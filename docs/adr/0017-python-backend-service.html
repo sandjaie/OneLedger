@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR-0017 — A Python backend service — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="../design/architecture.html">Architecture</a></li>
+<li><a href="../design/data-model.html">Data model</a></li>
+<li><a href="../design/multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="../design/statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="../design/classification.html">Classification</a></li>
+<li><a href="../design/transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="../design/api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="./index.html">ADR index</a></li>
+<li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="#" aria-current="page">0016 Statement layouts as data</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="adr-0017--python-backend-service">ADR-0017 — A Python backend service</h1>
+<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-05 ·
+<strong>Supersedes:</strong> <a href="0014-matching-engines-in-postgres.html">ADR-0014</a> and
+<a href="0015-parse-in-the-browser.html">ADR-0015</a> ·
+<strong>Revises:</strong> <a href="0002-supabase-vercel-local-importer.html">ADR-0002</a>
+(its "no hosted API server" clause)</p>
+
+<h2 id="context">Context</h2>
+<p>Two decisions taken earlier the same day carried costs that were stated plainly in their own text:</p>
+<ul>
+<li><a href="0014-matching-engines-in-postgres.html">ADR-0014</a> moved the classification cascade and the
+transfer matcher into Postgres. Stated cost: <em>"matching logic is SQL, which is harder to unit-test than
+Python and less pleasant to debug."</em></li>
+<li><a href="0015-parse-in-the-browser.html">ADR-0015</a> moved parsing into the browser. Stated cost:
+<em>"roughly 200 lines of word-grouping helper that <code>pdfplumber</code> would have provided free."</em></li>
+</ul>
+<p><strong>Both costs existed only because there was no backend.</strong> Matching went into SQL because two
+clients — a local importer and the web app — each needed it, and SQL was the one place both could reach.
+Parsing went into the browser because the alternatives were a CLI, which had been rejected as the wrong
+interface for a monthly task, or a hosted server, which would have put statements on a third-party host.</p>
+<p>Neither was the best available design. Each was the best design <em>available without a backend</em>. The
+question was never asked directly until now.</p>
+<p>A further correction matters here: the claim that Python parses these documents better than TypeScript was
+<a href="0015-parse-in-the-browser.html#correction">measured and found false</a> — on the hardest of the four
+layouts <code>pdfplumber</code> recovers no more than <code>pdf.js</code> does. <strong>Parsing quality is not
+the argument for this decision</strong>, and it should not be recorded as though it were.</p>
+
+<h2 id="decision">Decision</h2>
+<p><strong>A Python backend service owns all business logic. React owns the interface. Postgres owns the
+truth.</strong></p>
+<pre><code>React / Next.js        UI only — review queue, dashboards, layout mapping
+      │  HTTP
+FastAPI (Python)       parse · normalize · dedupe · FX · reconcile · stage
+                       classification · transfer matching · XIRR · amortisation
+      │
+Supabase Postgres      source of truth · constraints · triggers · the invariants
+</code></pre>
+<p>It runs on <code>localhost</code> during Phase 0 and Phase 1. Statements are parsed on your own machine and
+never transit a third-party host, which is the property
+<a href="0002-supabase-vercel-local-importer.html">ADR-0002</a> was protecting — preserved here without the
+CLI that made importing a terminal command.</p>
+
+<h2 id="rationale">Rationale</h2>
+<p><strong>It dissolves two costs rather than trading between them.</strong> Matching becomes Python: one
+implementation, one caller, unit-tested normally instead of through database fixtures. Parsing becomes
+<code>pdfplumber</code>: no word-grouping helper to write, no Web Worker, no glyph arithmetic.</p>
+<p><strong>Iterating a parser against 71 real files is the work that actually consumes time</strong>, and a
+REPL with a breakpoint over a directory beats DevTools on a page by a wide margin. This is the strongest
+practical argument and it was under-weighted in ADR-0015.</p>
+<p><strong>It removes a client from the contract.</strong> ADR-0014's premise was two clients needing identical
+semantics. With one backend that premise is gone, and with it the reason to express the trickiest logic in a
+language chosen for reach rather than for expressing it.</p>
+<p><strong>OCR and spreadsheet parsing become additive.</strong> Neither applies today — every institution is
+PDF-only, and scanned statements are out of scope — but both are Python-shaped, and the service existing means
+they would not require a new component.</p>
+<p><strong>Import stays a UI action.</strong> You drop files into the web app; it posts them to the local
+service. The requirement that displaced ADR-0002's CLI is fully met.</p>
+
+<h2 id="what-does-not-change">What does not change</h2>
+<p>Everything in the product specification is untouched, because these are database and product decisions
+rather than backend-language ones: the eight invariants, signed balances, frozen dual-currency amounts,
+transfers as first-class entities, statement layouts as data
+(<a href="0016-statement-layouts-as-data.html">ADR-0016</a>), the review queue, and the dashboard.</p>
+<p>The invariants in particular stay enforced <strong>in Postgres</strong> — constraints, triggers and the
+reporting views — not in Python. A backend is a convenient place to put logic and a poor place to put
+guarantees.</p>
+
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<p><strong>Keep the browser parser and add Python only for parsing.</strong> Rejected: two parsers is the
+duplication ADR-0014 and ADR-0015 were both written to prevent, and it would surface as rows importing
+differently depending on which path ran.</p>
+<p><strong>Python full-stack, with HTMX or Jinja templates.</strong> One language end to end, no npm, no build
+step — genuinely attractive for a solo project. Rejected on two screens: the review queue and the layout
+mapping UI. Reviewing 200 rows and dragging column bands are the interactions that decide whether this tool
+survives contact with a monthly routine, and both are better served by React.</p>
+<p><strong>Stay on Next.js Server Components reading Supabase directly.</strong> The status quo. Rejected
+because it is what forced the two contortions above, and because the logic it pushes into SQL and the browser
+is logic that wants to live somewhere testable.</p>
+
+<h2 id="consequences">Consequences</h2>
+<p><strong>Row Level Security stops being the security boundary.</strong> The current posture is that the
+browser holds only the anon key and RLS enforces isolation, so a forgotten <code>WHERE</code> returns nothing
+rather than everything. With a backend, Python holds the credentials and enforces authorization in code — as
+most applications do, and as this one now will. RLS is retained as defence in depth, not removed, but it is no
+longer the thing standing between a bug and a leak. Given that multi-tenancy is permanently out of scope this
+is an acceptable trade; it is recorded as a decision rather than allowed to become a side effect.</p>
+<p><strong>The service-role key returns to the threat model.</strong>
+<a href="0015-parse-in-the-browser.html">ADR-0015</a> removed it, which was a real gain, and this reverses that
+gain. It lives in the service's local <code>.env</code>, never in the browser bundle, and
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §6 is updated accordingly.</p>
+<p><strong>Hosting is now an open question rather than a settled one.</strong> Vercel plus Supabase free tiers
+were the answer to the zero-spend requirement. A persistent FastAPI service does not fit Vercel; it wants Fly,
+Railway or Render, whose free tiers are thinner and change more often. Phase 0 and Phase 1 run locally, so
+this is deferred rather than incurred — but it is the one genuine risk this decision creates against a stated
+non-functional requirement, and it should be decided deliberately when the cloud matters, not discovered at
+deploy time.</p>
+<p><strong>Two processes to run locally</strong> — <code>next dev</code> and <code>uvicorn</code> — where there
+was one.</p>
+<p><strong>Documents affected:</strong> architecture, data model (the RLS section), statement ingestion,
+classification, transfers, security and privacy, API contracts (which now describes a real API surface),
+testing, and the roadmap. The schema itself is unchanged.</p>
+
+<h2 id="on-the-churn">On the churn</h2>
+<p>This is the fourth structural decision recorded in a single day, and the largest. That is worth noting
+honestly rather than glossing.</p>
+<p>Each was prompted by something real — a duplicated engine, an import experience that belonged in the UI, a
+hardcoded set of banks, and now a missing backend — and they have converged rather than oscillated. Critically,
+<strong>no application code exists</strong>, so the cost of this decision is rewriting prose. The same decision
+taken at M5 would cost a rewrite of the ledger's entire ingestion path. Deciding it now is the cheap moment,
+and it is the last structural question outstanding.</p>
+</article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

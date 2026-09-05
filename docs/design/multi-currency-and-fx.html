@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>04 — Multi-Currency and FX — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="./architecture.html">Architecture</a></li>
+<li><a href="./data-model.html">Data model</a></li>
+<li><a href="#" aria-current="page">Multi-currency and FX</a></li>
+<li><a href="./statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="./transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="./api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="04--multi-currency-and-fx">04 — Multi-Currency and FX</h1>
+<blockquote>
+<p>Read this before the data model. Currency handling determines several column choices that are
+painful to change later.</p>
+</blockquote>
+<p><strong>The problem, stated plainly:</strong> the AED/INR rate moves every day. A transaction from two months
+ago will show a different converted value today than it did then. Which value is correct?</p>
+<p><strong>The answer:</strong> both — for different questions. Conflating them is the defect that quietly ruins
+multi-currency personal finance tools.</p>
+<hr>
+<h2 id="1-two-rates-two-purposes">1. Two rates, two purposes</h2>
+<h3 id="flows-translate-at-the-transaction-date-rate-frozen-forever">Flows translate at the transaction-date rate, frozen forever</h3>
+<p>A coffee bought on 03 Sep 2026 for AED 31 cost ₹742 at that day&#39;s rate of 23.94.</p>
+<p>That ₹742 <strong>must never change.</strong> If historical spending is re-translated at today&#39;s rate:</p>
+<ul>
+<li>&quot;March spending&quot; is a different number every day.</li>
+<li>Year-on-year comparisons compare rate movement, not behaviour.</li>
+<li>A budget that was met can retroactively become a budget that was missed.</li>
+<li>Any chart of spending over time is partly a chart of the exchange rate.</li>
+</ul>
+<p>So: <strong>compute once at import, store the result, never recompute.</strong></p>
+<h3 id="balances-translate-at-the-as-of-date-rate-computed-live">Balances translate at the as-of-date rate, computed live</h3>
+<p>An HDFC balance of ₹500,000 on 30 Sep is worth AED 20,876 at <em>30 September&#39;s</em> rate. Not at the
+blended rate of every deposit that built it, and not at each deposit&#39;s own rate.</p>
+<p>A balance is a snapshot of value held <em>now</em>. Snapshots use spot.</p>
+<h3 id="the-two-are-different-and-the-difference-is-real">The two are different, and the difference is real</h3>
+<p>Sum every INR-converted transaction into an AED account and you will not get the AED balance
+converted at today&#39;s rate. The gap is <strong>FX translation gain or loss</strong>, and it is not an error to
+be reconciled away — it is a genuine change in wealth.</p>
+<p>If you hold AED and the AED strengthens against the INR, your net worth in INR rises without you
+earning, spending or investing anything. That belongs on the balance sheet as its own line:</p>
+<pre><code>+ ₹12.0 L   investment contributions
++ ₹ 8.0 L   market appreciation
++ ₹15.0 L   loan principal reduction
++ ₹ 1.4 L   FX translation gain          ← this line
+− ₹ 2.0 L   asset depreciation
+</code></pre>
+<p>Most tools hide this in a rounding residual. Showing it is one of the more informative things
+this product can do for a two-currency life.</p>
+<hr>
+<h2 id="2-what-is-stored-on-a-transaction">2. What is stored on a transaction</h2>
+<pre><code>amount                1000.0000       ← immutable, as the bank stated it
+currency              AED             ← immutable
+
+fx_rate_date          2026-09-03      ← the date the rate is quoted for
+fx_rate_is_carried    false           ← true if carried from an earlier date
+fx_rate_to_base         23.9400000000 ← frozen
+fx_rate_to_secondary     1.0000000000 ← frozen
+amount_base          23940.0000       ← frozen, derived once
+amount_secondary      1000.0000       ← frozen, derived once
+</code></pre>
+<p>Base and secondary are whatever <code>household</code> was configured with — INR and AED here.</p>
+<p><strong>Why store both converted amounts rather than converting on read?</strong></p>
+<ol>
+<li>Historical figures become literally immutable, not just conventionally so. No query can
+accidentally re-translate history.</li>
+<li>Reporting is a plain <code>SUM()</code> — no per-row rate join across millions of row-reads.</li>
+<li>The currency toggle is a column swap, so neither currency is second-class.</li>
+</ol>
+<p>The cost is a backfill migration if a third reporting currency is ever added. That is an
+acceptable one-off, and it is recorded in
+<a href="../adr/0003-frozen-dual-currency-amounts.html">ADR-0003</a> along with the pivot-currency alternative
+that was considered and rejected.</p>
+<p><strong>Rounding:</strong> amounts are <code>NUMERIC(20,4)</code>, rates <code>NUMERIC(20,10)</code>. Never floating point. Round
+half-up at the point of storage; never round intermediates.</p>
+<hr>
+<h2 id="3-where-rates-come-from">3. Where rates come from</h2>
+<h3 id="a-peg-is-a-row-not-a-constant">A peg is a row, not a constant</h3>
+<p>A currency held at a fixed rate against another needs no feed of its own. <code>currency.pegged_to</code>
+and <code>currency.peg_rate</code> record the anchor and the rate, and everything derived through them is
+stored with <code>source = &#39;derived_peg&#39;</code>, so abandoning a peg is one identifiable set of rows.</p>
+<p>The first deployment pegs one currency — <strong>AED to the US dollar at 3.6725 AED = 1 USD</strong>, held
+since 1997 — which leaves exactly one volatile rate to track:</p>
+<pre><code>USD/INR   ← the only rate that actually moves
+AED/INR = (USD/INR) ÷ 3.6725
+</code></pre>
+<p>A deployment with no pegged currency seeds no peg row and fetches both sides. Fewer fetches is a
+consequence of the configuration, never an assumption in the code.</p>
+<h3 id="source">Source</h3>
+<p>Primary: <strong>ECB daily reference rates</strong> (via the Frankfurter API — no key, no rate limit, no
+account). The ECB quotes ~30 currencies against the euro, so <em>any</em> pair is one division:</p>
+<pre><code>quote per base = (EUR/quote) ÷ (EUR/base)
+
+USD/INR = (EUR/INR) ÷ (EUR/USD)          both published
+AED/INR = (EUR/INR) ÷ (EUR/USD × 3.6725) AED reached through its peg
+</code></pre>
+<p>The ECB does not publish AED, which is exactly why the peg derivation exists. A currency that is
+neither published nor pegged raises rather than guesses — see <code>units_per_eur</code> in
+<a href="../plan/phase-0-foundations.md">phase-0-foundations.md</a> Task 7.</p>
+<blockquote>
+<p><strong>Verify before implementing.</strong> Free API availability and terms change. The rate source is
+behind an interface (<code>FxRateSource</code>) with the ECB path as the default implementation, so
+swapping providers is a single class. Alternatives to evaluate: exchangerate.host,
+open.er-api.com, or a manual CSV import as the always-available fallback.</p>
+</blockquote>
+<h3 id="every-stored-rate-records-its-provenance">Every stored rate records its provenance</h3>
+<pre><code class="language-sql">fx_rate (
+  rate_date, base_currency, quote_currency, rate,
+  source              -- &#39;ecb&#39; | &#39;derived_peg&#39; | &#39;manual&#39; | &#39;actual_transfer&#39;
+  is_carried_forward, carried_from, fetched_at
+)
+</code></pre>
+<p><code>source = &#39;derived_peg&#39;</code> for anything computed through the 3.6725 constant. If the peg is ever
+abandoned, every affected row is identifiable by that one field.</p>
+<h3 id="weekends-holidays-and-gaps">Weekends, holidays and gaps</h3>
+<p>The ECB publishes on TARGET business days only. Roughly 30% of calendar dates have no published
+rate, and transactions occur on all of them.</p>
+<p><strong>Rule: carry forward the last published rate. Never interpolate, never invent.</strong></p>
+<pre><code>Fri 04 Sep   USD/INR 88.42   published
+Sat 05 Sep   USD/INR 88.42   carried_forward, carried_from = 2026-09-04
+Sun 06 Sep   USD/INR 88.42   carried_forward, carried_from = 2026-09-04
+Mon 07 Sep   USD/INR 88.61   published
+</code></pre>
+<p>Carried rates are flagged on the transaction (<code>fx_rate_is_carried</code>) and shown in the UI on hover.
+Invariant I7: nothing derived is presented as if observed.</p>
+<p>Forward-filling is correct here; interpolating between Friday and Monday would fabricate a
+Saturday rate that never existed and would make a Saturday transaction&#39;s INR value depend on
+what happened on Monday.</p>
+<h3 id="backfill-and-schedule">Backfill and schedule</h3>
+<ul>
+<li><strong>Backfill</strong> on setup: 24 months of daily rates (~730 rows per pair) — one API call for the
+full range.</li>
+<li><strong>Daily</strong> thereafter: fetch the latest, derive any pegged pair, carry forward any gap.</li>
+<li><strong>On import:</strong> if a statement contains a date with no rate, the import path fetches that date&#39;s
+range before proceeding. An import never proceeds against a missing rate.</li>
+</ul>
+<hr>
+<h2 id="4-the-reporting-base-decision">4. The reporting-base decision</h2>
+<p><strong><code>household.base_currency</code> is the base; <code>household.secondary_currency</code> is the toggle.</strong>
+Both are chosen at setup and neither is baked into the schema
+(<a href="../adr/0003-frozen-dual-currency-amounts.html">ADR-0003</a>).</p>
+<p><strong>How to choose.</strong> Denominate the base where the wealth will eventually be <em>spent</em>, not where it
+is currently earned — the net-worth curve is the primary long-term metric, and it should be
+measured in the currency the money is destined for. Put day-to-day spending in the secondary,
+where it reads naturally. For the first household that is INR base, AED toggle: wealth
+accumulates in INR terms, daily life is priced in AED.</p>
+<p>Because both values are frozen per row (§2), <em>which of the two is shown</em> is a display default,
+not a data asymmetry: swapping it changes one config value and no data. Changing <em>which two
+currencies the pair contains</em> is a different thing — the frozen columns are already populated,
+so it is a backfill from <code>fx_rate</code> history.</p>
+<p><strong>Display rule: the original currency is always visible.</strong> Never show only the converted figure.</p>
+<pre><code>STARBUCKS DUBAI MALL
+−AED 31.00          ₹742  @ 23.94 on 03 Sep 2026
+</code></pre>
+<p>Formatting follows <code>currency.number_format</code>, not a hardcoded locale: INR renders in the Indian
+numbering system (₹1,02,34,567, with lakh and crore abbreviations), AED in international grouping
+(AED 1,234,567.89). A currency added later declares its own grouping in that column.</p>
+<hr>
+<h2 id="5-actual-rates-beat-reference-rates">5. Actual rates beat reference rates</h2>
+<p>This is where the model produces something no bank statement shows.</p>
+<p>When AED 5,000 is remitted and ₹111,000 arrives, the rate actually achieved was <strong>22.20</strong>. The
+mid-market rate that day may have been <strong>22.55</strong>. The 0.35 gap is a real cost, and it is almost
+always larger than the fee that was disclosed.</p>
+<p>For every confirmed transfer:</p>
+<pre><code>source_amount        AED 5,000.00
+destination_amount   ₹111,000.00
+implied_rate         22.2000        = destination ÷ source
+market_rate          22.5500        = mid-market on transfer_date
+fx_spread_pct         1.5521 %      = (market − implied) ÷ market
+fx_spread_cost       AED 77.60      = source_amount × spread_pct
+explicit_fee         AED 26.25      = as itemised by the provider
+total_cost           AED 103.85
+effective_cost_pct    2.077 %
+</code></pre>
+<p>Aggregated over a year, per provider:</p>
+<pre><code>2026 remittances to India
+
+Provider        Sent (AED)   Fees     Spread    Total    Effective
+─────────────────────────────────────────────────────────────────
+Bank wire          80,000     420     1,690     2,110      2.64 %
+Exchange house     70,000     315       910     1,225      1.75 %
+Wise               30,000     198        95       293      0.98 %
+─────────────────────────────────────────────────────────────────
+                  180,000     933     2,695     3,628      2.02 %
+</code></pre>
+<p>Which answers a question worth real money: <em>which channel should be used, and what is the current
+one costing?</em></p>
+<p>The spread is computed only where both legs are known — that is, a <strong>confirmed</strong> transfer
+(see <a href="./transfers-and-reconciliation.html">transfers-and-reconciliation.html</a>). An unmatched leg
+produces no cost figure rather than a guessed one.</p>
+<h3 id="the-uae-narration-already-carries-the-achieved-rate">The UAE narration already carries the achieved rate</h3>
+<p>Observed in the gathered statements: an outbound remittance on the UAE current account posts a
+narration of the form</p>
+<pre><code>RMA REF: EPHCOR…       −4,271.00
+BENEFICIARY NAME INR100000@.04271
+</code></pre>
+<p>The destination INR amount and the achieved rate are <strong>in the narration of the source leg</strong>. That
+is materially better than deriving <code>implied_rate</code> from two matched legs:</p>
+<ul>
+<li>Cross-currency matching becomes near-exact rather than a ±5% FX tolerance
+(<a href="./transfers-and-reconciliation.html">07</a> §3), so false positives all but disappear.</li>
+<li><code>implied_rate</code> is read rather than derived, so it is exact rather than rounded through two
+amounts.</li>
+<li><strong>A one-sided transfer still yields the full cost analysis.</strong> Where the Indian leg has not been
+imported, the spread and total cost are still computable, which is the case §5 otherwise cannot
+serve at all.</li>
+</ul>
+<p>The parser extracts <code>remit_amount</code> and <code>remit_rate</code> into <code>raw_row</code>; the matcher uses them as a
+strong direct signal. Where the narration does not carry them, the two-leg derivation above stands
+unchanged as the fallback.</p>
+<hr>
+<h2 id="6-balance-and-net-worth-translation">6. Balance and net worth translation</h2>
+<p>A balance is translated at the rate for the date being viewed:</p>
+<pre><code class="language-sql">-- Net worth on any date, in any base currency
+SELECT SUM(b.balance_native * fx.rate) AS net_worth
+FROM   account_balance_on(as_of_date) b
+JOIN   fx_rate fx
+  ON   fx.rate_date       = as_of_date
+ AND   fx.base_currency   = b.currency
+ AND   fx.quote_currency  = :reporting_currency;
+</code></pre>
+<p>Viewing net worth as of 30 Jun 2026 uses 30 Jun 2026&#39;s rates for every account — not today&#39;s.
+The historical net-worth curve is therefore reproducible: recomputing it a year from now gives
+the same shape it gave when first drawn.</p>
+<p><strong>Materialisation:</strong> month-end snapshots are stored in <code>net_worth_snapshot</code> with the rates used,
+so the trend chart doesn&#39;t recompute from the full ledger each time and so the figure shown last
+month is provably the figure that was shown last month.</p>
+<hr>
+<h2 id="7-net-worth-attribution-the-decomposition">7. Net-worth attribution: the decomposition</h2>
+<p>The &quot;why did it change&quot; breakdown, done in a way that reconciles exactly rather than
+approximately.</p>
+<p>For any account or holding, value in the base currency is <code>V_base = V_native × r</code>, where <code>r</code> is
+the translation rate. Over a period from <code>t₀</code> to <code>t₁</code>:</p>
+<pre><code>V_base(t₁) − V_base(t₀)
+  = V_nat(t₁)·r(t₁) − V_nat(t₀)·r(t₀)
+
+  = [ ΔV_nat · r(t₁) ]        ← native-currency change, valued at the closing rate
+  + [ V_nat(t₀) · Δr ]        ← FX translation effect on the opening balance
+</code></pre>
+<p>This split is exact. There is no leftover cross-term — the <code>ΔV_nat · Δr</code> interaction is absorbed
+into the first bracket by valuing native change at the <em>closing</em> rate. That choice is what makes
+the FX line reconcile to the last decimal rather than approximately.</p>
+<p><code>ΔV_nat</code> then splits by cause, all in native currency:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Net cash saved</td>
+<td>Σ transactions on cash accounts (income − expense)</td>
+</tr>
+<tr>
+<td>Investment contributions</td>
+<td>Σ investment purchases net of redemptions</td>
+</tr>
+<tr>
+<td>Market appreciation</td>
+<td>Δ holding value not explained by units bought or sold</td>
+</tr>
+<tr>
+<td>Loan principal reduction</td>
+<td>Σ principal components of actual EMIs, plus prepayments</td>
+</tr>
+<tr>
+<td>Asset revaluation</td>
+<td>Δ between successive manual valuation snapshots</td>
+</tr>
+<tr>
+<td>FX translation</td>
+<td><code>V_nat(t₀) · Δr</code>, from the bracket above</td>
+</tr>
+<tr>
+<td><strong>Unexplained</strong></td>
+<td>The residual, <strong>displayed rather than absorbed</strong></td>
+</tr>
+</tbody></table>
+<p>A non-trivial residual means something real: a missing statement, an unimported month, an
+unlinked transfer, a stale valuation. It is a data-quality signal, so hiding it would discard the
+most useful diagnostic the product has. Invariant I7.</p>
+<hr>
+<h2 id="8-edge-cases-and-their-rulings">8. Edge cases and their rulings</h2>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Ruling</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Transaction in a currency other than the account&#39;s (AED card used in Thailand)</td>
+<td>Store <code>amount</code>/<code>currency</code> as the <strong>account</strong> posted it (AED). Keep the original THB amount and rate in <code>original_amount</code> / <code>original_currency</code> for reference. The bank&#39;s conversion is the truth; it&#39;s what actually left the account</td>
+</tr>
+<tr>
+<td>Same-currency transfer (AED → AED)</td>
+<td><code>implied_rate = 1</code>. No spread. Fee only</td>
+</tr>
+<tr>
+<td>Rate missing for a transaction date</td>
+<td>Import blocks and fetches. Never defaults to 1.0, never uses today&#39;s rate</td>
+</tr>
+<tr>
+<td>Statement predates the backfill window</td>
+<td>Extend the backfill; do not import against absent rates</td>
+</tr>
+<tr>
+<td>Correcting a wrongly-dated transaction</td>
+<td>Re-fetch the rate for the corrected date and rewrite the frozen values. Logged in <code>audit_log</code> — this is the <strong>only</strong> circumstance in which frozen values change</td>
+</tr>
+<tr>
+<td>Third reporting currency added later</td>
+<td>Backfill migration adds <code>amount_&lt;ccy&gt;</code> and populates from <code>fx_rate</code> history. One-off, planned for</td>
+</tr>
+<tr>
+<td>Peg abandoned</td>
+<td>All <code>source = &#39;derived_peg&#39;</code> rows identified and re-derived from a direct AED quote from the switch date forward. Historical derived rates remain correct for their dates</td>
+</tr>
+<tr>
+<td>Investment priced in USD, held in an INR account</td>
+<td>Holding valued in USD, translated at the as-of rate. Contributes FX translation like any other foreign-currency asset</td>
+</tr>
+<tr>
+<td>Refund of a foreign purchase months later</td>
+<td>Refund is a separate transaction at its own date&#39;s rate. The INR difference from the original is a genuine FX effect, not an error</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="9-test-cases">9. Test cases</h2>
+<p>Enforced in <a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>:</p>
+<ol>
+<li><strong>Frozen flows.</strong> Import a transaction, advance the rate table by six months, re-run the
+period report. The INR figure is byte-identical.</li>
+<li><strong>Peg derivation.</strong> <code>AED/INR × 3.6725 = USD/INR</code> for every date in the table, to 8 decimals.</li>
+<li><strong>Carry-forward.</strong> A Sunday transaction uses Friday&#39;s rate and is flagged <code>is_carried = true</code>.</li>
+<li><strong>Attribution reconciles.</strong> For a synthetic period with known flows and a known rate move,
+the components sum to the actual delta with residual exactly zero.</li>
+<li><strong>Spread cost.</strong> A transfer with known legs produces the hand-computed spread cost.</li>
+<li><strong>Toggle symmetry.</strong> <code>amount_base ÷ amount_secondary = fx_rate_to_base ÷ fx_rate_to_secondary</code> for every
+row, within rounding tolerance.</li>
+<li><strong>No implicit conversion.</strong> A static check asserts that no report query multiplies <code>amount</code> by
+any rate — reports read frozen columns only.</li>
+</ol>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

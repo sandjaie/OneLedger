@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>07 — Transfers and Reconciliation — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="./architecture.html">Architecture</a></li>
+<li><a href="./data-model.html">Data model</a></li>
+<li><a href="./multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="./statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="#" aria-current="page">Transfers and reconciliation</a></li>
+<li><a href="./api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="07--transfers-and-reconciliation">07 — Transfers and Reconciliation</h1>
+<p><strong>The correctness feature that matters most in a two-country ledger.</strong></p>
+<p>Get this wrong and every spending figure in the product is inflated — potentially by more than
+actual spending, since a year of remittances can exceed a year of expenses.</p>
+<hr>
+<h2 id="1-the-problem">1. The problem</h2>
+<pre><code>   Emirates NBD Current                    HDFC NRO
+   ───────────────────                     ────────
+   03 Sep  −AED 5,000                      05 Sep  +₹111,000
+           &quot;TT REMITTANCE TO INDIA&quot;                &quot;INWARD REMIT ENBD&quot;
+</code></pre>
+<p>Two rows in the ledger. <strong>One movement of money. Zero expense. Zero income.</strong></p>
+<p>Naive handling produces:</p>
+<ul>
+<li>AED 5,000 of &quot;spending&quot; in September — the largest expense of the month.</li>
+<li>₹111,000 of &quot;income&quot; in September — inflating the savings rate.</li>
+<li>A savings rate above 100%, or below zero, depending on which side you look at.</li>
+<li>Total annual spending that bears no relation to reality.</li>
+</ul>
+<p>The same applies to internal transfers, card payments, SIP debits and ATM withdrawals — which
+together are typically the <strong>largest</strong> category of transactions by value in a two-country life.</p>
+<hr>
+<h2 id="2-the-model">2. The model</h2>
+<p>A <code>transfer</code> is a first-class entity linking two transaction legs.</p>
+<pre><code>transfer
+├── source_account_id          Emirates NBD Current
+├── destination_account_id     HDFC NRO
+├── source_transaction_id      the −AED 5,000 row
+├── destination_transaction_id the +₹111,000 row
+├── source_amount              5,000.00 AED
+├── destination_amount         111,000.00 INR
+├── transfer_date              2026-09-03
+├── implied_rate               22.2000
+├── market_rate                22.5500
+├── fx_spread_cost_source      77.60 AED
+├── explicit_fee_amount        26.25 AED
+├── total_cost_source          103.85 AED
+├── transfer_kind              remittance
+├── provider                   &#39;LuLu Exchange&#39;
+├── match_confidence           0.94
+└── status                     confirmed
+</code></pre>
+<p>Both legs get <code>transfer_id</code> set and <code>txn_type</code> becomes <code>transfer_out</code> / <code>transfer_in</code>. The
+reporting view then excludes them automatically:</p>
+<pre><code class="language-sql">CREATE VIEW v_transaction_reportable AS
+SELECT * FROM transaction
+WHERE transfer_id IS NULL
+  AND txn_type NOT IN (&#39;transfer_in&#39;,&#39;transfer_out&#39;, ...);
+</code></pre>
+<p><strong>The exclusion lives in the database, not in application code</strong> (Invariant I3). No future query
+can forget it, because the reports never read the base table.</p>
+<h3 id="transfer-kinds">Transfer kinds</h3>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Example</th>
+<th>FX cost tracked</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>internal_same_currency</code></td>
+<td>ENBD Current → ENBD Savings</td>
+<td>No — rate is 1</td>
+</tr>
+<tr>
+<td><code>remittance</code></td>
+<td>ENBD → HDFC NRO</td>
+<td><strong>Yes — the headline case</strong></td>
+</tr>
+<tr>
+<td><code>card_payment</code></td>
+<td>ENBD Current → ENBD Credit Card</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>loan_payment</code></td>
+<td>HDFC Savings → HDFC Home Loan</td>
+<td>No</td>
+</tr>
+<tr>
+<td><code>investment_funding</code></td>
+<td>HDFC Savings → mutual fund purchase</td>
+<td>Only if cross-currency</td>
+</tr>
+<tr>
+<td><code>cash_withdrawal</code></td>
+<td>ATM debit → cash account</td>
+<td>No</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="3-detection">3. Detection</h2>
+<p>Automatic candidate generation, <strong>confirmed by the user</strong>
+(<a href="../adr/0009-transfer-auto-detection-with-review.html">ADR-0009</a>). Nothing links silently — a wrong
+silent link corrupts spending totals in a way that is invisible for months.</p>
+<h3 id="the-matching-algorithm">The matching algorithm</h3>
+<p>Implemented in the Python service as <code>transfers.py</code>
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>) — called at stage 11 of the import pipeline,
+and again by the transactions screen to rank peers for manual linking (§6). The code below is the
+specification of the scoring and close to the implementation.</p>
+<p>For each unmatched debit, find candidate credits within a window and score them.</p>
+<pre><code class="language-python">def score_match(debit: Txn, credit: Txn) -&gt; float:
+    if debit.account_id == credit.account_id:      return 0.0
+    if debit.amount &gt;= 0 or credit.amount &lt;= 0:    return 0.0
+
+    score  = 0.0
+    score += 0.35 * amount_score(debit, credit)     # FX-aware
+    score += 0.25 * date_score(debit, credit)
+    score += 0.20 * description_score(debit, credit)
+    score += 0.15 * pair_history_score(debit.account_id, credit.account_id)
+    score += 0.05 * rule_hint_score(debit, credit)
+    return min(score, 1.0)
+</code></pre>
+<p><strong>Amount (35%) — FX-aware.</strong> Same currency: exact match scores 1.0, tolerance for a deducted fee.
+Cross-currency: convert the source at the market rate for that date and compare.</p>
+<pre><code class="language-python">def amount_score(debit, credit) -&gt; float:
+    src, dst = abs(debit.amount), abs(credit.amount)
+    if debit.currency == credit.currency:
+        diff = abs(src - dst) / src
+        return 1.0 if diff &lt; 0.001 else max(0.0, 1.0 - diff * 20)   # tolerate a fee
+
+    expected = src * market_rate(debit.currency, credit.currency, debit.booked_date)
+    diff = abs(expected - dst) / expected
+    # Remittance spread is typically 0.5–3%; allow up to 5% before scoring zero
+    return max(0.0, 1.0 - diff / 0.05)
+</code></pre>
+<p>The 5% tolerance is deliberate. Exchange houses take a spread; a strict match would miss every
+genuine remittance. Below 5% is a plausible transfer, above it is more likely a coincidence.</p>
+<p><strong>Date (25%).</strong> Same day scores 1.0, decaying over a window that varies by kind:</p>
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Window</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Internal, same bank</td>
+<td>0–1 days</td>
+<td>Usually instant</td>
+</tr>
+<tr>
+<td>Domestic, cross-bank</td>
+<td>0–3 days</td>
+<td>NEFT/IMPS settlement</td>
+</tr>
+<tr>
+<td>Cross-border remittance</td>
+<td>0–7 days</td>
+<td>Correspondent banking</td>
+</tr>
+<tr>
+<td>Card payment</td>
+<td>0–5 days</td>
+<td>Posting lag</td>
+</tr>
+</tbody></table>
+<p><strong>Description (20%).</strong> Token overlap after cleaning, plus keyword signals — <code>REMIT</code>, <code>TT</code>, <code>WIRE</code>,
+<code>TRANSFER</code>, <code>IMPS</code>, <code>NEFT</code>, <code>INWARD</code>, <code>OUTWARD</code>. Counterparty name or partial account number
+appearing in the other leg&#39;s description is strong evidence.</p>
+<p><strong>Pair history (15%).</strong> If ENBD Current → HDFC NRO has been confirmed eleven times before, a
+twelfth is likely. This is why detection improves markedly after the first month.</p>
+<p><strong>Rule hint (5%).</strong> A classification rule with <code>set_is_transfer_candidate</code> and a
+<code>counterparty_account</code> gives a direct signal, which is how card payments and SIP debits become
+near-certain matches.</p>
+<h3 id="thresholds">Thresholds</h3>
+<table>
+<thead>
+<tr>
+<th>Score</th>
+<th>Presentation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>≥ 0.90</td>
+<td>Pre-ticked in review, grouped as &quot;high confidence&quot;</td>
+</tr>
+<tr>
+<td>0.70 – 0.89</td>
+<td>Shown, <strong>not</strong> pre-ticked, alternatives listed</td>
+</tr>
+<tr>
+<td>0.50 – 0.69</td>
+<td>Shown as a weak suggestion</td>
+</tr>
+<tr>
+<td>&lt; 0.50</td>
+<td>Not shown; findable via manual linking</td>
+</tr>
+</tbody></table>
+<p><strong>No threshold auto-confirms.</strong> Even 0.99 requires a click in Phase 1. Once a few months of
+history exists and false-positive rate is measured, raising this becomes a data-informed decision
+rather than a hopeful one.</p>
+<h3 id="one-sided-transfers">One-sided transfers</h3>
+<p>Frequently only one leg is present — the destination account&#39;s statement hasn&#39;t been imported
+yet, or the account isn&#39;t tracked at all.</p>
+<p>Handling:</p>
+<ul>
+<li>Leg present, peer expected but absent → <strong>pending transfer</strong>, excluded from spending, listed
+as &quot;awaiting the other side&quot;. Re-matched automatically on the next import.</li>
+<li>Leg present, peer never expected (money sent to a family member&#39;s untracked account) → user
+marks it <code>external transfer</code>. Excluded from spending but shown separately from consumption,
+because it is neither an expense nor an internal movement.</li>
+</ul>
+<p>A pending transfer older than 30 days is surfaced for resolution — it usually means a statement
+is missing, which is exactly the kind of gap that shows up later as an unexplained net-worth
+residual.</p>
+<hr>
+<h2 id="4-credit-card-payments-invariant-i4">4. Credit card payments (Invariant I4)</h2>
+<p>The most common double-counting error, and worth stating separately.</p>
+<pre><code>15 Sep   ENBD Current      −AED 3,900   &quot;CREDIT CARD PAYMENT&quot;
+15 Sep   ENBD Credit Card  +AED 3,900   &quot;PAYMENT RECEIVED — THANK YOU&quot;
+</code></pre>
+<p><strong>This is not spending.</strong> The spending happened when the card was used, and each of those
+purchases is already in the ledger. Counting the payment as well double-counts every dirham.</p>
+<p>Detection here is near-perfect because both legs are usually in the same bank, exact to the fils,
+and within a day. A seeded rule per card account provides the rule hint, pushing typical scores
+above 0.95.</p>
+<p><strong>Statement reconciliation makes it certain.</strong> Because card statement cycles are modelled
+(<a href="../adr/0011-credit-card-statement-cycles.html">ADR-0011</a>), a payment can be matched against a
+<em>known</em> statement balance rather than a fuzzy amount — and the card statement records whether it
+was paid in full.</p>
+<pre><code>Statement 25 Aug   balance due AED 3,900   due 15 Sep
+Payment   15 Sep   AED 3,900               → paid in full ✓
+</code></pre>
+<hr>
+<h2 id="5-remittance-cost-analysis">5. Remittance cost analysis</h2>
+<p>The reporting payoff, and the reason transfers carry FX fields at all.</p>
+<p>For each confirmed cross-currency transfer (method in
+<a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5):</p>
+<pre><code>implied_rate    = destination_amount ÷ source_amount     what you actually got
+market_rate     = mid-market on transfer_date            what it was worth
+fx_spread_pct   = (market − implied) ÷ market
+fx_spread_cost  = source_amount × fx_spread_pct
+total_cost      = fx_spread_cost + explicit_fee
+</code></pre>
+<p>Aggregated annually by provider:</p>
+<pre><code>2026 · Money moved to India
+
+Provider          Sent (AED)    Fees    Spread   Total    Effective   Avg rate
+──────────────────────────────────────────────────────────────────────────────
+Bank wire (ENBD)      80,000     420     1,690    2,110      2.64 %      22.09
+LuLu Exchange         70,000     315       910    1,225      1.75 %      22.31
+Wise                  30,000     198        95      293      0.98 %      22.44
+──────────────────────────────────────────────────────────────────────────────
+Total                180,000     933     2,695    3,628      2.02 %
+
+Moving everything through the cheapest channel would have cost AED 1,764.
+Difference: AED 1,864.
+</code></pre>
+<p>That last line is the product doing something genuinely useful. The information exists in no bank
+statement, and the cost is invisible precisely because it is embedded in a rate rather than
+itemised as a fee.</p>
+<p><strong>Where <code>market_rate</code> comes from:</strong> the mid-market rate for <code>transfer_date</code> from <code>fx_rate</code>
+(§3 of the FX doc). Where the date is a non-publication day, the carried-forward rate is used and
+the derived cost is flagged as approximate (Invariant I7).</p>
+<hr>
+<h2 id="6-manual-linking">6. Manual linking</h2>
+<p>Automatic matching will miss cases: unusual routings, split remittances, transfers spanning a
+statement boundary.</p>
+<p>From the transactions screen: select a transaction → <strong>Link as transfer</strong> → the app proposes
+plausible peers ranked by score — the same scoring function the import pipeline uses, not a second
+implementation — with manual search available. On confirmation both legs update
+and the transfer record is written with <code>match_method = &#39;user_created&#39;</code>.</p>
+<p><strong>Unlinking</strong> is supported and reverses cleanly: both legs return to their prior <code>txn_type</code> and
+category, and the transfer row is retained with <code>status = &#39;rejected&#39;</code> so the matcher does not
+re-propose the same pair.</p>
+<p><strong>Split transfers</strong> — one AED 15,000 debit arriving as three separate INR credits — are handled
+by linking one source to multiple destinations. The transfer stores the total on each side, and
+each leg carries the transfer id.</p>
+<hr>
+<h2 id="7-reconciliation-beyond-transfers">7. Reconciliation beyond transfers</h2>
+<p>Transfer matching is one of several reconciliation checks. All of them exist to answer: <em>is this
+ledger complete and correct?</em></p>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Method</th>
+<th>On failure</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Statement reconciliation</strong></td>
+<td><code>opening + Σ rows = declared closing</code></td>
+<td><strong>Blocks import</strong> (I8)</td>
+</tr>
+<tr>
+<td><strong>Account balance drift</strong></td>
+<td>Computed balance vs latest statement balance</td>
+<td>Warns; offers an adjusting entry</td>
+</tr>
+<tr>
+<td><strong>Transfer completeness</strong></td>
+<td>Pending transfers older than 30 days</td>
+<td>Lists them; usually a missing statement</td>
+</tr>
+<tr>
+<td><strong>Card statement coverage</strong></td>
+<td>Gap in card statement periods</td>
+<td>Flags the missing month</td>
+</tr>
+<tr>
+<td><strong>Holding units</strong></td>
+<td>Σ investment transaction units = holding units</td>
+<td>Blocks portfolio value display</td>
+</tr>
+<tr>
+<td><strong>Net worth attribution</strong></td>
+<td>Components + residual = actual change</td>
+<td>Shows residual (I7)</td>
+</tr>
+<tr>
+<td><strong>Coverage</strong></td>
+<td>Months with no imported statement per account</td>
+<td>Dashboard warning</td>
+</tr>
+</tbody></table>
+<h3 id="the-account-drift-adjusting-entry">The account-drift adjusting entry</h3>
+<p>When a computed balance disagrees with a bank statement&#39;s declared balance and the cause cannot
+be found, the resolution is an explicit <code>adjustment</code> transaction — never a silent edit of the
+opening balance.</p>
+<pre><code>30 Sep 2026   ENBD Current   −AED 12.50
+              &quot;Balance adjustment — reconciled to statement&quot;
+              txn_type: adjustment · category: Uncategorized · excluded from reporting
+</code></pre>
+<p>Visible, auditable, excluded from spending. If adjustments accumulate, that is itself the signal:
+something in the pipeline is systematically wrong.</p>
+<hr>
+<h2 id="8-test-cases">8. Test cases</h2>
+<ol>
+<li>A cross-currency remittance with a 2% spread is detected above 0.90 and neither leg appears in
+spending.</li>
+<li>A card payment is detected, and the card&#39;s statement is marked paid in full.</li>
+<li>Two similar-sized unrelated transactions on the same day are <strong>not</strong> linked.</li>
+<li>A one-sided transfer stays pending and links automatically when the peer statement imports.</li>
+<li>Unlinking restores both legs and the spending figure changes accordingly.</li>
+<li>Split transfer: one debit, three credits, total cost computed across all legs.</li>
+<li>Annual remittance cost equals the sum of per-transfer costs, to the fils.</li>
+<li>A transaction cannot be a leg of two confirmed transfers (enforced by partial unique index).</li>
+<li>Removing the transfer link on a remittance increases reported spending by exactly the source
+amount — proving I3 is live rather than assumed.</li>
+</ol>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>
