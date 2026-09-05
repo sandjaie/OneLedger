@@ -418,52 +418,58 @@ survive regardless of what language sits above them.</p>
 <p>The import path&#39;s only responsibility is to fill <code>document</code>, <code>import_batch</code> and
 <code>staged_transaction</code> correctly. Everything after that is the review screen&#39;s.</p>
 <h3 id="the-staged-row-schema">The staged row schema</h3>
-<pre><code class="language-typescript">// lib/import/schema.ts
-import { z } from &quot;zod&quot;;
+<pre><code class="language-python"># api/oneledger/schemas/staging.py
+from datetime import date
+from decimal import Decimal
+from typing import Annotated, Any, Self
 
-/** Money is a string all the way from the parser to the database. A JS number here would
- *  already be an IEEE-754 float, and the precision is gone before anyone can check. */
-const money = z.string().regex(/^-?\d+\.\d{4}$/, &quot;money must be a fixed-4dp string&quot;);
-const rate  = z.string().regex(/^\d+\.\d{10}$/, &quot;rates are fixed-10dp strings&quot;);
+from pydantic import BaseModel, Field, model_validator
 
-export const StagedTransaction = z.object({
-  accountId: z.string().uuid(),
-  bookedDate: z.string().date(),
-  valueDate: z.string().date().nullable(),
-  descriptionRaw: z.string().min(1),
-  descriptionClean: z.string().nullable(),
-  referenceRaw: z.string().nullable(),
+# Money is a Decimal all the way from the parser to the database, and a fixed-point string on
+# the wire. A float here would already have lost precision before anyone could check.
+Money = Annotated[Decimal, Field(max_digits=20, decimal_places=4)]
+Rate = Annotated[Decimal, Field(gt=0, max_digits=20, decimal_places=10)]
 
-  amount: money,                       // signed, per Invariant I2
-  currency: z.string().length(3),
-  originalAmount: money.nullable(),
-  originalCurrency: z.string().length(3).nullable(),
 
-  // frozen FX, computed before staging
-  fxRateDate: z.string().date(),
-  fxRateIsCarried: z.boolean(),
-  fxRateToInr: rate,
-  fxRateToAed: rate,
-  amountInr: money,
-  amountAed: money,
+class StagedTransaction(BaseModel):
+    account_id: UUID
+    booked_date: date
+    value_date: date | None
+    description_raw: str = Field(min_length=1)
+    description_clean: str | None
+    reference_raw: str | None
 
-  dedupeHash: z.string().length(64),
-  sourcePageNumber: z.number().int().nullable(),
-  sourceRowNumber: z.number().int(),
-  rawRow: z.record(z.unknown()),
-})
-  .refine(
-    (r) =&gt; new Decimal(r.amount).times(r.fxRateToInr).minus(r.amountInr).abs().lte(&quot;0.01&quot;),
-    { message: &quot;amountInr is inconsistent with the stated rate&quot; },
-  )
-  .refine(
-    (r) =&gt; (r.originalAmount === null) === (r.originalCurrency === null),
-    { message: &quot;originalAmount and originalCurrency must be set together&quot; },
-  );
+    amount: Money                        # signed, per Invariant I2
+    currency: str = Field(min_length=3, max_length=3)
+    original_amount: Money | None
+    original_currency: str | None = Field(default=None, min_length=3, max_length=3)
 
-export type StagedTransaction = z.infer&lt;typeof StagedTransaction&gt;;
+    # frozen FX, computed before staging — named for the role, never for a currency
+    fx_rate_date: date
+    fx_rate_is_carried: bool
+    fx_rate_to_base: Rate
+    fx_rate_to_secondary: Rate
+    amount_base: Money
+    amount_secondary: Money
+
+    dedupe_hash: str = Field(min_length=64, max_length=64)
+    source_page_number: int | None
+    source_row_number: int
+    raw_row: dict[str, Any]
+
+    @model_validator(mode=&quot;after&quot;)
+    def translations_agree_with_the_stated_rate(self) -&gt; Self:
+        if abs(self.amount * self.fx_rate_to_base - self.amount_base) &gt; Decimal(&quot;0.01&quot;):
+            raise ValueError(&quot;amount_base is inconsistent with the stated rate&quot;)
+        return self
+
+    @model_validator(mode=&quot;after&quot;)
+    def original_amount_and_currency_travel_together(self) -&gt; Self:
+        if (self.original_amount is None) != (self.original_currency is None):
+            raise ValueError(&quot;original_amount and original_currency must be set together&quot;)
+        return self
 </code></pre>
-<p>The refinements are the contract&#39;s teeth. A float that has lost precision, or an internally
+<p>The model validators are the contract&#39;s teeth. A float that has lost precision, or an internally
 inconsistent FX translation, fails in the service where the error names the offending row — not in
 Postgres where it names a constraint.</p>
 <h3 id="write-sequence">Write sequence</h3>

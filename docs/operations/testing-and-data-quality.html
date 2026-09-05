@@ -439,7 +439,7 @@ branch, not in history. Redaction keeps layout, column positions and formatting;
 amounts, dates, account numbers and merchant names. The <code>README.md</code> in each directory records
 provenance so a future layout change can be diagnosed.</p>
 <h3 id="property-based-tests">Property-based tests</h3>
-<p><code>hypothesis</code> generates the awkward cases — zero amounts, extreme values, boundary dates — more reliably than hand-written examples. Two properties hold for <em>any</em> generated input: a parsed statement's opening balance plus the sum of its rows equals its declared closing balance, and a normalized transaction's <code>amountInr</code> equals its amount times its stated rate, to four decimal places.</p>
+<p><code>hypothesis</code> generates the awkward cases — zero amounts, extreme values, boundary dates — more reliably than hand-written examples. Two properties hold for <em>any</em> generated input: a parsed statement's opening balance plus the sum of its rows equals its declared closing balance, and a normalized transaction's <code>amount_base</code> equals its amount times its stated rate, to four decimal places.</p>
 <p><code>hypothesis</code> generates the awkward cases — zero amounts, extreme values, boundary dates — more
 reliably than hand-written examples do.</p>
 <h3 id="sign-convention">Sign convention</h3>

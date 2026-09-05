@@ -174,7 +174,7 @@ defeats the purpose.
 ☐  Feature works against real data, not only fixtures
 ☐  Unit tests cover the calculation logic
 ☐  Any invariant the milestone touches has a test
-☐  `oneledger doctor` reports no new warnings
+☐  Settings › Data Quality reports no new warnings (`GET /doctor` — there is no CLI, ADR-0013)
 ☐  Migrations apply cleanly from an empty database
 ☐  Types regenerated; schema parity test passes
 ☐  Docs updated where behaviour changed
