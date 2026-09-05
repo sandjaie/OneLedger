@@ -339,20 +339,20 @@ body {
       <h2>Decisions</h2>
       <ul><li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="#" aria-current="page">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="#" aria-current="page">0002 Supabase + Vercel + local importer · superseded</a></li>
 <li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
 <li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
 <li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
 <li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
 <li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
 <li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
 <li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
 <li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
 <li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
 <li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
+<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
 <li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li></ul>
     </div>
       </nav>
@@ -360,6 +360,13 @@ body {
         <article class="prose">
           <h1 id="adr-0002--supabase--vercel--local-python-importer">ADR-0002 — Supabase + Vercel + local Python importer</h1>
 <p><strong>Status:</strong> Superseded by <a href="./0018-one-vps-one-compose-file.html">ADR-0018</a> · <strong>Date:</strong> 2026-09-04</p>
+<blockquote>
+<p><strong>This decision no longer holds.</strong> It is kept as the record of what was decided
+and why it changed — deleting it would leave the current architecture looking arbitrary. The
+decision in force is <a href="./0018-one-vps-one-compose-file.html">ADR-0018</a>.</p>
+<p>What changed: this ADR chose Supabase, Vercel and a local Python CLI. Postgres is now a container, the app is a compose stack on one VPS, and parsing happens in the API service.
+Everything below describes the system as of 04 September 2026, not the one being built.</p>
+</blockquote>
 <h2 id="context">Context</h2>
 <p>Hard constraint: <strong>zero infrastructure spend.</strong> Free tiers only, localhost first, cloud
 eventually.</p>
