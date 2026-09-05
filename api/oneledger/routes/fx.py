@@ -10,7 +10,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_owner
 from ..db import connect
-from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate, terminal_anchor
+from ..fx import (
+    EcbFrankfurterSource,
+    Peg,
+    anchor_chain,
+    carry_forward,
+    cross_rate,
+    terminal_anchor,
+)
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
@@ -35,10 +42,12 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
         )
         bases = {row[0] for row in cur.fetchall()}
 
-    # A pegged currency's anchor is quoted too, even when no account holds it. Without this
+    # Every anchor along the chain is quoted too, even when no account holds it. Without this
     # the peg-identity check joins AED->INR rows against USD->INR rows that were never
-    # written, finds nothing, and reports zero violations while proving nothing.
-    bases |= {pegs[c].anchor for c in bases if c in pegs}
+    # written, finds nothing, and reports zero violations while proving nothing. The whole
+    # chain, not one hop: A->B->USD stored as A and B leaves the B->USD identity just as
+    # vacuous as storing A alone left A->USD.
+    bases = {c for b in bases for c in anchor_chain(b, pegs)}
     # ...but an anchor can be the reporting currency itself — base USD with secondary AED
     # puts USD back. A USD/USD row violates the no_self_pair constraint and means nothing.
     bases.discard(quote)
@@ -123,9 +132,8 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
 
     with connect() as conn:
         quote, bases, pegs = reporting_config(conn)
-        # A pegged currency is derived from its anchor — and an anchor may itself be pegged,
-        # so follow the chain to the end. Resolving one hop asks for the middle currency and
-        # never the one the feed actually publishes.
+        # A pegged currency is derived from its anchor, so only the end of each chain is
+        # fetched. `bases` already carries the intermediates; they are stored, not requested.
         fetch = sorted({terminal_anchor(c, pegs) for c in [quote, *bases]})
         # Frankfurter snaps a range start backward to the previous publication day, so asking
         # from 10 days earlier guarantees carry_forward has something to fill from.
