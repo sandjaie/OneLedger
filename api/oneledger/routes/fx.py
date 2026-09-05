@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 import psycopg
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_owner
 from ..db import connect
@@ -39,6 +39,9 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
     # the peg-identity check joins AED->INR rows against USD->INR rows that were never
     # written, finds nothing, and reports zero violations while proving nothing.
     bases |= {pegs[c].anchor for c in bases if c in pegs}
+    # ...but an anchor can be the reporting currency itself — base USD with secondary AED
+    # puts USD back. A USD/USD row violates the no_self_pair constraint and means nothing.
+    bases.discard(quote)
     return quote, sorted(bases), pegs
 
 
@@ -53,7 +56,11 @@ def to_rows(
     rows: list[dict[str, Any]] = []
     for base in bases:
         series = {day: cross_rate(rates, base, quote, pegs) for day, rates in published.items()}
-        source = "derived_peg" if base in pegs else EcbFrankfurterSource.name
+        # Either side going through a peg makes the result derived. Checking only the base
+        # labels an ECB-published USD as `ecb` while reporting in a pegged AED, when the cross
+        # in fact travelled through the peg.
+        derived = base in pegs or quote in pegs
+        source = "derived_peg" if derived else EcbFrankfurterSource.name
         for day, rate, carried in carry_forward(series, start, end):
             rows.append(
                 {
@@ -82,6 +89,11 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
               SET rate = EXCLUDED.rate, source = EXCLUDED.source,
                   is_carried_forward = EXCLUDED.is_carried_forward,
                   carried_from = EXCLUDED.carried_from, fetched_at = now()
+              -- Only reference rates are refreshable. A `manual` rate someone typed and an
+              -- `actual_transfer` rate read off a statement are observations, and a reference
+              -- feed does not get to overwrite an observation — multi-currency-and-fx.html §5
+              -- is explicit that actual rates beat reference rates.
+              WHERE fx_rate.source IN ('ecb', 'derived_peg')
             """,
             rows,
         )
@@ -91,6 +103,18 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
 
 @router.post("/backfill")
 def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[str, int]:
+    # carry_forward fills every calendar day in the range, so an end date in the future
+    # writes the last known rate forward into it — years of invented history from one typo.
+    # Nothing is silently invented (Invariant 7): refuse rather than clamp, so the caller
+    # learns their range was wrong instead of quietly getting a different one.
+    # One day of slack, deliberately. The service runs UTC and the caller may not: a request
+    # for their genuine "today" from UTC+4 arrives a calendar day ahead of the server's, and
+    # rejecting it would refuse a correct range. A typo like 2030-01-01 is still refused.
+    if end > date.today() + timedelta(days=1):
+        raise HTTPException(status_code=422, detail="end date is in the future")
+    if start > end:
+        raise HTTPException(status_code=422, detail="start date is after end date")
+
     with connect() as conn:
         quote, bases, pegs = reporting_config(conn)
         # A pegged currency is derived from its anchor, so fetch anchors instead of pegs.
