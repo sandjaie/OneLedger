@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Prints the Postgres DSN, built from the parts in .env. One source of truth for the
+# Prints the Postgres DSN, assembled from the parts in .env. One source of truth for the
 # password: nothing anywhere holds a second copy that can drift out of step.
 #
 #   DATABASE_URL="$(scripts/dsn.sh)" psql "$DATABASE_URL" -c '\dt'
 set -euo pipefail
-
-if [ -f .env ]; then
-  set -a; . ./.env; set +a
-fi
+cd "$(dirname "$0")/.."
+. scripts/load-env.sh
 
 : "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is unset — copy .env.example to .env}"
 printf 'postgresql://%s:%s@%s:%s/%s\n' \
