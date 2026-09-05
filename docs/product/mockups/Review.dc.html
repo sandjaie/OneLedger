@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{margin:0;background:#eef2f0;font-family:"IBM Plex Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#101614}a{color:#1d5c44;text-decoration:none}a:hover{color:#0f3d2c}.lbl{font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:rgba(16,22,20,.62)}.mono{font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums}.card{background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px}.grow{display:flex;flex-direction:column;gap:2px;min-width:0}.trunc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style></helmet>
+
+<div style="display:flex;min-height:900px;background:#eef2f0">
+
+<nav style="flex:none;width:132px;background:#101614;padding:22px 0 18px;display:flex;flex-direction:column;gap:26px">
+<div style="padding:0 16px;display:flex;flex-direction:column;gap:3px">
+<div style="font-family:'IBM Plex Serif',serif;font-size:17px;color:#eef2f0;letter-spacing:-.01em">OneLedger</div>
+<div style="font:500 8.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#7fc4a8">UAE · INDIA</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:1px;padding:0 8px">
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Overview</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Accounts</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Transactions</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Cash Flow</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Investments</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Loans</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Net Worth</div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Documents</div>
+<div style="font-size:12.5px;color:#eef2f0;background:rgba(127,196,168,.16);padding:7px 8px;border-radius:6px;display:flex;justify-content:space-between;align-items:center"><span>Review</span><span class="mono" style="font-size:9.5px;background:#7fc4a8;color:#101614;padding:1px 5px;border-radius:8px">21</span></div>
+<div style="font-size:12.5px;color:rgba(238,242,240,.55);padding:7px 8px">Settings</div>
+</div>
+<div style="margin-top:auto;padding:0 16px" class="lbl">MOCKUP SET 01<br>REVIEW QUEUE</div>
+</nav>
+
+<div style="flex:1;display:flex;flex-direction:column;min-width:0">
+
+<div style="display:flex;align-items:center;gap:14px;padding:16px 30px;border-bottom:1px solid rgba(16,22,20,.06)">
+<div class="grow" style="flex:1">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Review</h1>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">Emirates NBD Current · Sep 2026 · 217 rows · 21 need attention</span>
+</div>
+<div style="display:flex;background:rgba(16,22,20,.06);border-radius:7px;padding:2px">
+<button style="border:0;font:inherit;font-size:11px;padding:4px 11px;border-radius:5px;background:transparent;color:rgba(16,22,20,.62);cursor:pointer">AED</button>
+<button style="border:0;font:inherit;font-size:11px;padding:4px 11px;border-radius:5px;background:#fbfcfb;color:#101614;box-shadow:0 1px 2px rgba(16,22,20,.12);cursor:pointer">INR</button>
+</div>
+</div>
+
+<div style="padding:18px 30px;display:flex;flex-direction:column;gap:16px;flex:1">
+
+<div style="display:flex;align-items:center;gap:11px;background:#f4f8f6;border:1px solid rgba(45,122,92,.22);border-radius:10px;padding:12px 16px">
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2f7a5c" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M3 8.4 6.4 11.8 13 5.2"></path></svg>
+<span class="mono" style="font-size:12.5px;color:#1d5c44">Reconciled — opening 42,180.00 &nbsp;+&nbsp; Σ −3,240.50 &nbsp;=&nbsp; closing 38,939.50</span>
+<span style="margin-left:auto;font-size:11.5px;color:rgba(16,22,20,.62)">A statement that doesn’t balance doesn’t import</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:9px">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#1d5c44" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h11l-2.5-2.5"></path><path d="M13.5 10.5h-11l2.5 2.5"></path></svg>
+<span class="lbl" style="color:#1d5c44">TRANSFERS</span><span class="lbl mono">(4)</span>
+<button style="margin-left:auto;border:1px solid rgba(45,122,92,.35);background:#f4f8f6;color:#1d5c44;font:inherit;font-size:11.5px;padding:3px 11px;border-radius:6px;cursor:pointer">Confirm all 4</button>
+</div>
+<div class="card">
+<div style="display:grid;grid-template-columns:28px 62px minmax(0,1fr) 124px 200px;gap:14px;padding:11px 16px;align-items:baseline;border-bottom:1px solid rgba(16,22,20,.06)">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="#2f7a5c"><rect x="1" y="1" width="14" height="14" rx="3"></rect><path d="M4 8.2 6.8 11 12 5.4" fill="none" stroke="#fbfcfb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62)">03 Sep</span>
+<div class="grow"><span class="mono trunc" style="font-size:12.5px">TT REMITTANCE TO INDIA</span><span class="mono" style="font-size:11px;color:rgba(16,22,20,.62)">0.94 · remittance · cost AED 103.85 (fee 26.25 + spread 77.60)</span></div>
+<span class="mono" style="font-size:13px;text-align:right">− AED 5,000.00</span>
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62);text-align:right">→ HDFC NRE &nbsp;<span style="color:#101614">+ ₹1,13,500</span></span>
+</div>
+<div style="display:grid;grid-template-columns:28px 62px minmax(0,1fr) 124px 200px;gap:14px;padding:11px 16px;align-items:baseline">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="#2f7a5c"><rect x="1" y="1" width="14" height="14" rx="3"></rect><path d="M4 8.2 6.8 11 12 5.4" fill="none" stroke="#fbfcfb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62)">15 Sep</span>
+<div class="grow"><span class="mono trunc" style="font-size:12.5px">CREDIT CARD PAYMENT</span><span class="mono" style="font-size:11px;color:rgba(16,22,20,.62)">0.99 · card_payment · not spending — the expense happened at purchase</span></div>
+<span class="mono" style="font-size:13px;text-align:right">− AED 4,320.00</span>
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62);text-align:right">→ ENBD Visa &nbsp;<span style="color:#101614">+ AED 4,320.00</span></span>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:9px">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#b1453a" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6.4"></circle><path d="M6.3 6.2a1.8 1.8 0 1 1 2.1 2.2v1"></path><circle cx="8.4" cy="11.4" r=".55" fill="#b1453a" stroke="none"></circle></svg>
+<span class="lbl" style="color:#b1453a">UNCLASSIFIED</span><span class="lbl mono">(11)</span>
+</div>
+<div class="card">
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr) 124px 230px;gap:14px;padding:11px 16px;align-items:center;border-bottom:1px solid rgba(16,22,20,.06)">
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62)">07 Sep</span>
+<span class="mono trunc" style="font-size:12.5px">NOON.COM DUBAI</span>
+<span class="mono" style="font-size:13px;text-align:right">− AED 284.00</span>
+<button style="border:1px dashed rgba(16,22,20,.22);background:transparent;color:rgba(16,22,20,.62);font:inherit;font-size:12px;padding:5px 11px;border-radius:6px;cursor:pointer">Choose a category…</button>
+</div>
+<div style="display:grid;grid-template-columns:62px minmax(0,1fr) 124px 230px;gap:14px;padding:11px 16px;align-items:center">
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62)">09 Sep</span>
+<span class="mono trunc" style="font-size:12.5px">AL MAYA SUPERMARKET</span>
+<span class="mono" style="font-size:13px;text-align:right">− AED 162.50</span>
+<button style="border:1px dashed rgba(16,22,20,.22);background:transparent;color:rgba(16,22,20,.62);font:inherit;font-size:12px;padding:5px 11px;border-radius:6px;cursor:pointer">Choose a category…</button>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:9px">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#b1453a" stroke-width="1.5" stroke-linejoin="round"><path d="M8.8 1.6 3.2 9.1h3.6l-.8 5.3 5.8-7.7H8.2z"></path></svg>
+<span class="lbl" style="color:#b1453a">LOW CONFIDENCE</span><span class="lbl mono">(6)</span>
+</div>
+<div class="card" style="display:grid;grid-template-columns:62px minmax(0,1fr) 124px 230px;gap:14px;padding:11px 16px;align-items:center">
+<span class="mono" style="font-size:12px;color:rgba(16,22,20,.62)">12 Sep</span>
+<div class="grow"><span class="mono trunc" style="font-size:12.5px">CAREEM DUBAI</span><span style="font-size:11px;color:#b1453a">Unusually large for Careem — food delivery rather than a ride?</span></div>
+<span class="mono" style="font-size:13px;text-align:right">− AED 1,240.00</span>
+<span class="mono" style="font-size:12px;text-align:right">Transport / Taxi &nbsp;<span style="color:#b1453a">0.62</span></span>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:9px">
+<div class="card" style="display:flex;align-items:center;gap:9px;padding:13px 16px">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#2f7a5c" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.4 6.4 11.8 13 5.2"></path></svg>
+<span class="lbl" style="color:#2f7a5c">READY</span><span class="lbl mono">(183)</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">classified with confidence, pre-ticked — shown as a count, not 183 lines to scroll</span>
+<button style="margin-left:auto;border:1px solid rgba(16,22,20,.12);background:transparent;font:inherit;font-size:11.5px;padding:3px 11px;border-radius:6px;cursor:pointer">Expand</button>
+</div>
+<div class="card" style="display:flex;align-items:center;gap:9px;padding:13px 16px">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="rgba(16,22,20,.5)" stroke-width="1.5"><circle cx="8" cy="8" r="6.4"></circle><path d="M3.6 12.4 12.4 3.6"></path></svg>
+<span class="lbl">DUPLICATES</span><span class="lbl mono">(27)</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">already imported from the August statement</span>
+<button style="margin-left:auto;border:1px solid rgba(16,22,20,.12);background:transparent;font:inherit;font-size:11.5px;padding:3px 11px;border-radius:6px;cursor:pointer">Expand</button>
+</div>
+</div>
+
+</div>
+
+<div style="display:flex;align-items:center;gap:12px;padding:14px 30px;border-top:1px solid rgba(16,22,20,.06);background:#fbfcfb">
+<button style="border:1px solid rgba(16,22,20,.12);background:transparent;font:inherit;font-size:12.5px;padding:8px 15px;border-radius:7px;cursor:pointer">Select all ready</button>
+<button style="border:1px solid rgba(16,22,20,.12);background:transparent;font:inherit;font-size:12.5px;padding:8px 15px;border-radius:7px;cursor:pointer">Categorise selected ▾</button>
+<span style="margin-left:auto;font-size:11.5px;color:rgba(16,22,20,.62)">Tab, Space and Enter reach every control</span>
+<button class="mono" style="border:0;background:#101614;color:#eef2f0;font-size:13px;padding:9px 20px;border-radius:7px;cursor:pointer">Import 217 rows</button>
+</div>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>
