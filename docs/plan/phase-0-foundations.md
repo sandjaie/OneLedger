@@ -1195,22 +1195,31 @@ def require_owner(session: str = Cookie(default="")) -> str:
 from __future__ import annotations
 
 import os
+from urllib.parse import quote
 
 import psycopg
 
 
-def dsn() -> str:
-    """Built from parts, so the password exists in exactly one place.
+def _user() -> str:
+    return os.environ.get("POSTGRES_USER", "oneledger")
 
-    A DATABASE_URL in .env would be a second copy, and two copies of one value drift —
-    scripts/dsn.sh assembles the identical string for shells that need one.
-    """
+
+def _password() -> str:
     try:
-        password = os.environ["POSTGRES_PASSWORD"]
+        return os.environ["POSTGRES_PASSWORD"]
     except KeyError:
         raise SystemExit("POSTGRES_PASSWORD is not set. Copy .env.example to .env.") from None
+
+
+def dsn() -> str:
+    """The connection as a URI, for anything that needs a string.
+
+    Percent-encoded, matching scripts/dsn.sh. A password is invited to be real, and `@`, `/`,
+    `:` and `#` are all legal in one and all structural in a URI — interpolating them raw
+    changes how libpq parses the string and authentication fails for no visible reason.
+    """
     return (
-        f"postgresql://{os.environ.get('POSTGRES_USER', 'oneledger')}:{password}"
+        f"postgresql://{quote(_user(), safe='')}:{quote(_password(), safe='')}"
         f"@{os.environ.get('POSTGRES_HOST', '127.0.0.1')}"
         f":{os.environ.get('POSTGRES_PORT', '5432')}"
         f"/{os.environ.get('POSTGRES_DB', 'oneledger')}"
@@ -1218,7 +1227,18 @@ def dsn() -> str:
 
 
 def connect() -> psycopg.Connection:
-    return psycopg.connect(dsn())
+    """Connect with keyword parameters rather than a URI.
+
+    Nothing is parsed, so no character in a password can change the meaning of the
+    connection. dsn() exists for the places that genuinely need a string.
+    """
+    return psycopg.connect(
+        host=os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+        port=int(os.environ.get("POSTGRES_PORT", "5432")),
+        dbname=os.environ.get("POSTGRES_DB", "oneledger"),
+        user=_user(),
+        password=_password(),
+    )
 ```
 
 ```python
