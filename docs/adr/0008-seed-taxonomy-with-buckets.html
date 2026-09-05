@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0005 — Google OAuth, single user, household-capable schema — OneLedger</title>
+  <title>ADR-0008 — Seed taxonomy with Need/Want/Investment/Debt buckets — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,82 +337,85 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="#" aria-current="page">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="./0017-python-backend-service.html">0017 Python backend service</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="#" aria-current="page">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0005--google-oauth-single-user-household-capable-schema">ADR-0005 — Google OAuth, single user, household-capable schema</h1>
-<p><strong>Status:</strong> Accepted; the mechanism is revised by <a href="0018-one-vps-one-compose-file.html">ADR-0018</a> — Google OIDC in the service rather than Supabase Auth · <strong>Date:</strong> 2026-09-04</p>
+          <h1 id="adr-0008--seed-taxonomy-with-needwantinvestmentdebt-buckets">ADR-0008 — Seed taxonomy with Need/Want/Investment/Debt buckets</h1>
+<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-04</p>
 <h2 id="context">Context</h2>
-<p>This system holds an entire financial life. Authentication is a security-critical decision, and
-authentication <em>flows</em> — registration, invitation, password reset — are where a large share of
-auth vulnerabilities live.</p>
-<p>Separately: the ledger is one person&#39;s today, but a spouse&#39;s accounts could reasonably be added
-later. Retrofitting a tenancy dimension across forty tables is a genuinely painful migration.</p>
+<p>Two related questions:</p>
+<ol>
+<li>Does the product ship with a category tree, or does the user build one?</li>
+<li>The brief asks for both a detailed category view <em>and</em> a Needs/Wants/Investments/Debt view.
+Are those one classification or two?</li>
+</ol>
 <h2 id="decision">Decision</h2>
-<blockquote>
-<p><strong>Still in force, but read &quot;Supabase Auth&quot; as &quot;the API service&quot;.</strong>
-<a href="./0018-one-vps-one-compose-file.html">ADR-0018</a> removed Supabase; the service now verifies
-Google&#39;s <code>id_token</code> against Google&#39;s JWKS itself and issues its own signed session cookie. Every
-property this ADR decided — no passwords, no signup, one pinned address — is unchanged. Only the
-component performing the check moved.</p>
-</blockquote>
-<p><strong>Authentication:</strong> Google OAuth via Supabase Auth. No passwords. No signup flow, no public
-registration, no invitations, no password reset. The permitted account is pinned by email in
-configuration; any other Google account is rejected at the application layer even if Supabase
-authenticates it successfully.</p>
-<p><strong>Tenancy:</strong> <code>household_id</code> on every household-scoped table, and <code>owner_person_id</code> on accounts
-and holdings, from the very first migration. RLS policies key on <code>household_id</code>. One household
-row, one person row, one <code>app_user</code> row in Phase 1.</p>
-<p><strong>No multi-user behaviour is built.</strong> No user management, no roles beyond <code>owner</code>, no sharing.</p>
+<p><strong>Ship a curated two-level taxonomy</strong>, freely editable — add, rename, merge, deactivate.
+The <em>category tree</em> is universal: Housing, Utilities, Groceries, Transport, Health, Education and
+the rest are what spending looks like anywhere. The <em>merchant rules</em> that fill it are not, so they
+ship as <strong>packs</strong> — one global pack always loaded, plus a per-country pack for each country the
+household selects at setup.</p>
+<p><strong>Every category carries a <code>bucket</code></strong>: <code>need</code>, <code>want</code>, <code>investment</code>, <code>debt_service</code>, <code>income</code> or
+<code>ignore</code>. One classification pass produces both views.</p>
 <h2 id="rationale">Rationale</h2>
-<p><strong>Not building signup is a security control, not a shortcut.</strong> Credential stuffing, password
-reset poisoning, enumeration through registration, invitation token flaws — none of these exist
-if the flows don&#39;t. This is the single largest structural advantage a single-user system has, and
-it would be careless not to take it.</p>
-<p><strong>MFA belongs on the Google account</strong>, where it is already configured and already managed.
-Reimplementing it here would be strictly worse.</p>
-<p><strong>The tenancy columns are nearly free now and expensive later.</strong> They cost a <code>NOT NULL UUID</code> per
-table today. Added later they cost a migration touching every table, every query, every RLS
-policy, and a backfill against live data.</p>
-<p><strong>RLS is enabled from day one even with one user</strong> for three reasons: a forgotten <code>WHERE</code> returns
-nothing instead of everything; the anon key is public by design and RLS is what makes that safe;
-and the policies are already correct on the day a second person is added.</p>
+<p><strong>Reports must work on the first import.</strong> An empty taxonomy means the first import produces a
+list of uncategorized transactions and no insight at all — the least motivating possible first
+experience, at exactly the moment motivation matters most.</p>
+<p><strong>The rules must be regional to be useful.</strong> A generic taxonomy has &quot;Utilities&quot; but no DEWA,
+&quot;Transport&quot; but no Salik or Careem, &quot;Investments&quot; but no SIP or NPS. Around 120 seed rules
+mapping the merchants one household actually encounters is what makes the first import land at
+~70% classified instead of ~20%. That argument is about <em>a</em> region, not about these two: the
+packs are <code>db/seeds/rules/regions/&lt;iso2&gt;.yaml</code>, and AE and IN are simply the two that exist
+because they were needed first.</p>
+<p><strong>Bucket-on-category means the coarse view is free.</strong> The alternative — asking the user to
+classify each transaction twice, or maintaining a separate mapping — is redundant work for a
+mapping that is stable. &quot;Groceries is a need&quot; does not change transaction by transaction.</p>
+<p><strong>The bucket is a default, not a verdict.</strong> Whether dining out is a need or a want is genuinely
+personal. Shipping an opinion and letting it be overridden is better than either shipping no
+opinion or insisting on one.</p>
+<p><strong>Two levels, not more.</strong> One level loses &quot;Food &amp; Dining → Coffee&quot;, which is precisely the
+drill-down the brief asks for. Three levels invites over-classification and produces reports too
+sparse per node to say anything.</p>
 <h2 id="alternatives-considered">Alternatives considered</h2>
-<p><strong>Email/password.</strong> Rejected: a password to store, hash, rotate, reset and leak, for zero benefit
-over an OAuth provider already in daily use.</p>
-<p><strong>No auth at all (localhost only).</strong> Simplest. Rejected because the dashboard should be reachable
-from a phone, and because an unauthenticated deployment is one misconfiguration away from public.</p>
-<p><strong>Full multi-user now.</strong> Rejected: builds user management, invitations and permission checks for
-a system with one user, and reintroduces the auth-flow attack surface the decision above removes.</p>
-<p><strong>Single user with no tenancy columns.</strong> Simplest schema. Rejected on migration cost — the one
-decision here that would be genuinely expensive to reverse.</p>
+<p><strong>Fully user-defined.</strong> Perfectly fitted to how the user thinks. Rejected: the first several
+imports become taxonomy design work, and early reports are noise until the tree settles. The
+editability of the seed set captures most of the benefit at none of the cost.</p>
+<p><strong>Flat categories, no subcategories.</strong> Simplest queries and UI. Rejected: &quot;how much did I spend on
+coffee last year&quot; is a stated goal and needs the second level.</p>
+<p><strong>Separate bucket mapping table.</strong> More flexible — the same category could bucket differently in
+different periods. Rejected as flexibility nobody asked for, at the cost of a join in every
+report and a second thing to keep consistent.</p>
 <h2 id="consequences">Consequences</h2>
-<p><strong>Good.</strong> No password anywhere in the system. Minimal auth surface. Household support is a
-feature flag and a second <code>app_user</code> row rather than a migration. RLS is correct before it is
-needed.</p>
-<p><strong>Costs.</strong> Google is a hard dependency for access — losing that account means losing access until
-the Supabase auth provider is changed. Accepted; the alternative is a password. Also, one
-<code>NOT NULL UUID</code> per table serving no present purpose, which will look like over-engineering right
-up until it doesn&#39;t.</p>
+<p><strong>Good.</strong> Meaningful reports from the first import. Both the detailed and coarse views from one
+classification. Regional relevance out of the box for a country with a pack. Seed rules can be
+versioned and updated independently of user rules, and a new country is a new file rather than a
+change to any existing one.</p>
+<p><strong>Costs.</strong> The seed taxonomy needs maintaining — new merchants appear, and merchants rename;
+now once per pack. <strong>A country with no pack gets the tree and the global merchants only, and its
+first import lands well below 70% classified.</strong> That is a worse first experience, not a broken
+one: the rule-from-correction flow (classification.html §4) is how the pack gets written, and
+contributing it back is a pull request with one file in it. The taxonomy is also opinionated, and
+some opinions will be wrong for a given household; editability is the answer.
+Changing a category&#39;s bucket retroactively changes historical Need/Want reports, which is correct
+behaviour but should be surfaced when it happens.</p>
 
         </article>
       </main>

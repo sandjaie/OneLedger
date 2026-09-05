@@ -337,25 +337,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -414,14 +412,14 @@ start earning their keep. Nothing is dropped; it is sequenced.</p>
 <p><strong>Deliverables</strong></p>
 <ul>
 <li>Monorepo skeleton per <a href="../design/architecture.html">architecture.html</a> §3.</li>
-<li>The full <code>docker compose</code> stack — <code>web</code>, <code>api</code>, <code>db</code> — running locally. The same file deploys later (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>).</li>
+<li>The full <code>docker compose</code> stack — <code>web</code>, <code>api</code>, <code>db</code> — running locally. The same file deploys later (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>).</li>
 <li>Migrations <code>0001</code>–<code>0004</code>: extensions, reference data, identity, RLS, accounts, FX rates.</li>
 <li>Google OIDC implemented in the service; a signed session cookie; one <code>app_user</code> row.</li>
 <li>RLS enabled on every household-scoped table, with a test proving isolation.</li>
 <li>FX backfill: <strong>36 months</strong> of USD/INR from ECB back to 01 Jan 2024, AED/INR derived through the
-peg (<a href="../adr/0013-36-month-history-horizon.html">ADR-0013</a>).</li>
+peg (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
 <li>Next.js app shell: layout, navigation, auth guard, currency toggle in the header.</li>
-<li><strong>The Python service skeleton</strong> — FastAPI, <code>uv</code>, <code>ruff</code>, <code>mypy --strict</code>, <code>pytest</code>, and the <code>require_owner()</code> dependency that every route depends on (<a href="../adr/0017-python-backend-service.html">ADR-0017</a>).</li>
+<li><strong>The Python service skeleton</strong> — FastAPI, <code>uv</code>, <code>ruff</code>, <code>mypy --strict</code>, <code>pytest</code>, and the <code>require_owner()</code> dependency that every route depends on (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>).</li>
 <li><code>.gitignore</code> excluding <code>pdf-statements/</code>, <code>*.pdf</code> and <code>.env</code>; pre-commit secret scan.</li>
 </ul>
 <p><strong>Done when</strong></p>
@@ -463,7 +461,7 @@ the way through, rather than four layouts half-done.</p>
 <blockquote>
 <p><strong>Re-planned twice.</strong> It originally read &quot;CSV/Excel, one institution&quot;; Q7 established that <strong>no
 institution provides CSV or Excel</strong> — every layout is PDF. Then
-<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a> made layouts data rather than code, so this
+<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a> made layouts data rather than code, so this
 milestone&#39;s deliverable is the <strong>generic engine plus the mapping UI</strong>, proven by mapping one
 layout. The card statements are that layout: cleanest of the four, they declare their own
 reconciliation anchors in a header block, and one profile covers both cards — 38 of the 71 files.</p>
@@ -471,7 +469,7 @@ reconciliation anchors in a header block, and one profile covers both cards — 
 <p><strong>Build</strong></p>
 <ul>
 <li><strong>The generic extraction engine</strong>, driven by a <code>statement_layout</code> row
-(<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>). No bank name in code.</li>
+(<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). No bank name in code.</li>
 <li><strong>The layout mapping UI</strong>: find the header row, auto-propose column bands from its x-positions,
 show the parsed result live, let the user drag and relabel, save the profile.</li>
 <li>Field-name synonyms so auto-proposal works across layouts (<code>Narration</code>/<code>Particulars</code>/
@@ -527,7 +525,7 @@ Hardest of the four; done last deliberately.</li>
 <li>Diagnostics panel: extracted rows beside the computed running balance, divergence highlighted.</li>
 <li>Scanned-PDF detection with a clear &quot;not supported&quot; message rather than garbage output.</li>
 <li><strong>Each new quirk is a considered addition to the vocabulary</strong>, not a reflex. If the list starts
-growing per-bank, <a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a> has failed and needs
+growing per-bank, <a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a> has failed and needs
 revisiting with a superseding ADR.</li>
 </ul>
 <p><strong>Done when</strong></p>
@@ -537,7 +535,7 @@ revisiting with a superseding ADR.</li>
 <li>An encrypted statement imports without the password touching disk.</li>
 <li>All 71 gathered statements import; every account reconciles across its full period.</li>
 <li>A layout invented for the test — a synthetic statement in an unseen format — can be mapped and
-imported without touching the codebase. <strong>This is the real acceptance test for ADR-0016.</strong></li>
+imported without touching the codebase. <strong>This is the real acceptance test for ADR-0012.</strong></li>
 </ul>
 <h3 id="m4--classification-engine">M4 — Classification engine</h3>
 <p><strong>Build</strong></p>
@@ -682,7 +680,7 @@ rate, investment rate, 12-month chart.</li>
 <p>All scheduled milestones done (M8 excepted while descheduled), plus:</p>
 <ol>
 <li><strong>36 months</strong> of real statements across all four layouts, imported and reconciled — back to the
-01 Jan 2024 anchor (<a href="../adr/0013-36-month-history-horizon.html">ADR-0013</a>).</li>
+01 Jan 2024 anchor (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
 <li>Monthly import + review completed in under 20 minutes.</li>
 <li>Net worth agrees with a manual tally to within 1%.</li>
 <li>Monthly spending agrees with a hand-checked month, exactly.</li>
@@ -738,7 +736,7 @@ redesign — the tables are already defined in
 two months. Analysis over an incomplete ledger produces confident nonsense.</p>
 <hr>
 <h2 id="v2--intelligence">V2 — Intelligence</h2>
-<p><strong>Everything AI lives here</strong> (<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>). The privacy decision is
+<p><strong>Everything AI lives here</strong> (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>). The privacy decision is
 explicitly deferred and must be made before any of this starts.</p>
 <table>
 <thead>
@@ -794,7 +792,7 @@ unreliable.</p>
 <p><strong>Rules</strong></p>
 <ol>
 <li>A new Phase 1 idea goes to Phase 2 by default. Promoting it requires demoting something.</li>
-<li>AI in Phase 1 or 2 is blocked by ADR-0004. Not a judgement call during the build.</li>
+<li>AI in Phase 1 or 2 is blocked by ADR-0003. Not a judgement call during the build.</li>
 <li>A new institution parser is always allowed — it is additive and doesn&#39;t touch shared code.</li>
 <li>Anything requiring paid infrastructure goes to a &quot;when hosted&quot; list, not into a phase.</li>
 <li>If a milestone hasn&#39;t finished after three sessions, it was too large. Split it rather than

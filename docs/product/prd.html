@@ -337,25 +337,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -404,14 +402,14 @@ by design and not as a temporary measure.</li>
 <li><strong>Not an accounting system.</strong> Single-entry with explicit transfer links, not double-entry
 journals. The rigour that matters is captured by the invariants in §4.</li>
 <li><strong>Not AI-first.</strong> No LLM calls exist in Phase 1 or Phase 2. See
-<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>.</li>
+<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>.</li>
 </ul>
 <h2 id="3-users-and-context">3. Users and context</h2>
 <p>One user. Tax-resident considerations in two jurisdictions. Earns primarily in AED, accumulates
 long-term wealth primarily in INR, and moves money between the two regularly.</p>
 <p>The schema carries <code>household_id</code> and <code>owner_person_id</code> from day one so a second person can be
 added later without a migration that touches every table — but no multi-user <em>behaviour</em> is built
-now. See <a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>.</p>
+now. See <a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>.</p>
 <p><strong>Usage shape:</strong> opened daily for ten seconds (the dashboard), used properly monthly for twenty
 minutes (import statements, clear the review queue). The product must be excellent at both and
 optimise for neither at the other&#39;s expense.</p>
@@ -560,7 +558,7 @@ rule (§5.5).</li>
 <p><strong>Formats:</strong> PDF (including password-protected) and manual entry. <strong>No institution in use
 provides CSV or Excel</strong> (Q7), so PDF extraction is the only import path, not the fallback one.
 Email attachment ingestion is Phase 2.</p>
-<p><strong>No institution is named in application code</strong> (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>).
+<p><strong>No institution is named in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>).
 A statement layout is a row the user creates through a mapping UI on first import of an
 unrecognised format: the app finds the header row, proposes column bands from its x-positions, and
 the user confirms or drags. One generic engine reads any profile.</p>
@@ -631,7 +629,7 @@ from the two leg amounts; the gap to mid-market is a recorded cost (§5.6).</li>
 <hr>
 <h3 id="55-classification--phase-1-deterministic-only">5.5 Classification — <em>Phase 1 (deterministic only)</em></h3>
 <p>Full specification: <a href="../design/classification.html">classification.html</a>.</p>
-<p><strong>A deterministic cascade. No AI in Phase 1 or Phase 2</strong> (<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>).</p>
+<p><strong>A deterministic cascade. No AI in Phase 1 or Phase 2</strong> (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>).</p>
 <pre><code>1. Explicit user override on this transaction   → stop
 2. User rule (highest priority first)           → stop
 3. Merchant alias match                         → stop
@@ -672,7 +670,7 @@ repayment, investment funding, cash withdrawal.</p>
 <p><strong>Detection:</strong> automatic candidate matching on date proximity, amount (FX-aware), direction and
 account pair, scored for confidence and <strong>confirmed by the user in the review queue</strong>. High
 confidence pre-ticks; nothing links silently
-(<a href="../adr/0009-transfer-auto-detection-with-review.html">ADR-0009</a>).</p>
+(<a href="../adr/0007-transfer-auto-detection-with-review.html">ADR-0007</a>).</p>
 <p><strong>The FX cost model</strong> is what makes this more than bookkeeping. A confirmed transfer stores:</p>
 <pre><code>source_amount · destination_amount
 implied_rate   = destination_amount / source_amount     ← what you actually got
@@ -694,7 +692,7 @@ every bank statement and is one of the more genuinely useful things this product
 <hr>
 <h3 id="57-credit-cards--phase-1">5.7 Credit Cards — <em>Phase 1</em></h3>
 <p>Cards are modelled as liability accounts <strong>plus first-class statement cycles</strong>
-(<a href="../adr/0011-credit-card-statement-cycles.html">ADR-0011</a>).</p>
+(<a href="../adr/0009-credit-card-statement-cycles.html">ADR-0009</a>).</p>
 <p><strong>Per card:</strong> current outstanding, credit limit, utilisation %, statement balance, statement
 date, payment due date, minimum due, and whether the last statement was paid in full.</p>
 <p><strong>Statement cycle object</strong> — each imported card statement becomes a record with period, opening
@@ -714,7 +712,7 @@ would double it.</p>
 <hr>
 <h3 id="58-investments--phase-1-transaction-level">5.8 Investments — <em>Phase 1, transaction-level</em></h3>
 <p>Tracked at the level of individual lots — units and NAV per transaction — not as snapshots
-(<a href="../adr/0006-transaction-level-investment-lots.html">ADR-0006</a>). XIRR cannot be backfilled later
+(<a href="../adr/0005-transaction-level-investment-lots.html">ADR-0005</a>). XIRR cannot be backfilled later
 without re-entering everything, so it is built now.</p>
 <p><strong>Per holding:</strong> units, average cost, invested amount, current value, absolute return, <strong>XIRR</strong>,
 asset class, fund category, country, currency, platform, account holder.</p>
@@ -737,7 +735,7 @@ labelled with their as-of date (I7).</p>
 <hr>
 <h3 id="59-manual-valuations--phase-1">5.9 Manual Valuations — <em>Phase 1</em></h3>
 <p>For assets with no importable statement: property, physical gold, EPF, PPF, anything opaque
-(<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>).</p>
+(<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>).</p>
 <p>The user records <em>&quot;as of 30 Sep 2026, this is worth X&quot;</em>. Net worth uses the most recent snapshot
 at or before the date being viewed — carried forward flat, <strong>never extrapolated</strong>.</p>
 <p><strong>Staleness is shown, not hidden (I7).</strong> A property valued 14 months ago is displayed with its
@@ -858,7 +856,7 @@ compensation trend.</p>
 not by reading statements. The normalized ledger built in Phase 1 is what makes this feasible;
 attempting it earlier would mean an LLM reading raw documents, which is both expensive and
 unreliable. Requires the privacy decision deferred in
-<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>.</p>
+<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>.</p>
 <hr>
 <h2 id="6-non-functional-requirements">6. Non-functional requirements</h2>
 <table>
@@ -886,7 +884,7 @@ unreliable. Requires the privacy decision deferred in
 </tr>
 <tr>
 <td>Cost</td>
-<td>Zero while local. Roughly <strong>$5–12 per month</strong> once hosted — one small VPS (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>). No per-service, per-seat or usage-based pricing: the bill does not grow with the ledger</td>
+<td>Zero while local. Roughly <strong>$5–12 per month</strong> once hosted — one small VPS (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>). No per-service, per-seat or usage-based pricing: the bill does not grow with the ledger</td>
 </tr>
 <tr>
 <td>Privacy</td>
@@ -944,12 +942,12 @@ the bank and then abandoned. Everything in §4 exists to earn that trust.</p>
 <tr>
 <td>Scope creep into AI</td>
 <td>High</td>
-<td>Locked out by ADR-0004. Not a judgement call during the build</td>
+<td>Locked out by ADR-0003. Not a judgement call during the build</td>
 </tr>
 <tr>
 <td>Transfer detection produces false links</td>
 <td>High</td>
-<td>Review queue is mandatory; nothing links silently (<a href="../adr/0009-transfer-auto-detection-with-review.html">ADR-0009</a>)</td>
+<td>Review queue is mandatory; nothing links silently (<a href="../adr/0007-transfer-auto-detection-with-review.html">ADR-0007</a>)</td>
 </tr>
 <tr>
 <td>Manual valuations decay</td>

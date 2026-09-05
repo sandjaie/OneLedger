@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0002 — Supabase + Vercel + local Python importer — OneLedger</title>
+  <title>ADR-0006 — Manual valuation snapshots for opaque assets — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,91 +337,73 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="#" aria-current="page">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="#" aria-current="page">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0002--supabase--vercel--local-python-importer">ADR-0002 — Supabase + Vercel + local Python importer</h1>
-<p><strong>Status:</strong> Superseded by <a href="./0018-one-vps-one-compose-file.html">ADR-0018</a> · <strong>Date:</strong> 2026-09-04</p>
-<blockquote>
-<p><strong>This decision no longer holds.</strong> It is kept as the record of what was decided
-and why it changed — deleting it would leave the current architecture looking arbitrary. The
-decision in force is <a href="./0018-one-vps-one-compose-file.html">ADR-0018</a>.</p>
-<p>What changed: this ADR chose Supabase, Vercel and a local Python CLI. Postgres is now a container, the app is a compose stack on one VPS, and parsing happens in the API service.
-Everything below describes the system as of 04 September 2026, not the one being built.</p>
-</blockquote>
+          <h1 id="adr-0006--manual-valuation-snapshots-for-opaque-assets">ADR-0006 — Manual valuation snapshots for opaque assets</h1>
+<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-04</p>
 <h2 id="context">Context</h2>
-<p>Hard constraint: <strong>zero infrastructure spend.</strong> Free tiers only, localhost first, cloud
-eventually.</p>
-<p>The original sketch was a conventional three-tier system: Next.js → hosted FastAPI → PostgreSQL.
-The interesting question is where the statement parsing runs, because parsing is by far the
-heaviest thing the system does — large PDFs, table extraction, unbounded runtime — while
-everything else is light.</p>
-<p>There is also a secondary goal: this should be a real Python learning project, not a thin
-wrapper.</p>
+<p>Some assets produce no importable statement: property, physical gold, EPF, PPF, and various
+holdings with no machine-readable output. Together they can be a large share of net worth — often
+the largest single line, in the case of property.</p>
+<p>Three options: exclude them, derive a value, or record one manually.</p>
 <h2 id="decision">Decision</h2>
-<p>Three components:</p>
-<ol>
-<li><strong>Next.js on Vercel</strong> — the app, reading Supabase directly from Server Components.</li>
-<li><strong>Supabase</strong> — Postgres, Auth (Google), and Storage. The single source of truth.</li>
-<li><strong>A local Python importer</strong> — a CLI on your own machine that parses statements and writes
-staged rows.</li>
-</ol>
-<p><strong>No hosted API server.</strong></p>
+<p>Record <strong>manual valuation snapshots</strong>: <em>&quot;as of date X, this is worth Y.&quot;</em></p>
+<p>Net worth on any date uses the most recent snapshot at or before that date, <strong>carried forward
+flat</strong>. Never interpolated between snapshots, never extrapolated beyond the latest.</p>
+<p>Snapshot age is displayed. A net worth including significantly stale valuations says so.</p>
+<h2 id="rationale">Rationale</h2>
+<p><strong>Excluding them makes net worth wrong in a more misleading way than a stale estimate does.</strong> A
+net worth that silently omits a property is not conservative; it is incorrect, and it is
+incorrect by an amount the user cannot see.</p>
+<p><strong>Carried forward flat, not interpolated.</strong> Drawing a smooth line between a snapshot in January
+and one in December implies month-by-month knowledge that does not exist. A step function is
+visually less satisfying and considerably more honest — and it makes the moment new information
+arrived legible on the chart.</p>
+<p><strong>Staleness must be visible</strong> (Invariant I7). A property valued fourteen months ago is a guess.
+Presenting it identically to a bank balance imported yesterday would misrepresent the confidence
+of the whole figure.</p>
+<p><strong>Confidence is recorded per snapshot</strong> — <code>high</code> for a formal valuation or an EPF statement,
+<code>medium</code> for a market estimate, <code>low</code> for a rough guess — so the UI can distinguish them.</p>
 <h2 id="alternatives-considered">Alternatives considered</h2>
-<p><strong>Hosted FastAPI on a free tier (Render, Koyeb, Fly).</strong> Truest to the original sketch, and
-accessible from anywhere. Rejected because free tiers sleep after inactivity — a 30–60 second
-cold start on the first request of the morning, on the screen meant to be glanced at — and
-because ~512 MB of RAM makes large PDF parsing genuinely fragile. It also puts every bank
-statement through a third-party host for no benefit, and has a clear path to eventually costing
-money.</p>
-<p><strong>All TypeScript, no Python.</strong> One language, one deploy, simplest operationally. Rejected because
-it abandons the Python learning goal and because <code>pdfplumber</code> and <code>pandas</code> have no real
-equivalent in the JavaScript ecosystem. Statement parsing is exactly the domain where Python&#39;s
-libraries are meaningfully better.</p>
-<p><strong>Local-only desktop app.</strong> Maximum privacy, no hosting at all. Rejected because the daily
-dashboard should be reachable from a phone, and a desktop app makes that a sync problem.</p>
+<p><strong>Strictly transaction-derived.</strong> Only what traces to a statement counts. Most rigorous audit
+trail. Rejected: property and EPF simply would not appear, and net worth is the product&#39;s primary
+metric.</p>
+<p><strong>Snapshots plus automatic market pricing for everything.</strong> Fetch property indices, gold prices
+and so on. Rejected for Phase 1 as scope: it adds several fragile external dependencies for
+marginal accuracy on assets that move slowly. Gold and listed securities <em>are</em> auto-priced in M7
+where a free source exists (AMFI); the difference is that those have an unambiguous market price
+and a property does not.</p>
+<p><strong>Index-linked estimation</strong> — apply a property index to the purchase price. Rejected as false
+precision. An index for &quot;Dubai apartments&quot; says little about one specific apartment, and the
+resulting number would look derived-and-therefore-reliable when it is neither.</p>
 <h2 id="consequences">Consequences</h2>
-<p><strong>Good</strong></p>
-<ul>
-<li>No cold starts. The dashboard is a static-rendered page over a fast database.</li>
-<li>No execution ceiling on parsing. A 200-page CAS is fine.</li>
-<li>Statements are parsed entirely on your own machine — a real privacy gain, not a theoretical
-one.</li>
-<li>Debugging a parser is a breakpoint, not a deploy-and-read-logs cycle.</li>
-<li>Free permanently, with no upgrade cliff.</li>
-<li>The importer is where the substantial Python lives: Pydantic models, a parser registry, a rules
-engine, a matching algorithm, XIRR. More interesting than a CRUD API.</li>
-</ul>
-<p><strong>Costs, stated honestly</strong></p>
-<ul>
-<li><strong>Imports require the machine with the importer installed.</strong> For a monthly batch operation this
-is close to free, but it is a real constraint.</li>
-<li>Two deployment stories: <code>git push</code> for the web app, <code>uv sync</code> for the importer.</li>
-<li>The service-role key lives on a laptop, making full-disk encryption a requirement rather than
-a suggestion.</li>
-</ul>
-<p><strong>Reversibility.</strong> The importer is a library behind a CLI. Putting an HTTP handler in front of it
-later — when hosting is affordable — is a small addition, not a rewrite. That is the test this
-architecture is designed to pass: the same architecture, smaller, rather than a different one
-that must be replaced.</p>
+<p><strong>Good.</strong> Net worth is complete. The method is simple, honest, and works for anything. Snapshots
+are cheap to record — a few minutes, a few times a year.</p>
+<p><strong>Costs.</strong> Net worth accuracy depends on the user&#39;s diligence. A property not revalued for two
+years distorts the trend, and — importantly — distorts it <em>smoothly</em>, so the revaluation appears
+as a sudden jump attributed to &quot;asset revaluation&quot; rather than being spread across the period it
+actually occurred in. That is a real limitation of the method, and it is the reason staleness
+prompts exist.</p>
+<p><strong>Mitigation.</strong> Snapshots older than a configurable threshold surface a prompt. <code>oneledger doctor</code> lists them. The dashboard flags a net worth that materially depends on a stale valuation.</p>
 
         </article>
       </main>

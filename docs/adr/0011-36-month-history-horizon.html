@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0012 — Signed balances; net worth is one SUM — OneLedger</title>
+  <title>ADR-0011 — Import 36 months of history, anchored at 01 Jan 2024 — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,87 +337,80 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="#" aria-current="page">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="./0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="./0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="#" aria-current="page">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0012--signed-balances-net-worth-is-one-sum">ADR-0012 — Signed balances; net worth is one SUM</h1>
-<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-04</p>
+          <h1 id="adr-0011--import-36-months-of-history-anchored-at-01-jan-2024">ADR-0011 — Import 36 months of history, anchored at 01 Jan 2024</h1>
+<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-05 · <strong>Supersedes:</strong> <a href="./superseded.html#24-month-history">the 24-month horizon</a></p>
 <h2 id="context">Context</h2>
-<p>Assets and liabilities both need balances, and every report has to combine them. Two conventions
-are available:</p>
-<ul>
-<li><strong>Signed:</strong> assets positive, liabilities negative. <code>net_worth = SUM(balance)</code>.</li>
-<li><strong>Absolute with a class flag:</strong> everything positive; subtract liabilities by class.
-<code>net_worth = SUM(assets) − SUM(liabilities)</code>.</li>
-</ul>
-<p>Sign confusion in liability handling is, empirically, the most common source of wrong numbers in
-personal finance software — largely because a sign error is internally consistent and therefore
-invisible.</p>
+<p><a href="./superseded.html#24-month-history">The earlier horizon</a> was ~24 months, on the reasoning that
+24 months is where trends become real and that older statements use retired layouts, each costing
+a parser version.</p>
+<p>Two things have changed since it was written.</p>
+<p><strong>The statements are in hand.</strong> 71 files covering Jan 2025 – Sep 2026 have been gathered, and they
+are not six layouts — they are four. Both credit cards share a single issuer layout, and both
+Indian accounts are Axis with an identical format. The &quot;each extra year costs parser versions&quot;
+premise is weaker than assumed when 0008 was written, because the layouts observed are stable
+across the whole period already collected.</p>
+<p><strong>Calendar-year reporting was chosen</strong> (Q20). A window starting 01 Jan aligns every annual figure,
+year-on-year comparison and opening-balance anchor to a reporting boundary rather than cutting
+across one.</p>
 <h2 id="decision">Decision</h2>
-<p><strong>Signed, from the household&#39;s perspective, everywhere in the database.</strong></p>
-<pre><code>balance &gt; 0    you own it
-balance &lt; 0    you owe it
-
-amount &gt; 0     money entered the account
-amount &lt; 0     money left the account
-</code></pre>
-<p>This holds for liability accounts without special-casing. A card purchase is <code>−310</code> (you owe
-more); a card payment is <code>+3,900</code> (you owe less).</p>
-<p>The <strong>display layer</strong> flips signs for liability screens — &quot;You owe AED 4,500&quot;. The database never
-does.</p>
+<p><strong>Anchor the history window at 01 Jan 2024 — approximately 36 months.</strong></p>
+<p>Opening balances are entered manually as at 01 Jan 2024 and are the anchor for every derived
+balance.</p>
 <h2 id="rationale">Rationale</h2>
-<p><strong>It makes the two core formulas trivial and universal:</strong></p>
-<pre><code class="language-sql">balance   = opening_balance + SUM(amount)     -- every account type, no CASE
-net_worth = SUM(balance_in_base)              -- one aggregate, no subtraction
-</code></pre>
-<p>The absolute convention needs a <code>CASE</code> on <code>account_class</code> in every balance query and a subtraction
-in every net-worth query. Each of those is a place to get the sign wrong, and a wrong sign there
-produces a plausible-looking number rather than an error.</p>
-<p><strong>It makes attribution work without special cases.</strong> Loan principal reduction is a positive
-change in a negative balance. In the signed convention it just adds. In the absolute convention
-it is a decrease in a subtracted quantity — correct, but requiring a sign flip in exactly the
-place where sign flips get miscounted.</p>
-<p><strong>It matches how transactions naturally read.</strong> Money in is positive; money out is negative. The
-card case, which feels inverted at first, is the same rule applied consistently: a purchase takes
-value out of your position.</p>
+<p><strong>Two complete prior calendar years, not one.</strong> 24 months from a January anchor gives one full
+year plus the current partial year. 36 months gives two complete comparison years, which is the
+difference between &quot;this year versus last year&quot; and an actual trend.</p>
+<p><strong>XIRR needs history to mean anything.</strong> A return figure computed over 18 months of SIP
+contributions is dominated by the most recent NAV. Three years is where the number starts being
+worth acting on, and XIRR cannot be backfilled later
+(<a href="./0005-transaction-level-investment-lots.html">ADR-0005</a>) — the data has to be there from the start
+or not at all.</p>
+<p><strong>The marginal cost is gathering, not code.</strong> The parsers are the same. FX backfill grows from
+~730 to ~1,100 daily rates, which is still one API call. The ledger grows from roughly 20k to 30k
+rows, which is immaterial against the free tier
+(<a href="../design/architecture.html">architecture.html</a> §9).</p>
 <h2 id="alternatives-considered">Alternatives considered</h2>
-<p><strong>Absolute values with a class flag.</strong> More intuitive on inspection — a <code>SELECT</code> on a loan table
-shows <code>4,000,000</code> rather than <code>-4,000,000</code>. Rejected: intuition at the row level is worth less
-than correctness at the aggregate level, and every aggregate would carry a conditional.</p>
-<p><strong>Signed in the database, signed in the UI.</strong> Fewer moving parts. Rejected: &quot;Home loan:
-−₹40,00,000&quot; alongside &quot;You owe&quot; reads as a double negative. The flip belongs in presentation,
-which is where every other formatting decision lives.</p>
+<p><strong>Keep 24 months (01 Jan 2025).</strong> Less to gather, and it matches the statements already in hand
+with nothing missing. Rejected because it buys a saving in the one-off task that is already the
+cheapest part, at the cost of the comparison year that makes the trend readable.</p>
+<p><strong>01 Apr 2025, aligned to Indian FY.</strong> The default stated in <code>questions.html</code> Q6. Rejected once
+calendar-year reporting was chosen: an Apr anchor with Jan–Dec reporting means the first reporting
+year is permanently incomplete.</p>
+<p><strong>Five years.</strong> Rejected. Statement availability degrades — most banks expose 24–36 months through
+online channels — and layouts genuinely do drift that far back, which is 0008&#39;s argument still
+holding at a longer range.</p>
 <h2 id="consequences">Consequences</h2>
-<p><strong>Good.</strong> Net worth is one <code>SUM</code> over one indexed column. Balance computation is identical for
-every account type. Attribution needs no sign special-cases. The invariant is directly testable
-(Invariant I2, tested in <a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a> §1).</p>
-<p><strong>Costs.</strong> A liability row in the database reads as a negative number, which looks alarming
-before the convention is internalised. Every parser must get card sign handling right — card
-statements present a purchase as a positive debit, and the ledger stores it negative. This is
-tested per-parser precisely because the failure is internally consistent and would otherwise be
-invisible.</p>
-<p><strong>Enforcement.</strong> <code>account_class</code> is set by trigger from <code>account_type</code>, never by hand. The
-liability display flip lives in one formatting helper, not scattered across components.</p>
+<ul>
+<li><strong>Statements for Jan–Dec 2024 must still be gathered.</strong> The 71 files in hand start at Jan 2025.
+This is a prerequisite for M2 being meaningful, and it is the user&#39;s task, not the code&#39;s.</li>
+<li>Where a 2024 statement proves unobtainable, that account&#39;s opening balance is anchored at the
+earliest date actually available and the gap is recorded — visibly, per Invariant I7 — rather
+than silently starting the account later.</li>
+<li>FX backfill range extends to 01 Jan 2024.</li>
+<li><code>oneledger doctor</code> coverage checks run over 36 months, so a missing month is reported for the
+full window rather than only the recent one.</li>
+</ul>
 
         </article>
       </main>

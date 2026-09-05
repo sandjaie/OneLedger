@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0016 — Statement layouts are data, not code — OneLedger</title>
+  <title>ADR-0012 — Statement layouts are data, not code — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,28 +337,28 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="#" aria-current="page">0016 Statement layouts as data</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="#" aria-current="page">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0016--statement-layouts-are-data-not-code">ADR-0016 — Statement layouts are data, not code</h1>
+          <h1 id="adr-0012--statement-layouts-are-data-not-code">ADR-0012 — Statement layouts are data, not code</h1>
 <p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-05 · <strong>Supersedes:</strong> the parser-registry design in
 <a href="../design/architecture.html">architecture.html</a> §3 and
 <a href="../design/statement-ingestion.html">statement-ingestion.html</a> §3–§4</p>
@@ -463,7 +463,7 @@ a UI exercise, not a coding one.</li>
 <li><strong>Seed data stays</strong>, as deletable suggestions: the institution list and the ~120 merchant
 classification rules. Those are a starter dictionary the user owns, and they are what produce
 ≥70% auto-classification on the first import rather than 200 uncategorised rows
-(<a href="./0010-seed-taxonomy-with-buckets.html">ADR-0010</a>). They are rows, editable and deletable, and
+(<a href="./0008-seed-taxonomy-with-buckets.html">ADR-0008</a>). They are rows, editable and deletable, and
 nothing structural depends on them.</li>
 </ul>
 

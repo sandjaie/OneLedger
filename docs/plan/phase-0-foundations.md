@@ -8,7 +8,7 @@
 on top of it yet.
 
 **Architecture:** One `docker compose` stack — `web`, `api`, `db`
-([ADR-0018](../adr/0018-one-vps-one-compose-file.html)). A **FastAPI service on :8000** owns all
+([ADR-0014](../adr/0014-one-vps-one-compose-file.html)). A **FastAPI service on :8000** owns all
 business logic and is the authorization boundary; a **Next.js app on :3000** is the interface and
 holds none; **Postgres 18** holds the truth and the invariants. Migrations are forward-only SQL.
 
@@ -26,7 +26,7 @@ uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · Typ
 [04-multi-currency-and-fx.md](../design/multi-currency-and-fx.html) §3,
 [05-statement-ingestion.md](../design/statement-ingestion.html) §4,
 [09-security-and-privacy.md](../operations/security-and-privacy.html),
-[ADR-0017](../adr/0017-python-backend-service.html)
+[ADR-0013](../adr/0013-python-backend-service.html)
 
 ## Global Constraints
 
@@ -104,7 +104,7 @@ Expected: `OK` first, then `FAIL: real financial data is tracked by git:` and ex
 - [ ] **Step 3: Write the compose file and bring up the database**
 
 ```yaml
-# docker-compose.yml — this file is the deployment (ADR-0018)
+# docker-compose.yml — this file is the deployment (ADR-0014)
 services:
   db:
     image: postgres:18
@@ -310,7 +310,7 @@ CREATE INDEX idx_institution_country ON institution (country, name);
 
 **Suggestions, not a supported list.** `institution` is a table; any institution can be added from
 the account form at any time, and nothing structural depends on these rows
-([ADR-0016](../adr/0016-statement-layouts-as-data.html)). Seed only what is actually evidenced in the
+([ADR-0012](../adr/0012-statement-layouts-as-data.html)). Seed only what is actually evidenced in the
 gathered statements plus the remittance providers from Q11 — speculative seeds are noise in a
 picker, and the user can delete every row here without consequence.
 
@@ -903,7 +903,7 @@ build-backend = "hatchling.build"
 
 ```python
 # api/oneledger/auth.py
-"""Authorization. Since ADR-0017 this is the boundary, not RLS.
+"""Authorization. Since ADR-0013 this is the boundary, not RLS.
 
 Google authenticates any Google account, so a valid sign-in proves identity and nothing else.
 A caller is authorized only if their session resolves to a row in app_user.
@@ -1412,7 +1412,7 @@ cd api && uv run pytest tests/test_fx_rows.py -v
 
 Expected: 1 passed.
 
-- [ ] **Step 5: Run the real backfill to the ADR-0013 anchor**
+- [ ] **Step 5: Run the real backfill to the ADR-0011 anchor**
 
 ```bash
 cd api && uv run uvicorn oneledger.main:app --port 8000 &
@@ -1443,7 +1443,7 @@ Expected: `violations | 0` — test 2 of
 
 - [ ] **Step 7: Prove an unpermitted account cannot reach the route**
 
-Since [ADR-0017](../adr/0017-python-backend-service.html) the service is the authorization
+Since [ADR-0013](../adr/0013-python-backend-service.html) the service is the authorization
 boundary, so this test matters more than it did under RLS. Use a **second, real Google account**.
 
 ```bash
@@ -1527,7 +1527,7 @@ Expected: FAIL — no test files found, or the alias cannot resolve.
 // web/lib/api/client.ts
 /**
  * The only route from the web app to the backend. Nothing in web/ touches Postgres, and no
- * component calls fetch directly — see ADR-0017.
+ * component calls fetch directly — see ADR-0013.
  */
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -1586,7 +1586,7 @@ git commit -m "feat(web): Next.js shell with a typed API client"
 - Produces: `GET /auth/login` (redirect to Google), `GET /auth/callback` (exchange, verify, issue
   the session cookie), `POST /auth/logout`. The cookie every route in the system depends on.
 
-**Why this lives in the service.** [ADR-0018](../adr/0018-one-vps-one-compose-file.html) dropped
+**Why this lives in the service.** [ADR-0014](../adr/0014-one-vps-one-compose-file.html) dropped
 Supabase, so there is no managed auth to lean on. For a single pinned user this is small: Google
 OIDC is a redirect, a code exchange, a signature check, and a cookie.
 
@@ -1639,9 +1639,9 @@ Expected: FAIL — `No module named 'oneledger.routes.auth'`.
 
 ```python
 # api/oneledger/routes/auth.py
-"""Google OIDC. No password, no signup, no registration, one pinned account (ADR-0005).
+"""Google OIDC. No password, no signup, no registration, one pinned account (ADR-0004).
 
-The mechanism moved out of Supabase Auth in ADR-0018; the policy is unchanged.
+The mechanism moved out of Supabase Auth in ADR-0014; the policy is unchanged.
 """
 from __future__ import annotations
 
@@ -2043,7 +2043,7 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  Google sign-in works locally; a non-permitted account reaches /unauthorized
 ☐  A second Google account is rejected at /auth/callback, and gets 403 from every api route
 ☐  GET /fx/2026-09-03 returns a rate with its source; /fx/2026-09-06 names its carry origin
-☐  GET /fx/2024-01-01 returns a rate — the backfill reaches the ADR-0013 anchor
+☐  GET /fx/2024-01-01 returns a rate — the backfill reaches the ADR-0011 anchor
 ☐  The peg identity holds for every row: 0 violations
 ☐  The RLS isolation test fails when a policy is deliberately made permissive
 ☐  System seed institutions remain visible to the signed-in user

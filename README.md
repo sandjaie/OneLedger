@@ -80,8 +80,8 @@ live in the database rather than the service, because a backend is a convenient 
 and a poor place to put guarantees.
 
 Statements are parsed by software running on a machine you control, and reach no third party.
-Rationale in [ADR-0017](docs/adr/0017-python-backend-service.html) and
-[ADR-0018](docs/adr/0018-one-vps-one-compose-file.html).
+Rationale in [ADR-0013](docs/adr/0013-python-backend-service.html) and
+[ADR-0014](docs/adr/0014-one-vps-one-compose-file.html).
 
 ---
 
@@ -111,7 +111,8 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [UI & Information Architecture](docs/product/ui-information-architecture.html) | Screens, navigation, key interactions |
 | [Testing & Data Quality](docs/operations/testing-and-data-quality.html) | How correctness is proven, not assumed |
 | [Glossary](docs/reference/glossary.html) | Domain vocabulary used consistently everywhere |
-| [ADRs](docs/adr/index.html) | 18 decisions, each with the alternatives actually considered |
+| [ADRs](docs/adr/index.html) | 14 decisions in force, each with the alternatives actually considered |
+| [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/plan/questions.html) | Scoping questions — **17 of 24 answered** |
 | **[Implementation Plan](docs/plan/implementation-plan.md)** | **The build order. Start here to write code** |
 | [Schema Reference](docs/plan/schema.md) | The complete DDL, by migration |
@@ -153,14 +154,14 @@ considered. The ones that shape the most code:
 
 | Decision | ADR |
 |---|---|
-| Both reporting currencies frozen per transaction; flows at booked-date rate, balances at as-of date | [0003](docs/adr/0003-frozen-dual-currency-amounts.html) |
-| Investments tracked at lot level — XIRR cannot be backfilled later | [0006](docs/adr/0006-transaction-level-investment-lots.html) |
-| Signed balances, so net worth is one aggregate with no `CASE` | [0012](docs/adr/0012-signed-balance-convention.html) |
-| 36 months of history, anchored 01 Jan 2024 | [0013](docs/adr/0013-36-month-history-horizon.html) |
-| **Statement layouts are data, not code** — no bank name appears in the codebase | [0016](docs/adr/0016-statement-layouts-as-data.html) |
-| **A Python backend service** owns all business logic | [0017](docs/adr/0017-python-backend-service.html) |
-| **One VPS, one compose file** — no managed services | [0018](docs/adr/0018-one-vps-one-compose-file.html) |
-| All AI deferred to V2, with four stated prerequisites | [0004](docs/adr/0004-defer-ai-to-v2.html) |
+| Both reporting currencies frozen per transaction; flows at booked-date rate, balances at as-of date | [0002](docs/adr/0002-frozen-dual-currency-amounts.html) |
+| Investments tracked at lot level — XIRR cannot be backfilled later | [0005](docs/adr/0005-transaction-level-investment-lots.html) |
+| Signed balances, so net worth is one aggregate with no `CASE` | [0010](docs/adr/0010-signed-balance-convention.html) |
+| 36 months of history, anchored 01 Jan 2024 | [0011](docs/adr/0011-36-month-history-horizon.html) |
+| **Statement layouts are data, not code** — no bank name appears in the codebase | [0012](docs/adr/0012-statement-layouts-as-data.html) |
+| **A Python backend service** owns all business logic | [0013](docs/adr/0013-python-backend-service.html) |
+| **One VPS, one compose file** — no managed services | [0014](docs/adr/0014-one-vps-one-compose-file.html) |
+| All AI deferred to V2, with four stated prerequisites | [0003](docs/adr/0003-defer-ai-to-v2.html) |
 
 **The app is institution- and region-agnostic by construction.** Accounts, institutions,
 categories, merchants, rules, securities, currency pegs and statement layouts are all rows.
@@ -178,10 +179,10 @@ decisions answer themselves. Everything else is editable in the app later.
 | Choice | Notes |
 |---|---|
 | **Reporting pair** — `BASE_CURRENCY`, `SECONDARY_CURRENCY` | The one that is expensive to change afterwards: both amounts are frozen per row, so switching the *pair* later is a backfill. Denominate the base where the money will eventually be spent ([§4](docs/design/multi-currency-and-fx.html)) |
-| **The Google account allowed to sign in** | One address. Every other is rejected even if Google authenticates it ([ADR-0005](docs/adr/0005-google-auth-single-user.html)) |
-| **History anchor date** | 36 months back by default ([ADR-0013](docs/adr/0013-36-month-history-horizon.html)) |
+| **The Google account allowed to sign in** | One address. Every other is rejected even if Google authenticates it ([ADR-0004](docs/adr/0004-google-auth-single-user.html)) |
+| **History anchor date** | 36 months back by default ([ADR-0011](docs/adr/0011-36-month-history-horizon.html)) |
 | **Countries you bank in** | Not asked — derived from your accounts, and it selects the merchant rule packs ([classification §3](docs/design/classification.html)) |
-| **Statement layouts** | Not asked — mapped in the UI on first import of an unfamiliar statement ([ADR-0016](docs/adr/0016-statement-layouts-as-data.html)) |
+| **Statement layouts** | Not asked — mapped in the UI on first import of an unfamiliar statement ([ADR-0012](docs/adr/0012-statement-layouts-as-data.html)) |
 
 A currency pegged to another (AED to USD, DKK to EUR) is a row in `currency`, so the rate pipeline
 fetches one side and derives the other. A deployment with no peg simply fetches both.
@@ -203,7 +204,7 @@ not during.
 
 **AI is entirely a V2 concern.** Phase 1 and Phase 2 contain no LLM calls. The classification
 engine is deterministic and inspectable; it has to be good on its own before anything smarter is
-layered on top ([ADR-0004](docs/adr/0004-defer-ai-to-v2.html)).
+layered on top ([ADR-0003](docs/adr/0003-defer-ai-to-v2.html)).
 
 **Two milestones are worth knowing about in advance.** The tool becomes genuinely useful at **M2**,
 not M10 — a personal project that only pays off at the end usually doesn't reach the end. And the

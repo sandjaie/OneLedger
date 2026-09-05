@@ -343,25 +343,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -542,10 +540,10 @@ currency                         -- reference
 <hr>
 <h2 id="3-identity-and-tenancy">3. Identity and tenancy</h2>
 <p>Single user now, household-capable from day one
-(<a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>). The columns exist and RLS uses them; no
+(<a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>). The columns exist and RLS uses them; no
 multi-user <em>behaviour</em> is built.</p>
 <table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>household</code></td><td>Name and the reporting pair: <code>base_currency</code> (the default) and <code>secondary_currency</code> (the toggle).</td></tr><tr><td><code>person</code></td><td>Display name, <code>is_self</code>, tax residency, and <em>last four only</em> of a tax ID and a national ID (PAN and Emirates ID, in the first deployment). Full numbers are never stored.</td></tr><tr><td><code>app_user</code></td><td>Maps an authenticated Google identity to a person. Exactly one row in Phase 1; <code>role</code> exists for a future second member.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0002</code>.</p>
-<p><strong>Since <a href="../adr/0017-python-backend-service.html">ADR-0017</a>, RLS is defence in depth
+<p><strong>Since <a href="../adr/0013-python-backend-service.html">ADR-0013</a>, RLS is defence in depth
 rather than the primary boundary.</strong> The Python service connects with the service-role key and therefore
 bypasses these policies; it enforces authorization itself, scoping every query to the household resolved from
 the request's JWT. The policies below are kept because they cost nothing to maintain, they remain correct, and
@@ -567,7 +565,7 @@ AS $$
   WHERE id = NULLIF(current_setting('app.user_id', true), '')::UUID
 $$;
 </code></pre>
-<p><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a> removed Supabase, and with it
+<p><a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a> removed Supabase, and with it
 <code>auth.uid()</code>. Identity now comes from a session variable the service sets on the connection
 <em>after</em> it has authorized the request:</p>
 <pre><code class="language-sql">SET LOCAL app.user_id = '&lt;uuid&gt;';   -- per transaction, by the service
@@ -601,7 +599,7 @@ person is added. See <a href="../operations/security-and-privacy.html">security-
 <h3 id="authenticated-is-not-the-same-as-permitted">Authenticated is not the same as <em>permitted</em></h3>
 <p><strong>Google will authenticate any Google account.</strong> A valid sign-in proves identity and nothing
 more. Authorization is the service's job
-(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>): it checks the address against
+(<a href="../adr/0013-python-backend-service.html">ADR-0013</a>): it checks the address against
 <code>ALLOWED_USER_EMAIL</code>, resolves the session to a row in <code>app_user</code>, and only then scopes
 the database connection with <code>SET LOCAL app.user_id</code>.</p>
 <p>An unscoped connection therefore reads nothing, because every policy predicate is <code>NULL</code>. The
@@ -664,7 +662,7 @@ verbatim into a migration.</p>
 </blockquote>
 <p><strong>The <code>bucket</code> column is what makes Needs/Wants/Investments/Debt free.</strong> One classification pass
 yields both the detailed category tree and the coarse view, without asking for the same judgement
-twice (<a href="../adr/0010-seed-taxonomy-with-buckets.html">ADR-0010</a>). Seed taxonomy is listed in
+twice (<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>). Seed taxonomy is listed in
 <a href="./classification.html">classification.html</a> §3.</p>
 <p>One <code>merchant</code>, many <code>merchant_alias</code> rows — because the same coffee shop appears as <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements. Each alias carries a <code>pattern_kind</code> (<code>exact</code>, <code>prefix</code>, <code>contains</code>, <code>regex</code>) and a priority, and counts how often it has matched.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0005</code>.</p>
 <p>One merchant, many aliases — because the same coffee shop appears as
@@ -761,7 +759,7 @@ would not have satisfied.</p>
 a second source of truth for the same fact.</p>
 <hr>
 <h2 id="10-investments">10. Investments</h2>
-<p>Transaction-level lots (<a href="../adr/0006-transaction-level-investment-lots.html">ADR-0006</a>) — XIRR is
+<p>Transaction-level lots (<a href="../adr/0005-transaction-level-investment-lots.html">ADR-0005</a>) — XIRR is
 impossible to reconstruct from snapshots.</p>
 <table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>security</code></td><td>The instrument. ISIN, a price-feed <code>provider_code</code> (an AMFI scheme code, say), ticker, exchange, <code>asset_class</code>, sub-class, fund house, expense ratio. <code>household_id IS NULL</code> for shared reference data.</td></tr><tr><td><code>holding</code></td><td>A position: units, average cost, invested amount, realised gain, current price and value, <code>xirr_pct</code> with <code>xirr_computed_at</code> so a stale figure reads as stale.</td></tr><tr><td><code>investment_transaction</code></td><td>The lot. Signed units, NAV, gross and net amount, charges, tax withheld, frozen FX, and the bank transaction that funded it.</td></tr><tr><td><code>price_snapshot</code></td><td>Price per security per date, with its source (<code>amfi</code>/<code>manual</code>/<code>statement</code>).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0011</code>.</p>
 <h3 id="xirr">XIRR</h3>
@@ -773,7 +771,7 @@ Recomputed on any new investment transaction or price refresh, stored on <code>h
 with <code>xirr_computed_at</code> so a stale figure is visible as stale.</p>
 <h3 id="manual-valuations">Manual valuations</h3>
 <p>For property, physical gold, EPF, PPF — anything with no importable statement
-(<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>).</p>
+(<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>).</p>
 <p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> Targets either an account or a holding — a <code>CHECK</code> enforces exactly one — and freezes the FX rates at <code>as_of_date</code> alongside the native value. Carries a <code>method</code> and a <code>confidence</code>, both displayed, never hidden.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0013</code>.</p>
 <p><strong>Carried forward flat, never extrapolated.</strong> The valuation in effect on any date is the most
 recent snapshot at or before it. A trend line between two snapshots is drawn as a step, not a
@@ -791,10 +789,10 @@ remembered one.</p>
 <p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
 <h3 id="statement-layouts">Statement layouts</h3>
 <p><strong>No bank name appears anywhere in application code</strong>
-(<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>). A statement layout is a row, created
+(<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A statement layout is a row, created
 through the mapping UI on first import of an unrecognised format. One generic extraction engine
 reads any profile.</p>
-<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
+<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
 <p><code>has_a_balance_anchor</code> is the constraint that keeps Invariant I8 enforceable: a layout must offer
 <em>some</em> way to verify the extracted rows, either a declared closing balance or a running balance
 column. A profile that offers neither cannot be reconciled, and would let a mis-mapped column

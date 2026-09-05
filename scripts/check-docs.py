@@ -78,8 +78,27 @@ def check_no_real_data() -> list[str]:
             if f.lower().endswith(".pdf") or f.startswith("pdf-statements/")]
 
 
+ADR_LINK = re.compile(r'<a href="[^"]*?(\d{4})-[a-z0-9-]+\.html(?:#[^"]*)?">(?:ADR-)?(\d{4})\b[^<]*</a>')
+ADR_MD_LINK = re.compile(r'\[(?:ADR-)?(\d{4})\]\([^)]*?(\d{4})-[a-z0-9-]+\.html\)')
+
+
+def check_adr_numbers() -> list[str]:
+    """A link labelled ADR-0013 must point at 0013. Renumbering is where this breaks."""
+    out = []
+    for path in documents():
+        text = path.read_text()
+        for target, label in ADR_LINK.findall(text):
+            if target != label:
+                out.append(f"{path.relative_to(ROOT)}: labelled {label}, points at {target}")
+        for label, target in ADR_MD_LINK.findall(text):
+            if target != label:
+                out.append(f"{path.relative_to(ROOT)}: labelled {label}, points at {target}")
+    return out
+
+
 CHECKS = [
     ("broken links", check_links),
+    ("ADR link labels disagreeing with their target", check_adr_numbers),
     ("malformed html", check_html),
     ("real financial data tracked by git", check_no_real_data),
 ]

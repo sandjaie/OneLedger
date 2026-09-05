@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0018 — One VPS, one compose file — OneLedger</title>
+  <title>ADR-0014 — One VPS, one compose file — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,39 +337,39 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="#" aria-current="page">0016 Statement layouts as data</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="#" aria-current="page">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0018--one-vps-one-compose-file">ADR-0018 — One VPS, one compose file</h1>
+          <h1 id="adr-0014--one-vps-one-compose-file">ADR-0014 — One VPS, one compose file</h1>
 <p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-05 ·
-<strong>Supersedes:</strong> <a href="0002-supabase-vercel-local-importer.html">ADR-0002</a> ·
-<strong>Revises:</strong> <a href="0005-google-auth-single-user.html">ADR-0005</a>
+<strong>Supersedes:</strong> <a href="./superseded.html#supabase-vercel-importer">Supabase + Vercel + a local importer</a> ·
+<strong>Revises:</strong> <a href="0004-google-auth-single-user.html">ADR-0004</a>
 (its "via Supabase Auth" clause)</p>
 
 <h2 id="context">Context</h2>
-<p><a href="0002-supabase-vercel-local-importer.html">ADR-0002</a> chose Supabase plus Vercel because both
+<p><a href="./superseded.html#supabase-vercel-importer">The original sketch</a> chose Supabase plus Vercel because both
 have free tiers, and "zero infrastructure spend" was a stated requirement. Every subsequent decision inherited
 that frame, and two of them bent around it:</p>
 <ul>
-<li><a href="0017-python-backend-service.html">ADR-0017</a> introduced a FastAPI service, which does not fit
+<li><a href="0013-python-backend-service.html">ADR-0013</a> introduced a FastAPI service, which does not fit
 Vercel as a persistent process. That left three unattractive options: split the read path so only import runs
 locally, host the service on a fourth provider, or accept that importing needs the laptop.</li>
 <li>Keeping statements off third-party hosts — the privacy property in
@@ -426,12 +426,12 @@ tiers does.</p>
 <h2 id="consequences">Consequences</h2>
 <p><strong>Authentication is ours to build.</strong> Google OIDC: redirect, exchange the code, verify the
 <code>id_token</code> against Google's JWKS, check the address against <code>ALLOWED_USER_EMAIL</code>, issue a
-signed httpOnly session cookie. <a href="0005-google-auth-single-user.html">ADR-0005</a>'s substance is
+signed httpOnly session cookie. <a href="0004-google-auth-single-user.html">ADR-0004</a>'s substance is
 unchanged — Google OAuth, no passwords, no signup, no registration, one pinned account — only the mechanism
 moves from Supabase Auth into the service.</p>
 <p><strong>RLS loses <code>auth.uid()</code> and gains a session variable.</strong> Policies read
 <code>current_setting('app.user_id', true)</code>, which the service sets per transaction. RLS remains defence
-in depth as established in <a href="0017-python-backend-service.html">ADR-0017</a>; this only changes where the
+in depth as established in <a href="0013-python-backend-service.html">ADR-0013</a>; this only changes where the
 identity comes from.</p>
 <p><strong>Backups become entirely yours, and matter more.</strong> One box is one point of failure. The
 existing requirement — nightly <code>pg_dump</code>, weekly document sync, monthly off-box copy, quarterly

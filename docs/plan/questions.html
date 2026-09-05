@@ -335,25 +335,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -378,7 +376,7 @@ See <a href="../operations/security-and-privacy.html">security-and-privacy.html<
 <h2 id="needed-before-phase-0-foundations">Needed before Phase 0 (foundations)</h2>
 <h3 id="q1--which-google-account-signs-in">Q1 · Which Google account signs in?</h3>
 <p>Pinned as <code>ALLOWED_USER_EMAIL</code>; every other Google account is rejected even if Google
-authenticates it (<a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>).</p>
+authenticates it (<a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>).</p>
 <p><em>Default if unanswered:</em> the address on the session that set the project up.</p>
 <p><strong>Answer:</strong> one address, set in <code>.env</code> as <code>ALLOWED_USER_EMAIL</code>. It is
 deployment configuration and is never written into a committed document.</p>
@@ -391,7 +389,7 @@ often the lowest-latency free-tier option from the UAE.</p>
 financial data in India, which is the more likely future regulatory concern of the two.</p>
 <p><strong>Answer:</strong> <strong>Mumbai (ap-south-1)</strong> — default accepted.</p>
 <blockquote>
-<p><strong>Moot since <a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>.</strong> There is no
+<p><strong>Moot since <a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>.</strong> There is no
 Supabase project to place. Postgres runs in a container on a machine you choose, so the question
 becomes where that VPS is, and the reasoning above still answers it: put the data nearest the
 jurisdiction most likely to care about it.</p>
@@ -400,7 +398,7 @@ jurisdiction most likely to care about it.</p>
 <p>Determines the keychain integration for secrets, the full-disk-encryption instructions, and the
 <code>~/statements/</code> cloud-sync exclusion guidance.</p>
 <p><em>Default if unanswered:</em> macOS.</p>
-<p><strong>Answer:</strong> <strong>macOS.</strong> Since <a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> moved parsing into the
+<p><strong>Answer:</strong> <strong>macOS.</strong> Since <a href="../adr/superseded.html#parse-in-the-browser">parsing moved out of a local CLI</a> into the
 browser, there is no keychain integration and no secret held on the machine at all. What remains
 OS-specific: <code>~/statements/</code> must sit on the FileVault volume, outside the repository, and be
 excluded from iCloud Drive sync.</p>
@@ -491,17 +489,17 @@ importer offers to create an account when a statement resolves to none.</p>
 — Q18 and Q21 stay open, and M8 is descheduled until a loan exists.</p>
 <h3 id="q5--any-joint-or-spouse-held-accounts">Q5 · Any joint or spouse-held accounts?</h3>
 <p>The schema carries <code>owner_person_id</code> and an optional <code>joint_owner_person_id</code> already
-(<a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>), so tagging is free. I just need to know whether
+(<a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>), so tagging is free. I just need to know whether
 to seed a second <code>person</code> row.</p>
 <p><em>Default if unanswered:</em> one person, everything solely held.</p>
 <p><strong>Answer:</strong> <strong>One person, everything solely held.</strong> Spouse deferred entirely to Phase 2 — <code>owner_person_id</code> and <code>joint_owner_person_id</code> exist in the schema from day one and stay unused in Phase 1, so adding her later needs no migration.</p>
 <h3 id="q6--whats-the-history-window-start-date">Q6 · What&#39;s the history window start date?</h3>
-<p>We settled on ~24 months (<a href="../adr/0008-24-month-history-horizon.html">ADR-0008</a>). This is the exact
+<p>We settled on ~24 months (later <a href="../adr/0011-36-month-history-horizon.html">36</a>). This is the exact
 date opening balances get anchored to — probably 01 Jan 2025 or 01 Apr 2025 (aligning to the
 Indian financial year).</p>
 <p><em>Default if unanswered:</em> <strong>01 Apr 2025</strong>, so the window aligns to Indian FY boundaries and makes
 tax reporting cleaner later.</p>
-<p><strong>Answer:</strong> <strong>01 Jan 2024</strong> — ~36 months. Supersedes ADR-0008; recorded as <a href="../adr/0013-36-month-history-horizon.html">ADR-0013</a>.</p>
+<p><strong>Answer:</strong> <strong>01 Jan 2024</strong> — ~36 months. Supersedes the earlier 24-month horizon; recorded as <a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>.</p>
 <hr>
 <h2 id="needed-before-m2-first-importer--the-big-one">Needed before M2 (first importer — the big one)</h2>
 <h3 id="q7--which-institutions-give-you-csv-or-excel-and-which-are-pdf-only">Q7 · Which institutions give you CSV or Excel, and which are PDF-only?</h3>
@@ -559,7 +557,7 @@ layouts, in ascending difficulty:</p>
 offer a date-range export. Worth knowing before you sit down to do it.</p>
 <p><em>Default if unanswered:</em> assume one at a time; I&#39;ll make the importer take a whole directory so
 it&#39;s one command regardless.</p>
-<p><strong>Answer:</strong> Not yet answered. 71 files covering Jan 2025 – Sep 2026 are gathered. <strong>Calendar 2024 still needs collecting</strong> to reach the ADR-0013 anchor.</p>
+<p><strong>Answer:</strong> Not yet answered. 71 files covering Jan 2025 – Sep 2026 are gathered. <strong>Calendar 2024 still needs collecting</strong> to reach the ADR-0011 anchor.</p>
 <hr>
 <h2 id="needed-before-m3-pdf-parsers">Needed before M3 (PDF parsers)</h2>
 <h3 id="q9--which-statements-are-password-protected-and-whats-the-password-scheme">Q9 · Which statements are password-protected, and what&#39;s the password <em>scheme</em>?</h3>
@@ -588,7 +586,7 @@ masked value in a diagnostic dump, not confirmed, and no scheme needs to be know
 it&#39;s my guess at your life, not yours.</p>
 <p>Also: any bucket assignment you&#39;d flip? I&#39;ve shipped Groceries as <code>need</code> and Food &amp; Dining as
 <code>want</code>, for instance — that split is personal and editable
-(<a href="../adr/0010-seed-taxonomy-with-buckets.html">ADR-0010</a>).</p>
+(<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>).</p>
 <p><em>Default if unanswered:</em> ship the seed taxonomy as specified; you edit it in-app after the first
 import, which is when you&#39;ll actually know.</p>
 <p><strong>Answer:</strong> Ship the seed taxonomy as specified; edit in-app after the first import, which is when the gaps will be obvious.</p>
@@ -638,15 +636,15 @@ parser. Request one covering 01 Jan 2024 onward.</p>
 <h3 id="q16--any-internationalus-holdings-and-where">Q16 · Any international/US holdings, and where?</h3>
 <p>Affects whether USD pricing and a third currency in reporting matter sooner than planned. Note
 that adding USD as a <em>reporting</em> currency means a backfill migration
-(<a href="../adr/0003-frozen-dual-currency-amounts.html">ADR-0003</a>) — holding USD <em>assets</em> does not, and works
+(<a href="../adr/0002-frozen-dual-currency-amounts.html">ADR-0002</a>) — holding USD <em>assets</em> does not, and works
 today.</p>
 <p><em>Default if unanswered:</em> USD assets supported, USD reporting not built.</p>
-<p><strong>Answer:</strong> <strong>Yes — US equities and ETFs.</strong> Held and valued in USD, translated at the as-of rate like any other foreign-currency asset. This works with no schema change. <strong>USD is not added as a reporting currency</strong> — that would need the backfill migration in <a href="../adr/0003-frozen-dual-currency-amounts.html">ADR-0003</a>, and it is not being done.</p>
+<p><strong>Answer:</strong> <strong>Yes — US equities and ETFs.</strong> Held and valued in USD, translated at the as-of rate like any other foreign-currency asset. This works with no schema change. <strong>USD is not added as a reporting currency</strong> — that would need the backfill migration in <a href="../adr/0002-frozen-dual-currency-amounts.html">ADR-0002</a>, and it is not being done.</p>
 <h3 id="q17--do-you-have-ppf-epf-or-nps">Q17 · Do you have PPF, EPF or NPS?</h3>
 <p>These get manual valuation snapshots rather than lot tracking
-(<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>) — no XIRR, but they count toward net worth
+(<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>) — no XIRR, but they count toward net worth
 and allocation.</p>
-<p><strong>Answer:</strong> Not yet answered. If any exist they take manual valuation snapshots (<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>) — no XIRR, but they count toward net worth and allocation. Needed before M7 completes, not before it starts.</p>
+<p><strong>Answer:</strong> Not yet answered. If any exist they take manual valuation snapshots (<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>) — no XIRR, but they count toward net worth and allocation. Needed before M7 completes, not before it starts.</p>
 <hr>
 <h2 id="needed-before-m8-loans">Needed before M8 (loans)</h2>
 <h3 id="q18--which-loans-and-fixed-or-floating-rate">Q18 · Which loans, and fixed or floating rate?</h3>
@@ -703,7 +701,7 @@ before coding was to have the argument now rather than at M7.</p>
 <ol>
 <li><strong>The rule engine and transfer matcher were specified to exist twice</strong> — once in Python, once
 in Postgres for retroactive apply and manual linking. Resolved by
-<a href="../adr/0014-matching-engines-in-postgres.html">ADR-0014</a>: one implementation, in Postgres.</li>
+<a href="../adr/0013-python-backend-service.html">ADR-0013</a>: one implementation, in the service.</li>
 <li><strong>Circular foreign keys break migration order.</strong> <code>transaction</code> references <code>transfer</code>,
 <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code> and <code>recurring_series</code>, all created in later
 migrations, and <code>transfer</code> references <code>transaction</code> back. Migration <code>0006</code> cannot apply as
