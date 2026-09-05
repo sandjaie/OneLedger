@@ -106,7 +106,8 @@ Expected: `OK` first, then `FAIL: real financial data is tracked by git:` and ex
 - [ ] **Step 3: Write the compose file and bring up the database**
 
 ```yaml
-# docker-compose.yml — this file is the deployment (ADR-0014)
+# docker-compose.yml — this file is the deployment (ADR-0014). The same compose file runs on a laptop and on the
+# VPS; only .env and whether Caddy is enabled differ.
 services:
   db:
     image: postgres:18
@@ -114,10 +115,13 @@ services:
       POSTGRES_USER: oneledger
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
       POSTGRES_DB: oneledger
-    ports: ["5432:5432"]
-    # 18+ stores data in a major-version subdirectory, so the mount goes one level
-    # up. Mounting /var/lib/postgresql/data is the <=17 convention and the image
-    # refuses to start on it.
+    # Loopback only. ADR-0014 exposes Caddy and nothing else; a short-form mapping would
+    # publish Postgres on every host interface, reachable the moment a firewall rule slips.
+    # DB_PORT lets a scratch stack run beside the working one without a port clash.
+    ports: ["127.0.0.1:${DB_PORT:-5432}:5432"]
+    # 18+ stores data in a major-version subdirectory, so the mount goes one level up.
+    # Mounting /var/lib/postgresql/data is the <=17 convention and the image refuses to
+    # start on it.
     volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oneledger"]
@@ -137,8 +141,19 @@ services:
       db: { condition: service_healthy }
 
   web:
-    build: ./web
-    env_file: .env
+    build:
+      context: ./web
+      args:
+        # Next.js inlines NEXT_PUBLIC_* at `next build` and freezes them into the bundle.
+        # Supplying it at runtime is too late: the browser would fall back to localhost and
+        # every hosted visitor would call their own machine instead of the API.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    # Deliberately NOT env_file: .env. The web service renders and holds no secrets, and
+    # handing it the service-wide file would give a compromised dependency SESSION_SECRET,
+    # GOOGLE_CLIENT_SECRET, POSTGRES_PASSWORD and ACCOUNT_HASH_SALT — defeating the point
+    # of the API being the authorization boundary (ADR-0013).
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports: ["3000:3000"]
     depends_on: [api]
 
@@ -187,7 +202,10 @@ now.
 NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # Service only. NEVER prefixed NEXT_PUBLIC_. Never committed.
-POSTGRES_PASSWORD=
+# Local default, matching DATABASE_URL below. Change BOTH before hosting: the containers read
+# this one, and `uv run` on your machine reads the URL — set one without the other and local
+# commands fail authentication against a database that started fine.
+POSTGRES_PASSWORD=oneledger
 SESSION_SECRET=                 # openssl rand -hex 32 — signs the session cookie
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -198,8 +216,8 @@ WEB_ORIGIN=http://localhost:3000
 # The single permitted Google account. Any other is rejected at the app layer.
 ALLOWED_USER_EMAIL=you@example.com
 
-# Seeded into `household` and `person` by Task 9 Step 6. The reporting pair is the one
-# decision here that is expensive to change later — see multi-currency-and-fx.html §4.
+# Seeded into `household` and `person` by Task 3. The reporting pair is the one decision
+# here that is expensive to change later — see multi-currency-and-fx.html §4.
 HOUSEHOLD_NAME=Household
 OWNER_DISPLAY_NAME=Owner
 OWNER_TAX_RESIDENCY=AE
@@ -207,9 +225,11 @@ BASE_CURRENCY=INR
 SECONDARY_CURRENCY=AED
 
 # Per-installation salt for account-number hashing. Held outside the database.
-# Rotating this invalidates every stored hash. See 09-security-and-privacy.md §4.
+# Rotating this invalidates every stored hash. See security-and-privacy.html §4.
 ACCOUNT_HASH_SALT=
 
+# Host-side connection, for `uv run` outside a container. The password here must equal
+# POSTGRES_PASSWORD above. Inside the api container compose overrides this to reach db:5432.
 DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger
 DOCUMENTS_DIR=/var/lib/oneledger/documents
 ```
@@ -1710,6 +1730,12 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# Next.js inlines NEXT_PUBLIC_* during `next build` and freezes them into the bundle, so this
+# has to arrive as a build argument. Supplying it at runtime is too late: the browser would
+# fall back to localhost and every hosted visitor would call their own machine.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
 EXPOSE 3000
@@ -2241,11 +2267,15 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  No secret in .next/static/
 ☐  ./scripts/check-no-real-data.sh passes; no statement is tracked by git
 ☐  uv run pytest, ruff and mypy --strict all clean in api/
-☐  All migrations apply cleanly from empty, seeds included, every test checked:
-     docker compose down -v && docker compose up -d db     # genuinely empty; `flyway clean`
-     docker compose run --rm flyway migrate                # is disabled by default since v10
+☐  All migrations apply cleanly from empty, seeds included, every test checked — in a
+   SCRATCH project, because `down -v` on the default one deletes pgdata AND documents:
+     export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
+     export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+     docker compose down -v && docker compose up -d db
+     docker compose run --rm flyway migrate
      for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
      for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
+     docker compose down -v
    (the seeds are not optional: 0001_reference.sql asserts six system institutions, and
     0002_rls.sql asserts they stay visible to anon. Without `|| exit 1` the loop reports
     only the last file's status.)
