@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0014 — Classification and transfer matching live in Postgres — OneLedger</title>
+  <title>ADR-0002 — Freeze both reporting-currency amounts on every transaction — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,105 +337,91 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="#" aria-current="page">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li></ul>
+<li><a href="#" aria-current="page">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0014--classification-and-transfer-matching-live-in-postgres">ADR-0014 — Classification and transfer matching live in Postgres</h1>
-<p><strong>Status:</strong> Superseded by <a href="0017-python-backend-service.html">ADR-0017</a> · <strong>Date:</strong> 2026-09-05</p>
-<blockquote>
-<p><strong>This decision no longer holds.</strong> It is kept as the record of what was decided
-and why it changed — deleting it would leave the current architecture looking arbitrary. The
-decision in force is <a href="./0017-python-backend-service.html">ADR-0017</a>.</p>
-<p>What changed: this ADR chose The classification cascade and the transfer matcher as Postgres functions. Both now live in the Python service.
-Everything below describes the system as of 05 September 2026, not the one being built.</p>
-</blockquote>
+          <h1 id="adr-0002--freeze-both-reporting-currency-amounts-on-every-transaction">ADR-0002 — Freeze both reporting-currency amounts on every transaction</h1>
+<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-04</p>
 <h2 id="context">Context</h2>
-<p>The specification as originally written places the classification cascade and the transfer
-matching algorithm in the local Python importer
-(<a href="../design/classification.html">classification.html</a> §1,
-<a href="../design/transfers-and-reconciliation.html">transfers-and-reconciliation.html</a> §3), and
-<code>classify.py</code> / <code>transfers.py</code> appear in the importer layout
-(<a href="../design/architecture.html">architecture.html</a> §3).</p>
-<p>But the web app needs the same two behaviours:</p>
-<ul>
-<li><strong>Retroactive rule application.</strong> <code>apply_category_change</code> and <code>upsert_classification_rule</code>
-(<a href="../design/api-contracts.html">api-contracts.html</a> §3) apply a newly created rule to past
-transactions and report an affected count. That is rule matching.</li>
-<li><strong>Manual transfer linking.</strong> &quot;Link as transfer&quot; proposes plausible peers ranked by score
-(<a href="../design/transfers-and-reconciliation.html">07</a> §6). That is the matching algorithm.</li>
-</ul>
-<p>There is no hosted API to call (<a href="./0002-supabase-vercel-local-importer.html">ADR-0002</a>), so as
-specified these would be implemented a second time — in TypeScript or in SQL — alongside the
-Python originals.</p>
-<p>Two implementations of pattern matching (contains / prefix / exact / regex, plus account,
-currency, amount-range, direction and country filters, evaluated in priority order) and two
-implementations of a weighted five-factor scoring function. They would diverge. When they did, the
-symptom would be a transaction categorised one way at import and a different way after a rule
-edit — which is precisely the &quot;silently wrong number&quot; failure this product is built to avoid.</p>
+<p>A household spread across two countries moves money between two currencies constantly, and the
+rate changes daily. The question that prompted this: <em>&quot;a two-month-old transaction will show a
+different rate today — which is correct?&quot;</em></p>
+<p>Both, for different questions. <strong>Flows must be frozen at the transaction-date rate; balances must
+translate at the as-of-date rate.</strong> If historical flows are re-translated live, last March&#39;s
+spending changes every day and every trend chart becomes partly a chart of the exchange rate.</p>
+<p>Given that flows must be frozen, the question becomes: frozen in what?</p>
 <h2 id="decision">Decision</h2>
-<p><strong>One implementation of each, as Postgres functions.</strong></p>
-<pre><code>match_classification_rules(txn) -&gt; rule_id, category_id, merchant_id, txn_type, confidence
-score_transfer_candidates(txn)  -&gt; peer_txn_id, score, transfer_kind
+<p>Every household configures a <strong>reporting pair</strong> — <code>household.base_currency</code> and
+<code>household.secondary_currency</code>. Which two they are is configuration; <em>that there are exactly
+two</em> is the decision. Store on every transaction:</p>
+<pre><code>amount, currency                       immutable original
+fx_rate_to_base, fx_rate_to_secondary  frozen at booked_date
+amount_base, amount_secondary          frozen, derived once
 </code></pre>
-<p>The importer calls them over RPC during staging. The web app calls the same functions for
-retroactive apply, affected counts and manual linking. <code>classify.py</code> and <code>transfers.py</code> are
-removed from the importer.</p>
-<h2 id="rationale">Rationale</h2>
-<p><strong>The duplication is of the hardest semantics in the product.</strong> Priority ordering, null-condition
-handling (&quot;every non-null condition must match&quot;), and the FX-aware amount tolerance are exactly
-the rules that get subtly mis-copied.</p>
-<p><strong>The data is already there.</strong> Both engines read <code>classification_rule</code>, <code>merchant_alias</code>,
-<code>account</code>, <code>fx_rate</code> and the candidate transactions. Running them in Python means fetching all of
-that over the network and matching in application memory; running them in SQL means the match
-happens next to the data, set-based, over the whole staged batch at once.</p>
-<p><strong>The importer already requires the network at this point in the pipeline.</strong> It fetches FX rates
-(stage 6) and writes staged rows (stage 9). Requiring it to classify over RPC costs no offline
-capability that stage 7 actually had.</p>
-<p><strong>Rule health becomes queryable.</strong> The shadowed-rule, never-fired and frequently-overridden
-analyses (<a href="../design/classification.html">06</a> §4) are SQL over the same functions rather than a
-separate Python reimplementation of rule semantics.</p>
+<p>Both reporting currencies are stored. The currency toggle swaps a column.</p>
+<p>No currency code appears in a column name, an enum or a constraint. AED and INR are what the
+first household happened to choose; a household running EUR and CHF gets the same schema, the
+same queries and the same toggle, and changes two rows of configuration to get it.</p>
+<p>Balances and net worth translate at the as-of date, computed live from <code>fx_rate</code>. The difference
+between the two treatments is <strong>FX translation gain/loss</strong>, surfaced as its own line in net-worth
+attribution rather than absorbed into a residual.</p>
 <h2 id="alternatives-considered">Alternatives considered</h2>
-<p><strong>Python only, retroactive apply becomes a CLI command.</strong> Keeps matching in one place and keeps it
-unit-testable in Python. Rejected on user experience: creating a rule from a correction is an
-in-app action with a live affected count (<a href="../design/classification.html">06</a> §4), and pushing it
-to a terminal command removes the feature&#39;s whole point.</p>
-<p><strong>Both, with a shared test corpus asserting agreement.</strong> Honest about the duplication and guards
-it. Rejected because it is two codebases for one behaviour, forever, and the guard only catches
-divergence on cases the corpus happens to contain.</p>
-<p><strong>Postgres functions generated from a single Python source.</strong> Rejected as more machinery than the
-problem justifies for a single-user system.</p>
+<p><strong>Convert on read.</strong> Store only the original; translate in every query. Rejected: it makes
+accidental re-translation of history the <em>default</em> behaviour rather than a bug, and it puts a
+per-row rate join into every report.</p>
+<p><strong>Freeze the base amount only, derive the secondary on read.</strong> Half the columns. Rejected
+because the secondary view would be a second-class derived view of a derived view, and because
+deriving it from a frozen base value reintroduces exactly the re-translation problem for the
+secondary toggle.</p>
+<p><strong>Pivot currency (freeze one amount in a fixed pivot such as USD, translate from there).</strong>
+Elegant and extends to any number of reporting currencies. Rejected for now: every report becomes
+a two-hop conversion with a rate join, for a system that has exactly two reporting currencies. The
+complexity is real and the benefit is hypothetical.</p>
+<p><strong>Name the columns after the currencies</strong> (<code>amount_inr</code>, <code>amount_aed</code>). Simpler to read in
+the first household and impossible to reuse in the second. Rejected: it puts a deployment&#39;s
+configuration into the schema, where changing it costs a migration instead of an UPDATE.</p>
 <h2 id="consequences">Consequences</h2>
+<p><strong>Good</strong></p>
 <ul>
-<li><strong>Matching logic is SQL</strong>, which is harder to unit-test than Python and less pleasant to debug.
-Mitigated by testing it as database tests (<code>db/tests/</code>), which
-<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a> §6 already
-budgets ~25 of.</li>
-<li><strong>The importer cannot classify offline.</strong> It can still parse, normalize, dedupe and reconcile
-offline — <code>--dry-run</code> remains fully useful without a database.</li>
-<li>The Python learning goal stated in <a href="./0002-supabase-vercel-local-importer.html">ADR-0002</a> is
-narrowed slightly: parsers, normalization, reconciliation, FX and XIRR remain in Python; the
-rules engine and matcher move out. Parsing was always the substantial part.</li>
-<li><code>06</code> §1, <code>07</code> §3 and §6, and <code>02</code> §3 are updated to describe SQL functions rather than Python
-modules.</li>
+<li>Historical figures are literally immutable. No query can accidentally re-translate.</li>
+<li>Reporting is a plain <code>SUM()</code> on an indexed column.</li>
+<li>The toggle is instant, and neither currency is second-class.</li>
+<li>The FX translation line in attribution reconciles exactly, because the flow and stock
+treatments are cleanly separated.</li>
 </ul>
+<p><strong>Costs</strong></p>
+<ul>
+<li>Two extra <code>NUMERIC(20,4)</code> and two <code>NUMERIC(20,10)</code> columns per row. Negligible at ~20,000 rows.</li>
+<li><strong>Adding a third reporting currency requires a backfill migration</strong> — add a third column,
+populate from <code>fx_rate</code> history. A planned one-off, not a surprise. If a third currency ever
+becomes routine, revisit the pivot-currency alternative in a new ADR.</li>
+<li><strong>Changing the pair after import is a backfill, not a settings change.</strong> The frozen columns
+are already populated, so switching base currency re-derives every row from <code>fx_rate</code> history.
+Choose the pair at setup; the UI states this where it is chosen.</li>
+<li>The importer must compute translations correctly at staging time. Enforced by a Pydantic
+validator that rejects an inconsistent <code>amount_base</code>.</li>
+</ul>
+<p><strong>Correction path.</strong> The only circumstance in which frozen values change is a corrected
+transaction date. That path re-fetches the rate for the corrected date and writes <code>audit_log</code>.
+Every other write path is blocked by trigger.</p>
 
         </article>
       </main>

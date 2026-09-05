@@ -337,32 +337,30 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="02--architecture">02 — Architecture</h1>
 <p><strong>Constraint that shapes everything: near-zero infrastructure spend.</strong> Localhost first, one
-small VPS when it earns it — <a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a> settled
+small VPS when it earns it — <a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a> settled
 this at roughly $5–12 a month with no usage pricing, replacing the free-tiers-only rule the earlier
 drafts were written under.</p>
 <p>That constraint turns out to produce a better architecture than an unconstrained one would, for
@@ -396,19 +394,19 @@ reasons set out in §2.</p>
    └───────────────────────────────────────────────────────────┘
 
    All four run as containers in one compose file, on your laptop
-   now and on one small VPS later.          (ADR-0018)
+   now and on one small VPS later.          (ADR-0014)
 </code></pre>
 <p>Three pieces, each with one job: React renders, Python computes, Postgres guarantees.</p>
 <p><strong>The invariants live in Postgres, not in Python.</strong> A backend is a convenient place to put
 logic and a poor place to put guarantees — so the constraints, the triggers and the reporting views stay
 where no code path can route around them
-(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>).</p>
+(<a href="../adr/0013-python-backend-service.html">ADR-0013</a>).</p>
 <h2 id="why-a-python-service">2. Why a Python service</h2>
 <p>Two earlier designs put this logic elsewhere, and each recorded its own cost:</p>
 <ul>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">ADR-0014</a> put classification and transfer
+<li><a href="../adr/superseded.html#matching-in-postgres">An earlier decision</a> put classification and transfer
 matching in Postgres — <em>"harder to unit-test than Python"</em>.</li>
-<li><a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> put parsing in the browser — <em>"~200 lines
+<li><a href="../adr/superseded.html#parse-in-the-browser">Another</a> put parsing in the browser — <em>"~200 lines
 of word grouping that pdfplumber gives free"</em>.</li>
 </ul>
 <p><strong>Both costs existed only because there was no backend.</strong> Matching went to SQL because two
@@ -421,7 +419,7 @@ found false — on the hardest of the four layouts <code>pdfplumber</code> recov
 a breakpoint, that one backend means one implementation of the trickiest semantics, and that OCR and
 spreadsheet support become additive rather than a new component.</p>
 <p><strong>Local, not hosted.</strong> The service runs on <code>localhost</code>. That preserves the privacy
-property <a href="../adr/0002-supabase-vercel-local-importer.html">ADR-0002</a> was protecting, without the CLI
+property <a href="../adr/superseded.html#supabase-vercel-importer">the original sketch</a> was protecting, without the CLI
 that made importing a terminal command — you drop files into the web app and it posts them to the service.</p>
 <h2 id="repository-layout">3. Repository layout</h2>
 <pre><code>OneLedger/
@@ -440,7 +438,7 @@ that made importing a terminal command — you drop files into the web app and i
 │   │   │   ├── detect.py      match a document against saved profiles
 │   │   │   ├── propose.py     find the header row, propose column bands
 │   │   │   ├── synonyms.py    Narration|Particulars|Description, Withdrawal|Debit
-│   │   │   └── quirks.py      the small additive vocabulary (ADR-0016)
+│   │   │   └── quirks.py      the small additive vocabulary (ADR-0012)
 │   │   ├── normalize.py       dates, signs, currency, description cleanup
 │   │   ├── dedupe.py          checksum + transaction fingerprint
 │   │   ├── reconcile.py       balance verification
@@ -547,7 +545,7 @@ dashboard has no data. Acceptable while everything is local, and the first thing
 question is taken up (§11).</p>
 <h2 id="environments">7. Environments</h2>
 <p><strong>There is one environment definition.</strong> The compose file that runs on your laptop is the one
-that runs on the VPS (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>); only the
+that runs on the VPS (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>); only the
 <code>.env</code> and whether Caddy is enabled differ.</p>
 <pre><code>services:
   caddy    reverse proxy · automatic TLS        (hosted only)
@@ -573,14 +571,14 @@ would cost more attention than it saves.</p>
 <tr><td>PDF passwords</td><td>Posted with the file, held in memory for the parse</td><td>Written to disk, a keychain, the database or a log</td></tr>
 </tbody></table>
 <p><strong>A privileged database connection is back, and that is a real loss.</strong>
-<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> had removed it entirely by making the browser
+<a href="../adr/superseded.html#parse-in-the-browser">Parsing in the browser</a> had removed it entirely by making the browser
 write as the signed-in user under RLS. A backend holds credentials, so they return to the threat model.
 They are confined to one process on one machine, never reach the browser, and
 <a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3 records what now stands in
 for RLS as the authorization boundary.</p>
 <h2 id="sizing">9. Sizing</h2>
 <p>The free-tier arithmetic this section used to contain is obsolete
-(<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>) — you size the box rather than fitting
+(<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>) — you size the box rather than fitting
 inside someone's allowance.</p>
 <p><strong>The workload is small.</strong> Thirty-six months of transactions is on the order of 30,000 rows;
 statements, payslips and receipts are roughly 100 MB of PDFs; one user generates a handful of page loads a day.
@@ -615,7 +613,7 @@ argument for keeping the parsers deterministic and versioned.</p>
 <h2 id="deployment">11. Deployment</h2>
 <p><strong>Nothing is deployed yet</strong>, and nothing needs to be until Phase 1 is done. This section
 records the target so the local build does not accumulate work that would have to be undone to reach it
-(<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>).</p>
+(<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>).</p>
 <p>One VPS. One compose file. Caddy terminates TLS and proxies to <code>web</code>; <code>web</code> talks to
 <code>api</code>; <code>api</code> talks to <code>db</code>. Only Caddy is exposed.</p>
 <h3 id="what-hosting-changes">What hosting changes</h3>

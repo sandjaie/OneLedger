@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0007 — Manual valuation snapshots for opaque assets — OneLedger</title>
+  <title>ADR-0004 — Google OAuth, single user, household-capable schema — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,75 +337,81 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="#" aria-current="page">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="./0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="./0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="#" aria-current="page">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0007--manual-valuation-snapshots-for-opaque-assets">ADR-0007 — Manual valuation snapshots for opaque assets</h1>
-<p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-04</p>
+          <h1 id="adr-0004--google-oauth-single-user-household-capable-schema">ADR-0004 — Google OAuth, single user, household-capable schema</h1>
+<p><strong>Status:</strong> Accepted; the mechanism is revised by <a href="0014-one-vps-one-compose-file.html">ADR-0014</a> — Google OIDC in the service rather than Supabase Auth · <strong>Date:</strong> 2026-09-04</p>
 <h2 id="context">Context</h2>
-<p>Some assets produce no importable statement: property, physical gold, EPF, PPF, and various
-holdings with no machine-readable output. Together they can be a large share of net worth — often
-the largest single line, in the case of property.</p>
-<p>Three options: exclude them, derive a value, or record one manually.</p>
+<p>This system holds an entire financial life. Authentication is a security-critical decision, and
+authentication <em>flows</em> — registration, invitation, password reset — are where a large share of
+auth vulnerabilities live.</p>
+<p>Separately: the ledger is one person&#39;s today, but a spouse&#39;s accounts could reasonably be added
+later. Retrofitting a tenancy dimension across forty tables is a genuinely painful migration.</p>
 <h2 id="decision">Decision</h2>
-<p>Record <strong>manual valuation snapshots</strong>: <em>&quot;as of date X, this is worth Y.&quot;</em></p>
-<p>Net worth on any date uses the most recent snapshot at or before that date, <strong>carried forward
-flat</strong>. Never interpolated between snapshots, never extrapolated beyond the latest.</p>
-<p>Snapshot age is displayed. A net worth including significantly stale valuations says so.</p>
+<blockquote>
+<p><strong>Still in force, but read &quot;Supabase Auth&quot; as &quot;the API service&quot;.</strong>
+<a href="./0014-one-vps-one-compose-file.html">ADR-0014</a> removed Supabase; the service now verifies
+Google&#39;s <code>id_token</code> against Google&#39;s JWKS itself and issues its own signed session cookie. Every
+property this ADR decided — no passwords, no signup, one pinned address — is unchanged. Only the
+component performing the check moved.</p>
+</blockquote>
+<p><strong>Authentication:</strong> Google OAuth via Supabase Auth. No passwords. No signup flow, no public
+registration, no invitations, no password reset. The permitted account is pinned by email in
+configuration; any other Google account is rejected at the application layer even if Supabase
+authenticates it successfully.</p>
+<p><strong>Tenancy:</strong> <code>household_id</code> on every household-scoped table, and <code>owner_person_id</code> on accounts
+and holdings, from the very first migration. RLS policies key on <code>household_id</code>. One household
+row, one person row, one <code>app_user</code> row in Phase 1.</p>
+<p><strong>No multi-user behaviour is built.</strong> No user management, no roles beyond <code>owner</code>, no sharing.</p>
 <h2 id="rationale">Rationale</h2>
-<p><strong>Excluding them makes net worth wrong in a more misleading way than a stale estimate does.</strong> A
-net worth that silently omits a property is not conservative; it is incorrect, and it is
-incorrect by an amount the user cannot see.</p>
-<p><strong>Carried forward flat, not interpolated.</strong> Drawing a smooth line between a snapshot in January
-and one in December implies month-by-month knowledge that does not exist. A step function is
-visually less satisfying and considerably more honest — and it makes the moment new information
-arrived legible on the chart.</p>
-<p><strong>Staleness must be visible</strong> (Invariant I7). A property valued fourteen months ago is a guess.
-Presenting it identically to a bank balance imported yesterday would misrepresent the confidence
-of the whole figure.</p>
-<p><strong>Confidence is recorded per snapshot</strong> — <code>high</code> for a formal valuation or an EPF statement,
-<code>medium</code> for a market estimate, <code>low</code> for a rough guess — so the UI can distinguish them.</p>
+<p><strong>Not building signup is a security control, not a shortcut.</strong> Credential stuffing, password
+reset poisoning, enumeration through registration, invitation token flaws — none of these exist
+if the flows don&#39;t. This is the single largest structural advantage a single-user system has, and
+it would be careless not to take it.</p>
+<p><strong>MFA belongs on the Google account</strong>, where it is already configured and already managed.
+Reimplementing it here would be strictly worse.</p>
+<p><strong>The tenancy columns are nearly free now and expensive later.</strong> They cost a <code>NOT NULL UUID</code> per
+table today. Added later they cost a migration touching every table, every query, every RLS
+policy, and a backfill against live data.</p>
+<p><strong>RLS is enabled from day one even with one user</strong> for three reasons: a forgotten <code>WHERE</code> returns
+nothing instead of everything; the anon key is public by design and RLS is what makes that safe;
+and the policies are already correct on the day a second person is added.</p>
 <h2 id="alternatives-considered">Alternatives considered</h2>
-<p><strong>Strictly transaction-derived.</strong> Only what traces to a statement counts. Most rigorous audit
-trail. Rejected: property and EPF simply would not appear, and net worth is the product&#39;s primary
-metric.</p>
-<p><strong>Snapshots plus automatic market pricing for everything.</strong> Fetch property indices, gold prices
-and so on. Rejected for Phase 1 as scope: it adds several fragile external dependencies for
-marginal accuracy on assets that move slowly. Gold and listed securities <em>are</em> auto-priced in M7
-where a free source exists (AMFI); the difference is that those have an unambiguous market price
-and a property does not.</p>
-<p><strong>Index-linked estimation</strong> — apply a property index to the purchase price. Rejected as false
-precision. An index for &quot;Dubai apartments&quot; says little about one specific apartment, and the
-resulting number would look derived-and-therefore-reliable when it is neither.</p>
+<p><strong>Email/password.</strong> Rejected: a password to store, hash, rotate, reset and leak, for zero benefit
+over an OAuth provider already in daily use.</p>
+<p><strong>No auth at all (localhost only).</strong> Simplest. Rejected because the dashboard should be reachable
+from a phone, and because an unauthenticated deployment is one misconfiguration away from public.</p>
+<p><strong>Full multi-user now.</strong> Rejected: builds user management, invitations and permission checks for
+a system with one user, and reintroduces the auth-flow attack surface the decision above removes.</p>
+<p><strong>Single user with no tenancy columns.</strong> Simplest schema. Rejected on migration cost — the one
+decision here that would be genuinely expensive to reverse.</p>
 <h2 id="consequences">Consequences</h2>
-<p><strong>Good.</strong> Net worth is complete. The method is simple, honest, and works for anything. Snapshots
-are cheap to record — a few minutes, a few times a year.</p>
-<p><strong>Costs.</strong> Net worth accuracy depends on the user&#39;s diligence. A property not revalued for two
-years distorts the trend, and — importantly — distorts it <em>smoothly</em>, so the revaluation appears
-as a sudden jump attributed to &quot;asset revaluation&quot; rather than being spread across the period it
-actually occurred in. That is a real limitation of the method, and it is the reason staleness
-prompts exist.</p>
-<p><strong>Mitigation.</strong> Snapshots older than a configurable threshold surface a prompt. <code>oneledger doctor</code> lists them. The dashboard flags a net worth that materially depends on a stale valuation.</p>
+<p><strong>Good.</strong> No password anywhere in the system. Minimal auth surface. Household support is a
+feature flag and a second <code>app_user</code> row rather than a migration. RLS is correct before it is
+needed.</p>
+<p><strong>Costs.</strong> Google is a hard dependency for access — losing that account means losing access until
+the Supabase auth provider is changed. Accepted; the alternative is a password. Also, one
+<code>NOT NULL UUID</code> per table serving no present purpose, which will look like over-engineering right
+up until it doesn&#39;t.</p>
 
         </article>
       </main>

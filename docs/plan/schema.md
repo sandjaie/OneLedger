@@ -502,7 +502,7 @@ CREATE TABLE statement_layout (
   closing_balance_pattern TEXT,
   has_running_balance     BOOLEAN NOT NULL DEFAULT false,
 
-  -- the small, additive vocabulary. See ADR-0016.
+  -- the small, additive vocabulary. See ADR-0012.
   quirks                 TEXT[] NOT NULL DEFAULT '{}',
 
   -- credit-card header block: limit, statement date, due date, minimum due

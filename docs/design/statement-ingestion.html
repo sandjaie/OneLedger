@@ -337,25 +337,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="../adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="../adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="../adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="../adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="../adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="../adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="../adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -403,7 +401,7 @@ it becomes decoration.</p>
    Import                         one database transaction; balances recomputed
 </code></pre>
 <p>Every stage runs in the <strong>Python service on <code>localhost</code></strong>
-(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>). The web app posts the file and renders the
+(<a href="../adr/0013-python-backend-service.html">ADR-0013</a>). The web app posts the file and renders the
 result; it performs no parsing and no arithmetic. Statements are processed on your own machine and reach no
 third-party host — only the original blob is uploaded to Storage at staging.</p>
 <hr>
@@ -433,7 +431,7 @@ guess, pre-fill, or offer to save.</p>
 <p>Three strategies, in order:</p>
 <p><strong>1. Content fingerprint.</strong> Each <strong>saved layout profile</strong> carries a signature — distinctive strings
 from the statement header. Profiles are rows in <code>statement_layout</code>, created through the mapping UI
-(<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>); no bank name appears in application code.</p>
+(<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>); no bank name appears in application code.</p>
 <pre><code class="language-jsonc">// a row in statement_layout — created by the mapping UI, not shipped in the codebase
 {
   &quot;name&quot;: &quot;UAE card&quot;,                    // whatever the user calls it
@@ -467,7 +465,7 @@ because a wrong guess corrupts two accounts at once.</p>
 <h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
 <h3 id="the-extraction-engine">The extraction engine</h3>
 <p>One engine, driven by a profile. There is no per-bank class, and no bank name appears in the
-codebase (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>).</p>
+codebase (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>).</p>
 <pre><code class="language-python">class ExtractionEngine(Protocol):
     def matches(self, profile: StatementLayout, text: str, filename: str) -&gt; float: ...
     def extract(self, profile: StatementLayout, pages: list[Page]) -&gt; ExtractionResult: ...
@@ -801,9 +799,7 @@ and is worse than no import at all.</p>
 <p>Post-commit, asynchronously: net-worth snapshot, holdings, XIRR, recurring-series detection.</p>
 <hr>
 <h2 id="12-the-import-screen">12. The import screen</h2>
-<p>There is no CLI (<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a>, kept by
-<a href="../adr/0017-python-backend-service.html">ADR-0017</a> when parsing moved back to Python).
-Everything a CLI would have
+<p>There is no CLI (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>). Everything a CLI would have
 done is a screen.</p>
 <table>
 <thead>
@@ -852,7 +848,7 @@ matters more than the current contents.</p>
 PDF-only; no CSV or Excel export exists from any of them</strong> — which is why M2 is planned around the
 easiest PDF rather than a CSV.</p>
 <p><strong>These are field notes, not a supported-institutions list.</strong> Layouts are rows created through the
-mapping UI (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>); nothing below is compiled into
+mapping UI (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>); nothing below is compiled into
 the product. It is recorded because it is what the engine and the quirk vocabulary were designed
 against, and because a future layout change is easier to diagnose with a note of what the format
 looked like before.</p>

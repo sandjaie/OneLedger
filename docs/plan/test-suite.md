@@ -7,7 +7,7 @@
 > Tests are written task-by-task in the milestone plans, following TDD. This file is the reference
 > the plans draw from, so the assertions stay consistent as they get distributed across milestones.
 >
-> **Since [ADR-0017](../adr/0017-python-backend-service.html) the suite is Python** — `pytest` and
+> **Since [ADR-0013](../adr/0013-python-backend-service.html) the suite is Python** — `pytest` and
 > `hypothesis` in `api/tests/`, plus SQL tests in `db/tests/` for constraints, triggers, views and
 > RLS. The TypeScript snippets below are retained where they test the web app's own behaviour and
 > retargeted where they tested logic that has since moved into the service.

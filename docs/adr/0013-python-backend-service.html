@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0017 — A Python backend service — OneLedger</title>
+  <title>ADR-0013 — A Python backend service — OneLedger</title>
   <style>:root {
   --page: #ffffff;
   --canvas: #f4f6f3;
@@ -337,41 +337,41 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./index.html">ADR index</a></li>
+      <ul>
+<li><a href="./index.html">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="#" aria-current="page">0016 Statement layouts as data</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="#" aria-current="page">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="adr-0017--python-backend-service">ADR-0017 — A Python backend service</h1>
+          <h1 id="adr-0013--python-backend-service">ADR-0013 — A Python backend service</h1>
 <p><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-05 ·
-<strong>Supersedes:</strong> <a href="0014-matching-engines-in-postgres.html">ADR-0014</a> and
-<a href="0015-parse-in-the-browser.html">ADR-0015</a> ·
-<strong>Revises:</strong> <a href="0002-supabase-vercel-local-importer.html">ADR-0002</a>
+<strong>Supersedes:</strong> <a href="./superseded.html#matching-in-postgres">matching in Postgres</a> and
+<a href="./superseded.html#parse-in-the-browser">parsing in the browser</a> ·
+<strong>Revises:</strong> <a href="./superseded.html#supabase-vercel-importer">the original sketch</a>
 (its "no hosted API server" clause)</p>
 
 <h2 id="context">Context</h2>
 <p>Two decisions taken earlier the same day carried costs that were stated plainly in their own text:</p>
 <ul>
-<li><a href="0014-matching-engines-in-postgres.html">ADR-0014</a> moved the classification cascade and the
+<li><a href="./superseded.html#matching-in-postgres">One decision</a> moved the classification cascade and the
 transfer matcher into Postgres. Stated cost: <em>"matching logic is SQL, which is harder to unit-test than
 Python and less pleasant to debug."</em></li>
-<li><a href="0015-parse-in-the-browser.html">ADR-0015</a> moved parsing into the browser. Stated cost:
+<li><a href="./superseded.html#parse-in-the-browser">Another</a> moved parsing into the browser. Stated cost:
 <em>"roughly 200 lines of word-grouping helper that <code>pdfplumber</code> would have provided free."</em></li>
 </ul>
 <p><strong>Both costs existed only because there was no backend.</strong> Matching went into SQL because two
@@ -381,7 +381,7 @@ interface for a monthly task, or a hosted server, which would have put statement
 <p>Neither was the best available design. Each was the best design <em>available without a backend</em>. The
 question was never asked directly until now.</p>
 <p>A further correction matters here: the claim that Python parses these documents better than TypeScript was
-<a href="0015-parse-in-the-browser.html#correction">measured and found false</a> — on the hardest of the four
+<a href="./superseded.html#parsing-measurement">measured and found false</a> — on the hardest of the four
 layouts <code>pdfplumber</code> recovers no more than <code>pdf.js</code> does. <strong>Parsing quality is not
 the argument for this decision</strong>, and it should not be recorded as though it were.</p>
 
@@ -397,7 +397,7 @@ Supabase Postgres      source of truth · constraints · triggers · the invaria
 </code></pre>
 <p>It runs on <code>localhost</code> during Phase 0 and Phase 1. Statements are parsed on your own machine and
 never transit a third-party host, which is the property
-<a href="0002-supabase-vercel-local-importer.html">ADR-0002</a> was protecting — preserved here without the
+<a href="./superseded.html#supabase-vercel-importer">the original sketch</a> was protecting — preserved here without the
 CLI that made importing a terminal command.</p>
 
 <h2 id="rationale">Rationale</h2>
@@ -406,28 +406,28 @@ implementation, one caller, unit-tested normally instead of through database fix
 <code>pdfplumber</code>: no word-grouping helper to write, no Web Worker, no glyph arithmetic.</p>
 <p><strong>Iterating a parser against 71 real files is the work that actually consumes time</strong>, and a
 REPL with a breakpoint over a directory beats DevTools on a page by a wide margin. This is the strongest
-practical argument and it was under-weighted in ADR-0015.</p>
-<p><strong>It removes a client from the contract.</strong> ADR-0014's premise was two clients needing identical
+practical argument and it was under-weighted when parsing moved to the browser.</p>
+<p><strong>It removes a client from the contract.</strong> The premise for matching in Postgres was two clients needing identical
 semantics. With one backend that premise is gone, and with it the reason to express the trickiest logic in a
 language chosen for reach rather than for expressing it.</p>
 <p><strong>OCR and spreadsheet parsing become additive.</strong> Neither applies today — every institution is
 PDF-only, and scanned statements are out of scope — but both are Python-shaped, and the service existing means
 they would not require a new component.</p>
 <p><strong>Import stays a UI action.</strong> You drop files into the web app; it posts them to the local
-service. The requirement that displaced ADR-0002's CLI is fully met.</p>
+service. The requirement that displaced the original local CLI is fully met.</p>
 
 <h2 id="what-does-not-change">What does not change</h2>
 <p>Everything in the product specification is untouched, because these are database and product decisions
 rather than backend-language ones: the eight invariants, signed balances, frozen dual-currency amounts,
 transfers as first-class entities, statement layouts as data
-(<a href="0016-statement-layouts-as-data.html">ADR-0016</a>), the review queue, and the dashboard.</p>
+(<a href="0012-statement-layouts-as-data.html">ADR-0012</a>), the review queue, and the dashboard.</p>
 <p>The invariants in particular stay enforced <strong>in Postgres</strong> — constraints, triggers and the
 reporting views — not in Python. A backend is a convenient place to put logic and a poor place to put
 guarantees.</p>
 
 <h2 id="alternatives-considered">Alternatives considered</h2>
 <p><strong>Keep the browser parser and add Python only for parsing.</strong> Rejected: two parsers is the
-duplication ADR-0014 and ADR-0015 were both written to prevent, and it would surface as rows importing
+duplication both of those decisions were written to prevent, and it would surface as rows importing
 differently depending on which path ran.</p>
 <p><strong>Python full-stack, with HTMX or Jinja templates.</strong> One language end to end, no npm, no build
 step — genuinely attractive for a solo project. Rejected on two screens: the review queue and the layout
@@ -445,7 +445,7 @@ most applications do, and as this one now will. RLS is retained as defence in de
 longer the thing standing between a bug and a leak. Given that multi-tenancy is permanently out of scope this
 is an acceptable trade; it is recorded as a decision rather than allowed to become a side effect.</p>
 <p><strong>The service-role key returns to the threat model.</strong>
-<a href="0015-parse-in-the-browser.html">ADR-0015</a> removed it, which was a real gain, and this reverses that
+<a href="./superseded.html#parse-in-the-browser">Parsing in the browser</a> removed it, which was a real gain, and this reverses that
 gain. It lives in the service's local <code>.env</code>, never in the browser bundle, and
 <a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §6 is updated accordingly.</p>
 <p><strong>Hosting is now an open question rather than a settled one.</strong> Vercel plus Supabase free tiers

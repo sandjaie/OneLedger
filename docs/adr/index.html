@@ -337,24 +337,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="#" aria-current="page">ADR index</a></li>
+      <ul>
+<li><a href="#" aria-current="page">ADR index</a></li>
 <li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="./0017-python-backend-service.html">0017 Python backend service</a></li></ul>
+<li><a href="./0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -363,6 +362,10 @@ body {
 <p>Each ADR records one decision, the alternatives that were genuinely considered, and the
 trade-off accepted. They exist so that a decision is not silently relitigated six months later
 by someone — including a future you — who has forgotten why it was made.</p>
+<p><strong>Everything numbered here is in force.</strong> Four decisions were made and replaced during the
+specification work, before any code existed; they are summarised in
+<a href="./superseded.html">Decisions we changed</a> and hold no number, because a folder where a
+third of the pages describe an abandoned architecture misleads on sight.</p>
 <table>
 <thead>
 <tr>
@@ -377,87 +380,67 @@ by someone — including a future you — who has forgotten why it was made.</p>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0002-supabase-vercel-local-importer.html">0002</a></td>
-<td>Supabase + Vercel + local Python importer</td>
-<td>Superseded by <a href="./0018-one-vps-one-compose-file.html">0018</a></td>
-</tr>
-<tr>
-<td><a href="./0003-frozen-dual-currency-amounts.html">0003</a></td>
+<td><a href="./0002-frozen-dual-currency-amounts.html">0002</a></td>
 <td>Freeze both reporting-currency amounts per transaction</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0004-defer-ai-to-v2.html">0004</a></td>
+<td><a href="./0003-defer-ai-to-v2.html">0003</a></td>
 <td>Defer all AI to V2</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0005-google-auth-single-user.html">0005</a></td>
+<td><a href="./0004-google-auth-single-user.html">0004</a></td>
 <td>Google OAuth, single user, household-capable schema</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0006-transaction-level-investment-lots.html">0006</a></td>
+<td><a href="./0005-transaction-level-investment-lots.html">0005</a></td>
 <td>Track investments at lot level, not snapshot</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0007-manual-valuation-snapshots.html">0007</a></td>
+<td><a href="./0006-manual-valuation-snapshots.html">0006</a></td>
 <td>Manual valuation snapshots for opaque assets</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0008-24-month-history-horizon.html">0008</a></td>
-<td>Import 24 months of history</td>
-<td>Superseded by <a href="./0013-36-month-history-horizon.html">0013</a></td>
-</tr>
-<tr>
-<td><a href="./0009-transfer-auto-detection-with-review.html">0009</a></td>
+<td><a href="./0007-transfer-auto-detection-with-review.html">0007</a></td>
 <td>Auto-detect transfers, confirm in review</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0010-seed-taxonomy-with-buckets.html">0010</a></td>
+<td><a href="./0008-seed-taxonomy-with-buckets.html">0008</a></td>
 <td>Seed taxonomy with Need/Want/Investment/Debt buckets</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0011-credit-card-statement-cycles.html">0011</a></td>
+<td><a href="./0009-credit-card-statement-cycles.html">0009</a></td>
 <td>Model credit card statement cycles as entities</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0012-signed-balance-convention.html">0012</a></td>
+<td><a href="./0010-signed-balance-convention.html">0010</a></td>
 <td>Signed balances; net worth is one SUM</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0013-36-month-history-horizon.html">0013</a></td>
+<td><a href="./0011-36-month-history-horizon.html">0011</a></td>
 <td>Import 36 months, anchored 01 Jan 2024</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0014-matching-engines-in-postgres.html">0014</a></td>
-<td>Classification and transfer matching in Postgres</td>
-<td>Superseded by <a href="./0017-python-backend-service.html">0017</a></td>
-</tr>
-<tr>
-<td><a href="./0015-parse-in-the-browser.html">0015</a></td>
-<td>Parse statements in the browser; retire the Python importer</td>
-<td>Superseded by <a href="./0017-python-backend-service.html">0017</a></td>
-</tr>
-<tr>
-<td><a href="./0016-statement-layouts-as-data.html">0016</a></td>
+<td><a href="./0012-statement-layouts-as-data.html">0012</a></td>
 <td>Statement layouts are data, not code</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0017-python-backend-service.html">0017</a></td>
+<td><a href="./0013-python-backend-service.html">0013</a></td>
 <td>A Python backend service</td>
 <td>Accepted</td>
 </tr>
 <tr>
-<td><a href="./0018-one-vps-one-compose-file.html">0018</a></td>
+<td><a href="./0014-one-vps-one-compose-file.html">0014</a></td>
 <td>One VPS, one compose file</td>
 <td>Accepted</td>
 </tr>
@@ -466,6 +449,11 @@ by someone — including a future you — who has forgotten why it was made.</p>
 <p>Do not edit an accepted ADR to reflect a new decision. Write a new one that supersedes it, and
 mark the old one <code>Superseded by ADR-XXXX</code>. The reasoning that led to a decision stays useful even
 when the decision changes — often especially then.</p>
+<p><strong>That rule starts at the first commit of application code.</strong> Until then, a reversed decision
+was never built on and never constrained anything, so it is summarised in
+<a href="./superseded.html">Decisions we changed</a> rather than kept as a numbered page — and the
+number it held goes back into the sequence. Once something depends on an ADR, reversing it has a
+migration story, and that story is exactly what a superseding ADR is for.</p>
 
         </article>
       </main>

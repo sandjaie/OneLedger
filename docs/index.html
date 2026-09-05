@@ -337,25 +337,23 @@ body {
     </div>
 <div class="register-section">
       <h2>Decisions</h2>
-      <ul><li><a href="./adr/index.html">ADR index</a></li>
+      <ul>
+<li><a href="#" aria-current="page">ADR index</a></li>
 <li><a href="./adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
-<li><a href="./adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer · superseded</a></li>
-<li><a href="./adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
-<li><a href="./adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
-<li><a href="./adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
-<li><a href="./adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
-<li><a href="./adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
-<li><a href="./adr/0008-24-month-history-horizon.html">0008 24-month history horizon · superseded</a></li>
-<li><a href="./adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
-<li><a href="./adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
-<li><a href="./adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
-<li><a href="./adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
-<li><a href="./adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
-<li><a href="./adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres · superseded</a></li>
-<li><a href="./adr/0015-parse-in-the-browser.html">0015 Parse in the browser · superseded</a></li>
-<li><a href="./adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
-<li><a href="./adr/0017-python-backend-service.html">0017 Python backend service</a></li>
-<li><a href="./adr/0018-one-vps-one-compose-file.html">0018 One VPS, one compose file</a></li></ul>
+<li><a href="./adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
+<li><a href="./adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
+<li><a href="./adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
+<li><a href="./adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
+<li><a href="./adr/0007-transfer-auto-detection-with-review.html">0007 Transfer auto-detection</a></li>
+<li><a href="./adr/0008-seed-taxonomy-with-buckets.html">0008 Seed taxonomy with buckets</a></li>
+<li><a href="./adr/0009-credit-card-statement-cycles.html">0009 Credit card statement cycles</a></li>
+<li><a href="./adr/0010-signed-balance-convention.html">0010 Signed balance convention</a></li>
+<li><a href="./adr/0011-36-month-history-horizon.html">0011 36-month history horizon</a></li>
+<li><a href="./adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
+<li><a href="./adr/0013-python-backend-service.html">0013 Python backend service</a></li>
+<li><a href="./adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="./adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
       <main id="document" class="ledger">
@@ -455,8 +453,8 @@ That is the what and the when.</p>
 </tr>
 </tbody></table>
 <p><a href="./adr/index.html">ADRs</a> record the decisions and their trade-offs. Read
-<a href="./adr/0003-frozen-dual-currency-amounts.html">0003 (frozen dual amounts)</a> and
-<a href="./adr/0017-python-backend-service.html">0017 (a Python backend service)</a> at minimum — they shape the
+<a href="./adr/0002-frozen-dual-currency-amounts.html">0002 (frozen dual amounts)</a> and
+<a href="./adr/0013-python-backend-service.html">0013 (a Python backend service)</a> at minimum — they shape the
 most code.</p>
 <hr>
 <h2 id="what-is-generic-and-what-isnt">What is generic, and what isn&#39;t</h2>
@@ -489,42 +487,42 @@ here in one place:</p>
 <tbody><tr>
 <td>Hosting</td>
 <td><strong>One VPS, one <code>docker compose</code> stack</strong> — web, api, db, caddy. Localhost first; hosted later</td>
-<td><a href="./adr/0002-supabase-vercel-local-importer.html">0002</a></td>
+<td><a href="./adr/0014-one-vps-one-compose-file.html">0014</a></td>
 </tr>
 <tr>
 <td>Auth</td>
 <td>Google OIDC implemented in the service. No password, no signup, one pinned account</td>
-<td><a href="./adr/0005-google-auth-single-user.html">0005</a></td>
+<td><a href="./adr/0004-google-auth-single-user.html">0004</a></td>
 </tr>
 <tr>
 <td>Backend shape</td>
 <td>React UI · <strong>Python (FastAPI) backend</strong> · Postgres. All containers; local through Phase 1</td>
-<td><a href="./adr/0002-supabase-vercel-local-importer.html">0002</a>, <a href="./adr/0015-parse-in-the-browser.html">0015</a></td>
+<td><a href="./adr/0013-python-backend-service.html">0013</a></td>
 </tr>
 <tr>
 <td>Users</td>
 <td>Single user now; <code>household_id</code> / <code>owner_person_id</code> carried from day one</td>
-<td><a href="./adr/0005-google-auth-single-user.html">0005</a></td>
+<td><a href="./adr/0004-google-auth-single-user.html">0004</a></td>
 </tr>
 <tr>
 <td>Reporting currency</td>
 <td>A configured <strong>base</strong> and <strong>secondary</strong>. Both frozen per transaction</td>
-<td><a href="./adr/0003-frozen-dual-currency-amounts.html">0003</a></td>
+<td><a href="./adr/0002-frozen-dual-currency-amounts.html">0002</a></td>
 </tr>
 <tr>
 <td>FX model</td>
 <td>Two rates: transaction-date for flows, as-of-date for balances</td>
-<td><a href="./adr/0003-frozen-dual-currency-amounts.html">0003</a></td>
+<td><a href="./adr/0002-frozen-dual-currency-amounts.html">0002</a></td>
 </tr>
 <tr>
 <td>History depth</td>
 <td><strong>36 months, anchored 01 Jan 2024</strong></td>
-<td><a href="./adr/0013-36-month-history-horizon.html">0013</a> <em>(supersedes 0008)</em></td>
+<td><a href="./adr/0011-36-month-history-horizon.html">0011</a></td>
 </tr>
 <tr>
 <td>Rules &amp; matching</td>
 <td>Classification cascade and transfer scoring live in the <strong>Python service</strong> — one implementation, one caller</td>
-<td><a href="./adr/0014-matching-engines-in-postgres.html">0014</a></td>
+<td><a href="./adr/0013-python-backend-service.html">0013</a></td>
 </tr>
 <tr>
 <td>Reporting year</td>
@@ -539,42 +537,42 @@ here in one place:</p>
 <tr>
 <td>Statement layouts</td>
 <td><strong>Data, not code.</strong> A layout is a row created through a mapping UI; no bank is named in the codebase</td>
-<td><a href="./adr/0016-statement-layouts-as-data.html">0016</a></td>
+<td><a href="./adr/0012-statement-layouts-as-data.html">0012</a></td>
 </tr>
 <tr>
 <td>Opaque assets</td>
 <td>Manual valuation snapshots with staleness indicator</td>
-<td><a href="./adr/0007-manual-valuation-snapshots.html">0007</a></td>
+<td><a href="./adr/0006-manual-valuation-snapshots.html">0006</a></td>
 </tr>
 <tr>
 <td>Investments</td>
 <td>Transaction-level: units, NAV, lots, XIRR</td>
-<td><a href="./adr/0006-transaction-level-investment-lots.html">0006</a></td>
+<td><a href="./adr/0005-transaction-level-investment-lots.html">0005</a></td>
 </tr>
 <tr>
 <td>Transfers</td>
 <td>Auto-detect with confidence score, confirmed in review queue</td>
-<td><a href="./adr/0009-transfer-auto-detection-with-review.html">0009</a></td>
+<td><a href="./adr/0007-transfer-auto-detection-with-review.html">0007</a></td>
 </tr>
 <tr>
 <td>Categories</td>
 <td>Curated seed taxonomy + user additions; every category carries a Need/Want/Investment/Debt bucket</td>
-<td><a href="./adr/0010-seed-taxonomy-with-buckets.html">0010</a></td>
+<td><a href="./adr/0008-seed-taxonomy-with-buckets.html">0008</a></td>
 </tr>
 <tr>
 <td>Credit cards</td>
 <td>Full statement-cycle objects</td>
-<td><a href="./adr/0011-credit-card-statement-cycles.html">0011</a></td>
+<td><a href="./adr/0009-credit-card-statement-cycles.html">0009</a></td>
 </tr>
 <tr>
 <td>AI</td>
 <td><strong>Entirely deferred to V2.</strong> No LLM calls in Phase 1 or 2</td>
-<td><a href="./adr/0004-defer-ai-to-v2.html">0004</a></td>
+<td><a href="./adr/0003-defer-ai-to-v2.html">0003</a></td>
 </tr>
 <tr>
 <td>Sign convention</td>
 <td>Signed balances; <code>net_worth = SUM(balances)</code></td>
-<td><a href="./adr/0012-signed-balance-convention.html">0012</a></td>
+<td><a href="./adr/0010-signed-balance-convention.html">0010</a></td>
 </tr>
 </tbody></table>
 <hr>

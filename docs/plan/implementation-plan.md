@@ -10,7 +10,7 @@ the household spans, with the consolidated cash-flow, portfolio and net-worth vi
 become possible once that ledger exists. The first deployment spans the UAE and India.
 
 **Architecture:** Three pieces, one job each
-([ADR-0017](../adr/0017-python-backend-service.html)). **React** renders. **Python (FastAPI)**
+([ADR-0013](../adr/0013-python-backend-service.html)). **React** renders. **Python (FastAPI)**
 computes — parsing, normalization, classification, transfer matching, XIRR — and is the
 authorization boundary. **Postgres** guarantees, through constraints, triggers and the reporting
 views, because a backend is a convenient place for logic and a poor place for guarantees. The
@@ -46,7 +46,7 @@ Project-wide. Every task's requirements implicitly include this section.
 - A transaction happens on a **date**, not an instant. Business dates are `DATE`, never
   `TIMESTAMPTZ`. Audit timestamps are `TIMESTAMPTZ`, always UTC.
 - Reporting year is the **calendar year** (Q20). History is anchored at **01 Jan 2024**
-  ([ADR-0013](../adr/0013-36-month-history-horizon.html)).
+  ([ADR-0011](../adr/0011-36-month-history-horizon.html)).
 
 **Correctness invariants** — the eight in [01-prd.md](../product/prd.html) §4. Each has a test in
 [12-testing-and-data-quality.md](../operations/testing-and-data-quality.html) §1. Two are easy to
@@ -71,8 +71,8 @@ violate accidentally and are enforced statically:
 
 - Migrations are numbered, plain, **forward-only** SQL. No down-migrations.
 - TDD: write the failing test, watch it fail, implement minimally, watch it pass, commit.
-- Near-zero infrastructure spend: local while building, one small VPS once hosted (ADR-0018).
-- **No LLM calls in Phase 1 or Phase 2** ([ADR-0004](../adr/0004-defer-ai-to-v2.html)).
+- Near-zero infrastructure spend: local while building, one small VPS once hosted (ADR-0014).
+- **No LLM calls in Phase 1 or Phase 2** ([ADR-0003](../adr/0003-defer-ai-to-v2.html)).
 
 ---
 
@@ -84,14 +84,14 @@ would be writing fiction.
 
 | Plan | Milestone | Deliverable | Governing spec |
 |---|---|---|---|
-| [`phase-0-foundations.md`](phase-0-foundations.md) | **Phase 0** | Schema, RLS, the API service, auth, FX backfill, UI shell | [02](../design/architecture.html), [03](../design/data-model.html), [ADR-0017](../adr/0017-python-backend-service.html) |
+| [`phase-0-foundations.md`](phase-0-foundations.md) | **Phase 0** | Schema, RLS, the API service, auth, FX backfill, UI shell | [02](../design/architecture.html), [03](../design/data-model.html), [ADR-0013](../adr/0013-python-backend-service.html) |
 | `02-m1-accounts.md` | **M1** | Account CRUD, manual entry, signed balances | [01](../product/prd.html) §5.1–5.2, [03](../design/data-model.html) §5 |
-| `03-m2-extraction-engine.md` | **M2** | Generic engine + layout mapping UI, proven on one layout | [05](../design/statement-ingestion.html), [ADR-0016](../adr/0016-statement-layouts-as-data.html) |
+| `03-m2-extraction-engine.md` | **M2** | Generic engine + layout mapping UI, proven on one layout | [05](../design/statement-ingestion.html), [ADR-0012](../adr/0012-statement-layouts-as-data.html) |
 | `04-m3-layouts.md` | **M3** | The remaining three layouts, mapped not coded | [05](../design/statement-ingestion.html) §13 |
-| `05-m4-classification.md` | **M4** | `match_classification_rules()`, seed rules, learn-from-correction | [06](../design/classification.html), [ADR-0014](../adr/0014-matching-engines-in-postgres.html) |
+| `05-m4-classification.md` | **M4** | `match_classification_rules()`, seed rules, learn-from-correction | [06](../design/classification.html), [ADR-0013](../adr/0013-python-backend-service.html) |
 | `06-m5-transfers.md` | **M5** | `score_transfer_candidates()`, review confirmation, FX cost | [07](../design/transfers-and-reconciliation.html) |
-| `07-m6-cards.md` | **M6** | Statement cycles, utilisation, paid-in-full | [01](../product/prd.html) §5.7, [ADR-0011](../adr/0011-credit-card-statement-cycles.html) |
-| `08-m7-investments.md` | **M7** | CAS import, holdings, XIRR, allocation | [01](../product/prd.html) §5.8, [ADR-0006](../adr/0006-transaction-level-investment-lots.html) |
+| `07-m6-cards.md` | **M6** | Statement cycles, utilisation, paid-in-full | [01](../product/prd.html) §5.7, [ADR-0009](../adr/0009-credit-card-statement-cycles.html) |
+| `08-m7-investments.md` | **M7** | CAS import, holdings, XIRR, allocation | [01](../product/prd.html) §5.8, [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
 | `09-m9-networth.md` | **M9** | Net worth, attribution, the dashboard | [04](../design/multi-currency-and-fx.html) §7, [11](../product/ui-information-architecture.html) §2 |
 | `10-m10-documents.md` | **M10** | Document vault, bidirectional traceability | [01](../product/prd.html) §5.11 |
 
@@ -131,7 +131,7 @@ Phase 0  Foundations
 Two ordering decisions are worth stating, because both are counterintuitive:
 
 **M2's deliverable is the engine, not a bank.** No institution is named in code
-([ADR-0016](../adr/0016-statement-layouts-as-data.html)); M2 builds the generic extraction engine and
+([ADR-0012](../adr/0012-statement-layouts-as-data.html)); M2 builds the generic extraction engine and
 the layout mapping UI, then proves both by mapping one layout through the UI exactly as a future
 bank would be. The card statements are that layout — they declare their own reconciliation anchors
 in a header block, are not encrypted, and one profile covers both cards, which is 38 of the 71
@@ -196,7 +196,7 @@ Recorded so the assumptions are checkable rather than implicit.
   A layout with no header row would fall back to fully manual band-dragging, which the UI must
   therefore still support.
 - **The quirk vocabulary stays small.** Two entries cover the four known layouts. If it grows
-  per-bank, [ADR-0016](../adr/0016-statement-layouts-as-data.html) has failed and the honest response
+  per-bank, [ADR-0012](../adr/0012-statement-layouts-as-data.html) has failed and the honest response
   is a superseding ADR, not a longer list.
 - **The CAS covers every folio.** If ETMoney holds anything outside CAMS/KFintech registrars, M7
   needs a second source and grows.
@@ -212,5 +212,5 @@ Recorded so the assumptions are checkable rather than implicit.
   ([architecture](../design/architecture.html) §11), and the reason that section now lists three
   options rather than asserting one.
 - **Postgres functions are testable enough to keep confidence.** If database testing proves too
-  painful to sustain, revisit [ADR-0014](../adr/0014-matching-engines-in-postgres.html) — but
+  painful to sustain, revisit [matching in Postgres](../adr/superseded.html#matching-in-postgres) — but
   revisit it with a superseding ADR, not by quietly reintroducing a second matcher in TypeScript.
