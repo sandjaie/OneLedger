@@ -20,7 +20,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 - **Postgres 18**, **Python 3.14** (`requires-python = ">=3.14"`), **Node 24 LTS**.
 - **Money is `NUMERIC` in Postgres and `Decimal` in Python. Never `float`, `real` or `double precision`.** Over the wire it is a **string**. Enforced by lint and by Pydantic validators.
-- **Migrations are forward-only.** No down-migrations. A schema change edits `docs/plan/schema.md` **and** `docs/design/data-model.html` in the same commit.
+- **Migrations are forward-only, applied by Flyway** ([ADR-0015](../../adr/0015-flyway-for-schema-migrations.html)), pinned to `flyway/flyway:13.5.0-alpine`. No down-migrations, and never edit an applied migration — Flyway checksums them. A schema change edits `docs/plan/schema.md` **and** `docs/design/data-model.html` in the same commit.
 - **No real financial data enters the repository, ever.** `pdf-statements/`, `*.pdf` and `.env` are git-ignored; `scripts/check-no-real-data.sh` runs in pre-commit and in CI.
 - **No secret is ever prefixed `NEXT_PUBLIC_`.** `NEXT_PUBLIC_API_URL` is the only variable carrying the prefix, and it holds a URL.
 - **No bank name appears as a code identifier, enum value or required seed row.** Institutions, layouts, categories and rules are rows.
@@ -37,23 +37,37 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 ```
 main
- └── feature/phase0                    integration branch for the whole phase
-      ├── feature/phase0-repo-skeleton      PR → feature/phase0
-      ├── feature/phase0-schema-reference   PR → feature/phase0
-      ├── …                                 one branch per PR below
-      └── feature/phase0-web-shell
+ └── feature/phase-0-foundations               integration branch for the whole phase
+      ├── feature/phase-0-compose-and-secret-scanning
+      ├── feature/phase-0-reference-data-and-tenancy
+      ├── feature/phase-0-accounts-and-fx-tables
+      ├── feature/phase-0-api-authorization-boundary
+      ├── feature/phase-0-fx-rate-pipeline
+      ├── feature/phase-0-web-shell
+      └── feature/phase-0-google-oidc-and-money-format
 ```
 
-Task branches are cut **from `feature/phase0`** and merged **back into it**. `feature/phase0` goes to `main` as one PR when the phase is complete and every invariant test passes.
+A branch name should say what is inside it. `feature/phase-0-fx-rate-pipeline` tells a reviewer what
+they are about to read; `feature/phase0-5` does not.
+
+Task branches are cut **from `feature/phase-0-foundations`** and merged **back into it**. `feature/phase-0-foundations` goes to `main` as one PR when the phase is complete and every invariant test passes.
 
 **The review gate.** Every PR waits for **Codex review on GitHub**. Merge only after Codex approves. If Codex raises findings, address them on the same branch and let it re-review — do not merge past an open finding, and do not close and reopen to dodge one.
 
-**The 500-line cap.** No pull request exceeds **500 hand-authored lines of diff**. Generated files do not count against the cap, but must be declared in the PR body and land in a PR that contains nothing else worth reading:
+**The 500-line cap counts code, and only code.** No pull request exceeds **500 lines of actual
+implementation and test code**. These do not count against it:
 
-- `web/package-lock.json` and the `create-next-app` scaffold — several thousand lines, generated.
-- `api/uv.lock` — generated.
+- Markdown and HTML documentation, including this plan and the spec.
+- `package.json`, `pyproject.toml`, `docker-compose.yml`, `.env.example` and other configuration.
+- Generated files — `web/package-lock.json`, `api/uv.lock`, the `create-next-app` scaffold.
 
-> **This is the one thing that will trip you on day one.** `npx create-next-app` writes a lockfile and a scaffold far larger than the cap in a single command. PR 6 exists to absorb that, and contains no hand-written logic beyond configuration. Review it by skimming what was configured, not by reading it.
+The cap exists so a reviewer can hold the whole change in their head. A lockfile does not consume
+that budget because nobody reads it; a hundred lines of migration does, because somebody must.
+
+> **The generated scaffold still needs its own PR.** `npx create-next-app` writes thousands of lines
+in one command, and even uncounted they drown a diff. PR 6 exists to absorb it and carries no
+hand-written logic beyond configuration — its body says so, and it is reviewed by skimming what was
+configured rather than by reading it.
 
 **Commit convention**, matching the existing history: a lowercase type prefix, a subject that states what changed rather than what was done, and a body that explains why when the subject cannot.
 
@@ -66,31 +80,69 @@ chore: pin gitleaks to v8.30.1
 
 ---
 
+## Testing discipline, and why the hooks matter more than the CI
+
+**Test-driven, and the spec already assumes it.** Every task in
+[`phase-0-foundations.md`](../../plan/phase-0-foundations.md) is shaped the same way: write the
+failing test, run it and watch it fail *for the right reason*, write the minimal implementation, run
+it again. That is not decoration. In a ledger the tests **are** the invariants — a statement that
+doesn't balance doesn't import, a transfer is never spending, last March's total does not move — and
+a test written after the implementation tends to assert what the code does rather than what the
+product requires. Writing it first is what keeps the invariant in charge.
+
+The step that is easiest to skip and least safe to skip is *running the test before the code
+exists*. A test that has never failed has never been shown to test anything.
+
+**The hooks, not the pull request, are where checks belong.** `.pre-commit-config.yaml` is installed
+on this branch already. Install it once in a fresh clone:
+
+```bash
+pre-commit install --install-hooks -t pre-commit -t pre-push
+```
+
+| Stage | What runs |
+|---|---|
+| **commit** | gitleaks · merge-conflict, case-conflict, yaml/json/toml, large files · whitespace on code only · no real financial data tracked · `scripts/check-docs.py` · `ruff check --fix` · `ruff format` · `mypy --strict` · `eslint` · `tsc --noEmit` |
+| **push** | `pytest` · `vitest` · every `db/tests/*.sql` against a live database |
+
+`api/` and `web/` do not exist until PR 4 and PR 6, so every hook targeting them exits cleanly until
+they arrive. The database hook is the one that bites: once `db/tests/` has files in it, a push with
+no reachable database **fails** and tells you to run `docker compose up -d db`. That is deliberate —
+an invariant proven only in CI is proven too late.
+
+A failing push is not a reason to reach for `--no-verify`. Fix it, then push.
+
+---
+
 ## PR decomposition
 
 Eleven spec tasks become **seven pull requests**. No task in the spec exceeds 173 lines of code, so the cap permits grouping; the groupings below are drawn where a reviewer could meaningfully reject one and approve its neighbour.
 
 | PR | Branch | Spec tasks | Hand-written lines | Gate |
 |---|---|---|---|---|
-| 1 | `feature/phase0-repo-skeleton` | 1 | ~101 | compose up, secret scan catches a planted key |
-| 2 | `feature/phase0-schema-reference` | 2, 3 | ~203 | `0001`, `0002` tests pass; anon reads zero rows |
-| 3 | `feature/phase0-schema-accounts-fx` | 4, 5 | ~201 | `0003`, `0004` tests pass |
-| 4 | `feature/phase0-service-skeleton` | 6 | ~141 | health 200, whoami 401 then 403 |
-| 5 | `feature/phase0-fx-pipeline` | 7, 8 | ~317 | peg identity to 8 dp; backfill writes provenance |
-| 6 | `feature/phase0-web-scaffold` | 9 | ~55 + generated | `vitest run` and `next build` pass; no secret in bundle |
-| 7 | `feature/phase0-auth-and-money` | 10, 11 | ~307 | sign-in end to end both ways; money formats both currencies |
+| 1 | `feature/phase-0-compose-and-secret-scanning` | 1 | ~101 | compose up, secret scan catches a planted key |
+| 2 | `feature/phase-0-reference-data-and-tenancy` | 2, 3 | ~203 | `0001`, `0002` tests pass; anon reads zero rows |
+| 3 | `feature/phase-0-accounts-and-fx-tables` | 4, 5 | ~201 | `0003`, `0004` tests pass |
+| 4 | `feature/phase-0-api-authorization-boundary` | 6 | ~141 | health 200, whoami 401 then 403 |
+| 5 | `feature/phase-0-fx-rate-pipeline` | 7, 8 | ~317 | peg identity to 8 dp; backfill writes provenance |
+| 6 | `feature/phase-0-web-shell` | 9 | ~55 + generated | `vitest run` and `next build` pass; no secret in bundle |
+| 7 | `feature/phase-0-google-oidc-and-money-format` | 10, 11 | ~307 | sign-in end to end both ways; money formats both currencies |
 
 ---
 
 ### PR 1: Repository skeleton, tooling and secret hygiene
 
-**Branch:** `feature/phase0-repo-skeleton` · **Spec:** Task 1, steps 1–7 · **~101 lines**
+**Branch:** `feature/phase-0-compose-and-secret-scanning` · **Spec:** Task 1, steps 1–7 · **~101 lines**
 
 **Files:**
-- Create: `.env.example`, `docker-compose.yml`, `.pre-commit-config.yaml`, `scripts/migrate.sh`
+- Create: `.env.example`, `docker-compose.yml` (including the pinned `flyway` service)
 - Create: `db/migrations/.gitkeep`, `db/seeds/.gitkeep`, `db/functions/.gitkeep`, `db/tests/.gitkeep`
 - Modify: `.gitignore`
-- Test: `scripts/check-no-real-data.sh`
+
+> `.pre-commit-config.yaml`, `scripts/check-no-real-data.sh` and `scripts/hooks/` already exist on
+> `feature/phase-0-foundations` — they were installed before the first task branch was cut, so every
+> branch inherits them. Spec Task 1 Steps 5 and 6 are therefore already satisfied; run
+> `pre-commit run --all-files` to confirm rather than recreating the files.
 
 **Interfaces:**
 - Consumes: nothing.
@@ -99,8 +151,8 @@ Eleven spec tasks become **seven pull requests**. No task in the spec exceeds 17
 - [ ] **Step 1: Cut the branch**
 
 ```bash
-git checkout feature/phase0 && git pull --ff-only
-git checkout -b feature/phase0-repo-skeleton
+git checkout feature/phase-0-foundations && git pull --ff-only
+git checkout -b feature/phase-0-compose-and-secret-scanning
 ```
 
 - [ ] **Step 2: Work spec Task 1, steps 1–7 in order**
@@ -109,7 +161,15 @@ Each spec step carries the file content and the command that verifies it. Do not
 
 - [ ] **Step 3: Prove the secret scan actually catches something**
 
-Spec Task 1 Step 6 plants a JWT-shaped value and expects `gitleaks` to fail the commit. A secret scanner that has never caught a planted key is a hypothesis, not a control. Expected: a finding and a non-zero exit, then a clean run once the file is removed.
+The hooks are installed, but nobody has yet watched them refuse a commit. Plant a JWT-shaped value
+and confirm `gitleaks` fails, then remove it and confirm the run is clean. A secret scanner that has
+never caught a planted key is a hypothesis, not a control.
+
+```bash
+printf 'LEAKED_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.fake\n' > leak.env
+git add leak.env && pre-commit run --all-files    # expect: gitleaks FAILS
+git reset leak.env && rm leak.env
+```
 
 - [ ] **Step 4: Verify the whole PR**
 
@@ -119,17 +179,17 @@ docker compose exec db pg_isready -U oneledger    # accepting connections
 ./scripts/check-no-real-data.sh                   # OK
 ```
 
-- [ ] **Step 5: Open the PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: Open the PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 2: Migrations 0001–0002 — reference data, identity and RLS
 
-**Branch:** `feature/phase0-schema-reference` · **Spec:** Tasks 2 and 3 · **~203 lines**
+**Branch:** `feature/phase-0-reference-data-and-tenancy` · **Spec:** Tasks 2 and 3 · **~203 lines**
 
 **Files:**
-- Create: `db/migrations/0001_extensions_and_reference.sql`, `db/seeds/institutions.sql`, `db/tests/0001_reference.sql`
-- Create: `db/migrations/0002_identity_and_rls.sql`, `db/tests/0002_rls.sql`
+- Create: `db/migrations/V1__extensions_and_reference.sql`, `db/seeds/institutions.sql`, `db/tests/0001_reference.sql`
+- Create: `db/migrations/V2__identity_and_rls.sql`, `db/tests/0002_rls.sql`
 
 **Interfaces:**
 - Consumes: a running local Postgres from PR 1.
@@ -137,7 +197,7 @@ docker compose exec db pg_isready -U oneledger    # accepting connections
 
 **Why these two ship together:** `0002` adds the foreign key from `institution.household_id` to `household(id)` that `0001` deliberately leaves dangling. Reviewing `0001` alone means reviewing a schema with a knowingly incomplete constraint.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 2, then spec Task 3, in order**
 
 Both follow the same shape: write the failing test, run it and watch it fail for the right reason, write the migration, run it again.
@@ -145,7 +205,7 @@ Both follow the same shape: write the failing test, run it and watch it fail for
 - [ ] **Step 3: Verify**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/seeds/institutions.sql
 psql "$DATABASE_URL" -f db/tests/0001_reference.sql   # no output = pass
 psql "$DATABASE_URL" -f db/tests/0002_rls.sql         # no output = pass
@@ -157,23 +217,23 @@ The `0002` test asserts an unauthenticated role reads **zero rows** from `househ
 
 `docs/plan/schema.md` and `docs/design/data-model.html` describe these tables. If what you wrote differs from what they say, one of them is wrong — fix it in this PR.
 
-- [ ] **Step 5: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 3: Migrations 0003–0004 — accounts and FX rates
 
-**Branch:** `feature/phase0-schema-accounts-fx` · **Spec:** Tasks 4 and 5 · **~201 lines**
+**Branch:** `feature/phase-0-accounts-and-fx-tables` · **Spec:** Tasks 4 and 5 · **~201 lines**
 
 **Files:**
-- Create: `db/migrations/0003_accounts.sql`, `db/tests/0003_accounts.sql`
-- Create: `db/migrations/0004_fx_rates.sql`, `db/tests/0004_fx.sql`
+- Create: `db/migrations/V3__accounts.sql`, `db/tests/0003_accounts.sql`
+- Create: `db/migrations/V4__fx_rates.sql`, `db/tests/0004_fx.sql`
 
 **Interfaces:**
 - Consumes: `household`, `person`, `institution`, `currency`, `current_household_id()`.
 - Produces: enums `account_type`, `account_class`; table `account`; trigger **`set_account_class()`** deriving `account_class` from `account_type` on insert **and** update. Table `fx_rate(rate_date, base_currency, quote_currency, rate, source, is_carried_forward, carried_from, fetched_at)` with primary key `(rate_date, base_currency, quote_currency)`, and **`fx_rate_on(base, quote, on_date) RETURNS NUMERIC(20,10)`**. PR 5 populates it; every later milestone reads it.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 4, then spec Task 5**
 - [ ] **Step 3: Verify the trigger fires on UPDATE, not only INSERT**
 
@@ -182,18 +242,18 @@ The spec's `0003` test changes an account's type after insert and asserts the de
 - [ ] **Step 4: Verify**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/tests/0003_accounts.sql
 psql "$DATABASE_URL" -f db/tests/0004_fx.sql
 ```
 
-- [ ] **Step 5: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 4: Python service skeleton and the authorization boundary
 
-**Branch:** `feature/phase0-service-skeleton` · **Spec:** Task 6 · **~141 lines**
+**Branch:** `feature/phase-0-api-authorization-boundary` · **Spec:** Task 6 · **~141 lines**
 
 **Files:**
 - Create: `api/pyproject.toml`, `api/oneledger/__init__.py`, `api/oneledger/main.py`, `api/oneledger/auth.py`, `api/oneledger/db.py`
@@ -205,7 +265,7 @@ psql "$DATABASE_URL" -f db/tests/0004_fx.sql
 
 **This PR ships alone** because `require_owner()` is the contract the rest of the system is built against. A reviewer should be able to reject the shape of the authorization boundary without also rejecting an FX pipeline.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 6, steps 1–8**
 - [ ] **Step 3: Verify all three authorization outcomes**
 
@@ -225,13 +285,13 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami \
 cd api && uv run ruff check . && uv run mypy . && uv run pytest -v
 ```
 
-- [ ] **Step 5: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 5: FX pipeline — rate source, peg derivation, backfill
 
-**Branch:** `feature/phase0-fx-pipeline` · **Spec:** Tasks 7 and 8 · **~317 lines**
+**Branch:** `feature/phase-0-fx-rate-pipeline` · **Spec:** Tasks 7 and 8 · **~317 lines**
 
 **Files:**
 - Create: `api/oneledger/fx.py`, `api/oneledger/routes/fx.py`
@@ -244,7 +304,7 @@ cd api && uv run ruff check . && uv run mypy . && uv run pytest -v
 
 **Why these ship together:** Task 8's route is the only caller of Task 7's functions. Splitting them produces one PR of pure library code with no user and one PR that is untestable without it.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 7, then spec Task 8**
 - [ ] **Step 3: Hold the two assertions that matter**
 
@@ -260,13 +320,13 @@ curl -s "localhost:8000/fx/2026-09-06" -b "session=$SESSION"   # carried, names 
 curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"   # the anchor returns a rate
 ```
 
-- [ ] **Step 5: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 6: Next.js scaffold and the typed API client
 
-**Branch:** `feature/phase0-web-scaffold` · **Spec:** Task 9 · **~55 hand-written lines + generated scaffold**
+**Branch:** `feature/phase-0-web-shell` · **Spec:** Task 9 · **~55 hand-written lines + generated scaffold**
 
 **Files:**
 - Create: `web/` via `create-next-app`, `web/vitest.config.ts`, `web/lib/api/client.ts`
@@ -278,7 +338,7 @@ curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"   # the anchor retu
 
 **Read this PR by skimming.** It carries `package-lock.json` and the `create-next-app` output — thousands of generated lines. The PR body must say so explicitly and list the four files that were actually written by hand. Nothing else lands in this PR.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 9, steps 1–6**
 
 `create-next-app` sets `@/*` in `tsconfig.json`, but vitest does not read it — spec Step 3 adds the alias to `vitest.config.ts`. Without it every `@/` import fails at test time only, which is a confusing way to learn this.
@@ -295,13 +355,13 @@ grep -rE "SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|postgresql://" .nex
 
 State the generated-file count, name the four hand-written files, and confirm the bundle grep came back clean.
 
-- [ ] **Step 5: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ### PR 7: Google OIDC, the seed, money formatting and the toggle
 
-**Branch:** `feature/phase0-auth-and-money` · **Spec:** Tasks 10 and 11 · **~307 lines**
+**Branch:** `feature/phase-0-google-oidc-and-money-format` · **Spec:** Tasks 10 and 11 · **~307 lines**
 
 **Files:**
 - Create: `api/oneledger/routes/auth.py`, `web/app/login/page.tsx`, `web/app/unauthorized/page.tsx`
@@ -315,7 +375,7 @@ State the generated-file count, name the four hand-written files, and confirm th
 
 **Manual prerequisite, do this before starting:** register both redirect URIs in the Google Cloud console — `http://localhost:8000/auth/callback` and `https://<your-hostname>/auth/callback` — and put the client id and secret in `.env`. Deploying later then needs no console visit. This is the only step in Phase 0 that cannot be completed from the terminal, and it will block PR 7's verification if left until the end.
 
-- [ ] **Step 1: Cut the branch from `feature/phase0`**
+- [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 10, steps 1–8**
 
 The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is written into a committed document.
@@ -335,25 +395,25 @@ cd api && uv run pytest tests/test_oidc.py -v    # 4 passed
 cd web && npx vitest run && npm run dev
 ```
 
-- [ ] **Step 6: PR into `feature/phase0`, wait for Codex, merge on approval**
+- [ ] **Step 6: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 
 ---
 
 ## Closing the phase
 
-- [ ] **Every checkbox above is ticked and every PR is merged into `feature/phase0`.**
+- [ ] **Every checkbox above is ticked and every PR is merged into `feature/phase-0-foundations`.**
 - [ ] **Run the whole gate from a clean clone**, because a green suite on a developer machine that has been accumulating state for a week proves less than it appears to:
 
 ```bash
 docker compose down -v && docker compose up -d db
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 for t in db/tests/*.sql; do psql "$DATABASE_URL" -f "$t"; done
 cd api && uv run ruff check . && uv run mypy . && uv run pytest -v
 cd ../web && npx vitest run && npm run build
 python3 scripts/check-docs.py
 ```
 
-- [ ] **Open `feature/phase0` → `main`.** The PR body states what Phase 0 delivered and what M1 may now assume: a database with four migrations and their invariant tests, a service that is the authorization boundary, an FX table covering the full history horizon, and a web shell that formats money correctly.
+- [ ] **Open `feature/phase-0-foundations` → `main`.** The PR body states what Phase 0 delivered and what M1 may now assume: a database with four migrations and their invariant tests, a service that is the authorization boundary, an FX table covering the full history horizon, and a web shell that formats money correctly.
 - [ ] **Wait for Codex, merge on approval.**
 
 ## What Phase 0 deliberately does not deliver

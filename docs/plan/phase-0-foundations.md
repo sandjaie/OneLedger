@@ -10,7 +10,8 @@ on top of it yet.
 **Architecture:** One `docker compose` stack — `web`, `api`, `db`
 ([ADR-0014](../adr/0014-one-vps-one-compose-file.html)). A **FastAPI service on :8000** owns all
 business logic and is the authorization boundary; a **Next.js app on :3000** is the interface and
-holds none; **Postgres 18** holds the truth and the invariants. Migrations are forward-only SQL.
+holds none; **Postgres 18** holds the truth and the invariants. Migrations are forward-only SQL,
+applied by Flyway ([ADR-0015](../adr/0015-flyway-for-schema-migrations.html)).
 
 **The compose file you build here is the one that deploys later.** Nothing in Phase 0 depends on a
 managed service, so reaching the hosted target is running the same file on a VPS.
@@ -44,7 +45,8 @@ ones this plan touches directly:
 - No secret is ever prefixed `NEXT_PUBLIC_`. `NEXT_PUBLIC_API_URL` is the only variable that carries
   the prefix, and it holds a URL.
 - No real financial data in the repository, ever.
-- Migrations are forward-only. No down-migrations.
+- Migrations are forward-only, applied by Flyway. No down-migrations. Never edit an applied
+  migration — Flyway checksums them and will refuse to run.
 - History anchor: **01 Jan 2024**. Reporting year: **calendar**.
 
 **Verified environment facts** (checked 2026-09-05, do not re-derive):
@@ -63,7 +65,7 @@ ones this plan touches directly:
 ### Task 1: Repository skeleton, tooling and secret hygiene
 
 **Files:**
-- Create: `.env.example`, `docker-compose.yml`, `.pre-commit-config.yaml`, `scripts/migrate.sh`
+- Create: `.env.example`, `docker-compose.yml`
 - Create: `db/migrations/.gitkeep`, `db/seeds/.gitkeep`, `db/functions/.gitkeep`, `db/tests/.gitkeep`
 - Modify: `.gitignore` (already exists)
 - Test: `scripts/check-no-real-data.sh`
@@ -133,6 +135,20 @@ services:
     ports: ["3000:3000"]
     depends_on: [api]
 
+  # Runs on demand, never at boot:  docker compose run --rm flyway migrate | info
+  flyway:
+    image: flyway/flyway:13.5.0-alpine
+    profiles: ["tools"]
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/oneledger
+      FLYWAY_USER: oneledger
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "20"
+    volumes: ["./db/migrations:/flyway/sql:ro"]
+    depends_on:
+      db: { condition: service_healthy }
+
 volumes:
   pgdata:
   documents:
@@ -141,10 +157,16 @@ volumes:
 ```bash
 docker compose up -d db
 docker compose exec db pg_isready -U oneledger      # expect: accepting connections
+docker compose run --rm flyway info                 # expect: connects, "<< Empty Schema >>"
 ```
 
 `api` and `web` have nothing to build yet — they arrive in Tasks 6 and 9. Bring up `db` alone for
 now.
+
+> **Prove Flyway reaches Postgres 18 before anything is built on it.** Flyway 13.5.0 was confirmed
+> on 2026-09-05 to connect to Postgres 18.4 and read its schema, but a migration was never observed
+> applying end to end. `flyway info` closes that gap in one command. If it fails, that is a reason
+> to revisit [ADR-0015](../adr/0015-flyway-for-schema-migrations.html), not to work around it.
 
 - [ ] **Step 4: Write `.env.example`**
 
@@ -225,7 +247,7 @@ git commit -m "chore: repo skeleton, compose stack, secret scanning"
 ### Task 2: Migration 0001 — extensions and reference data
 
 **Files:**
-- Create: `db/migrations/0001_extensions_and_reference.sql`
+- Create: `db/migrations/V1__extensions_and_reference.sql`
 - Create: `db/seeds/institutions.sql`
 - Test: `db/tests/0001_reference.sql`
 
@@ -263,7 +285,7 @@ Expected: `ERROR: relation "currency" does not exist`.
 - [ ] **Step 3: Write the migration**
 
 ```sql
--- db/migrations/0001_extensions_and_reference.sql
+-- db/migrations/V1__extensions_and_reference.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid() is built in on PG15,
                                            -- pgcrypto is for digest() used in account hashing
 
@@ -331,7 +353,7 @@ INSERT INTO institution (household_id, name, short_name, country, institution_ty
 - [ ] **Step 5: Apply and run the test to verify it passes**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/seeds/institutions.sql
 psql "$DATABASE_URL" -f db/tests/0001_reference.sql
 ```
@@ -341,7 +363,7 @@ Expected: `NOTICE: PASS 0001`.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add db/migrations/0001_extensions_and_reference.sql db/seeds/institutions.sql db/tests/0001_reference.sql
+git add db/migrations/V1__extensions_and_reference.sql db/seeds/institutions.sql db/tests/0001_reference.sql
 git commit -m "feat(db): extensions, currency and institution reference data"
 ```
 
@@ -350,7 +372,7 @@ git commit -m "feat(db): extensions, currency and institution reference data"
 ### Task 3: Migration 0002 — identity, tenancy and RLS
 
 **Files:**
-- Create: `db/migrations/0002_identity_and_rls.sql`
+- Create: `db/migrations/V2__identity_and_rls.sql`
 - Test: `db/tests/0002_rls.sql`
 
 **Interfaces:**
@@ -429,7 +451,7 @@ Expected: `ERROR: relation "person" does not exist`.
 - [ ] **Step 3: Write the migration**
 
 ```sql
--- db/migrations/0002_identity_and_rls.sql
+-- db/migrations/V2__identity_and_rls.sql
 CREATE TABLE household (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name               TEXT NOT NULL,
@@ -507,7 +529,7 @@ CREATE POLICY institution_write ON institution FOR ALL
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/tests/0002_rls.sql
 ```
 
@@ -532,7 +554,7 @@ is silently discarded.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add db/migrations/0002_identity_and_rls.sql db/tests/0002_rls.sql
+git add db/migrations/V2__identity_and_rls.sql db/tests/0002_rls.sql
 git commit -m "feat(db): household identity and row-level security"
 ```
 
@@ -541,7 +563,7 @@ git commit -m "feat(db): household identity and row-level security"
 ### Task 4: Migration 0003 — accounts
 
 **Files:**
-- Create: `db/migrations/0003_accounts.sql`
+- Create: `db/migrations/V3__accounts.sql`
 - Test: `db/tests/0003_accounts.sql`
 
 **Interfaces:**
@@ -600,7 +622,7 @@ Expected: `ERROR: type "account_class" does not exist`.
 - [ ] **Step 3: Write the migration**
 
 ```sql
--- db/migrations/0003_accounts.sql
+-- db/migrations/V3__accounts.sql
 CREATE TYPE account_type AS ENUM (
   'cash','current','savings','salary','fixed_deposit','recurring_deposit',
   'credit_card',
@@ -691,7 +713,7 @@ CREATE POLICY household_isolation ON account USING (household_id = current_house
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/tests/0003_accounts.sql
 ```
 
@@ -700,7 +722,7 @@ Expected: `NOTICE: PASS 0003`, then the deliberate `rollback test data` exceptio
 - [ ] **Step 5: Commit**
 
 ```bash
-git add db/migrations/0003_accounts.sql db/tests/0003_accounts.sql
+git add db/migrations/V3__accounts.sql db/tests/0003_accounts.sql
 git commit -m "feat(db): accounts with derived account_class"
 ```
 
@@ -709,7 +731,7 @@ git commit -m "feat(db): accounts with derived account_class"
 ### Task 5: Migration 0004 — FX rates
 
 **Files:**
-- Create: `db/migrations/0004_fx_rates.sql`
+- Create: `db/migrations/V4__fx_rates.sql`
 - Test: `db/tests/0004_fx.sql`
 
 **Interfaces:**
@@ -765,7 +787,7 @@ Expected: `ERROR: relation "fx_rate" does not exist`.
 - [ ] **Step 3: Write the migration**
 
 ```sql
--- db/migrations/0004_fx_rates.sql
+-- db/migrations/V4__fx_rates.sql
 -- Global, not household-scoped: exchange rates are public data. But "public" means readable,
 -- not writable. RLS is defence in depth here: if the service ever connects as a role other than
 -- the owner, an unscoped connection must not be able to rewrite the historical rate table and
@@ -810,7 +832,7 @@ CREATE POLICY reference_read ON currency FOR SELECT TO authenticated USING (true
 - [ ] **Step 4: Run the test to verify it passes**
 
 ```bash
-./scripts/migrate.sh
+docker compose run --rm flyway migrate
 psql "$DATABASE_URL" -f db/tests/0004_fx.sql
 ```
 
@@ -819,7 +841,7 @@ Expected: `NOTICE: PASS 0004`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add db/migrations/0004_fx_rates.sql db/tests/0004_fx.sql
+git add db/migrations/V4__fx_rates.sql db/tests/0004_fx.sql
 git commit -m "feat(db): fx_rate with provenance and carry-forward constraints"
 ```
 
@@ -2052,7 +2074,7 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  ./scripts/check-no-real-data.sh passes; no statement is tracked by git
 ☐  uv run pytest, ruff and mypy --strict all clean in api/
 ☐  All migrations apply cleanly from empty:
-     ./scripts/migrate.sh --reset && for f in db/tests/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+     docker compose run --rm flyway clean migrate && for f in db/tests/*.sql; do psql "$DATABASE_URL" -f "$f"; done
 ☐  The compose file that runs locally is the one that would deploy — no managed service anywhere
 ```
 
