@@ -43,20 +43,26 @@ def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str
     return published[code] * factor
 
 
-def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
-    """Follow a peg chain to the currency a feed will actually quote.
+def anchor_chain(code: str, pegs: Mapping[str, Peg]) -> list[str]:
+    """`code` and every currency its peg passes through, ending at one a feed publishes.
 
     A peg can point at another peg — A pegged to B, B pegged to USD — and only USD is ever
-    published. Resolving one hop asks the feed for B and never USD, so the fetch omits the
-    only rate the chain can be built from.
+    published. Both callers need the whole chain, for different reasons: the fetch would
+    otherwise ask for B and never USD, and the stored rows would carry A and B but no USD,
+    leaving the B->USD peg identity with nothing to check itself against.
     """
-    seen: set[str] = set()
+    chain = [code]
     while code in pegs:
-        if code in seen:
-            raise ValueError(f"peg cycle through {code}")
-        seen.add(code)
         code = pegs[code].anchor
-    return code
+        if code in chain:
+            raise ValueError(f"peg cycle through {code}")
+        chain.append(code)
+    return chain
+
+
+def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
+    """The currency a feed will actually quote for `code`."""
+    return anchor_chain(code, pegs)[-1]
 
 
 def cross_rate(
