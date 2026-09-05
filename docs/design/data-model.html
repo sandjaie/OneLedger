@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>03 — Data Model — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+
+.ddl-ref {
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-left: 2px solid var(--accent-soft);
+  padding-left: 0.75rem;
+  margin-top: -0.4rem;
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="./architecture.html">Architecture</a></li>
+<li><a href="#" aria-current="page">Data model</a></li>
+<li><a href="./multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="./statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="./transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="./api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="03--data-model">03 — Data Model</h1>
+<p>PostgreSQL 15. Every monetary value is <code>NUMERIC</code> — never <code>float</code>, <code>real</code> or
+<code>double precision</code>. Every table carries <code>household_id</code> for row-level security and future
+household support.</p>
+<blockquote>
+<p>Read <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> first. The frozen-amount
+columns below only make sense with that model in hand.</p>
+</blockquote>
+<hr>
+<h2 id="1-conventions">1. Conventions</h2>
+<h3 id="sign-convention-invariant-i2">Sign convention (Invariant I2)</h3>
+<p><strong>Every balance and every amount is signed from the household&#39;s perspective.</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Positive</th>
+<th>Negative</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Balance</td>
+<td>You own it</td>
+<td>You owe it</td>
+</tr>
+<tr>
+<td>Transaction amount</td>
+<td>Money entered the account</td>
+<td>Money left the account</td>
+</tr>
+</tbody></table>
+<p>This holds for liability accounts without special-casing:</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>Account</th>
+<th>Amount</th>
+<th>Effect on balance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Salary credited</td>
+<td>Savings</td>
+<td><code>+18,000</code></td>
+<td>−→ more positive</td>
+</tr>
+<tr>
+<td>Rent paid</td>
+<td>Savings</td>
+<td><code>−5,000</code></td>
+<td>−→ less positive</td>
+</tr>
+<tr>
+<td>Card purchase</td>
+<td>Credit card</td>
+<td><code>−310</code></td>
+<td>−→ more negative (owe more)</td>
+</tr>
+<tr>
+<td>Card payment</td>
+<td>Credit card</td>
+<td><code>+3,900</code></td>
+<td>−→ less negative (owe less)</td>
+</tr>
+<tr>
+<td>Home loan EMI</td>
+<td>Home loan</td>
+<td><code>+42,000</code> principal portion</td>
+<td>−→ less negative</td>
+</tr>
+</tbody></table>
+<p>Consequences that make this worth the discipline:</p>
+<pre><code class="language-sql">balance    = opening_balance + SUM(amount)        -- works for every account type
+net_worth  = SUM(balance_in_base)                 -- one aggregate, no CASE, no subtraction
+</code></pre>
+<p>The display layer flips signs for liability screens (&quot;You owe AED 4,500&quot;). <strong>The database never
+does.</strong> Sign confusion in liability handling is the single most common source of wrong numbers in
+personal finance software, and it is designed out here rather than tested for.</p>
+<h3 id="naming-and-types">Naming and types</h3>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Type</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Money</td>
+<td><code>NUMERIC(20,4)</code></td>
+<td>4 dp handles fils/paise and rate-derived precision</td>
+</tr>
+<tr>
+<td>Units (securities)</td>
+<td><code>NUMERIC(28,8)</code></td>
+<td>Mutual fund units go to 3–4 dp; 8 is safe</td>
+</tr>
+<tr>
+<td>Price / NAV</td>
+<td><code>NUMERIC(20,6)</code></td>
+<td></td>
+</tr>
+<tr>
+<td>FX rate</td>
+<td><code>NUMERIC(20,10)</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Percentage</td>
+<td><code>NUMERIC(9,4)</code></td>
+<td>Stored as <code>15.2500</code> for 15.25%, never as <code>0.1525</code></td>
+</tr>
+<tr>
+<td>Currency</td>
+<td><code>CHAR(3)</code></td>
+<td>ISO 4217</td>
+</tr>
+<tr>
+<td>Country</td>
+<td><code>CHAR(2)</code></td>
+<td>ISO 3166-1 alpha-2</td>
+</tr>
+<tr>
+<td>Identifier</td>
+<td><code>UUID</code></td>
+<td><code>gen_random_uuid()</code></td>
+</tr>
+<tr>
+<td>Timestamp</td>
+<td><code>TIMESTAMPTZ</code></td>
+<td>Always UTC</td>
+</tr>
+<tr>
+<td>Business date</td>
+<td><code>DATE</code></td>
+<td>Never a timestamp — a transaction happens on a date, not an instant</td>
+</tr>
+</tbody></table>
+<p>Every table has <code>created_at TIMESTAMPTZ NOT NULL DEFAULT now()</code>; mutable tables also have
+<code>updated_at</code> maintained by trigger.</p>
+<hr>
+<h2 id="2-entity-map">2. Entity map</h2>
+<pre><code>household ──┬── person ──── app_user
+            │
+            ├── institution
+            │      │
+            ├── account ────────┬── transaction ──┬── transfer (2 legs)
+            │      │            │                 ├── card_statement
+            │      │            │                 ├── investment_transaction
+            │      │            │                 ├── loan_schedule_entry
+            │      │            │                 └── recurring_series
+            │      │            │
+            │      ├── card_statement
+            │      ├── loan ──── loan_schedule_entry
+            │      │      └───── loan_event
+            │      ├── holding ── investment_transaction
+            │      └── valuation_snapshot
+            │
+            ├── category (tree, seeded)
+            ├── merchant ──── merchant_alias
+            ├── classification_rule
+            ├── security ──── price_snapshot
+            ├── statement_layout
+            ├── document ──── import_batch ──── staged_transaction
+            ├── net_worth_snapshot
+            ├── budget_period ──── budget_line          [Phase 2]
+            ├── payslip ──── payslip_line               [Phase 2]
+            └── audit_log
+
+fx_rate                          -- global, not household-scoped
+currency                         -- reference
+</code></pre>
+<hr>
+<h2 id="3-identity-and-tenancy">3. Identity and tenancy</h2>
+<p>Single user now, household-capable from day one
+(<a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>). The columns exist and RLS uses them; no
+multi-user <em>behaviour</em> is built.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>household</code></td><td>Name and the reporting pair: <code>base_currency</code> (the default) and <code>secondary_currency</code> (the toggle).</td></tr><tr><td><code>person</code></td><td>Display name, <code>is_self</code>, tax residency, and <em>last four only</em> of a tax ID and a national ID (PAN and Emirates ID, in the first deployment). Full numbers are never stored.</td></tr><tr><td><code>app_user</code></td><td>Maps an authenticated Google identity to a person. Exactly one row in Phase 1; <code>role</code> exists for a future second member.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0002</code>.</p>
+<p><strong>Since <a href="../adr/0017-python-backend-service.html">ADR-0017</a>, RLS is defence in depth
+rather than the primary boundary.</strong> The Python service connects with the service-role key and therefore
+bypasses these policies; it enforces authorization itself, scoping every query to the household resolved from
+the request's JWT. The policies below are kept because they cost nothing to maintain, they remain correct, and
+they protect any future client that connects as a user rather than as the service.</p>
+<p>What is genuinely lost is the property that a forgotten <code>WHERE</code> clause returned <em>nothing</em>.
+It would now return another household's rows — in a system that has one household and is permanently
+single-tenant, but the guarantee is gone, not relocated. This is recorded in
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3 as a deliberate trade.</p>
+<p><strong>RLS pattern.</strong> The household lookup goes through a <code>SECURITY DEFINER</code> function, never an inline
+subquery:</p>
+<pre><code class="language-sql">-- SECURITY DEFINER is load-bearing. An inline `SELECT household_id FROM app_user ...` inside
+-- app_user&#39;s own policy re-enters that policy and Postgres raises infinite recursion — which,
+-- because every other policy depends on the same lookup, fails reads across the application.
+-- Running as the function owner (who bypasses RLS) breaks the cycle.
+CREATE FUNCTION current_household_id() RETURNS UUID
+  LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT household_id FROM app_user
+  WHERE id = NULLIF(current_setting('app.user_id', true), '')::UUID
+$$;
+</code></pre>
+<p><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a> removed Supabase, and with it
+<code>auth.uid()</code>. Identity now comes from a session variable the service sets on the connection
+<em>after</em> it has authorized the request:</p>
+<pre><code class="language-sql">SET LOCAL app.user_id = '&lt;uuid&gt;';   -- per transaction, by the service
+</code></pre>
+<p><code>current_setting(..., true)</code> returns <code>NULL</code> rather than raising when the variable is
+unset, so a connection that never scopes itself sees nothing rather than everything. Everything downstream of
+<code>current_household_id()</code> is unchanged.</p>
+<p>Applied to every household-scoped table:</p>
+<pre><code class="language-sql">ALTER TABLE &lt;table&gt; ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY household_isolation ON &lt;table&gt;
+  USING (household_id = current_household_id());
+</code></pre>
+<p><strong>Tables that carry system seed rows need a wider read policy.</strong> <code>institution</code>, <code>category</code>,
+<code>merchant</code> and <code>security</code> use a nullable <code>household_id</code>, where <code>NULL</code> means &quot;shipped with the
+product&quot;. <code>NULL = &lt;uuid&gt;</code> evaluates to <code>NULL</code>, not <code>true</code>, so the policy above would hide every
+seeded institution and the entire seed taxonomy — breaking M1 and M4 outright:</p>
+<pre><code class="language-sql">-- read: own rows plus the shared seed set
+CREATE POLICY household_read ON &lt;seeded_table&gt; FOR SELECT
+  USING (household_id IS NULL OR household_id = current_household_id());
+
+-- write: own rows only. The seed set is not user-modifiable in place; a user who wants a
+-- different Groceries category edits a copy scoped to their household.
+CREATE POLICY household_write ON &lt;seeded_table&gt; FOR ALL
+  USING (household_id = current_household_id())
+  WITH CHECK (household_id = current_household_id());
+</code></pre>
+<p>Even with one user, RLS is enabled everywhere. A missing <code>WHERE</code> clause in application code then
+returns nothing rather than everything, and the policy is already correct on the day a second
+person is added. See <a href="../operations/security-and-privacy.html">security-and-privacy.html</a>.</p>
+<h3 id="authenticated-is-not-the-same-as-permitted">Authenticated is not the same as <em>permitted</em></h3>
+<p><strong>Google will authenticate any Google account.</strong> A valid sign-in proves identity and nothing
+more. Authorization is the service's job
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>): it checks the address against
+<code>ALLOWED_USER_EMAIL</code>, resolves the session to a row in <code>app_user</code>, and only then scopes
+the database connection with <code>SET LOCAL app.user_id</code>.</p>
+<p>An unscoped connection therefore reads nothing, because every policy predicate is <code>NULL</code>. The
+remaining hole is <code>SECURITY DEFINER</code> functions, which bypass RLS by design:</p>
+<pre><code class="language-sql">-- Called first by every SECURITY DEFINER function. Authentication is not authorization.
+CREATE FUNCTION assert_is_owner() RETURNS VOID
+  LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  IF current_household_id() IS NULL THEN
+    RAISE EXCEPTION &#39;not authorized&#39; USING ERRCODE = &#39;42501&#39;;
+  END IF;
+END $$;
+</code></pre>
+<p><code>current_household_id()</code> is the one exception, and safely so: it returns <code>NULL</code> rather than data
+for an unknown caller, which is precisely the behaviour the policies rely on.</p>
+<hr>
+<h2 id="4-reference-data">4. Reference data</h2>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>currency</code></td><td>ISO code, symbol, decimals, and <code>number_format</code> — <code>indian</code> selects 2,2,3 grouping and lakh/crore abbreviation.</td></tr><tr><td><code>institution</code></td><td>Name, short name, country and type (bank, card issuer, broker, AMC, exchange house…). <code>household_id IS NULL</code> marks a shipped suggestion.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0001</code>.</p>
+<p><strong>Institutions are rows, not an enum — any institution can be added at any time</strong>, from the
+account form or during import when a statement resolves to an unknown one. Nothing structural
+depends on the seeded set.</p>
+<p>A small starter list ships as deletable suggestions, purely to save typing on the first few
+accounts: a handful of banks, brokers and registrars from the countries whose rule packs are
+loaded. Delete any of them and the product is unaffected.</p>
+<h3 id="fx-rates">FX rates</h3>
+<p>Global, not household-scoped — rates are public data. <strong>That does not mean unprotected.</strong></p>
+<p>If the service ever connects as a role other than the owner, RLS is what gates it. A table with RLS <em>enabled</em> and no matching policy denies everything; a
+table with RLS <em>disabled</em> falls back to those grants — so leaving RLS off here would let any
+authenticated Google account <code>UPDATE</code> the entire historical rate table directly, corrupting every
+balance conversion and every future import.</p>
+<p>Reference tables therefore enable RLS with a read-only policy, and all writes go through a
+<code>SECURITY DEFINER</code> function that calls <code>assert_is_owner()</code> first:</p>
+<pre><code class="language-sql">ALTER TABLE fx_rate  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE currency ENABLE ROW LEVEL SECURITY;
+ALTER TABLE price_snapshot ENABLE ROW LEVEL SECURITY;
+
+-- Readable by anyone signed in. No INSERT/UPDATE/DELETE policy exists, so writes are denied
+-- to every role except through the vetted functions.
+CREATE POLICY reference_read ON fx_rate        FOR SELECT TO authenticated USING (true);
+CREATE POLICY reference_read ON currency       FOR SELECT TO authenticated USING (true);
+CREATE POLICY reference_read ON price_snapshot FOR SELECT TO authenticated USING (true);
+</code></pre>
+<p>Keyed on <code>(rate_date, base_currency, quote_currency)</code>, with the rate as <code>NUMERIC(20,10)</code>. Every row records its <strong>provenance</strong>: <code>source</code> is <code>ecb</code>, <code>derived_peg</code>, <code>manual</code> or <code>actual_transfer</code>, and a carried-forward rate must name the date it came from — a <code>CHECK</code> enforces that, so a derived value can never masquerade as an observed one (Invariant I7).</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0004</code>.</p>
+<hr>
+<h2 id="5-accounts">5. Accounts</h2>
+<p>One <code>account_type</code> enum spans everything from <code>cash</code> to <code>property</code> to <code>payable</code>; <code>account_class</code> (<code>asset</code>/<code>liability</code>) is derived from it by trigger and never set by hand.</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>Globalising attributes</td><td><code>country</code>, <code>currency</code>, <code>institution_id</code>, <code>account_subtype</code> (NRE/NRO/PPF/EPF), <code>tax_residency_context</code>. These are what make one model serve both countries.</td></tr><tr><td>Identity</td><td><code>account_number_masked</code> for display, <code>account_number_hash</code> for matching statements. The full number is never stored.</td></tr><tr><td>Anchoring</td><td><code>opening_balance</code> + <code>opening_balance_date</code> — the anchor every derived balance is computed from.</td></tr><tr><td>Toggles</td><td><code>include_in_net_worth</code>, and <code>is_liquid</code> (defaults true; the user de-selects what shouldn't count as liquid).</td></tr><tr><td>Type-specific</td><td><code>credit_limit</code>, <code>statement_day</code>, <code>payment_due_day</code> for cards; <code>interest_rate_pct</code>, <code>maturity_date</code> for deposits.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0003</code>.</p>
+<p><strong>The full account number is never stored</strong> — only a mask for display and a salted hash for
+matching an incoming statement to an account. See
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §4.</p>
+<p><code>account_class</code> is derivable from <code>account_type</code> but is stored because net-worth queries filter
+on it constantly. A trigger keeps it consistent; it is never set by hand.</p>
+<hr>
+<h2 id="6-categories-and-merchants">6. Categories and merchants</h2>
+<p>Two enums carry the meaning: <code>category_kind</code> (<code>income</code>/<code>expense</code>/<code>transfer</code>/<code>investment</code>/<code>debt</code>) and <code>category_bucket</code> (<code>need</code>/<code>want</code>/<code>investment</code>/<code>debt_service</code>/<code>income</code>/<code>ignore</code>). <code>category</code> is a two-level tree; the depth limit is a trigger, not a <code>CHECK</code>, because a subquery in a <code>CHECK</code> is not valid PostgreSQL.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0005</code>.</p>
+<blockquote>
+<p>The two-level <code>CHECK</code> above is illustrative — a subquery in a <code>CHECK</code> is not valid PostgreSQL.
+It is implemented as a <code>BEFORE INSERT OR UPDATE</code> trigger. Noted explicitly so it is not copied
+verbatim into a migration.</p>
+</blockquote>
+<p><strong>The <code>bucket</code> column is what makes Needs/Wants/Investments/Debt free.</strong> One classification pass
+yields both the detailed category tree and the coarse view, without asking for the same judgement
+twice (<a href="../adr/0010-seed-taxonomy-with-buckets.html">ADR-0010</a>). Seed taxonomy is listed in
+<a href="./classification.html">classification.html</a> §3.</p>
+<p>One <code>merchant</code>, many <code>merchant_alias</code> rows — because the same coffee shop appears as <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements. Each alias carries a <code>pattern_kind</code> (<code>exact</code>, <code>prefix</code>, <code>contains</code>, <code>regex</code>) and a priority, and counts how often it has matched.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0005</code>.</p>
+<p>One merchant, many aliases — because the same coffee shop appears as
+<code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements.</p>
+<hr>
+<h2 id="7-the-transaction-ledger">7. The transaction ledger</h2>
+<p>The centre of the system.</p>
+<p>The centre of the system. Its columns fall into eight groups:</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>identity</td><td><code>booked_date</code>, <code>value_date</code>, <code>description_raw</code> (never edited — it is the audit record), <code>description_clean</code>, <code>reference_raw</code></td></tr><tr><td>money</td><td><code>amount</code> + <code>currency</code>, <strong>immutable</strong> (I1). <code>original_amount</code>/<code>original_currency</code> where the bank converted for you</td></tr><tr><td>frozen FX</td><td><code>fx_rate_date</code>, <code>fx_rate_is_carried</code>, <code>fx_rate_to_base</code>, <code>fx_rate_to_secondary</code>, <code>amount_base</code>, <code>amount_secondary</code> — computed once, never recomputed (I5)</td></tr><tr><td>meaning</td><td><code>txn_type</code>, <code>category_id</code>, <code>merchant_id</code>, <code>counterparty_raw</code></td></tr><tr><td>context</td><td><code>country</code>, <code>payment_method</code></td></tr><tr><td>links</td><td><code>transfer_id</code>, <code>card_statement_id</code>, <code>investment_transaction_id</code>, <code>loan_id</code>, <code>recurring_series_id</code>, <code>parent_transaction_id</code>. <strong>Any non-null link changes how the row is reported.</strong></td></tr><tr><td>provenance</td><td><code>source</code>, <code>source_document_id</code>, page and row number, <code>import_batch_id</code>, <code>statement_layout_id</code>, <code>layout_version</code>, <code>dedupe_hash</code> (I6)</td></tr><tr><td>classification</td><td><code>classified_by</code>, <code>classification_rule_id</code>, <code>classification_confidence</code>, <code>is_reviewed</code> — so the UI can always answer <em>why is this Food &amp; Dining?</em></td></tr></tbody></table><p>A partial index on <code>is_reviewed = false</code> serves the review queue, and a GIN index over <code>description_raw</code> serves free-text search.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0006</code>.</p>
+<h3 id="splits-the-container-versus-posting-rule">Splits: the container-versus-posting rule</h3>
+<p>Splitting one ₹8,000 supermarket bill into ₹6,500 groceries and ₹1,500 household creates child
+rows via <code>parent_transaction_id</code>. Both the parent and its children then exist in <code>transaction</code>, so
+a naive <code>opening_balance + SUM(amount)</code> counts the movement <strong>twice</strong>.</p>
+<p>The parent&#39;s <code>amount</code> cannot simply be zeroed — it is the bank&#39;s figure and is immutable (I1).</p>
+<p><strong>Rule: a row with children is a container, not a posting. Only leaf rows count.</strong></p>
+<pre><code class="language-sql">-- A row is a posting unless something points at it as a parent.
+CREATE VIEW v_transaction_posting WITH (security_invoker = true) AS
+SELECT t.* FROM transaction t
+WHERE NOT EXISTS (SELECT 1 FROM transaction c WHERE c.parent_transaction_id = t.id);
+</code></pre>
+<p>Balances, cash flow and every category report read leaf rows. The parent keeps its immutable
+amount, its <code>description_raw</code> and its document provenance (I6); the children inherit
+<code>account_id</code>, <code>booked_date</code>, <code>source_document_id</code> and the frozen FX columns from it, and differ
+only in <code>amount</code>, <code>category_id</code> and <code>notes</code>.</p>
+<p>A constraint trigger asserts children sum exactly to the parent, so a split can never change an
+account&#39;s balance:</p>
+<pre><code class="language-sql">-- SUM(child.amount) = parent.amount, enforced at statement end
+CREATE CONSTRAINT TRIGGER trg_split_sums_to_parent
+  AFTER INSERT OR UPDATE OR DELETE ON transaction
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION assert_split_sums_to_parent();
+</code></pre>
+<p>Splits are one level deep. A child cannot itself be split — the trigger rejects it — because
+nothing in the product needs it and the leaf rule stays trivially correct.</p>
+<h3 id="the-reporting-guard-view-invariant-i3">The reporting guard view (Invariant I3)</h3>
+<p>The exclusion of transfers is enforced <strong>in the database</strong>, not in application code, so no future
+query can forget it.</p>
+<pre><code class="language-sql">-- security_invoker is load-bearing, not a stylistic choice. A PostgreSQL view evaluates its
+-- base-table access as the view *owner* by default, and the owner bypasses RLS — so without
+-- this, any authenticated caller reads every household&#39;s transactions through the view that
+-- exists to make reporting safe. Requires PG15+, which is the stated target.
+CREATE VIEW v_transaction_reportable WITH (security_invoker = true) AS
+SELECT *
+FROM   v_transaction_posting           -- split parents excluded; only leaf rows post
+WHERE  transfer_id IS NULL             -- a transfer leg is never income or expense
+  AND  is_excluded = false
+  AND  txn_type NOT IN (&#39;opening_balance&#39;,&#39;adjustment&#39;,
+                        &#39;transfer_in&#39;,&#39;transfer_out&#39;,
+                        &#39;investment_buy&#39;,&#39;investment_sell&#39;,
+                        &#39;loan_disbursement&#39;,&#39;loan_repayment&#39;);
+</code></pre>
+<p>This view is built on <code>transaction</code>, and the leaf rule above applies to it too: a split parent is
+excluded because its children carry the categories. <code>v_transaction_reportable</code> therefore selects
+from <code>v_transaction_posting</code>, not from <code>transaction</code> directly.</p>
+<p><strong>Every cash-flow, budget, spending and savings-rate query reads this view, never the base
+table.</strong> A static check enforces it (<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>).</p>
+<p>Investment and loan flows are excluded here because they are balance-sheet movements, not
+consumption. They have their own views:</p>
+<pre><code class="language-sql">CREATE VIEW v_investment_flow WITH (security_invoker = true) AS
+  SELECT * FROM transaction
+  WHERE txn_type IN (&#39;investment_buy&#39;,&#39;investment_sell&#39;,&#39;investment_income&#39;)
+    AND is_excluded = false;
+
+CREATE VIEW v_debt_service_flow WITH (security_invoker = true) AS
+  SELECT * FROM transaction
+  WHERE txn_type = &#39;loan_repayment&#39; AND is_excluded = false;
+</code></pre>
+<hr>
+<h2 id="8-transfers">8. Transfers</h2>
+<p>A transfer links two legs and records what the movement actually cost. Beyond the two account and two transaction references it holds <code>source_amount</code>/<code>destination_amount</code> with their currencies, and the FX truth: <code>implied_rate</code> (what you got), <code>market_rate</code> (what it was worth), <code>fx_spread_pct</code>, <code>fx_spread_cost_source</code>, <code>explicit_fee_amount</code> and <code>total_cost_source</code>. Plus <code>transfer_kind</code>, <code>provider</code>, <code>match_confidence</code> and <code>status</code> (<code>candidate</code>/<code>confirmed</code>/<code>rejected</code>).</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0009</code>.</p>
+<p>The partial unique indexes stop one <em>transfer</em> from claiming the same transaction twice in the
+same role. They do <strong>not</strong> stop one <em>transaction</em> from being the source of transfer A and the
+destination of transfer B — each index is satisfied independently, while
+<code>transaction.transfer_id</code> can only point at one of them, leaving the other silently inconsistent.</p>
+<p>The matcher will not produce that pairing (it scores only debit→credit, so a row is a plausible
+source or destination, never both), but manual linking (§6 of
+<a href="./transfers-and-reconciliation.html">07</a>) can. The invariant is therefore enforced rather than
+assumed:</p>
+<pre><code class="language-sql">-- On confirmation, neither leg may already belong to a different confirmed transfer.
+CREATE CONSTRAINT TRIGGER trg_one_transfer_per_leg
+  AFTER INSERT OR UPDATE ON transfer
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW WHEN (NEW.status = &#39;confirmed&#39;)
+  EXECUTE FUNCTION assert_legs_unclaimed();
+</code></pre>
+<p><code>assert_legs_unclaimed()</code> raises if either leg&#39;s <code>transaction.transfer_id</code> is non-null and differs
+from <code>NEW.id</code>. Candidates may still overlap freely while the matching engine proposes
+alternatives; confirmation is what resolves to one.</p>
+<p>This is test 8 of <a href="./transfers-and-reconciliation.html">07</a> §8, which the partial indexes alone
+would not have satisfied.</p>
+<hr>
+<h2 id="9-credit-card-statements">9. Credit card statements</h2>
+<p>One row per statement cycle: period and statement dates, payment due date, opening and closing balance (signed), <code>statement_balance</code> (positive — what was due), minimum due, total debits and credits, credit and cash limits, finance charges, late fees, reward points opening/earned/redeemed/closing, and whether it was <code>is_paid_in_full</code> with the payment transaction that settled it.</p><p>Utilisation is <em>computed</em>, not stored — <code>ABS(closing_balance) / credit_limit</code>. Storing it would be a second source of truth for the same fact.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0010</code>.</p>
+<p>Utilisation is computed, not stored: <code>ABS(closing_balance) / credit_limit</code>. Storing it would be
+a second source of truth for the same fact.</p>
+<hr>
+<h2 id="10-investments">10. Investments</h2>
+<p>Transaction-level lots (<a href="../adr/0006-transaction-level-investment-lots.html">ADR-0006</a>) — XIRR is
+impossible to reconstruct from snapshots.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>security</code></td><td>The instrument. ISIN, a price-feed <code>provider_code</code> (an AMFI scheme code, say), ticker, exchange, <code>asset_class</code>, sub-class, fund house, expense ratio. <code>household_id IS NULL</code> for shared reference data.</td></tr><tr><td><code>holding</code></td><td>A position: units, average cost, invested amount, realised gain, current price and value, <code>xirr_pct</code> with <code>xirr_computed_at</code> so a stale figure reads as stale.</td></tr><tr><td><code>investment_transaction</code></td><td>The lot. Signed units, NAV, gross and net amount, charges, tax withheld, frozen FX, and the bank transaction that funded it.</td></tr><tr><td><code>price_snapshot</code></td><td>Price per security per date, with its source (<code>amfi</code>/<code>manual</code>/<code>statement</code>).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0011</code>.</p>
+<h3 id="xirr">XIRR</h3>
+<p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
+<pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
+</code></pre>
+<p>by Newton–Raphson with bisection fallback (Newton alone diverges on irregular SIP series).
+Recomputed on any new investment transaction or price refresh, stored on <code>holding</code>, and stamped
+with <code>xirr_computed_at</code> so a stale figure is visible as stale.</p>
+<h3 id="manual-valuations">Manual valuations</h3>
+<p>For property, physical gold, EPF, PPF — anything with no importable statement
+(<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>).</p>
+<p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> Targets either an account or a holding — a <code>CHECK</code> enforces exactly one — and freezes the FX rates at <code>as_of_date</code> alongside the native value. Carries a <code>method</code> and a <code>confidence</code>, both displayed, never hidden.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0013</code>.</p>
+<p><strong>Carried forward flat, never extrapolated.</strong> The valuation in effect on any date is the most
+recent snapshot at or before it. A trend line between two snapshots is drawn as a step, not a
+slope, because a smooth line would imply knowledge that does not exist (Invariant I7).</p>
+<hr>
+<h2 id="11-loans">11. Loans</h2>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>loan</code></td><td>Original and outstanding principal, rate and rate type (with benchmark and spread for floating), EMI, start and both end dates, totals paid, prepayment penalty.</td></tr><tr><td><code>loan_schedule_entry</code></td><td>One row per installment: opening principal, EMI, principal and interest components, closing principal, and the actual transaction that paid it. Versioned, not mutated.</td></tr><tr><td><code>loan_event</code></td><td>Prepayment, rate change, EMI change, moratorium, restructure, closure — each regenerates the schedule as a new version.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0012</code>.</p>
+<p><strong>Schedules are versioned rather than mutated.</strong> A rate change or prepayment generates
+<code>schedule_version + 1</code>; the prior version is retained. This preserves what was expected at the
+time, which is what makes &quot;interest saved by prepaying&quot; a computable number rather than a
+remembered one.</p>
+<hr>
+<h2 id="12-documents-and-import">12. Documents and import</h2>
+<p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
+<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
+<h3 id="statement-layouts">Statement layouts</h3>
+<p><strong>No bank name appears anywhere in application code</strong>
+(<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>). A statement layout is a row, created
+through the mapping UI on first import of an unrecognised format. One generic extraction engine
+reads any profile.</p>
+<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0007</code>.</p>
+<p><code>has_a_balance_anchor</code> is the constraint that keeps Invariant I8 enforceable: a layout must offer
+<em>some</em> way to verify the extracted rows, either a declared closing balance or a running balance
+column. A profile that offers neither cannot be reconciled, and would let a mis-mapped column
+through silently — so it is rejected at creation.</p>
+<p><code>staged_transaction</code> mirrors <code>transaction</code>&#39;s shape plus review metadata. Full definition in
+<a href="./statement-ingestion.html">statement-ingestion.html</a> §6 — it belongs with the pipeline it
+serves.</p>
+<hr>
+<h2 id="13-classification-rules">13. Classification rules</h2>
+<p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0008</code>.</p>
+<hr>
+<h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>net_worth_snapshot</code></td><td>Month-end totals in both currencies, broken out by cash, investments, property, other assets, loans and card debt — <em>with the rates used</em>, so a past figure is reproducible.</td></tr><tr><td><code>net_worth_attribution</code></td><td>The decomposition: net cash saved, investment contributions, market appreciation, principal reduction, asset revaluation, FX translation, and <code>unexplained_base</code> — displayed, never absorbed (I7).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0014</code>.</p>
+<p>Method in <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7. <code>unexplained_base</code> is
+displayed in the UI (Invariant I7) — a non-trivial residual indicates missing data, which is
+exactly what the user needs to know.</p>
+<h3 id="phase-2-tables">Phase 2 tables</h3>
+<p>Defined now so Phase 1 foreign keys exist and no migration has to touch <code>transaction</code> later.</p>
+<p>Defined now so Phase 1 foreign keys exist and no later migration has to touch <code>transaction</code>: <code>recurring_series</code> (cadence, expected amount, tolerances, confidence), <code>budget_period</code> and <code>budget_line</code> (per category or per bucket, with rollover), and <code>payslip</code> with <code>payslip_line</code> — line items rather than fixed columns, because UAE and Indian payslips differ too much for one schema.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0016</code>.</p>
+<hr>
+<h2 id="15-audit-log">15. Audit log</h2>
+<h3 id="why-every-child-table-carries-household_id">Why every child table carries <code>household_id</code></h3>
+<p>A foreign key to an RLS-protected parent gives a child <strong>no protection whatsoever</strong>. PostgREST
+exposes every table directly, so <code>payslip_line</code>, <code>loan_schedule_entry</code>, <code>loan_event</code> and
+<code>budget_line</code> are each independently queryable — and salary line items or a loan&#39;s amortisation are
+exactly as sensitive as their parents.</p>
+<p>The parent&#39;s policy does not cascade, and a join-based policy costs a subquery on every row read.
+So the rule is flat and mechanical: <strong>every household-owned table carries <code>household_id</code> and the
+same policy</strong>, including child tables where the column is strictly redundant with the parent&#39;s.
+Redundancy is cheaper than a leak.</p>
+<p>The exceptions, and the reason each is safe:</p>
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Why no <code>household_id</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>currency</code>, <code>fx_rate</code></td>
+<td>Public reference data. Exchange rates are not private</td>
+</tr>
+<tr>
+<td><code>price_snapshot</code></td>
+<td>Market prices for securities. Not private, and shared across households by design</td>
+</tr>
+<tr>
+<td><code>household</code></td>
+<td>Scoped on its own <code>id</code>: <code>USING (id = current_household_id())</code></td>
+</tr>
+</tbody></table>
+<p>Append-only: actor, action, entity type and id, <code>before</code> and <code>after</code> as JSONB, and context. Written by trigger on <code>transaction</code>, <code>account</code>, <code>transfer</code>, <code>loan</code>, <code>holding</code> and <code>valuation_snapshot</code>, so it cannot be bypassed by forgetting to call a logging function. The application role holds <code>INSERT</code> only — no <code>UPDATE</code>, no <code>DELETE</code>.</p><p class="ddl-ref">Full DDL: <a href="../plan/schema.md">schema.md</a> <code>0015</code>.</p>
+<p>Written by trigger on <code>transaction</code>, <code>account</code>, <code>transfer</code>, <code>loan</code>, <code>holding</code> and
+<code>valuation_snapshot</code>. Append-only: no <code>UPDATE</code> or <code>DELETE</code> grant exists on this table for the
+application role.</p>
+<hr>
+<h2 id="16-invariants-enforced-in-the-database">16. Invariants enforced in the database</h2>
+<p>Not left to application discipline:</p>
+<table>
+<thead>
+<tr>
+<th>Invariant</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>I1 — originals immutable</td>
+<td>Trigger blocks <code>UPDATE</code> of <code>amount</code>/<code>currency</code> unless the change originates from a dated correction, which writes <code>audit_log</code></td>
+</tr>
+<tr>
+<td>I2 — signed balances</td>
+<td><code>account_class</code> trigger; <code>net_worth</code> view sums without <code>CASE</code></td>
+</tr>
+<tr>
+<td>I3 — transfers excluded</td>
+<td><code>v_transaction_reportable</code> view; static check that reports never read the base table</td>
+</tr>
+<tr>
+<td>I4 — card payment is a transfer</td>
+<td>Rule seeded per card account; reconciliation flags an unmatched payment</td>
+</tr>
+<tr>
+<td>I5 — frozen flows</td>
+<td><code>NOT NULL</code> on <code>amount_base</code>/<code>amount_secondary</code>; trigger blocks recomputation</td>
+</tr>
+<tr>
+<td>I6 — provenance</td>
+<td><code>CHECK (source &lt;&gt; &#39;statement_import&#39; OR source_document_id IS NOT NULL)</code>; <code>statement_layout_id</code> names the profile that produced the row</td>
+</tr>
+<tr>
+<td>I7 — labelled derivations</td>
+<td><code>is_carried_forward</code>, <code>is_projected</code>, <code>confidence</code>, <code>unexplained_base</code> are all <code>NOT NULL</code></td>
+</tr>
+<tr>
+<td>I8 — reconciliation</td>
+<td>Import commits inside a transaction that rolls back on mismatch</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="17-migrations">17. Migrations</h2>
+<p>Plain, numbered, forward-only SQL under <code>db/migrations/</code>. Applied by a small runner against the <code>db</code> container, local and hosted alike.</p>
+<pre><code>0001_extensions_and_reference.sql     pgcrypto, currency, institution seed
+0002_identity_and_rls.sql             household, person, app_user, RLS policies
+0003_accounts.sql
+0004_fx_rates.sql
+0005_categories_and_merchants.sql     + seed taxonomy
+0006_transactions.sql                 + v_transaction_reportable
+0007_documents_and_import.sql         + statement_layout
+0008_classification_rules.sql         + seed rules
+0009_transfers.sql
+0010_card_statements.sql
+0011_investments.sql
+0012_loans.sql
+0013_valuations.sql
+0014_net_worth.sql
+0015_audit_log.sql
+0016_phase2_tables.sql                recurring, budget, payslip
+0017_deferred_foreign_keys.sql        the circular references, added last
+</code></pre>
+<h3 id="the-circular-references">The circular references</h3>
+<p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
+<code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
+<code>transaction</code> (migrations 0009–0016), and <code>transfer</code> references <code>transaction</code> back. Migration
+<code>0006</code> therefore cannot declare those columns as foreign keys — the targets do not exist yet.</p>
+<p>The columns are created as bare <code>UUID</code> in <code>0006</code>; the constraints are added in <code>0017</code>, once every
+table exists:</p>
+<pre><code class="language-sql">ALTER TABLE transaction
+  ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
+  ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
+  ADD CONSTRAINT fk_txn_inv_txn      FOREIGN KEY (investment_transaction_id)
+                                     REFERENCES investment_transaction(id),
+  ADD CONSTRAINT fk_txn_loan         FOREIGN KEY (loan_id)           REFERENCES loan(id),
+  ADD CONSTRAINT fk_txn_loan_entry   FOREIGN KEY (loan_schedule_entry_id)
+                                     REFERENCES loan_schedule_entry(id),
+  ADD CONSTRAINT fk_txn_recurring    FOREIGN KEY (recurring_series_id)
+                                     REFERENCES recurring_series(id);
+</code></pre>
+<p>The schema listing in §7 shows the columns with their eventual <code>REFERENCES</code> for readability. The
+migration order is what is authoritative.</p>
+<p><strong>No down-migrations.</strong> For a single-user system, a mistake is corrected by a new forward
+migration against a restored backup — which is simpler and safer than maintaining reversibility
+that would be exercised roughly never.</p>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

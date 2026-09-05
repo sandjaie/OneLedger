@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>05 — Statement Ingestion — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="./architecture.html">Architecture</a></li>
+<li><a href="./data-model.html">Data model</a></li>
+<li><a href="./multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="#" aria-current="page">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="./transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="./api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="05--statement-ingestion">05 — Statement Ingestion</h1>
+<p>The hardest subsystem, and the one that determines whether the product is usable at all. If
+importing a month of statements is painful, the ledger goes stale and everything built on top of
+it becomes decoration.</p>
+<p><strong>Target: six institutions, one month, under 20 minutes including review.</strong></p>
+<hr>
+<h2 id="1-pipeline">1. Pipeline</h2>
+<pre><code>   Upload
+     │  SHA-256 · reject if already imported
+     ▼
+   Identify institution
+     │  text fingerprint → filename hint → ask
+     ▼
+   Extract                        parser-specific, versioned
+     │  raw rows, verbatim
+     ▼
+   Normalize                      dates, signs, currency, description
+     │
+     ▼
+   Detect duplicates              against staged and committed rows
+     │
+     ▼
+   Enrich FX                      fetch rates, freeze amount_base / amount_secondary
+     │
+     ▼
+   Classify                       deterministic cascade
+     │
+     ▼
+   Match transfers                scored candidates
+     │
+     ▼
+   Reconcile                      opening + Σ rows = declared closing?   ← blocks
+     │
+     ▼
+   Stage                          write document, import_batch, staged_transaction
+     │
+     ▼
+   Review                         web app: confirm, correct, exclude
+     │
+     ▼
+   Import                         one database transaction; balances recomputed
+</code></pre>
+<p>Every stage runs in the <strong>Python service on <code>localhost</code></strong>
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>). The web app posts the file and renders the
+result; it performs no parsing and no arithmetic. Statements are processed on your own machine and reach no
+third-party host — only the original blob is uploaded to Storage at staging.</p>
+<hr>
+<h2 id="2-stage-1--upload-and-checksum">2. Stage 1 — Upload and checksum</h2>
+<p>Every file is hashed before anything else happens.</p>
+<pre><code class="language-python">sha256 = hashlib.sha256(file_bytes).hexdigest()
+</code></pre>
+<p><code>document.sha256</code> is uniquely indexed per household. An identical file is rejected immediately —
+before parsing, before any cost is incurred — with a message naming when it was first imported.</p>
+<p>This is the cheapest of the three duplicate defences and catches the most common case: the same
+statement downloaded twice.</p>
+<p><strong>Password-protected PDFs.</strong> Some statements are encrypted — two of the seven accounts in the set
+gathered so far. <strong>The product models no password scheme and derives nothing.</strong> When a file fails to open, the
+import screen shows a password field for that file and the user types it in. <code>pdf.js</code> accepts it
+directly:</p>
+<pre><code class="language-typescript">const doc = await getDocument({ data: bytes, password }).promise;
+</code></pre>
+<p>The import form prompts for it and holds it in a React state variable for the duration of the
+parse. <strong>It is never written to disk, a keychain, a config file, the database or a log</strong>, and it is
+not remembered between imports. What is uploaded to Storage is the original encrypted file.</p>
+<p>The import screen prompts per file, and only for files that actually fail to open. It does not
+guess, pre-fill, or offer to save.</p>
+<hr>
+<h2 id="3-stage-2--institution-identification">3. Stage 2 — Institution identification</h2>
+<p>Three strategies, in order:</p>
+<p><strong>1. Content fingerprint.</strong> Each <strong>saved layout profile</strong> carries a signature — distinctive strings
+from the statement header. Profiles are rows in <code>statement_layout</code>, created through the mapping UI
+(<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>); no bank name appears in application code.</p>
+<pre><code class="language-jsonc">// a row in statement_layout — created by the mapping UI, not shipped in the codebase
+{
+  &quot;name&quot;: &quot;UAE card&quot;,                    // whatever the user calls it
+  &quot;version&quot;: 1,
+  &quot;fingerprints&quot;: [&quot;Credit Card Statement&quot;, &quot;Card Type:&quot;],
+  &quot;header_row_pattern&quot;: &quot;Transaction Date\\s+Posting Date\\s+Description\\s+Amount&quot;,
+  &quot;columns&quot;: [
+    { &quot;field&quot;: &quot;booked_date&quot;,  &quot;x_min&quot;: 40,  &quot;x_max&quot;: 110 },
+    { &quot;field&quot;: &quot;value_date&quot;,   &quot;x_min&quot;: 110, &quot;x_max&quot;: 175 },
+    { &quot;field&quot;: &quot;description&quot;,  &quot;x_min&quot;: 175, &quot;x_max&quot;: 430 },
+    { &quot;field&quot;: &quot;amount&quot;,       &quot;x_min&quot;: 430, &quot;x_max&quot;: 560 }
+  ],
+  &quot;date_format&quot;: &quot;dd/MM/yyyy&quot;,
+  &quot;sign_convention&quot;: &quot;cr_suffix&quot;,
+  &quot;inverts_sign&quot;: true,
+  &quot;quirks&quot;: [&quot;filter_script:arabic&quot;]
+}
+</code></pre>
+<p><strong>2. Filename hint.</strong> Users name files predictably (<code>ENBD_Sep2026.pdf</code>). Used as a tiebreaker
+only, never on its own — a filename is a claim, not evidence.</p>
+<p><strong>3. Ask, and offer to map.</strong> If no saved profile matches, the import screen offers the existing
+profiles <em>and</em> a <strong>Map a new layout</strong> action. Mapping auto-proposes column bands from the header
+row and shows the parsed result live; the user confirms or drags. The saved profile matches
+automatically from then on — including for statements from an account that has since been closed.</p>
+<p><strong>This is the path for every future bank.</strong> No code change, no deploy.</p>
+<p><strong>Account resolution.</strong> Once the institution is known, the account is resolved by hashing the
+account number found in the statement and matching <code>account.account_number_hash</code>. If no account
+matches, the import screen stops and asks — it never guesses which account a statement belongs to,
+because a wrong guess corrupts two accounts at once.</p>
+<hr>
+<h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
+<h3 id="the-extraction-engine">The extraction engine</h3>
+<p>One engine, driven by a profile. There is no per-bank class, and no bank name appears in the
+codebase (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>).</p>
+<pre><code class="language-python">class ExtractionEngine(Protocol):
+    def matches(self, profile: StatementLayout, text: str, filename: str) -&gt; float: ...
+    def extract(self, profile: StatementLayout, pages: list[Page]) -&gt; ExtractionResult: ...
+    def propose(self, pages: list[Page]) -&gt; StatementLayoutDraft: ...
+</code></pre>
+<p><code>RawRow</code> is deliberately unopinionated — whatever the parser saw, with its position:</p>
+<pre><code class="language-typescript">export interface RawRow {
+  pageNumber: number;
+  rowNumber: number;
+  rawText: string;                        // the whole line, kept for debugging
+  fields: Record&lt;string, string&gt;;         // parser&#39;s best column split
+}
+</code></pre>
+<h3 id="words-and-coordinates">Words and coordinates</h3>
+<p><code>pdfplumber</code> returns words with bounding boxes directly, so the engine consumes
+<code>page.extract_words()</code> rather than grouping glyph runs itself.</p>
+<p><strong>One caveat, measured rather than assumed:</strong> on a producer that emits no space characters,
+<code>extract_words()</code> returns run-together tokens like <code>Statementofaccount</code> — one of the four
+layouts in hand does exactly this. Word grouping does not rescue that case in any language. What does is
+<strong>column banding by x-position</strong>, which the layout profile specifies and which works identically
+whatever the spacing.</p>
+<h3 id="layouts-are-versioned">Layouts are versioned</h3>
+<p>Banks change statement layouts without notice. <code>statement_layout_id</code> and <code>layout_version</code> are
+recorded on every transaction, so when a September import behaves oddly, the question &quot;which layout
+produced these rows?&quot; is answered by a foreign key — and the profile itself can be opened and
+inspected, which a parser name could not offer.</p>
+<p>When a bank does change format, reconciliation fails (§8), the user re-maps in the same UI, and the
+profile&#39;s version increments. Rows already imported keep pointing at the version that produced
+them.</p>
+<p>A layout change is caught by reconciliation (§8) as a hard failure, not as silently wrong data.
+That is the entire reason reconciliation is non-optional.</p>
+<h3 id="format-handling">Format handling</h3>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Approach</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>PDF, text-based</strong></td>
+<td><code>pdf.js</code> via <code>lib/pdf/words.ts</code>. Columns identified by x-position, never by regex over a flattened line. Mandatory for any layout whose text extracts without spaces — one of the four in hand does</td>
+</tr>
+<tr>
+<td><strong>PDF, scanned</strong></td>
+<td>Out of scope for Phase 1. Detected (a page with no text items) and reported, not silently mis-parsed</td>
+</tr>
+<tr>
+<td><strong>PDF, encrypted</strong></td>
+<td><code>getDocument({ data, password })</code>. The import screen prompts per file; no scheme is modelled</td>
+</tr>
+<tr>
+<td><strong>CSV / Excel</strong></td>
+<td><strong>Not built.</strong> No institution in use provides either (Q7). Added if one ever does</td>
+</tr>
+</tbody></table>
+<p><strong>Multi-line descriptions</strong> are the most common PDF parsing failure. A transaction&#39;s narration
+often wraps across two or three physical lines, with only the first carrying a date and amount.
+The rule: a line without a parseable date <strong>and</strong> without a parseable amount is a continuation of
+the previous row. Each parser declares its own row-start predicate.</p>
+<hr>
+<h2 id="5-stage-4--normalization">5. Stage 4 — Normalization</h2>
+<p>Turning what the bank wrote into the ledger&#39;s shape. This is where most correctness lives.</p>
+<h3 id="dates">Dates</h3>
+<p>Ambiguity is the trap: <code>03/09/2026</code> is 3 September in both the UAE and India, but <code>09/03/2026</code>
+appears in some formats. Rules:</p>
+<ol>
+<li>Each parser declares its date format explicitly. No inference.</li>
+<li>Parsed dates must fall inside the statement period, which is itself extracted. A date outside
+it fails the row.</li>
+<li>Two-digit years are windowed against the statement period, not against a fixed pivot.</li>
+</ol>
+<h3 id="signs-invariant-i2">Signs (Invariant I2)</h3>
+<p>Statements express direction in at least four ways:</p>
+<table>
+<thead>
+<tr>
+<th>Format</th>
+<th>Example</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Separate columns</td>
+<td><code>Debit: 310.00</code> / <code>Credit: —</code></td>
+<td>Debit → negative, credit → positive</td>
+</tr>
+<tr>
+<td>Signed amount</td>
+<td><code>-310.00</code></td>
+<td>Used as-is</td>
+</tr>
+<tr>
+<td><code>Dr</code>/<code>Cr</code> suffix</td>
+<td><code>310.00 Dr</code></td>
+<td>Dr → negative, Cr → positive</td>
+</tr>
+<tr>
+<td>Balance delta</td>
+<td>balance fell from 5,000 to 4,690</td>
+<td>Derived from consecutive balances</td>
+</tr>
+</tbody></table>
+<p><strong>For credit cards, the convention inverts</strong> relative to the statement&#39;s presentation. A card
+statement shows a purchase as a positive &quot;debit&quot; because it increases what you owe. In the ledger
+a purchase is <strong>negative</strong> (Invariant I2). Each card parser declares <code>inverts_sign = True</code> and
+this is asserted in tests, because getting it wrong makes every card balance wrong in a way that
+still looks internally consistent.</p>
+<h3 id="description-cleanup">Description cleanup</h3>
+<p><code>description_raw</code> is never modified — it is the audit record. <code>description_clean</code> is derived for
+matching and display:</p>
+<pre><code>POS 4821 STARBUCKS DUBAI MALL      AE  030926 REF 887262819
+    ↓
+STARBUCKS DUBAI MALL
+</code></pre>
+<p>Removals: terminal and reference numbers, trailing dates, POS/ATM prefixes, repeated whitespace,
+trailing country and currency codes. Uppercase preserved — banks are inconsistent and case
+carries no meaning.</p>
+<p>Cleanup is <strong>rule-driven and inspectable</strong>, not clever. A user can see exactly what was stripped.</p>
+<h3 id="currency">Currency</h3>
+<p>The account&#39;s currency, unless the statement states a foreign amount. A foreign transaction on an
+AED card:</p>
+<pre><code>amount            −310.00    AED     ← what left the account; the ledger&#39;s truth
+original_amount     −75.00    USD    ← reference
+original_currency     USD
+</code></pre>
+<p>The bank&#39;s conversion is authoritative because it is what actually happened. The ledger does not
+second-guess it with a market rate.</p>
+<hr>
+<h2 id="6-stage-5--duplicate-detection">6. Stage 5 — Duplicate detection</h2>
+<p>Three layers, in increasing cost.</p>
+<p><strong>Layer 1 — document checksum (§2).</strong> Same file. Free.</p>
+<p><strong>Layer 2 — transaction fingerprint.</strong> Statements overlap; a July–August statement followed by an
+August–September one shares August.</p>
+<pre><code class="language-python">dedupe_hash = sha256(&quot;|&quot;.join([
+    str(account_id),
+    booked_date.isoformat(),
+    f&quot;{amount:.4f}&quot;,
+    normalise_for_hash(description_raw),   # uppercase, collapse whitespace, strip punctuation
+    reference_raw or &quot;&quot;,
+]))
+</code></pre>
+<p>Uniquely indexed on <code>(household_id, account_id, dedupe_hash)</code>. Any row whose hash already exists
+is marked <code>duplicate</code> and excluded from import by default.</p>
+<p><strong>Reference number is included deliberately.</strong> Two genuinely distinct identical-looking
+transactions — two AED 31 coffees at the same shop on the same day — will differ in their bank
+reference, and the hash separates them.</p>
+<p><strong>Where a bank provides no reference, the disambiguator must be stable across documents.</strong> The
+obvious choice — the row&#39;s ordinal position within the statement — is wrong, and wrong in a way
+that silently corrupts balances:</p>
+<pre><code>Jul–Aug statement    …  row 50: 12 Aug  AED 31.00  STARBUCKS
+Aug–Sep statement    …  row 12: 12 Aug  AED 31.00  STARBUCKS     ← same transaction
+</code></pre>
+<p>Different ordinal, different hash, so Layer 2 does not recognise the overlap and imports the
+August rows a second time. Layer 3 only warns. Spending and balances double for the overlapping
+month, which is exactly the failure the three layers exist to prevent.</p>
+<p><strong>The disambiguator is therefore the occurrence index within the day</strong>, not within the document:</p>
+<pre><code class="language-python"># nth identical (date, amount, normalised description) on this account, counting from 0
+occurrence_index = prior_identical_rows_on_same_date
+</code></pre>
+<p>Any statement covering 12 August contains the same set of transactions for that date, so the
+second coffee is occurrence 1 in both documents and hashes identically in both. Two distinct
+same-day identical transactions still get distinct hashes, which is the property the ordinal was
+reaching for.</p>
+<p>The index is computed against the union of rows already committed for that date and rows earlier
+in the current batch, so a transaction split across a document boundary is counted once.</p>
+<p><strong>Layer 3 — near-duplicate warning.</strong> Same account, same amount, date within ±3 days, description
+similarity above 0.85 (token-set ratio). <strong>Warned, not blocked</strong> — this catches a genuinely
+double-charged subscription as well as a re-import, and only the user can tell those apart.</p>
+<hr>
+<h2 id="7-stages-67--fx-and-classification">7. Stages 6–7 — FX and classification</h2>
+<p><strong>FX enrichment.</strong> For each row, look up the rate for <code>booked_date</code>, carrying forward across
+non-publication days. Missing rates trigger a fetch. <strong>An import never proceeds against a missing
+rate</strong> and never falls back to 1.0 or to today&#39;s rate. Detail:
+<a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §3.</p>
+<p><strong>Classification.</strong> The deterministic cascade, run locally so the review queue arrives
+pre-populated. Detail: <a href="./classification.html">classification.html</a>.</p>
+<p><strong>Transfer matching.</strong> Candidates proposed and scored; nothing linked without confirmation.
+Detail: <a href="./transfers-and-reconciliation.html">transfers-and-reconciliation.html</a>.</p>
+<hr>
+<h2 id="8-stage-8--reconciliation-invariant-i8">8. Stage 8 — Reconciliation (Invariant I8)</h2>
+<p><strong>The single highest-value check in the pipeline.</strong></p>
+<p>Most statements declare an opening and a closing balance. If the extracted rows are complete and
+correctly signed:</p>
+<pre><code>opening_balance + Σ(amounts) == closing_balance
+</code></pre>
+<p>If they do not balance, something is wrong — a dropped row, a missed continuation line, a
+sign error, a misread amount. Any of these would otherwise enter the ledger silently and be
+discovered months later, if ever.</p>
+<pre><code class="language-typescript">const result = reconcile(extraction);
+switch (result.kind) {
+  case &quot;reconciled&quot;:
+    return proceed();
+  case &quot;mismatched&quot;:
+    throw new ImportBlocked(
+      `Reconciliation failed: declared closing ${result.declared}, ` +
+      `computed ${result.computed}, delta ${result.delta}. ` +
+      `Likely a dropped or misparsed row. Import blocked.`,
+    );
+  case &quot;running_balance_break&quot;:
+    // The UAE current account declares no opening or closing balance, only a running
+    // column. A break localises the fault to one row rather than the whole batch.
+    throw new ImportBlocked(
+      `Running balance breaks at row ${result.rowNumber}: ` +
+      `${result.previous} ${result.amount &gt;= 0 ? &quot;+&quot; : &quot;-&quot;} ${result.amount} ` +
+      `should be ${result.expected}, statement says ${result.actual}.`,
+    );
+  case &quot;unavailable&quot;:
+    warn(&quot;Statement declares no balances; reconciliation skipped.&quot;);
+    return proceedWithFlag();
+}
+</code></pre>
+<p><strong>A mismatch blocks the import.</strong> Not a warning — a block. Wrong financial data is worse than
+absent financial data, because absent data announces itself and wrong data does not.</p>
+<p>When it blocks, the diagnostics panel shows the computed running balance beside each row so the
+divergence point is visible immediately. In practice this turns a parser bug from an afternoon of confusion
+into a two-minute fix.</p>
+<p>Where a statement genuinely declares no balances (some CSV exports), reconciliation is marked
+<code>unavailable</code> and the batch carries a flag. Rows imported without reconciliation are visually
+distinguished in the review queue.</p>
+<hr>
+<h2 id="9-stage-9--staging">9. Stage 9 — Staging</h2>
+<pre><code class="language-sql">CREATE TABLE staged_transaction (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  import_batch_id      UUID NOT NULL REFERENCES import_batch(id) ON DELETE CASCADE,
+  household_id         UUID NOT NULL REFERENCES household(id),
+  account_id           UUID NOT NULL REFERENCES account(id),
+
+  raw_row              JSONB NOT NULL,        -- exactly what the parser saw
+  source_page_number   SMALLINT,
+  source_row_number    INTEGER,
+
+  -- normalized, same shape as transaction
+  booked_date          DATE NOT NULL,
+  value_date           DATE,
+  description_raw      TEXT NOT NULL,
+  description_clean    TEXT,
+  reference_raw        TEXT,
+  amount               NUMERIC(20,4) NOT NULL,
+  currency             CHAR(3) NOT NULL,
+  original_amount      NUMERIC(20,4),
+  original_currency    CHAR(3),
+
+  fx_rate_date         DATE NOT NULL,
+  fx_rate_is_carried   BOOLEAN NOT NULL DEFAULT false,
+  fx_rate_to_base      NUMERIC(20,10) NOT NULL,
+  fx_rate_to_secondary NUMERIC(20,10) NOT NULL,
+  amount_base          NUMERIC(20,4) NOT NULL,
+  amount_secondary     NUMERIC(20,4) NOT NULL,
+
+  -- proposals, all overridable in review
+  proposed_txn_type       txn_type,
+  proposed_category_id    UUID REFERENCES category(id),
+  proposed_merchant_id    UUID REFERENCES merchant(id),
+  proposed_payment_method payment_method,
+  proposed_country        CHAR(2),
+  classified_by           classified_by NOT NULL DEFAULT &#39;unclassified&#39;,
+  classification_rule_id  UUID REFERENCES classification_rule(id),
+  classification_confidence NUMERIC(4,3),
+
+  -- transfer candidacy
+  proposed_transfer_peer_staged_id UUID REFERENCES staged_transaction(id),
+  proposed_transfer_peer_txn_id    UUID REFERENCES transaction(id),
+  transfer_match_confidence        NUMERIC(4,3),
+  proposed_transfer_kind           transfer_kind,
+
+  -- dedupe
+  dedupe_hash              TEXT NOT NULL,
+  duplicate_of_transaction_id UUID REFERENCES transaction(id),
+  near_duplicate_of_id     UUID REFERENCES transaction(id),
+
+  status               TEXT NOT NULL DEFAULT &#39;new&#39;,
+      -- new | duplicate | near_duplicate | needs_review | accepted | rejected
+  user_note            TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_staged_batch ON staged_transaction (import_batch_id, status);
+</code></pre>
+<p><code>raw_row</code> retains the parser&#39;s original view of the data. When a classification looks wrong six
+months later, the question &quot;what did the statement actually say?&quot; is answerable without reopening
+the PDF.</p>
+<hr>
+<h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
+<p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because
+it is the recurring cost of using the product.</p>
+<p><strong>Grouping</strong>, most-attention-needed first:</p>
+<pre><code>⚠  Blocked            reconciliation failed — resolve before importing
+🔁 Transfers          4 candidate pairs, high confidence pre-ticked
+❓ Unclassified       11 rows with no category
+⚡ Low confidence     6 rows classified below threshold
+✓  Ready             183 rows, classified with high confidence   [collapsed]
+⊘  Duplicates         27 rows already present                     [collapsed]
+</code></pre>
+<p><strong>Interactions</strong></p>
+<ul>
+<li><strong>Keyboard-first.</strong> <code>j</code>/<code>k</code> to move, <code>c</code> to categorize, <code>t</code> to toggle transfer, <code>x</code> to exclude,
+<code>Enter</code> to accept, <code>⌘Enter</code> to import all. Reviewing 200 rows with a mouse is why people
+abandon these tools.</li>
+<li><strong>Bulk apply</strong> — select several rows, categorize together.</li>
+<li><strong>Rule creation inline</strong> — categorizing offers &quot;always categorize <code>TALABAT*</code> as Food &amp; Dining →
+Delivery&quot;, with a live count of how many past and future rows it affects.</li>
+<li><strong>Original visible</strong> — each row shows <code>description_raw</code> and links to the source document at the
+right page.</li>
+<li><strong>Running totals update live</strong> so the shape of the month is visible before committing.</li>
+</ul>
+<p>Nothing imports without a click in Phase 1. Confidence pre-sorts and pre-ticks; it never decides.</p>
+<hr>
+<h2 id="11-stage-11--commit">11. Stage 11 — Commit</h2>
+<pre><code class="language-sql">BEGIN;
+  INSERT INTO transaction (...) SELECT ... FROM staged_transaction
+    WHERE import_batch_id = $1 AND status = &#39;accepted&#39;;
+
+  INSERT INTO transfer (...)      -- confirmed pairs
+  UPDATE transaction SET transfer_id = ... , txn_type = &#39;transfer_in&#39;|&#39;transfer_out&#39;;
+
+  INSERT INTO card_statement (...)  -- if the document was a card statement
+
+  UPDATE account SET current_balance = ..., current_balance_as_of = now()
+    WHERE id = $account;
+
+  -- verify against the statement one final time
+  -- raises and rolls back the whole batch on mismatch
+  PERFORM assert_account_reconciles($account, $declared_closing);
+
+  UPDATE import_batch SET status=&#39;completed&#39;, rows_imported=..., completed_at=now();
+COMMIT;
+</code></pre>
+<p><strong>All or nothing.</strong> A partial import leaves the ledger in a state that reconciles against nothing
+and is worse than no import at all.</p>
+<p>Post-commit, asynchronously: net-worth snapshot, holdings, XIRR, recurring-series detection.</p>
+<hr>
+<h2 id="12-the-import-screen">12. The import screen</h2>
+<p>There is no CLI (<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a>). Everything a CLI would have
+done is a screen.</p>
+<table>
+<thead>
+<tr>
+<th>Was going to be</th>
+<th>Is</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>oneledger import ~/statements/2026-09/</code></td>
+<td><strong>/import</strong> — drop a folder&#39;s worth of files into the picker; each is fingerprinted, parsed and reconciled independently, with per-file status</td>
+</tr>
+<tr>
+<td><code>oneledger import --dry-run</code></td>
+<td>The same screen. Nothing is written until <strong>Stage batch</strong> is pressed; the parse, reconciliation and classification summary are all visible first</td>
+</tr>
+<tr>
+<td><code>oneledger parse --show-rows --show-running-balance</code></td>
+<td><strong>Diagnostics panel</strong> on the import screen — the extracted rows beside the computed running balance, with the divergent row highlighted. The first thing to open when a bank changes layout</td>
+</tr>
+<tr>
+<td><code>oneledger fx backfill</code> / <code>fx check</code></td>
+<td><strong>Settings › FX</strong> — a date range and a Backfill button; a rate inspector showing source and carry-forward status</td>
+</tr>
+<tr>
+<td><code>oneledger doctor</code></td>
+<td><strong>Settings › Data Quality</strong> — already specified there in <a href="../operations/testing-and-data-quality.html">12</a> §5</td>
+</tr>
+<tr>
+<td><code>oneledger recompute balances|networth|xirr|holdings</code></td>
+<td><strong>Settings › Maintenance</strong> — buttons calling the corresponding Postgres functions</td>
+</tr>
+<tr>
+<td><code>oneledger stats classification</code></td>
+<td><strong>Settings › Rules</strong> — coverage, hit counts, override counts, top unclassified descriptions</td>
+</tr>
+</tbody></table>
+<p><strong>Multi-file import is the common case.</strong> Selecting twelve months of one account, or one month of
+seven accounts, is a single drop. Each file gets its own <code>import_batch</code> and its own reconciliation
+verdict, so one bad statement blocks only itself.</p>
+<hr>
+<h2 id="13-institution-notes">13. Institution notes</h2>
+<p>Parser-specific quirks, recorded as they are discovered. Populated during M2–M3; the structure
+matters more than the current contents.</p>
+<p>Observed directly from the 71 statements gathered (Jan 2025 – Sep 2026). <strong>Every institution is
+PDF-only; no CSV or Excel export exists from any of them</strong> — which is why M2 is planned around the
+easiest PDF rather than a CSV.</p>
+<p><strong>These are field notes, not a supported-institutions list.</strong> Layouts are rows created through the
+mapping UI (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>); nothing below is compiled into
+the product. It is recorded because it is what the engine and the quirk vocabulary were designed
+against, and because a future layout change is easier to diagnose with a note of what the format
+looked like before.</p>
+<table>
+<thead>
+<tr>
+<th>Layout</th>
+<th>Files</th>
+<th>Encrypted</th>
+<th>Reconciliation anchor</th>
+<th>Known quirks</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>UAE card</strong> (Skywards + noon One)</td>
+<td>38</td>
+<td>No</td>
+<td>Header block: credit limit, statement date, due date, minimum due</td>
+<td>One issuer, one layout for both cards. Bilingual AR/EN — Arabic text interleaves in extraction order, so filter by script or use x-position. Credits carry a <code>CR</code> suffix; debits are bare. <code>inverts_sign = True</code></td>
+</tr>
+<tr>
+<td><strong>Axis</strong> (2 accounts)</td>
+<td>6</td>
+<td>No</td>
+<td>Declares <code>OPENING BALANCE</code> <strong>and</strong> a running balance column</td>
+<td><code>Tran Date · Chq No · Particulars · Debit · Credit · Balance · Init.Br</code>. Multi-line particulars. Trailing legend page of abbreviation definitions must not be parsed as rows. <code>(cid:9)</code> artefacts in that legend</td>
+</tr>
+<tr>
+<td><strong>UAE current account</strong></td>
+<td>20</td>
+<td>No</td>
+<td><strong>Running balance column only</strong> — no declared opening/closing</td>
+<td>Reverse-chronological. Two physical lines per transaction. Balance carries a <code>Cr</code> suffix. Remittance narration embeds destination INR amount and achieved rate</td>
+</tr>
+<tr>
+<td><strong>HDFC</strong> (2 accounts)</td>
+<td>6</td>
+<td><strong>Yes</strong></td>
+<td><code>ClosingBalance</code> column per row</td>
+<td>Encrypted — the user is prompted per file. <strong>Text extracts with no spaces</strong> (<code>Statementofaccount</code>) — flattened-text regex is impossible here; word coordinates are mandatory. <code>Date · Narration · Chq./Ref.No. · ValueDt · WithdrawalAmt. · DepositAmt. · ClosingBalance</code></td>
+</tr>
+</tbody></table>
+<p><strong>Where no opening/closing balance is declared</strong> — the UAE current account — reconciliation uses
+the running balance column instead, asserting <code>balanceₙ = balanceₙ₋₁ + amountₙ</code> for every
+consecutive pair. That is a <em>stronger</em> check than the opening/closing bridge, because it localises
+a divergence to a specific row rather than reporting a batch-level delta.</p>
+<p><strong>Test fixtures are redacted.</strong> Real statements never enter the repository. Fixtures keep layout
+and structure with substituted amounts, dates and account numbers, and each carries a
+<code>README.md</code> recording which real statement&#39;s structure it reproduces.</p>
+<hr>
+<h2 id="14-acceptance-criteria">14. Acceptance criteria</h2>
+<ol>
+<li>A real statement from each of the six institutions imports with zero manual correction of
+dates or amounts.</li>
+<li>Reconciliation passes for every one of them.</li>
+<li>Re-importing an identical file imports zero rows and names the original import.</li>
+<li>An overlapping statement imports only the non-overlapping rows.</li>
+<li>A deliberately corrupted amount fails reconciliation and blocks the batch.</li>
+<li>Two identical-amount same-day transactions both import (the reference/ordinal disambiguates).</li>
+<li>A password-protected PDF imports without the password touching disk or database.</li>
+<li>200 rows are reviewable in under 10 minutes.</li>
+<li>Every imported row traces to document, page and row number.</li>
+</ol>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>
