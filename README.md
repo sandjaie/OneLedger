@@ -91,8 +91,9 @@ Start here → **[docs/index.html](docs/index.html)** (index and suggested readi
 
 Published at **https://sandjaie.github.io/OneLedger/** — `docs/` is deployed by
 [`.github/workflows/docs.yml`](.github/workflows/docs.yml) on every push to the default branch.
-Every push on any branch runs [`scripts/check-docs.py`](scripts/check-docs.py) first: no broken
-links, no malformed HTML, no statement tracked by git.
+[`scripts/check-docs.py`](scripts/check-docs.py) — no broken links, no malformed HTML, no
+statement tracked by git — runs in the pre-commit hook rather than in CI, over the whole tree
+each time. A commit cannot introduce a broken link, so nothing is left for a workflow to find.
 
 Documents you read are HTML; plans that get executed are Markdown.
 
