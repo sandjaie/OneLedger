@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"><style>*{box-sizing:border-box}body{margin:0;background:#eef2f0;font-family:"IBM Plex Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased;color:#101614}a{color:#1d5c44;text-decoration:none}a:hover{color:#0f3d2c}::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:rgba(16,22,20,.16);border-radius:9px}</style></helmet>
+<div style="display:flex;min-height:100vh;background:#eef2f0">
+
+<nav style="flex:none;width:132px;background:#101614;padding:22px 0 18px;display:flex;flex-direction:column;gap:26px;position:sticky;top:0;height:100vh">
+<div style="padding:0 16px;display:flex;flex-direction:column;gap:3px">
+<div style="font-family:'IBM Plex Serif',serif;font-size:17px;color:#eef2f0;letter-spacing:-.01em">OneLedger</div>
+<div style="font:500 8.5px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:#7fc4a8">{{ countries }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:1px;padding:0 8px">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="11">
+<button onClick="{{ n.go }}" style="appearance:none;border:0;text-align:left;cursor:pointer;font:500 11.5px/1 'IBM Plex Sans',sans-serif;letter-spacing:.01em;padding:9px 10px;border-radius:5px;display:flex;align-items:center;gap:7px;background:{{ n.bg }};color:{{ n.fg }}" style-hover="background:rgba(238,242,240,.07)">
+<span style="width:3px;height:3px;border-radius:50%;flex:none;background:{{ n.dot }}"></span>{{ n.label }}</button>
+</sc-for>
+</div>
+<div style="margin-top:auto;padding:0 16px">
+<div style="font:400 8.5px/1.5 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(238,242,240,.62)">MOCKUP SET 01<br>6 OF 11 SCREENS</div>
+</div>
+</nav>
+
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+
+<header style="display:flex;align-items:center;gap:18px;padding:14px 32px;background:#fbfcfb;border-bottom:1px solid rgba(16,22,20,.08);position:sticky;top:0;z-index:5">
+<div style="flex:1;min-width:0;max-width:340px;display:flex;align-items:center;gap:8px;background:#eef2f0;border:1px solid rgba(16,22,20,.07);border-radius:6px;padding:7px 11px">
+<span style="width:9px;height:9px;border:1.5px solid rgba(16,22,20,.34);border-radius:50%;flex:none"></span>
+<span style="font-size:12.5px;color:rgba(16,22,20,.62)">Search transactions, accounts, funds</span>
+</div>
+<div style="display:flex;align-items:center;gap:2px;background:#eef2f0;border:1px solid rgba(16,22,20,.07);border-radius:6px;padding:2px">
+<button onClick="{{ setAED }}" style="appearance:none;border:0;cursor:pointer;font:500 11.5px 'IBM Plex Mono',monospace;letter-spacing:.06em;padding:6px 13px;border-radius:4px;background:{{ aedBg }};color:{{ aedFg }};box-shadow:{{ aedShadow }}">AED</button>
+<button onClick="{{ setINR }}" style="appearance:none;border:0;cursor:pointer;font:500 11.5px 'IBM Plex Mono',monospace;letter-spacing:.06em;padding:6px 13px;border-radius:4px;background:{{ inrBg }};color:{{ inrFg }};box-shadow:{{ inrShadow }}">INR</button>
+</div>
+<div style="display:flex;align-items:center;gap:7px;padding:6px 12px;border:1px solid rgba(16,22,20,.09);border-radius:6px;font-size:12px;color:rgba(16,22,20,.62)">Sep 2026<span style="width:5px;height:5px;border-right:1.5px solid rgba(16,22,20,.34);border-bottom:1.5px solid rgba(16,22,20,.34);transform:rotate(45deg);margin-top:-3px"></span></div>
+<div style="display:flex;align-items:center;gap:9px;padding-left:4px">
+<div style="width:28px;height:28px;border-radius:50%;background:#7fc4a8;color:#101614;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Sans',sans-serif">SJ</div>
+</div>
+</header>
+
+<main style="flex:1;padding:30px 32px 56px;max-width:1320px">
+
+<sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:26px">
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:28px 30px">
+<sc-if value="{{ heroLedger }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-wrap:wrap;gap:36px;align-items:flex-end;justify-content:space-between">
+<div style="display:flex;flex-direction:column;gap:9px;min-width:260px">
+<div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:rgba(16,22,20,.62)">NET WORTH</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:68px;line-height:.94;letter-spacing:-.025em">{{ netWorth }}</div>
+<div style="display:flex;align-items:center;gap:14px;padding-top:4px">
+<span style="font:500 13px 'IBM Plex Sans',sans-serif;color:#2f7a5c">+{{ nwYtd }} this year</span>
+<span style="font:500 11.5px 'IBM Plex Mono',monospace;color:#2f7a5c;background:rgba(47,122,92,.1);padding:3px 7px;border-radius:4px">+3.1%</span>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">as of 5 Sep 2026</span>
+</div>
+</div>
+<div style="flex:1;min-width:280px;max-width:620px">
+<svg viewBox="0 0 600 130" preserveAspectRatio="none" style="width:100%;height:118px;display:block;overflow:visible">
+<defs><linearGradient id="olnw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fc4a8" stop-opacity=".34"></stop><stop offset="1" stop-color="#7fc4a8" stop-opacity="0"></stop></linearGradient></defs>
+<path d="M0,104 L54,99 L109,101 L163,92 L218,86 L272,88 L327,76 L381,66 L436,62 L490,48 L545,34 L600,18 L600,130 L0,130 Z" fill="url(#olnw)"></path>
+<path d="M0,104 L54,99 L109,101 L163,92 L218,86 L272,88 L327,76 L381,66 L436,62 L490,48 L545,34 L600,18" fill="none" stroke="#1d5c44" stroke-width="1.6"></path>
+<circle cx="600" cy="18" r="3.5" fill="#1d5c44"></circle>
+</svg>
+<div style="display:flex;justify-content:space-between;font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:rgba(16,22,20,.62);padding-top:8px">
+<span>SEP 2025</span><span>MAR 2026</span><span>SEP 2026</span>
+</div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ heroSplit }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:baseline">
+<div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:rgba(16,22,20,.62);width:100%">NET WORTH</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:82px;line-height:.9;letter-spacing:-.03em">{{ netWorth }}</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:500 14px 'IBM Plex Sans',sans-serif;color:#2f7a5c">+{{ nwYtd }} · +3.1%</span>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">trailing 12 months</span>
+</div>
+</div>
+<div>
+<div style="display:flex;height:34px;border-radius:5px;overflow:hidden;gap:2px">
+<div style="width:9.2%;background:#1d5c44"></div>
+<div style="width:51.9%;background:#2f8f6a"></div>
+<div style="width:38.9%;background:#8ec4b0"></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:22px;padding-top:12px">
+<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#1d5c44"></span>Cash {{ cash }}</div>
+<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#2f8f6a"></span>Investments {{ invests }}</div>
+<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#8ec4b0"></span>Property {{ property }}</div>
+<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:rgba(16,22,20,.62);margin-left:auto"><span style="width:8px;height:8px;border-radius:2px;background:#b1453a"></span>Liabilities −{{ liabilities }}</div>
+</div>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ heroCompact }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-wrap:wrap;gap:34px;align-items:center">
+<div style="display:flex;flex-direction:column;gap:6px;min-width:230px">
+<div style="font:500 10px/1 'IBM Plex Mono',monospace;letter-spacing:.16em;color:rgba(16,22,20,.62)">NET WORTH</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:52px;line-height:.95;letter-spacing:-.02em">{{ netWorth }}</div>
+<span style="font:500 12.5px 'IBM Plex Sans',sans-serif;color:#2f7a5c">+{{ nwYtd }} this year · +3.1%</span>
+</div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:18px;border-left:1px solid rgba(16,22,20,.09);padding-left:30px">
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)">LIQUID NW</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">{{ liquidNw }}</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)">INVESTED NW</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">{{ invests }}</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)">DEBT / ASSET</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">9.8%</span></div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)">SAVINGS RATE</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">18%</span></div>
+</div>
+</div>
+</sc-if>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">TOTAL ASSETS</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:27px;letter-spacing:-.01em">{{ assets }}</div>
+<div style="font-size:11.5px;color:rgba(16,22,20,.62)">Cash · investments · property</div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">TOTAL LIABILITIES</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:27px;letter-spacing:-.01em;color:#b1453a">{{ liabilities }}</div>
+<div style="font-size:11.5px;color:rgba(16,22,20,.62)">1 loan · 2 cards outstanding</div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">CASH AVAILABLE</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:27px;letter-spacing:-.01em">{{ cash }}</div>
+<div style="font-size:11.5px;color:rgba(16,22,20,.62)">5 accounts · 2 countries</div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:8px">
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">INVESTMENTS</div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:27px;letter-spacing:-.01em">{{ invests }}</div>
+<div style="font-size:11.5px;color:#2f7a5c">+39% since inception</div>
+</div>
+</section>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62);padding-bottom:16px">SEPTEMBER 2026</div>
+<div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0">
+<div style="padding:2px 20px 2px 0;display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Income</span><span style="font-family:'IBM Plex Serif',serif;font-size:23px;color:#2f7a5c">{{ income }}</span></div>
+<div style="padding:2px 20px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Expenses</span><span style="font-family:'IBM Plex Serif',serif;font-size:23px">{{ expenses }}</span></div>
+<div style="padding:2px 20px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Investments</span><span style="font-family:'IBM Plex Serif',serif;font-size:23px">{{ monthInvest }}</span></div>
+<div style="padding:2px 20px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Loan payments</span><span style="font-family:'IBM Plex Serif',serif;font-size:23px">{{ emi }}</span></div>
+<div style="padding:2px 0 2px 20px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:6px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Savings rate</span><span style="font-family:'IBM Plex Serif',serif;font-size:23px">18%</span></div>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:14px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">CASH FLOW</div>
+<div style="display:flex;gap:2px;background:#eef2f0;border-radius:5px;padding:2px">
+<sc-for list="{{ ranges }}" as="r" hint-placeholder-count="5">
+<button onClick="{{ r.go }}" style="appearance:none;border:0;cursor:pointer;font:500 10.5px 'IBM Plex Mono',monospace;padding:4px 9px;border-radius:3px;background:{{ r.bg }};color:{{ r.fg }}">{{ r.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;gap:18px;padding:14px 0 18px">
+<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#2f7a5c"></span>Income</span>
+<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#4a7fb0"></span>Expenses</span>
+<span style="display:flex;align-items:center;gap:6px;font-size:11px;color:rgba(16,22,20,.62)"><span style="width:8px;height:8px;border-radius:2px;background:#7fc4a8"></span>Investments</span>
+</div>
+<div style="display:flex;align-items:flex-end;gap:9px;height:172px;border-bottom:1px solid rgba(16,22,20,.1)">
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:46%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:11%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:52%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:11%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:40%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:13%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:61%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:13%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:100%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:44%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:24%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:48%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:13%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:57%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:13%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:42%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:15%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:39%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:15%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:55%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:15%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:43%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:15%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:2px;height:100%"><div style="flex:1;height:82%;background:#2f7a5c;border-radius:2px 2px 0 0"></div><div style="flex:1;height:53%;background:#4a7fb0;border-radius:2px 2px 0 0"></div><div style="flex:1;height:15%;background:#7fc4a8;border-radius:2px 2px 0 0"></div></div>
+</div>
+<div style="display:flex;gap:9px;padding-top:8px;font:400 9.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">
+<span style="flex:1;text-align:center">OCT</span><span style="flex:1;text-align:center">NOV</span><span style="flex:1;text-align:center">DEC</span><span style="flex:1;text-align:center">JAN</span><span style="flex:1;text-align:center">FEB</span><span style="flex:1;text-align:center">MAR</span><span style="flex:1;text-align:center">APR</span><span style="flex:1;text-align:center">MAY</span><span style="flex:1;text-align:center">JUN</span><span style="flex:1;text-align:center">JUL</span><span style="flex:1;text-align:center">AUG</span><span style="flex:1;text-align:center">SEP</span>
+</div>
+</div>
+
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">SPENDING BREAKDOWN</div>
+<div style="display:flex;align-items:center;gap:22px;padding-top:18px;flex-wrap:wrap">
+<div style="position:relative;width:132px;height:132px;flex:none;border-radius:50%;background:conic-gradient(#1d5c44 0 26.04%,#2f8f6a 26.04% 42.45%,#4fa8a0 42.45% 57.55%,#4a7fb0 57.55% 69.43%,#5f6bb0 69.43% 79.07%,#8a6bab 79.07% 87.61%,#b4638f 87.61% 93.44%,#7d8f4e 93.44% 96.77%,#8a9aa5 96.77% 100%)">
+<div style="position:absolute;inset:34px;background:#fbfcfb;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+<span style="font:400 8.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">TOTAL</span>
+<span style="font-family:'IBM Plex Serif',serif;font-size:15px">{{ expenses }}</span>
+</div>
+</div>
+<div style="flex:1;min-width:150px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#1d5c44"></span><span style="flex:1;color:rgba(16,22,20,.7)">Housing</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">26%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#2f8f6a"></span><span style="flex:1;color:rgba(16,22,20,.7)">Food &amp; dining</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">16%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#4fa8a0"></span><span style="flex:1;color:rgba(16,22,20,.7)">Travel</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">15%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#4a7fb0"></span><span style="flex:1;color:rgba(16,22,20,.7)">Shopping</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">12%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#5f6bb0"></span><span style="flex:1;color:rgba(16,22,20,.7)">Family</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">10%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#8a6bab"></span><span style="flex:1;color:rgba(16,22,20,.7)">Transport</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">9%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#b4638f"></span><span style="flex:1;color:rgba(16,22,20,.7)">Utilities</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">6%</span></div>
+<div style="display:flex;align-items:center;gap:8px;font-size:11.5px"><span style="width:7px;height:7px;border-radius:2px;background:#7d8f4e"></span><span style="flex:1;color:rgba(16,22,20,.7)">Subscriptions</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">3%</span></div>
+</div>
+</div>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="display:flex;align-items:baseline;justify-content:space-between">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">ACCOUNTS</div>
+<button onClick="{{ goAccounts }}" style="appearance:none;background:none;border:0;cursor:pointer;font:500 11px 'IBM Plex Sans',sans-serif;color:#1d5c44">View all</button>
+</div>
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62);padding:18px 0 9px">UAE</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(16,22,20,.06)"><span style="font-size:13px">Emirates NBD</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">AED 32,500</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(16,22,20,.06)"><span style="font-size:13px">ADCB</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">AED 18,700</span></div>
+</div>
+<div style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62);padding:18px 0 9px">INDIA</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(16,22,20,.06)"><span style="font-size:13px">HDFC NRE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">₹12,40,000</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(16,22,20,.06)"><span style="font-size:13px">HDFC NRO</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">₹3,20,000</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0"><span style="font-size:13px">Axis Bank</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px">₹1,80,000</span></div>
+</div>
+</div>
+
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">UPCOMING OBLIGATIONS</div>
+<div style="display:flex;flex-direction:column;padding-top:8px">
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(16,22,20,.06)">
+<div style="width:38px;flex:none;display:flex;flex-direction:column;align-items:center"><span style="font-family:'IBM Plex Serif',serif;font-size:17px;line-height:1">15</span><span style="font:400 8.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">SEP</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">Credit card payment</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Emirates NBD Visa · statement due</span></div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px">AED 4,320</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(16,22,20,.06)">
+<div style="width:38px;flex:none;display:flex;flex-direction:column;align-items:center"><span style="font-family:'IBM Plex Serif',serif;font-size:17px;line-height:1">24</span><span style="font:400 8.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">SEP</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">Personal loan EMI</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Emirates NBD · 13 of 36</span></div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px">AED 10,464</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(16,22,20,.06)">
+<div style="width:38px;flex:none;display:flex;flex-direction:column;align-items:center"><span style="font-family:'IBM Plex Serif',serif;font-size:17px;line-height:1">05</span><span style="font:400 8.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">OCT</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">SIP investments</span><span style="font-size:11px;color:rgba(16,22,20,.62)">4 funds · auto-debit HDFC NRE</span></div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px">₹1,25,000</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px;padding:13px 0">
+<div style="width:38px;flex:none;display:flex;flex-direction:column;align-items:center"><span style="font-family:'IBM Plex Serif',serif;font-size:17px;line-height:1">12</span><span style="font:400 8.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">OCT</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">Term insurance premium</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Annual · LIC</span></div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:13px">₹42,000</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isTransactions }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Transactions</h1>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">1,284 transactions · 7 accounts · Sep 2026</span>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+<div style="display:flex;align-items:center;gap:8px;background:#fbfcfb;border:1px solid rgba(16,22,20,.09);border-radius:6px;padding:8px 12px;min-width:230px"><span style="width:9px;height:9px;border:1.5px solid rgba(16,22,20,.34);border-radius:50%"></span><span style="font-size:12.5px;color:rgba(16,22,20,.62)">Search merchant or note</span></div>
+<sc-for list="{{ filters }}" as="f" hint-placeholder-count="7">
+<div style="display:flex;align-items:center;gap:8px;background:#fbfcfb;border:1px solid rgba(16,22,20,.09);border-radius:6px;padding:8px 11px;font-size:12px;color:rgba(16,22,20,.62)">{{ f }}<span style="width:5px;height:5px;border-right:1.5px solid rgba(16,22,20,.3);border-bottom:1.5px solid rgba(16,22,20,.3);transform:rotate(45deg);margin-top:-3px"></span></div>
+</sc-for>
+</div>
+
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;overflow:hidden">
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:11px 22px;background:#eef2f0;font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)">
+<span>DATE</span><span>DESCRIPTION</span><span>CATEGORY</span><span>ACCOUNT</span><span style="text-align:right">AMOUNT</span>
+</div>
+
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">05 Sep</span>
+<span style="font-size:13px">Talabat</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Food &amp; Dining / Delivery</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">ENBD Visa ••4821</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 84</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">04 Sep</span>
+<span style="font-size:13px">Emaar Community Fee</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Housing / Fees</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Emirates NBD</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 1,850</span>
+</div>
+
+<div style="padding:14px 22px;border-bottom:1px solid rgba(16,22,20,.06);background:#f3f7f5">
+<div style="display:grid;grid-template-columns:76px minmax(0,1fr) 128px;gap:14px;align-items:center">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">03 Sep</span>
+<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+<span style="font:500 8.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#1d5c44;border:1px solid rgba(29,92,68,.3);border-radius:3px;padding:3px 6px">TRANSFER</span>
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px">Emirates NBD</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">− AED 5,000</span></div>
+<span style="width:26px;height:1px;background:rgba(16,22,20,.28);position:relative"></span>
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:12.5px">HDFC NRE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#2f7a5c">+ ₹1,13,500</span></div>
+<div style="display:flex;gap:16px;padding-left:8px">
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font:400 8.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">FX RATE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">22.70</span></div>
+<div style="display:flex;flex-direction:column;gap:1px"><span style="font:400 8.5px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">FEE</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px">AED 15</span></div>
+</div>
+</div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;color:rgba(16,22,20,.62)">net 0</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">03 Sep</span>
+<span style="font-size:13px">Costa Coffee</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Food &amp; Dining / Coffee</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">ENBD Visa ••4821</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 31</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">02 Sep</span>
+<span style="font-size:13px">Parag Parikh Flexi Cap — SIP</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Investment / Mutual fund</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">HDFC NRE ••7734</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− ₹40,000</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">01 Sep</span>
+<span style="font-size:13px">Salary — Sep 2026</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Income / Salary</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Emirates NBD</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;color:#2f7a5c">+ AED 36,000</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">31 Aug</span>
+<span style="font-size:13px">DEWA</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Utilities / Electricity</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Emirates NBD</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 612</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">30 Aug</span>
+<span style="font-size:13px">Amazon.ae</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Shopping / Household</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">ADCB Card ••9012</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 268</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">28 Aug</span>
+<span style="font-size:13px">HDFC NRE interest credit</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Income / Interest</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">HDFC NRE ••7734</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;color:#2f7a5c">+ ₹4,180</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">26 Aug</span>
+<span style="font-size:13px">Personal loan EMI</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Debt / Loan payment</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Emirates NBD</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 10,464</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">24 Aug</span>
+<span style="font-size:13px">Emirates — DXB to BLR</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Travel / Flights</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">ENBD Visa ••4821</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 2,140</span>
+</div>
+<div style="display:grid;grid-template-columns:76px minmax(0,2.2fr) minmax(0,1.3fr) minmax(0,1.4fr) 128px;gap:14px;padding:13px 22px;align-items:center" style-hover="background:#f4f8f6">
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">22 Aug</span>
+<span style="font-size:13px">Netflix</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">Subscriptions / Streaming</span>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62)">ENBD Visa ••4821</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− AED 55</span>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAccounts }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Accounts</h1>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">9 accounts · last synced 5 Sep, 08:12</span>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:12px"><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">UAE</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">AED 51,200</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#101614;color:#7fc4a8;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">EN</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Emirates NBD</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Current · AED</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">AED 32,500</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 3092 · Updated Sep 5</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#101614;color:#7fc4a8;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">AD</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">ADCB</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Savings · AED</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">AED 18,700</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 6641 · Updated Sep 5</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#1d5c44;color:#fbfcfb;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">CC</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Emirates NBD Visa</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Credit card · AED</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px;color:#b1453a">− AED 4,250</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 4821 · 14% utilised</span></div>
+</div>
+</div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:12px"><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">INDIA</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">₹17,40,000</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#101614;color:#7fc4a8;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">HD</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">HDFC Bank</span><span style="font-size:11px;color:rgba(16,22,20,.62)">NRE Savings · INR</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">₹12,40,500</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 4821 · Updated Sep 5</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#101614;color:#7fc4a8;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">HD</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">HDFC Bank</span><span style="font-size:11px;color:rgba(16,22,20,.62)">NRO Savings · INR</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">₹3,20,000</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 5510 · Updated Sep 4</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#101614;color:#7fc4a8;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">AX</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Axis Bank</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Savings · INR</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">₹1,80,000</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">•••• 2277 · Updated Aug 29</span></div>
+</div>
+</div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:12px"><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">INVESTMENTS</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">{{ invests }}</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#7fc4a8;color:#101614;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">MF</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">MF Central</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Mutual funds · INR</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">₹1,24,00,000</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#2f7a5c">+39% all time</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#7fc4a8;color:#101614;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">AU</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Sovereign gold</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Gold bonds · INR</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">₹18,40,000</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#2f7a5c">+11% all time</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#7fc4a8;color:#101614;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">EQ</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">IBKR</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Global equity · USD</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px">$ 92,400</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#2f7a5c">+22% all time</span></div>
+</div>
+</div>
+</div>
+
+<div>
+<div style="display:flex;align-items:baseline;gap:12px;padding-bottom:12px"><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">LOANS</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">AED 127,586 outstanding</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:12px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:18px 20px;display:flex;flex-direction:column;gap:14px;cursor:pointer" style-hover="border-color:rgba(29,92,68,.4)">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:6px;background:#b1453a;color:#fbfcfb;display:flex;align-items:center;justify-content:center;font:500 11px 'IBM Plex Mono',monospace">PL</div><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">Personal loan</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Emirates NBD · 5.49%</span></div></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-family:'IBM Plex Serif',serif;font-size:25px;color:#b1453a">AED 127,586</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">EMI AED 10,464 · 13 left</span></div>
+</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isInvestments }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Investments</h1>
+<div style="display:flex;gap:2px;background:#eef2f0;border-radius:5px;padding:2px">
+<sc-for list="{{ invViews }}" as="v" hint-placeholder-count="5">
+<button onClick="{{ v.go }}" style="appearance:none;border:0;cursor:pointer;font:500 10.5px 'IBM Plex Mono',monospace;padding:5px 10px;border-radius:3px;background:{{ v.bg }};color:{{ v.fg }}">{{ v.label }}</button>
+</sc-for>
+</div>
+</div>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:26px 28px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:24px">
+<div style="display:flex;flex-direction:column;gap:7px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">PORTFOLIO VALUE</span><span style="font-family:'IBM Plex Serif',serif;font-size:38px;line-height:1;letter-spacing:-.02em">{{ invests }}</span></div>
+<div style="display:flex;flex-direction:column;gap:7px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">TOTAL INVESTED</span><span style="font-family:'IBM Plex Serif',serif;font-size:26px">{{ invested }}</span></div>
+<div style="display:flex;flex-direction:column;gap:7px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">TOTAL RETURNS</span><span style="font-family:'IBM Plex Serif',serif;font-size:26px;color:#2f7a5c">+{{ returns }}</span></div>
+<div style="display:flex;flex-direction:column;gap:7px"><span style="font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.13em;color:rgba(16,22,20,.62)">XIRR</span><span style="font-family:'IBM Plex Serif',serif;font-size:26px;color:#2f7a5c">14.2%</span></div>
+</section>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">ASSET ALLOCATION</div>
+<div style="display:flex;height:12px;border-radius:3px;overflow:hidden;gap:2px;margin:18px 0 16px">
+<div style="width:44%;background:#1d5c44"></div><div style="width:21%;background:#2f8f6a"></div><div style="width:14%;background:#4fa8a0"></div><div style="width:12%;background:#4a7fb0"></div><div style="width:9%;background:#5f6bb0"></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(16,22,20,.6)"><span style="width:7px;height:7px;border-radius:2px;background:#1d5c44"></span>Indian equity</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">44% · ₹71.9L</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(16,22,20,.6)"><span style="width:7px;height:7px;border-radius:2px;background:#2f8f6a"></span>International equity</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">21% · ₹34.3L</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(16,22,20,.6)"><span style="width:7px;height:7px;border-radius:2px;background:#4fa8a0"></span>Gold</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">14% · ₹22.9L</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(16,22,20,.6)"><span style="width:7px;height:7px;border-radius:2px;background:#4a7fb0"></span>Debt</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">12% · ₹19.6L</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(16,22,20,.6)"><span style="width:7px;height:7px;border-radius:2px;background:#5f6bb0"></span>Cash &amp; arbitrage</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">9% · ₹14.7L</span></div>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:14px">Parag Parikh Flexi Cap</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">DIRECT · GROWTH · SELF</span></div><span style="font:500 11px 'IBM Plex Mono',monospace;color:#2f7a5c;background:rgba(47,122,92,.1);padding:3px 7px;border-radius:4px">+39%</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:20px">
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">CURRENT</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹11.4L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">INVESTED</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹8.2L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">XIRR</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">14.2%</span></div>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding-top:2px;border-top:1px solid rgba(16,22,20,.07);padding-top:12px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">SIP · 5th monthly</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px">₹40,000</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:14px">Motilal Oswal S&amp;P 500</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">DIRECT · GROWTH · SELF</span></div><span style="font:500 11px 'IBM Plex Mono',monospace;color:#2f7a5c;background:rgba(47,122,92,.1);padding:3px 7px;border-radius:4px">+31%</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:20px">
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">CURRENT</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹34.3L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">INVESTED</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹26.2L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">XIRR</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">16.8%</span></div>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(16,22,20,.07);padding-top:12px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">SIP · 5th monthly</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px">₹50,000</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:14px">HDFC Short Term Debt</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">DIRECT · GROWTH · JOINT</span></div><span style="font:500 11px 'IBM Plex Mono',monospace;color:#2f7a5c;background:rgba(47,122,92,.1);padding:3px 7px;border-radius:4px">+8%</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:20px">
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">CURRENT</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹19.6L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">INVESTED</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹18.1L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">XIRR</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">7.1%</span></div>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(16,22,20,.07);padding-top:12px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">SIP · 5th monthly</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px">₹35,000</span></div>
+</div>
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:9px;padding:20px 22px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:14px">Sovereign Gold Bonds</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:rgba(16,22,20,.62)">2029 SERIES · SELF</span></div><span style="font:500 11px 'IBM Plex Mono',monospace;color:#2f7a5c;background:rgba(47,122,92,.1);padding:3px 7px;border-radius:4px">+11%</span></div>
+<div style="display:flex;flex-wrap:wrap;gap:20px">
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">CURRENT</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹22.9L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">INVESTED</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">₹20.6L</span></div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62)">XIRR</span><span style="font-family:'IBM Plex Serif',serif;font-size:21px">9.4%</span></div>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(16,22,20,.07);padding-top:12px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">No recurring purchase</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px">—</span></div>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isLoans }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:22px">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Loans</h1>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:26px 28px;display:flex;flex-direction:column;gap:26px">
+<div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-end;justify-content:space-between">
+<div style="display:flex;flex-direction:column;gap:7px">
+<span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">PERSONAL LOAN · EMIRATES NBD</span>
+<span style="font-family:'IBM Plex Serif',serif;font-size:46px;line-height:1;letter-spacing:-.02em;color:#b1453a">AED 127,586</span>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">outstanding of AED 450,000 original · 5.49% reducing</span>
+</div>
+<div style="display:flex;gap:28px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">EMI</span><span style="font-family:'IBM Plex Serif',serif;font-size:22px">AED 10,464</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">REMAINING</span><span style="font-family:'IBM Plex Serif',serif;font-size:22px">13 months</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">LOAN-FREE</span><span style="font-family:'IBM Plex Serif',serif;font-size:22px">Oct 2027</span></div>
+</div>
+</div>
+
+<div>
+<div style="display:flex;height:10px;border-radius:3px;overflow:hidden;background:#e3e9e6">
+<div style="width:71.6%;background:#1d5c44"></div><div style="width:28.4%;background:#cfdcd6"></div>
+</div>
+<div style="display:flex;justify-content:space-between;padding-top:9px;font-size:11.5px;color:rgba(16,22,20,.62)">
+<span>AED 322,414 principal repaid · 72%</span><span>AED 127,586 remaining</span>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0">
+<div style="padding:2px 18px 2px 0;display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Principal paid</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px">AED 322,414</span></div>
+<div style="padding:2px 18px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Interest paid</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px">AED 54,208</span></div>
+<div style="padding:2px 18px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Interest remaining</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px">AED 8,446</span></div>
+<div style="padding:2px 0 2px 18px;border-left:1px solid rgba(16,22,20,.09);display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Next EMI</span><span style="font-family:'IBM Plex Mono',monospace;font-size:15px">24 Sep 2026</span></div>
+</div>
+</section>
+
+<section style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px">
+<div style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">PAYOFF TRAJECTORY</div>
+<svg viewBox="0 0 600 150" preserveAspectRatio="none" style="width:100%;height:170px;display:block;margin-top:20px;overflow:visible">
+<line x1="0" y1="150" x2="600" y2="150" stroke="rgba(16,22,20,.12)" stroke-width="1"></line>
+<path d="M0,12 L60,32 L120,52 L180,70 L240,86 L300,101 L360,113 L390,118" fill="none" stroke="#1d5c44" stroke-width="2"></path>
+<path d="M390,118 L450,129 L510,139 L560,146 L600,150" fill="none" stroke="#b1453a" stroke-width="2" stroke-dasharray="4 4"></path>
+<circle cx="390" cy="118" r="4" fill="#1d5c44"></circle>
+<circle cx="600" cy="150" r="4" fill="#b1453a"></circle>
+</svg>
+<div style="display:flex;justify-content:space-between;font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.08em;color:rgba(16,22,20,.62);padding-top:10px"><span>SEP 2023 · 450,000</span><span>TODAY · 127,586</span><span>OCT 2027 · 0</span></div>
+</div>
+
+<div style="background:#101614;border-radius:10px;padding:22px 24px;display:flex;flex-direction:column;gap:18px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:#7fc4a8">PREPAYMENT SIMULATOR</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-size:12px;color:rgba(238,242,240,.62)">One-off prepayment today</span><span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#eef2f0">AED {{ prepayLabel }}</span></div>
+<input type="range" min="0" max="120000" step="5000" value="{{ prepay }}" onChange="{{ onPrepay }}" style="width:100%;accent-color:#7fc4a8;background:transparent">
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;border-top:1px solid rgba(238,242,240,.12);padding-top:16px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(238,242,240,.62)">NEW OUTSTANDING</span><span style="font-family:'IBM Plex Serif',serif;font-size:20px;color:#eef2f0">AED {{ newOutstanding }}</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(238,242,240,.62)">INTEREST SAVED</span><span style="font-family:'IBM Plex Serif',serif;font-size:20px;color:#7fc4a8">AED {{ interestSaved }}</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(238,242,240,.62)">MONTHS SAVED</span><span style="font-family:'IBM Plex Serif',serif;font-size:20px;color:#eef2f0">{{ monthsSaved }}</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(238,242,240,.62)">NEW PAYOFF DATE</span><span style="font-family:'IBM Plex Serif',serif;font-size:20px;color:#eef2f0">{{ newPayoff }}</span></div>
+</div>
+</div>
+</section>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62);padding-bottom:6px">PREPAYMENT HISTORY</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(16,22,20,.06)"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">Bonus prepayment</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Mar 2026 · reduced tenure by 4 months</span></div><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">AED 60,000</span></div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0"><div style="display:flex;flex-direction:column;gap:2px"><span style="font-size:13px">Bonus prepayment</span><span style="font-size:11px;color:rgba(16,22,20,.62)">Apr 2025 · reduced tenure by 3 months</span></div><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">AED 40,000</span></div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isStatements }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:12px">
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:28px;font-weight:400;letter-spacing:-.015em">Statement import</h1>
+<span style="font-size:12px;color:rgba(16,22,20,.62)">42 statements processed · originals kept, every row traces back to one</span>
+</div>
+
+<div style="border:1px dashed rgba(16,22,20,.22);border-radius:10px;background:#fbfcfb;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center">
+<div style="width:42px;height:42px;border-radius:8px;background:#eef2f0;border:1px solid rgba(16,22,20,.09);display:flex;align-items:center;justify-content:center"><span style="width:11px;height:11px;border-top:2px solid #1d5c44;border-right:2px solid #1d5c44;transform:rotate(-45deg);margin-bottom:-2px"></span></div>
+<div style="font-family:'IBM Plex Serif',serif;font-size:21px">Upload a financial statement</div>
+<div style="font-size:12.5px;color:rgba(16,22,20,.62);max-width:420px;text-wrap:pretty">Drop a bank, credit card or salary statement here. OneLedger detects the institution, account, period and currency automatically.</div>
+<div style="display:flex;gap:7px;padding-top:6px"><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62);border:1px solid rgba(16,22,20,.12);border-radius:4px;padding:4px 8px">PDF</span><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62);border:1px solid rgba(16,22,20,.12);border-radius:4px;padding:4px 8px">CSV</span><span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.1em;color:rgba(16,22,20,.62);border:1px solid rgba(16,22,20,.12);border-radius:4px;padding:4px 8px">XLSX</span></div>
+</div>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;padding:22px 24px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="width:32px;height:38px;border-radius:3px;background:#eef2f0;border:1px solid rgba(16,22,20,.12);display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;font:500 8px 'IBM Plex Mono',monospace;color:#1d5c44">PDF</div>
+<div style="display:flex;flex-direction:column;gap:3px"><span style="font-size:13.5px">HDFC_NRE_Aug2026.pdf</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:rgba(16,22,20,.62)">1.2 MB · uploaded 12 seconds ago</span></div>
+</div>
+<span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:#1d5c44;background:rgba(29,92,68,.1);padding:5px 9px;border-radius:4px">READY FOR REVIEW</span>
+</div>
+<div style="display:flex;gap:6px;padding:22px 0 12px">
+<div style="flex:1;height:3px;border-radius:2px;background:#1d5c44"></div><div style="flex:1;height:3px;border-radius:2px;background:#1d5c44"></div><div style="flex:1;height:3px;border-radius:2px;background:#1d5c44"></div><div style="flex:1;height:3px;border-radius:2px;background:#1d5c44"></div><div style="flex:1;height:3px;border-radius:2px;background:#1d5c44"></div><div style="flex:1;height:3px;border-radius:2px;background:#7fc4a8"></div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:10px 22px;font:400 10.5px 'IBM Plex Mono',monospace;letter-spacing:.06em">
+<span style="color:rgba(16,22,20,.62)">UPLOADED</span><span style="color:rgba(16,22,20,.62)">INSTITUTION DETECTED</span><span style="color:rgba(16,22,20,.62)">TRANSACTIONS EXTRACTED</span><span style="color:rgba(16,22,20,.62)">DUPLICATES CHECKED</span><span style="color:rgba(16,22,20,.62)">CATEGORISED</span><span style="color:#1d5c44">REVIEW</span>
+</div>
+</section>
+
+<section style="background:#fbfcfb;border:1px solid rgba(16,22,20,.07);border-radius:10px;overflow:hidden">
+<div style="padding:20px 24px;border-bottom:1px solid rgba(16,22,20,.07);display:flex;flex-wrap:wrap;gap:26px">
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">DETECTED ACCOUNT</span><span style="font-size:13.5px">HDFC Bank NRE Savings ••7734</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">PERIOD</span><span style="font-size:13.5px">1 Aug – 31 Aug 2026</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">OPENING</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13.5px">₹11,86,320</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">CLOSING</span><span style="font-family:'IBM Plex Mono',monospace;font-size:13.5px">₹12,40,500</span></div>
+<div style="display:flex;flex-direction:column;gap:4px"><span style="font:400 9.5px 'IBM Plex Mono',monospace;letter-spacing:.11em;color:rgba(16,22,20,.62)">CURRENCY</span><span style="font-size:13.5px">INR</span></div>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:12px;padding:16px 24px;background:#f3f7f5;border-bottom:1px solid rgba(16,22,20,.07)">
+<span style="font-size:12px;color:rgba(16,22,20,.7)"><strong style="font-weight:500">38</strong> transactions detected</span>
+<span style="font-size:12px;color:rgba(16,22,20,.7)"><strong style="font-weight:500">2</strong> possible duplicates</span>
+<span style="font-size:12px;color:rgba(16,22,20,.7)"><strong style="font-weight:500">1</strong> uncategorised</span>
+<span style="font-size:12px;color:#2f7a5c;margin-left:auto">Balances reconcile · ₹54,180 net</span>
+</div>
+
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:11px 24px;background:#eef2f0;font:500 9.5px 'IBM Plex Mono',monospace;letter-spacing:.12em;color:rgba(16,22,20,.62)"><span>DATE</span><span>DESCRIPTION</span><span>CATEGORY</span><span style="text-align:right">AMOUNT</span><span style="text-align:right">STATUS</span></div>
+
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:12px 24px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">28 Aug</span><span style="font-size:13px">Interest credit</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Income / Interest</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;color:#2f7a5c">+ ₹4,180</span><span style="font:500 9.5px 'IBM Plex Mono',monospace;text-align:right;color:#2f7a5c">NEW</span></div>
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:12px 24px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">26 Aug</span><span style="font-size:13px">NEFT — self transfer from ENBD</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Transfer / Remittance</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right;color:#2f7a5c">+ ₹1,13,500</span><span style="font:500 9.5px 'IBM Plex Mono',monospace;text-align:right;color:#1d5c44">MATCHED</span></div>
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:12px 24px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center;background:#edf5f1"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">05 Aug</span><span style="font-size:13px">SIP — Parag Parikh Flexi Cap</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Investment / Mutual fund</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− ₹40,000</span><span style="font:500 9.5px 'IBM Plex Mono',monospace;text-align:right;color:#b1453a">DUPLICATE</span></div>
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:12px 24px;border-bottom:1px solid rgba(16,22,20,.06);align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">03 Aug</span><span style="font-size:13px">LIC premium</span><span style="font-size:11.5px;color:rgba(16,22,20,.62)">Insurance / Term</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− ₹42,000</span><span style="font:500 9.5px 'IBM Plex Mono',monospace;text-align:right;color:#2f7a5c">NEW</span></div>
+<div style="display:grid;grid-template-columns:78px minmax(0,2fr) minmax(0,1.2fr) 118px 120px;gap:14px;padding:12px 24px;align-items:center"><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(16,22,20,.62)">01 Aug</span><span style="font-size:13px">UPI — Vasan Stores</span><span style="font-size:11.5px;color:rgba(16,22,20,.62);color:#b1453a">Needs a category</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;text-align:right">− ₹3,240</span><span style="font:500 9.5px 'IBM Plex Mono',monospace;text-align:right;color:#b1453a">REVIEW</span></div>
+
+<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:18px 24px;border-top:1px solid rgba(16,22,20,.07)">
+<button style="appearance:none;border:0;cursor:pointer;background:#101614;color:#eef2f0;font:500 12.5px 'IBM Plex Sans',sans-serif;padding:10px 18px;border-radius:6px" style-hover="background:#223028">Approve import · 36 transactions</button>
+<button style="appearance:none;cursor:pointer;background:none;border:1px solid rgba(16,22,20,.16);color:#101614;font:500 12.5px 'IBM Plex Sans',sans-serif;padding:10px 16px;border-radius:6px" style-hover="border-color:rgba(16,22,20,.62)">Review duplicates</button>
+<span style="font-size:11.5px;color:rgba(16,22,20,.62);margin-left:auto">Original is stored — every imported row links back to its page</span>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSoon }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;align-items:flex-start;gap:12px;padding:80px 0;max-width:460px">
+<span style="font:500 10px 'IBM Plex Mono',monospace;letter-spacing:.14em;color:rgba(16,22,20,.62)">NOT IN MOCKUP SET 01</span>
+<h1 style="margin:0;font-family:'IBM Plex Serif',serif;font-size:30px;font-weight:400">{{ soonName }}</h1>
+<p style="margin:0;font-size:13px;line-height:1.6;color:rgba(16,22,20,.62);text-wrap:pretty">The first set covers Overview, Accounts, Transactions, Investments, Loans and Statement import — enough to fix the design language. This screen comes in the next round.</p>
+<button onClick="{{ goOverview }}" style="appearance:none;border:0;cursor:pointer;background:#101614;color:#eef2f0;font:500 12.5px 'IBM Plex Sans',sans-serif;padding:10px 18px;border-radius:6px;margin-top:6px">Back to overview</button>
+</div>
+</sc-if>
+
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;heroVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ledger&quot;,&quot;split&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;ledger&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Net worth hero&quot;},&quot;defaultCurrency&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;INR&quot;,&quot;AED&quot;],&quot;default&quot;:&quot;INR&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Reporting&quot;}}">
+class Component extends DCLogic {
+  state = { screen: 'overview', cur: null, range: '1Y', invView: 'FUND', prepay: 50000 };
+  // The rate that produced the frozen pairs below. It is NOT applied at render time:
+  // every figure carries both amounts, and the toggle picks one — amount_base /
+  // amount_secondary in the schema. See ADR-0002. Multiplying here instead would make
+  // last March's total move whenever the rate moved, which is the bug the whole
+  // frozen-column design exists to prevent.
+  R = 22.7;
+
+  cur() { return this.state.cur || this.props.defaultCurrency || 'INR'; }
+  grp(n) { return Math.round(n).toLocaleString('en-US'); }
+  inr(n) { return Math.round(n).toLocaleString('en-IN'); }
+
+  // Stands in for the frozen pair a real row carries. In the product these two are
+  // columns written once at import; here they are derived once, at load, from R.
+  frozen(aed) { return { secondary: aed, base: aed * this.R }; }
+
+  m(aed) {
+    const pair = this.frozen(aed);
+    if (this.cur() === 'AED') return 'AED ' + this.grp(pair.secondary);
+    const v = pair.base;
+    if (v >= 1e7) return '₹' + (v / 1e7).toFixed(2) + ' Cr';
+    if (v >= 1e5) return '₹' + (v / 1e5).toFixed(1) + ' L';
+    return '₹' + this.inr(v);
+  }
+  pick(active) {
+    return active
+      ? { bg: '#101614', fg: '#eef2f0' }
+      : { bg: 'transparent', fg: 'rgba(16,22,20,.62)' };
+  }
+
+  renderVals() {
+    const s = this.state, screen = s.screen;
+    const go = k => () => this.setState({ screen: k });
+    // Phase 1 navigation, in the order ui-information-architecture.html §1 sets.
+    // Review carries a badge and appears only when a batch is waiting; Settings is
+    // where statement layouts live, which is where the bank-agnosticism is visible.
+    // Budget and Insights are deliberately absent — Phase 2 and V2 respectively.
+    const items = [
+      ['overview', 'Overview'], ['accounts', 'Accounts'], ['transactions', 'Transactions'],
+      ['cashflow', 'Cash Flow'], ['investments', 'Investments'], ['loans', 'Loans'],
+      ['networth', 'Net Worth'], ['statements', 'Documents'],
+      ['review', 'Review'], ['settings', 'Settings']
+    ];
+    const built = ['overview', 'accounts', 'transactions', 'investments', 'loans', 'statements'];
+    const nav = items.map(([k, label]) => {
+      const on = screen === k, ready = built.includes(k);
+      return {
+        label, go: go(k),
+        bg: on ? 'rgba(127,196,168,.16)' : 'transparent',
+        fg: on ? '#eef2f0' : ready ? 'rgba(238,242,240,.72)' : 'rgba(238,242,240,.62)',
+        dot: on ? '#7fc4a8' : ready ? 'rgba(238,242,240,.62)' : 'transparent'
+      };
+    });
+
+    const ranges = ['1M', '3M', '6M', '1Y', 'All'].map(label => ({
+      label, go: () => this.setState({ range: label }),
+      ...this.pick(s.range === label)
+    }));
+    const invViews = ['FUND', 'ASSET CLASS', 'PERSON', 'COUNTRY', 'PLATFORM'].map(label => ({
+      label, go: () => this.setState({ invView: label }),
+      ...this.pick(s.invView === label)
+    }));
+
+    const rate = 0.0549 / 12, out = 127586, emi = 10464;
+    const monthsFor = bal => {
+      let m = 0, b = bal;
+      while (b > 0 && m < 600) { b = b * (1 + rate) - emi; m++; }
+      return m;
+    };
+    const baseM = monthsFor(out), newOut = Math.max(0, out - s.prepay), newM = monthsFor(newOut);
+    const baseInt = baseM * emi - out, newInt = Math.max(0, newM * emi - newOut);
+    const months = ['Oct 2026','Nov 2026','Dec 2026','Jan 2027','Feb 2027','Mar 2027','Apr 2027','May 2027','Jun 2027','Jul 2027','Aug 2027','Sep 2027','Oct 2027','Nov 2027'];
+
+    const soonNames = { cashflow: 'Cash Flow', networth: 'Net Worth', review: 'Review', settings: 'Settings' };
+    const hero = this.props.heroVariant || 'ledger';
+    const c = this.cur();
+
+    // The wordmark reads the household's own countries — SELECT DISTINCT country
+    // FROM account — rather than naming two as a property of the product.
+    const accountCountries = ['UAE', 'INDIA'];
+    const countries = [...new Set(accountCountries)].join(' · ');
+
+    return {
+      nav, ranges, invViews, countries,
+      isOverview: screen === 'overview',
+      isAccounts: screen === 'accounts',
+      isTransactions: screen === 'transactions',
+      isInvestments: screen === 'investments',
+      isLoans: screen === 'loans',
+      isStatements: screen === 'statements',
+      isSoon: !built.includes(screen),
+      soonName: soonNames[screen] || 'Screen',
+      goOverview: go('overview'), goAccounts: go('accounts'),
+      heroLedger: hero === 'ledger', heroSplit: hero === 'split', heroCompact: hero === 'compact',
+      setAED: () => this.setState({ cur: 'AED' }), setINR: () => this.setState({ cur: 'INR' }),
+      aedBg: c === 'AED' ? '#fbfcfb' : 'transparent', aedFg: c === 'AED' ? '#101614' : 'rgba(16,22,20,.62)',
+      aedShadow: c === 'AED' ? '0 1px 2px rgba(16,22,20,.12)' : 'none',
+      inrBg: c === 'INR' ? '#fbfcfb' : 'transparent', inrFg: c === 'INR' ? '#101614' : 'rgba(16,22,20,.62)',
+      inrShadow: c === 'INR' ? '0 1px 2px rgba(16,22,20,.12)' : 'none',
+      netWorth: this.m(1251696), nwYtd: this.m(37000),
+      assets: this.m(1387852), liabilities: this.m(136156),
+      cash: this.m(127852), invests: this.m(720000), property: this.m(540000),
+      liquidNw: this.m(711696),
+      income: this.m(36000), expenses: this.m(19200), monthInvest: this.m(5500), emi: this.m(10464),
+      invested: this.m(518000), returns: this.m(202000),
+      filters: ['All accounts', 'Country', 'Currency', 'Category', 'Type', 'Date range', 'Amount'],
+      prepay: s.prepay, prepayLabel: this.grp(s.prepay),
+      onPrepay: e => this.setState({ prepay: Number(e.target.value) }),
+      newOutstanding: this.grp(newOut),
+      interestSaved: this.grp(Math.max(0, baseInt - newInt)),
+      monthsSaved: (baseM - newM) + ' months',
+      newPayoff: newM === 0 ? 'Today' : (months[newM - 1] || '—')
+    };
+  }
+}
+</script>
+</body>
+</html>
