@@ -48,3 +48,27 @@ def test_carry_forward_fills_gaps_and_never_interpolates() -> None:
 def test_carry_forward_refuses_to_start_on_a_gap() -> None:
     with pytest.raises(ValueError, match="no published rate at or before"):
         carry_forward({date(2024, 1, 8): Decimal("84.00")}, date(2024, 1, 5), date(2024, 1, 8))
+
+
+def test_eur_is_present_even_though_it_is_never_a_quoted_symbol() -> None:
+    """Frankfurter quotes against EUR, so EUR is absent from its own rates map.
+
+    A household reporting in EUR, or holding it, would otherwise hit "neither published nor
+    pegged" for the currency the feed is denominated in.
+    """
+    published = {"EUR": Decimal(1), "INR": Decimal("91.285")}
+    assert cross_rate(published, "EUR", "INR", {}) == Decimal("91.285")
+
+
+def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
+    """Provenance follows either side of the cross, not just the base.
+
+    Reporting in a pegged currency makes every rate derived, however the base was obtained.
+    """
+    from oneledger.routes.fx import to_rows
+
+    published = {date(2024, 1, 2): {"EUR": Decimal(1), "USD": Decimal("1.0956")}}
+    rows = to_rows(
+        published, date(2024, 1, 2), date(2024, 1, 2), quote="AED", bases=["USD"], pegs=PEGS
+    )
+    assert {r["source"] for r in rows} == {"derived_peg"}

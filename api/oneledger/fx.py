@@ -100,10 +100,13 @@ class EcbFrankfurterSource:
 
         return {
             date.fromisoformat(day): {
+                # The base is never among the quoted symbols, so a household reporting in EUR
+                # or holding it would hit "neither published nor pegged" for a currency the
+                # feed is denominated in. One EUR is one EUR; state it.
+                "EUR": Decimal(1),
                 # str() first: json produces floats, and Decimal(float) inherits the binary
                 # rounding error. This is the most common way float creeps into money code.
-                code: Decimal(str(value))
-                for code, value in rates.items()
+                **{code: Decimal(str(value)) for code, value in rates.items()},
             }
             for day, rates in response.json()["rates"].items()
         }
