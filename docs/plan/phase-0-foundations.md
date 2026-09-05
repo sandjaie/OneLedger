@@ -1391,7 +1391,7 @@ from decimal import Decimal
 
 import pytest
 
-from oneledger.fx import Peg, carry_forward, cross_rate
+from oneledger.fx import Peg, carry_forward, cross_rate, terminal_anchor
 
 # What the `currency` table holds for the first household: one peg, held since 1997.
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
@@ -1459,6 +1459,25 @@ def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
         published, date(2024, 1, 2), date(2024, 1, 2), quote="AED", bases=["USD"], pegs=PEGS
     )
     assert {r["source"] for r in rows} == {"derived_peg"}
+
+
+def test_a_peg_chain_resolves_to_the_currency_the_feed_publishes() -> None:
+    """A peg can point at another peg. Only the end of the chain is ever quoted."""
+    chain = {
+        "XAA": Peg(anchor="XBB", units_per_anchor=Decimal(2)),
+        "XBB": Peg(anchor="USD", units_per_anchor=Decimal(3)),
+    }
+    assert terminal_anchor("XAA", chain) == "USD"
+    assert terminal_anchor("USD", chain) == "USD"
+
+
+def test_a_peg_cycle_raises_rather_than_looping() -> None:
+    cycle = {
+        "XAA": Peg(anchor="XBB", units_per_anchor=Decimal(2)),
+        "XBB": Peg(anchor="XAA", units_per_anchor=Decimal(3)),
+    }
+    with pytest.raises(ValueError, match="peg cycle"):
+        terminal_anchor("XAA", cycle)
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -1515,6 +1534,22 @@ def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str
         factor *= peg.units_per_anchor
         code = peg.anchor
     return published[code] * factor
+
+
+def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
+    """Follow a peg chain to the currency a feed will actually quote.
+
+    A peg can point at another peg — A pegged to B, B pegged to USD — and only USD is ever
+    published. Resolving one hop asks the feed for B and never USD, so the fetch omits the
+    only rate the chain can be built from.
+    """
+    seen: set[str] = set()
+    while code in pegs:
+        if code in seen:
+            raise ValueError(f"peg cycle through {code}")
+        seen.add(code)
+        code = pegs[code].anchor
+    return code
 
 
 def cross_rate(
@@ -1705,7 +1740,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_owner
 from ..db import connect
-from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate
+from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate, terminal_anchor
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
@@ -1772,7 +1807,12 @@ def to_rows(
 
 
 def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
-    """Idempotent: re-running a backfill overwrites with the same values rather than failing."""
+    """Idempotent: re-running a backfill overwrites with the same values rather than failing.
+
+    Returns rows actually written, not rows offered. The conflict clause skips authoritative
+    sources, so `len(rows)` would report writes that deliberately did not happen — and a
+    backfill claiming to have stored a rate it declined to touch is worse than no number.
+    """
     with conn.cursor() as cur:
         cur.executemany(
             """
@@ -1792,8 +1832,9 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
             """,
             rows,
         )
+        written = cur.rowcount
     conn.commit()
-    return len(rows)
+    return written
 
 
 @router.post("/backfill")
@@ -1812,8 +1853,10 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
 
     with connect() as conn:
         quote, bases, pegs = reporting_config(conn)
-        # A pegged currency is derived from its anchor, so fetch anchors instead of pegs.
-        fetch = sorted({pegs[c].anchor if c in pegs else c for c in [quote, *bases]})
+        # A pegged currency is derived from its anchor — and an anchor may itself be pegged,
+        # so follow the chain to the end. Resolving one hop asks for the middle currency and
+        # never the one the feed actually publishes.
+        fetch = sorted({terminal_anchor(c, pegs) for c in [quote, *bases]})
         # Frankfurter snaps a range start backward to the previous publication day, so asking
         # from 10 days earlier guarantees carry_forward has something to fill from.
         published = EcbFrankfurterSource().fetch_range(start - timedelta(days=10), end, fetch)

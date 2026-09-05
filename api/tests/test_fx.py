@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from oneledger.fx import Peg, carry_forward, cross_rate
+from oneledger.fx import Peg, carry_forward, cross_rate, terminal_anchor
 
 # What the `currency` table holds for the first household: one peg, held since 1997.
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
@@ -72,3 +72,22 @@ def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
         published, date(2024, 1, 2), date(2024, 1, 2), quote="AED", bases=["USD"], pegs=PEGS
     )
     assert {r["source"] for r in rows} == {"derived_peg"}
+
+
+def test_a_peg_chain_resolves_to_the_currency_the_feed_publishes() -> None:
+    """A peg can point at another peg. Only the end of the chain is ever quoted."""
+    chain = {
+        "XAA": Peg(anchor="XBB", units_per_anchor=Decimal(2)),
+        "XBB": Peg(anchor="USD", units_per_anchor=Decimal(3)),
+    }
+    assert terminal_anchor("XAA", chain) == "USD"
+    assert terminal_anchor("USD", chain) == "USD"
+
+
+def test_a_peg_cycle_raises_rather_than_looping() -> None:
+    cycle = {
+        "XAA": Peg(anchor="XBB", units_per_anchor=Decimal(2)),
+        "XBB": Peg(anchor="XAA", units_per_anchor=Decimal(3)),
+    }
+    with pytest.raises(ValueError, match="peg cycle"):
+        terminal_anchor("XAA", cycle)
