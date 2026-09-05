@@ -315,74 +315,6 @@ BEGIN
 END $$;
 ```
 
-```python
-# api/tests/test_health.py
-"""The authorization boundary, as HTTP sees it.
-
-`test_auth.py` covers `resolve_owner` as a function. These cover the same rules through the
-app, because a dependency that is correct in isolation and unwired in `main.py` fails exactly
-the same way as one that is wrong — and only this test can tell the difference.
-"""
-
-import pytest
-from fastapi.testclient import TestClient
-
-from oneledger.main import app
-
-client = TestClient(app)
-
-
-def test_health_needs_no_session() -> None:
-    """The one route that is deliberately open. There is no second."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-def test_no_session_is_401_not_403() -> None:
-    """Absent credentials and rejected credentials are different answers.
-
-    A service that returns 403 for both tells a caller their account is not permitted when in
-    fact they never presented one, which sends them to the wrong fix.
-    """
-    assert client.get("/whoami").status_code == 401
-
-
-def test_a_forged_session_is_403() -> None:
-    """Google authenticates any Google account. Authentication is not authorization."""
-    forged = TestClient(app)
-    forged.cookies.set("session", "not-a-real-token")
-    assert forged.get("/whoami").status_code == 403
-
-
-@pytest.mark.parametrize("route", ["/whoami"])
-def test_every_route_but_health_requires_the_owner(route: str) -> None:
-    """A route added without `Depends(require_owner)` is the failure this catches.
-
-    Extend the parameter list as routes land; a route that answers anonymously will fail here
-    rather than in production.
-    """
-    assert client.get(route).status_code in (401, 403)
-```
-
-```python
-"""Environment these tests need before oneledger.main is imported.
-
-The service refuses to start without SESSION_SECRET, deliberately — so the suite has to supply
-one. It is a throwaway value: nothing here signs anything a real client will ever present.
-"""
-
-import os
-
-os.environ.setdefault("SESSION_SECRET", "test-secret-not-used-outside-this-suite")
-os.environ.setdefault("ALLOWED_USER_EMAIL", "owner@example.com")
-```
-
-`test_health.py` covers the same rules through the app that `test_auth.py` covers as a
-function, because a dependency that is correct in isolation and unwired in `main.py` fails
-identically to one that is wrong — and only the HTTP test tells them apart. `conftest.py`
-supplies the session secret the service now refuses to start without.
-
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
@@ -1023,24 +955,28 @@ git commit -m "feat(db): fx_rate with provenance and carry-forward constraints"
 ```python
 # api/tests/test_auth.py
 import pytest
-from oneledger.auth import resolve_owner, NotAuthorized
+
+from oneledger.auth import NotAuthorized, resolve_owner
 
 
-def test_rejects_a_token_with_no_matching_app_user():
+def test_rejects_a_token_with_no_matching_app_user() -> None:
     """Google authenticates any Google account. Authentication is not authorization."""
     with pytest.raises(NotAuthorized):
-        resolve_owner(claims={"sub": "00000000-0000-0000-0000-000000000000",
-                              "email": "stranger@example.com"},
-                      lookup=lambda uid: None, allowed_email="owner@example.com")
+        resolve_owner(
+            claims={"sub": "00000000-0000-0000-0000-000000000000", "email": "stranger@example.com"},
+            lookup=lambda uid: None,
+            allowed_email="owner@example.com",
+        )
 
 
-def test_rejects_a_missing_subject_rather_than_defaulting_open():
+def test_rejects_a_missing_subject_rather_than_defaulting_open() -> None:
     with pytest.raises(NotAuthorized):
-        resolve_owner(claims={}, lookup=lambda uid: "household-1",
-                      allowed_email="owner@example.com")
+        resolve_owner(
+            claims={}, lookup=lambda uid: "household-1", allowed_email="owner@example.com"
+        )
 
 
-def test_accepts_a_token_that_resolves_to_an_app_user():
+def test_accepts_a_token_that_resolves_to_an_app_user() -> None:
     household = resolve_owner(
         claims={"sub": "11111111-1111-1111-1111-111111111111", "email": "owner@example.com"},
         lookup=lambda uid: "household-1",
@@ -1048,6 +984,74 @@ def test_accepts_a_token_that_resolves_to_an_app_user():
     )
     assert household == "household-1"
 ```
+
+```python
+# api/tests/test_health.py
+"""The authorization boundary, as HTTP sees it.
+
+`test_auth.py` covers `resolve_owner` as a function. These cover the same rules through the
+app, because a dependency that is correct in isolation and unwired in `main.py` fails exactly
+the same way as one that is wrong — and only this test can tell the difference.
+"""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from oneledger.main import app
+
+client = TestClient(app)
+
+
+def test_health_needs_no_session() -> None:
+    """The one route that is deliberately open. There is no second."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_no_session_is_401_not_403() -> None:
+    """Absent credentials and rejected credentials are different answers.
+
+    A service that returns 403 for both tells a caller their account is not permitted when in
+    fact they never presented one, which sends them to the wrong fix.
+    """
+    assert client.get("/whoami").status_code == 401
+
+
+def test_a_forged_session_is_403() -> None:
+    """Google authenticates any Google account. Authentication is not authorization."""
+    forged = TestClient(app)
+    forged.cookies.set("session", "not-a-real-token")
+    assert forged.get("/whoami").status_code == 403
+
+
+@pytest.mark.parametrize("route", ["/whoami"])
+def test_every_route_but_health_requires_the_owner(route: str) -> None:
+    """A route added without `Depends(require_owner)` is the failure this catches.
+
+    Extend the parameter list as routes land; a route that answers anonymously will fail here
+    rather than in production.
+    """
+    assert client.get(route).status_code in (401, 403)
+```
+
+```python
+"""Environment these tests need before oneledger.main is imported.
+
+The service refuses to start without SESSION_SECRET, deliberately — so the suite has to supply
+one. It is a throwaway value: nothing here signs anything a real client will ever present.
+"""
+
+import os
+
+os.environ.setdefault("SESSION_SECRET", "test-secret-not-used-outside-this-suite")
+os.environ.setdefault("ALLOWED_USER_EMAIL", "owner@example.com")
+```
+
+`test_health.py` covers the same rules through the app that `test_auth.py` covers as a
+function, because a dependency that is correct in isolation and unwired in `main.py` fails
+identically to one that is wrong — and only the HTTP test tells them apart. `conftest.py`
+supplies the session secret the service now refuses to start without.
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -1286,7 +1290,7 @@ def whoami(household_id: str = Depends(require_owner)) -> dict[str, str]:
 cd api && uv sync && uv run pytest -v && uv run ruff check . && uv run mypy .
 ```
 
-Expected: 3 passed; ruff and mypy clean.
+Expected: 7 passed; ruff and mypy clean.
 
 - [ ] **Step 7: Verify the service runs and rejects an anonymous caller**
 
