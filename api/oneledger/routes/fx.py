@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_owner
 from ..db import connect
-from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate
+from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate, terminal_anchor
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
@@ -77,7 +77,12 @@ def to_rows(
 
 
 def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
-    """Idempotent: re-running a backfill overwrites with the same values rather than failing."""
+    """Idempotent: re-running a backfill overwrites with the same values rather than failing.
+
+    Returns rows actually written, not rows offered. The conflict clause skips authoritative
+    sources, so `len(rows)` would report writes that deliberately did not happen — and a
+    backfill claiming to have stored a rate it declined to touch is worse than no number.
+    """
     with conn.cursor() as cur:
         cur.executemany(
             """
@@ -97,8 +102,9 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
             """,
             rows,
         )
+        written = cur.rowcount
     conn.commit()
-    return len(rows)
+    return written
 
 
 @router.post("/backfill")
@@ -117,8 +123,10 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
 
     with connect() as conn:
         quote, bases, pegs = reporting_config(conn)
-        # A pegged currency is derived from its anchor, so fetch anchors instead of pegs.
-        fetch = sorted({pegs[c].anchor if c in pegs else c for c in [quote, *bases]})
+        # A pegged currency is derived from its anchor — and an anchor may itself be pegged,
+        # so follow the chain to the end. Resolving one hop asks for the middle currency and
+        # never the one the feed actually publishes.
+        fetch = sorted({terminal_anchor(c, pegs) for c in [quote, *bases]})
         # Frankfurter snaps a range start backward to the previous publication day, so asking
         # from 10 days earlier guarantees carry_forward has something to fill from.
         published = EcbFrankfurterSource().fetch_range(start - timedelta(days=10), end, fetch)

@@ -43,6 +43,22 @@ def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str
     return published[code] * factor
 
 
+def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
+    """Follow a peg chain to the currency a feed will actually quote.
+
+    A peg can point at another peg — A pegged to B, B pegged to USD — and only USD is ever
+    published. Resolving one hop asks the feed for B and never USD, so the fetch omits the
+    only rate the chain can be built from.
+    """
+    seen: set[str] = set()
+    while code in pegs:
+        if code in seen:
+            raise ValueError(f"peg cycle through {code}")
+        seen.add(code)
+        code = pegs[code].anchor
+    return code
+
+
 def cross_rate(
     published: Mapping[str, Decimal], base: str, quote: str, pegs: Mapping[str, Peg]
 ) -> Decimal:
