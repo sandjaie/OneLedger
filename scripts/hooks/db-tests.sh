@@ -7,7 +7,8 @@ shopt -s nullglob
 tests=(db/tests/*.sql)
 [ ${#tests[@]} -gt 0 ] || { echo "no db tests yet — skipping"; exit 0; }
 
-: "${DATABASE_URL:=postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger}"
+# One source of truth for the password: scripts/dsn.sh assembles it from .env.
+: "${DATABASE_URL:=$(scripts/dsn.sh)}"
 
 if ! psql "$DATABASE_URL" -c 'SELECT 1' >/dev/null 2>&1; then
   echo "FAIL: ${#tests[@]} invariant test(s) exist but the database is unreachable."

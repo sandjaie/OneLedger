@@ -410,7 +410,10 @@ cd web && npx vitest run && npm run dev
 - [ ] **Run the whole gate from a clean clone**, because a green suite on a developer machine that has been accumulating state for a week proves less than it appears to:
 
 ```bash
-docker compose down -v && docker compose up -d db
+# Scratch project: `down -v` on the default one deletes pgdata AND documents.
+COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 POSTGRES_PASSWORD=oneledger \
+  docker compose down -v && COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 \
+  POSTGRES_PASSWORD=oneledger docker compose up -d db
 docker compose run --rm flyway migrate
 for t in db/tests/*.sql; do psql "$DATABASE_URL" -f "$t"; done
 cd api && uv run ruff check . && uv run mypy . && uv run pytest -v

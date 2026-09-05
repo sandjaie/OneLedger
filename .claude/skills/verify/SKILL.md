@@ -20,8 +20,8 @@ with **the number of checks that actually ran**, then one verdict line.
      # Pin the scratch password rather than inheriting .env's: a properly secured install
      # sets a real POSTGRES_PASSWORD, and this URL would then fail to authenticate against
      # the database compose just initialised with it.
-     export POSTGRES_PASSWORD=oneledger
-     export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+     export POSTGRES_PASSWORD=oneledger POSTGRES_PORT=55432
+     export DATABASE_URL="$(scripts/dsn.sh)"   # assembled from the parts, never restated
 
      # Runs on success and on failure alike. Without it a failing test — the case this gate
      # exists to catch — leaves the scratch stack up and port 55432 held.
