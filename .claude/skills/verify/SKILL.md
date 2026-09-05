@@ -14,15 +14,25 @@ with **the number of checks that actually ran**, then one verdict line.
 4. Migrations from empty, against a **scratch stack that cannot reach the working one**:
 
    ```bash
-   export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
-   export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+   (
+     set -euo pipefail
+     export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
+     # Pin the scratch password rather than inheriting .env's: a properly secured install
+     # sets a real POSTGRES_PASSWORD, and this URL would then fail to authenticate against
+     # the database compose just initialised with it.
+     export POSTGRES_PASSWORD=oneledger
+     export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
 
-   docker compose down -v                      # only oneledger-verify's own volumes
-   docker compose up -d db
-   docker compose run --rm flyway migrate
-   for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
-   for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
-   docker compose down -v                      # leave nothing behind
+     # Runs on success and on failure alike. Without it a failing test — the case this gate
+     # exists to catch — leaves the scratch stack up and port 55432 held.
+     trap 'docker compose down -v >/dev/null 2>&1' EXIT
+
+     docker compose down -v
+     docker compose up -d db
+     docker compose run --rm flyway migrate
+     for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
+     for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
+   )
    ```
 
    **`COMPOSE_PROJECT_NAME` is the whole safety mechanism, not a tidiness flourish.** Without
