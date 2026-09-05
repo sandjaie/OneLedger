@@ -1760,7 +1760,11 @@ Expected: 1 passed.
 - [ ] **Step 5: Run the real backfill to the ADR-0011 anchor**
 
 ```bash
-cd api && uv run uvicorn oneledger.main:app --port 8000 &
+# From the repository root, and .env first — uv does not read it and the service refuses
+# to start without SESSION_SECRET.
+. scripts/load-env.sh
+uv run --project api uvicorn oneledger.main:app --port 8000 &
+
 curl -s -X POST "localhost:8000/fx/backfill?start=2024-01-01&end=2026-09-05" \
   -b "session=$SESSION"
 curl -s "localhost:8000/fx/2026-09-03" -b "session=$SESSION"   # published
