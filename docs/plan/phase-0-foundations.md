@@ -124,6 +124,10 @@ services:
   api:
     build: ./api
     env_file: .env
+    environment:
+      # .env holds the host URL, so `uv run` on the laptop works. Inside this container
+      # 127.0.0.1 is the container itself, so the service address wins here.
+      DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
     ports: ["8000:8000"]
     volumes: ["documents:/var/lib/oneledger/documents"]
     depends_on:
@@ -181,6 +185,8 @@ SESSION_SECRET=                 # openssl rand -hex 32 — signs the session coo
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=http://localhost:8000/auth/callback
+# Where the service sends the browser after sign-in. The web app, not the API.
+WEB_ORIGIN=http://localhost:3000
 
 # The single permitted Google account. Any other is rejected at the app layer.
 ALLOWED_USER_EMAIL=you@example.com
@@ -288,6 +294,26 @@ Expected: `ERROR: relation "currency" does not exist`.
 -- db/migrations/V1__extensions_and_reference.sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid() is built in on PG15,
                                            -- pgcrypto is for digest() used in account hashing
+
+-- Two NOLOGIN roles the RLS policies and the isolation tests are written against.
+-- `anon` is the unauthenticated role every policy must return nothing to; `authenticated`
+-- is what a future non-service client would connect as. Neither can log in, and neither is
+-- what the API service uses — it connects privileged and bypasses RLS (ADR-0013).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+END $$;
+
+-- The grant matters as much as the role. Without it the isolation test dies with
+-- "permission denied for table household" instead of returning zero rows, and a test that
+-- fails for the wrong reason proves nothing.
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO anon, authenticated;
 
 CREATE TABLE currency (
   code          CHAR(3) PRIMARY KEY,
@@ -404,8 +430,8 @@ END $$;
 --      table owner -- who bypasses RLS anyway. The explicit BEGIN is load-bearing.
 BEGIN;
   -- Seed a household that WOULD be visible if the policy were missing or permissive.
-  INSERT INTO household (id, name) VALUES
-    ('11111111-1111-1111-1111-111111111111', 'rls fixture');
+  INSERT INTO household (id, name, base_currency, secondary_currency) VALUES
+    ('11111111-1111-1111-1111-111111111111', 'rls fixture', 'INR', 'AED');
   INSERT INTO person (id, household_id, display_name) VALUES
     ('22222222-2222-2222-2222-222222222222',
      '11111111-1111-1111-1111-111111111111', 'rls fixture');
@@ -551,6 +577,36 @@ Expected: a failed assertion, then a pass. If the permissive policy still passes
 running as `anon` — check that the `BEGIN` is present, since `SET LOCAL ROLE` outside a transaction
 is silently discarded.
 
+- [ ] **Step 4c: Seed the household, person and app_user row**
+
+```bash
+set -a && . ./.env && set +a
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -v household="$HOUSEHOLD_NAME"    -v person="$OWNER_DISPLAY_NAME" \
+  -v residency="$OWNER_TAX_RESIDENCY" -v email="$ALLOWED_USER_EMAIL" \
+  -v base="$BASE_CURRENCY"          -v secondary="$SECONDARY_CURRENCY" <<'SQL'
+WITH h AS (
+  INSERT INTO household (name, base_currency, secondary_currency)
+  VALUES (:'household', :'base', :'secondary') RETURNING id
+), p AS (
+  INSERT INTO person (household_id, display_name, is_self, tax_residency)
+  SELECT id, :'person', true, :'residency' FROM h RETURNING id, household_id
+)
+INSERT INTO app_user (id, household_id, person_id, email, role)
+SELECT gen_random_uuid(), p.household_id, p.id, :'email', 'owner' FROM p;
+SQL
+psql "$DATABASE_URL" -c "SELECT email, role FROM app_user;"
+```
+
+The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is
+written into a document that gets committed.
+
+**It lives here, not with OIDC, for a dependency reason.** Task 8's `reporting_config()` reads
+the household's reporting pair; with no row it unpacks `None` and raises. Seeding at the end of
+identity is the earliest point the row can exist, and it needs nothing from Google.
+
+Expected: one row.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -579,7 +635,8 @@ git commit -m "feat(db): household identity and row-level security"
 DO $$
 DECLARE h UUID; p UUID; a_card UUID; a_sav UUID; cls account_class;
 BEGIN
-  INSERT INTO household (name) VALUES ('test') RETURNING id INTO h;
+  INSERT INTO household (name, base_currency, secondary_currency)
+  VALUES ('test', 'INR', 'AED') RETURNING id INTO h;
   INSERT INTO person (household_id, display_name, is_self) VALUES (h,'self',true) RETURNING id INTO p;
 
   INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
@@ -850,14 +907,15 @@ git commit -m "feat(db): fx_rate with provenance and carry-forward constraints"
 ### Task 6: Python service skeleton
 
 **Files:**
-- Create: `api/pyproject.toml`, `api/oneledger/__init__.py`, `api/oneledger/main.py`,
-  `api/oneledger/auth.py`, `api/oneledger/db.py`
+- Create: `api/pyproject.toml`, `api/Dockerfile`, `api/oneledger/__init__.py`,
+  `api/oneledger/main.py`, `api/oneledger/auth.py`, `api/oneledger/db.py`
 - Test: `api/tests/test_health.py`, `api/tests/test_auth.py`
 
 **Interfaces:**
 - Consumes: the `db` service from Task 1; `app_user` from Task 3.
 - Produces: a FastAPI app on `:8000`; the dependency `require_owner()` returning the caller's
-  `household_id`, which **every** route from here on depends on; `resolve_owner(claims, lookup)`,
+  `household_id`, which **every** route from here on depends on;
+  `resolve_owner(claims, lookup, allowed_email)`,
   the pure function it wraps, which Task 10 reuses; `connect()` for Postgres access.
 
 - [ ] **Step 1: Write the failing test**
@@ -872,18 +930,21 @@ def test_rejects_a_token_with_no_matching_app_user():
     """Google authenticates any Google account. Authentication is not authorization."""
     with pytest.raises(NotAuthorized):
         resolve_owner(claims={"sub": "00000000-0000-0000-0000-000000000000",
-                              "email": "stranger@example.com"}, lookup=lambda uid: None)
+                              "email": "stranger@example.com"},
+                      lookup=lambda uid: None, allowed_email="owner@example.com")
 
 
 def test_rejects_a_missing_subject_rather_than_defaulting_open():
     with pytest.raises(NotAuthorized):
-        resolve_owner(claims={}, lookup=lambda uid: "household-1")
+        resolve_owner(claims={}, lookup=lambda uid: "household-1",
+                      allowed_email="owner@example.com")
 
 
 def test_accepts_a_token_that_resolves_to_an_app_user():
     household = resolve_owner(
         claims={"sub": "11111111-1111-1111-1111-111111111111", "email": "owner@example.com"},
         lookup=lambda uid: "household-1",
+        allowed_email="owner@example.com",
     )
     assert household == "household-1"
 ```
@@ -947,13 +1008,20 @@ class NotAuthorized(Exception):
     pass
 
 
-def resolve_owner(claims: dict[str, Any], lookup: Callable[[str], str | None]) -> str:
+def resolve_owner(
+    claims: dict[str, Any],
+    lookup: Callable[[str], str | None],
+    allowed_email: str | None = None,
+) -> str:
     """Fails closed: a missing subject, an unknown subject, or the wrong address is a rejection."""
     subject = claims.get("sub")
     if not subject:
         raise NotAuthorized("no subject in token")
 
-    allowed = os.environ.get("ALLOWED_USER_EMAIL", "").strip().lower()
+    # Passed in, not read from the environment: a function that reaches for os.environ is a
+    # function whose tests need monkeypatching to say anything. claims_from_id_token already
+    # takes `allowed` this way; this matches it.
+    allowed = (allowed_email or "").strip().lower()
     email = (claims.get("email") or "").strip().lower()
     if not allowed or email != allowed:
         raise NotAuthorized("address is not the permitted account")
@@ -980,7 +1048,7 @@ def require_owner(session: str = Cookie(default="")) -> str:
         raise HTTPException(status_code=401, detail="not signed in")
     try:
         claims = jwt.decode(session, os.environ["SESSION_SECRET"], algorithms=["HS256"])
-        return resolve_owner(claims, _lookup)
+        return resolve_owner(claims, _lookup, os.environ.get("ALLOWED_USER_EMAIL"))
     except (jwt.PyJWTError, NotAuthorized) as exc:
         raise HTTPException(status_code=403, detail="not authorized") from exc
 ```
@@ -1042,6 +1110,31 @@ curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami \
 ```
 
 Expected: `ok`, then `401`, then `403`.
+
+- [ ] **Step 7b: Write the Dockerfile**
+
+`docker-compose.yml` has said `build: ./api` since Task 1. Nothing has built it yet.
+
+```dockerfile
+# api/Dockerfile
+FROM python:3.14-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.10 /uv /usr/local/bin/uv
+WORKDIR /app
+
+# Dependencies first, so a source change does not re-resolve them.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+COPY oneledger ./oneledger
+EXPOSE 8000
+CMD ["uv", "run", "--no-dev", "uvicorn", "oneledger.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```bash
+docker compose build api && docker compose up -d api
+curl -s localhost:8000/health          # {"status":"ok"} — from the container this time
+```
 
 - [ ] **Step 8: Commit**
 
@@ -1249,7 +1342,7 @@ class EcbFrankfurterSource:
 cd api && uv run pytest tests/test_fx.py -v
 ```
 
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1338,15 +1431,24 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
     """
     with conn.cursor() as cur:
         cur.execute("SELECT base_currency, secondary_currency FROM household LIMIT 1")
-        quote, secondary = cur.fetchone()
+        row = cur.fetchone()
+        if row is None:
+            # Seeded by Task 3. Failing here with a sentence beats unpacking None.
+            raise RuntimeError("no household row — run the Task 3 seed before backfilling")
+        quote, secondary = row
         cur.execute("SELECT code, pegged_to, peg_rate FROM currency WHERE pegged_to IS NOT NULL")
         pegs = {code: Peg(anchor, rate) for code, anchor, rate in cur.fetchall()}
         cur.execute(
             "SELECT DISTINCT currency FROM account WHERE currency <> %s "
             "UNION SELECT %s", (quote, secondary),
         )
-        bases = sorted(row[0] for row in cur.fetchall())
-    return quote, bases, pegs
+        bases = {row[0] for row in cur.fetchall()}
+
+    # A pegged currency's anchor is quoted too, even when no account holds it. Without this
+    # the peg-identity check joins AED->INR rows against USD->INR rows that were never
+    # written, finds nothing, and reports zero violations while proving nothing.
+    bases |= {pegs[c].anchor for c in bases if c in pegs}
+    return quote, sorted(bases), pegs
 
 
 def to_rows(
@@ -1446,7 +1548,9 @@ curl -s "localhost:8000/fx/2026-09-06" -b "session=$SESSION"   # carried
 curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"   # the anchor
 ```
 
-Expected: roughly 2,440 rows written. `2026-09-03` shows `[ecb]`/`[derived_peg]` with no carry
+Expected: **1,958 rows** — 979 days from the 01 Jan 2024 anchor to today, times the two bases
+a fresh install quotes (`AED` from the reporting pair, `USD` as its peg anchor). Once accounts
+exist in other currencies the count rises by 979 per currency; recompute rather than assuming. `2026-09-03` shows `[ecb]`/`[derived_peg]` with no carry
 note; `2026-09-06` names `2026-09-04` as its origin; `2024-01-01` returns a rate.
 
 - [ ] **Step 6: Verify the peg identity holds across the whole table**
@@ -1491,7 +1595,8 @@ git commit -m "feat(api): fx backfill and inspection routes"
 ### Task 9: Next.js shell with a typed API client
 
 **Files:**
-- Create: `web/` via `create-next-app`, `web/vitest.config.ts`, `web/lib/api/client.ts`
+- Create: `web/` via `create-next-app`, `web/Dockerfile`, `web/vitest.config.ts`,
+  `web/lib/api/client.ts`
 - Test: `web/lib/api/__tests__/env.test.ts`
 
 **Interfaces:**
@@ -1560,14 +1665,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(
-  path: string,
-  init: RequestInit & { token: string },
-): Promise<T> {
-  const { token, ...rest } = init;
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
-    ...rest,
-    headers: { ...rest.headers, Authorization: `Bearer ${token}` },
+    ...init,
+    // The session is an httpOnly cookie the service sets. Browser JS cannot read it, so
+    // there is no token to pass — the browser attaches it when told to include credentials.
+    credentials: "include",
+    headers: { ...init.headers },
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => response.statusText);
@@ -1581,12 +1685,34 @@ export async function apiFetch<T>(
 
 ```bash
 cd web && npx vitest run && npm run build
-grep -rE "SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|postgresql://" .next/static/ \
+grep -rE "SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://" .next/static/ \
   && echo "LEAK" || echo "OK: clean bundle"
 ```
 
 Expected: 1 passed, then `OK: clean bundle`. A checklist item in
 [security-and-privacy.html](../operations/security-and-privacy.html) §11.
+
+- [ ] **Step 5b: Write the Dockerfile**
+
+```dockerfile
+# web/Dockerfile
+FROM node:24-alpine
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+```bash
+docker compose build web && docker compose up -d
+curl -s -o /dev/null -w '%{http_code}\n' localhost:3000    # 200
+```
 
 - [ ] **Step 6: Commit**
 
@@ -1619,7 +1745,7 @@ OIDC is a redirect, a code exchange, a signature check, and a cookie.
 # api/tests/test_oidc.py
 import pytest
 
-from oneledger.routes.auth import claims_from_id_token, PINNED
+from oneledger.routes.auth import claims_from_id_token
 from oneledger.auth import NotAuthorized
 
 
@@ -1687,7 +1813,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN = "https://oauth2.googleapis.com/token"  # noqa: S105 — a URL, not a secret
 GOOGLE_JWKS = "https://www.googleapis.com/oauth2/v3/certs"
-PINNED = os.environ.get("ALLOWED_USER_EMAIL", "")
+# Read at call time, not at import: a module-level constant is fixed by whatever the
+# environment held when the module first loaded, which no test can change afterwards.
+def _pinned() -> str:
+    return os.environ.get("ALLOWED_USER_EMAIL", "")
+
+
+# The redirect targets are web routes, and the service is not the web origin. Sending the
+# browser to a bare "/" lands it on the API's own port, which serves no such page.
+WEB_ORIGIN = os.environ.get("WEB_ORIGIN", "http://localhost:3000").rstrip("/")
 
 SESSION_TTL_SECONDS = 60 * 60 * 12
 
@@ -1723,7 +1857,15 @@ def login() -> RedirectResponse:
 
 
 @router.get("/callback")
-def callback(code: str, state: str, response: Response, oidc_state: str = "") -> RedirectResponse:
+def callback(
+    code: str,
+    state: str,
+    response: Response,
+    # Cookie(), not a bare default: FastAPI binds a plain `str` to a QUERY parameter, and
+    # Google never sends one, so the CSRF check would compare state against "" every time
+    # and reject every sign-in.
+    oidc_state: str = Cookie(default=""),
+) -> RedirectResponse:
     if not state or state != oidc_state:
         raise HTTPException(status_code=400, detail="state mismatch")
 
@@ -1742,21 +1884,21 @@ def callback(code: str, state: str, response: Response, oidc_state: str = "") ->
                             audience=os.environ["GOOGLE_CLIENT_ID"])
 
     try:
-        claims = claims_from_id_token(claims, PINNED)
+        claims = claims_from_id_token(claims, _pinned())
     except NotAuthorized:
-        return RedirectResponse("/unauthorized", status_code=303)
+        return RedirectResponse(f"{WEB_ORIGIN}/unauthorized", status_code=303)
 
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT id FROM app_user WHERE email = %s", (claims["email"],))
         row = cur.fetchone()
     if not row:
-        return RedirectResponse("/unauthorized", status_code=303)
+        return RedirectResponse(f"{WEB_ORIGIN}/unauthorized", status_code=303)
 
     session = jwt.encode(
         {"sub": str(row[0]), "email": claims["email"], "exp": int(time.time()) + SESSION_TTL_SECONDS},
         os.environ["SESSION_SECRET"], algorithm="HS256",
     )
-    redirect = RedirectResponse("/", status_code=303)
+    redirect = RedirectResponse(f"{WEB_ORIGIN}/", status_code=303)
     redirect.set_cookie("session", session, httponly=True, samesite="lax",
                         secure=os.environ.get("COOKIE_SECURE", "0") == "1",
                         max_age=SESSION_TTL_SECONDS)
@@ -1804,31 +1946,16 @@ https://<your-hostname>/auth/callback
 
 Put the client id and secret in `.env`.
 
-- [ ] **Step 6: Seed the household, person and app_user row**
+- [ ] **Step 6: Confirm the household row exists**
+
+The seed moved to Task 3, because it needs nothing from OIDC and Task 8 needs it to exist. If
+Task 3 was run against this database it is already there.
 
 ```bash
-set -a && . ./.env && set +a
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -v household="$HOUSEHOLD_NAME"    -v person="$OWNER_DISPLAY_NAME" \
-  -v residency="$OWNER_TAX_RESIDENCY" -v email="$ALLOWED_USER_EMAIL" \
-  -v base="$BASE_CURRENCY"          -v secondary="$SECONDARY_CURRENCY" <<'SQL'
-WITH h AS (
-  INSERT INTO household (name, base_currency, secondary_currency)
-  VALUES (:'household', :'base', :'secondary') RETURNING id
-), p AS (
-  INSERT INTO person (household_id, display_name, is_self, tax_residency)
-  SELECT id, :'person', true, :'residency' FROM h RETURNING id, household_id
-)
-INSERT INTO app_user (id, household_id, person_id, email, role)
-SELECT gen_random_uuid(), p.household_id, p.id, :'email', 'owner' FROM p;
-SQL
 psql "$DATABASE_URL" -c "SELECT email, role FROM app_user;"
 ```
 
-The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is
-written into a document that gets committed.
-
-Expected: one row.
+Expected: one row, holding `ALLOWED_USER_EMAIL`.
 
 - [ ] **Step 7: Verify sign-in end to end, both ways**
 
@@ -1877,8 +2004,15 @@ git commit -m "feat(api): Google OIDC with a pinned account and signed sessions"
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `formatMoney(value: string, currency: "INR" | "AED", opts?): string`. Every screen
-  from M1 onward formats money through this and nothing else.
+- Produces: `formatMoney(value: string, currency: Currency, opts?): string`, where `Currency` is
+  the row shape — `{ code, symbol, decimals, numberFormat }`. Every screen from M1 onward formats
+  money through this and nothing else.
+
+> **No currency code is a type here.** `"INR" | "AED"` as a union would put the first household's
+> reporting pair into the type system, which is precisely what ADR-0002 moved out of the schema and
+> what the README forbids. Formatting reads `currency.symbol`, `currency.decimals` and
+> `currency.number_format` — the columns that exist for it. A household reporting in EUR and CHF
+> gets correct output with no code change.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1887,23 +2021,31 @@ git commit -m "feat(api): Google OIDC with a pinned account and signed sessions"
 import { describe, expect, it } from "vitest";
 import { formatMoney } from "@/lib/money/format";
 
+// Rows as the `currency` table holds them. Nothing here is a literal in the source under test.
+const INR = { code: "INR", symbol: "₹", decimals: 2, numberFormat: "indian" } as const;
+const AED = { code: "AED", symbol: "AED", decimals: 2, numberFormat: "international" } as const;
+const KWD = { code: "KWD", symbol: "KD", decimals: 3, numberFormat: "international" } as const;
+
 describe("formatMoney", () => {
-  it("groups INR in the Indian system (2,2,3)", () => {
-    expect(formatMoney("13642180", "INR")).toBe("₹1,36,42,180.00");
+  it("groups by number_format, not by code (indian: 2,2,3)", () => {
+    expect(formatMoney("13642180", INR)).toBe("₹1,36,42,180.00");
   });
-  it("groups AED internationally", () => {
-    expect(formatMoney("5982530", "AED")).toBe("AED 5,982,530.00");
+  it("groups internationally when the row says so", () => {
+    expect(formatMoney("5982530", AED)).toBe("AED 5,982,530.00");
   });
-  it("abbreviates INR in crore and lakh", () => {
-    expect(formatMoney("13642180", "INR", { abbreviate: true })).toBe("₹1.36 Cr");
-    expect(formatMoney("4210400", "INR", { abbreviate: true })).toBe("₹42.10 L");
+  it("abbreviates in crore and lakh for indian grouping", () => {
+    expect(formatMoney("13642180", INR, { abbreviate: true })).toBe("₹1.36 Cr");
+    expect(formatMoney("4210400", INR, { abbreviate: true })).toBe("₹42.10 L");
+  });
+  it("honours a currency with other than two decimals", () => {
+    expect(formatMoney("1234.5", KWD)).toBe("KD 1,234.500");
   });
   it("keeps the minus sign — never colour alone", () => {
-    expect(formatMoney("-310.00", "AED")).toBe("-AED 310.00");
+    expect(formatMoney("-310.00", AED)).toBe("-AED 310.00");
   });
   it("rejects a number, so no float can reach it", () => {
     // @ts-expect-error money crosses the wire as a string
-    expect(() => formatMoney(310, "AED")).toThrow(TypeError);
+    expect(() => formatMoney(310, AED)).toThrow(TypeError);
   });
 });
 ```
@@ -1922,7 +2064,13 @@ Expected: FAIL — cannot resolve `@/lib/money/format`.
 // web/lib/money/format.ts
 import Decimal from "decimal.js";
 
-const SYMBOL = { INR: "₹", AED: "AED " } as const;
+/** The `currency` row, as the API returns it. No code is ever a literal in this module. */
+export interface Currency {
+  code: string;
+  symbol: string;
+  decimals: number;
+  numberFormat: "international" | "indian";
+}
 
 /**
  * Formats money for display. Takes a string because money crosses the wire as a string — a JSON
@@ -1930,7 +2078,7 @@ const SYMBOL = { INR: "₹", AED: "AED " } as const;
  */
 export function formatMoney(
   value: string,
-  currency: "INR" | "AED",
+  currency: Currency,
   opts: { abbreviate?: boolean } = {},
 ): string {
   if (typeof value !== "string") {
@@ -1940,21 +2088,25 @@ export function formatMoney(
   const sign = amount.isNegative() ? "-" : "";
   const abs = amount.abs();
 
-  if (opts.abbreviate && currency === "INR") {
-    if (abs.gte(10_000_000)) return `${sign}₹${abs.div(10_000_000).toFixed(2)} Cr`;
-    if (abs.gte(100_000)) return `${sign}₹${abs.div(100_000).toFixed(2)} L`;
-  }
-  if (opts.abbreviate && currency === "AED" && abs.gte(1_000_000)) {
-    return `${sign}AED ${abs.div(1_000_000).toFixed(2)} M`;
+  // A word-shaped symbol needs a space after it; a glyph does not. "AED 310", "₹310".
+  const symbol = currency.symbol + (/[A-Za-z]$/.test(currency.symbol) ? " " : "");
+
+  if (opts.abbreviate) {
+    if (currency.numberFormat === "indian") {
+      if (abs.gte(10_000_000)) return `${sign}${symbol}${abs.div(10_000_000).toFixed(2)} Cr`;
+      if (abs.gte(100_000)) return `${sign}${symbol}${abs.div(100_000).toFixed(2)} L`;
+    } else if (abs.gte(1_000_000)) {
+      return `${sign}${symbol}${abs.div(1_000_000).toFixed(2)} M`;
+    }
   }
 
-  const locale = currency === "INR" ? "en-IN" : "en-US";
+  const locale = currency.numberFormat === "indian" ? "en-IN" : "en-US";
   const grouped = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(abs.toFixed(2)));
+    minimumFractionDigits: currency.decimals,
+    maximumFractionDigits: currency.decimals,
+  }).format(Number(abs.toFixed(currency.decimals)));
 
-  return `${sign}${SYMBOL[currency]}${grouped}`;
+  return `${sign}${symbol}${grouped}`;
 }
 ```
 
@@ -1968,7 +2120,7 @@ export function formatMoney(
 cd web && npx vitest run lib/money/__tests__/format.test.ts
 ```
 
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Write the currency toggle**
 
@@ -1977,17 +2129,24 @@ Expected: 5 passed.
 "use client";
 import { useEffect, useState } from "react";
 
-export type Reporting = "INR" | "AED";
-
-export function CurrencyToggle() {
-  const [currency, setCurrency] = useState<Reporting>("INR");
+/**
+ * The pair comes from `household` — base first, secondary second. No currency code appears
+ * in this file, so a household reporting in EUR and CHF renders correctly with no change.
+ */
+export function CurrencyToggle({ pair }: { pair: readonly [string, string] }) {
+  const [base, secondary] = pair;
+  const [currency, setCurrency] = useState<string>(base);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("oneledger.currency");
-    if (saved === "INR" || saved === "AED") setCurrency(saved);
-  }, []);
+    const chosen = saved === base || saved === secondary ? saved : base;
+    setCurrency(chosen);
+    // Also on mount, not only on click: after a reload the dataset would otherwise be unset
+    // until the next click, and CSS keyed on it would render the wrong currency's styling.
+    document.documentElement.dataset.currency = chosen;
+  }, [base, secondary]);
 
-  function choose(next: Reporting) {
+  function choose(next: string) {
     setCurrency(next);
     window.localStorage.setItem("oneledger.currency", next);
     document.documentElement.dataset.currency = next;
@@ -1995,7 +2154,7 @@ export function CurrencyToggle() {
 
   return (
     <div role="group" aria-label="Reporting currency" className="inline-flex rounded border">
-      {(["INR", "AED"] as const).map((c) => (
+      {pair.map((c) => (
         <button
           key={c}
           onClick={() => choose(c)}
@@ -2031,7 +2190,9 @@ const NAV = [
   <nav className="flex gap-4 text-sm">
     {NAV.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}
   </nav>
-  <CurrencyToggle />
+  {/* The pair comes from GET /household. Hardcoding it here would undo the point of the
+      component taking it as a prop. */}
+  <CurrencyToggle pair={[household.baseCurrency, household.secondaryCurrency]} />
 </header>
 ```
 
@@ -2073,8 +2234,13 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  No secret in .next/static/
 ☐  ./scripts/check-no-real-data.sh passes; no statement is tracked by git
 ☐  uv run pytest, ruff and mypy --strict all clean in api/
-☐  All migrations apply cleanly from empty:
-     docker compose run --rm flyway clean migrate && for f in db/tests/*.sql; do psql "$DATABASE_URL" -f "$f"; done
+☐  All migrations apply cleanly from empty, seeds included, every test checked:
+     docker compose run --rm flyway clean migrate
+     for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
+     for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
+   (the seeds are not optional: 0001_reference.sql asserts six system institutions, and
+    0002_rls.sql asserts they stay visible to anon. Without `|| exit 1` the loop reports
+    only the last file's status.)
 ☐  The compose file that runs locally is the one that would deploy — no managed service anywhere
 ```
 

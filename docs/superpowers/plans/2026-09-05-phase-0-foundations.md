@@ -190,12 +190,17 @@ docker compose exec db pg_isready -U oneledger    # accepting connections
 **Files:**
 - Create: `db/migrations/V1__extensions_and_reference.sql`, `db/seeds/institutions.sql`, `db/tests/0001_reference.sql`
 - Create: `db/migrations/V2__identity_and_rls.sql`, `db/tests/0002_rls.sql`
+- Create: the household/person/app_user seed (spec Task 3 Step 4c)
 
 **Interfaces:**
 - Consumes: a running local Postgres from PR 1.
 - Produces: `currency(code CHAR(3) PK, name, symbol, decimals, number_format, pegged_to, peg_rate)`; `institution(id UUID PK, household_id, name, short_name, country, institution_type, …)`; `household(id, name, base_currency, secondary_currency)`; `person(id, household_id, …)`; `app_user(id, household_id, person_id, email, role)`; and the SQL function **`current_household_id() RETURNS UUID`**, which every RLS policy from here on calls.
 
-**Why these two ship together:** `0002` adds the foreign key from `institution.household_id` to `household(id)` that `0001` deliberately leaves dangling. Reviewing `0001` alone means reviewing a schema with a knowingly incomplete constraint.
+**Why these two ship together:** `V2` adds the foreign key from `institution.household_id` to `household(id)` that `V1` deliberately leaves dangling. Reviewing `V1` alone means reviewing a schema with a knowingly incomplete constraint.
+
+**This PR also seeds the household.** It moved here from Task 10 because PR 5's
+`reporting_config()` reads the household's reporting pair and raises without a row — PR 5 would
+otherwise depend on PR 7. The seed reads `.env` and needs nothing from Google.
 
 - [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 2, then spec Task 3, in order**
@@ -256,7 +261,7 @@ psql "$DATABASE_URL" -f db/tests/0004_fx.sql
 **Branch:** `feature/phase-0-api-authorization-boundary` · **Spec:** Task 6 · **~141 lines**
 
 **Files:**
-- Create: `api/pyproject.toml`, `api/oneledger/__init__.py`, `api/oneledger/main.py`, `api/oneledger/auth.py`, `api/oneledger/db.py`
+- Create: `api/pyproject.toml`, `api/Dockerfile`, `api/oneledger/__init__.py`, `api/oneledger/main.py`, `api/oneledger/auth.py`, `api/oneledger/db.py`
 - Test: `api/tests/test_health.py`, `api/tests/test_auth.py`
 
 **Interfaces:**
@@ -329,7 +334,7 @@ curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"   # the anchor retu
 **Branch:** `feature/phase-0-web-shell` · **Spec:** Task 9 · **~55 hand-written lines + generated scaffold**
 
 **Files:**
-- Create: `web/` via `create-next-app`, `web/vitest.config.ts`, `web/lib/api/client.ts`
+- Create: `web/` via `create-next-app`, `web/Dockerfile`, `web/vitest.config.ts`, `web/lib/api/client.ts`
 - Test: `web/lib/api/__tests__/env.test.ts`
 
 **Interfaces:**
@@ -371,14 +376,14 @@ State the generated-file count, name the four hand-written files, and confirm th
 
 **Interfaces:**
 - Consumes: `resolve_owner` and `require_owner` (PR 4); `app_user` (PR 2); `apiFetch` (PR 6).
-- Produces: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` — the session cookie every route depends on. **`formatMoney(value: string, currency: "INR" | "AED", opts?): string`** — every screen from M1 onward formats money through this and nothing else.
+- Produces: `GET /auth/login`, `GET /auth/callback`, `POST /auth/logout` — the session cookie every route depends on. **`formatMoney(value: string, currency: Currency, opts?): string`**, where `Currency` is the row shape `{ code, symbol, decimals, numberFormat }` — every screen from M1 onward formats money through this and nothing else. **No currency code is a type**: a `"INR" | "AED"` union would put the first household's pair into the type system.
 
 **Manual prerequisite, do this before starting:** register both redirect URIs in the Google Cloud console — `http://localhost:8000/auth/callback` and `https://<your-hostname>/auth/callback` — and put the client id and secret in `.env`. Deploying later then needs no console visit. This is the only step in Phase 0 that cannot be completed from the terminal, and it will block PR 7's verification if left until the end.
 
 - [ ] **Step 1: Cut the branch from `feature/phase-0-foundations`**
 - [ ] **Step 2: Work spec Task 10, steps 1–8**
 
-The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is written into a committed document.
+The household was seeded in PR 2; Step 6 only confirms the row is there.
 
 - [ ] **Step 3: Verify sign-in end to end, both ways**
 

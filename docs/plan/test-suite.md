@@ -81,57 +81,75 @@ def test_I8_reconciliation_blocks_bad_import():
 
 ## Static checks
 
-```typescript
-// api/tests/test_static_checks.py
-import { globSync } from "glob";
-import { readFileSync } from "node:fs";
+```python
+# api/tests/test_static_checks.py
+import re
+from pathlib import Path
 
-it("no reporting function reads the base transaction table (I3)", () => {
-  const offenders = globSync("db/functions/*.sql").filter((f) => {
-    const sql = readFileSync(f, "utf8");
-    return isReportingFunction(sql) && /\bFROM\s+transaction\b/i.test(sql);
-  });
-  expect(offenders).toEqual([]);
-});
+ROOT = Path(__file__).resolve().parents[2]
 
-it("no query multiplies amount by a live rate (I5)", () => {
-  for (const f of globSync("db/functions/*.sql")) {
-    expect(readFileSync(f, "utf8")).not.toMatch(/amount\s*\*\s*\w*rate/i);
-  }
-});
 
-it("no money value is ever a JS number", () => {
-  // Money arrives as a string and stays one. parseFloat/Number on a money field is the
-  // single most likely way precision is silently lost.
-  for (const f of globSync("web/lib/**/*.ts")) {
-    const src = readFileSync(f, "utf8");
-    expect(src).not.toMatch(/(parseFloat|Number)\s*\(\s*\w*[Aa]mount/);
-    expect(src).not.toMatch(/(parseFloat|Number)\s*\(\s*\w*[Bb]alance/);
-  }
-});
+def test_no_reporting_function_reads_the_base_transaction_table():
+    """Invariant I3. Reports read v_transaction_reportable, which excludes transfers."""
+    offenders = [
+        f for f in ROOT.glob("db/functions/*.sql")
+        if is_reporting_function(f.read_text())
+        and re.search(r"\bFROM\s+transaction\b", f.read_text(), re.I)
+    ]
+    assert offenders == [], f"reporting functions reading the base table: {offenders}"
+
+
+def test_no_query_multiplies_an_amount_by_a_live_rate():
+    """Invariant I5. Historical flows are frozen; re-translating them is the bug."""
+    for f in ROOT.glob("db/functions/*.sql"):
+        assert not re.search(r"amount\s*\*\s*\w*rate", f.read_text(), re.I), f
+
+
+def test_no_money_value_is_ever_a_js_number():
+    """Money arrives as a string and stays one. parseFloat/Number on a money field is the
+    single most likely way precision is silently lost."""
+    for f in ROOT.glob("web/lib/**/*.ts"):
+        src = f.read_text()
+        for pattern in (r"(parseFloat|Number)\s*\(\s*\w*[Aa]mount",
+                        r"(parseFloat|Number)\s*\(\s*\w*[Bb]alance"):
+            assert not re.search(pattern, src), f
+
+
+def test_no_currency_code_is_a_type_or_an_identifier():
+    """The reporting pair is configuration (ADR-0002). A union of currency codes puts the
+    first household's choice into the type system, where changing it costs a migration."""
+    for f in list(ROOT.glob("web/lib/**/*.ts")) + list(ROOT.glob("api/oneledger/**/*.py")):
+        src = f.read_text()
+        assert not re.search(r'"(INR|AED)"\s*\|\s*"(INR|AED)"', src), f
+        assert not re.search(r"\b(amount|value|fx_rate_to)_(inr|aed)\b", src, re.I), f
 ```
 
 ---
 
 ## Property-based tests
 
-```typescript
-# hypothesis equivalents live in api/tests/test_properties.py
+```python
+# api/tests/test_properties.py
+from decimal import Decimal
 
-it("reconciliation holds for any generated statement", () => {
-  fc.assert(fc.property(statementRows(), money(), (rows, opening) => {
-    const result = parse(synthesiseStatement(rows, opening));
-    const computed = result.rows.reduce((s, r) => s.plus(r.amount), new Decimal(opening));
-    expect(computed.equals(result.closing)).toBe(true);
-  }));
-});
+from hypothesis import given
 
-it("the FX freeze is internally consistent", () => {
-  fc.assert(fc.property(money(), fxRate(), (amount, rate) => {
-    const txn = normalize({ amount, currency: "AED", rateToBase: rate });
-    expect(txn.amountInr).toBe(new Decimal(amount).times(rate).toFixed(4));
-  }));
-});
+from .strategies import fx_rates, money, statement_rows
+
+
+@given(statement_rows(), money())
+def test_reconciliation_holds_for_any_generated_statement(rows, opening):
+    """Invariant I8. Whatever the parser produces must add up to the declared closing."""
+    result = parse(synthesise_statement(rows, opening))
+    computed = sum((r.amount for r in result.rows), start=Decimal(opening))
+    assert computed == result.closing
+
+
+@given(money(), fx_rates())
+def test_the_fx_freeze_is_internally_consistent(amount, rate):
+    """The frozen base amount is the original times the frozen rate, to 4 dp. Nothing else."""
+    txn = normalize(amount=amount, currency="AED", rate_to_base=rate)
+    assert txn.amount_base == (Decimal(amount) * rate).quantize(Decimal("0.0001"))
 ```
 
 ---

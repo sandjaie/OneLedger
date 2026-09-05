@@ -1,11 +1,13 @@
 # Schema Reference — the complete DDL
 
-> **This is the executable form of the model.** The readable description — what each entity is,
-> why it exists, the conventions it follows and the invariants it enforces — lives in
-> [data-model.html](../design/data-model.html). That document is the specification; this file is
-> what gets typed into `db/migrations/`.
+> **This is the table reference, not the migrations.** It carries every table, column, type and
+> constraint, grouped by the migration that creates it. It deliberately does **not** carry triggers,
+> functions, views or RLS policies — those live in `db/migrations/` and are specified in
+> [data-model.html](../design/data-model.html), which is the readable description of what each
+> entity is and why.
 >
-> The two must not drift. A schema change edits **both**, in the same commit.
+> So a migration having more than this file shows is expected. A migration *disagreeing* with it is
+> not: a change to a table edits the migration and this file in the same commit.
 
 Ordered by migration. Phase 0 covers `0001`–`0004`; the rest land with the milestone that needs
 them. The circular foreign keys on `transaction` are added last, in `0017`, because their targets

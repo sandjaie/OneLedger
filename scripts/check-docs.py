@@ -71,11 +71,16 @@ def check_html() -> list[str]:
 
 
 def check_no_real_data() -> list[str]:
-    """A statement must never be tracked by git. Invariant, not a preference."""
-    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT,
-                             capture_output=True, text=True, check=True).stdout.split()
-    return [f for f in tracked
-            if f.lower().endswith(".pdf") or f.startswith("pdf-statements/")]
+    """A statement must never be tracked by git. Invariant, not a preference.
+
+    One implementation, in scripts/check-no-real-data.sh, so the pre-commit hook and CI
+    cannot drift apart on what counts as real data.
+    """
+    result = subprocess.run([str(ROOT / "scripts" / "check-no-real-data.sh")],
+                            cwd=ROOT, capture_output=True, text=True)
+    if result.returncode == 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.startswith("  ")]
 
 
 ADR_LINK = re.compile(r'<a href="[^"]*?(\d{4})-[a-z0-9-]+\.html(?:#[^"]*)?">(?:ADR-)?(\d{4})\b[^<]*</a>')
