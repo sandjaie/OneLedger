@@ -12,8 +12,10 @@ with **the number of checks that actually ran**, then one verdict line.
 2. `pre-commit run --all-files` — secrets, formatting, and every commit-stage hook
 3. `cd api && uv run ruff check . && uv run mypy . && uv run pytest -q`
 4. Migrations from empty, against a **scratch** database and never the working one:
-   `docker compose run --rm flyway clean migrate`, then every `db/seeds/*.sql`, then every
-   `db/tests/*.sql` with `-v ON_ERROR_STOP=1`
+   `docker compose down -v && docker compose up -d db`, then `docker compose run --rm flyway
+   migrate`, then every `db/seeds/*.sql`, then every `db/tests/*.sql` with `-v ON_ERROR_STOP=1`.
+   (`flyway clean` is disabled by default since v10 and is not the reset to reach for — dropping
+   the volume is both genuinely empty and incapable of touching a real database.)
 5. `cd web && npx tsc --noEmit && npx vitest run && npm run build`, then grep `.next/static/` for
    `SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://`
 
