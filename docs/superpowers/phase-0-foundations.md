@@ -29,9 +29,25 @@ uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · Typ
 [09-security-and-privacy.md](../operations/security-and-privacy.html),
 [ADR-0013](../adr/0013-python-backend-service.html)
 
+## Current execution status — 6 September 2026
+
+GitHub PRs **#3–#7 are merged** into `feature/phase-0-foundations`. They cover original Tasks
+**1–8**, including the FX backfill endpoint. The owner confirmed #7 merged; its feature and review
+fixes through `fd6b5db` are present in the local integration branch. This status records delivered
+work, not a new run of every verification command printed below.
+
+**Resume at Task 9**, then Tasks 10–11 and Phase 0 exit verification. The numbered PR headings in
+this document set are ordinal groups: original PR 5 corresponds to GitHub #7; original PRs 6–7
+remain. Do not restart completed tasks because their original instructional checkboxes are blank.
+
+The [current master](plans/implementation-plan.md) carries the revised product
+sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0
+plan stays here for continuity, and Phase 0 scope remains unchanged.
+
+
 ## Global Constraints
 
-Inherited verbatim from [implementation-plan.md](implementation-plan.md#global-constraints). The
+Inherited verbatim from [implementation-plan.md](plans/implementation-plan.md#global-constraints). The
 ones this plan touches directly:
 
 - Money is `NUMERIC(20,4)`; FX rates are `NUMERIC(20,10)`; percentages `NUMERIC(9,4)` stored

@@ -9,6 +9,13 @@
 > So a migration having more than this file shows is expected. A migration *disagreeing* with it is
 > not: a change to a table edits the migration and this file in the same commit.
 
+**Product-review scope (2026-09-06):** V1–V4 are the completed Phase 0 schema work. Later
+sections are reference designs, not a claim that every accepted capability already has a table.
+[Finance OS requirements](../product/finance-os.html) govern household outflows, consolidated
+attribution, commitments, actions, reservations, goals and protection records. In particular, the
+unapplied `0014` attribution shape must be reconciled with F03 before implementation. Update the
+relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
+
 Ordered by migration. Phase 0 covers `0001`–`0004`; the rest land with the milestone that needs
 them. The circular foreign keys on `transaction` are added last, in `0017`, because their targets
 do not exist until `0009`–`0016`.

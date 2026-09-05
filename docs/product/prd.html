@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="#" aria-current="page">Product requirements</a></li>
 <li><a href="./roadmap.html">Roadmap</a></li>
+<li><a href="./finance-os.html">Finance OS requirements</a></li>
 <li><a href="./ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -329,11 +330,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -369,8 +370,8 @@ body {
           <h1 id="01--product-requirements">01 — Product Requirements</h1>
 <p><strong>Product:</strong> OneLedger
 <strong>Owner:</strong> single user (household-capable)
-<strong>Status:</strong> specification, pre-implementation
-<strong>Last decision round:</strong> all Phase-1 scoping questions closed</p>
+<strong>Status:</strong> Phase 0 in progress; GitHub PRs #3–#7 merged into <code>feature/phase-0-foundations</code>
+<strong>Last product review:</strong> 6 September 2026; <a href="./finance-os.html">finance OS coverage and requirements</a> accepted</p>
 <hr>
 <h2 id="1-problem">1. Problem</h2>
 <p>A financial life split across two countries is invisible in aggregate.</p>
@@ -400,6 +401,10 @@ the last thing worth renting from a third party.</p>
 feature becomes a query rather than a subsystem. Net worth is a query. Cash flow is a query.
 Savings rate is a query. That is why the ledger and the ingestion pipeline get the majority of
 Phase 1&#39;s effort, and the dashboards get comparatively little.</p>
+<p>The product also needs to answer <strong>what is coming next, whether the household is on track,
+and what needs attention</strong>. The <a href="./finance-os.html">finance OS requirements</a> define
+cash planning, resilience, goals, protection, owner export and the meaning of headline metrics.
+They extend Phase 1 and Phase 2 without adding work to Phase 0.</p>
 <h3 id="what-it-is-not">What it is not</h3>
 <ul>
 <li><strong>Not a budgeting app.</strong> Budgets exist (Phase 2) but are a comparison view, not the centre.</li>
@@ -418,9 +423,10 @@ long-term wealth primarily in INR, and moves money between the two regularly.</p
 <p>The schema carries <code>household_id</code> and <code>owner_person_id</code> from day one so a second person can be
 added later without a migration that touches every table — but no multi-user <em>behaviour</em> is built
 now. See <a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>.</p>
-<p><strong>Usage shape:</strong> opened daily for ten seconds (the dashboard), used properly monthly for twenty
-minutes (import statements, clear the review queue). The product must be excellent at both and
-optimise for neither at the other&#39;s expense.</p>
+<p><strong>Usage shape:</strong> a reliable monthly import and ledger review under twenty minutes.
+Daily visits show dated positions, upcoming card dues and actions; they do not imply live bank data.
+Phase 2 adds a planning review, measured separately, for commitments, goals and follow-up. Every
+headline distinguishes verified, partially covered and estimated information.</p>
 <h2 id="4-product-invariants">4. Product invariants</h2>
 <p>These are requirements, not implementation notes. Each is enforced by a test
 (<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>) and violating one is a bug of
@@ -551,7 +557,7 @@ rule (§5.5).</li>
 <p><strong>Deferred:</strong> merge of transactions; recurring-transaction templating (Phase 2).</p>
 <p><strong>Acceptance</strong></p>
 <ul>
-<li>24 months of real statements import and reconcile.</li>
+<li>The agreed history back to 01 Jan 2024 imports and reconciles; one complete recent month is an earlier usability checkpoint.</li>
 <li>Filter combinations return in under 300 ms at ~20,000 rows.</li>
 <li>Every row can be traced to a source document, or is explicitly marked <code>source = manual</code>.</li>
 </ul>
@@ -612,7 +618,7 @@ high-confidence rows are pre-ticked, but the human presses import.</li>
 </ul>
 <p><strong>Acceptance</strong></p>
 <ul>
-<li>Each of the six institutions imports a real statement end-to-end with zero manual correction of
+<li>Each of the four gathered statement layouts imports a real statement end-to-end with zero manual correction of
 amounts or dates.</li>
 <li>Re-uploading an identical file imports zero rows and says why.</li>
 <li>Uploading an <em>overlapping</em> statement (Aug–Sep after Jul–Aug) imports only September.</li>
@@ -754,7 +760,7 @@ age. Net worth including significantly stale valuations says so.</p>
 <li>Snapshots older than a configurable threshold surface a prompt to update.</li>
 </ul>
 <hr>
-<h3 id="510-loans--phase-1">5.10 Loans — <em>Phase 1</em></h3>
+<h3 id="510-loans--phase-1">5.10 Loans — <em>conditional, descheduled pending Q18</em></h3>
 <p>Loans are proper entities with amortisation, not just negative balances.</p>
 <p><strong>Per loan:</strong> original principal, outstanding principal, interest rate (fixed or floating with
 benchmark and spread), EMI, start date, end date, remaining tenure, interest paid to date,
@@ -793,9 +799,8 @@ transaction, open the document at the right page.</p>
 <p>Monthly income vs spending, with the transfer exclusion (I3) applied throughout.</p>
 <ul>
 <li>Monthly income, spending, net, and 12-month trend.</li>
-<li>Savings rate = (income − spending) ÷ income.</li>
-<li>Investment rate = investment contributions ÷ income. Tracked separately from savings rate,
-because money sitting in a current account is saved but not invested.</li>
+<li>Savings rate = (income − net consumption spending − external household outflows) ÷ income. External support is shown separately from consumption. Zero or negative income shows “not applicable.”</li>
+<li>Investment funding rate = net cash funding of investments ÷ income; excludes reinvestment and platform transfers. It can exceed 100% when existing savings are invested and is not labelled new saving. See <a href="./finance-os.html#financial-meaning">metric definitions</a>.</li>
 <li>Category breakdown, drill-through to transactions.</li>
 <li>Need / Want / Investment / Debt split from category buckets (§5.5).</li>
 <li>Both currencies via the toggle.</li>
@@ -814,16 +819,13 @@ because money sitting in a current account is saved but not invested.</li>
 └ Other assets
                 Net Worth = Assets − Liabilities
 </code></pre>
-<p>Also <strong>liquid net worth</strong> — excluding property, retirement accounts with lock-ins, and anything
-not convertible within roughly a month. For a two-country life this is often the more actionable
-number.</p>
+<p><strong>Liquid net worth</strong> follows the user-selected account toggle (Q22). It does not mean uncommitted cash or an emergency reserve. Those are separate Phase 2 measures with access restrictions and earmarking visible.</p>
 <p><strong>Attribution is the feature.</strong> A trend line that goes up is much less useful than one that
 explains itself:</p>
 <pre><code>Sep 2026 → Sep 2027          ₹1.02 Cr → ₹1.36 Cr        +₹34.0 L
 
-  + ₹12.0 L   investment contributions
+  + ₹27.0 L   retained income
   + ₹ 8.0 L   market appreciation
-  + ₹15.0 L   loan principal reduction
   + ₹ 1.4 L   FX translation gain (AED strengthened)
   − ₹ 2.0 L   asset depreciation
   − ₹ 0.4 L   unexplained
@@ -836,7 +838,7 @@ hidden</strong> (I7) — a decomposition that doesn&#39;t reconcile is telling y
 <li>Net worth on any date equals the sum of signed account balances on that date, in both
 currencies (I2).</li>
 <li>Attribution components plus residual equal the actual change, exactly.</li>
-<li>Residual is under 1% of the change for a period with complete data.</li>
+<li>Complete synthetic scenarios have zero unexplained residual. Real discrepancies are identified individually; valuation uncertainty and incomplete coverage are labelled separately.</li>
 </ul>
 <hr>
 <h3 id="514-budgets--phase-2">5.14 Budgets — <em>Phase 2</em></h3>
@@ -859,6 +861,14 @@ spending.&quot;</strong> Plus detection of price increases and of subscriptions 
 much for a fixed schema. Separates <strong>annual compensation</strong> (including employer contributions and
 accrued bonus) from <strong>actual cash received</strong>. Yields bonus history, increment history and
 compensation trend.</p>
+<h3 id="finance-os-additions">Finance OS additions — Phase 2</h3>
+<p><a href="./finance-os.html#next-month">Phase 2A</a> delivers confirmed commitments, a 30–90-day
+cash forecast by account and currency, and actions with due dates and resolution states.
+<a href="./finance-os.html#resilience">Phase 2B</a> delivers emergency-reserve coverage, goals with
+exclusive earmarking, and a register for insurance, maturities, claims and administration.</p>
+<p>Budgets, recurring detection, salary and investment analysis remain planned. Simple commitments
+can be entered before their automatic discovery exists. M10 includes an <a href="./finance-os.html#portability-and-continuity">owner export</a>;
+tax readiness and document organisation do not depend on AI or V2 tax calculations.</p>
 <h3 id="517-ask-my-finances--v2">5.17 Ask My Finances — <em>V2</em></h3>
 <p>Natural-language questions answered by <strong>generating a SQL query against the normalized ledger</strong>,
 not by reading statements. The normalized ledger built in Phase 1 is what makes this feasible;
@@ -910,8 +920,8 @@ unreliable. Requires the privacy decision deferred in
 <h2 id="7-success-criteria">7. Success criteria</h2>
 <p>Phase 1 has succeeded when:</p>
 <ol>
-<li>24 months of real statements from all six institutions are imported and reconciled.</li>
-<li>The dashboard is opened voluntarily, most mornings, because it is genuinely informative.</li>
+<li>History across all four gathered layouts is imported and reconciled back to 01 Jan 2024 (ADR-0011).</li>
+<li>The user can identify the verified position, missing coverage, upcoming card dues and required follow-up from the overview.</li>
 <li>Monthly import + review takes under 20 minutes.</li>
 <li>Net worth is trusted enough to be used in an actual financial decision.</li>
 <li>Infrastructure spend stays at zero while local, and is a single predictable line item once hosted.</li>
@@ -930,7 +940,7 @@ the bank and then abandoned. Everything in §4 exists to earn that trust.</p>
 <tbody><tr>
 <td>PDF parsing is harder than expected</td>
 <td>High</td>
-<td>CSV/Excel first (M2), PDF second (M3). One bank fully working before breadth</td>
+<td>One PDF layout end-to-end at M2, followed by the other three layouts at M3; reconciliation blocks faulty imports</td>
 </tr>
 <tr>
 <td>Bank changes statement layout</td>
@@ -976,7 +986,7 @@ the bank and then abandoned. Everything in §4 exists to earn that trust.</p>
 <li>Mobile native apps (the web app is responsive).</li>
 <li>Tax filing. Tax <em>reporting</em> is V2; filing is never.</li>
 <li>Trading, brokerage integration, or order placement.</li>
-<li>Sharing, collaboration or export-to-advisor features.</li>
+<li>Sharing, collaboration or export-to-advisor features. Owner downloads remain in scope; emergency handover requires a separate access/privacy decision.</li>
 </ul>
 
         </article>

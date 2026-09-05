@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./prd.html">Product requirements</a></li>
 <li><a href="./roadmap.html">Roadmap</a></li>
+<li><a href="./finance-os.html">Finance OS requirements</a></li>
 <li><a href="#" aria-current="page">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -329,11 +330,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -400,7 +401,10 @@ Documents         the vault
 Review            appears with a badge when a batch awaits review
 Settings          categories, rules, institutions, FX, backup
 </code></pre>
-<p>Phase 2 adds Budgets, Recurring and Salary. V2 adds Ask.</p>
+<p>Phase 2A adds a Planning view for commitments, cash forecasts and actions. Phase 2B adds goals,
+emergency-reserve coverage and protection/administration records within that view. Phase 2C adds
+Budgets, Recurring and Salary as needed. V2 adds Ask. Avoid a separate top-level destination for
+every record type.</p>
 <p><strong>Persistent header:</strong> the <strong>currency toggle</strong> (the household&#39;s pair, <code>INR ⇄ AED</code> in the mockups below) and a date-range control on
 analytical screens. The currency toggle is global, persisted, and instant — it swaps a column, it
 does not recompute (see <a href="../design/multi-currency-and-fx.html">multi-currency-and-fx.html</a> §2).</p>
@@ -447,6 +451,16 @@ month with no imported statement. A number the system doesn&#39;t trust should n
 though it does (Invariant I7).</li>
 </ul>
 <hr>
+<h3 id="freshness-and-actions">Verified position and attention</h3>
+<p>The overview ships first as M9a after transfers; full M9b adds investment history and attribution.
+Every headline exposes its as-of date and verified, partially covered or estimated status. Price,
+FX and statement freshness are separate. An old cash balance stays visibly old after a price refresh.</p>
+<p>The Phase 1 attention region links existing missing-statement, review, card-due and stale-valuation
+items to their source. Phase 2 extends it with open, snoozed, completed and dismissed actions, reasons
+and due dates. Daily visits should answer what needs attention without implying live bank balances.</p>
+<p><strong>Monthly workflow:</strong> check account/period coverage → import → resolve transfers and
+classification → compare the verified position → inspect upcoming obligations → record follow-up.
+The ledger portion targets twenty minutes; planning time is measured separately.</p>
 <h2 id="3-review--the-screen-that-decides-whether-this-gets-used">3. Review — the screen that decides whether this gets used</h2>
 <p>Density and speed. This is where twenty minutes a month are spent, and the screen that decides whether the tool survives a monthly routine.</p>
 <pre><code>┌──────────────────────────────────────────────────────────────────────────┐
@@ -531,8 +545,7 @@ state, source document.</li>
 │                                                                          │
 │  WHY IT CHANGED                                                          │
 │                                                                          │
-│   Investment contributions   ████████████        + ₹12,00,000            │
-│   Loan principal reduction   ███████████████     + ₹15,00,000            │
+│   Retained income            ███████████████     + ₹27,00,000            │
 │   Market appreciation        ████████            +  ₹8,00,000            │
 │   FX translation gain        █                   +  ₹1,40,000            │
 │   Asset depreciation         ██                  −  ₹2,00,000            │
@@ -598,6 +611,19 @@ version that produced them.</p>
 <p><strong>The reconciliation line is the point.</strong> It turns &quot;did I map the columns correctly?&quot; from a
 judgement call into a verified fact, before anything is saved or imported.</p>
 <hr>
+<h3 id="planning-experience">Planning — Phase 2</h3>
+<p>Start with a 30/60/90-day horizon, account and currency filters, known income/payments, lowest
+projected balance and its date. Show confirmed and estimated inputs separately. Selecting a shortfall
+opens its commitments and funding accounts; no action executes a transfer or payment.</p>
+<p>Goals show target currency, date, earmarked resources, planned contributions and shortfall.
+The emergency view shows eligible resources, essential-spend assumptions and estimated months of
+coverage. A reservation cannot be used by both a goal and the emergency reserve.</p>
+<p>Protection records show coverage and renewal dates alongside document links. Maturities,
+claims and administration deadlines feed the same action list. Refunds and reimbursements remain
+traceable to their original event; partial settlements show the outstanding amount.</p>
+<p>Document export is an owner action with selected records/originals, coverage dates and a clear
+statement of what is included. See <a href="./finance-os.html">the product requirements and acceptance scenarios</a>.
+These are planned flows; the existing mockups have not yet been redesigned to show them.</p>
 <h2 id="7-cross-cutting">7. Cross-cutting</h2>
 <h3 id="money-formatting">Money formatting</h3>
 <table>

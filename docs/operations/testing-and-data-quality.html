@@ -337,11 +337,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -383,11 +383,11 @@ that is quietly wrong, and you believe it.</p>
 <h2 id="1-the-invariant-test-suite">1. The invariant test suite</h2>
 <p>Eight tests. If any fails, the ledger cannot be trusted, and no feature work proceeds until it
 passes.</p>
-<table><thead><tr><th>Invariant</th><th>What the test must prove</th></tr></thead><tbody><tr><td><strong>I1</strong> originals immutable</td><td><code>UPDATE</code> of <code>amount</code> or <code>currency</code> raises.</td></tr><tr><td><strong>I2</strong> signed balances</td><td>A savings account at +100,000, a card at −4,500 and a home loan at −4,000,000 sum to −3,904,500 with no <code>CASE</code> and no subtraction.</td></tr><tr><td><strong>I3</strong> transfers excluded</td><td>Confirming a remittance drops spending by exactly the source amount; rejecting it restores the figure. Proves the exclusion is live, not assumed.</td></tr><tr><td><strong>I4</strong> card payment not double-counted</td><td>A −310 purchase and a +3,900 payment yield spending of exactly 310.</td></tr><tr><td><strong>I5</strong> historical flows frozen</td><td>Move the rate table by a large step after import; the March figure is byte-identical.</td></tr><tr><td><strong>I6</strong> provenance</td><td>No row with <code>source = 'statement_import'</code> has a null <code>source_document_id</code>.</td></tr><tr><td><strong>I7</strong> derived values labelled</td><td>A Sunday import carries <code>fx_rate_is_carried = true</code> and an <code>fx_rate_date</code> earlier than its <code>booked_date</code>.</td></tr><tr><td><strong>I8</strong> reconciliation blocks</td><td>A statement with one row dropped raises <code>ImportBlocked</code> and stages <em>zero</em> rows.</td></tr></tbody></table><p class="ddl-ref">Test source: <a href="../plan/test-suite.md">test-suite.md</a>.</p>
+<table><thead><tr><th>Invariant</th><th>What the test must prove</th></tr></thead><tbody><tr><td><strong>I1</strong> originals immutable</td><td><code>UPDATE</code> of <code>amount</code> or <code>currency</code> raises.</td></tr><tr><td><strong>I2</strong> signed balances</td><td>A savings account at +100,000, a card at −4,500 and a home loan at −4,000,000 sum to −3,904,500 with no <code>CASE</code> and no subtraction.</td></tr><tr><td><strong>I3</strong> transfers excluded</td><td>Confirming a remittance drops spending by exactly the source amount; rejecting it restores the figure. Proves the exclusion is live, not assumed.</td></tr><tr><td><strong>I4</strong> card payment not double-counted</td><td>A −310 purchase and a +3,900 payment yield spending of exactly 310.</td></tr><tr><td><strong>I5</strong> historical flows frozen</td><td>Move the rate table by a large step after import; the March figure is byte-identical.</td></tr><tr><td><strong>I6</strong> provenance</td><td>No row with <code>source = 'statement_import'</code> has a null <code>source_document_id</code>.</td></tr><tr><td><strong>I7</strong> derived values labelled</td><td>A Sunday import carries <code>fx_rate_is_carried = true</code> and an <code>fx_rate_date</code> earlier than its <code>booked_date</code>.</td></tr><tr><td><strong>I8</strong> reconciliation blocks</td><td>A statement with one row dropped raises <code>ImportBlocked</code> and stages <em>zero</em> rows.</td></tr></tbody></table><p class="ddl-ref">Test source: <a href="../superpowers/test-suite.md">test-suite.md</a>.</p>
 <hr>
 <h2 id="2-static-checks">2. Static checks</h2>
 <p>Some invariants are better enforced by refusing to compile than by testing at runtime.</p>
-<p>Three checks are enforced by refusing to build rather than by testing at runtime: no reporting function may read the base <code>transaction</code> table instead of <code>v_transaction_reportable</code> (I3); no query may multiply <code>amount</code> by a rate rather than reading a frozen column (I5); and no money value may pass through <code>parseFloat</code> or <code>Number()</code>, which is the likeliest way precision is silently lost.</p><p class="ddl-ref">Check source: <a href="../plan/test-suite.md">test-suite.md</a>.</p>
+<p>Three checks are enforced by refusing to build rather than by testing at runtime: no reporting function may read the base <code>transaction</code> table instead of <code>v_transaction_reportable</code> (I3); no query may multiply <code>amount</code> by a rate rather than reading a frozen column (I5); and no money value may pass through <code>parseFloat</code> or <code>Number()</code>, which is the likeliest way precision is silently lost.</p><p class="ddl-ref">Check source: <a href="../superpowers/test-suite.md">test-suite.md</a>.</p>
 <p><strong>Lint rules</strong></p>
 <table>
 <thead>
@@ -620,6 +620,27 @@ has never been restored is a hypothesis.</li>
 <li>Review rule health: unused rules, frequently-overridden rules, shadowed rules.</li>
 </ul>
 <hr>
+<h2 id="product-outcomes">Product outcomes and scenario gates</h2>
+<p>The <a href="../product/finance-os.html#acceptance">P01–P12 scenarios</a> supplement the eight
+ledger invariants. They are planned acceptance gates, not claims that tests already exist in Phase 0.</p>
+<ul>
+<li>M5/M9a: external support reduces retained income; internal transfers do not; verified dates and
+in-transit gaps remain visible. One complete recent month provides an early usability checkpoint.</li>
+<li>M7/M9b: investment funding and principal repayments cancel cash legs; income, distributions and
+market/FX effects are counted once; platform transfers preserve acquisition history.</li>
+<li>Phase 2A: account-level shortfalls remain visible; purchases and card settlements have distinct
+spending/cash timing; actual payments clear future commitments; actions resolve without duplicates.</li>
+<li>Phase 2B: resources cannot be reserved twice; emergency coverage uses a visible baseline;
+partial claims settle without creating duplicate income; renewals and maturities surface actions.</li>
+<li>M10: the owner can interpret exported records independently and unauthorized sessions cannot retrieve them.</li>
+</ul>
+<p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
+source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.
+A blanket 1% net-worth tolerance does not waive reconciliation. Complete synthetic attribution cases
+have zero residual, including internal movements and dated FX effects.</p>
+<p>Measure import plus ledger-review time against the twenty-minute target; measure the added planning
+review separately. Validate that the user can identify the verified position, next obligations,
+uncommitted resources and unresolved actions. Daily opening frequency alone is not success.</p>
 <h2 id="8-definition-of-done">8. Definition of done</h2>
 <p>A milestone is complete when all of the following hold. Partial completion is tracked as
 incomplete — a milestone that is &quot;done except for tests&quot; is a milestone whose numbers cannot be

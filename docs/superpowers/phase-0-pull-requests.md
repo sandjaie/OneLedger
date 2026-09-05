@@ -8,11 +8,27 @@
 
 **Tech Stack:** Docker Compose · Postgres 18 · Python 3.14 · FastAPI · Pydantic · `pdfplumber` · uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · TypeScript · Tailwind · `decimal.js` · vitest
 
-**Spec:** [`docs/plan/phase-0-foundations.md`](./phase-0-foundations.md) — 11 tasks, 73 steps, every line of code and every verification command. **This plan does not restate that code.** It decides how the 11 tasks become reviewable pull requests, what gates each one, and what "done" means. Executors read both: the spec for *what to type*, this plan for *what to ship and when*.
+**Spec:** [`docs/superpowers/phase-0-foundations.md`](./phase-0-foundations.md) — 11 tasks, 73 steps, every line of code and every verification command. **This plan does not restate that code.** It decides how the 11 tasks become reviewable pull requests, what gates each one, and what "done" means. Executors read both: the spec for *what to type*, this plan for *what to ship and when*.
 
 Supporting specifications: [architecture](../design/architecture.html), [data model](../design/data-model.html), [multi-currency and FX](../design/multi-currency-and-fx.html), [security and privacy](../operations/security-and-privacy.html), [schema reference](./schema.md).
 
 ---
+
+## Current execution status — 6 September 2026
+
+GitHub PRs **#3–#7 are merged** into `feature/phase-0-foundations`. They cover original Tasks
+**1–8**, including the FX backfill endpoint. The owner confirmed #7 merged; its feature and review
+fixes through `fd6b5db` are present in the local integration branch. This status records delivered
+work, not a new run of every verification command printed below.
+
+**Resume at Task 9**, then Tasks 10–11 and Phase 0 exit verification. The numbered PR headings in
+this document set are ordinal groups: original PR 5 corresponds to GitHub #7; original PRs 6–7
+remain. Do not restart completed tasks because their original instructional checkboxes are blank.
+
+The [current master](plans/implementation-plan.md) carries the revised product
+sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0
+plan stays here for continuity, and Phase 0 scope remains unchanged.
+
 
 ## Global Constraints
 
@@ -20,7 +36,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 - **Postgres 18**, **Python 3.14** (`requires-python = ">=3.14"`), **Node 24 LTS**.
 - **Money is `NUMERIC` in Postgres and `Decimal` in Python. Never `float`, `real` or `double precision`.** Over the wire it is a **string**. Enforced by lint and by Pydantic validators.
-- **Migrations are forward-only, applied by Flyway** ([ADR-0015](../adr/0015-flyway-for-schema-migrations.html)), pinned to `flyway/flyway:13.5.0-alpine`. No down-migrations, and never edit an applied migration — Flyway checksums them. A schema change edits `docs/plan/schema.md` **and** `docs/design/data-model.html` in the same commit.
+- **Migrations are forward-only, applied by Flyway** ([ADR-0015](../adr/0015-flyway-for-schema-migrations.html)), pinned to `flyway/flyway:13.5.0-alpine`. No down-migrations, and never edit an applied migration — Flyway checksums them. A schema change edits `docs/superpowers/schema.md` **and** `docs/design/data-model.html` in the same commit.
 - **No real financial data enters the repository, ever.** `pdf-statements/`, `*.pdf` and `.env` are git-ignored; `scripts/check-no-real-data.sh` runs in pre-commit and in CI.
 - **No secret is ever prefixed `NEXT_PUBLIC_`.** `NEXT_PUBLIC_API_URL` is the only variable carrying the prefix, and it holds a URL.
 - **No bank name appears as a code identifier, enum value or required seed row.** Institutions, layouts, categories and rules are rows.
@@ -220,7 +236,7 @@ The `0002` test asserts an unauthenticated role reads **zero rows** from `househ
 
 - [ ] **Step 4: Confirm the schema docs did not drift**
 
-`docs/plan/schema.md` and `docs/design/data-model.html` describe these tables. If what you wrote differs from what they say, one of them is wrong — fix it in this PR.
+`docs/superpowers/schema.md` and `docs/design/data-model.html` describe these tables. If what you wrote differs from what they say, one of them is wrong — fix it in this PR.
 
 - [ ] **Step 5: PR into `feature/phase-0-foundations`, wait for Codex, merge on approval**
 

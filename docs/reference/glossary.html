@@ -329,11 +329,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -450,8 +450,7 @@ rules by priority.</p>
 120 covering UAE, India and global merchants.</p>
 <hr>
 <h2 id="transfers">Transfers</h2>
-<p><strong>External transfer</strong> — Money sent to an account not tracked in the system. Excluded from
-spending, but shown separately from internal movements.</p>
+<p><strong>External transfer</strong> — Money confirmed as leaving the household, such as family support. Separate from consumption, but included in external outflows and retained-income calculations. An untracked destination alone does not make a movement external.</p>
 <p><strong>Leg</strong> — One side of a transfer. A transfer has a source leg and a destination leg, each an
 ordinary transaction row carrying <code>transfer_id</code>.</p>
 <p><strong>Pending transfer</strong> — A leg whose peer hasn&#39;t been imported yet. Excluded from spending;
@@ -496,10 +495,8 @@ Distinct from current outstanding, which includes transactions since.</p>
 <p><strong>Utilisation</strong> — Card outstanding ÷ credit limit. Computed, never stored.</p>
 <hr>
 <h2 id="net-worth">Net worth</h2>
-<p><strong>Attribution</strong> — The decomposition of a net-worth change into its causes: contributions, market
-appreciation, principal reduction, FX translation, revaluation, and the residual.</p>
-<p><strong>Liquid net worth</strong> — Net worth excluding property, locked retirement accounts and anything not
-convertible within roughly a month. Often the more actionable number.</p>
+<p><strong>Attribution</strong> — The decomposition of a net-worth change into retained income, market appreciation, revaluation, FX translation, other identified external changes and a visible residual. Internal investment funding and principal repayments cancel their funding legs.</p>
+<p><strong>Liquid net worth</strong> — Net worth of user-selected accounts under Q22. It is distinct from uncommitted cash and eligible emergency resources.</p>
 <p><strong>Net worth</strong> — <code>SUM(balance_in_base)</code> across all accounts. One aggregate, because balances are
 signed (Invariant I2).</p>
 <p><strong>Net worth snapshot</strong> — A stored month-end computation, including the rates used, so the
@@ -507,6 +504,17 @@ historical trend is reproducible.</p>
 <p><strong>Unexplained residual</strong> — The part of a net-worth change that attribution cannot account for.
 <strong>Displayed, never hidden</strong> — it is the best data-quality signal the system produces.</p>
 <hr>
+<h2 id="planning">Planning</h2>
+<p><strong>Verified position</strong> — A position tied to dated statement or valuation evidence, with account/period coverage disclosed.</p>
+<p><strong>Estimated position</strong> — A projection from dated evidence and explicit assumptions; not a bank-confirmed balance.</p>
+<p><strong>Retained income</strong> — Income less net consumption spending and external household outflows. It may be held in cash, invested or used to reduce debt.</p>
+<p><strong>Commitment</strong> — A confirmed or estimated future payment/receipt with an account, currency, date and settlement status; not a posted ledger row.</p>
+<p><strong>Earmarking</strong> — Reserving existing resources for a goal or emergency reserve without moving money or changing wealth. The same resource cannot be reserved twice.</p>
+<p><strong>Uncommitted resources</strong> — Accessible resources after accounting for applicable obligations and reservations once.</p>
+<p><strong>Emergency coverage</strong> — Eligible emergency resources divided by the user-selected monthly essential-spend baseline, with assumptions shown.</p>
+<p><strong>In transit</strong> — An internal movement awaiting settlement evidence. Shown separately from settled available cash; an estimated value must be labelled and cleared on settlement.</p>
+<p><strong>Action</strong> — Follow-up with a reason, linked financial record, optional due date and open/snoozed/completed/dismissed state.</p>
+<p>Full definitions and acceptance examples: <a href="../product/finance-os.html">finance OS requirements</a>.</p>
 <h2 id="system">System</h2>
 <p><strong>Audit log</strong> — Append-only record of every change to financial data. Insert-only at the database
 grant level.</p>

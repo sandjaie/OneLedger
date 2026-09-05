@@ -329,11 +329,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -397,9 +397,8 @@ converted at today&#39;s rate. The gap is <strong>FX translation gain or loss</s
 be reconciled away — it is a genuine change in wealth.</p>
 <p>If you hold AED and the AED strengthens against the INR, your net worth in INR rises without you
 earning, spending or investing anything. That belongs on the balance sheet as its own line:</p>
-<pre><code>+ ₹12.0 L   investment contributions
+<pre><code>+ ₹27.0 L   retained income
 + ₹ 8.0 L   market appreciation
-+ ₹15.0 L   loan principal reduction
 + ₹ 1.4 L   FX translation gain          ← this line
 − ₹ 2.0 L   asset depreciation
 </code></pre>
@@ -454,7 +453,7 @@ AED/INR = (EUR/INR) ÷ (EUR/USD × 3.6725) AED reached through its peg
 </code></pre>
 <p>The ECB does not publish AED, which is exactly why the peg derivation exists. A currency that is
 neither published nor pegged raises rather than guesses — see <code>units_per_eur</code> in
-<a href="../plan/phase-0-foundations.md">phase-0-foundations.md</a> Task 7.</p>
+<a href="../superpowers/phase-0-foundations.md">phase-0-foundations.md</a> Task 7.</p>
 <blockquote>
 <p><strong>Verify before implementing.</strong> Free API availability and terms change. The rate source is
 behind an interface (<code>FxRateSource</code>) with the ECB path as the default implementation, so
@@ -607,20 +606,20 @@ the FX line reconcile to the last decimal rather than approximately.</p>
 </tr>
 </thead>
 <tbody><tr>
-<td>Net cash saved</td>
-<td>Σ transactions on cash accounts (income − expense)</td>
+<td>Retained income</td>
+<td>Income less net consumption and external household outflows across the household, including card purchases; internal transfers excluded. Recognised investment income is counted here once.</td>
 </tr>
 <tr>
-<td>Investment contributions</td>
-<td>Σ investment purchases net of redemptions</td>
+<td>Internal investment funding — supporting breakdown</td>
+<td>Cash outflow and investment inflow cancel in the consolidated waterfall. Portfolio transfers and reinvestment are not new household saving.</td>
 </tr>
 <tr>
 <td>Market appreciation</td>
-<td>Δ holding value not explained by units bought or sold</td>
+<td>Holding value change after funding, distributions, corporate actions and valuation currency effects are accounted for; do not repeat investment income recognised in retained income.</td>
 </tr>
 <tr>
-<td>Loan principal reduction</td>
-<td>Σ principal components of actual EMIs, plus prepayments</td>
+<td>Principal reduction — supporting breakdown</td>
+<td>Reduction of debt cancels the cash funding leg; interest and fees remain costs. Principal repayment alone creates no household wealth.</td>
 </tr>
 <tr>
 <td>Asset revaluation</td>
@@ -635,6 +634,18 @@ the FX line reconcile to the last decimal rather than approximately.</p>
 <td>The residual, <strong>displayed rather than absorbed</strong></td>
 </tr>
 </tbody></table>
+<p><strong>Consolidation comes before attribution.</strong> Buying an investment for 50,000 from
+existing cash, or paying 50,000 of principal from existing cash, changes consolidated net worth by
+zero before costs. Show allocation movements separately rather than adding their positive legs to
+income retained. Identify other external changes (for example an in-kind gift) separately; never
+force them into market appreciation or the residual.</p>
+<p>The identity above is exact per account. To explain flows at frozen booked-date rates in a
+household waterfall, also allocate FX movement on intra-period flows to the FX component. For
+example, an income flow valued at its closing rate in the identity must have its closing-minus-booked
+translation difference removed from retained income and included in FX. Cross-currency internal
+legs must be matched so spread/fees and translation effects remain identified. M9b's detailed plan
+must specify this bridge and prove it with dated cash-flow fixtures; a row labelled contributions
+cannot substitute for it. See <a href="../product/finance-os.html#financial-meaning">F03</a>.</p>
 <p>A non-trivial residual means something real: a missing statement, an unimported month, an
 unlinked transfer, a stale valuation. It is a data-quality signal, so hiding it would discard the
 most useful diagnostic the product has. Invariant I7.</p>
