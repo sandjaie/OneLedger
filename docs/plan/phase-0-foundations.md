@@ -1258,7 +1258,17 @@ from .auth import require_owner, session_secret
 # its sessions is broken in a way every caller will experience as an unexplained 500.
 session_secret()
 
-app = FastAPI(title="OneLedger", version="0.1.0")
+# /docs, /redoc and /openapi.json are registered by default and depend on nothing, which
+# would make three unauthenticated routes rather than the one the boundary allows —
+# /openapi.json alone hands an anonymous caller the entire route surface. Generating the
+# client's types does not need them served: `scripts/openapi.py` writes the schema to a file.
+app = FastAPI(
+    title="OneLedger",
+    version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 # The web app is served from :3000 and calls this service on :8000 — a different origin,
 # because the port differs. Without this the browser blocks every response, and because
@@ -1295,14 +1305,28 @@ Expected: 7 passed; ruff and mypy clean.
 - [ ] **Step 7: Verify the service runs and rejects an anonymous caller**
 
 ```bash
-cd api && uv run uvicorn oneledger.main:app --reload --port 8000 &
+# From the repository root. Neither Python nor `uv run` reads .env, and the service now
+# refuses to start without SESSION_SECRET — so loading it is the first step, not an
+# afterthought. Run this without it and you get the RuntimeError, which is correct but
+# is not what you were trying to test.
+. scripts/load-env.sh
+uv run --project api uvicorn oneledger.main:app --reload --port 8000 &
+
 curl -s localhost:8000/health                                    # {"status":"ok"}
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami   # 401
 curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami \
   -H "Cookie: session=not-a-real-token"                           # 403
+
+# /health is the only route that answers without a session. Prove it.
+for r in /docs /redoc /openapi.json; do
+  curl -s -o /dev/null -w "$r %{http_code}\n" "localhost:8000$r"  # 404 each
+done
 ```
 
-Expected: `ok`, then `401`, then `403`.
+Expected: `ok`, then `401`, then `403`, then three `404`s.
+
+> **`SESSION_SECRET` must be a real value before this works.** `.env.example` ships it empty
+> with the command that fills it: `openssl rand -hex 32`.
 
 - [ ] **Step 7b: Write the Dockerfile**
 
