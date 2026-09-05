@@ -8,9 +8,9 @@
 
 **Tech Stack:** Docker Compose · Postgres 18 · Python 3.14 · FastAPI · Pydantic · `pdfplumber` · uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · TypeScript · Tailwind · `decimal.js` · vitest
 
-**Spec:** [`docs/plan/phase-0-foundations.md`](../../plan/phase-0-foundations.md) — 11 tasks, 73 steps, every line of code and every verification command. **This plan does not restate that code.** It decides how the 11 tasks become reviewable pull requests, what gates each one, and what "done" means. Executors read both: the spec for *what to type*, this plan for *what to ship and when*.
+**Spec:** [`docs/plan/phase-0-foundations.md`](./phase-0-foundations.md) — 11 tasks, 73 steps, every line of code and every verification command. **This plan does not restate that code.** It decides how the 11 tasks become reviewable pull requests, what gates each one, and what "done" means. Executors read both: the spec for *what to type*, this plan for *what to ship and when*.
 
-Supporting specifications: [architecture](../../design/architecture.html), [data model](../../design/data-model.html), [multi-currency and FX](../../design/multi-currency-and-fx.html), [security and privacy](../../operations/security-and-privacy.html), [schema reference](../../plan/schema.md).
+Supporting specifications: [architecture](../design/architecture.html), [data model](../design/data-model.html), [multi-currency and FX](../design/multi-currency-and-fx.html), [security and privacy](../operations/security-and-privacy.html), [schema reference](./schema.md).
 
 ---
 
@@ -20,7 +20,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 
 - **Postgres 18**, **Python 3.14** (`requires-python = ">=3.14"`), **Node 24 LTS**.
 - **Money is `NUMERIC` in Postgres and `Decimal` in Python. Never `float`, `real` or `double precision`.** Over the wire it is a **string**. Enforced by lint and by Pydantic validators.
-- **Migrations are forward-only, applied by Flyway** ([ADR-0015](../../adr/0015-flyway-for-schema-migrations.html)), pinned to `flyway/flyway:13.5.0-alpine`. No down-migrations, and never edit an applied migration — Flyway checksums them. A schema change edits `docs/plan/schema.md` **and** `docs/design/data-model.html` in the same commit.
+- **Migrations are forward-only, applied by Flyway** ([ADR-0015](../adr/0015-flyway-for-schema-migrations.html)), pinned to `flyway/flyway:13.5.0-alpine`. No down-migrations, and never edit an applied migration — Flyway checksums them. A schema change edits `docs/plan/schema.md` **and** `docs/design/data-model.html` in the same commit.
 - **No real financial data enters the repository, ever.** `pdf-statements/`, `*.pdf` and `.env` are git-ignored; `scripts/check-no-real-data.sh` runs in pre-commit and in CI.
 - **No secret is ever prefixed `NEXT_PUBLIC_`.** `NEXT_PUBLIC_API_URL` is the only variable carrying the prefix, and it holds a URL.
 - **No bank name appears as a code identifier, enum value or required seed row.** Institutions, layouts, categories and rules are rows.
@@ -83,7 +83,7 @@ chore: pin gitleaks to v8.30.1
 ## Testing discipline, and why the hooks matter more than the CI
 
 **Test-driven, and the spec already assumes it.** Every task in
-[`phase-0-foundations.md`](../../plan/phase-0-foundations.md) is shaped the same way: write the
+[`phase-0-foundations.md`](./phase-0-foundations.md) is shaped the same way: write the
 failing test, run it and watch it fail *for the right reason*, write the minimal implementation, run
 it again. That is not decoration. In a ledger the tests **are** the invariants — a statement that
 doesn't balance doesn't import, a transfer is never spending, last March's total does not move — and
