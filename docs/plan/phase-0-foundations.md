@@ -835,7 +835,8 @@ git commit -m "feat(db): fx_rate with provenance and carry-forward constraints"
 **Interfaces:**
 - Consumes: the `db` service from Task 1; `app_user` from Task 3.
 - Produces: a FastAPI app on `:8000`; the dependency `require_owner()` returning the caller's
-  `household_id`, which **every** route from here on depends on; `connect()` for Postgres access.
+  `household_id`, which **every** route from here on depends on; `resolve_owner(claims, lookup)`,
+  the pure function it wraps, which Task 10 reuses; `connect()` for Postgres access.
 
 - [ ] **Step 1: Write the failing test**
 
