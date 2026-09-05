@@ -34,11 +34,6 @@ venv/
 .ruff_cache/
 *.egg-info/
 
-# Supabase
-.supabase/
-supabase/.branches/
-supabase/.temp/
-
 # Backups
 backups/
 *.dump

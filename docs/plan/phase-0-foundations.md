@@ -115,7 +115,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
       POSTGRES_DB: oneledger
     ports: ["5432:5432"]
-    volumes: ["pgdata:/var/lib/postgresql/data"]
+    # 18+ stores data in a major-version subdirectory, so the mount goes one level
+    # up. Mounting /var/lib/postgresql/data is the <=17 convention and the image
+    # refuses to start on it.
+    volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oneledger"]
       interval: 5s
@@ -2239,7 +2242,8 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  ./scripts/check-no-real-data.sh passes; no statement is tracked by git
 ☐  uv run pytest, ruff and mypy --strict all clean in api/
 ☐  All migrations apply cleanly from empty, seeds included, every test checked:
-     docker compose run --rm flyway clean migrate
+     docker compose down -v && docker compose up -d db     # genuinely empty; `flyway clean`
+     docker compose run --rm flyway migrate                # is disabled by default since v10
      for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
      for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
    (the seeds are not optional: 0001_reference.sql asserts six system institutions, and
