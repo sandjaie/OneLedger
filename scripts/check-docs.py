@@ -67,7 +67,7 @@ def check_links() -> list[str]:
 def check_html() -> list[str]:
     out = []
     for path in sorted(ROOT.rglob("*.html")):
-        if ".git" in path.parts:
+        if SKIP.intersection(path.parts):
             continue
         checker = TagBalance()
         checker.feed(path.read_text())
