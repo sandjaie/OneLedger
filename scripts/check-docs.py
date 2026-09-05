@@ -52,10 +52,25 @@ def documents() -> list[pathlib.Path]:
                   if p.suffix in (".html", ".md") and not SKIP.intersection(p.parts))
 
 
+FENCE = re.compile(r"(?ms)^```.*?^```")
+
+
+def prose_only(text: str, suffix: str) -> str:
+    """Markdown link syntax means nothing inside a fenced code block.
+
+    `def carry_forward[T](published: dict[date, T], ...)` is a Python generic, and reads as
+    `[T](published: dict...)` to a link matcher — a broken link that is not a link at all.
+    Blank the fences rather than deleting them, so reported line numbers stay true.
+    """
+    if suffix != ".md":
+        return text
+    return FENCE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+
+
 def check_links() -> list[str]:
     out = []
     for path in documents():
-        text = path.read_text()
+        text = prose_only(path.read_text(), path.suffix)
         for pattern in LINK_PATTERNS:
             for match in pattern.finditer(text):
                 target = match.group(1).split("#")[0]

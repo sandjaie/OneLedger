@@ -1253,6 +1253,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import require_owner, session_secret
+from .routes import fx
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
@@ -1281,6 +1282,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+
+app.include_router(fx.router)
 
 
 @app.get("/health")
@@ -1393,29 +1397,30 @@ from oneledger.fx import Peg, carry_forward, cross_rate
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 
 
-def test_cross_rate_matches_published_ecb_values():
+def test_cross_rate_matches_published_ecb_values() -> None:
     """ECB 2024-01-02: EUR/INR 91.285, EUR/USD 1.0956. Verified against the live API."""
     published = {"INR": Decimal("91.285"), "USD": Decimal("1.0956")}
     usd_inr = cross_rate(published, "USD", "INR", PEGS)
     assert usd_inr.quantize(Decimal("0.0001")) == Decimal("83.3196")
 
 
-def test_a_pegged_currency_needs_no_published_rate():
+def test_a_pegged_currency_needs_no_published_rate() -> None:
     """The ECB publishes no AED, which is exactly why the peg derivation exists."""
     published = {"INR": Decimal("91.285"), "USD": Decimal("1.0956")}
     aed_inr = cross_rate(published, "AED", "INR", PEGS)
     usd_inr = cross_rate(published, "USD", "INR", PEGS)
     # the peg identity must hold to 8 dp — test 2 of multi-currency-and-fx.html §9
-    assert (aed_inr * PEGS["AED"].units_per_anchor).quantize(Decimal("0.00000001")) == \
-           usd_inr.quantize(Decimal("0.00000001"))
+    assert (aed_inr * PEGS["AED"].units_per_anchor).quantize(
+        Decimal("0.00000001")
+    ) == usd_inr.quantize(Decimal("0.00000001"))
 
 
-def test_an_unpublished_unpegged_currency_is_an_error_not_a_guess():
+def test_an_unpublished_unpegged_currency_is_an_error_not_a_guess() -> None:
     with pytest.raises(ValueError, match="neither published nor pegged"):
         cross_rate({"INR": Decimal("91.285")}, "BRL", "INR", PEGS)
 
 
-def test_carry_forward_fills_gaps_and_never_interpolates():
+def test_carry_forward_fills_gaps_and_never_interpolates() -> None:
     """A Sunday uses Friday's rate, flagged — not the average of Friday and Monday."""
     published = {date(2024, 1, 5): Decimal("83.00"), date(2024, 1, 8): Decimal("84.00")}
     filled = carry_forward(published, date(2024, 1, 5), date(2024, 1, 8))
@@ -1427,7 +1432,7 @@ def test_carry_forward_fills_gaps_and_never_interpolates():
     ]
 
 
-def test_carry_forward_refuses_to_start_on_a_gap():
+def test_carry_forward_refuses_to_start_on_a_gap() -> None:
     with pytest.raises(ValueError, match="no published rate at or before"):
         carry_forward({date(2024, 1, 8): Decimal("84.00")}, date(2024, 1, 5), date(2024, 1, 8))
 ```
@@ -1450,20 +1455,18 @@ No currency code is hardcoded here. The ECB quotes everything against EUR, so an
 division; a currency the ECB does not publish is reached through its peg, which is a row in
 `currency`. See multi-currency-and-fx.html §3.
 """
+
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import TypeVar
 
 import httpx
 
 # The FX doc names api.frankfurter.app; that host now 301s to nothing. Verified live 2026-09-05.
 FRANKFURTER = "https://api.frankfurter.dev/v1"
-
-T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -1497,7 +1500,7 @@ def cross_rate(
     return units_per_eur(published, quote, pegs) / units_per_eur(published, base, pegs)
 
 
-def carry_forward(
+def carry_forward[T](
     published: dict[date, T], start: date, end: date
 ) -> list[tuple[date, T, date | None]]:
     """Fill every calendar date from the last published value.
@@ -1599,14 +1602,17 @@ from oneledger.routes.fx import to_rows
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 
 
-def test_rows_carry_provenance():
+def test_rows_carry_provenance() -> None:
     """Every stored rate declares whether it was published or carried, and from where."""
-    published = {date(2024, 1, 5): {"INR": Decimal("91.28"), "USD": Decimal("1.0956")},
-                 date(2024, 1, 8): {"INR": Decimal("91.50"), "USD": Decimal("1.0940")}}
-    rows = to_rows(published, date(2024, 1, 5), date(2024, 1, 8),
-                   quote="INR", bases=["USD", "AED"], pegs=PEGS)
+    published = {
+        date(2024, 1, 5): {"INR": Decimal("91.28"), "USD": Decimal("1.0956")},
+        date(2024, 1, 8): {"INR": Decimal("91.50"), "USD": Decimal("1.0940")},
+    }
+    rows = to_rows(
+        published, date(2024, 1, 5), date(2024, 1, 8), quote="INR", bases=["USD", "AED"], pegs=PEGS
+    )
 
-    assert len(rows) == 8                       # 4 days x 2 currency pairs
+    assert len(rows) == 8  # 4 days x 2 currency pairs
     usd = [r for r in rows if r["base_currency"] == "USD"]
     assert [r["is_carried_forward"] for r in usd] == [False, True, True, False]
     assert usd[1]["carried_from"] == date(2024, 1, 5)
@@ -1659,8 +1665,8 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
         cur.execute("SELECT code, pegged_to, peg_rate FROM currency WHERE pegged_to IS NOT NULL")
         pegs = {code: Peg(anchor, rate) for code, anchor, rate in cur.fetchall()}
         cur.execute(
-            "SELECT DISTINCT currency FROM account WHERE currency <> %s "
-            "UNION SELECT %s", (quote, secondary),
+            "SELECT DISTINCT currency FROM account WHERE currency <> %s UNION SELECT %s",
+            (quote, secondary),
         )
         bases = {row[0] for row in cur.fetchall()}
 
@@ -1684,11 +1690,17 @@ def to_rows(
         series = {day: cross_rate(rates, base, quote, pegs) for day, rates in published.items()}
         source = "derived_peg" if base in pegs else EcbFrankfurterSource.name
         for day, rate, carried in carry_forward(series, start, end):
-            rows.append({
-                "rate_date": day, "base_currency": base, "quote_currency": quote,
-                "rate": rate, "source": source,
-                "is_carried_forward": carried is not None, "carried_from": carried,
-            })
+            rows.append(
+                {
+                    "rate_date": day,
+                    "base_currency": base,
+                    "quote_currency": quote,
+                    "rate": rate,
+                    "source": source,
+                    "is_carried_forward": carried is not None,
+                    "carried_from": carried,
+                }
+            )
     return rows
 
 
@@ -1735,8 +1747,7 @@ def rate_on(on: date, _: str = Depends(require_owner)) -> list[dict[str, Any]]:
             (on,),
         )
         return [
-            {"base": b, "quote": q, "rate": str(r), "source": s,
-             "carried": c, "carried_from": cf}
+            {"base": b, "quote": q, "rate": str(r), "source": s, "carried": c, "carried_from": cf}
             for b, q, r, s, c, cf in cur.fetchall()
         ]
 ```
@@ -1765,16 +1776,26 @@ Expected: 1 passed.
 . scripts/load-env.sh
 uv run --project api uvicorn oneledger.main:app --port 8000 &
 
-curl -s -X POST "localhost:8000/fx/backfill?start=2024-01-01&end=2026-09-05" \
+# `date +%F`, not a literal. A hardcoded end date silently stops covering today the day
+# after it is written, and the carried-rate probe below then reads an empty range rather
+# than a carried rate — which looks like a broken carry-forward and is not.
+curl -s -X POST "localhost:8000/fx/backfill?start=2024-01-01&end=$(date +%F)" \
   -b "session=$SESSION"
-curl -s "localhost:8000/fx/2026-09-03" -b "session=$SESSION"   # published
-curl -s "localhost:8000/fx/2026-09-06" -b "session=$SESSION"   # carried
-curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"   # the anchor
+
+LAST_SUNDAY=$(date -v-sunday +%F 2>/dev/null || date -d 'last sunday' +%F)
+curl -s "localhost:8000/fx/$(date -v-1d +%F 2>/dev/null || date -d yesterday +%F)" \
+  -b "session=$SESSION"                                          # published, if a weekday
+curl -s "localhost:8000/fx/$LAST_SUNDAY" -b "session=$SESSION"   # carried, names its origin
+curl -s "localhost:8000/fx/2024-01-01" -b "session=$SESSION"     # the anchor
 ```
 
-Expected: **1,958 rows** — 979 days from the 01 Jan 2024 anchor to today, times the two bases
-a fresh install quotes (`AED` from the reporting pair, `USD` as its peg anchor). Once accounts
-exist in other currencies the count rises by 979 per currency; recompute rather than assuming. `2026-09-03` shows `[ecb]`/`[derived_peg]` with no carry
+Expected: **two rows per calendar day** from the 01 Jan 2024 anchor to today — `AED` from the
+reporting pair and `USD` as its peg anchor. Measured on 2026-09-06: 1,960 rows for 980 days.
+Once accounts exist in other currencies the count rises by one row per day per currency, so
+compute it rather than matching a number written months earlier.
+
+A Sunday carries from the preceding Friday and says so; the anchor itself carries from
+2023-12-29, the last publication day of the previous year. `2026-09-03` shows `[ecb]`/`[derived_peg]` with no carry
 note; `2026-09-06` names `2026-09-04` as its origin; `2024-01-01` returns a rate.
 
 - [ ] **Step 6: Verify the peg identity holds across the whole table**
@@ -1786,7 +1807,12 @@ FROM fx_rate a
 JOIN fx_rate u ON u.rate_date = a.rate_date
              AND u.base_currency = 'USD' AND u.quote_currency = 'INR'
 WHERE a.base_currency = 'AED' AND a.quote_currency = 'INR'
-  AND round(a.rate * 3.6725, 8) <> round(u.rate, 8);"
+  -- A tolerance, not rounded equality. round(x,8) <> round(y,8) flags a pair that differs by
+  -- 2e-10 when it happens to straddle a rounding boundary, which is not what "holds to 8
+  -- decimal places" means. Measured worst case across 979 days is 1.8e-10: NUMERIC(20,10)
+  -- storage granularity amplified by the 3.6725 multiplication, and two orders of magnitude
+  -- inside the tolerance.
+  AND abs(a.rate * 3.6725 - u.rate) > 1e-8;"
 ```
 
 Expected: `violations | 0` — test 2 of
