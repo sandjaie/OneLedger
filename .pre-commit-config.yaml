@@ -1,0 +1,113 @@
+# Everything that can fail a pull request should have failed at commit or push
+# instead. Install once, for both hook types:
+#
+#     pre-commit install --install-hooks -t pre-commit -t pre-push
+#
+# api/ and web/ do not exist until Phase 0 PR 4 and PR 6. Every hook that
+# targets them exits cleanly until they arrive, so this file is installable
+# from the first commit rather than after the code shows up.
+
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+minimum_pre_commit_version: "4.0.0"
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+        exclude: '^(web/package-lock\.json|api/uv\.lock|docs/product/mockups/)'
+      # Whitespace fixers touch code only. docs/ carries ASCII diagrams and
+      # <pre> blocks where trailing spaces are load-bearing.
+      - id: end-of-file-fixer
+        files: '^(api|web|db|scripts)/'
+      - id: trailing-whitespace
+        files: '^(api|web|db|scripts)/'
+
+  - repo: local
+    hooks:
+      - id: no-real-data
+        name: no real financial data is tracked
+        entry: scripts/check-no-real-data.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: docs
+        name: docs — links, html, adr numbering
+        entry: python3 scripts/check-docs.py
+        language: system
+        pass_filenames: false
+        files: '^(docs/|README\.md|scripts/check-docs\.py)'
+
+      - id: ruff
+        name: ruff — lint (api)
+        entry: scripts/hooks/api.sh ruff check --fix
+        language: system
+        pass_filenames: false
+        files: '^api/.*\.py$'
+
+      - id: ruff-format
+        name: ruff — format (api)
+        entry: scripts/hooks/api.sh ruff format
+        language: system
+        pass_filenames: false
+        files: '^api/.*\.py$'
+
+      - id: mypy
+        name: mypy --strict (api)
+        entry: scripts/hooks/api.sh mypy .
+        language: system
+        pass_filenames: false
+        files: '^api/.*\.py$'
+
+      - id: eslint
+        name: eslint (web)
+        entry: scripts/hooks/web.sh lint
+        language: system
+        pass_filenames: false
+        files: '^web/.*\.(ts|tsx|js|jsx)$'
+
+      - id: tsc
+        name: tsc --noEmit (web)
+        entry: scripts/hooks/web.sh typecheck
+        language: system
+        pass_filenames: false
+        files: '^web/.*\.(ts|tsx)$'
+
+      # ---- pre-push: the full suite, so a red test never reaches a PR ----
+
+      - id: pytest
+        name: pytest (api)
+        entry: scripts/hooks/api.sh pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: vitest
+        name: vitest (web)
+        entry: scripts/hooks/web.sh test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: db-invariants
+        name: db invariant tests
+        entry: scripts/hooks/db-tests.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

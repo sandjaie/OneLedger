@@ -309,13 +309,6 @@ body {
 <li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
-      <h2>Mockups</h2>
-      <ul><li><a href="../product/mockups/OneLedger.dc.html">Screen set 01</a></li>
-<li><a href="../product/mockups/Review.dc.html">Review queue</a></li>
-<li><a href="../product/mockups/NetWorth.dc.html">Net worth</a></li>
-<li><a href="../product/mockups/LayoutMapping.dc.html">Layout mapping</a></li></ul>
-    </div>
-<div class="register-section">
       <h2>Design</h2>
       <ul><li><a href="#" aria-current="page">Architecture</a></li>
 <li><a href="./data-model.html">Data model</a></li>
@@ -343,6 +336,13 @@ body {
 <li><a href="../plan/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
+      <h2>Mockups</h2>
+      <ul><li><a href="../product/mockups/OneLedger.dc.html">Screen set 01</a></li>
+<li><a href="../product/mockups/Review.dc.html">Review queue</a></li>
+<li><a href="../product/mockups/NetWorth.dc.html">Net worth</a></li>
+<li><a href="../product/mockups/LayoutMapping.dc.html">Layout mapping</a></li></ul>
+    </div>
+<div class="register-section">
       <h2>Decisions</h2>
       <ul>
 <li><a href="../adr/index.html">ADR index</a></li>
@@ -360,6 +360,7 @@ body {
 <li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
 <li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
 <li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/0015-flyway-for-schema-migrations.html">0015 Flyway for migrations</a></li>
 <li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
@@ -432,7 +433,7 @@ that made importing a terminal command — you drop files into the web app and i
 <pre><code>OneLedger/
 ├── docs/                      these specifications
 ├── db/
-│   ├── migrations/            numbered, forward-only SQL
+│   ├── migrations/            Flyway versioned, forward-only SQL
 │   ├── seeds/                 categories, institutions, seed rules, currencies
 │   └── tests/                 constraints, triggers, views, RLS
 ├── api/                       the Python service
@@ -486,7 +487,7 @@ the one exception is display formatting, which is not arithmetic.</p>
 <tr><td>Styling</td><td>Tailwind + shadcn/ui</td><td>Fast, unopinionated, no runtime cost</td></tr>
 <tr><td>Charts</td><td>Recharts</td><td>Lines, bars and waterfalls. No licence cost</td></tr>
 <tr><td>Python tooling</td><td>uv · ruff · mypy --strict · pytest</td><td>Fast, strict, current</td></tr>
-<tr><td>Migrations</td><td>Plain SQL, forward-only</td><td>No ORM migration magic over a schema this deliberate</td></tr>
+<tr><td>Migrations</td><td>Plain SQL, forward-only, run by <strong>Flyway</strong></td><td>No ORM migration magic over a schema this deliberate — but a runner that checksums what it applied, so an already-applied migration cannot be quietly edited (<a href="../adr/0015-flyway-for-schema-migrations.html">ADR-0015</a>)</td></tr>
 <tr><td>Proxy / TLS</td><td>Caddy</td><td>Automatic certificates, one config file. Only needed once hosted</td></tr>
 </tbody></table>
 <h3 id="which-versions-and-why">Which versions, and why</h3>

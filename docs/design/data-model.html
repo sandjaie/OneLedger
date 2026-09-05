@@ -317,13 +317,6 @@ body {
 <li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
-      <h2>Mockups</h2>
-      <ul><li><a href="../product/mockups/OneLedger.dc.html">Screen set 01</a></li>
-<li><a href="../product/mockups/Review.dc.html">Review queue</a></li>
-<li><a href="../product/mockups/NetWorth.dc.html">Net worth</a></li>
-<li><a href="../product/mockups/LayoutMapping.dc.html">Layout mapping</a></li></ul>
-    </div>
-<div class="register-section">
       <h2>Design</h2>
       <ul><li><a href="./architecture.html">Architecture</a></li>
 <li><a href="#" aria-current="page">Data model</a></li>
@@ -349,6 +342,13 @@ body {
 <li><a href="../plan/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
+      <h2>Mockups</h2>
+      <ul><li><a href="../product/mockups/OneLedger.dc.html">Screen set 01</a></li>
+<li><a href="../product/mockups/Review.dc.html">Review queue</a></li>
+<li><a href="../product/mockups/NetWorth.dc.html">Net worth</a></li>
+<li><a href="../product/mockups/LayoutMapping.dc.html">Layout mapping</a></li></ul>
+    </div>
+<div class="register-section">
       <h2>Decisions</h2>
       <ul>
 <li><a href="../adr/index.html">ADR index</a></li>
@@ -366,6 +366,7 @@ body {
 <li><a href="../adr/0012-statement-layouts-as-data.html">0012 Statement layouts as data</a></li>
 <li><a href="../adr/0013-python-backend-service.html">0013 Python backend service</a></li>
 <li><a href="../adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
+<li><a href="../adr/0015-flyway-for-schema-migrations.html">0015 Flyway for migrations</a></li>
 <li><a href="../adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
@@ -900,24 +901,27 @@ application role.</p>
 </tbody></table>
 <hr>
 <h2 id="17-migrations">17. Migrations</h2>
-<p>Plain, numbered, forward-only SQL under <code>db/migrations/</code>. Applied by a small runner against the <code>db</code> container, local and hosted alike.</p>
-<pre><code>0001_extensions_and_reference.sql     pgcrypto, currency, institution seed
-0002_identity_and_rls.sql             household, person, app_user, RLS policies
-0003_accounts.sql
-0004_fx_rates.sql
-0005_categories_and_merchants.sql     + seed taxonomy
-0006_transactions.sql                 + v_transaction_reportable
-0007_documents_and_import.sql         + statement_layout
-0008_classification_rules.sql         + seed rules
-0009_transfers.sql
-0010_card_statements.sql
-0011_investments.sql
-0012_loans.sql
-0013_valuations.sql
-0014_net_worth.sql
-0015_audit_log.sql
-0016_phase2_tables.sql                recurring, budget, payslip
-0017_deferred_foreign_keys.sql        the circular references, added last
+<p>Plain, forward-only SQL under <code>db/migrations/</code>, applied by <strong>Flyway</strong> against the
+<code>db</code> container, local and hosted alike (<a href="../adr/0015-flyway-for-schema-migrations.html">ADR-0015</a>). Flyway records a checksum of
+every migration it applies and refuses to run when one changes underneath it, which is the guardrail a
+forward-only schema most needs.</p>
+<pre><code>V1__extensions_and_reference.sql      pgcrypto, currency, institution seed
+V2__identity_and_rls.sql              household, person, app_user, RLS policies
+V3__accounts.sql
+V4__fx_rates.sql
+V5__categories_and_merchants.sql      + seed taxonomy
+V6__transactions.sql                  + v_transaction_reportable
+V7__documents_and_import.sql          + statement_layout
+V8__classification_rules.sql          + seed rules
+V9__transfers.sql
+V10__card_statements.sql
+V11__investments.sql
+V12__loans.sql
+V13__valuations.sql
+V14__net_worth.sql
+V15__audit_log.sql
+V16__phase2_tables.sql                recurring, budget, payslip
+V17__deferred_foreign_keys.sql        the circular references, added last
 </code></pre>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
