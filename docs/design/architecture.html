@@ -361,8 +361,10 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="02--architecture">02 — Architecture</h1>
-<p><strong>Constraint that shapes everything: zero infrastructure spend.</strong> Free tiers only. Localhost
-first, cloud when it earns it.</p>
+<p><strong>Constraint that shapes everything: near-zero infrastructure spend.</strong> Localhost first, one
+small VPS when it earns it — <a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a> settled
+this at roughly $5–12 a month with no usage pricing, replacing the free-tiers-only rule the earlier
+drafts were written under.</p>
 <p>That constraint turns out to produce a better architecture than an unconstrained one would, for
 reasons set out in §2.</p>
 <hr>
@@ -520,7 +522,7 @@ arithmetic on it — enforced by lint.</p>
 10. API      classify through the deterministic cascade
 11. API      propose transfer matches, scored
 12. API      reconcile: opening + Σ rows = declared closing?   ← blocks on mismatch
-13. API      upload original to Storage; write document, import_batch,
+13. API      write the original to the documents volume; write document, import_batch,
              staged_transaction — one database transaction
 14. You      review: confirm categories, confirm transfers, fix anything wrong
 15. Web      POST /import/{batch}/commit → staged rows become transaction rows
@@ -563,17 +565,17 @@ Migrations run forward against it. There is no staging environment — for a sin
 would cost more attention than it saves.</p>
 <h2 id="secrets">8. Secrets</h2>
 <table><thead><tr><th>Secret</th><th>Where it lives</th><th>Never</th></tr></thead><tbody>
-<tr><td><code>SUPABASE_URL</code></td><td>Public</td><td>—</td></tr>
-<tr><td><code>SUPABASE_ANON_KEY</code></td><td>Public — used by the web app for sign-in only</td><td>—</td></tr>
-<tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td><strong>The API service's local <code>.env</code></strong></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
+<tr><td><code>NEXT_PUBLIC_API_URL</code></td><td>Public — the browser needs to know where the API is</td><td>—</td></tr>
+<tr><td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td><td><strong>The API service's local <code>.env</code></strong></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
+<tr><td><code>SESSION_SECRET</code></td><td>The service's <code>.env</code> — it signs the session cookie</td><td>In the browser. Committed. Shared between deployments</td></tr>
 <tr><td>Google OAuth client secret</td><td>The service's <code>.env</code></td><td>In the repository. In the browser</td></tr>
 <tr><td>Account-number hash salt</td><td>The API service's <code>.env</code></td><td>Rotated — it would invalidate every stored hash</td></tr>
 <tr><td>PDF passwords</td><td>Posted with the file, held in memory for the parse</td><td>Written to disk, a keychain, the database or a log</td></tr>
 </tbody></table>
-<p><strong>The service-role key is back, and that is a real loss.</strong>
+<p><strong>A privileged database connection is back, and that is a real loss.</strong>
 <a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> had removed it entirely by making the browser
-write as the signed-in user under RLS. A backend holds credentials, so the key returns to the threat model.
-It is confined to one process on one machine, never reaches the browser, and
+write as the signed-in user under RLS. A backend holds credentials, so they return to the threat model.
+They are confined to one process on one machine, never reach the browser, and
 <a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3 records what now stands in
 for RLS as the authorization boundary.</p>
 <h2 id="sizing">9. Sizing</h2>
@@ -600,7 +602,7 @@ first disk resize is years away.</p>
 <p>The one place where &quot;personal project&quot; is not an excuse. Hours of downtime are fine; losing the
 ledger is not.</p>
 <pre><code>Daily    pg_dump → gzip → local disk, 30 days retained     scripts/backup-db.sh
-Weekly   full document sync from Storage → local disk      scripts/backup-docs.sh
+Weekly   documents volume → local disk                     scripts/backup-docs.sh
 Monthly  copy of both to a second physical location
 </code></pre>
 <p>Restore is tested <strong>quarterly</strong> against a scratch database, and the test is a checklist item in
