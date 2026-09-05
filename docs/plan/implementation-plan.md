@@ -64,13 +64,14 @@ violate accidentally and are enforced statically:
 - **No real financial data enters this repository, ever** — not in `main`, not in a branch, not in
   history. Test fixtures are redacted. `pdf-statements/`, `*.pdf` and `.env` are git-ignored.
 - RLS enabled on every household-scoped table from the first migration, even with one user.
-- `SUPABASE_SERVICE_ROLE_KEY` is never prefixed `NEXT_PUBLIC_`.
+- No secret is ever prefixed `NEXT_PUBLIC_`. `NEXT_PUBLIC_API_URL` is the only variable that carries
+  the prefix, and it holds a URL.
 
 **Process**
 
 - Migrations are numbered, plain, **forward-only** SQL. No down-migrations.
 - TDD: write the failing test, watch it fail, implement minimally, watch it pass, commit.
-- Zero infrastructure spend. Free tiers only.
+- Near-zero infrastructure spend: local while building, one small VPS once hosted (ADR-0018).
 - **No LLM calls in Phase 1 or Phase 2** ([ADR-0004](../adr/0004-defer-ai-to-v2.html)).
 
 ---

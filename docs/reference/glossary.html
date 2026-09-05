@@ -506,10 +506,11 @@ historical trend is reproducible.</p>
 grant level.</p>
 <p><strong>Household</strong> — The tenancy boundary. One household in Phase 1; the column exists so a second
 person can be added without a schema migration.</p>
-<p><strong>Import path</strong> — The browser-side pipeline that parses statements: <code>pdf.js</code> → words → parser →
-normalize → dedupe → FX freeze → reconcile → stage. Runs in a Web Worker in your own browser; the
-file bytes never reach a server (<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a>). There is no
-separate importer and no CLI.</p>
+<p><strong>Import path</strong> — The pipeline that parses statements: <code>pdfplumber</code> → words → parser →
+normalize → dedupe → FX freeze → reconcile → stage. It runs in the API service on a machine you
+control, so the file bytes reach no third party
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>). There is no separate importer and no
+CLI.</p>
 <p><strong>Invariant</strong> — One of the eight properties in <a href="../product/prd.html">prd.html</a> §4 that must always hold.
 Each has a test; violating one produces silently wrong numbers.</p>
 <p><strong>Never-store list</strong> — The credentials and identifiers this system deliberately never holds. The

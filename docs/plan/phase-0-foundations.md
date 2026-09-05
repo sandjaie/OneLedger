@@ -41,7 +41,8 @@ ones this plan touches directly:
 - Business dates are `DATE`. Audit timestamps are `TIMESTAMPTZ`, UTC.
 - Every household-scoped table carries `household_id` and has RLS **enabled**, from its first
   migration, even with one user.
-- `SUPABASE_SERVICE_ROLE_KEY` is never prefixed `NEXT_PUBLIC_`.
+- No secret is ever prefixed `NEXT_PUBLIC_`. `NEXT_PUBLIC_API_URL` is the only variable that carries
+  the prefix, and it holds a URL.
 - No real financial data in the repository, ever.
 - Migrations are forward-only. No down-migrations.
 - History anchor: **01 Jan 2024**. Reporting year: **calendar**.
@@ -200,7 +201,9 @@ repos:
 
 ```bash
 pre-commit install
-printf 'SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.fake\n' > /tmp/leak.env
+# a JWT-shaped value, because that is a rule gitleaks ships with — the point is to prove the
+# scanner fires, not to plant a secret this project actually holds
+printf 'LEAKED_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake.fake\n' > /tmp/leak.env
 cp /tmp/leak.env ./leak.env && git add leak.env
 pre-commit run --all-files          # expect: gitleaks FAILS
 git reset leak.env && rm leak.env
@@ -1555,7 +1558,8 @@ export async function apiFetch<T>(
 
 ```bash
 cd web && npx vitest run && npm run build
-grep -r "service_role\|SUPABASE_JWT_SECRET" .next/static/ && echo "LEAK" || echo "OK: clean bundle"
+grep -rE "SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|postgresql://" .next/static/ \
+  && echo "LEAK" || echo "OK: clean bundle"
 ```
 
 Expected: 1 passed, then `OK: clean bundle`. A checklist item in

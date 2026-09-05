@@ -368,6 +368,13 @@ auth vulnerabilities live.</p>
 <p>Separately: the ledger is one person&#39;s today, but a spouse&#39;s accounts could reasonably be added
 later. Retrofitting a tenancy dimension across forty tables is a genuinely painful migration.</p>
 <h2 id="decision">Decision</h2>
+<blockquote>
+<p><strong>Still in force, but read &quot;Supabase Auth&quot; as &quot;the API service&quot;.</strong>
+<a href="./0018-one-vps-one-compose-file.html">ADR-0018</a> removed Supabase; the service now verifies
+Google&#39;s <code>id_token</code> against Google&#39;s JWKS itself and issues its own signed session cookie. Every
+property this ADR decided — no passwords, no signup, one pinned address — is unchanged. Only the
+component performing the check moved.</p>
+</blockquote>
 <p><strong>Authentication:</strong> Google OAuth via Supabase Auth. No passwords. No signup flow, no public
 registration, no invitations, no password reset. The permitted account is pinned by email in
 configuration; any other Google account is rejected at the application layer even if Supabase

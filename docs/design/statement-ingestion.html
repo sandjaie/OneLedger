@@ -417,13 +417,15 @@ before parsing, before any cost is incurred — with a message naming when it wa
 statement downloaded twice.</p>
 <p><strong>Password-protected PDFs.</strong> Some statements are encrypted — two of the seven accounts in the set
 gathered so far. <strong>The product models no password scheme and derives nothing.</strong> When a file fails to open, the
-import screen shows a password field for that file and the user types it in. <code>pdf.js</code> accepts it
-directly:</p>
-<pre><code class="language-typescript">const doc = await getDocument({ data: bytes, password }).promise;
+import screen shows a password field for that file and the user types it in. <code>pdfplumber</code>
+accepts it directly:</p>
+<pre><code class="language-python">with pdfplumber.open(path, password=password) as pdf:
+    ...
 </code></pre>
-<p>The import form prompts for it and holds it in a React state variable for the duration of the
-parse. <strong>It is never written to disk, a keychain, a config file, the database or a log</strong>, and it is
-not remembered between imports. What is uploaded to Storage is the original encrypted file.</p>
+<p>The import form prompts for it and posts it alongside the file, over localhost or the TLS
+connection Caddy terminates. The service holds it in a local variable for the duration of the parse.
+<strong>It is never written to disk, a keychain, a config file, the database or a log</strong>, and it is not
+remembered between imports. What is stored in the documents volume is the original encrypted file.</p>
 <p>The import screen prompts per file, and only for files that actually fail to open. It does not
 guess, pre-fill, or offer to save.</p>
 <hr>
@@ -507,7 +509,7 @@ That is the entire reason reconciliation is non-optional.</p>
 </thead>
 <tbody><tr>
 <td><strong>PDF, text-based</strong></td>
-<td><code>pdf.js</code> via <code>lib/pdf/words.ts</code>. Columns identified by x-position, never by regex over a flattened line. Mandatory for any layout whose text extracts without spaces — one of the four in hand does</td>
+<td><code>pdfplumber</code> via <code>api/oneledger/parse/words.py</code>. Columns identified by x-position, never by regex over a flattened line. Mandatory for any layout whose text extracts without spaces — one of the four in hand does</td>
 </tr>
 <tr>
 <td><strong>PDF, scanned</strong></td>
@@ -515,7 +517,7 @@ That is the entire reason reconciliation is non-optional.</p>
 </tr>
 <tr>
 <td><strong>PDF, encrypted</strong></td>
-<td><code>getDocument({ data, password })</code>. The import screen prompts per file; no scheme is modelled</td>
+<td><code>pdfplumber.open(path, password=…)</code>. The import screen prompts per file; no scheme is modelled</td>
 </tr>
 <tr>
 <td><strong>CSV / Excel</strong></td>
@@ -799,7 +801,9 @@ and is worse than no import at all.</p>
 <p>Post-commit, asynchronously: net-worth snapshot, holdings, XIRR, recurring-series detection.</p>
 <hr>
 <h2 id="12-the-import-screen">12. The import screen</h2>
-<p>There is no CLI (<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a>). Everything a CLI would have
+<p>There is no CLI (<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a>, kept by
+<a href="../adr/0017-python-backend-service.html">ADR-0017</a> when parsing moved back to Python).
+Everything a CLI would have
 done is a screen.</p>
 <table>
 <thead>

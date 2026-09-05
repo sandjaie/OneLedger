@@ -404,10 +404,10 @@ steal that would let an attacker touch an actual bank account.</p>
 <td><strong>No password exists.</strong> Google OAuth only</td>
 </tr>
 <tr>
-<td>Leaked service-role key</td>
+<td>Leaked database credentials</td>
 <td><strong>Low</strong></td>
 <td>Critical</td>
-<td>Held by the API service only, in a local <code>.env</code>. Never in the browser bundle, never <code>NEXT_PUBLIC_</code>, git-ignored, pre-commit scanned, rotatable. <a href="../adr/0017-python-backend-service.html">ADR-0017</a> reintroduced this key; <a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> had removed it</td>
+<td>Held by the API service only, in a local <code>.env</code>. Never in the browser bundle, never <code>NEXT_PUBLIC_</code>, git-ignored, pre-commit scanned, rotatable. <a href="../adr/0017-python-backend-service.html">ADR-0017</a> reintroduced a privileged connection that <a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> had removed</td>
 </tr>
 <tr>
 <td>VPS or provider compromise</td>
@@ -481,11 +481,12 @@ addressed by unglamorous measures that are easy to skip and shouldn&#39;t be.</p
 authenticating is rejected by the service even though Google authenticated it successfully.</li>
 <li>MFA is inherited from the Google account, where it should live.</li>
 </ul>
-<pre><code class="language-typescript">// Every authenticated route, server-side
-const { data: { user } } = await supabase.auth.getUser();
-if (!user || user.email !== process.env.ALLOWED_USER_EMAIL) {
-  redirect(&#39;/unauthorized&#39;);
-}
+<pre><code class="language-python"># Every authenticated route, in the service
+def require_owner(session: str = Cookie(default=&quot;&quot;)) -&gt; str:
+    claims = verify_session(session)          # 401 if absent, forged or expired
+    if claims[&quot;email&quot;] != os.environ[&quot;ALLOWED_USER_EMAIL&quot;]:
+        raise HTTPException(403)              # authenticated, still not authorized
+    return claims[&quot;sub&quot;]
 </code></pre>
 <h3 id="the-authorization-boundary">Where authorization actually happens</h3>
 <p><strong>Google will authenticate any Google account.</strong> Authentication is not authorization, and a
@@ -524,8 +525,8 @@ one household and is permanently single-tenant, but the property is genuinely lo
 <td>Each calls <code>assert_is_owner()</code> first, which raises <code>42501</code> unless <code>app.user_id</code> resolves to a row in <code>app_user</code></td>
 </tr>
 <tr>
-<td>Storage buckets</td>
-<td>Private, with policies scoped the same way. No permanent public URL is ever issued</td>
+<td>The documents volume</td>
+<td>Not web-served. Originals are streamed by a route that checks the session first, so no URL works without one</td>
 </tr>
 </tbody></table>
 <p><code>current_household_id()</code> is deliberately exempt from <code>assert_is_owner()</code>: returning <code>NULL</code> for an
@@ -603,8 +604,11 @@ CREATE POLICY household_isolation ON transaction
 </code></pre>
 <p>Three reasons this is not premature:</p>
 <ol>
-<li>A forgotten <code>WHERE</code> clause returns <strong>nothing</strong> instead of everything.</li>
-<li>The anon key is public by design; RLS is what makes that safe.</li>
+<li>A forgotten <code>WHERE</code> clause returns <strong>nothing</strong> instead of everything — for any
+connection that is not the service&#39;s own.</li>
+<li>It is a second wall behind the service&#39;s authorization, at a cost of one <code>USING</code> clause per
+table. Since <a href="../adr/0017-python-backend-service.html">ADR-0017</a> the service connects
+privileged and bypasses these policies, so they are depth, not the boundary.</li>
 <li>The policy is already correct on the day a second person is added, rather than being retrofitted
 across forty tables.</li>
 </ol>
@@ -620,13 +624,18 @@ across forty tables.</li>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>SESSION_SECRET</code></td>
-<td>Public by design</td>
-<td>With the project</td>
+<td><code>NEXT_PUBLIC_API_URL</code></td>
+<td>Public by design — the browser has to know where the API is. The only <code>NEXT_PUBLIC_</code> variable, and it holds a URL</td>
+<td>With the deployment</td>
 </tr>
 <tr>
-<td><code>DATABASE_URL</code></td>
-<td><strong>Not used by the application.</strong> Admin scripts only, if ever</td>
+<td><code>SESSION_SECRET</code></td>
+<td>The service's <code>.env</code>, mode 600. <strong>It signs the session cookie</strong> — anyone holding it can mint a valid session</td>
+<td>Immediately if exposed; this invalidates every session</td>
+</tr>
+<tr>
+<td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td>
+<td>The service's <code>.env</code>. <strong>This is the application's own connection</strong>, and it is privileged enough to bypass RLS</td>
 <td>Immediately if exposed</td>
 </tr>
 <tr>
@@ -635,8 +644,8 @@ across forty tables.</li>
 <td>If exposed</td>
 </tr>
 <tr>
-<td>Account-number hash salt</td>
-<td>OS keychain; Vercel env</td>
+<td><code>ACCOUNT_HASH_SALT</code></td>
+<td>The service's <code>.env</code>, with a copy in a password manager — losing it is unrecoverable</td>
 <td>Never — rotation invalidates all hashes</td>
 </tr>
 <tr>
@@ -655,8 +664,8 @@ across forty tables.</li>
 <li><code>.env</code> is git-ignored; <code>.env.example</code> documents every variable with placeholder values.</li>
 <li>Pre-commit hook (<code>gitleaks</code> or equivalent) scans staged changes for key-shaped strings.</li>
 <li>CI fails on a detected secret.</li>
-<li>The service-role key is <strong>never</strong> prefixed <code>NEXT_PUBLIC_</code>. A lint rule enforces this — the
-prefix is what would silently ship it to the browser.</li>
+<li>No secret is <strong>ever</strong> prefixed <code>NEXT_PUBLIC_</code>. A lint rule enforces this — the prefix is
+what would silently ship one to the browser.</li>
 </ul>
 <hr>
 <h2 id="7-audit-log">7. Audit log</h2>
@@ -694,7 +703,7 @@ decision is not made in this document, and not made implicitly by shipping a fea
 <p>Restated here because data loss is the most likely serious failure and the least exciting to
 prepare for.</p>
 <pre><code>Daily     pg_dump → gzip → encrypted → local disk        30 days retained
-Weekly    Storage sync → local disk                      4 weeks retained
+Weekly    documents volume → local disk                  4 weeks retained
 Monthly   Both → second physical location                12 months retained
 Quarterly RESTORE TEST → scratch database                verified, not assumed
 </code></pre>
@@ -707,7 +716,7 @@ keeping parsers deterministic and versioned.</p>
 <hr>
 <h2 id="10-incident-response">10. Incident response</h2>
 <p>Small system, short plan — but written down, because the moment to work it out is not during.</p>
-<p><strong>Service-role key exposed</strong></p>
+<p><strong>Database credentials exposed</strong></p>
 <ol>
 <li>Rotate the database password and the session secret immediately.</li>
 <li>Update the .env on the box and restart the stack.</li>
@@ -742,10 +751,10 @@ than editing history.</li>
 <pre><code>☐  RLS enabled on every household-scoped table
 ☐  RLS enabled on reference tables too, with SELECT-only policies
 ☐  Unauthenticated query returns zero rows from every table
-☐  A *second, authenticated* Google account returns zero rows and cannot write, via direct
-   PostgREST and RPC calls — not merely via the UI
+☐  A *second, authenticated* Google account gets 403 from every route — not merely a redirect
+   in the UI
 ☐  Every SECURITY DEFINER function calls assert_is_owner() first
-☐  Service-role key absent from the client bundle  (grep the build output)
+☐  No secret in the client bundle  (grep the build output)
 ☐  No NEXT_PUBLIC_ variable holds a secret
 ☐  .env git-ignored; .env.example current
 ☐  Pre-commit secret scan active and tested with a fake key
@@ -756,7 +765,7 @@ than editing history.</li>
 ☐  Dependencies updated; no known critical advisories
 ☐  audit_log writing on every financial mutation
 ☐  No real financial data anywhere in the repository history
-☐  Storage buckets private; no permanent public URLs
+☐  Documents reachable only through an authorized route; no static path serves them
 </code></pre>
 
         </article>

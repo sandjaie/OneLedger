@@ -458,14 +458,16 @@ export const StagedTransaction = z.object({
 export type StagedTransaction = z.infer&lt;typeof StagedTransaction&gt;;
 </code></pre>
 <p>The refinements are the contract&#39;s teeth. A float that has lost precision, or an internally
-inconsistent FX translation, fails in the browser where the error names the offending row — not in
+inconsistent FX translation, fails in the service where the error names the offending row — not in
 Postgres where it names a constraint.</p>
 <h3 id="write-sequence">Write sequence</h3>
-<p>The write sequence is: upload the original to Storage first, then one RPC that writes <code>document</code>, <code>import_batch</code> and every staged row inside a single transaction. Original first, because a staged batch referencing a document that failed to upload is worse than an orphaned blob, which a storage sweep reclaims. <code>stage_import_batch</code> being a Postgres function is what makes the whole staging write atomic — a failure leaves no partial batch to clean up.</p>
-<p><code>stage_import_batch</code> is a Postgres function so the whole staging write is atomic. A failure leaves
+<p>The write sequence is: the service writes the original into the documents volume first, then writes
+<code>document</code>, <code>import_batch</code> and every staged row inside one database transaction. Original
+first, because a staged batch referencing a document that failed to write is worse than an orphaned
+file, which a sweep reclaims. The single transaction is what makes staging atomic — a failure leaves
 no partial batch to clean up.</p>
 <h3 id="error-contract">Error contract</h3>
-<p>The CLI&#39;s exit codes become UI states. Each names what happened and what to do.</p>
+<p>Every failure is a UI state. Each names what happened and what to do.</p>
 <table>
 <thead>
 <tr>

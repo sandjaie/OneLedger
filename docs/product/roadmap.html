@@ -408,7 +408,7 @@ loan is confirmed — the schema (<code>loan</code>, <code>loan_schedule_entry</
 <hr>
 <h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
 <p>Everything needed before feature work has somewhere to land.</p>
-<p><strong>Deliberately lean.</strong> CI, the Vercel deployment, the keepalive cron and the backup script are
+<p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
 <em>not</em> here — there is nothing yet to regress, deploy or lose. They land in M1 and M2, where they
 start earning their keep. Nothing is dropped; it is sequenced.</p>
 <p><strong>Deliverables</strong></p>
@@ -676,7 +676,7 @@ rate, investment rate, 12-month chart.</li>
 <li>Every document is retrievable and openable.</li>
 <li>Every imported transaction links back to document, page and row.</li>
 <li>Re-uploading a stored file is detected before parsing.</li>
-<li>Storage usage is visible against the free-tier allowance.</li>
+<li>Disk usage on the box is visible, documents and database separately.</li>
 </ul>
 <h3 id="phase-1-exit-criteria">Phase 1 exit criteria</h3>
 <p>All scheduled milestones done (M8 excepted while descheduled), plus:</p>

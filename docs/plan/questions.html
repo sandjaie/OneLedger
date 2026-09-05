@@ -390,6 +390,12 @@ often the lowest-latency free-tier option from the UAE.</p>
 <p><em>Default if unanswered:</em> <strong>Mumbai</strong> — nearest to the larger share of the data, and keeps Indian
 financial data in India, which is the more likely future regulatory concern of the two.</p>
 <p><strong>Answer:</strong> <strong>Mumbai (ap-south-1)</strong> — default accepted.</p>
+<blockquote>
+<p><strong>Moot since <a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>.</strong> There is no
+Supabase project to place. Postgres runs in a container on a machine you choose, so the question
+becomes where that VPS is, and the reasoning above still answers it: put the data nearest the
+jurisdiction most likely to care about it.</p>
+</blockquote>
 <h3 id="q3--what-os-is-the-importer-machine">Q3 · What OS is the importer machine?</h3>
 <p>Determines the keychain integration for secrets, the full-disk-encryption instructions, and the
 <code>~/statements/</code> cloud-sync exclusion guidance.</p>
@@ -568,8 +574,8 @@ opens both HDFC files. That is the whole of what is known, and it is all the pro
 <p><strong>The UI prompts for a password on any file that fails to open, and that is the entire design.</strong>
 Nothing is derived from a scheme, nothing is pre-filled, nothing is remembered between imports, and
 nothing is stored — not in the database, not in a config file, not in the OS keychain
-(<a href="../operations/security-and-privacy.html">09</a> §1). <code>pdf.js</code> takes it directly via
-<code>getDocument({ data, password })</code>.</p>
+(<a href="../operations/security-and-privacy.html">09</a> §1). <code>pdfplumber</code> takes it directly via
+<code>pdfplumber.open(path, password=…)</code>.</p>
 <blockquote>
 <p><strong>Correction (2026-09-05).</strong> An earlier version of this answer read &quot;HDFC = customer ID.
 Confirmed against both HDFC files.&quot; That was wrong on both counts: the scheme was inferred from a
