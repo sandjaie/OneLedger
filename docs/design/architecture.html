@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>02 — Architecture — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="#" aria-current="page">Architecture</a></li>
+<li><a href="./data-model.html">Data model</a></li>
+<li><a href="./multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="./statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="./transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="./api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="02--architecture">02 — Architecture</h1>
+<p><strong>Constraint that shapes everything: zero infrastructure spend.</strong> Free tiers only. Localhost
+first, cloud when it earns it.</p>
+<p>That constraint turns out to produce a better architecture than an unconstrained one would, for
+reasons set out in §2.</p>
+<hr>
+<h2 id="the-shape">1. The shape</h2>
+<pre><code>   ┌───────────────────────────────────────────────────────────┐
+   │  React · Next.js · TypeScript · Tailwind                  │
+   │  runs on localhost:3000                                   │
+   │                                                            │
+   │  UI only: review queue · dashboards · layout mapping      │
+   │  No business logic. No parsing. No money arithmetic.       │
+   └───────────────────────┬───────────────────────────────────┘
+                           │  HTTP (localhost)
+   ┌───────────────────────▼───────────────────────────────────┐
+   │  FastAPI · Python 3.12                                    │
+   │  runs on localhost:8000                                   │
+   │                                                            │
+   │  parse (pdfplumber) → normalize → dedupe → FX freeze      │
+   │       → reconcile → stage                                  │
+   │  classify · match transfers · XIRR · amortisation          │
+   │                                                            │
+   │  Statements are parsed on your machine and never           │
+   │  transit a third-party host.                               │
+   └───────────────────────┬───────────────────────────────────┘
+                           │  service-role connection
+   ┌───────────────────────▼───────────────────────────────────┐
+   │  POSTGRES 15                                              │
+   │  the single source of truth                                │
+   │  constraints · triggers · reporting views                  │
+   └───────────────────────────────────────────────────────────┘
+
+   All four run as containers in one compose file, on your laptop
+   now and on one small VPS later.          (ADR-0018)
+</code></pre>
+<p>Three pieces, each with one job: React renders, Python computes, Postgres guarantees.</p>
+<p><strong>The invariants live in Postgres, not in Python.</strong> A backend is a convenient place to put
+logic and a poor place to put guarantees — so the constraints, the triggers and the reporting views stay
+where no code path can route around them
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>).</p>
+<h2 id="why-a-python-service">2. Why a Python service</h2>
+<p>Two earlier designs put this logic elsewhere, and each recorded its own cost:</p>
+<ul>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">ADR-0014</a> put classification and transfer
+matching in Postgres — <em>"harder to unit-test than Python"</em>.</li>
+<li><a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> put parsing in the browser — <em>"~200 lines
+of word grouping that pdfplumber gives free"</em>.</li>
+</ul>
+<p><strong>Both costs existed only because there was no backend.</strong> Matching went to SQL because two
+clients needed it; parsing went to the browser because the alternatives were a CLI (rejected as the wrong
+interface for a monthly task) or a hosted server (which would put statements on a third-party host). Adding a
+local service dissolves both rather than trading between them.</p>
+<p><strong>What is <em>not</em> the argument:</strong> that Python extracts PDFs better. That was measured and
+found false — on the hardest of the four layouts <code>pdfplumber</code> recovers no more than
+<code>pdf.js</code> does. The real arguments are that iterating a parser against 71 real files wants a REPL and
+a breakpoint, that one backend means one implementation of the trickiest semantics, and that OCR and
+spreadsheet support become additive rather than a new component.</p>
+<p><strong>Local, not hosted.</strong> The service runs on <code>localhost</code>. That preserves the privacy
+property <a href="../adr/0002-supabase-vercel-local-importer.html">ADR-0002</a> was protecting, without the CLI
+that made importing a terminal command — you drop files into the web app and it posts them to the service.</p>
+<h2 id="repository-layout">3. Repository layout</h2>
+<pre><code>OneLedger/
+├── docs/                      these specifications
+├── db/
+│   ├── migrations/            numbered, forward-only SQL
+│   ├── seeds/                 categories, institutions, seed rules, currencies
+│   └── tests/                 constraints, triggers, views, RLS
+├── api/                       the Python service
+│   ├── oneledger/
+│   │   ├── main.py            FastAPI app
+│   │   ├── routes/            parse · import · rules · transfers · reports
+│   │   ├── extract/           ← no bank name appears anywhere in this tree
+│   │   │   ├── engine.py      one generic engine, driven by a layout profile
+│   │   │   ├── profile.py     the statement_layout schema, as Pydantic
+│   │   │   ├── detect.py      match a document against saved profiles
+│   │   │   ├── propose.py     find the header row, propose column bands
+│   │   │   ├── synonyms.py    Narration|Particulars|Description, Withdrawal|Debit
+│   │   │   └── quirks.py      the small additive vocabulary (ADR-0016)
+│   │   ├── normalize.py       dates, signs, currency, description cleanup
+│   │   ├── dedupe.py          checksum + transaction fingerprint
+│   │   ├── reconcile.py       balance verification
+│   │   ├── classify.py        the deterministic cascade
+│   │   ├── transfers.py       the matching engine
+│   │   ├── fx.py              rate fetch, peg derivation, carry-forward
+│   │   ├── xirr.py            Newton–Raphson with bisection fallback
+│   │   ├── amortise.py
+│   │   ├── models.py          Pydantic domain models
+│   │   └── db.py              Postgres access
+│   ├── tests/
+│   │   └── fixtures/          redacted sample statements  ← never real ones
+│   └── pyproject.toml
+├── web/                       the interface
+│   ├── app/
+│   │   ├── (dashboard)/       overview, net worth
+│   │   ├── accounts/  transactions/  cashflow/  investments/  loans/
+│   │   ├── documents/  import/  review/  layouts/  settings/
+│   ├── components/
+│   ├── lib/
+│   │   ├── api/               typed client for the Python service
+│   │   └── money/             formatting, currency display, Indian numbering
+│   └── types/                 generated from the OpenAPI schema
+├── scripts/                   backup-db.sh, backup-docs.sh
+└── .github/workflows/         CI: lint, type-check, test, migration check
+</code></pre>
+<p><code>web/</code> holds no business logic. If a calculation appears there, it is in the wrong place —
+the one exception is display formatting, which is not arithmetic.</p>
+<h2 id="technology-choices">4. Technology choices</h2>
+<table><thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead><tbody>
+<tr><td>Database</td><td>Postgres 15, in a container</td><td><code>NUMERIC</code>, window functions, CTEs. Financial data wants a real relational database</td></tr>
+<tr><td>Backend</td><td>Python 3.12 · FastAPI</td><td>Owns all business logic. Pydantic models are the contract; OpenAPI generates the client's types</td></tr>
+<tr><td>PDF parsing</td><td><code>pdfplumber</code></td><td>Words, lines and coordinates. Column bands by x-position, never regex over flattened text</td></tr>
+<tr><td>Money in Python</td><td><code>Decimal</code></td><td>Never <code>float</code>. Enforced by lint and by Pydantic validators</td></tr>
+<tr><td>Auth</td><td>Google OIDC, in the service</td><td>No password to store or leak. The service verifies Google's <code>id_token</code> against its JWKS and issues a signed session cookie</td></tr>
+<tr><td>Storage</td><td>A Docker volume</td><td>Original documents. Served only through the service, never by a static path</td></tr>
+<tr><td>Web</td><td>Next.js App Router</td><td>The review queue and the layout mapping screen are genuinely React-shaped</td></tr>
+<tr><td>Styling</td><td>Tailwind + shadcn/ui</td><td>Fast, unopinionated, no runtime cost</td></tr>
+<tr><td>Charts</td><td>Recharts</td><td>Lines, bars and waterfalls. No licence cost</td></tr>
+<tr><td>Python tooling</td><td>uv · ruff · mypy --strict · pytest</td><td>Fast, strict, current</td></tr>
+<tr><td>Migrations</td><td>Plain SQL, forward-only</td><td>No ORM migration magic over a schema this deliberate</td></tr>
+<tr><td>Proxy / TLS</td><td>Caddy</td><td>Automatic certificates, one config file. Only needed once hosted</td></tr>
+</tbody></table>
+<p><strong>Money crosses the wire as a string.</strong> A JSON number is an IEEE-754 float by the time it
+reaches React, and the precision is gone before anyone can check. Python holds <code>Decimal</code>, Postgres
+holds <code>NUMERIC</code>, and the wire holds <code>"-310.0000"</code>. React formats it and performs no
+arithmetic on it — enforced by lint.</p>
+<h2 id="data-flow-an-import">5. Data flow: an import</h2>
+<pre><code>1.  You      open /import and drop 6 PDFs into the file picker
+2.  Web      POST /parse  (multipart) → localhost:8000, one request per file
+3.  API      SHA-256 each file → skip anything already in `document`
+4.  API      detect layout by fingerprint against saved profiles
+5.  API      prompt needed? return 409 with `password_required` for that file
+6.  API      pdfplumber → words → apply the layout profile → raw rows
+7.  API      normalize: dates, signs, currency, description cleanup
+8.  API      compute dedupe_hash → mark duplicates against existing rows
+9.  API      fetch missing FX rates → freeze amount_base / amount_secondary
+10. API      classify through the deterministic cascade
+11. API      propose transfer matches, scored
+12. API      reconcile: opening + Σ rows = declared closing?   ← blocks on mismatch
+13. API      upload original to Storage; write document, import_batch,
+             staged_transaction — one database transaction
+14. You      review: confirm categories, confirm transfers, fix anything wrong
+15. Web      POST /import/{batch}/commit → staged rows become transaction rows
+16. API      balances, net worth snapshot, holdings recomputed
+</code></pre>
+<p>Steps 3–13 are one HTTP call per file. The file bytes reach the service and the documents volume, and nowhere else.</p>
+<p><strong>Nothing is written until the batch reconciles.</strong> A failure at step 12 returns the divergent
+row and leaves the database untouched — no orphaned <code>document</code> row to clean up.</p>
+<h2 id="data-flow-a-morning-dashboard-load">6. Data flow: a morning dashboard load</h2>
+<pre><code>Browser → Next.js → GET /dashboard on the Python service
+                  → 4 queries against pre-computed tables:
+                       net_worth_snapshot        (latest row)
+                       v_monthly_cashflow        (current month)
+                       holding + price_snapshot  (portfolio value)
+                       card_statement            (what is due)
+                  → one JSON payload → render
+</code></pre>
+<p>Headline figures are indexed row reads against pre-computed snapshots, not aggregations over the whole
+ledger. No loading spinner ever appears where a number belongs.</p>
+<p><strong>The service is on the read path.</strong> That is the cost of a backend: if it is not running, the
+dashboard has no data. Acceptable while everything is local, and the first thing to reconsider when the cloud
+question is taken up (§11).</p>
+<h2 id="environments">7. Environments</h2>
+<p><strong>There is one environment definition.</strong> The compose file that runs on your laptop is the one
+that runs on the VPS (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>); only the
+<code>.env</code> and whether Caddy is enabled differ.</p>
+<pre><code>services:
+  caddy    reverse proxy · automatic TLS        (hosted only)
+  web      Next.js                              :3000
+  api      FastAPI                              :8000
+  db       Postgres 15                          :5432
+volumes:
+  pgdata      the ledger
+  documents   original statements
+</code></pre>
+<p><code>docker compose up</code> brings up the whole system with no network dependency beyond the FX rate
+fetch. Development works offline.</p>
+<p><strong>Promotion</strong> is <code>git pull &amp;&amp; docker compose up -d --build</code> on the box.
+Migrations run forward against it. There is no staging environment — for a single-user personal system, one
+would cost more attention than it saves.</p>
+<h2 id="secrets">8. Secrets</h2>
+<table><thead><tr><th>Secret</th><th>Where it lives</th><th>Never</th></tr></thead><tbody>
+<tr><td><code>SUPABASE_URL</code></td><td>Public</td><td>—</td></tr>
+<tr><td><code>SUPABASE_ANON_KEY</code></td><td>Public — used by the web app for sign-in only</td><td>—</td></tr>
+<tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td><strong>The API service's local <code>.env</code></strong></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
+<tr><td>Google OAuth client secret</td><td>The service's <code>.env</code></td><td>In the repository. In the browser</td></tr>
+<tr><td>Account-number hash salt</td><td>The API service's <code>.env</code></td><td>Rotated — it would invalidate every stored hash</td></tr>
+<tr><td>PDF passwords</td><td>Posted with the file, held in memory for the parse</td><td>Written to disk, a keychain, the database or a log</td></tr>
+</tbody></table>
+<p><strong>The service-role key is back, and that is a real loss.</strong>
+<a href="../adr/0015-parse-in-the-browser.html">ADR-0015</a> had removed it entirely by making the browser
+write as the signed-in user under RLS. A backend holds credentials, so the key returns to the threat model.
+It is confined to one process on one machine, never reaches the browser, and
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3 records what now stands in
+for RLS as the authorization boundary.</p>
+<h2 id="sizing">9. Sizing</h2>
+<p>The free-tier arithmetic this section used to contain is obsolete
+(<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>) — you size the box rather than fitting
+inside someone's allowance.</p>
+<p><strong>The workload is small.</strong> Thirty-six months of transactions is on the order of 30,000 rows;
+statements, payslips and receipts are roughly 100 MB of PDFs; one user generates a handful of page loads a day.
+The only burst is a monthly import, which is CPU-bound for seconds at a time.</p>
+<table><thead><tr><th>Resource</th><th>Needs</th></tr></thead><tbody>
+<tr><td>RAM</td><td>1–2 GB. Postgres and two small application containers. Parsing a statement is measured in
+tens of megabytes</td></tr>
+<tr><td>Disk</td><td>10–25 GB. The ledger is a few hundred megabytes with indexes; documents grow by roughly
+40 MB a year</td></tr>
+<tr><td>CPU</td><td>One shared core. The monthly import is the only load that registers</td></tr>
+<tr><td>Bandwidth</td><td>Negligible</td></tr>
+</tbody></table>
+<p>That is the smallest instance every provider sells — roughly $5–12 a month at DigitalOcean, Hetzner or
+Railway. <strong>The bill does not grow with the ledger</strong>, which is the property that matters: no
+per-row, per-seat or per-request pricing to be surprised by.</p>
+<p>Growth would be gradual and visible: documents are the only thing that accumulates, and at 40 MB a year the
+first disk resize is years away.</p>
+<h2 id="10-backups">10. Backups</h2>
+<p>The one place where &quot;personal project&quot; is not an excuse. Hours of downtime are fine; losing the
+ledger is not.</p>
+<pre><code>Daily    pg_dump → gzip → local disk, 30 days retained     scripts/backup-db.sh
+Weekly   full document sync from Storage → local disk      scripts/backup-docs.sh
+Monthly  copy of both to a second physical location
+</code></pre>
+<p>Restore is tested <strong>quarterly</strong> against a scratch database, and the test is a checklist item in
+<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
+restored is a hypothesis, not a backup.</p>
+<p>Keep <code>~/statements/</code> outside the repository as a second copy of the source data. The
+ledger can be rebuilt from the original files if it ever comes to that — which is a quiet
+argument for keeping the parsers deterministic and versioned.</p>
+<hr>
+<h2 id="deployment">11. Deployment</h2>
+<p><strong>Nothing is deployed yet</strong>, and nothing needs to be until Phase 1 is done. This section
+records the target so the local build does not accumulate work that would have to be undone to reach it
+(<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>).</p>
+<p>One VPS. One compose file. Caddy terminates TLS and proxies to <code>web</code>; <code>web</code> talks to
+<code>api</code>; <code>api</code> talks to <code>db</code>. Only Caddy is exposed.</p>
+<h3 id="what-hosting-changes">What hosting changes</h3>
+<table><thead><tr><th>Concern</th><th>Local</th><th>Hosted</th></tr></thead><tbody>
+<tr><td>TLS</td><td>None needed</td><td>Caddy, automatic</td></tr>
+<tr><td>Google OAuth redirect</td><td><code>localhost</code></td><td>The real hostname — both registered in the Google console</td></tr>
+<tr><td>Secrets</td><td><code>.env</code>, git-ignored</td><td>Same file, on the box, mode 600</td></tr>
+<tr><td>Backups</td><td>Nightly to local disk</td><td>Nightly on the box, <strong>copied off it</strong></td></tr>
+<tr><td>Access</td><td>Nothing exposed</td><td>SSH keys only, no password auth, firewall to 22/80/443</td></tr>
+</tbody></table>
+<h3 id="what-it-does-not-change">What it does not change</h3>
+<p>The schema, the module boundaries, the data flow, and the fact that statements are parsed by software you
+run on a machine you control. That last point is why this arrangement is the first one that can put the
+<em>whole</em> system in the cloud without contradicting
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §8.</p>
+<h3 id="what-it-costs-you-in-attention">What it costs you in attention</h3>
+<p>You administer a machine: unattended security upgrades, a firewall, an SSH key rather than a password, and
+a restore you have actually tested. That last one is not optional — <strong>one box is one point of failure</strong>,
+and the quarterly restore test in <a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>
+§7 stops being belt-and-braces over a managed service and becomes the only thing standing between you and
+losing the ledger.</p>
+</article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

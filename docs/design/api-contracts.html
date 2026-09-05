@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 — API Contracts — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="./architecture.html">Architecture</a></li>
+<li><a href="./data-model.html">Data model</a></li>
+<li><a href="./multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="./statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="./classification.html">Classification</a></li>
+<li><a href="./transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="#" aria-current="page">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="10--api-contracts">10 — API Contracts</h1>
+<p><strong>One surface: the web app talks to the Python service over HTTP.</strong> Nothing else reaches the
+database — not the browser, not a second client
+(<a href="../adr/0017-python-backend-service.html">ADR-0017</a>).</p>
+<p>The contract is <strong>Pydantic models plus the OpenAPI schema FastAPI generates from them</strong>. The
+web app's TypeScript types are generated from that schema, so a change to a model changes the client's types
+in the same commit and every mismatched call site fails <code>tsc</code> immediately. There is no hand-written
+type on either side of the wire, and no schema-parity test to maintain — the generator is the check.</p>
+<h2 id="type-generation">1. Type generation</h2>
+<pre><code class="language-bash"># Pydantic models -> OpenAPI -> TypeScript client
+uv run python -m oneledger.openapi &gt; openapi.json
+npx openapi-typescript openapi.json -o web/types/api.ts
+</code></pre>
+<p>Run in CI. A model change that is not reflected in the committed schema fails the build, which is the
+cheapest possible place to catch it.</p>
+<p>The database schema is generated from separately, for the service's own row types:</p>
+<p>The service's own row types are hand-written Pydantic models, checked against the live schema by a test
+that introspects <code>information_schema</code> — a migration that changes a table without updating the
+model fails CI.</p>
+<h2 id="the-route-surface">2. The route surface</h2>
+<p>Every route requires a valid session cookie that resolves to the pinned <code>app_user</code>; anything
+else gets <code>403</code> (<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3).</p>
+<table><thead><tr><th>Route</th><th>Does</th></tr></thead><tbody>
+<tr><td><code>POST /parse</code></td><td>Multipart file plus optional password. Detects the layout, extracts, normalizes, dedupes, freezes FX, classifies, proposes transfers, reconciles, stages. Returns the batch and its reconciliation verdict</td></tr>
+<tr><td><code>POST /layouts/propose</code></td><td>Finds the header row and proposes column bands for an unrecognised document (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>)</td></tr>
+<tr><td><code>POST /layouts</code></td><td>Saves a mapped layout profile</td></tr>
+<tr><td><code>POST /import/{batch}/commit</code></td><td>Staged rows become <code>transaction</code> rows, in one database transaction, re-verifying reconciliation</td></tr>
+<tr><td><code>PATCH /transactions/{id}</code></td><td>Category, merchant, type, notes, tags. Optionally creates a rule and applies it retroactively</td></tr>
+<tr><td><code>POST /rules/preview</code></td><td>Returns the affected count and rows before a rule is created</td></tr>
+<tr><td><code>POST /transfers</code> · <code>DELETE /transfers/{id}</code></td><td>Confirm or reject a link. Computes FX cost on confirmation</td></tr>
+<tr><td><code>GET /dashboard</code></td><td>Net worth, month cash flow, portfolio, cards due — one payload</td></tr>
+<tr><td><code>GET /transactions</code></td><td>Full-text search plus structured filters, paged</td></tr>
+<tr><td><code>GET /networth</code> · <code>GET /networth/attribution</code></td><td>Balances on a date; the decomposition with its residual</td></tr>
+<tr><td><code>POST /fx/backfill</code> · <code>GET /fx/{date}</code></td><td>Fetch and inspect rates</td></tr>
+<tr><td><code>GET /doctor</code></td><td>The data-quality report (<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a> §5)</td></tr>
+<tr><td><code>POST /recompute/{what}</code></td><td>Balances, net worth, XIRR, holdings. Idempotent</td></tr>
+</tbody></table>
+<p><strong>Aggregation happens in Postgres, not in Python.</strong> The service issues the query and shapes the
+response; it does not pull rows into memory and reduce over them. Money arithmetic stays in
+<code>NUMERIC</code>.</p>
+<h2 id="atomicity">3. Atomicity</h2>
+<p>Multi-step mutations are <strong>Postgres functions</strong> called by the service, not sequences of
+statements it orchestrates. <code>apply_category_change</code> updates the transaction, optionally creates a
+rule, optionally applies it retroactively and writes <code>audit_log</code> — all or nothing.</p>
+<p>The rule is: if a failure halfway through would leave the ledger inconsistent, it belongs in one function in
+the database. The service's job is to decide <em>whether</em> to call it, not to hold the pieces together.</p>
+<p>This is unchanged from before the backend existed, and deliberately so — it is the reason the invariants
+survive regardless of what language sits above them.</p>
+<h2 id="4-import-staging-contract">4. Import staging contract</h2>
+<p>The import path&#39;s only responsibility is to fill <code>document</code>, <code>import_batch</code> and
+<code>staged_transaction</code> correctly. Everything after that is the review screen&#39;s.</p>
+<h3 id="the-staged-row-schema">The staged row schema</h3>
+<pre><code class="language-typescript">// lib/import/schema.ts
+import { z } from &quot;zod&quot;;
+
+/** Money is a string all the way from the parser to the database. A JS number here would
+ *  already be an IEEE-754 float, and the precision is gone before anyone can check. */
+const money = z.string().regex(/^-?\d+\.\d{4}$/, &quot;money must be a fixed-4dp string&quot;);
+const rate  = z.string().regex(/^\d+\.\d{10}$/, &quot;rates are fixed-10dp strings&quot;);
+
+export const StagedTransaction = z.object({
+  accountId: z.string().uuid(),
+  bookedDate: z.string().date(),
+  valueDate: z.string().date().nullable(),
+  descriptionRaw: z.string().min(1),
+  descriptionClean: z.string().nullable(),
+  referenceRaw: z.string().nullable(),
+
+  amount: money,                       // signed, per Invariant I2
+  currency: z.string().length(3),
+  originalAmount: money.nullable(),
+  originalCurrency: z.string().length(3).nullable(),
+
+  // frozen FX, computed before staging
+  fxRateDate: z.string().date(),
+  fxRateIsCarried: z.boolean(),
+  fxRateToInr: rate,
+  fxRateToAed: rate,
+  amountInr: money,
+  amountAed: money,
+
+  dedupeHash: z.string().length(64),
+  sourcePageNumber: z.number().int().nullable(),
+  sourceRowNumber: z.number().int(),
+  rawRow: z.record(z.unknown()),
+})
+  .refine(
+    (r) =&gt; new Decimal(r.amount).times(r.fxRateToInr).minus(r.amountInr).abs().lte(&quot;0.01&quot;),
+    { message: &quot;amountInr is inconsistent with the stated rate&quot; },
+  )
+  .refine(
+    (r) =&gt; (r.originalAmount === null) === (r.originalCurrency === null),
+    { message: &quot;originalAmount and originalCurrency must be set together&quot; },
+  );
+
+export type StagedTransaction = z.infer&lt;typeof StagedTransaction&gt;;
+</code></pre>
+<p>The refinements are the contract&#39;s teeth. A float that has lost precision, or an internally
+inconsistent FX translation, fails in the browser where the error names the offending row — not in
+Postgres where it names a constraint.</p>
+<h3 id="write-sequence">Write sequence</h3>
+<p>The write sequence is: upload the original to Storage first, then one RPC that writes <code>document</code>, <code>import_batch</code> and every staged row inside a single transaction. Original first, because a staged batch referencing a document that failed to upload is worse than an orphaned blob, which a storage sweep reclaims. <code>stage_import_batch</code> being a Postgres function is what makes the whole staging write atomic — a failure leaves no partial batch to clean up.</p>
+<p><code>stage_import_batch</code> is a Postgres function so the whole staging write is atomic. A failure leaves
+no partial batch to clean up.</p>
+<h3 id="error-contract">Error contract</h3>
+<p>The CLI&#39;s exit codes become UI states. Each names what happened and what to do.</p>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>What the user sees</th>
+<th>Database state</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Duplicate document (sha256)</td>
+<td>&quot;Already imported on 3 Aug 2026&quot; with a link to that batch</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Layout not identified</td>
+<td>A layout picker listing the four, with the fingerprint scores</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Account not resolved</td>
+<td>An account picker, with &quot;create a new account&quot; inline</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Encrypted, no password</td>
+<td>A password prompt on that file only; other files continue</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Parse failure</td>
+<td>The row numbers that failed, with the raw text beside them</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td><strong>Reconciliation mismatch</strong></td>
+<td><strong>The diagnostics panel, divergent row highlighted.</strong> Import blocked</td>
+<td>Unchanged — <strong>no staged rows</strong></td>
+</tr>
+<tr>
+<td>Missing FX rate, fetch fails</td>
+<td>&quot;Rates unavailable for 3 dates&quot; and a retry</td>
+<td>Unchanged</td>
+</tr>
+<tr>
+<td>Network failure mid-write</td>
+<td>Retry; the write is idempotent on <code>sha256</code></td>
+<td>Rolled back</td>
+</tr>
+</tbody></table>
+<p><strong>Nothing is written until the batch reconciles</strong>, which is why every failure row above leaves the
+database unchanged. That is stricter than the local importer&#39;s contract, which wrote a <code>document</code>
+row on parse failure.</p>
+<hr>
+<h2 id="5-fx-source-interface">5. FX source interface</h2>
+<p>The rate provider is behind an interface so a provider change is one class
+(<a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §3).</p>
+<pre><code class="language-typescript">export interface FxRateSource {
+  name: string;
+  /** codes are what the household needs quoted; pegged currencies are derived, not fetched. */
+  fetchRange(start: string, end: string, codes: string[]): Promise&lt;Map&lt;string, Map&lt;string, Decimal&gt;&gt;&gt;;
+}
+
+/** ECB reference rates, quoted against EUR; any pair is a division. A currency the ECB does
+ *  not publish is reached through its peg — a row in `currency`, not a constant here.
+ *  Endpoint verified 2026-09-05: api.frankfurter.app is dead, api.frankfurter.dev/v1 is live,
+ *  and it sends `access-control-allow-origin: *`, so the browser can call it directly. */
+export class EcbFrankfurterSource implements FxRateSource { name = &quot;ecb&quot;; /* ... */ }
+
+/** Always-available fallback: rates pasted or uploaded as CSV in Settings › FX. */
+export class ManualCsvSource implements FxRateSource { name = &quot;manual&quot;; /* ... */ }
+</code></pre>
+<p><code>ManualCsvSource</code> exists so a provider outage or shutdown never blocks an import. Rates can always
+be entered by hand.</p>
+<hr>
+<h2 id="6-conventions">6. Conventions</h2>
+<p><strong>Money over the wire is a string.</strong></p>
+<pre><code class="language-json">{ &quot;amount&quot;: &quot;-310.0000&quot;, &quot;currency&quot;: &quot;AED&quot;, &quot;amount_base&quot;: &quot;-7421.4000&quot; }
+</code></pre>
+<p>Never a JSON number — that would be an IEEE-754 float by the time it reached React. Parsed with
+<code>decimal.js</code> where arithmetic is unavoidable, which should be almost nowhere.</p>
+<p><strong>Dates are ISO-8601 date strings</strong>, not timestamps. A transaction happens on a date.</p>
+<p><strong>Percentages are stored and transmitted as the human-readable value</strong> — <code>15.2500</code> means 15.25%,
+never <code>0.1525</code>. Chosen because it matches how the values are read and written everywhere else in
+the system, and mixing the two conventions is a reliable source of hundredfold errors.</p>
+<p><strong>Errors carry a code</strong>, so the UI can respond to a class of failure rather than pattern-matching
+on message text:</p>
+<pre><code class="language-json">{
+  &quot;error&quot;: {
+    &quot;code&quot;: &quot;RECONCILIATION_FAILED&quot;,
+    &quot;message&quot;: &quot;Declared closing balance 12,450.00 but computed 12,140.00&quot;,
+    &quot;detail&quot;: { &quot;delta&quot;: &quot;-310.0000&quot;, &quot;first_divergent_row&quot;: 47 }
+  }
+}
+</code></pre>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>01 — Product Requirements — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="#" aria-current="page">Product requirements</a></li>
+<li><a href="./roadmap.html">Roadmap</a></li>
+<li><a href="./ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="../design/architecture.html">Architecture</a></li>
+<li><a href="../design/data-model.html">Data model</a></li>
+<li><a href="../design/multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="../design/statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="../design/classification.html">Classification</a></li>
+<li><a href="../design/transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="../design/api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="../adr/index.html">ADR index</a></li>
+<li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="../adr/0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="../adr/0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="../adr/0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="../adr/0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="../adr/0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="../adr/0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="../adr/0008-24-month-history-horizon.html">0008 24-month history horizon</a></li>
+<li><a href="../adr/0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="../adr/0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="../adr/0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="../adr/0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="../adr/0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="../adr/0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="../adr/0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="../adr/0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="../adr/0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="01--product-requirements">01 — Product Requirements</h1>
+<p><strong>Product:</strong> OneLedger
+<strong>Owner:</strong> single user (household-capable)
+<strong>Status:</strong> specification, pre-implementation
+<strong>Last decision round:</strong> all Phase-1 scoping questions closed</p>
+<hr>
+<h2 id="1-problem">1. Problem</h2>
+<p>A financial life split across two countries is invisible in aggregate.</p>
+<p>Each institution shows a slice. The bank where the salary lands knows about the current account.
+The bank in the other country knows about the savings account. The broker knows about equity.
+Nobody knows the total, and nobody can answer the questions that actually matter:</p>
+<ul>
+<li>Am I getting wealthier, and <em>why</em>?</li>
+<li>What did sending money home actually cost me last year?</li>
+<li>What proportion of what I earn ends up invested rather than spent?</li>
+<li>What is committed before I have spent anything discretionary this month?</li>
+</ul>
+<p>The first deployment is a UAE + India household, and the worked examples throughout these
+documents are drawn from it. Nothing in the design is: the countries, the currencies, the
+institutions and the statement layouts are all rows in tables.</p>
+<p>Existing tools fail for a specific reason: they are built for one country. They treat a second
+currency as a display conversion rather than a first-class property of the data, and they treat
+an international remittance as a large expense followed by a large income — which is wrong twice
+over.</p>
+<h2 id="2-what-this-product-is">2. What this product is</h2>
+<p><strong>A single normalized ledger of every financial event, in every country, with the
+consolidated views that only become possible once that ledger exists.</strong></p>
+<p>Self-hosted, and fed by statements rather than by an aggregator — the banks that matter in this
+situation are usually the ones with no API and no aggregator coverage, and financial history is
+the last thing worth renting from a third party.</p>
+<p>The design bet is that once every event is normalized into one well-shaped table, nearly every
+feature becomes a query rather than a subsystem. Net worth is a query. Cash flow is a query.
+Savings rate is a query. That is why the ledger and the ingestion pipeline get the majority of
+Phase 1&#39;s effort, and the dashboards get comparatively little.</p>
+<h3 id="what-it-is-not">What it is not</h3>
+<ul>
+<li><strong>Not a budgeting app.</strong> Budgets exist (Phase 2) but are a comparison view, not the centre.</li>
+<li><strong>Not multi-tenant.</strong> No signup, no organizations, no public registration, no invitations.
+This removes an entire class of vulnerability rather than mitigating it.</li>
+<li><strong>Not a bank aggregator.</strong> No credentials are stored, ever. Statement import is the mechanism,
+by design and not as a temporary measure.</li>
+<li><strong>Not an accounting system.</strong> Single-entry with explicit transfer links, not double-entry
+journals. The rigour that matters is captured by the invariants in §4.</li>
+<li><strong>Not AI-first.</strong> No LLM calls exist in Phase 1 or Phase 2. See
+<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>.</li>
+</ul>
+<h2 id="3-users-and-context">3. Users and context</h2>
+<p>One user. Tax-resident considerations in two jurisdictions. Earns primarily in AED, accumulates
+long-term wealth primarily in INR, and moves money between the two regularly.</p>
+<p>The schema carries <code>household_id</code> and <code>owner_person_id</code> from day one so a second person can be
+added later without a migration that touches every table — but no multi-user <em>behaviour</em> is built
+now. See <a href="../adr/0005-google-auth-single-user.html">ADR-0005</a>.</p>
+<p><strong>Usage shape:</strong> opened daily for ten seconds (the dashboard), used properly monthly for twenty
+minutes (import statements, clear the review queue). The product must be excellent at both and
+optimise for neither at the other&#39;s expense.</p>
+<h2 id="4-product-invariants">4. Product invariants</h2>
+<p>These are requirements, not implementation notes. Each is enforced by a test
+(<a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>) and violating one is a bug of
+the highest severity, because each produces <em>silently wrong numbers</em> rather than errors.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Invariant</th>
+<th>What breaks without it</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>I1</td>
+<td>The original amount and currency are written once and never modified</td>
+<td>Historical reports change under you</td>
+</tr>
+<tr>
+<td>I2</td>
+<td>Every balance is signed so that <code>net_worth = SUM(balances)</code></td>
+<td>Sign confusion in liability handling</td>
+</tr>
+<tr>
+<td>I3</td>
+<td>A transaction linked to a transfer is never income or expense</td>
+<td>Remittances counted as ₹1L of spending</td>
+</tr>
+<tr>
+<td>I4</td>
+<td>A credit card payment is a transfer, not an expense</td>
+<td>Every card purchase counted twice</td>
+</tr>
+<tr>
+<td>I5</td>
+<td>Flows translate at transaction-date rate; balances at as-of-date rate</td>
+<td>Last March&#39;s spending changes daily</td>
+</tr>
+<tr>
+<td>I6</td>
+<td>Every imported transaction links to its source document and row</td>
+<td>No audit trail; can&#39;t resolve disputes</td>
+</tr>
+<tr>
+<td>I7</td>
+<td>Derived, carried-forward or interpolated values are labelled as such</td>
+<td>False precision presented as fact</td>
+</tr>
+<tr>
+<td>I8</td>
+<td>Import is rejected if declared closing balance ≠ opening + Σ rows</td>
+<td>Dropped rows go unnoticed forever</td>
+</tr>
+</tbody></table>
+<h2 id="5-modules">5. Modules</h2>
+<p>Each module below states its purpose, its Phase 1 scope, what is explicitly deferred, and its
+acceptance criteria. Phase assignments are summarised in
+<a href="./roadmap.html">roadmap.html</a>.</p>
+<hr>
+<h3 id="51-accounts--phase-1">5.1 Accounts — <em>Phase 1</em></h3>
+<p><strong>Everything is an Account.</strong> One universal model rather than separate systems per institution
+or per country. This is the decision that makes the consolidated view possible.</p>
+<p><strong>Account types</strong></p>
+<pre><code>Cash &amp; deposit    cash · current · savings · salary · fixed_deposit · recurring_deposit
+Credit            credit_card
+Borrowing         personal_loan · home_loan · auto_loan · education_loan · gold_loan
+Investment        brokerage · mutual_fund_folio · retirement (PPF/EPF/NPS)
+Illiquid          property · precious_metal · other_asset
+Other             crypto · receivable · payable
+</code></pre>
+<p><strong>Attributes that make it global</strong>, rather than there being a UAE model and an India model:
+<code>country</code>, <code>currency</code>, <code>institution</code>, <code>account_subtype</code> (NRE / NRO / PPF / EPF), and
+<code>tax_residency_context</code>.</p>
+<p><strong>Phase 1 scope</strong></p>
+<ul>
+<li>CRUD on accounts, with institution and country.</li>
+<li>Native currency per account. An account has exactly one currency.</li>
+<li>Opening balance with an opening-balance date — the anchor for all derived balances.</li>
+<li><code>include_in_net_worth</code> toggle (for tracking something without it counting).</li>
+<li>Masked account number for display; a hash of the full number for statement matching. The full
+number is never stored. See <a href="../operations/security-and-privacy.html">security-and-privacy.html</a>.</li>
+<li>Active/closed lifecycle. Closed accounts keep their history and drop out of current views.</li>
+</ul>
+<p><strong>Deferred:</strong> multi-currency accounts (rare, and modelable as two accounts); account groups.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Every account type above can be created and appears in the right net-worth bucket.</li>
+<li>An account&#39;s computed balance equals <code>opening_balance + Σ(transactions)</code> exactly, to 4 decimal
+places, for both an asset account and a liability account.</li>
+</ul>
+<hr>
+<h3 id="52-transaction-ledger--phase-1">5.2 Transaction Ledger — <em>Phase 1</em></h3>
+<p>The centre of the product. Everything imported becomes a row here, and nearly every other
+feature is a query over it.</p>
+<p><strong>Fields</strong> — full schema in <a href="../design/data-model.html">data-model.html</a>.</p>
+<pre><code>identity      booked_date · value_date · description_raw · description_clean · reference_raw
+money         amount · currency  (immutable)
+              fx_rate_to_base · fx_rate_to_secondary · amount_base · amount_secondary  (frozen at booked_date)
+meaning       txn_type · category · merchant · counterparty
+context       account · country · payment_method
+links         transfer_id · card_statement_id · investment_txn_id · loan_id · recurring_series_id
+provenance    source · source_document_id · source_row_number · import_batch_id · dedupe_hash
+review        classified_by · classification_confidence · is_reviewed
+user          notes · tags · is_excluded
+</code></pre>
+<p><strong>Sign convention (I2):</strong> negative = money left the account, positive = money entered. This holds
+for liability accounts too — a card purchase is negative (you owe more), a card payment is
+positive. <code>balance = opening + Σ(amount)</code> therefore works unmodified for every account type.</p>
+<p><strong><code>txn_type</code></strong> is what separates a spending figure from a movement figure:</p>
+<pre><code>income · expense · fee · interest · tax · refund          → counted in cash flow
+transfer_in · transfer_out                                 → never counted
+investment_buy · investment_sell · investment_income       → portfolio, not spending
+loan_disbursement · loan_repayment                         → balance sheet, not spending
+adjustment · opening_balance                               → excluded from everything
+</code></pre>
+<p><strong>Phase 1 scope</strong></p>
+<ul>
+<li>List with filter by account, date range, category, merchant, amount range, currency, country,
+type, tag, review state, and free-text search over description.</li>
+<li>Inline edit of category, merchant, type, notes, tags. Editing a category offers to create a
+rule (§5.5).</li>
+<li>Bulk select → recategorize, tag, exclude, mark reviewed.</li>
+<li>Split a transaction into multiple categories (one ₹8,000 supermarket bill → ₹6,500 groceries,
+₹1,500 household).</li>
+<li>Manual entry, for cash spending and anything without a statement.</li>
+<li>Attachment of a receipt image to a transaction.</li>
+<li>Every transaction shows its source: which document, which page, which row.</li>
+</ul>
+<p><strong>Deferred:</strong> merge of transactions; recurring-transaction templating (Phase 2).</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>24 months of real statements import and reconcile.</li>
+<li>Filter combinations return in under 300 ms at ~20,000 rows.</li>
+<li>Every row can be traced to a source document, or is explicitly marked <code>source = manual</code>.</li>
+</ul>
+<hr>
+<h3 id="53-statement-importing--phase-1-and-the-hardest-part">5.3 Statement Importing — <em>Phase 1, and the hardest part</em></h3>
+<p>Bank APIs are deliberately not used. Statement import is the mechanism, permanently.</p>
+<p><strong>Pipeline</strong></p>
+<pre><code>Upload → identify institution → extract → normalize → detect duplicates
+       → classify → detect transfers → reconcile → user review → import
+</code></pre>
+<p>Full specification: <a href="../design/statement-ingestion.html">statement-ingestion.html</a>.</p>
+<p><strong>Formats:</strong> PDF (including password-protected) and manual entry. <strong>No institution in use
+provides CSV or Excel</strong> (Q7), so PDF extraction is the only import path, not the fallback one.
+Email attachment ingestion is Phase 2.</p>
+<p><strong>No institution is named in application code</strong> (<a href="../adr/0016-statement-layouts-as-data.html">ADR-0016</a>).
+A statement layout is a row the user creates through a mapping UI on first import of an
+unrecognised format: the app finds the header row, proposes column bands from its x-positions, and
+the user confirms or drags. One generic engine reads any profile.</p>
+<p>This is what makes the product <strong>agnostic in the way that matters</strong>: a bank account opened next
+year, or an old statement from an account closed years ago, needs no code change and no deploy.</p>
+<p>Four layouts cover the seven accounts held today. They are the first four profiles created, not a
+fixed list:</p>
+<table>
+<thead>
+<tr>
+<th>Layout characteristics</th>
+<th>Accounts covered</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Credit-card statement, bilingual, <code>CR</code> suffix, sign inverted</td>
+<td>2 cards</td>
+</tr>
+<tr>
+<td>Current account, running balance only, reverse-chronological</td>
+<td>1 current account</td>
+</tr>
+<tr>
+<td>Savings, declares <code>OPENING BALANCE</code>, separate debit/credit columns</td>
+<td>2 savings accounts</td>
+</tr>
+<tr>
+<td>Savings, encrypted, extracts without spaces</td>
+<td>2 savings accounts</td>
+</tr>
+</tbody></table>
+<p>Parsers are versioned. Banks change layouts; a parser records which version produced a row so a
+layout change is diagnosable rather than mysterious.</p>
+<p><strong>Non-negotiables</strong></p>
+<ul>
+<li><strong>The original file is stored permanently</strong> and linked to every row it produced (I6).</li>
+<li><strong>SHA-256 checksum</strong> on every document prevents re-importing the same statement (§5.11).</li>
+<li><strong>Balance reconciliation (I8).</strong> If the statement declares an opening and closing balance, the
+imported rows must bridge them exactly. A mismatch blocks the import and reports the delta.
+This single check catches the majority of parser bugs.</li>
+<li><strong>Nothing is imported without review in Phase 1.</strong> Confidence scores pre-sort the queue and
+high-confidence rows are pre-ticked, but the human presses import.</li>
+</ul>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Each of the six institutions imports a real statement end-to-end with zero manual correction of
+amounts or dates.</li>
+<li>Re-uploading an identical file imports zero rows and says why.</li>
+<li>Uploading an <em>overlapping</em> statement (Aug–Sep after Jul–Aug) imports only September.</li>
+<li>A deliberately corrupted row fails the batch rather than importing silently.</li>
+</ul>
+<hr>
+<h3 id="54-multi-currency--phase-1">5.4 Multi-Currency — <em>Phase 1</em></h3>
+<p>Full specification: <a href="../design/multi-currency-and-fx.html">multi-currency-and-fx.html</a>. Summarised here
+because it is a product requirement, not only a technical one.</p>
+<ul>
+<li><strong>INR is the reporting base. AED is a toggle.</strong> Both are stored frozen per transaction, so
+neither is &quot;the derived one&quot; and the toggle is instantaneous.</li>
+<li><strong>The original currency is always visible.</strong> <code>AED 1,000 → ₹24,xxx at 24.15 on 03 Sep 2026</code>,
+never just the converted figure.</li>
+<li><strong>Flows use the transaction-date rate, frozen.</strong> Balances use the as-of-date rate, live.</li>
+<li><strong>FX translation gain/loss is a first-class line item</strong> in net-worth attribution. When AED
+strengthens, INR net worth rises without any action — the product says so explicitly rather
+than burying it.</li>
+<li><strong>The actual achieved rate beats any reference rate.</strong> A remittance stores its implied rate
+from the two leg amounts; the gap to mid-market is a recorded cost (§5.6).</li>
+</ul>
+<hr>
+<h3 id="55-classification--phase-1-deterministic-only">5.5 Classification — <em>Phase 1 (deterministic only)</em></h3>
+<p>Full specification: <a href="../design/classification.html">classification.html</a>.</p>
+<p><strong>A deterministic cascade. No AI in Phase 1 or Phase 2</strong> (<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>).</p>
+<pre><code>1. Explicit user override on this transaction   → stop
+2. User rule (highest priority first)           → stop
+3. Merchant alias match                         → stop
+4. Recurring series match                       → stop
+5. Prior classification of an identical description on the same account
+6. Seed rule (ships with the product)
+7. Unclassified → review queue
+</code></pre>
+<p><strong>Category taxonomy:</strong> a curated two-level tree shipping with the product so reports work on
+the first import. The tree is universal — Housing, Utilities, Groceries, Transport, Health,
+Education; the merchants that fill it arrive as rule packs, one global plus one per country the
+household banks in (school fees, remittance and SIP land in the tree the same way DEWA, Salik and
+Talabat do). The user adds, renames and merges freely.</p>
+<p><strong>Every category carries a bucket:</strong> <code>need | want | investment | debt_service | income | ignore</code>.
+This gives the Needs/Wants/Investments/Debt view for free from a single classification pass,
+rather than asking for the same judgement twice.</p>
+<p><strong>Learning from corrections is explicit, not implicit.</strong> Recategorizing a transaction offers to
+create a rule, showing exactly how many past and future transactions it would affect. The user
+accepts or declines. Nothing changes behaviour behind their back.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Seed rules classify ≥ 70% of a first real import without any user rules existing.</li>
+<li>After one month of corrections, ≥ 90% of the next import is auto-classified.</li>
+<li>Every classified transaction can show <em>which rule</em> classified it.</li>
+</ul>
+<hr>
+<h3 id="56-transfers--phase-1-first-class">5.6 Transfers — <em>Phase 1, first-class</em></h3>
+<p>Full specification: <a href="../design/transfers-and-reconciliation.html">transfers-and-reconciliation.html</a>.</p>
+<p>The single most important correctness feature in a two-country ledger.</p>
+<pre><code>AED 5,000 leaves Emirates NBD
+        ↓  remittance
+₹111,000 arrives at HDFC NRO
+</code></pre>
+<p>Two ledger rows, one movement of money, <strong>zero expense</strong>. Without this, annual spending is
+overstated by the entire amount remitted — potentially by more than actual spending.</p>
+<p><strong>Transfer kinds:</strong> internal same-currency, cross-border remittance, credit card payment, loan
+repayment, investment funding, cash withdrawal.</p>
+<p><strong>Detection:</strong> automatic candidate matching on date proximity, amount (FX-aware), direction and
+account pair, scored for confidence and <strong>confirmed by the user in the review queue</strong>. High
+confidence pre-ticks; nothing links silently
+(<a href="../adr/0009-transfer-auto-detection-with-review.html">ADR-0009</a>).</p>
+<p><strong>The FX cost model</strong> is what makes this more than bookkeeping. A confirmed transfer stores:</p>
+<pre><code>source_amount · destination_amount
+implied_rate   = destination_amount / source_amount     ← what you actually got
+market_rate    = mid-market on transfer_date            ← what it was worth
+fx_spread_cost = source_amount × (1 − implied/market)   ← what the spread cost you
+explicit_fee   = the fee the provider itemised
+total_cost     = spread + fee                           ← the real cost
+</code></pre>
+<p>Which yields the report: <strong>&quot;You moved AED 180,000 to India in 2026. It cost you AED 3,240 —
+AED 1,100 in stated fees and AED 2,140 in exchange-rate spread.&quot;</strong> That number is invisible in
+every bank statement and is one of the more genuinely useful things this product can produce.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Salary → savings, card payment, remittance and SIP debit are all detected as transfers.</li>
+<li>Confirmed transfers are absent from every spending figure.</li>
+<li>Annual remittance cost report reconciles to the sum of individual transfer costs.</li>
+<li>No transfer is created without explicit user confirmation.</li>
+</ul>
+<hr>
+<h3 id="57-credit-cards--phase-1">5.7 Credit Cards — <em>Phase 1</em></h3>
+<p>Cards are modelled as liability accounts <strong>plus first-class statement cycles</strong>
+(<a href="../adr/0011-credit-card-statement-cycles.html">ADR-0011</a>).</p>
+<p><strong>Per card:</strong> current outstanding, credit limit, utilisation %, statement balance, statement
+date, payment due date, minimum due, and whether the last statement was paid in full.</p>
+<p><strong>Statement cycle object</strong> — each imported card statement becomes a record with period, opening
+and closing balance, statement balance, minimum due, due date, limit, finance charges and reward
+points. This is what makes &quot;what is actually due on the 15th&quot; answerable, and what makes payment
+matching reliable: a payment can reconcile against a <em>known</em> statement balance rather than a
+fuzzy amount.</p>
+<p><strong>Payment = transfer (I4).</strong> Enforced. The expense was recorded at purchase; counting the payment
+would double it.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Utilisation matches the card statement.</li>
+<li>A payment appears in neither spending nor income.</li>
+<li>A card paid in full shows differently from one carrying a revolving balance.</li>
+<li>Total card spending in a cycle equals the statement&#39;s total debits.</li>
+</ul>
+<hr>
+<h3 id="58-investments--phase-1-transaction-level">5.8 Investments — <em>Phase 1, transaction-level</em></h3>
+<p>Tracked at the level of individual lots — units and NAV per transaction — not as snapshots
+(<a href="../adr/0006-transaction-level-investment-lots.html">ADR-0006</a>). XIRR cannot be backfilled later
+without re-entering everything, so it is built now.</p>
+<p><strong>Per holding:</strong> units, average cost, invested amount, current value, absolute return, <strong>XIRR</strong>,
+asset class, fund category, country, currency, platform, account holder.</p>
+<p><strong>Instrument coverage, Phase 1:</strong> Indian mutual funds (AMFI scheme code, NAV), Indian equities,
+US/international equities and ETFs, gold (ETF, SGB and physical), FDs and RDs, PPF/EPF/NPS.</p>
+<p><strong>Asset allocation</strong> is the headline view, not the list of individual funds:</p>
+<pre><code>Indian Equity · International Equity · Debt · Gold · Cash · Real Estate · Other
+</code></pre>
+<p>Twenty individual funds is data. The allocation is information.</p>
+<p><strong>Valuation:</strong> market instruments use fetched prices where a free source exists (AMFI daily NAV
+file for Indian MFs); everything else uses manual valuation snapshots (§5.9). Stale prices are
+labelled with their as-of date (I7).</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>XIRR for a known SIP series matches a spreadsheet <code>XIRR()</code> to within 0.01%.</li>
+<li>Allocation percentages sum to 100% and reconcile to total portfolio value.</li>
+<li>A holding in USD contributes correctly to both INR and AED views.</li>
+<li>Buying a fund shows the bank debit and the investment purchase as one linked event, not two.</li>
+</ul>
+<hr>
+<h3 id="59-manual-valuations--phase-1">5.9 Manual Valuations — <em>Phase 1</em></h3>
+<p>For assets with no importable statement: property, physical gold, EPF, PPF, anything opaque
+(<a href="../adr/0007-manual-valuation-snapshots.html">ADR-0007</a>).</p>
+<p>The user records <em>&quot;as of 30 Sep 2026, this is worth X&quot;</em>. Net worth uses the most recent snapshot
+at or before the date being viewed — carried forward flat, <strong>never extrapolated</strong>.</p>
+<p><strong>Staleness is shown, not hidden (I7).</strong> A property valued 14 months ago is displayed with its
+age. Net worth including significantly stale valuations says so.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Net worth on any past date uses the snapshot in effect on that date, not the latest one.</li>
+<li>Snapshots older than a configurable threshold surface a prompt to update.</li>
+</ul>
+<hr>
+<h3 id="510-loans--phase-1">5.10 Loans — <em>Phase 1</em></h3>
+<p>Loans are proper entities with amortisation, not just negative balances.</p>
+<p><strong>Per loan:</strong> original principal, outstanding principal, interest rate (fixed or floating with
+benchmark and spread), EMI, start date, end date, remaining tenure, interest paid to date,
+principal paid to date, prepayments.</p>
+<p><strong>Amortisation schedule</strong> generated from the terms and regenerated on any rate change,
+prepayment or EMI revision. Each actual EMI transaction links to its scheduled installment, so
+the <em>actual</em> principal/interest split is known — which is what &quot;interest paid this year&quot; needs.</p>
+<p><strong>Deferred to Phase 2:</strong> the what-if simulator (&quot;if I prepay AED 50k: new payoff date, interest
+saved, liquidity after&quot;). The schedule engine built in Phase 1 is what makes it a small addition
+later rather than a rewrite.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Generated schedule matches the lender&#39;s amortisation table to within rounding.</li>
+<li>A recorded prepayment regenerates the schedule and shows the revised payoff date.</li>
+<li>Interest paid in a period reconciles to the sum of the interest components of actual EMIs.</li>
+</ul>
+<hr>
+<h3 id="511-documents-vault--phase-1">5.11 Documents Vault — <em>Phase 1</em></h3>
+<p>Since documents are being imported anyway, the product becomes the financial document
+repository.</p>
+<p><strong>Types:</strong> bank statements, card statements, payslips, loan statements, investment statements,
+CAS, tax documents, insurance policies, property documents, FD certificates.</p>
+<p><strong>Every document carries:</strong> institution, type, period, currency, account, uploaded date, and
+<strong>SHA-256 checksum</strong>. The checksum is what makes duplicate imports impossible rather than merely
+unlikely.</p>
+<p><strong>Bidirectional traceability:</strong> from a document, see every transaction it produced; from a
+transaction, open the document at the right page.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Re-uploading the same file is detected by checksum before parsing begins.</li>
+<li>Every document is retrievable and openable.</li>
+<li>Deleting a document is blocked while transactions reference it.</li>
+</ul>
+<hr>
+<h3 id="512-cash-flow--phase-1">5.12 Cash Flow — <em>Phase 1</em></h3>
+<p>Monthly income vs spending, with the transfer exclusion (I3) applied throughout.</p>
+<ul>
+<li>Monthly income, spending, net, and 12-month trend.</li>
+<li>Savings rate = (income − spending) ÷ income.</li>
+<li>Investment rate = investment contributions ÷ income. Tracked separately from savings rate,
+because money sitting in a current account is saved but not invested.</li>
+<li>Category breakdown, drill-through to transactions.</li>
+<li>Need / Want / Investment / Debt split from category buckets (§5.5).</li>
+<li>Both currencies via the toggle.</li>
+</ul>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Spending for a month equals the sum of its reportable transactions, exactly.</li>
+<li>Removing a transfer link changes the figure; adding one restores it. (Proves I3 is live.)</li>
+</ul>
+<hr>
+<h3 id="513-net-worth--phase-1-the-primary-long-term-metric">5.13 Net Worth — <em>Phase 1, the primary long-term metric</em></h3>
+<pre><code>Assets                          Liabilities
+├ Cash                          ├ Personal loans
+├ Investments                   ├ Home loans
+├ Real estate                   └ Credit card debt
+└ Other assets
+                Net Worth = Assets − Liabilities
+</code></pre>
+<p>Also <strong>liquid net worth</strong> — excluding property, retirement accounts with lock-ins, and anything
+not convertible within roughly a month. For a two-country life this is often the more actionable
+number.</p>
+<p><strong>Attribution is the feature.</strong> A trend line that goes up is much less useful than one that
+explains itself:</p>
+<pre><code>Sep 2026 → Sep 2027          ₹1.02 Cr → ₹1.36 Cr        +₹34.0 L
+
+  + ₹12.0 L   investment contributions
+  + ₹ 8.0 L   market appreciation
+  + ₹15.0 L   loan principal reduction
+  + ₹ 1.4 L   FX translation gain (AED strengthened)
+  − ₹ 2.0 L   asset depreciation
+  − ₹ 0.4 L   unexplained
+</code></pre>
+<p>The decomposition method and the FX/flow split are specified in
+<a href="../design/multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7. <strong>The residual is shown, not
+hidden</strong> (I7) — a decomposition that doesn&#39;t reconcile is telling you something.</p>
+<p><strong>Acceptance</strong></p>
+<ul>
+<li>Net worth on any date equals the sum of signed account balances on that date, in both
+currencies (I2).</li>
+<li>Attribution components plus residual equal the actual change, exactly.</li>
+<li>Residual is under 1% of the change for a period with complete data.</li>
+</ul>
+<hr>
+<h3 id="514-budgets--phase-2">5.14 Budgets — <em>Phase 2</em></h3>
+<p>Actual vs expected. Deliberately not the centre of the product.</p>
+<pre><code>                 Budget     Actual      Δ
+Housing           5,000      5,000       —
+Transport         1,500      1,280    −220
+Dining            1,200      1,640    +440
+Shopping          1,000      1,420    +420
+Subscriptions       500        460     −40
+</code></pre>
+<p>Plus the coarser and often more useful Need / Want / Investment / Debt view.</p>
+<h3 id="515-recurring-expenses--phase-2">5.15 Recurring Expenses — <em>Phase 2</em></h3>
+<p>Automatic discovery of subscriptions, rent, school fees, insurance, SIPs, EMIs, telecom and
+software from repeating amount/merchant/cadence patterns.</p>
+<p>Output: <strong>&quot;Your committed recurring expenses for October are AED X before any discretionary
+spending.&quot;</strong> Plus detection of price increases and of subscriptions that quietly kept charging.</p>
+<h3 id="516-salary-intelligence--phase-2">5.16 Salary Intelligence — <em>Phase 2</em></h3>
+<p>Payslip extraction into line items rather than fixed columns — UAE and Indian payslips differ too
+much for a fixed schema. Separates <strong>annual compensation</strong> (including employer contributions and
+accrued bonus) from <strong>actual cash received</strong>. Yields bonus history, increment history and
+compensation trend.</p>
+<h3 id="517-ask-my-finances--v2">5.17 Ask My Finances — <em>V2</em></h3>
+<p>Natural-language questions answered by <strong>generating a SQL query against the normalized ledger</strong>,
+not by reading statements. The normalized ledger built in Phase 1 is what makes this feasible;
+attempting it earlier would mean an LLM reading raw documents, which is both expensive and
+unreliable. Requires the privacy decision deferred in
+<a href="../adr/0004-defer-ai-to-v2.html">ADR-0004</a>.</p>
+<hr>
+<h2 id="6-non-functional-requirements">6. Non-functional requirements</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Performance</td>
+<td>Dashboard interactive in &lt; 2 s cold, &lt; 500 ms warm. Transaction list &lt; 300 ms at 20k rows</td>
+</tr>
+<tr>
+<td>Correctness</td>
+<td>Every monetary value <code>NUMERIC</code>, never float. All money maths server-side or in Postgres</td>
+</tr>
+<tr>
+<td>Availability</td>
+<td>Personal tool. Hours of downtime are acceptable; <strong>data loss is not</strong></td>
+</tr>
+<tr>
+<td>Durability</td>
+<td>Automated database backup; documents backed up off the box. One VPS is one point of failure</td>
+</tr>
+<tr>
+<td>Cost</td>
+<td>Zero while local. Roughly <strong>$5–12 per month</strong> once hosted — one small VPS (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-0018</a>). No per-service, per-seat or usage-based pricing: the bill does not grow with the ledger</td>
+</tr>
+<tr>
+<td>Privacy</td>
+<td>No financial data to third-party services in Phase 1 or 2</td>
+</tr>
+<tr>
+<td>Devices</td>
+<td>Desktop-first for import and review; mobile-readable dashboard</td>
+</tr>
+<tr>
+<td>Accessibility</td>
+<td>Keyboard-navigable review queue; WCAG AA contrast; never colour alone for +/−</td>
+</tr>
+</tbody></table>
+<h2 id="7-success-criteria">7. Success criteria</h2>
+<p>Phase 1 has succeeded when:</p>
+<ol>
+<li>24 months of real statements from all six institutions are imported and reconciled.</li>
+<li>The dashboard is opened voluntarily, most mornings, because it is genuinely informative.</li>
+<li>Monthly import + review takes under 20 minutes.</li>
+<li>Net worth is trusted enough to be used in an actual financial decision.</li>
+<li>Infrastructure spend stays at zero while local, and is a single predictable line item once hosted.</li>
+</ol>
+<p>Criterion 4 is the real one. A financial dashboard that isn&#39;t trusted gets checked twice against
+the bank and then abandoned. Everything in §4 exists to earn that trust.</p>
+<h2 id="8-risks">8. Risks</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PDF parsing is harder than expected</td>
+<td>High</td>
+<td>CSV/Excel first (M2), PDF second (M3). One bank fully working before breadth</td>
+</tr>
+<tr>
+<td>Bank changes statement layout</td>
+<td>Medium</td>
+<td>Versioned parsers; reconciliation (I8) catches it as a failure, not silent corruption</td>
+</tr>
+<tr>
+<td>Outgrowing the instance</td>
+<td>Medium</td>
+<td>Disk growth is the only thing that accumulates, at roughly 40 MB a year. §9 of <a href="../design/architecture.html">architecture.html</a> sizes it</td>
+</tr>
+<tr>
+<td>VPS outage or loss</td>
+<td>Medium</td>
+<td>Nightly backups copied off the box; a tested restore. The stack rebuilds from one compose file</td>
+</tr>
+<tr>
+<td>Scope creep into AI</td>
+<td>High</td>
+<td>Locked out by ADR-0004. Not a judgement call during the build</td>
+</tr>
+<tr>
+<td>Transfer detection produces false links</td>
+<td>High</td>
+<td>Review queue is mandatory; nothing links silently (<a href="../adr/0009-transfer-auto-detection-with-review.html">ADR-0009</a>)</td>
+</tr>
+<tr>
+<td>Manual valuations decay</td>
+<td>Low</td>
+<td>Staleness indicators (I7); prompts on age</td>
+</tr>
+<tr>
+<td>Motivation lost mid-build</td>
+<td>High</td>
+<td>Milestone ordering is deliberately front-loaded for usefulness — M2 makes the tool usable, not M9</td>
+</tr>
+</tbody></table>
+<h2 id="9-out-of-scope-permanently">9. Out of scope, permanently</h2>
+<p>Recorded so they don&#39;t get relitigated:</p>
+<ul>
+<li>Bank credential storage or screen-scraping. <strong>Never.</strong></li>
+<li>Multi-tenancy, signup flows, organizations, billing.</li>
+<li>Mobile native apps (the web app is responsive).</li>
+<li>Tax filing. Tax <em>reporting</em> is V2; filing is never.</li>
+<li>Trading, brokerage integration, or order placement.</li>
+<li>Sharing, collaboration or export-to-advisor features.</li>
+</ul>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>

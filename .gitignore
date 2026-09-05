@@ -1,0 +1,45 @@
+# ── Real financial data. NEVER committed. See docs/operations/security-and-privacy.html
+pdf-statements/
+statements/
+*.pdf
+!docs/**/*.pdf
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+.vercel/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Supabase
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# Backups
+backups/
+*.dump
+*.sql.gz

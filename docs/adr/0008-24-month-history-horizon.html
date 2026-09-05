@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR-0008 — Import 24 months of history — OneLedger</title>
+  <style>:root {
+  --page: #ffffff;
+  --canvas: #f4f6f3;
+  --ink: #1b211e;
+  --muted: #5e6862;
+  --line: #d5dbd4;
+  --accent: #0b6b58;
+  --accent-soft: #e3f2ed;
+  --code: #eef2ee;
+  --focus: #0b6b58;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.skip {
+  position: absolute;
+  left: 0.75rem;
+  top: -3rem;
+  background: var(--ink);
+  color: var(--page);
+  padding: 0.4rem 0.7rem;
+  z-index: 10;
+}
+
+.skip:focus { top: 0.75rem; }
+
+.shell { min-height: 100vh; }
+
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--page);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.mark {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.mark:hover { color: var(--accent); }
+
+.kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.nav-toggle {
+  margin-left: auto;
+  display: none;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 6px;
+}
+
+.nav-toggle:focus-visible,
+.register a:focus-visible,
+.prose a:focus-visible,
+.mark:focus-visible,
+.skip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 3.4rem);
+}
+
+.register {
+  padding: 1.1rem 0.85rem 3rem;
+  border-right: 1px solid var(--line);
+  background: var(--page);
+  overflow: auto;
+}
+
+.register-section + .register-section { margin-top: 1.15rem; }
+
+.register h2 {
+  margin: 0 0 0.3rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.register ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.register a {
+  display: block;
+  padding: 0.32rem 0.55rem;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+}
+
+.register a:hover { background: var(--canvas); }
+
+.register a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.ledger { background: var(--page); }
+
+.prose {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 2.4rem 2rem 5rem;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.prose h1 {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: clamp(1.85rem, 3.4vw, 2.35rem);
+  font-weight: 600;
+  margin: 0 0 1.15rem;
+}
+
+.prose h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 2.1rem 0 0.65rem;
+}
+
+.prose h3 {
+  font-size: 1.12rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.45rem;
+}
+
+.prose h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+}
+
+.prose p,
+.prose li,
+.prose blockquote {
+  font-family: ui-serif, "Iowan Old Style", Palatino, Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.prose a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+.prose a:hover { text-decoration-thickness: 2px; }
+
+.prose hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 1.8rem 0;
+}
+
+.prose blockquote {
+  margin: 1.2rem 0;
+  padding: 0.1rem 0 0.1rem 1rem;
+  border-left: 3px solid var(--accent);
+  color: #2a332f;
+}
+
+.prose code,
+.prose pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.86em;
+}
+
+.prose :not(pre) > code {
+  background: var(--code);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.prose pre {
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  line-height: 1.45;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.prose th,
+.prose td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.5rem 0.55rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.prose ul,
+.prose ol { padding-left: 1.25rem; }
+
+.prose li + li { margin-top: 0.22rem; }
+
+.prose img { max-width: 100%; }
+
+@media (max-width: 900px) {
+  .nav-toggle { display: inline-block; }
+
+  .frame { grid-template-columns: 1fr; }
+
+  .register {
+    display: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 70vh;
+  }
+
+  .register.is-open { display: block; }
+
+  .prose { padding: 1.5rem 1.15rem 3.5rem; }
+
+  .prose table { display: block; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+  <a class="skip" href="#document">Skip to document</a>
+  <div class="shell">
+    <header class="masthead">
+      <a class="mark" href="../index.html">OneLedger</a>
+      <p class="kicker">Specification set</p>
+      <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="register">Documents</button>
+    </header>
+    <div class="frame">
+      <nav id="register" class="register" aria-label="Documents">
+        <div class="register-section">
+      <h2>Overview</h2>
+      <ul><li><a href="../index.html">Specification set</a></li>
+</ul>
+    </div>
+<div class="register-section">
+      <h2>Product</h2>
+      <ul><li><a href="../product/prd.html">Product requirements</a></li>
+<li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Design</h2>
+      <ul><li><a href="../design/architecture.html">Architecture</a></li>
+<li><a href="../design/data-model.html">Data model</a></li>
+<li><a href="../design/multi-currency-and-fx.html">Multi-currency and FX</a></li>
+<li><a href="../design/statement-ingestion.html">Statement ingestion</a></li>
+<li><a href="../design/classification.html">Classification</a></li>
+<li><a href="../design/transfers-and-reconciliation.html">Transfers and reconciliation</a></li>
+<li><a href="../design/api-contracts.html">API contracts</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Operations</h2>
+      <ul><li><a href="../operations/security-and-privacy.html">Security and privacy</a></li>
+<li><a href="../operations/testing-and-data-quality.html">Testing and data quality</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Reference</h2>
+      <ul><li><a href="../reference/glossary.html">Glossary</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Plan</h2>
+      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../plan/schema.md">Schema reference</a></li>
+<li><a href="../plan/test-suite.md">Test suite reference</a></li>
+<li><a href="../plan/questions.html">Questions</a></li></ul>
+    </div>
+<div class="register-section">
+      <h2>Decisions</h2>
+      <ul><li><a href="./index.html">ADR index</a></li>
+<li><a href="./0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
+<li><a href="./0002-supabase-vercel-local-importer.html">0002 Supabase + Vercel + local importer</a></li>
+<li><a href="./0003-frozen-dual-currency-amounts.html">0003 Frozen dual-currency amounts</a></li>
+<li><a href="./0004-defer-ai-to-v2.html">0004 Defer AI to V2</a></li>
+<li><a href="./0005-google-auth-single-user.html">0005 Google auth, single user</a></li>
+<li><a href="./0006-transaction-level-investment-lots.html">0006 Transaction-level investment lots</a></li>
+<li><a href="./0007-manual-valuation-snapshots.html">0007 Manual valuation snapshots</a></li>
+<li><a href="#" aria-current="page">0008 24-month history horizon</a></li>
+<li><a href="./0009-transfer-auto-detection-with-review.html">0009 Transfer auto-detection</a></li>
+<li><a href="./0010-seed-taxonomy-with-buckets.html">0010 Seed taxonomy with buckets</a></li>
+<li><a href="./0011-credit-card-statement-cycles.html">0011 Credit card statement cycles</a></li>
+<li><a href="./0012-signed-balance-convention.html">0012 Signed balance convention</a></li>
+<li><a href="./0013-36-month-history-horizon.html">0013 36-month history horizon</a></li>
+<li><a href="./0014-matching-engines-in-postgres.html">0014 Matching engines in Postgres</a></li>
+<li><a href="./0015-parse-in-the-browser.html">0015 Parse in the browser</a></li>
+<li><a href="./0016-statement-layouts-as-data.html">0016 Statement layouts as data</a></li>
+<li><a href="./0017-python-backend-service.html">ADR-0017 Python backend service</a></li>
+<li><a href="./0018-one-vps-one-compose-file.html">ADR-0018 One VPS, one compose file</a></li></ul>
+    </div>
+      </nav>
+      <main id="document" class="ledger">
+        <article class="prose">
+          <h1 id="adr-0008--import-24-months-of-history">ADR-0008 — Import 24 months of history</h1>
+<p><strong>Status:</strong> Superseded by <a href="./0013-36-month-history-horizon.html">ADR-0013</a> · <strong>Date:</strong> 2026-09-04</p>
+<h2 id="context">Context</h2>
+<p>How far back should statement import go? The choice trades net-worth trend quality against parser
+effort, and the effort is not linear: older statements use retired layouts, each needing its own
+parser version.</p>
+<h2 id="decision">Decision</h2>
+<p><strong>Current year plus prior year — approximately 24 months.</strong></p>
+<p>Opening balances at the start of that window are entered manually as the anchor.</p>
+<h2 id="rationale">Rationale</h2>
+<p><strong>24 months is the point where trends become real.</strong> It gives year-on-year comparison for every
+month, a full seasonal cycle twice over, and a net-worth curve with enough points to have a
+shape. Twelve months gives no YoY comparison at all; thirty-six adds relatively little
+analytically.</p>
+<p><strong>Parser effort rises sharply beyond it.</strong> Banks revise statement layouts every few years.
+Two years back usually means one layout per institution. Five years back can mean three, each
+needing its own parser version, its own fixture and its own maintenance — for data that is
+progressively less relevant to current decisions.</p>
+<p><strong>The FX backfill matches.</strong> 24 months of daily rates is a single API call. It aligns the rate
+table with the transaction horizon so there is never a transaction without a rate.</p>
+<p><strong>Manual opening balances are honest and cheap.</strong> Roughly fifteen numbers entered once, at the
+window boundary, anchoring everything derived after it.</p>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<p><strong>Everything available (5+ years).</strong> Richest long-term story. Rejected because dedupe and cleanup
+of old, differently-formatted statements would become the bulk of Phase 1 — turning the most
+motivating milestones into a data-entry project, on data that mostly informs nostalgia rather
+than decisions.</p>
+<p><strong>Go-forward only.</strong> Fastest to a working app; opening balances entered and nothing historical
+imported. Rejected because the net-worth trend — the primary long-term metric — would take a year
+to become interesting, and the classification engine would have no history to learn from. Both
+of the product&#39;s most valuable features would be dormant for twelve months.</p>
+<h2 id="consequences">Consequences</h2>
+<p><strong>Good.</strong> Phase 1 stays scoped. Parsers target current layouts only. YoY comparison works from
+day one. The FX backfill is bounded.</p>
+<p><strong>Costs.</strong> Net worth before the window start does not exist. Long-run charts begin two years ago
+rather than at the beginning of financial life. Accepted: the questions this product exists to
+answer are about the present and the future.</p>
+<p><strong>Extending later is straightforward</strong> — import older statements and let the pipeline handle
+them. The cost is parser versions for older layouts, which can be paid if and when the older data
+is actually wanted. Nothing about this decision forecloses it.</p>
+
+        </article>
+      </main>
+    </div>
+  </div>
+  <script>
+    const toggle = document.querySelector(".nav-toggle");
+    const register = document.getElementById("register");
+    toggle?.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!open));
+      register.classList.toggle("is-open", !open);
+    });
+  </script>
+</body>
+</html>
