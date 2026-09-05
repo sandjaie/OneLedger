@@ -1,0 +1,38 @@
+[project]
+name = "oneledger"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+  "fastapi>=0.141", "uvicorn[standard]>=0.52", "pydantic>=2.13",
+  "psycopg[binary]>=3.3", "httpx>=0.28", "pdfplumber>=0.11.10", "pyjwt[crypto]>=2.13",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9",
+    "mypy>=2.3",
+    "ruff>=0.16",
+    "hypothesis>=6.167",
+    "httpx>=0.28.1",
+]
+
+[tool.mypy]
+strict = true
+
+[tool.ruff]
+# 88 is ruff's default, not a decision anyone made here. The specification's code and this
+# repository's prose are both written to ~96, so the limit follows the code rather than the
+# code being rewrapped to satisfy a default.
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ANN"]
+
+# Say which package to ship. Hatchling's heuristics do not find `oneledger` on their own and
+# fail the build rather than guessing.
+[tool.hatch.build.targets.wheel]
+packages = ["oneledger"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
