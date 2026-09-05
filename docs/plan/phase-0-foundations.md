@@ -159,6 +159,10 @@ volumes:
 ```
 
 ```bash
+# .env first: api and web declare `env_file: .env`, and compose refuses to parse the file
+# at all when it is missing — so even `up -d db` fails on a fresh clone without this.
+cp .env.example .env
+
 docker compose up -d db
 docker compose exec db pg_isready -U oneledger      # expect: accepting connections
 docker compose run --rm flyway info                 # expect: connects, "<< Empty Schema >>"
