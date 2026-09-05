@@ -315,6 +315,74 @@ BEGIN
 END $$;
 ```
 
+```python
+# api/tests/test_health.py
+"""The authorization boundary, as HTTP sees it.
+
+`test_auth.py` covers `resolve_owner` as a function. These cover the same rules through the
+app, because a dependency that is correct in isolation and unwired in `main.py` fails exactly
+the same way as one that is wrong — and only this test can tell the difference.
+"""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from oneledger.main import app
+
+client = TestClient(app)
+
+
+def test_health_needs_no_session() -> None:
+    """The one route that is deliberately open. There is no second."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_no_session_is_401_not_403() -> None:
+    """Absent credentials and rejected credentials are different answers.
+
+    A service that returns 403 for both tells a caller their account is not permitted when in
+    fact they never presented one, which sends them to the wrong fix.
+    """
+    assert client.get("/whoami").status_code == 401
+
+
+def test_a_forged_session_is_403() -> None:
+    """Google authenticates any Google account. Authentication is not authorization."""
+    forged = TestClient(app)
+    forged.cookies.set("session", "not-a-real-token")
+    assert forged.get("/whoami").status_code == 403
+
+
+@pytest.mark.parametrize("route", ["/whoami"])
+def test_every_route_but_health_requires_the_owner(route: str) -> None:
+    """A route added without `Depends(require_owner)` is the failure this catches.
+
+    Extend the parameter list as routes land; a route that answers anonymously will fail here
+    rather than in production.
+    """
+    assert client.get(route).status_code in (401, 403)
+```
+
+```python
+"""Environment these tests need before oneledger.main is imported.
+
+The service refuses to start without SESSION_SECRET, deliberately — so the suite has to supply
+one. It is a throwaway value: nothing here signs anything a real client will ever present.
+"""
+
+import os
+
+os.environ.setdefault("SESSION_SECRET", "test-secret-not-used-outside-this-suite")
+os.environ.setdefault("ALLOWED_USER_EMAIL", "owner@example.com")
+```
+
+`test_health.py` covers the same rules through the app that `test_auth.py` covers as a
+function, because a dependency that is correct in isolation and unwired in `main.py` fails
+identically to one that is wrong — and only the HTTP test tells them apart. `conftest.py`
+supplies the session secret the service now refuses to start without.
+
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
@@ -1002,13 +1070,30 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=9", "mypy>=2.3", "ruff>=0.16", "hypothesis>=6.167"]
+dev = [
+    "pytest>=9",
+    "mypy>=2.3",
+    "ruff>=0.16",
+    "hypothesis>=6.167",
+    "httpx>=0.28.1",
+]
 
 [tool.mypy]
 strict = true
 
+[tool.ruff]
+# 88 is ruff's default, not a decision anyone made here. The specification's code and this
+# repository's prose are both written to ~96, so the limit follows the code rather than the
+# code being rewrapped to satisfy a default.
+line-length = 100
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ANN"]
+
+# Say which package to ship. Hatchling's heuristics do not find `oneledger` on their own and
+# fail the build rather than guessing.
+[tool.hatch.build.targets.wheel]
+packages = ["oneledger"]
 
 [build-system]
 requires = ["hatchling"]
@@ -1024,6 +1109,7 @@ build-backend = "hatchling.build"
 Google authenticates any Google account, so a valid sign-in proves identity and nothing else.
 A caller is authorized only if their session resolves to a row in app_user.
 """
+
 from __future__ import annotations
 
 import os
@@ -1031,7 +1117,7 @@ from collections.abc import Callable
 from typing import Any
 
 import jwt
-from fastapi import Cookie, Depends, HTTPException
+from fastapi import Cookie, HTTPException
 
 from .db import connect
 
@@ -1071,6 +1157,23 @@ def _lookup(subject: str) -> str | None:
     return str(row[0]) if row else None
 
 
+def session_secret() -> str:
+    """The key that signs session cookies. Absent is a configuration failure, not a request one.
+
+    Reading os.environ["SESSION_SECRET"] inline raised KeyError from inside require_owner's
+    try block, where the except clause does not catch it — so a service deployed without the
+    variable answered every request with a 500 and no explanation. main.py calls this at
+    startup so the process refuses to run instead.
+    """
+    secret = os.environ.get("SESSION_SECRET", "")
+    if not secret:
+        raise RuntimeError(
+            "SESSION_SECRET is not set: sessions cannot be verified without it. "
+            "Copy .env.example to .env and generate one with `openssl rand -hex 32`."
+        )
+    return secret
+
+
 def require_owner(session: str = Cookie(default="")) -> str:
     """FastAPI dependency. Every route depends on this — there is no unauthenticated route.
 
@@ -1079,7 +1182,7 @@ def require_owner(session: str = Cookie(default="")) -> str:
     if not session:
         raise HTTPException(status_code=401, detail="not signed in")
     try:
-        claims = jwt.decode(session, os.environ["SESSION_SECRET"], algorithms=["HS256"])
+        claims = jwt.decode(session, session_secret(), algorithms=["HS256"])
         return resolve_owner(claims, _lookup, os.environ.get("ALLOWED_USER_EMAIL"))
     except (jwt.PyJWTError, NotAuthorized) as exc:
         raise HTTPException(status_code=403, detail="not authorized") from exc
@@ -1125,7 +1228,11 @@ import os
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .auth import require_owner
+from .auth import require_owner, session_secret
+
+# Fail at startup, not on the first request. A service that boots without the key that signs
+# its sessions is broken in a way every caller will experience as an unexplained 500.
+session_secret()
 
 app = FastAPI(title="OneLedger", version="0.1.0")
 
@@ -1184,11 +1291,14 @@ FROM python:3.14-slim
 COPY --from=ghcr.io/astral-sh/uv:0.12.10 /uv /usr/local/bin/uv
 WORKDIR /app
 
-# Dependencies first, so a source change does not re-resolve them.
+# Dependencies first, so a source change does not re-resolve them. --no-install-project is
+# load-bearing: the package directory does not exist at this layer, and without it hatchling
+# fails with "Unable to determine which files to ship inside the wheel".
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY oneledger ./oneledger
+RUN uv sync --frozen --no-dev
 EXPOSE 8000
 CMD ["uv", "run", "--no-dev", "uvicorn", "oneledger.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
