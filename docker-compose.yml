@@ -1,0 +1,54 @@
+# This file is the deployment (ADR-0014). The same compose file runs on a laptop and on the
+# VPS; only .env and whether Caddy is enabled differ.
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: oneledger
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
+      POSTGRES_DB: oneledger
+    ports: ["5432:5432"]
+    # 18+ stores data in a major-version subdirectory, so the mount goes one level
+    # up. Mounting /var/lib/postgresql/data is the <=17 convention and the image
+    # refuses to start on it.
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oneledger"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    env_file: .env
+    environment:
+      # .env holds the host URL, so `uv run` on the laptop works. Inside this container
+      # 127.0.0.1 is the container itself, so the service address wins here.
+      DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
+    ports: ["8000:8000"]
+    volumes: ["documents:/var/lib/oneledger/documents"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  web:
+    build: ./web
+    env_file: .env
+    ports: ["3000:3000"]
+    depends_on: [api]
+
+  # Runs on demand, never at boot:  docker compose run --rm flyway migrate | info
+  flyway:
+    image: flyway/flyway:13.5.0-alpine
+    profiles: ["tools"]
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/oneledger
+      FLYWAY_USER: oneledger
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "20"
+    volumes: ["./db/migrations:/flyway/sql:ro"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  documents:
