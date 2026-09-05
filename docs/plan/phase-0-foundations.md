@@ -615,23 +615,13 @@ is silently discarded.
 - [ ] **Step 4c: Seed the household, person and app_user row**
 
 ```bash
-set -a && . ./.env && set +a
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -v household="$HOUSEHOLD_NAME"    -v person="$OWNER_DISPLAY_NAME" \
-  -v residency="$OWNER_TAX_RESIDENCY" -v email="$ALLOWED_USER_EMAIL" \
-  -v base="$BASE_CURRENCY"          -v secondary="$SECONDARY_CURRENCY" <<'SQL'
-WITH h AS (
-  INSERT INTO household (name, base_currency, secondary_currency)
-  VALUES (:'household', :'base', :'secondary') RETURNING id
-), p AS (
-  INSERT INTO person (household_id, display_name, is_self, tax_residency)
-  SELECT id, :'person', true, :'residency' FROM h RETURNING id, household_id
-)
-INSERT INTO app_user (id, household_id, person_id, email, role)
-SELECT gen_random_uuid(), p.household_id, p.id, :'email', 'owner' FROM p;
-SQL
-psql "$DATABASE_URL" -c "SELECT email, role FROM app_user;"
+./scripts/seed-household.sh
 ```
+
+The script reads `.env` and derives its DSN from `scripts/dsn.sh`, so the password is not
+restated. It is deliberately not idempotent — running it twice creates a second household,
+which the app has no concept of. Run it once per database.
+
 
 The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is
 written into a document that gets committed.
