@@ -87,3 +87,16 @@ def test_every_currency_in_a_peg_chain_is_stored_not_only_its_ends() -> None:
         )  # type: ignore[arg-type]
     )
     assert bases == ["USD", "XAA", "XBB"]
+
+
+def test_a_pegged_reporting_currency_stores_its_own_anchor() -> None:
+    """Reporting in a pegged currency writes INR->AED and nothing that exposes the peg.
+
+    Every one of those rows travelled through the 3.6725, and without a USD->AED row there is
+    nothing to check that factor against. The stored USD->AED rate *is* the peg rate.
+    """
+    _, bases, _ = reporting_config(
+        _conn(("AED", "INR"), [("AED", "USD", Decimal("3.6725"))], [("INR",)])  # type: ignore[arg-type]
+    )
+    assert "USD" in bases, "a pegged reporting currency must store its anchor"
+    assert "AED" not in bases

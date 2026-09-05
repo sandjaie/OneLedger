@@ -1749,6 +1749,19 @@ def test_every_currency_in_a_peg_chain_is_stored_not_only_its_ends() -> None:
         )  # type: ignore[arg-type]
     )
     assert bases == ["USD", "XAA", "XBB"]
+
+
+def test_a_pegged_reporting_currency_stores_its_own_anchor() -> None:
+    """Reporting in a pegged currency writes INR->AED and nothing that exposes the peg.
+
+    Every one of those rows travelled through the 3.6725, and without a USD->AED row there is
+    nothing to check that factor against. The stored USD->AED rate *is* the peg rate.
+    """
+    _, bases, _ = reporting_config(
+        _conn(("AED", "INR"), [("AED", "USD", Decimal("3.6725"))], [("INR",)])  # type: ignore[arg-type]
+    )
+    assert "USD" in bases, "a pegged reporting currency must store its anchor"
+    assert "AED" not in bases
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -1806,14 +1819,19 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
         )
         bases = {row[0] for row in cur.fetchall()}
 
-    # Every anchor along the chain is quoted too, even when no account holds it. Without this
-    # the peg-identity check joins AED->INR rows against USD->INR rows that were never
-    # written, finds nothing, and reports zero violations while proving nothing. The whole
-    # chain, not one hop: A->B->USD stored as A and B leaves the B->USD identity just as
-    # vacuous as storing A alone left A->USD.
-    bases = {c for b in bases for c in anchor_chain(b, pegs)}
-    # ...but an anchor can be the reporting currency itself — base USD with secondary AED
-    # puts USD back. A USD/USD row violates the no_self_pair constraint and means nothing.
+    # Every anchor along every chain is quoted too, even when no account holds it. Without
+    # this the peg-identity check joins AED->INR rows against USD->INR rows that were never
+    # written, finds nothing, and reports zero violations while proving nothing.
+    #
+    # The whole chain, not one hop: A->B->USD stored as A and B leaves the B->USD identity
+    # just as vacuous as storing A alone left A->USD. And the quote's own chain, not only the
+    # bases': reporting in a pegged AED writes INR->AED and nothing that exposes the 3.6725,
+    # so the derivation every one of those rows travelled through is never checked. Storing
+    # USD->AED makes it the peg rate itself, and a row that must equal currency.peg_rate.
+    bases = {c for b in [quote, *bases] for c in anchor_chain(b, pegs)}
+    # ...but a chain can pass through the reporting currency — base USD with secondary AED
+    # puts USD back, and the quote is in the seed set by construction. A USD/USD row violates
+    # the no_self_pair constraint and means nothing.
     bases.discard(quote)
     return quote, sorted(bases), pegs
 
