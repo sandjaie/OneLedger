@@ -410,16 +410,17 @@ cd web && npx vitest run && npm run dev
 - [ ] **Run the whole gate from a clean clone**, because a green suite on a developer machine that has been accumulating state for a week proves less than it appears to:
 
 ```bash
-# Scratch project: `down -v` on the default one deletes pgdata AND documents.
-COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 POSTGRES_PASSWORD=oneledger \
-  docker compose down -v && COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 \
-  POSTGRES_PASSWORD=oneledger docker compose up -d db
-docker compose run --rm flyway migrate
-for t in db/tests/*.sql; do psql "$DATABASE_URL" -f "$t"; done
-cd api && uv run ruff check . && uv run mypy . && uv run pytest -v
-cd ../web && npx vitest run && npm run build
-python3 scripts/check-docs.py
+/verify
 ```
+
+**One definition of green, not a second copy of it.** `.claude/skills/verify/SKILL.md` already
+runs the docs checks, the secret scan, ruff, mypy, pytest, the migrations-from-empty pass and
+the web suite — and it runs the database section inside an isolated `oneledger-verify` project
+with a cleanup trap. An abbreviated copy here drifted from it within a single review round:
+the teardown had been isolated but the `flyway migrate` and `psql` lines that followed still
+pointed at the default project, so it reset a scratch database and then tested the working one.
+
+If you would rather see the commands, read the skill. Do not restate them.
 
 - [ ] **Open `feature/phase-0-foundations` → `main`.** The PR body states what Phase 0 delivered and what M1 may now assume: a database with four migrations and their invariant tests, a service that is the authorization boundary, an FX table covering the full history horizon, and a web shell that formats money correctly.
 - [ ] **Wait for Codex, merge on approval.**
