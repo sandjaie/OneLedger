@@ -41,9 +41,15 @@ class TagBalance(HTMLParser):
             self.errors.append(f"</{tag}> at {self.getpos()} closes <{opened}> opened at {where}")
 
 
+# Vendored trees carry their own .md and .html. Checking them means auditing other people's
+# documentation, and every link they get wrong becomes our build failure.
+SKIP = {".git", ".venv", "node_modules", ".next", "__pycache__", ".ruff_cache",
+        ".mypy_cache", ".pytest_cache", "dist", "build"}
+
+
 def documents() -> list[pathlib.Path]:
     return sorted(p for p in ROOT.rglob("*")
-                  if p.suffix in (".html", ".md") and ".git" not in p.parts)
+                  if p.suffix in (".html", ".md") and not SKIP.intersection(p.parts))
 
 
 def check_links() -> list[str]:
