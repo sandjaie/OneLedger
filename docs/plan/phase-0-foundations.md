@@ -132,9 +132,10 @@ services:
     build: ./api
     env_file: .env
     environment:
-      # .env holds the host URL, so `uv run` on the laptop works. Inside this container
-      # 127.0.0.1 is the container itself, so the service address wins here.
-      DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
+      # .env points at 127.0.0.1 so `uv run` works on the laptop. Inside this container that
+      # is the container itself, so only the host changes — the password is not restated.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
     # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
     # reaches these over the compose network rather than the host interface.
     ports: ["127.0.0.1:8000:8000"]
@@ -204,10 +205,18 @@ now.
 NEXT_PUBLIC_API_URL=http://localhost:8000
 
 # Service only. NEVER prefixed NEXT_PUBLIC_. Never committed.
-# Local default, matching DATABASE_URL below. Change BOTH before hosting: the containers read
-# this one, and `uv run` on your machine reads the URL — set one without the other and local
-# commands fail authentication against a database that started fine.
+#
+# The database connection lives here as PARTS, not as a URL. A DSN in this file would hold a
+# second copy of the password, and two copies of one value drift: set the password without
+# updating the URL and the containers come up fine while every local `uv run` fails to
+# authenticate, which reads as a broken service rather than a typo.
+#   Host-side DSN, when a shell needs one:   DATABASE_URL="$(scripts/dsn.sh)"
+POSTGRES_USER=oneledger
 POSTGRES_PASSWORD=oneledger
+POSTGRES_DB=oneledger
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+
 SESSION_SECRET=                 # openssl rand -hex 32 — signs the session cookie
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -230,16 +239,6 @@ SECONDARY_CURRENCY=AED
 # Rotating this invalidates every stored hash. See security-and-privacy.html §4.
 ACCOUNT_HASH_SALT=
 
-# Host-side connection, for `uv run` outside a container. Inside the api container compose
-# overrides this to reach db:5432, so this line only ever serves your own machine.
-#
-#   THE PASSWORD HERE MUST EQUAL POSTGRES_PASSWORD ABOVE.
-#
-# They are two copies of one value and nothing enforces the match: set the password without
-# updating this and the containers come up fine while every local `uv run` fails to
-# authenticate, which reads as a broken service rather than a typo. After changing it:
-#   sed -i '' "s#oneledger:[^@]*@#oneledger:$POSTGRES_PASSWORD@#" .env
-DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger
 DOCUMENTS_DIR=/var/lib/oneledger/documents
 ```
 
@@ -1100,15 +1099,32 @@ import os
 import psycopg
 
 
+def dsn() -> str:
+    """Built from parts, so the password exists in exactly one place.
+
+    A DATABASE_URL in .env would be a second copy, and two copies of one value drift —
+    scripts/dsn.sh assembles the identical string for shells that need one.
+    """
+    try:
+        password = os.environ["POSTGRES_PASSWORD"]
+    except KeyError:
+        raise SystemExit("POSTGRES_PASSWORD is not set. Copy .env.example to .env.") from None
+    return (
+        f"postgresql://{os.environ.get('POSTGRES_USER', 'oneledger')}:{password}"
+        f"@{os.environ.get('POSTGRES_HOST', '127.0.0.1')}"
+        f":{os.environ.get('POSTGRES_PORT', '5432')}"
+        f"/{os.environ.get('POSTGRES_DB', 'oneledger')}"
+    )
+
+
 def connect() -> psycopg.Connection:
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        raise SystemExit("DATABASE_URL is not set. Copy .env.example to .env and fill it in.")
-    return psycopg.connect(url)
+    return psycopg.connect(dsn())
 ```
 
 ```python
 # api/oneledger/main.py
+import os
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -2293,7 +2309,7 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
    SCRATCH project, because `down -v` on the default one deletes pgdata AND documents.
    Run `/verify` section 4, which is this in a subshell with a cleanup trap:
      COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 POSTGRES_PASSWORD=oneledger
-     DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+     POSTGRES_PORT=55432 DATABASE_URL="$(scripts/dsn.sh)"
      down -v; up -d db; flyway migrate; every db/seeds/*.sql; every db/tests/*.sql
    (the seeds are not optional: 0001_reference.sql asserts six system institutions, and
     0002_rls.sql asserts they stay visible to anon. Without `|| exit 1` the loop reports

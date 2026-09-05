@@ -24,9 +24,10 @@ services:
     build: ./api
     env_file: .env
     environment:
-      # .env holds the host URL, so `uv run` on the laptop works. Inside this container
-      # 127.0.0.1 is the container itself, so the service address wins here.
-      DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
+      # .env points at 127.0.0.1 so `uv run` works on the laptop. Inside this container that
+      # is the container itself, so only the host changes — the password is not restated.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
     # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
     # reaches these over the compose network rather than the host interface.
     ports: ["127.0.0.1:8000:8000"]
