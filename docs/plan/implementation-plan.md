@@ -4,6 +4,11 @@
 > global constraints, but it is not itself executable task-by-task. Each milestone has its own
 > plan in this directory, written just-in-time. Execute those with
 > `superpowers:subagent-driven-development` or `superpowers:executing-plans`.
+>
+> **Phase 0 is decomposed into seven pull requests** in
+> [phase-0-pull-requests.md](./phase-0-pull-requests.md) — branch names, the review gate and
+> the 500-line cap. Read it alongside `phase-0-foundations.md`: that one says what to type,
+> this one says what to ship.
 
 **Goal:** Build a single normalized ledger of every financial event, across however many countries
 the household spans, with the consolidated cash-flow, portfolio and net-worth views that only

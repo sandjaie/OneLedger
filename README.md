@@ -115,6 +115,7 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/plan/questions.html) | Scoping questions — **17 of 24 answered** |
 | **[Implementation Plan](docs/plan/implementation-plan.md)** | **The build order. Start here to write code** |
+| [Phase 0 Pull Requests](docs/plan/phase-0-pull-requests.md) | How the 11 tasks become seven reviewable PRs, and what gates each |
 | [Schema Reference](docs/plan/schema.md) | The complete DDL, by migration |
 | [Test Suite Reference](docs/plan/test-suite.md) | The invariant suite and static checks |
 
