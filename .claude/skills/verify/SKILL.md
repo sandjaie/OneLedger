@@ -11,11 +11,28 @@ with **the number of checks that actually ran**, then one verdict line.
 1. `python3 scripts/check-docs.py` — links, ADR link labels, HTML, no statement tracked by git
 2. `pre-commit run --all-files` — secrets, formatting, and every commit-stage hook
 3. `cd api && uv run ruff check . && uv run mypy . && uv run pytest -q`
-4. Migrations from empty, against a **scratch** database and never the working one:
-   `docker compose down -v && docker compose up -d db`, then `docker compose run --rm flyway
-   migrate`, then every `db/seeds/*.sql`, then every `db/tests/*.sql` with `-v ON_ERROR_STOP=1`.
-   (`flyway clean` is disabled by default since v10 and is not the reset to reach for — dropping
-   the volume is both genuinely empty and incapable of touching a real database.)
+4. Migrations from empty, against a **scratch stack that cannot reach the working one**:
+
+   ```bash
+   export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
+   export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+
+   docker compose down -v                      # only oneledger-verify's own volumes
+   docker compose up -d db
+   docker compose run --rm flyway migrate
+   for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
+   for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
+   docker compose down -v                      # leave nothing behind
+   ```
+
+   **`COMPOSE_PROJECT_NAME` is the whole safety mechanism, not a tidiness flourish.** Without
+   it, `docker compose down -v` removes the default project's named volumes — `pgdata` *and*
+   `documents`, which holds every original statement the ledger traces back to. A verification
+   step is never allowed to be the thing that loses the data it is verifying. `DB_PORT` keeps
+   the scratch database off 5432 so it can run beside a working stack.
+
+   (`flyway clean` is not the reset to reach for either: it has been disabled by default since
+   Flyway 10, and a dropped scratch volume is a truer "from empty" anyway.)
 5. `cd web && npx tsc --noEmit && npx vitest run && npm run build`, then grep `.next/static/` for
    `SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://`
 
