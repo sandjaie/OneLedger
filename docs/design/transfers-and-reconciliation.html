@@ -329,11 +329,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -568,14 +568,27 @@ yet, or the account isn&#39;t tracked at all.</p>
 <ul>
 <li>Leg present, peer expected but absent → <strong>pending transfer</strong>, excluded from spending, listed
 as &quot;awaiting the other side&quot;. Re-matched automatically on the next import.</li>
-<li>Leg present, peer never expected (money sent to a family member&#39;s untracked account) → user
-marks it <code>external transfer</code>. Excluded from spending but shown separately from consumption,
-because it is neither an expense nor an internal movement.</li>
+<li>Money confirmed as leaving the household (for example family support) → user marks an
+<code>external transfer</code>. Exclude it from consumption but include it in external household
+outflows, retained-income/savings-rate calculations and cash-availability planning. An untracked
+account alone does not establish that the money left the household.</li>
 </ul>
 <p>A pending transfer older than 30 days is surfaced for resolution — it usually means a statement
 is missing, which is exactly the kind of gap that shows up later as an unexplained net-worth
 residual.</p>
 <hr>
+<h3 id="household-and-transit">Household boundary and money in transit</h3>
+<p>The transfer exclusion protects consumption reports; it must not erase external support from
+household resource calculations. The external-outflow view reads confirmed external movements
+separately and combines them with consumption totals for retained income. It must not bypass I3 by
+inserting internal transfers into spending. Define and test the distinction in M5 before M9a reports it.</p>
+<p>Show an internal transfer with different posting dates as pending/in transit until settlement.
+A verified position discloses the missing peer and coverage gap. Any estimated economic position
+that includes in-transit funds labels them separately, keeps them out of settled available cash,
+and removes them once settlement appears. Do not invent a bank posting or silently count both.</p>
+<p>Failed and reversed transfers remain distinguishable from settled transfers. Re-matching proposes
+peers; confirmation still requires the user under ADR-0007. See
+<a href="../product/finance-os.html#financial-meaning">F01–F04</a> and scenarios P02/P04.</p>
 <h2 id="4-credit-card-payments-invariant-i4">4. Credit card payments (Invariant I4)</h2>
 <p>The most common double-counting error, and worth stating separately.</p>
 <pre><code>15 Sep   ENBD Current      −AED 3,900   &quot;CREDIT CARD PAYMENT&quot;
@@ -703,7 +716,7 @@ something in the pipeline is systematically wrong.</p>
 spending.</li>
 <li>A card payment is detected, and the card&#39;s statement is marked paid in full.</li>
 <li>Two similar-sized unrelated transactions on the same day are <strong>not</strong> linked.</li>
-<li>A one-sided transfer stays pending and links automatically when the peer statement imports.</li>
+<li>A one-sided transfer stays pending, is re-proposed when its peer imports, and links after explicit confirmation; settlement clears the in-transit presentation.</li>
 <li>Unlinking restores both legs and the spending figure changes accordingly.</li>
 <li>Split transfer: one debit, three credits, total cost computed across all legs.</li>
 <li>Annual remittance cost equals the sum of per-transfer costs, to the fils.</li>

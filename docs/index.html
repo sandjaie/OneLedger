@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./product/prd.html">Product requirements</a></li>
 <li><a href="./product/roadmap.html">Roadmap</a></li>
+<li><a href="./product/finance-os.html">Finance OS requirements</a></li>
 <li><a href="./product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -328,12 +329,13 @@ body {
       <ul><li><a href="./reference/glossary.html">Glossary</a></li></ul>
     </div>
 <div class="register-section">
-      <h2>Plan</h2>
-      <ul><li><a href="./plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="./plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="./plan/schema.md">Schema reference</a></li>
-<li><a href="./plan/test-suite.md">Test suite reference</a></li>
-<li><a href="./plan/questions.html">Questions</a></li></ul>
+      <h2>Plans and references</h2>
+      <ul><li><a href="./superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="./superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="./superpowers/phase-0-pull-requests.md">Phase 0 pull requests</a></li>
+<li><a href="./superpowers/schema.md">Schema reference</a></li>
+<li><a href="./superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="./superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -367,8 +369,13 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="oneledger--specification-set">OneLedger — Specification Set</h1>
-<p>Thirteen documents plus a set of ADRs and an implementation plan. They are meant to be read in a
-particular order, and they are meant to be <strong>finished arguing about before code starts</strong>.</p>
+<p>The product, design and operational specifications, decision records and implementation plans.
+<strong>Phase 0 is in progress:</strong> GitHub PRs #3–#7 are merged into
+<code>feature/phase-0-foundations</code>; the web shell, Google OIDC, money formatting and exit
+checks remain. See <a href="./product/roadmap.html#current-baseline">the current baseline</a>.</p>
+<p>The accepted <a href="./product/finance-os.html">finance OS product review</a> adds planning,
+resilience and follow-up requirements for later phases. New implementation plans live in
+<a href="./superpowers/plans/implementation-plan.md">docs/superpowers/plans/</a>; Phase 0 is not expanded.</p>
 <hr>
 <h2 id="layout">Layout</h2>
 <pre><code>docs/
@@ -379,7 +386,8 @@ particular order, and they are meant to be <strong>finished arguing about before
 ├── operations/    how it stays correct       09 Security · 12 Testing
 ├── reference/     vocabulary                 13 Glossary
 ├── adr/           the decisions, with trade-offs
-└── plan/          answered questions · implementation plan
+├── plan/          existing Phase 0 plans · schema/tests · questions
+└── superpowers/   all new implementation plans · current master
 </code></pre>
 <hr>
 <h2 id="reading-order">Reading order</h2>
@@ -585,7 +593,7 @@ here in one place:</p>
 </tbody></table>
 <hr>
 <h2 id="open-questions">Open questions</h2>
-<p><strong>→ <a href="./plan/questions.html">questions.html</a></strong> — <strong>17 of 24 answered.</strong> The remainder are downstream of
+<p><strong>→ <a href="./superpowers/questions.html">questions.html</a></strong> — <strong>17 of 24 answered.</strong> The remainder are downstream of
 milestones that are not yet scheduled.</p>
 <table>
 <thead>
@@ -615,7 +623,7 @@ milestones that are not yet scheduled.</p>
 <td>Phase 2</td>
 </tr>
 </tbody></table>
-<p><strong>→ <a href="./plan/implementation-plan.md">implementation-plan.md</a></strong> — the milestone-by-milestone build
+<p><strong>→ <a href="./superpowers/plans/implementation-plan.md">implementation-plan.md</a></strong> — the milestone-by-milestone build
 order, derived from these answers.</p>
 <h2 id="how-to-change-these-documents">How to change these documents</h2>
 <p>The specs are version-controlled prose, and they are expected to change — but deliberately.</p>
@@ -624,8 +632,12 @@ order, derived from these answers.</p>
 Do not silently edit the old ADR; mark it <code>Superseded by ADR-XXXX</code>.</li>
 <li>A change to the schema updates <a href="./design/data-model.html">data-model.html</a> <strong>and</strong> ships a migration
 in the same commit.</li>
-<li>A change that moves work between phases updates <a href="./product/roadmap.html">roadmap.html</a> and says what
-it displaced. Phases have a fixed size budget; nothing is added without something moving out.</li>
+<li>A change that moves work between phases updates <a href="./product/roadmap.html">roadmap.html</a>
+and records its scope tradeoff. The 6 September review preserves Phase 0, brings part of M9 forward,
+and explicitly sequences the added planning capabilities as Phase 2A–2C.</li>
+<li>All new implementation plans go in <code>docs/superpowers/plans/</code>, and all new
+specifications go in <code>docs/superpowers/specs/</code>. Existing Phase 0 plans and references
+live directly in <code>docs/superpowers/</code>.</li>
 </ul>
 
         </article>

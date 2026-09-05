@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./prd.html">Product requirements</a></li>
 <li><a href="#" aria-current="page">Roadmap</a></li>
+<li><a href="./finance-os.html">Finance OS requirements</a></li>
 <li><a href="./ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -329,11 +330,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -367,7 +368,12 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="08--roadmap">08 — Roadmap</h1>
-<p>Phase 0 → Phase 1 (ten milestones) → Phase 2 → V2.</p>
+<p>Phase 0 (in progress) → Phase 1 (trusted position) → Phase 2A (next month)
+→ Phase 2B (resilience) → Phase 2C (deeper analysis) → V2.</p>
+<p><strong>Product review accepted 6 September 2026.</strong> The
+<a href="./finance-os.html">finance OS requirements</a> add planning and follow-through while
+preserving Phase 0 scope. M9 is delivered in two slices so a useful overview arrives sooner.
+New implementation plans live in <a href="../superpowers/plans/implementation-plan.md">docs/superpowers/plans/</a>.</p>
 <p><strong>Sequencing principle: usefulness early.</strong> The milestones are ordered so the tool becomes worth
 opening at M2, not at M10. A personal project that only pays off at the end usually doesn&#39;t reach
 the end.</p>
@@ -376,42 +382,41 @@ milestone instead has a <strong>definition of done</strong> that is objectively 
 sized so that one is completable in a small number of sessions.</p>
 <hr>
 <h2 id="dependency-graph">Dependency graph</h2>
-<pre><code>  Phase 0  Foundations
-     │
-     ▼
-  M1  Accounts + manual transactions
-     │
-     ▼
-  M2  Importer: UAE card layout, end-to-end               ◄── first genuinely useful point
-     │
-     ├──────────────┐
-     ▼              ▼
-  M3  Remaining     M4  Classification engine
-      layouts
-     │              │
-     └──────┬───────┘
-            ▼
-  M5  Transfers  ◄── first point at which the numbers are trustworthy
-            │
-     ┌──────┼──────────┬──────────┐
-     ▼      ▼          ▼          ▼
-  M6 Cards  M7 Invest  M10 Docs   (M8 Loans — descheduled)
-     └──────┴──────────┴──────────┘
-                │
-                ▼
-             M9  Net worth + dashboard   ◄── the morning screen
-                │
-                ▼
-             Phase 2
+<pre><code>Phase 0 — finish the existing foundations
+  → M1 Accounts → M2 First PDF import → M3 Layouts + M4 Classification
+  → M5 Transfers and household outflows
+  → M9a Basic verified overview and monthly review
+  → M6 Cards / M7 Investments / M10 Documents and owner export
+  → M9b Full net worth, history and attribution
+  → Phase 2A Commitments, cash forecast and actions
+  → Phase 2B Emergency reserve, goals and protection
+  → Phase 2C Budgets, discovery and deeper analytics
+  → V2 Optional intelligence and tax reporting
+
+M8 Loans: conditional on Q18; never blocks unrelated work.
 </code></pre>
 <p>M6, M7 and M10 are independent of one another and can be done in any order, or interleaved
 according to which is most useful at the time.</p>
 <p><strong>M8 (Loans) is descheduled.</strong> No loan appears in any of the 71 statements gathered, and Q18 is
 unanswered. Building an amortisation engine for a loan that may not exist is the clearest possible
-case of speculative work. The milestone stays specified below, ready to be scheduled the moment a
-loan is confirmed — the schema (<code>loan</code>, <code>loan_schedule_entry</code>, <code>loan_event</code>) still ships in Phase
-0 migrations, so scheduling it later costs no migration.</p>
+case of speculative work. The milestone stays specified below, ready to be scheduled when a loan is confirmed.
+Phase 0 applies V1–V4 only; loan schema and any required references belong to later forward migrations.</p>
 <hr>
+<h2 id="current-baseline">Current baseline — 6 September 2026</h2>
+<p>GitHub PR numbers below are repository PR numbers, not the ordinal PR headings or task numbers
+in the original Phase 0 plan. All five are merged into <code>feature/phase-0-foundations</code>.
+The owner confirmed #7 merged; its FX implementation and review fixes through <code>fd6b5db</code>
+are present in local branch history. Merge status is not a new claim that phase-exit checks passed.</p>
+<table><thead><tr><th>GitHub PR</th><th>Delivered</th><th>Original plan tasks</th></tr></thead><tbody>
+<tr><td>#3</td><td>Compose definition, environment template and secret hygiene</td><td>1</td></tr>
+<tr><td>#4</td><td>V1–V2: reference data, identity and RLS</td><td>2–3</td></tr>
+<tr><td>#5</td><td>V3–V4: accounts and FX rates</td><td>4–5</td></tr>
+<tr><td>#6</td><td>FastAPI and require_owner / resolve_owner / connect</td><td>6</td></tr>
+<tr><td>#7</td><td>FX pipeline: peg derivation, carry-forward and backfill; three Codex review rounds reported</td><td>7–8</td></tr>
+</tbody></table>
+<p><strong>Remaining:</strong> Task 9 web shell and typed client; Tasks 10–11 Google OIDC, seed,
+money formatting, currency toggle and navigation; then all Phase 0 exit checks. The existing
+compose definition does not mean the web service is implemented. Do not restart merged tasks.</p>
 <h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
 <p>Everything needed before feature work has somewhere to land.</p>
 <p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
@@ -612,7 +617,7 @@ wrong.</p>
 <li>Equity and ETF holdings, Indian and international.</li>
 <li><strong>XIRR</strong> by Newton–Raphson with bisection fallback.</li>
 <li>Asset allocation aggregation across the seven classes.</li>
-<li>Investment purchase linked to its funding bank debit.</li>
+<li>Investment purchase linked to its funding bank debit; dividends, reinvestment, partial sales, charges, security splits and platform transfers preserve continuity for the holdings owned (F06).</li>
 <li>Portfolio screen: holdings, allocation, returns, XIRR.</li>
 </ul>
 <p><strong>Done when</strong></p>
@@ -643,11 +648,17 @@ gathered statements.</p>
 <li>Outstanding principal matches the lender&#39;s statement.</li>
 </ul>
 <h3 id="m9--net-worth-and-the-dashboard">M9 — Net worth and the dashboard</h3>
-<p><strong>The morning screen.</strong></p>
+<p><strong>M9a follows M5.</strong> Deliver a basic verified overview, monthly spending and external
+outflows, account as-of dates, missing coverage and the existing review/quality items. Manually
+valued assets carry explicit dates; do not require full M7 or the M10 library. One complete recent
+month with acknowledged opening balances is the early usability checkpoint.</p>
+<p><strong>M9b follows M7 and the relevant valuation work.</strong> Deliver full consolidated
+history, allocation and attribution. M6 supplies card-due items when ready. The requirements below
+are the completed M9 outcome; forecasting and emergency coverage remain Phase 2.</p>
 <p><strong>Build</strong></p>
 <ul>
 <li>Signed-balance net worth across all accounts, both currencies.</li>
-<li>Liquid net worth (excluding property and locked retirement accounts).</li>
+<li>Liquid net worth follows Q22 user-selected account toggles; it is distinct from uncommitted cash and the Phase 2 emergency reserve.</li>
 <li>Month-end snapshots with the rates used, stored.</li>
 <li>Net worth trend chart.</li>
 <li><strong>Attribution</strong> per <a href="../design/multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7, including
@@ -663,7 +674,7 @@ rate, investment rate, 12-month chart.</li>
 <ul>
 <li>Net worth on any past date equals the sum of signed balances on that date, in both currencies.</li>
 <li>Attribution components plus residual equal the actual change exactly.</li>
-<li>Residual is under 1% for a period with complete data.</li>
+<li>Internal investment funding and principal repayments cancel their cash legs. Complete synthetic scenarios have zero residual; real discrepancies and valuation uncertainty are separately identified.</li>
 <li>Spending for a month equals the sum of reportable transactions, exactly.</li>
 <li>Dashboard is interactive in under 2 seconds cold.</li>
 </ul>
@@ -675,7 +686,7 @@ rate, investment rate, 12-month chart.</li>
 <li>Non-statement uploads: insurance, property, tax, FD certificates.</li>
 <li>Checksum-based duplicate prevention at upload.</li>
 <li>Deletion blocked while transactions reference a document.</li>
-<li>Receipt attachment on transactions.</li>
+<li>Receipt attachment on transactions; owner export of records and selected originals with currency, provenance and coverage metadata (F12).</li>
 </ul>
 <p><strong>Done when</strong></p>
 <ul>
@@ -690,16 +701,33 @@ rate, investment rate, 12-month chart.</li>
 <li><strong>36 months</strong> of real statements across all four layouts, imported and reconciled — back to the
 01 Jan 2024 anchor (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
 <li>Monthly import + review completed in under 20 minutes.</li>
-<li>Net worth agrees with a manual tally to within 1%.</li>
+<li>Every included native account balance reconciles to its evidence; the consolidated tally agrees at the chosen rates. Missing coverage, valuation uncertainty and unexplained differences are separately disclosed, not absorbed into a 1% tolerance.</li>
 <li>Monthly spending agrees with a hand-checked month, exactly.</li>
-<li>Zero infrastructure spend.</li>
+<li>Zero infrastructure spend while local; hosting follows the single-VPS decision if chosen.</li>
 <li>Restore from backup verified against a scratch database.</li>
 </ol>
 <hr>
-<h2 id="phase-2--analysis">Phase 2 — Analysis</h2>
-<p>Phase 1 answers <em>what happened</em>. Phase 2 answers <em>what it means</em>. It requires no schema
-redesign — the tables are already defined in
-<a href="../design/data-model.html">data-model.html</a> §14.</p>
+<h2 id="phase-2--analysis">Phase 2 — Planning, resilience and analysis</h2>
+<p>Phase 2 turns a trusted position into decisions and follow-up. Deliver the slices below in order;
+Phase 2C analytics must not block manually entered commitments or basic goals. The existing schema
+reference covers only part of this scope. Add forward migrations when each feature is designed;
+no future-feature tables are added to Phase 0 just to avoid a later migration.</p>
+<table><thead><tr><th>Slice</th><th>Outcome</th><th>Acceptance gate</th></tr></thead><tbody>
+<tr><td><strong>2A — Next month</strong></td><td>Confirmed commitments, 30/60/90-day forecast by account
+and currency, lowest projected balance, linked actions and monthly planning review</td>
+<td>Card settlement counted once; a shortage appears in the paying account; matched commitments
+stop forecasting; actions resolve and recurring items retain their next occurrence (P05, P06, P10).</td></tr>
+<tr><td><strong>2B — Resilience</strong></td><td>Emergency resources and essential-spend baseline;
+goal earmarking in the goal currency; insurance, maturities, claims and administration</td>
+<td>No resource is reserved twice; reserve coverage uses only eligible funds; partial reimbursements
+settle correctly; renewals surface actions (P07–P10).</td></tr>
+<tr><td><strong>2C — Deeper analysis</strong></td><td>Budgets, recurring discovery, salary analysis,
+benchmarks, allocation drift, remittance analysis and optional email ingestion</td>
+<td>Preserve the module-specific requirements below; automatic discovery proposes changes for confirmation.</td></tr>
+</tbody></table>
+<p>Definitions and scenarios: <a href="./finance-os.html#acceptance">finance OS acceptance requirements</a>.
+Planning is deterministic. Retirement/inflation scenarios remain later analysis with explicit assumptions;
+emergency handover remains an unresolved scope decision.</p>
 <table>
 <thead>
 <tr>
@@ -729,7 +757,7 @@ redesign — the tables are already defined in
 </tr>
 <tr>
 <td><strong>Goals</strong></td>
-<td>Target amount and date; progress from actual contributions; required run rate</td>
+<td>Delivered in 2B: target currency, date and priority; linked resources, exclusive earmarking, contribution progress, required run rate and shortfall. Separate contributions from market/FX changes.</td>
 </tr>
 <tr>
 <td><strong>Loan simulator</strong></td>
@@ -740,8 +768,9 @@ redesign — the tables are already defined in
 <td>Auto-fetch statement attachments from a dedicated mailbox</td>
 </tr>
 </tbody></table>
-<p><strong>Entry condition:</strong> Phase 1 exit criteria met, and the ledger has been maintained for at least
-two months. Analysis over an incomplete ledger produces confident nonsense.</p>
+<p><strong>Entry condition:</strong> Phase 1 exit criteria met and the ledger maintained for at least
+two months. Forecasts still identify dated inputs, incomplete coverage and assumptions; a forecast is
+not bank-confirmed cash. Phase 2B follows a working 2A cash/commitment view, and 2C enriches both.</p>
 <hr>
 <h2 id="v2--intelligence">V2 — Intelligence</h2>
 <p><strong>Everything AI lives here</strong> (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>). The privacy decision is
@@ -796,7 +825,7 @@ thousands of statement pages. Attempting it before Phase 1 would be both expensi
 unreliable.</p>
 <hr>
 <h2 id="scope-control">Scope control</h2>
-<p>Phases have a fixed size. Adding something means removing something.</p>
+<p>Phase 0 is unchanged. This accepted review explicitly extends the product roadmap: M9a brings forward part of existing M9; M10 adds owner export; new planning capabilities are sequenced as Phase 2A–2C. Further additions require an explicit scope tradeoff.</p>
 <p><strong>Rules</strong></p>
 <ol>
 <li>A new Phase 1 idea goes to Phase 2 by default. Promoting it requires demoting something.</li>
@@ -814,7 +843,15 @@ accounting.</p>
 <h2 id="progress-tracking">Progress tracking</h2>
 <p>Milestone state lives in <code>product/roadmap.html</code> itself — this file — updated as work completes. No
 external tracker for a single-person project; the overhead exceeds the benefit.</p>
-<pre><code>Phase 0   ☐ Foundations
+<pre><code>Phase 0   ◐ Foundations — in progress
+          ☑ GitHub #3 Compose and secret hygiene
+          ☑ GitHub #4 V1–V2
+          ☑ GitHub #5 V3–V4
+          ☑ GitHub #6 API authorization boundary
+          ☑ GitHub #7 FX pipeline including backfill
+          ☐ Task 9 Web shell and typed client
+          ☐ Tasks 10–11 Google OIDC, seed, money and navigation
+          ☐ Phase 0 exit verification
 
 Phase 1   ☐ M1   Accounts + manual transactions
           ☐ M2   Importer: UAE card layout, end-to-end
@@ -824,10 +861,13 @@ Phase 1   ☐ M1   Accounts + manual transactions
           ☐ M6   Credit cards
           ☐ M7   Investments
           ☐ M8   Loans                            — descheduled, pending Q18
-          ☐ M9   Net worth + dashboard
+          ☐ M9a  Basic verified overview (after M5)
+          ☐ M9b  Full net worth + attribution (after M7)
           ☐ M10  Documents vault
 
-Phase 2   ☐ Not started
+Phase 2   ☐ 2A Next month
+          ☐ 2B Resilience
+          ☐ 2C Deeper analysis
 V2        ☐ Not started
 </code></pre>
 

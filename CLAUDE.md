@@ -4,19 +4,32 @@
 
 | Need | Open |
 |---|---|
-| What to type next | `docs/plan/phase-0-foundations.md` — 11 tasks, code and verification per step |
-| What to ship, and when | `docs/plan/phase-0-pull-requests.md` — seven PRs, the review gate, the 500-line cap |
-| Build order, global constraints | `docs/plan/implementation-plan.md` |
+| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–8 delivered by GitHub PRs #3–#7 |
+| What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — seven PRs, the review gate, the 500-line cap |
+| Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
+| Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
-| Tables by migration | `docs/plan/schema.md`; the model behind them, `docs/design/data-model.html` |
+| Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
 | Decisions in force | `docs/adr/index.html` — 15, plus four replaced ones kept apart in `superseded.html` |
 
 **When documents disagree**, and they do: ADRs decide, `docs/design/` and `docs/operations/`
-specify, `docs/plan/` executes. A plan contradicting a design document is a bug in one of them —
+specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of them —
 say which, in the PR, and fix it there rather than working around it.
 
-`docs/plan/schema.md` is the table reference. It carries no trigger, function, view or RLS policy,
+`docs/superpowers/schema.md` is the table reference. It carries no trigger, function, view or RLS policy,
 so a migration having *more* than it shows is expected; a migration *disagreeing* with it is not.
+
+## Planning location and current phase
+
+All new implementation plans go in `docs/superpowers/plans/`; use dated filenames per feature.
+All new specifications go in `docs/superpowers/specs/`. The current master is
+`docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
+directly in `docs/superpowers/`.
+
+Phase 0 is in progress. GitHub PRs #3–#7 are merged into `feature/phase-0-foundations`, including
+the FX pipeline and review fixes. These cover original Tasks 1–8. Next are Task 9 (web shell),
+Tasks 10–11 (Google OIDC, seed, money and navigation), then phase-exit checks. GitHub #7 is not
+the original plan's seventh PR. Product-review additions do not expand Phase 0.
 
 ## Rules you will otherwise break by reflex
 

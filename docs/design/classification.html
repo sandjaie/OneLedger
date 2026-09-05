@@ -329,11 +329,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -497,6 +497,17 @@ is more likely food delivery or a subscription, and should be reviewed rather th
 is comprehensible six months later. Regex rules are validated at creation and rejected if they
 can catastrophically backtrack.</p>
 <hr>
+<h3 id="economic-meaning">Economic meaning before categories</h3>
+<p>Classification distinguishes internal transfers, external household support, earned/other income,
+refunds and receivable settlements. Category names alone do not settle that distinction.
+Refunds and purchase-linked cashback offset spending on their posting date; an identified
+reimbursement settles the corresponding receivable without creating income a second time.
+An uncertain expected reimbursement does not automatically become a recognised asset.</p>
+<p>Family support may retain its “To family” label, but confirmed external support reduces retained
+income even when excluded from consumption. Investment funding, platform transfers and reinvestment
+remain distinguishable. The governing definitions are
+<a href="../product/finance-os.html#financial-meaning">finance OS F01–F03</a>; implement them with
+M4/M5 reporting requirements and preserve explicit user overrides.</p>
 <h2 id="3-seed-taxonomy">3. Seed taxonomy</h2>
 <p>A universal two-level tree ships with the product, filled by the merchant rule packs below, so
 reports are meaningful on the very first import. Every category carries a <strong>bucket</strong> — <code>need</code>, <code>want</code>, <code>investment</code>, <code>debt_service</code>,
@@ -533,7 +544,7 @@ classification pass (<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0
 </tr>
 <tr>
 <td>Other income</td>
-<td>Gifts, Refunds, Reimbursements, Cashback</td>
+<td>Gifts received, Other income. Refunds, reimbursements and purchase-linked cashback use the treatment below rather than defaulting to income.</td>
 <td>income</td>
 </tr>
 </tbody></table>

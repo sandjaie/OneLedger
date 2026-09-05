@@ -43,14 +43,29 @@ Investment Rate                    X %
 
 ## Status
 
-**Pre-implementation.** This repository contains the specification set and the build plan. No
-application code has been written yet.
+**Phase 0 in progress (6 September 2026).** Merged into `feature/phase-0-foundations`:
 
-- **[docs/plan/phase-0-foundations.md](docs/plan/phase-0-foundations.md)** — the next thing to
-  execute. 11 tasks, 73 steps, each with real code and a command whose output you can check.
-- [docs/plan/implementation-plan.md](docs/plan/implementation-plan.md) — the master plan: global
-  constraints, build order, and what each milestone delivers.
-- [docs/product/roadmap.html](docs/product/roadmap.html) — the milestones it sequences.
+| GitHub PR | Completed scope |
+|---|---|
+| #3 | Compose definition, environment template, secret hygiene |
+| #4 | V1–V2: reference data, identity, RLS |
+| #5 | V3–V4: accounts and FX rates |
+| #6 | FastAPI service and its authorization boundary |
+| #7 | FX pipeline: peg derivation, carry-forward and backfill; merge confirmed |
+
+**Next:** existing Phase 0 Task 9 (web shell/typed client), then Tasks 10–11 (Google OIDC,
+seed, money formatting, currency toggle and navigation), followed by the phase-exit checks.
+The original plan's “PR 7” is a different number from GitHub #7 and is still pending.
+
+- **[Master implementation plan](docs/superpowers/plans/implementation-plan.md)** — current status,
+  remaining Phase 0 work and the revised delivery order. All new plans live in `docs/superpowers/plans/`.
+- [Existing Phase 0 task plan](docs/superpowers/phase-0-foundations.md) — retained to finish the current phase.
+- [Product roadmap](docs/product/roadmap.html) — delivery gates and progress.
+- [Finance OS requirements](docs/product/finance-os.html) — accepted product-review findings:
+  verified positions, upcoming cash needs, resilience, goals, protection, actions and owner export.
+
+Phase 0 scope is unchanged. These product requirements guide later milestones; they are not
+claims that those features are already implemented.
 
 **Statements are never committed.** `pdf-statements/`, `*.pdf` and `.env` are git-ignored. Real
 financial data does not enter this repository, and test fixtures are redacted — see
@@ -100,6 +115,7 @@ Documents you read are HTML; plans that get executed are Markdown.
 | Doc | What it settles |
 |---|---|
 | [PRD](docs/product/prd.html) | What the product does, module by module, with scope boundaries |
+| [Finance OS requirements](docs/product/finance-os.html) | Product coverage, financial definitions, planning capabilities and acceptance scenarios |
 | [Architecture](docs/design/architecture.html) | The three services, the compose stack, and why |
 | [Data Model](docs/design/data-model.html) | Entities, sign conventions, invariants, RLS |
 | [Multi-Currency & FX](docs/design/multi-currency-and-fx.html) | The two-rate model; pegs, gaps, and what an FX gain actually is |
@@ -114,11 +130,11 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [Glossary](docs/reference/glossary.html) | Domain vocabulary used consistently everywhere |
 | [ADRs](docs/adr/index.html) | 14 decisions in force, each with the alternatives actually considered |
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
-| [Questions](docs/plan/questions.html) | Scoping questions — **17 of 24 answered** |
-| **[Implementation Plan](docs/plan/implementation-plan.md)** | **The build order. Start here to write code** |
-| [Phase 0 Pull Requests](docs/plan/phase-0-pull-requests.md) | How the 11 tasks become seven reviewable PRs, and what gates each |
-| [Schema Reference](docs/plan/schema.md) | The complete DDL, by migration |
-| [Test Suite Reference](docs/plan/test-suite.md) | The invariant suite and static checks |
+| [Questions](docs/superpowers/questions.html) | Scoping questions — **17 of 24 answered** |
+| **[Implementation Plan](docs/superpowers/plans/implementation-plan.md)** | **The build order. Start here to write code** |
+| [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | How the 11 tasks become seven reviewable PRs, and what gates each |
+| [Schema Reference](docs/superpowers/schema.md) | The complete DDL, by migration |
+| [Test Suite Reference](docs/superpowers/test-suite.md) | The invariant suite and static checks |
 
 ---
 
@@ -208,7 +224,8 @@ not during.
 engine is deterministic and inspectable; it has to be good on its own before anything smarter is
 layered on top ([ADR-0003](docs/adr/0003-defer-ai-to-v2.html)).
 
-**Two milestones are worth knowing about in advance.** The tool becomes genuinely useful at **M2**,
-not M10 — a personal project that only pays off at the end usually doesn't reach the end. And the
-numbers are not trustworthy until **M5**, because before transfers are linked every spending figure
-is inflated by the full value of every remittance and card payment.
+**Usefulness arrives in stages.** M2 provides the first statement workflow; M5 adds the transfer
+and external-outflow treatment required for trustworthy spending. M9a then delivers a basic verified
+overview with coverage dates, ahead of the full M7 investment and M10 document experience. M9b
+completes wealth history and attribution. Phase 2A adds commitments, forecasts and actions; 2B adds
+resilience, goals and protection; 2C deepens analysis. The 01 Jan 2024 history objective remains.

@@ -329,11 +329,11 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../plan/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../plan/phase-0-foundations.md">Phase 0 foundations</a></li>
-<li><a href="../plan/schema.md">Schema reference</a></li>
-<li><a href="../plan/test-suite.md">Test suite reference</a></li>
-<li><a href="../plan/questions.html">Questions</a></li></ul>
+      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
+<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+<li><a href="../superpowers/schema.md">Schema reference</a></li>
+<li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
+<li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
       <h2>Mockups</h2>
@@ -705,6 +705,16 @@ integration requires an explicit decision recorded in an ADR, covering: what is 
 redacted, what is retained by the provider, and whether it can be turned off per-import. That
 decision is not made in this document, and not made implicitly by shipping a feature.</p>
 <hr>
+<h3 id="planning-and-export-privacy">Planning records and owner exports</h3>
+<p>Goals, insurance coverage, expected receipts, nominee-review metadata and actions are financial
+data and use the same owner authorization and log-redaction rules as the ledger. Store only metadata
+allowed by the never-store list; a policy register does not justify full identity numbers or bank credentials.</p>
+<p>Owner exports are delivered through authorized routes, contain only selected records and documents,
+and omit secrets. Temporary archives must not be publicly served and must be removed after a bounded
+retrieval period. Record the export event without logging financial contents. A downloaded archive
+requires the same local protection as statements.</p>
+<p>Emergency handover remains a separate unapproved access feature. No trusted-person login, shared
+link, advisor delivery or outbound reminder containing financial data is introduced by the product review.</p>
 <h2 id="9-backups">9. Backups</h2>
 <p>Restated here because data loss is the most likely serious failure and the least exciting to
 prepare for.</p>
