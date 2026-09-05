@@ -1,0 +1,49 @@
+name: docs
+
+# Every push is checked. Only the default branch is published, because a
+# repository has one Pages site — merge to publish, or run this workflow
+# by hand from a branch when you want to look at it before merging.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: python3 scripts/check-docs.py
+
+  publish:
+    needs: check
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish docs/ as-is
+        # The specifications are already static HTML. There is no site
+        # generator, and adding one would put a build step between the
+        # document you edit and the document you read.
+        run: touch docs/.nojekyll
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4

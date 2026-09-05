@@ -89,6 +89,11 @@ Rationale in [ADR-0017](docs/adr/0017-python-backend-service.html) and
 
 Start here → **[docs/index.html](docs/index.html)** (index and suggested reading order)
 
+Published at **https://sandjaie.github.io/OneLedger/** — `docs/` is deployed by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) on every push to the default branch.
+Every push on any branch runs [`scripts/check-docs.py`](scripts/check-docs.py) first: no broken
+links, no malformed HTML, no statement tracked by git.
+
 Documents you read are HTML; plans that get executed are Markdown.
 
 | Doc | What it settles |
