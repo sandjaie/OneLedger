@@ -1536,20 +1536,26 @@ def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str
     return published[code] * factor
 
 
-def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
-    """Follow a peg chain to the currency a feed will actually quote.
+def anchor_chain(code: str, pegs: Mapping[str, Peg]) -> list[str]:
+    """`code` and every currency its peg passes through, ending at one a feed publishes.
 
     A peg can point at another peg — A pegged to B, B pegged to USD — and only USD is ever
-    published. Resolving one hop asks the feed for B and never USD, so the fetch omits the
-    only rate the chain can be built from.
+    published. Both callers need the whole chain, for different reasons: the fetch would
+    otherwise ask for B and never USD, and the stored rows would carry A and B but no USD,
+    leaving the B->USD peg identity with nothing to check itself against.
     """
-    seen: set[str] = set()
+    chain = [code]
     while code in pegs:
-        if code in seen:
-            raise ValueError(f"peg cycle through {code}")
-        seen.add(code)
         code = pegs[code].anchor
-    return code
+        if code in chain:
+            raise ValueError(f"peg cycle through {code}")
+        chain.append(code)
+    return chain
+
+
+def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
+    """The currency a feed will actually quote for `code`."""
+    return anchor_chain(code, pegs)[-1]
 
 
 def cross_rate(
@@ -1655,11 +1661,13 @@ git commit -m "feat(api): ECB rate source, peg derivation and carry-forward"
 
 ```python
 # api/tests/test_fx_rows.py
+from __future__ import annotations
+
 from datetime import date
 from decimal import Decimal
 
 from oneledger.fx import Peg
-from oneledger.routes.fx import to_rows
+from oneledger.routes.fx import reporting_config, to_rows
 
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 
@@ -1684,37 +1692,63 @@ def test_rows_carry_provenance() -> None:
     assert {r["source"] for r in rows if r["base_currency"] == "AED"} == {"derived_peg"}
 
 
+class _Cursor:
+    """Answers `reporting_config`'s three queries in order. No database, no fixtures."""
+
+    def __init__(
+        self, household: tuple[str, str], pegs: list[object], accounts: list[object]
+    ) -> None:
+        self._household = household
+        self._fetchall = [pegs, accounts]
+
+    def execute(self, *_: object, **__: object) -> None: ...
+    def fetchone(self) -> object:
+        return self._household
+
+    def fetchall(self) -> object:
+        return self._fetchall.pop(0)
+
+    def __enter__(self) -> _Cursor:
+        return self
+
+    def __exit__(self, *_: object) -> None: ...
+
+
+def _conn(household: tuple[str, str], pegs: list[object], accounts: list[object]) -> object:
+    class _Conn:
+        def cursor(self) -> _Cursor:
+            return _Cursor(household, pegs, accounts)
+
+    return _Conn()
+
+
 def test_the_reporting_currency_is_never_its_own_base() -> None:
     """Adding peg anchors can put the quote currency back into the bases.
 
     Reporting in USD with a secondary of AED pulls USD in as AED's anchor, and a USD/USD row
     both violates the no_self_pair constraint and means nothing.
     """
-    from oneledger.routes.fx import reporting_config
-
-    class _Cursor:
-        def __init__(self) -> None:
-            self._answers = [("USD", "AED"), [("AED", "USD", Decimal("3.6725"))], [("AED",)]]
-
-        def execute(self, *_: object, **__: object) -> None: ...
-        def fetchone(self) -> object:
-            return self._answers[0]
-
-        def fetchall(self) -> object:
-            return self._answers.pop(1)
-
-        def __enter__(self) -> _Cursor:
-            return self
-
-        def __exit__(self, *_: object) -> None: ...
-
-    class _Conn:
-        def cursor(self) -> _Cursor:
-            return _Cursor()
-
-    quote, bases, _ = reporting_config(_Conn())  # type: ignore[arg-type]
+    quote, bases, _ = reporting_config(
+        _conn(("USD", "AED"), [("AED", "USD", Decimal("3.6725"))], [("AED",)])  # type: ignore[arg-type]
+    )
     assert quote == "USD"
     assert "USD" not in bases, "the reporting currency must never appear as a base"
+
+
+def test_every_currency_in_a_peg_chain_is_stored_not_only_its_ends() -> None:
+    """A->B->USD must store B as well, or the B->USD peg identity has nothing to check.
+
+    Expanding one hop stores A and B and omits USD; the identity check then joins B->INR rows
+    against USD->INR rows that were never written, matches nothing, and reports a clean run.
+    """
+    _, bases, _ = reporting_config(
+        _conn(
+            ("INR", "XAA"),
+            [("XAA", "XBB", Decimal(2)), ("XBB", "USD", Decimal(3))],
+            [("XAA",)],
+        )  # type: ignore[arg-type]
+    )
+    assert bases == ["USD", "XAA", "XBB"]
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
@@ -1740,7 +1774,14 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..auth import require_owner
 from ..db import connect
-from ..fx import EcbFrankfurterSource, Peg, carry_forward, cross_rate, terminal_anchor
+from ..fx import (
+    EcbFrankfurterSource,
+    Peg,
+    anchor_chain,
+    carry_forward,
+    cross_rate,
+    terminal_anchor,
+)
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
@@ -1765,10 +1806,12 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
         )
         bases = {row[0] for row in cur.fetchall()}
 
-    # A pegged currency's anchor is quoted too, even when no account holds it. Without this
+    # Every anchor along the chain is quoted too, even when no account holds it. Without this
     # the peg-identity check joins AED->INR rows against USD->INR rows that were never
-    # written, finds nothing, and reports zero violations while proving nothing.
-    bases |= {pegs[c].anchor for c in bases if c in pegs}
+    # written, finds nothing, and reports zero violations while proving nothing. The whole
+    # chain, not one hop: A->B->USD stored as A and B leaves the B->USD identity just as
+    # vacuous as storing A alone left A->USD.
+    bases = {c for b in bases for c in anchor_chain(b, pegs)}
     # ...but an anchor can be the reporting currency itself — base USD with secondary AED
     # puts USD back. A USD/USD row violates the no_self_pair constraint and means nothing.
     bases.discard(quote)
@@ -1853,9 +1896,8 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
 
     with connect() as conn:
         quote, bases, pegs = reporting_config(conn)
-        # A pegged currency is derived from its anchor — and an anchor may itself be pegged,
-        # so follow the chain to the end. Resolving one hop asks for the middle currency and
-        # never the one the feed actually publishes.
+        # A pegged currency is derived from its anchor, so only the end of each chain is
+        # fetched. `bases` already carries the intermediates; they are stored, not requested.
         fetch = sorted({terminal_anchor(c, pegs) for c in [quote, *bases]})
         # Frankfurter snaps a range start backward to the previous publication day, so asking
         # from 10 days earlier guarantees carry_forward has something to fill from.
