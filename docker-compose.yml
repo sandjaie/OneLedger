@@ -7,10 +7,13 @@ services:
       POSTGRES_USER: oneledger
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
       POSTGRES_DB: oneledger
-    ports: ["5432:5432"]
-    # 18+ stores data in a major-version subdirectory, so the mount goes one level
-    # up. Mounting /var/lib/postgresql/data is the <=17 convention and the image
-    # refuses to start on it.
+    # Loopback only. ADR-0014 exposes Caddy and nothing else; a short-form mapping would
+    # publish Postgres on every host interface, reachable the moment a firewall rule slips.
+    # DB_PORT lets a scratch stack run beside the working one without a port clash.
+    ports: ["127.0.0.1:${DB_PORT:-5432}:5432"]
+    # 18+ stores data in a major-version subdirectory, so the mount goes one level up.
+    # Mounting /var/lib/postgresql/data is the <=17 convention and the image refuses to
+    # start on it.
     volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U oneledger"]
@@ -30,8 +33,19 @@ services:
       db: { condition: service_healthy }
 
   web:
-    build: ./web
-    env_file: .env
+    build:
+      context: ./web
+      args:
+        # Next.js inlines NEXT_PUBLIC_* at `next build` and freezes them into the bundle.
+        # Supplying it at runtime is too late: the browser would fall back to localhost and
+        # every hosted visitor would call their own machine instead of the API.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    # Deliberately NOT env_file: .env. The web service renders and holds no secrets, and
+    # handing it the service-wide file would give a compromised dependency SESSION_SECRET,
+    # GOOGLE_CLIENT_SECRET, POSTGRES_PASSWORD and ACCOUNT_HASH_SALT — defeating the point
+    # of the API being the authorization boundary (ADR-0013).
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports: ["3000:3000"]
     depends_on: [api]
 
