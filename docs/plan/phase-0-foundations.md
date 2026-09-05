@@ -10,14 +10,14 @@ on top of it yet.
 **Architecture:** One `docker compose` stack — `web`, `api`, `db`
 ([ADR-0018](../adr/0018-one-vps-one-compose-file.html)). A **FastAPI service on :8000** owns all
 business logic and is the authorization boundary; a **Next.js app on :3000** is the interface and
-holds none; **Postgres 15** holds the truth and the invariants. Migrations are forward-only SQL.
+holds none; **Postgres 18** holds the truth and the invariants. Migrations are forward-only SQL.
 
 **The compose file you build here is the one that deploys later.** Nothing in Phase 0 depends on a
 managed service, so reaching the hosted target is running the same file on a VPS.
 
 Tasks are ordered backend-first: the schema, then the service, then the UI on top of it.
 
-**Tech Stack:** Docker Compose · Postgres 15 · Python 3.12 · FastAPI · Pydantic · `pdfplumber` ·
+**Tech Stack:** Docker Compose · Postgres 18 · Python 3.14 · FastAPI · Pydantic · `pdfplumber` ·
 uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · TypeScript · Tailwind ·
 `decimal.js` · vitest
 
@@ -48,8 +48,8 @@ ones this plan touches directly:
 
 **Verified environment facts** (checked 2026-09-05, do not re-derive):
 
-- `docker` 29.6.2, `node` v24.15.0, `uv` and `python3.12` are installed. No managed service is
-  used, so nothing else needs an account.
+- `docker` 29.6.2, `node` v24.15.0 (the active LTS line), `uv` and `python3.14` are installed. No
+  managed service is used, so nothing else needs an account.
 - The FX source `api.frankfurter.app` is **dead** (301 to nothing). The live endpoint is
   `https://api.frankfurter.dev/v1/`. [04](../design/multi-currency-and-fx.html) §3 names the old
   host; it is corrected here.
@@ -106,7 +106,7 @@ Expected: `OK` first, then `FAIL: real financial data is tracked by git:` and ex
 # docker-compose.yml — this file is the deployment (ADR-0018)
 services:
   db:
-    image: postgres:15
+    image: postgres:18
     environment:
       POSTGRES_USER: oneledger
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
@@ -184,7 +184,7 @@ DOCUMENTS_DIR=/var/lib/oneledger/documents
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+    rev: v8.30.1
     hooks:
       - id: gitleaks
   - repo: local
@@ -876,14 +876,14 @@ Expected: FAIL — `No module named 'oneledger.auth'`.
 [project]
 name = "oneledger"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
-  "fastapi>=0.115", "uvicorn[standard]>=0.32", "pydantic>=2.9",
-  "psycopg[binary]>=3.2", "httpx>=0.27", "pdfplumber>=0.11", "pyjwt[crypto]>=2.9",
+  "fastapi>=0.141", "uvicorn[standard]>=0.52", "pydantic>=2.13",
+  "psycopg[binary]>=3.3", "httpx>=0.28", "pdfplumber>=0.11.10", "pyjwt[crypto]>=2.13",
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6", "hypothesis>=6"]
+dev = ["pytest>=9", "mypy>=2.3", "ruff>=0.16", "hypothesis>=6.167"]
 
 [tool.mypy]
 strict = true

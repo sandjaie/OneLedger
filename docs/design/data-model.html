@@ -367,7 +367,7 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="03--data-model">03 — Data Model</h1>
-<p>PostgreSQL 15. Every monetary value is <code>NUMERIC</code> — never <code>float</code>, <code>real</code> or
+<p>PostgreSQL 18. Every monetary value is <code>NUMERIC</code> — never <code>float</code>, <code>real</code> or
 <code>double precision</code>. Every table carries <code>household_id</code> for row-level security and future
 household support.</p>
 <blockquote>
@@ -704,7 +704,7 @@ query can forget it.</p>
 <pre><code class="language-sql">-- security_invoker is load-bearing, not a stylistic choice. A PostgreSQL view evaluates its
 -- base-table access as the view *owner* by default, and the owner bypasses RLS — so without
 -- this, any authenticated caller reads every household&#39;s transactions through the view that
--- exists to make reporting safe. Requires PG15+, which is the stated target.
+-- exists to make reporting safe. Requires PG15+; the stated target is 18.
 CREATE VIEW v_transaction_reportable WITH (security_invoker = true) AS
 SELECT *
 FROM   v_transaction_posting           -- split parents excluded; only leaf rows post
