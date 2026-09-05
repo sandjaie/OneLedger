@@ -66,10 +66,10 @@ financial data does not enter this repository, and test fixtures are redacted �
                  ├─────────────────────────────────────┤
                  │  web        Next.js · React         │   renders. no business logic
                  ├─────────────────────────────────────┤
-                 │  api        FastAPI · Python 3.12   │   parse · classify · match
+                 │  api        FastAPI · Python 3.14   │   parse · classify · match
                  │             pdfplumber              │   XIRR · the auth boundary
                  ├─────────────────────────────────────┤
-                 │  db         Postgres 15             │   constraints · triggers · views
+                 │  db         Postgres 18             │   constraints · triggers · views
                  └─────────────────────────────────────┘
                    one docker compose file
                    your laptop now, one small VPS later

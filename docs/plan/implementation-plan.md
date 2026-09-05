@@ -16,7 +16,7 @@ authorization boundary. **Postgres** guarantees, through constraints, triggers a
 views, because a backend is a convenient place for logic and a poor place for guarantees. The
 service runs on `localhost` through Phase 1, so statements never transit a third-party host.
 
-**Tech Stack:** Postgres 15 · Python 3.12 · FastAPI · Pydantic · `pdfplumber` · uv ·
+**Tech Stack:** Postgres 18 · Python 3.14 · FastAPI · Pydantic · `pdfplumber` · uv ·
 ruff · mypy --strict · pytest · hypothesis · Next.js App Router · React · TypeScript · Tailwind ·
 shadcn/ui · Recharts · `decimal.js` · vitest · Playwright
 

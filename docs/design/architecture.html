@@ -376,7 +376,7 @@ reasons set out in §2.</p>
    └───────────────────────┬───────────────────────────────────┘
                            │  HTTP (localhost)
    ┌───────────────────────▼───────────────────────────────────┐
-   │  FastAPI · Python 3.12                                    │
+   │  FastAPI · Python 3.14                                    │
    │  runs on localhost:8000                                   │
    │                                                            │
    │  parse (pdfplumber) → normalize → dedupe → FX freeze      │
@@ -388,7 +388,7 @@ reasons set out in §2.</p>
    └───────────────────────┬───────────────────────────────────┘
                            │  service-role connection
    ┌───────────────────────▼───────────────────────────────────┐
-   │  POSTGRES 15                                              │
+   │  POSTGRES 18                                              │
    │  the single source of truth                                │
    │  constraints · triggers · reporting views                  │
    └───────────────────────────────────────────────────────────┘
@@ -469,8 +469,8 @@ that made importing a terminal command — you drop files into the web app and i
 the one exception is display formatting, which is not arithmetic.</p>
 <h2 id="technology-choices">4. Technology choices</h2>
 <table><thead><tr><th>Layer</th><th>Choice</th><th>Why</th></tr></thead><tbody>
-<tr><td>Database</td><td>Postgres 15, in a container</td><td><code>NUMERIC</code>, window functions, CTEs. Financial data wants a real relational database</td></tr>
-<tr><td>Backend</td><td>Python 3.12 · FastAPI</td><td>Owns all business logic. Pydantic models are the contract; OpenAPI generates the client's types</td></tr>
+<tr><td>Database</td><td>Postgres 18, in a container</td><td><code>NUMERIC</code>, window functions, CTEs. Financial data wants a real relational database</td></tr>
+<tr><td>Backend</td><td>Python 3.14 · FastAPI</td><td>Owns all business logic. Pydantic models are the contract; OpenAPI generates the client's types</td></tr>
 <tr><td>PDF parsing</td><td><code>pdfplumber</code></td><td>Words, lines and coordinates. Column bands by x-position, never regex over flattened text</td></tr>
 <tr><td>Money in Python</td><td><code>Decimal</code></td><td>Never <code>float</code>. Enforced by lint and by Pydantic validators</td></tr>
 <tr><td>Auth</td><td>Google OIDC, in the service</td><td>No password to store or leak. The service verifies Google's <code>id_token</code> against its JWKS and issues a signed session cookie</td></tr>
@@ -482,6 +482,27 @@ the one exception is display formatting, which is not arithmetic.</p>
 <tr><td>Migrations</td><td>Plain SQL, forward-only</td><td>No ORM migration magic over a schema this deliberate</td></tr>
 <tr><td>Proxy / TLS</td><td>Caddy</td><td>Automatic certificates, one config file. Only needed once hosted</td></tr>
 </tbody></table>
+<h3 id="which-versions-and-why">Which versions, and why</h3>
+<p><strong>Newest stable at project start, because the support window is the constraint.</strong> Nothing here
+is deployed yet, so there is no upgrade to weigh against — the only cost of starting a major
+version behind is arriving at end-of-life sooner, for no benefit.</p>
+<pre><code>Postgres 18      security support to Nov 2030   (15 ends Nov 2027)
+Python 3.14      security support to Oct 2030   (3.12 ends Oct 2028)
+Node 24 LTS      maintenance to Apr 2028        (26 becomes LTS Oct 2026)
+</code></pre>
+<p>Node stays on 24 because it is the active LTS line today and 26 does not become one until October
+2026. Everything else — FastAPI, Pydantic, Next.js, React — moves on its own release cadence and
+is pinned only by a floor in <code>pyproject.toml</code> and <code>package.json</code>.</p>
+<p>Two version-specific notes, checked 2026-09-05:</p>
+<ul>
+<li><code>security_invoker</code> views require PG15 or newer. That floor is what
+<a href="./data-model.html">data-model.html</a> §6 depends on; 18 is simply where the target sits.</li>
+<li>PG18 makes <code>uuidv7()</code> available, which would give time-ordered primary keys and better index
+locality than <code>gen_random_uuid()</code>. <strong>Not adopted.</strong> The benefit is real at millions of rows
+and invisible at twenty thousand, and a v7 UUID embeds its creation time in every id the UI puts
+in a URL. Revisit if the ledger ever gets large enough for insert locality to show up in a
+query plan.</li>
+</ul>
 <p><strong>Money crosses the wire as a string.</strong> A JSON number is an IEEE-754 float by the time it
 reaches React, and the precision is gone before anyone can check. Python holds <code>Decimal</code>, Postgres
 holds <code>NUMERIC</code>, and the wire holds <code>"-310.0000"</code>. React formats it and performs no
@@ -530,7 +551,7 @@ that runs on the VPS (<a href="../adr/0018-one-vps-one-compose-file.html">ADR-00
   caddy    reverse proxy · automatic TLS        (hosted only)
   web      Next.js                              :3000
   api      FastAPI                              :8000
-  db       Postgres 15                          :5432
+  db       Postgres 18                          :5432
 volumes:
   pgdata      the ledger
   documents   original statements
