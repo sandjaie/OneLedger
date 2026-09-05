@@ -1,36 +1,30 @@
 name: docs
 
-# Every push is checked. Only the default branch is published, because a
-# repository has one Pages site — merge to publish, or run this workflow
-# by hand from a branch when you want to look at it before merging.
+# Publish only. There is no `check` job here on purpose: the pre-commit hook
+# runs `python3 scripts/check-docs.py` with `pass_filenames: false`, and that
+# script walks the whole tree rather than the staged files — so a CI job would
+# run the identical command over the identical 46 documents and report it
+# twenty minutes later. The hooks are the gate; see CLAUDE.md.
+#
+# A repository has one Pages site, so only the default branch publishes.
+# `workflow_dispatch` deliberately publishes whatever branch it is run from,
+# for looking at a documentation change before merging it.
 on:
   push:
-  pull_request:
+    # Not `github.event.repository.default_branch` — the `on:` block cannot
+    # read context. Rename the default branch and this line renames with it.
+    branches: [main]
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.14'
-      - run: python3 scripts/check-docs.py
-
   publish:
-    needs: check
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
-      contents: read      # a job-level block replaces the top-level one entirely
+      contents: read
       pages: write
       id-token: write
     environment:
