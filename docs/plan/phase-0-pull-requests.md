@@ -274,13 +274,9 @@ psql "$DATABASE_URL" -f db/tests/0004_fx.sql
 - [ ] **Step 2: Work spec Task 6, steps 1–8**
 - [ ] **Step 3: Verify all three authorization outcomes**
 
-```bash
-cd api && uv run uvicorn oneledger.main:app --reload --port 8000 &
-curl -s localhost:8000/health                                    # {"status":"ok"}
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami   # 401
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/whoami \
-  -H "Cookie: session=not-a-real-token"                          # 403
-```
+Run spec Task 6 Step 7, which starts the service with the environment loaded and checks all
+five outcomes. Do not retype the command here — the copy in this file drifted out of step with
+the spec's within one review round the last time it existed, and got the startup wrong.
 
 401 and 403 are different answers to different questions — absent credentials versus present-but-unauthorized. A service that returns 401 for both is wrong, and the test asserts the difference.
 
