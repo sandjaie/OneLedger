@@ -27,7 +27,9 @@ services:
       # .env holds the host URL, so `uv run` on the laptop works. Inside this container
       # 127.0.0.1 is the container itself, so the service address wins here.
       DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
-    ports: ["8000:8000"]
+    # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
+    # reaches these over the compose network rather than the host interface.
+    ports: ["127.0.0.1:8000:8000"]
     volumes: ["documents:/var/lib/oneledger/documents"]
     depends_on:
       db: { condition: service_healthy }
@@ -46,7 +48,7 @@ services:
     # of the API being the authorization boundary (ADR-0013).
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     depends_on: [api]
 
   # Runs on demand, never at boot:  docker compose run --rm flyway migrate | info

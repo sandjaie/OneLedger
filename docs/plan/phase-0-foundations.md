@@ -135,7 +135,9 @@ services:
       # .env holds the host URL, so `uv run` on the laptop works. Inside this container
       # 127.0.0.1 is the container itself, so the service address wins here.
       DATABASE_URL: postgresql://oneledger:${POSTGRES_PASSWORD:-oneledger}@db:5432/oneledger
-    ports: ["8000:8000"]
+    # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
+    # reaches these over the compose network rather than the host interface.
+    ports: ["127.0.0.1:8000:8000"]
     volumes: ["documents:/var/lib/oneledger/documents"]
     depends_on:
       db: { condition: service_healthy }
@@ -154,7 +156,7 @@ services:
     # of the API being the authorization boundary (ADR-0013).
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     depends_on: [api]
 
   # Runs on demand, never at boot:  docker compose run --rm flyway migrate | info
@@ -228,8 +230,15 @@ SECONDARY_CURRENCY=AED
 # Rotating this invalidates every stored hash. See security-and-privacy.html §4.
 ACCOUNT_HASH_SALT=
 
-# Host-side connection, for `uv run` outside a container. The password here must equal
-# POSTGRES_PASSWORD above. Inside the api container compose overrides this to reach db:5432.
+# Host-side connection, for `uv run` outside a container. Inside the api container compose
+# overrides this to reach db:5432, so this line only ever serves your own machine.
+#
+#   THE PASSWORD HERE MUST EQUAL POSTGRES_PASSWORD ABOVE.
+#
+# They are two copies of one value and nothing enforces the match: set the password without
+# updating this and the containers come up fine while every local `uv run` fails to
+# authenticate, which reads as a broken service rather than a typo. After changing it:
+#   sed -i '' "s#oneledger:[^@]*@#oneledger:$POSTGRES_PASSWORD@#" .env
 DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger
 DOCUMENTS_DIR=/var/lib/oneledger/documents
 ```
@@ -1101,10 +1110,23 @@ def connect() -> psycopg.Connection:
 ```python
 # api/oneledger/main.py
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import require_owner
 
 app = FastAPI(title="OneLedger", version="0.1.0")
+
+# The web app is served from :3000 and calls this service on :8000 — a different origin,
+# because the port differs. Without this the browser blocks every response, and because
+# apiFetch sends credentials the origin must be named explicitly: "*" is rejected outright
+# for credentialed requests. WEB_ORIGIN is the same variable the OIDC callback redirects to.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[os.environ.get("WEB_ORIGIN", "http://localhost:3000")],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.get("/health")
@@ -2268,14 +2290,11 @@ Every one is a command with a checkable result, so "done" is verifiable rather t
 ☐  ./scripts/check-no-real-data.sh passes; no statement is tracked by git
 ☐  uv run pytest, ruff and mypy --strict all clean in api/
 ☐  All migrations apply cleanly from empty, seeds included, every test checked — in a
-   SCRATCH project, because `down -v` on the default one deletes pgdata AND documents:
-     export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
-     export DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
-     docker compose down -v && docker compose up -d db
-     docker compose run --rm flyway migrate
-     for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
-     for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" || exit 1; done
-     docker compose down -v
+   SCRATCH project, because `down -v` on the default one deletes pgdata AND documents.
+   Run `/verify` section 4, which is this in a subshell with a cleanup trap:
+     COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 POSTGRES_PASSWORD=oneledger
+     DATABASE_URL=postgresql://oneledger:oneledger@127.0.0.1:55432/oneledger
+     down -v; up -d db; flyway migrate; every db/seeds/*.sql; every db/tests/*.sql
    (the seeds are not optional: 0001_reference.sql asserts six system institutions, and
     0002_rls.sql asserts they stay visible to anon. Without `|| exit 1` the loop reports
     only the last file's status.)
