@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import require_owner, session_secret
+from .routes import fx
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
@@ -33,6 +34,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+
+app.include_router(fx.router)
 
 
 @app.get("/health")
