@@ -6,14 +6,21 @@
   "engines": {
     "node": "24.x"
   },
+  "overrides": {
+    "@hey-api/json-schema-ref-parser": {
+      "js-yaml": "4.3.1"
+    }
+  },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:compat": "tsc6 --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "api:types": "node scripts/generate-api-types.mjs write",
+    "api:types:check": "node scripts/generate-api-types.mjs check"
   },
   "dependencies": {
     "client-only": "0.0.1",
@@ -22,6 +29,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@hey-api/openapi-ts": "0.99.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",

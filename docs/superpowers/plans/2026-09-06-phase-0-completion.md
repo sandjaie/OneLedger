@@ -106,12 +106,20 @@ revocable require_owner and owner-scoped household configuration from the comple
 
 ### Task 3: Exact money, configured shell and FX inspector
 
+Task 3 is split into sequential reviewed PRs to keep the implementation/test line cap intact:
+3a generated API types plus exact money formatting, 3b authenticated shell plus configured
+currency preference, and 3c Settings FX inspector. The original Task 3 requirements remain in
+force across the three slices.
+
 **Branch:** `feature/phase-0-money-and-navigation`.
 **Files:** `web/lib/money/format.ts` and tests, currency preference/toggle component and tests,
 protected shell, login/unauthorized pages, Settings FX page and integration tests; API client usage only.
 **Interfaces:** consumes Task 1 client and Task 2 household/auth; produces the usable Phase 0 web shell.
 
-- [ ] Write formatter checks first, including these exact expectations:
+- [x] Task 3a writes generated API types from the local FastAPI OpenAPI exporter using
+  `@hey-api/openapi-ts` 0.99.0 with only the `@hey-api/typescript` plugin, commits
+  `web/types/api/`, and adds a drift check.
+- [x] Write formatter checks first, including these exact expectations:
 
 ```typescript
 expect(formatMoney("13642180", {code:"XIN", symbol:"₹", decimals:2,
@@ -120,13 +128,13 @@ expect(formatMoney("9007199254740993.12", {code:"XUS", symbol:"$", decimals:2,
   numberFormat:"international"})).toBe("$9,007,199,254,740,993.12");
 ```
 
-- [ ] Add negative, rounded-negative-zero, 0/3 decimal, L/Cr/M, invalid/nonfinite/non-string cases;
+- [x] Add negative, rounded-negative-zero, 0/3 decimal, L/Cr/M, invalid/nonfinite/non-string cases;
   implement exact decimal display without Number/parseFloat or currency-code branches.
-- [ ] Build login and unauthorized pages; guard the application view through authenticated household
+- [ ] Task 3b builds login and unauthorized pages; guard the application view through authenticated household
   loading; logout clears the view after the server invalidates the session. Handle offline service errors.
 - [ ] Add a configured pair toggle with persistence, invalid-preference fallback, storage-error tolerance
   and accessible pressed state. It must change the displayed currency, not only its own button style.
-- [ ] Add navigation and Settings FX inspector with date input and protected API request; show stored
+- [ ] Task 3c adds navigation and Settings FX inspector with date input and protected API request; show stored
   source/carry origin. Keep unavailable financial modules disabled or clearly labelled.
 - [ ] Run unit/integration tests, lint/types, production build and secret scan; browser-check keyboard
   access, auth transitions, preference reload and FX display using safe synthetic test sessions.

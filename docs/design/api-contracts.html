@@ -375,12 +375,17 @@ web app's TypeScript types are generated from that schema, so a change to a mode
 in the same commit and every mismatched call site fails <code>tsc</code> immediately. There is no hand-written
 type on either side of the wire, and no schema-parity test to maintain — the generator is the check.</p>
 <h2 id="type-generation">1. Type generation</h2>
-<pre><code class="language-bash"># Pydantic models -> OpenAPI -> TypeScript client
-uv run --project api python scripts/openapi.py &gt; web/openapi.json
-npx openapi-typescript web/openapi.json -o web/types/api.ts
+<pre><code class="language-bash"># Pydantic models -> OpenAPI -> TypeScript types
+cd web
+npm run api:types
+npm run api:types:check
 </code></pre>
-<p>Run in CI. A model change that is not reflected in the committed schema fails the build, which is the
-cheapest possible place to catch it.</p>
+<p>The generator command runs <code>uv run --project api python scripts/openapi.py</code> locally, then
+<code>@hey-api/openapi-ts</code> 0.99.0 with only the <code>@hey-api/typescript</code> plugin. It commits
+the generated output under <code>web/types/api/</code> and does not create an SDK, runtime client,
+validator, telemetry hook or anonymous OpenAPI route.</p>
+<p>Run the drift check in CI. A model change that is not reflected in the committed types fails the
+build, which is the cheapest possible place to catch it.</p>
 <p>The database schema is generated from separately, for the service's own row types:</p>
 <p>The service's own row types are hand-written Pydantic models, checked against the live schema by a test
 that introspects <code>information_schema</code> — a migration that changes a table without updating the
