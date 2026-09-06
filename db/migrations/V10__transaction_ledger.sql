@@ -120,7 +120,13 @@ CREATE TABLE transaction (
   -- stored rates within one allocated cent, whoever the writer is.
   CONSTRAINT frozen_amounts_derive CHECK (
     abs(amount_base - round(amount * fx_rate_to_base, 4)) <= 0.0001
-    AND abs(amount_secondary - round(amount * fx_rate_to_secondary, 4)) <= 0.0001)
+    AND abs(amount_secondary - round(amount * fx_rate_to_secondary, 4)) <= 0.0001),
+  -- I7 as a shape: a rate never comes from the future, and carried means exactly
+  -- "from an earlier date" — an unflagged earlier rate or a flagged same-day one would
+  -- both mislabel the conversion.
+  CONSTRAINT carried_rate_dates CHECK (
+    fx_rate_date <= booked_date
+    AND (fx_rate_is_carried = (fx_rate_date < booked_date)))
 );
 
 CREATE UNIQUE INDEX idx_txn_dedupe   ON transaction (household_id, account_id, dedupe_hash);

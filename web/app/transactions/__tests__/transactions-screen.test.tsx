@@ -338,3 +338,10 @@ it("labels a subcategory with its parent path", () => {
     within(entryCategory).queryByRole("option", { name: "Food & Dining → Coffee" }),
   ).not.toBeNull();
 });
+
+
+it("marks every row with its provenance", () => {
+  renderScreen([transaction({})], 1);
+  const row = screen.getByText("COFFEE").closest("tr");
+  expect(row!.textContent).toContain("· manual");
+});

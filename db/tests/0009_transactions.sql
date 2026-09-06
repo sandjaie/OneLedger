@@ -81,6 +81,26 @@ BEGIN
     classified_by = 'user_manual'
    WHERE id = t_lone;
 
+  -- I7 as a shape: no look-ahead rates, and carried means exactly "from an earlier date".
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_sav, '2024-02-12', 'UNFLAGGED CARRY', -10.0000, base,
+              '2024-02-09', 1, 20, -10.0000, -200.0000, 'expense', 'manual', 'cr1');
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_sav, '2024-02-12', 'FUTURE RATE', -10.0000, base,
+              '2024-02-15', 1, 20, -10.0000, -200.0000, 'expense', 'manual', 'cr2');
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
   -- Frozen amounts reproduce their stored rate on every row, whoever the writer is.
   BEGIN
     INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
