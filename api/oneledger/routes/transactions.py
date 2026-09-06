@@ -26,6 +26,11 @@ router = APIRouter(tags=["transactions"])
 # Money crosses the wire as a decimal string in both directions. api-contracts.html section 6.
 MONEY = re.compile(r"-?\d{1,16}(\.\d{1,4})?")
 
+# The manual-entry set: linked types (transfers, investments, loans, imports) arrive with
+# their owning features, and opening_balance/adjustment are derivations, not entries. The web
+# dropdown mirrors this list; the API is the boundary.
+MANUAL_TYPES = frozenset({"expense", "income", "fee", "interest", "tax", "refund"})
+
 CENT = Decimal("0.0001")  # amounts store at 4 dp
 RATE = Decimal("0.0000000001")  # rates store at 10 dp
 
@@ -59,6 +64,8 @@ class TransactionRow(BaseModel):
     amountSecondary: str
     fxRateDate: date
     fxRateIsCarried: bool
+    fxRateToBase: str
+    fxRateToSecondary: str
     txnType: str
     categoryId: UUID | None
     categoryName: str | None
@@ -94,6 +101,15 @@ class TransactionCreate(BaseModel):
     def exact_decimal_string(cls, value: str | None) -> str | None:
         return _money(value)
 
+    @field_validator("txnType")
+    @classmethod
+    def manual_types_only(cls, value: str) -> str:
+        if value not in MANUAL_TYPES:
+            raise ValueError(
+                "manual entry records unlinked types only: " + ", ".join(sorted(MANUAL_TYPES))
+            )
+        return value
+
 
 class TransactionUpdate(BaseModel):
     """The two owner-editable fields, always sent. Money is immutable (I1/I5); the database
@@ -105,7 +121,8 @@ class TransactionUpdate(BaseModel):
 
 COLUMNS = """t.id, t.account_id, a.name, t.booked_date, t.description_raw, t.description_clean,
              t.amount, t.currency, t.amount_base, t.amount_secondary, t.fx_rate_date,
-             t.fx_rate_is_carried, t.txn_type::text, t.category_id, c.name, t.merchant_id,
+             t.fx_rate_is_carried, t.fx_rate_to_base, t.fx_rate_to_secondary,
+             t.txn_type::text, t.category_id, c.name, t.merchant_id,
              t.transfer_id, t.parent_transaction_id, t.is_excluded, t.classified_by::text,
              t.source::text, t.notes"""
 
@@ -128,6 +145,8 @@ FIELDS = [
     "amountSecondary",
     "fxRateDate",
     "fxRateIsCarried",
+    "fxRateToBase",
+    "fxRateToSecondary",
     "txnType",
     "categoryId",
     "categoryName",
@@ -139,7 +158,7 @@ FIELDS = [
     "source",
     "notes",
 ]
-MONEY_FIELDS = {"amount", "amountBase", "amountSecondary"}
+MONEY_FIELDS = {"amount", "amountBase", "amountSecondary", "fxRateToBase", "fxRateToSecondary"}
 
 
 def transaction_row(values: tuple[Any, ...]) -> TransactionRow:
@@ -228,6 +247,8 @@ def list_transactions(
     dateFrom: Annotated[date | None, Query()] = None,
     dateTo: Annotated[date | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    sort: Annotated[str, Query(pattern="^(bookedDate|amount|description|account)$")] = "bookedDate",
+    direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionsResponse:
@@ -252,6 +273,13 @@ def list_transactions(
         clauses.append("t.description_raw ILIKE '%%' || %s || '%%'")
         params.append(q.strip())
     where = " AND ".join(clauses)
+    # A dictionary of static fragments: user input selects a key, never SQL text.
+    order = {
+        "bookedDate": "t.booked_date",
+        "amount": "t.amount",
+        "description": "t.description_raw",
+        "account": "a.name",
+    }[sort] + (" ASC" if direction == "asc" else " DESC")
 
     try:
         with connect() as conn, conn.cursor() as cur:
@@ -266,7 +294,7 @@ def list_transactions(
             cur.execute(
                 f"""SELECT {COLUMNS} {FROM}
                      WHERE {where}
-                     ORDER BY t.booked_date DESC, t.created_at DESC
+                     ORDER BY {order}, t.created_at DESC
                      LIMIT %s OFFSET %s""",
                 (*params, limit, offset),
             )

@@ -39,6 +39,8 @@ type Filters = {
   dateFrom: string;
   dateTo: string;
   q: string;
+  sort: string;
+  direction: string;
 };
 
 const NO_FILTERS: Filters = {
@@ -48,6 +50,8 @@ const NO_FILTERS: Filters = {
   dateFrom: "",
   dateTo: "",
   q: "",
+  sort: "bookedDate",
+  direction: "desc",
 };
 
 function query(filters: Filters, offset: number) {
@@ -58,6 +62,8 @@ function query(filters: Filters, offset: number) {
   if (filters.dateFrom) parameters.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) parameters.set("dateTo", filters.dateTo);
   if (filters.q.trim()) parameters.set("q", filters.q.trim());
+  if (filters.sort !== "bookedDate") parameters.set("sort", filters.sort);
+  if (filters.direction !== "desc") parameters.set("direction", filters.direction);
   parameters.set("limit", String(PAGE));
   parameters.set("offset", String(offset));
   return `/transactions?${parameters.toString()}`;
@@ -102,6 +108,12 @@ export function TransactionsScreen({
     if (row.currency === currency.code) return undefined;
     const value = currency.code === household.baseCurrency ? row.amountBase : row.amountSecondary;
     return formatMoney(value, currency);
+  }
+
+  // The frozen rate the displayed conversion actually used: rate, date and carried status
+  // together, so the converted figure is auditable (UI section 4).
+  function rateUsed(row: TransactionRow) {
+    return currency.code === household.baseCurrency ? row.fxRateToBase : row.fxRateToSecondary;
   }
 
   async function reload(nextFilters: Filters, offset: number, append: boolean) {
@@ -324,6 +336,28 @@ export function TransactionsScreen({
             value={filters.dateTo}
           />
         </label>
+        <label className="select-field">
+          <span>Sort by</span>
+          <select
+            onChange={(event) => setFilters({ ...filters, sort: event.target.value })}
+            value={filters.sort}
+          >
+            <option value="bookedDate">Date</option>
+            <option value="amount">Amount</option>
+            <option value="description">Description</option>
+            <option value="account">Account</option>
+          </select>
+        </label>
+        <label className="select-field">
+          <span>Direction</span>
+          <select
+            onChange={(event) => setFilters({ ...filters, direction: event.target.value })}
+            value={filters.direction}
+          >
+            <option value="desc">Newest / largest first</option>
+            <option value="asc">Oldest / smallest first</option>
+          </select>
+        </label>
         <div className="account-form-actions">
           <button className="primary-action" disabled={busy} type="submit">Apply filters</button>
         </div>
@@ -384,7 +418,7 @@ export function TransactionsScreen({
                   <span>{original(row)}</span>
                   {converted(row) && <small> · {converted(row)}</small>}
                   <small>
-                    {" "}· FX {row.fxRateDate}
+                    {" "}· FX {rateUsed(row)} on {row.fxRateDate}
                     {row.fxRateIsCarried ? " (carried forward)" : ""}
                   </small>
                 </td>

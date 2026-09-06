@@ -653,6 +653,14 @@ export type TransactionRow = {
      */
     fxRateIsCarried: boolean;
     /**
+     * Fxratetobase
+     */
+    fxRateToBase: string;
+    /**
+     * Fxratetosecondary
+     */
+    fxRateToSecondary: string;
+    /**
      * Txntype
      */
     txnType: string;
@@ -1135,6 +1143,14 @@ export type ListTransactionsTransactionsGetData = {
          * Q
          */
         q?: string | null;
+        /**
+         * Sort
+         */
+        sort?: string;
+        /**
+         * Direction
+         */
+        direction?: string;
         /**
          * Limit
          */

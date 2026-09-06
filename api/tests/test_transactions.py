@@ -44,6 +44,8 @@ FETCHED_ROW = (
     Decimal("-310.5000"),
     date(2024, 2, 2),
     False,
+    Decimal("20.0000000000"),
+    Decimal("1.0000000000"),
     "expense",
     CATEGORY_ID,
     "Food & Dining",
@@ -329,3 +331,26 @@ def test_a_foreign_household_category_is_refused(monkeypatch: MonkeyPatch) -> No
         _teardown()
     assert update.status_code == 422
     assert not any("UPDATE transaction" in s for s in connection.statements)
+
+
+def test_manual_entry_accepts_unlinked_types_only() -> None:
+    """opening_balance would move the balance while hiding from every report; linked types
+    arrive with their owning features."""
+    for bad in ["opening_balance", "transfer_out", "investment_buy", "adjustment"]:
+        with pytest.raises(ValidationError):
+            transactions.TransactionCreate.model_validate({**CREATE, "txnType": bad})
+    assert transactions.TransactionCreate.model_validate({**CREATE, "txnType": "refund"})
+
+
+def test_sort_is_a_bounded_contract(monkeypatch: MonkeyPatch) -> None:
+    connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
+    try:
+        client = _client(connection, monkeypatch)
+        ok = client.get("/transactions", params={"sort": "amount", "direction": "asc"})
+        bad = client.get("/transactions", params={"sort": "booked_date; DROP TABLE"})
+    finally:
+        _teardown()
+    assert ok.status_code == 200
+    listing = next(s for s in connection.statements if "ORDER BY" in s)
+    assert "t.amount ASC" in listing
+    assert bad.status_code == 422

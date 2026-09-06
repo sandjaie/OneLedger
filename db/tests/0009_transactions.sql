@@ -310,6 +310,47 @@ BEGIN
     END;
   END;
 
+  -- Report-affecting divergence on a child is refused: an excluded child would drop part of
+  -- a movement the balance still holds in full.
+  BEGIN
+    UPDATE transaction SET is_excluded = true WHERE id = t_child;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'excluding one split child must be rejected';
+    END IF;
+  END;
+
+  -- Topology changes rebalance: an adopted posting stops counting (its parent carries the
+  -- movement); a released child counts again.
+  DECLARE q1 UUID; p4 UUID; before NUMERIC(20,4);
+  BEGIN
+    SELECT id INTO p4 FROM transaction WHERE dedupe_hash = 'p4';
+    before := (SELECT current_balance FROM account WHERE id = a_card);
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_card, '2024-02-08', 'SPLIT FOUR', -50.0000, base,
+              '2024-02-08', 1, 20, -50.0000, -1000.0000, 'expense', 'manual', 'q1')
+      RETURNING id INTO q1;
+    ASSERT (SELECT current_balance FROM account WHERE id = a_card) = before - 50.0000,
+      'a new posting counts';
+    UPDATE transaction SET parent_transaction_id = p4 WHERE id = q1;
+    ASSERT (SELECT current_balance FROM account WHERE id = a_card) = before,
+      'an adopted posting stops counting — its parent already carries the movement';
+    UPDATE transaction SET parent_transaction_id = NULL WHERE id = q1;
+    ASSERT (SELECT current_balance FROM account WHERE id = a_card) = before - 50.0000,
+      'a released child counts again';
+  END;
+
+  -- Deleting the latest posting rewinds the as-of to a date the ledger still supports (I7).
+  DELETE FROM transaction WHERE dedupe_hash = 'd6';
+  ASSERT (SELECT current_balance FROM account WHERE id = a_sav) = 95000.0000,
+    'the deleted posting leaves the balance';
+  ASSERT (SELECT current_balance_as_of FROM account WHERE id = a_sav)
+           = '2024-02-04'::timestamptz,
+    'the as-of rewinds to the latest remaining posting';
+
   RAISE NOTICE 'PASS 0009';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN
