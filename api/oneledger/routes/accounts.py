@@ -341,8 +341,15 @@ def update_account(
                           is_active = (%s::date IS NULL),
                           include_in_net_worth = %s, is_liquid = %s,
                           opening_balance = %s, opening_balance_date = %s,
-                          current_balance = %s,
-                          current_balance_as_of = %s::date::timestamptz,
+                          current_balance = CASE
+                            WHEN opening_balance IS DISTINCT FROM %s
+                              OR opening_balance_date IS DISTINCT FROM %s THEN %s
+                            ELSE current_balance END,
+                          current_balance_as_of = CASE
+                            WHEN opening_balance IS DISTINCT FROM %s
+                              OR opening_balance_date IS DISTINCT FROM %s
+                            THEN %s::date::timestamptz
+                            ELSE current_balance_as_of END,
                           opening_balance_note = %s, credit_limit = %s,
                           opening_balance_confirmed_at =
                             CASE WHEN opening_balance IS DISTINCT FROM %s
@@ -367,6 +374,10 @@ def update_account(
                     Decimal(body.openingBalance),
                     body.openingBalanceDate,
                     Decimal(body.openingBalance),
+                    body.openingBalanceDate,
+                    Decimal(body.openingBalance),
+                    Decimal(body.openingBalance),
+                    body.openingBalanceDate,
                     body.openingBalanceDate,
                     body.openingBalanceNote,
                     None if body.creditLimit is None else Decimal(body.creditLimit),

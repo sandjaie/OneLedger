@@ -313,6 +313,31 @@ def test_closing_an_account_derives_is_active_from_the_closing_date(
     assert "is_active = (%s::date IS NULL)" in connection.statements[0]
 
 
+def test_a_non_anchor_patch_preserves_the_observed_current_balance(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Acknowledge, close and metadata edits must not invent a position from the opening
+    figure. Only an opening-anchor change rewrites the materialised current_balance."""
+    connection = AccountsConnection(rows=[FETCHED_ROW], totals=[])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "acknowledgeOpeningBalance": True},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    statement = connection.statements[0]
+    rewrite = statement[
+        statement.index("current_balance =") : statement.index("ELSE current_balance")
+    ]
+    assert "opening_balance IS DISTINCT FROM" in rewrite
+    assert "opening_balance_date IS DISTINCT FROM" in rewrite
+    assert "ELSE current_balance_as_of" in statement
+
+
 def test_acknowledging_an_opening_balance_is_recorded_and_reversible(
     monkeypatch: MonkeyPatch,
 ) -> None:
