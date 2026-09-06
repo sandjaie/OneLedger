@@ -13,8 +13,6 @@ M1a (this plan's Tasks 1–11) is on `develop` by owner request. The former inte
 `feature/phase-1-trusted-financial-position` is deleted after that merge. Later Phase 1 work
 (M1b onward) branches from `develop` until a new phase branch is named.
 Active M1a plan: [Phase 1 trusted financial position](plans/2026-09-06-phase-1-trusted-financial-position.md).
-Specification: [Phase 1 spec](specs/2026-09-06-phase-1-trusted-financial-position.md).
-M1b–M9b plan/spec: [PR #28](https://github.com/sandjaie/OneLedger/pull/28).
 Branching, phase integration and releases follow [docs/git-workflow.md](../git-workflow.md).
 Any path to `main` still needs a separate owner request.
 
