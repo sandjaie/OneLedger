@@ -257,6 +257,8 @@ def test_category_edit_stamps_user_manual_and_never_touches_amounts(
     assert response.status_code == 200
     update = next(s for s in connection.statements if "UPDATE transaction" in s)
     assert "user_manual" in update
+    assert "classification_rule_id = NULL" in update, "one answer to why, not two"
+    assert "classification_confidence = 1.000" in update
     assert "amount" not in update.split("SET", 1)[1].split("WHERE", 1)[0]
 
 
@@ -481,3 +483,27 @@ def test_a_malformed_amount_filter_is_a_422(monkeypatch: MonkeyPatch) -> None:
     finally:
         _teardown()
     assert response.status_code == 422
+
+
+def test_a_categorized_manual_entry_is_reviewed_at_full_confidence(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """User override: confidence 1.000, no review needed. Unclassified: 0.000, queued."""
+    connection = LedgerConnection(rows=[FETCHED_ROW])
+    try:
+        _client(connection, monkeypatch).post(
+            "/transactions", json={**CREATE, "categoryId": str(CATEGORY_ID)}, headers=ORIGIN
+        )
+    finally:
+        _teardown()
+    insert = next(i for i, s in enumerate(connection.statements) if "INSERT INTO transaction" in s)
+    assert Decimal("1.000") in connection.params[insert]
+    assert True in connection.params[insert]
+
+    connection = LedgerConnection(rows=[FETCHED_ROW])
+    try:
+        _client(connection, monkeypatch).post("/transactions", json=CREATE, headers=ORIGIN)
+    finally:
+        _teardown()
+    insert = next(i for i, s in enumerate(connection.statements) if "INSERT INTO transaction" in s)
+    assert Decimal("0.000") in connection.params[insert]

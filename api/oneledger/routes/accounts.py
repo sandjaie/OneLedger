@@ -402,7 +402,11 @@ def update_account(
                           EXISTS (SELECT FROM transaction t
                                    WHERE t.account_id = a.id
                                      AND t.parent_transaction_id IS NULL
-                                     AND t.booked_date < %s)
+                                     AND t.booked_date < %s),
+                          (SELECT min(t.booked_date) FROM transaction t
+                            WHERE t.account_id = a.id),
+                          (SELECT max(t.booked_date) FROM transaction t
+                            WHERE t.account_id = a.id)
                      FROM account a WHERE a.id = %s AND a.household_id = %s""",
                 (body.openingBalanceDate, account_id, owner.household_id),
             )
@@ -431,6 +435,23 @@ def update_account(
                         "would double-count them. Delete those entries or pick an earlier date"
                     ),
                 )
+            # The lifetime must keep holding what the ledger already holds: POST refuses
+            # out-of-lifetime postings, and an edit must not strand existing ones.
+            if existing is not None and existing[4] is not None:
+                if body.openedOn is not None and body.openedOn > existing[4]:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"a ledger entry on {existing[4]} predates the new opened date",
+                    )
+                if (
+                    body.closedOn is not None
+                    and existing[5] is not None
+                    and body.closedOn < existing[5]
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"a ledger entry on {existing[5]} postdates the new closed date",
+                    )
             cur.execute(
                 """UPDATE account
                       SET name = %s, institution_id = %s, account_type = %s::account_type,
