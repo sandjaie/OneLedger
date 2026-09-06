@@ -72,7 +72,8 @@ class LedgerConnection:
     def __init__(
         self,
         *,
-        account: tuple[object, ...] | None = ("XAE", None, None),
+        account: tuple[object, ...] | None = ("XAE", None, None, None),
+        container: tuple[object, ...] | None = (False,),
         pair: tuple[object, ...] | None = ("XIN", "XAE"),
         fx: dict[tuple[str, str], tuple[object, ...]] | None = None,
         rows: list[tuple[object, ...]] | None = None,
@@ -80,6 +81,7 @@ class LedgerConnection:
         category_ok: tuple[object, ...] | None = (1,),
     ) -> None:
         self.category_ok = category_ok
+        self.container = container
         self.account = account
         self.pair = pair
         # (base, quote) -> (rate, is_carried_forward, carried_from)
@@ -124,6 +126,8 @@ class LedgerCursor:
             self._one = self.connection.pair
         elif "FROM account" in sql:
             self._one = self.connection.account
+        elif "parent_transaction_id = %s" in sql and "EXISTS" in sql:
+            self._one = self.connection.container
         elif "FROM category WHERE id" in sql:
             self._one = self.connection.category_ok
         elif "FROM fx_rate" in sql:
@@ -212,7 +216,7 @@ def test_frozen_amounts_are_rounded_half_up_at_storage(monkeypatch: MonkeyPatch)
     """multi-currency: half-up at the point of storage; never round intermediates."""
     connection = LedgerConnection(
         rows=[FETCHED_ROW],
-        account=("XAE", None, None),
+        account=("XAE", None, None, None),
         pair=("XIN", "XAE"),
         fx={("XAE", "XIN"): (Decimal("2"), False, None)},
     )
@@ -364,7 +368,7 @@ def test_a_posting_outside_the_account_lifetime_is_refused(monkeypatch: MonkeyPa
     """The UI's active-account picker is not the boundary."""
     from datetime import date as _date
 
-    closed = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", None, _date(2024, 1, 31)))
+    closed = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", None, _date(2024, 1, 31), None))
     try:
         response = _client(closed, monkeypatch).post("/transactions", json=CREATE, headers=ORIGIN)
     finally:
@@ -372,7 +376,7 @@ def test_a_posting_outside_the_account_lifetime_is_refused(monkeypatch: MonkeyPa
     assert response.status_code == 422
     assert "closed" in response.json()["detail"]
 
-    unopened = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", _date(2024, 3, 1), None))
+    unopened = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", _date(2024, 3, 1), None, None))
     try:
         response = _client(unopened, monkeypatch).post("/transactions", json=CREATE, headers=ORIGIN)
     finally:
@@ -415,3 +419,36 @@ def test_the_full_filter_contract_round_trips(monkeypatch: MonkeyPatch) -> None:
         assert fragment in listing
     assert Decimal("-1000.0000") in connection.params[idx]
     assert False in connection.params[idx]
+
+
+def test_a_posting_before_the_anchor_is_refused(monkeypatch: MonkeyPatch) -> None:
+    """opening + the sum of LATER movements: an earlier posting is already inside the opening
+    balance and would count twice."""
+    from datetime import date as _date
+
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW], account=("XAE", None, None, _date(2024, 2, 15))
+    )
+    try:
+        response = _client(connection, monkeypatch).post(
+            "/transactions", json=CREATE, headers=ORIGIN
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 422
+    assert "anchored" in response.json()["detail"]
+
+
+def test_recategorizing_a_split_container_is_refused(monkeypatch: MonkeyPatch) -> None:
+    """Reports read the children; editing the container would change nothing they show."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], container=(True,))
+    try:
+        response = _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": None},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 409
+    assert not any("UPDATE transaction" in s for s in connection.statements)

@@ -358,7 +358,7 @@ def create_transaction(
             base, secondary = str(pair[0]).strip(), str(pair[1]).strip()
 
             cur.execute(
-                """SELECT currency, opened_on, closed_on FROM account
+                """SELECT currency, opened_on, closed_on, opening_balance_date FROM account
                     WHERE id = %s AND household_id = %s""",
                 (body.accountId, owner.household_id),
             )
@@ -366,7 +366,7 @@ def create_transaction(
             if account is None:
                 raise HTTPException(status_code=404, detail="no such account")
             currency = str(account[0]).strip()
-            opened_on, closed_on = account[1], account[2]
+            opened_on, closed_on, anchor = account[1], account[2], account[3]
             # The UI's active-account picker is not the boundary: a posting outside the
             # account's lifetime would move the balance of an account that did not exist yet
             # or was already closed.
@@ -374,6 +374,16 @@ def create_transaction(
                 raise HTTPException(status_code=422, detail=f"the account opened on {opened_on}")
             if closed_on is not None and body.bookedDate > closed_on:
                 raise HTTPException(status_code=422, detail=f"the account closed on {closed_on}")
+            # The balance equation is opening + the sum of LATER movements: a posting before
+            # the anchor is already inside the opening balance and would count twice.
+            if anchor is not None and body.bookedDate < anchor:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"the balance is anchored on {anchor}; earlier movements are already "
+                        "inside the opening balance"
+                    ),
+                )
             _assert_category_allowed(cur, body.categoryId, owner.household_id)
 
             rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
@@ -459,6 +469,21 @@ def update_transaction(
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_category_allowed(cur, body.categoryId, owner.household_id)
+            # A split parent is a container: reports read its children, so recategorizing it
+            # would change the ledger row while every report kept the old categories.
+            cur.execute(
+                """SELECT EXISTS (SELECT FROM transaction c WHERE c.parent_transaction_id = %s)
+                     FROM transaction t WHERE t.id = %s AND t.household_id = %s""",
+                (transaction_id, transaction_id, owner.household_id),
+            )
+            container = cur.fetchone()
+            if container is None:
+                raise HTTPException(status_code=404, detail="no such transaction")
+            if bool(container[0]):
+                raise HTTPException(
+                    status_code=409,
+                    detail="a split parent is a container; recategorize its children",
+                )
             cur.execute(
                 """UPDATE transaction
                       SET category_id = %s, notes = %s,
