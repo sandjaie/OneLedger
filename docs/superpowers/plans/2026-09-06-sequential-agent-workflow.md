@@ -1,6 +1,8 @@
 # Sequential agent workflow update
 
-**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — use the current checkout; no Git worktree.
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — the resolved local checkout for this task,
+not a global path. On another host, resolve the active root with `git rev-parse --show-toplevel`
+and record it here before dispatch. Do not create a Git worktree.
 **Branch:** `docs/sequential-agent-workflow`.
 **Base and PR target:** `feature/phase-0-foundations`.
 **Scope:** repository agent instructions, planning/review workflow and the reusable PR template.
@@ -9,6 +11,7 @@
 
 Run implementation agents sequentially in the current repository. Each task plan or spec must
 declare its exact branch, base/PR target and workspace before it is passed to an agent. The
+workspace is resolved from the active repository, never copied from another host's instructions. The
 orchestrator controls branch switches and PR creation, and waits for implementation and review
 work to finish before switching branches. Preserve unrelated local changes.
 

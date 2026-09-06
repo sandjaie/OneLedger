@@ -92,9 +92,10 @@ test anything. Every step states its expected output — run the command and com
 **Branches** carry a type prefix and say what is inside them: `feature/`, `fix/`, `docs/`,
 `chore/`. Phase 0 work branches from `feature/phase-0-foundations` and merges back into it.
 
-**Sequential agents use the current checkout.** The owner requests development in
-`/Users/sandjaieravi/dev/OneLedger`, with no Git worktrees. This preference overrides skill defaults
-that request an isolated worktree. Do not remove existing worktrees as part of this preference change.
+**Sequential agents use the active repository checkout.** Resolve its root from the current
+repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before
+dispatch. Never substitute a path from another machine. Do not create Git worktrees; this owner
+preference overrides skill defaults that request one. Do not remove existing worktrees as part of this preference change.
 Only one implementation agent may work at a time. Wait for any reviewer using this checkout to
 finish before changing its branch or files; do not run builds and type checks concurrently against
 the same generated output.

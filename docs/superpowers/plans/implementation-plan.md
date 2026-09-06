@@ -52,8 +52,9 @@ infrastructure or dependency is selected by this documentation update.
 - New implementation plans go in `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
 - Each task plan or spec declares its exact `Workspace`, `Branch` and `Base and PR target` before
   dispatch; split deliveries declare a branch each. Use `feature/`, `fix/`, `docs/` or `chore/`.
-- Work sequentially in `/Users/sandjaieravi/dev/OneLedger`; do not create Git worktrees. The
-  orchestrator preserves local changes and owns branch switches. Finish any agent/reviewer using
+- Work sequentially in the active checkout, resolving its root with `git rev-parse --show-toplevel`
+  and recording that path in the task plan/spec; do not create Git worktrees or use another host's
+  path. The orchestrator preserves local changes and owns branch switches. Finish any agent/reviewer using
   the checkout before switching it to another task.
 - Create every PR from [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md),
   recording what changed, implementation details, actual checks/results and any remaining limits.

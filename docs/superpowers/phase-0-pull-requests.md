@@ -72,8 +72,9 @@ they are about to read; `feature/phase0-5` does not.
 
 Task branches are cut **from `feature/phase-0-foundations`** and merged **back into it**. `feature/phase-0-foundations` goes to `main` as one PR when the phase is complete and every invariant test passes.
 
-**Current checkout, sequential work.** Use `/Users/sandjaieravi/dev/OneLedger`; do not create Git
-worktrees. This owner preference supersedes skill defaults. Each task plan or spec must declare
+**Current checkout, sequential work.** Use the active repository root, resolved with
+`git rev-parse --show-toplevel`; do not create Git worktrees or substitute another host's path.
+This owner preference supersedes skill defaults. Each task plan or spec must declare
 the exact workspace, branch and base/PR target before agent dispatch, including separate branch
 names for split deliveries. The orchestrator owns branch switches and preserves unrelated local
 changes. Finish the active implementer and any reviewer using the checkout before switching it.
