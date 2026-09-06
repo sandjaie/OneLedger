@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
+import secrets
+from base64 import urlsafe_b64encode
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+from hmac import compare_digest
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -17,6 +21,10 @@ from .db import connect
 SESSION_ISSUER = "oneledger"
 SESSION_AUDIENCE = "oneledger-web"
 SESSION_HOURS = 12
+FLOW_AUDIENCE = "oneledger-oidc-flow"
+FLOW_MINUTES = 10
+GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
+GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
 
 
 class NotAuthorized(Exception):
@@ -31,8 +39,129 @@ class OwnerSession:
     email: str
 
 
+@dataclass(frozen=True)
+class GoogleIdentity:
+    subject: str
+    email: str
+
+
 SessionLookup = Callable[[UUID, UUID, str], OwnerSession | None]
 SessionStore = Callable[[UUID, UUID, datetime], None]
+
+
+def b64url(value: bytes) -> str:
+    return urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def create_oidc_flow(now: datetime | None = None) -> tuple[str, str, str, str]:
+    issued_at = (now or datetime.now(UTC)).replace(microsecond=0)
+    state, nonce, verifier = (
+        secrets.token_urlsafe(32),
+        secrets.token_urlsafe(32),
+        secrets.token_urlsafe(64),
+    )
+    token = jwt.encode(
+        {
+            "state": state,
+            "nonce": nonce,
+            "verifier": verifier,
+            "iat": int(issued_at.timestamp()),
+            "exp": int((issued_at + timedelta(minutes=FLOW_MINUTES)).timestamp()),
+            "iss": SESSION_ISSUER,
+            "aud": FLOW_AUDIENCE,
+        },
+        session_secret(),
+        algorithm="HS256",
+    )
+    return token, state, nonce, b64url(sha256(verifier.encode()).digest())
+
+
+def verify_oidc_flow(token: str, presented_state: str) -> tuple[str, str]:
+    try:
+        claims: dict[str, Any] = jwt.decode(
+            token,
+            session_secret(),
+            algorithms=["HS256"],
+            issuer=SESSION_ISSUER,
+            audience=FLOW_AUDIENCE,
+            options={"require": ["state", "nonce", "verifier", "iat", "exp", "iss", "aud"]},
+        )
+        if (
+            not all(
+                isinstance(claims[name], str) and claims[name]
+                for name in ("state", "nonce", "verifier")
+            )
+            or type(claims["iat"]) is not int
+            or type(claims["exp"]) is not int
+            or claims["exp"] - claims["iat"] != FLOW_MINUTES * 60
+            or not compare_digest(claims["state"], presented_state)
+        ):
+            raise NotAuthorized("invalid sign-in flow")
+        return claims["nonce"], claims["verifier"]
+    except (jwt.PyJWTError, KeyError, TypeError, NotAuthorized) as exc:
+        raise NotAuthorized("invalid sign-in flow") from exc
+
+
+def _google_jwks_client() -> jwt.PyJWKClient:
+    return jwt.PyJWKClient(GOOGLE_JWKS_URL)
+
+
+def verify_google_id_token(
+    token: str, nonce: str, *, jwks_client: jwt.PyJWKClient | None = None
+) -> GoogleIdentity:
+    try:
+        client = jwks_client or _google_jwks_client()
+        key = client.get_signing_key_from_jwt(token).key
+        claims: dict[str, Any] = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=os.environ["GOOGLE_CLIENT_ID"],
+            issuer=GOOGLE_ISSUERS,
+            options={
+                "require": ["iss", "aud", "iat", "exp", "nonce", "sub", "email", "email_verified"]
+            },
+        )
+        if (
+            not isinstance(claims["nonce"], str)
+            or not compare_digest(claims["nonce"], nonce)
+            or not isinstance(claims["sub"], str)
+            or not claims["sub"]
+            or not isinstance(claims["email"], str)
+            or claims["email_verified"] is not True
+        ):
+            raise NotAuthorized("invalid Google identity")
+        return GoogleIdentity(claims["sub"], claims["email"].strip().lower())
+    except (jwt.PyJWTError, KeyError, TypeError, NotAuthorized) as exc:
+        raise NotAuthorized("invalid Google identity") from exc
+
+
+def bind_google_owner(subject: str, email: str) -> UUID:
+    normalized = email.strip().lower()
+    if normalized != _allowed_email():
+        raise NotAuthorized("address is not the permitted account")
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """WITH candidate AS (
+                     SELECT id FROM app_user
+                      WHERE role = 'owner' AND lower(btrim(email)) = %s
+                   ), eligible AS (
+                     SELECT id FROM candidate WHERE (SELECT count(*) FROM candidate) = 1
+                   )
+                   UPDATE app_user u SET google_subject = COALESCE(u.google_subject, %s)
+                    FROM eligible e
+                   WHERE u.id = e.id
+                     AND (u.google_subject IS NULL OR u.google_subject = %s)
+                   RETURNING u.id""",
+                (normalized, subject, subject),
+            )
+            row = cur.fetchone()
+    except Exception as exc:
+        raise NotAuthorized("owner binding failed") from exc
+    if row is None:
+        raise NotAuthorized("no unique permitted owner binding")
+    return UUID(str(row[0]))
 
 
 def session_secret() -> str:
