@@ -99,6 +99,7 @@ function transaction(overrides: Partial<TransactionRow>): TransactionRow {
     merchantId: null,
     transferId: null,
     parentTransactionId: null,
+    isSplitParent: false,
     isExcluded: false,
     classifiedBy: "user_manual",
     source: "manual",
@@ -311,4 +312,12 @@ it("filters offer every ledger type while entry stays manual-only", () => {
   const entryForm = screen.getByRole("form", { name: "Record a transaction" });
   const entryType = within(entryForm).getByLabelText("Type");
   expect(within(entryType).queryByRole("option", { name: "transfer_out" })).toBeNull();
+});
+
+
+it("disables category editing on a split container", () => {
+  renderScreen([transaction({ isSplitParent: true })], 1);
+  const select = screen.getByLabelText("Category for COFFEE") as HTMLSelectElement;
+  expect(select.disabled).toBe(true);
+  expect(select.title).toContain("recategorize its children");
 });
