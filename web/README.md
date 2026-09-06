@@ -22,6 +22,16 @@ npm run dev
 
 Open <http://localhost:3000>.
 
+The root route is an owner-only workspace. It checks `GET /household` through the browser client,
+uses the returned reporting pair for the persisted currency preference and exact formatting preview,
+and sends 401/403 responses to `/login` or `/unauthorized`. The sign-in link performs a top-level
+navigation to the API's `GET /auth/login`; `POST /auth/logout` must succeed before the owner view is
+cleared. A transient API or logout failure stays visible with a retry action.
+
+Activity, planning, ledger import and financial views are not available in Phase 0. Settings and the
+FX inspector remain visibly unavailable until the next delivery; the current amount is explicitly a
+synthetic formatting preview rather than account data.
+
 ## API Types
 
 The TypeScript API contract is generated from FastAPI's local OpenAPI exporter. The schema is not
@@ -88,6 +98,9 @@ directories. Next.js telemetry is disabled in build and runtime stages.
 - The narrow `js-yaml` 4.3.1 override patches `@hey-api/json-schema-ref-parser`'s exact 4.2.0
   transitive dependency and keeps `npm audit` clean without `--force` or legacy peer resolution.
 - Vitest runs the browser API client and money formatter contract suites in Node.
+- Testing Library 16.3.3 and its DOM package exercise rendered React interactions. Their React 19
+  peer ranges match the runtime; jsdom 30.0.1 supplies the browser test environment and supports the
+  pinned Node 24.20 runtime.
 
 Direct dependency versions are intentionally pinned. Audit them against current stable releases and
 peer ranges before changing the lockfile; record compatibility exceptions instead of suppressing

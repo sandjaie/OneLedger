@@ -1,7 +1,6 @@
 import "client-only";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { apiUrl } from "@/lib/api/url";
 const REQUEST_TIMEOUT_MS = 10_000;
 
 export class ApiError extends Error {
@@ -30,7 +29,7 @@ export async function apiFetch<T>(
   else callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
 
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(apiUrl(path), {
       ...init,
       credentials: "include",
       signal: controller.signal,
