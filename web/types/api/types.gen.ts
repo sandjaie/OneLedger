@@ -685,6 +685,10 @@ export type TransactionRow = {
      */
     parentTransactionId: string | null;
     /**
+     * Issplitparent
+     */
+    isSplitParent: boolean;
+    /**
      * Isexcluded
      */
     isExcluded: boolean;

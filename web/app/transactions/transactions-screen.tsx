@@ -515,7 +515,12 @@ export function TransactionsScreen({
                   <label className="select-field">
                     <span className="visually-hidden">Category for {row.descriptionRaw}</span>
                     <select
-                      disabled={busy}
+                      disabled={busy || row.isSplitParent}
+                      title={
+                        row.isSplitParent
+                          ? "A split parent is a container; recategorize its children"
+                          : undefined
+                      }
                       onChange={(event) => void recategorize(row, event.target.value)}
                       value={row.categoryId ?? ""}
                     >

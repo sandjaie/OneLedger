@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -72,6 +72,7 @@ class TransactionRow(BaseModel):
     merchantId: UUID | None
     transferId: UUID | None
     parentTransactionId: UUID | None
+    isSplitParent: bool
     isExcluded: bool
     classifiedBy: str
     source: str
@@ -123,7 +124,9 @@ COLUMNS = """t.id, t.account_id, a.name, t.booked_date, t.description_raw, t.des
              t.amount, t.currency, t.amount_base, t.amount_secondary, t.fx_rate_date,
              t.fx_rate_is_carried, t.fx_rate_to_base, t.fx_rate_to_secondary,
              t.txn_type::text, t.category_id, c.name, t.merchant_id,
-             t.transfer_id, t.parent_transaction_id, t.is_excluded, t.classified_by::text,
+             t.transfer_id, t.parent_transaction_id,
+             EXISTS (SELECT 1 FROM transaction c WHERE c.parent_transaction_id = t.id),
+             t.is_excluded, t.classified_by::text,
              t.source::text, t.notes"""
 
 FROM = (
@@ -153,6 +156,7 @@ FIELDS = [
     "merchantId",
     "transferId",
     "parentTransactionId",
+    "isSplitParent",
     "isExcluded",
     "classifiedBy",
     "source",
@@ -407,10 +411,18 @@ def create_transaction(
             # and the stored amounts derive from it — stored amount must equal
             # round(stored amount x stored rate), or the frozen facts disagree with each
             # other. A repeating cross-rate rounded after the multiplication would.
-            rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
-            rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
-            amount_base = (amount * rate_to_base).quantize(CENT, rounding=ROUND_HALF_UP)
-            amount_secondary = (amount * rate_to_secondary).quantize(CENT, rounding=ROUND_HALF_UP)
+            try:
+                rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
+                rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
+                amount_base = (amount * rate_to_base).quantize(CENT, rounding=ROUND_HALF_UP)
+                amount_secondary = (amount * rate_to_secondary).quantize(
+                    CENT, rounding=ROUND_HALF_UP
+                )
+            except InvalidOperation as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="the converted amount exceeds the storable range",
+                ) from exc
 
             # The manual dedupe disambiguator mirrors ingestion section 6: occurrence index
             # within the day, never a row ordinal.
@@ -493,6 +505,7 @@ def create_transaction(
         psycopg.errors.ForeignKeyViolation,
         psycopg.errors.UniqueViolation,
         psycopg.errors.RaiseException,
+        psycopg.errors.NumericValueOutOfRange,
     ) as exc:
         raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
 

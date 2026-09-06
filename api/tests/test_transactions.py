@@ -53,6 +53,7 @@ FETCHED_ROW = (
     None,
     None,
     False,
+    False,
     "user_manual",
     "manual",
     None,
@@ -573,3 +574,17 @@ def test_stored_amounts_derive_from_the_stored_rate(monkeypatch: MonkeyPatch) ->
     assert Decimal("0.3333333333") in params, "the rate stores at 10 dp"
     assert Decimal("999999.9999") in params, "the amount derives from the stored rate"
     assert Decimal("1000000.0000") not in params
+
+
+def test_an_overflowing_conversion_is_a_422(monkeypatch: MonkeyPatch) -> None:
+    """A huge amount times a large rate must be the caller's validation error, not a 500."""
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW],
+        fx={("XAE", "XIN"): (Decimal("9999999999.0000000000"), False, None)},
+    )
+    body = {**CREATE, "amount": "9999999999999999.0000"}
+    try:
+        response = _client(connection, monkeypatch).post("/transactions", json=body, headers=ORIGIN)
+    finally:
+        _teardown()
+    assert response.status_code == 422
