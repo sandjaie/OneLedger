@@ -113,7 +113,7 @@ class AccountsConnection:
         totals: list[tuple[object, ...]] | None = None,
         institutions: list[tuple[object, ...]] | None = None,
         self_people: list[tuple[object, ...]] | None = None,
-        ledger_state: tuple[object, ...] = ("XIN", False, date(2024, 1, 1), False),
+        ledger_state: tuple[object, ...] = ("XIN", False, date(2024, 1, 1), False, None, None),
     ) -> None:
         self.ledger_state = ledger_state
         self.fail_institution = fail_institution
@@ -522,7 +522,7 @@ def test_a_currency_change_is_refused_once_ledger_rows_exist(
     """The rows' native amounts are immutable facts in their denomination; relabelling the
     account would mix denominations in one balance."""
     connection = AccountsConnection(
-        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), False)
+        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), False, None, None)
     )
     monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
     app.dependency_overrides[auth.require_owner] = owner
@@ -577,7 +577,7 @@ def test_reanchoring_past_existing_postings_is_refused(monkeypatch: MonkeyPatch)
     """A posting before the new anchor would be counted twice: once inside the new opening
     balance by definition, once as a ledger row. Nothing is reinterpreted silently."""
     connection = AccountsConnection(
-        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), True)
+        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), True, None, None)
     )
     monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
     app.dependency_overrides[auth.require_owner] = owner
@@ -592,3 +592,31 @@ def test_reanchoring_past_existing_postings_is_refused(monkeypatch: MonkeyPatch)
     assert response.status_code == 409
     assert "double-count" in response.json()["detail"]
     assert not any("UPDATE account" in s for s in connection.statements)
+
+
+def test_lifecycle_edits_cannot_strand_existing_postings(monkeypatch: MonkeyPatch) -> None:
+    """POST refuses out-of-lifetime postings; an account edit must not create them after
+    the fact."""
+    connection = AccountsConnection(
+        rows=[FETCHED_ROW],
+        ledger_state=("XIN", True, date(2024, 1, 1), False, date(2024, 2, 1), date(2024, 6, 1)),
+    )
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        opened_late = TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openedOn": "2024-03-01"},
+            headers=ORIGIN,
+        )
+        closed_early = TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "closedOn": "2024-05-01"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert opened_late.status_code == 409
+    assert "predates" in opened_late.json()["detail"]
+    assert closed_early.status_code == 409
+    assert "postdates" in closed_early.json()["detail"]

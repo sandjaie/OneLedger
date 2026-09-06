@@ -434,9 +434,10 @@ def create_transaction(
                        currency, fx_rate_date, fx_rate_is_carried, fx_rate_to_base,
                        fx_rate_to_secondary, amount_base, amount_secondary, txn_type,
                        category_id, country, payment_method, source, dedupe_hash,
-                       classified_by, notes)
+                       classified_by, classification_confidence, is_reviewed, notes)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::txn_type,
-                           %s, %s, %s::payment_method, 'manual', %s, %s::classified_by, %s)
+                           %s, %s, %s::payment_method, 'manual', %s, %s::classified_by, %s, %s,
+                           %s)
                    RETURNING id""",
                 (
                     owner.household_id,
@@ -457,6 +458,10 @@ def create_transaction(
                     body.paymentMethod,
                     dedupe,
                     "user_manual" if body.categoryId is not None else "unclassified",
+                    # The classification contract: a user override is confidence 1.000 and
+                    # needs no review; an unclassified row is 0.000 and queues for it.
+                    Decimal("1.000") if body.categoryId is not None else Decimal("0.000"),
+                    body.categoryId is not None,
                     body.notes,
                 ),
             )
@@ -505,6 +510,10 @@ def update_transaction(
                 """UPDATE transaction
                       SET category_id = %s, notes = %s,
                           classified_by = 'user_manual', is_reviewed = true,
+                          -- One answer to "why this category": the owner said so. A stale
+                          -- rule id beside user_manual would be a second, contradictory one.
+                          classification_rule_id = NULL,
+                          classification_confidence = 1.000,
                           updated_at = now()
                     WHERE id = %s AND household_id = %s
                    RETURNING id""",
