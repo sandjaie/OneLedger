@@ -150,15 +150,11 @@ function formatDay(isoDate: string) {
 }
 
 function asOfFor(rows: Array<AccountRow>, currency: string) {
+  const included = rows.filter((row) => row.includeInNetWorth && row.currency === currency);
+  if (included.length === 0 || included.some((row) => !row.currentBalanceAsOf)) return "";
   const dates = [
-    ...new Set(
-      rows
-        .filter((row) => row.includeInNetWorth && row.currency === currency)
-        .map((row) => row.currentBalanceAsOf?.slice(0, 10))
-        .filter((day): day is string => Boolean(day)),
-    ),
+    ...new Set(included.map((row) => row.currentBalanceAsOf?.slice(0, 10)).filter((day): day is string => Boolean(day))),
   ].sort();
-  if (dates.length === 0) return "";
   if (dates.length === 1) return ` as of ${formatDay(dates[0])}`;
   return ` as of ${formatDay(dates[0])}–${formatDay(dates[dates.length - 1])}`;
 }
@@ -179,8 +175,14 @@ function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
 }
 
+function isDigit(ch: string) {
+  if (/\p{Nd}/u.test(ch)) return true;
+  const folded = ch.normalize("NFKC");
+  return folded.length === 1 && folded >= "0" && folded <= "9";
+}
+
 function isMask(value: string) {
-  return [...value].reduce((count, ch) => count + (/\p{Nd}/u.test(ch) ? 1 : 0), 0) <= 4;
+  return [...value].reduce((count, ch) => count + (isDigit(ch) ? 1 : 0), 0) <= 4;
 }
 
 function signedOpening(accountType: string, value: string) {
@@ -443,7 +445,7 @@ export function AccountsScreen({
 
   function balanceLabel(account: AccountRow) {
     const currency = currencyOf(currencies, account.currency);
-    if (account.accountClass === "liability") {
+    if (account.accountClass === "liability" && account.currentBalance.startsWith("-")) {
       return `You owe ${formatMoney(unsigned(account.currentBalance), currency)}`;
     }
     return formatMoney(account.currentBalance, currency);
@@ -636,7 +638,11 @@ export function AccountsScreen({
         <td>{account.accountNumberMasked}</td>
         <td
           aria-label={`${account.name} balance ${balanceLabel(account)}`}
-          className={account.accountClass === "liability" ? "account-owed" : undefined}
+          className={
+            account.accountClass === "liability" && account.currentBalance.startsWith("-")
+              ? "account-owed"
+              : undefined
+          }
         >
           {balanceLabel(account)}
         </td>
@@ -727,10 +733,12 @@ export function AccountsScreen({
                   <span key={`${row.currency}-${row.total}`}>
                     {index > 0 ? " · " : ""}
                     {formatMoney(
-                      row.accountClass === "liability" ? unsigned(row.total) : row.total,
+                      row.accountClass === "liability" && row.total.startsWith("-")
+                        ? unsigned(row.total)
+                        : row.total,
                       currencyOf(currencies, row.currency),
                     )}
-                    {row.accountClass === "liability" ? " owed" : ""}
+                    {row.accountClass === "liability" && row.total.startsWith("-") ? " owed" : ""}
                     {asOfFor(rows, row.currency)}
                   </span>
                 ))}
