@@ -99,7 +99,8 @@ reason*, implement, watch it pass, commit. A test that has never failed has neve
 test anything. Every step states its expected output — run the command and compare.
 
 **Branches** carry a type prefix and say what is inside them: `feature/`, `fix/`, `docs/`,
-`chore/`. Phase 0 work branches from `feature/phase-0-foundations` and merges back into it.
+`chore/`. New work branches from `develop` and merges back into it. Integration to `main`
+still needs a separate owner request.
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before

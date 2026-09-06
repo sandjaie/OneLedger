@@ -26,8 +26,9 @@ infrastructure or dependency is selected by this documentation update.
 
 ## Global constraints
 
-- Phase 0 work targets integration branch `feature/phase-0-foundations`; consult the progress file
-  before choosing work. Do not add product-expansion features to Phase 0.
+- New work targets integration branch `develop`; consult the progress file before choosing work.
+  Do not add product-expansion features under a closed Phase 0 label. Integration to `main`
+  still needs a separate owner request.
 - Postgres 18, Python 3.14 and Node 24 LTS remain the documented baseline.
 - Money is `NUMERIC(20,4)` in Postgres, `Decimal` in Python and a string on the wire. FX rates are
   `NUMERIC(20,10)`; units `NUMERIC(28,8)`; prices `NUMERIC(20,6)`; percentages `NUMERIC(9,4)`

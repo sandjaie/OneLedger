@@ -8,8 +8,11 @@ Updated: 6 September 2026.
 
 ## Current phase
 
-**Phase 0: implementation delivered; live Google identity verification pending.**
-Integration branch: `feature/phase-0-foundations`.
+**Phase 0: implementation delivered to `main`; live Google identity verification pending.**
+Integration branch: `develop`.
+`feature/phase-0-foundations` merged to `main` as [PR #20](https://github.com/sandjaie/OneLedger/pull/20).
+Later work branches from `develop` and merges back into it. Integration to `main` still needs a
+separate owner request.
 Active execution plan: [Phase 0 completion](plans/2026-09-06-phase-0-completion.md).
 
 | Completion-plan task | Status | Evidence |
