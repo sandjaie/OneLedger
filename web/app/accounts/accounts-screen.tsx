@@ -638,11 +638,11 @@ export function AccountsScreen({
             <button onClick={() => openEdit(account)} type="button">Edit {account.name}</button>
             {account.isActive ? (
               <button disabled={busy} onClick={() => void closeAccount(account)} type="button">
-                Close account
+                Close {account.name}
               </button>
             ) : (
               <button disabled={busy} onClick={() => void reopenAccount(account)} type="button">
-                Reopen account
+                Reopen {account.name}
               </button>
             )}
           </div>
@@ -697,7 +697,10 @@ export function AccountsScreen({
                 {groupTotals.map((row, index) => (
                   <span key={`${row.currency}-${row.total}`}>
                     {index > 0 ? " · " : ""}
-                    {formatMoney(row.total.startsWith("-") ? unsigned(row.total) : row.total, currencyOf(currencies, row.currency))}
+                    {formatMoney(
+                      row.accountClass === "liability" ? unsigned(row.total) : row.total,
+                      currencyOf(currencies, row.currency),
+                    )}
                     {row.accountClass === "liability" ? " owed" : ""}
                   </span>
                 ))}
