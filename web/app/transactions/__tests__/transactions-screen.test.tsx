@@ -216,3 +216,17 @@ it("round-trips a non-default sort as bounded parameters", async () => {
   expect(url).toContain("sort=amount");
   expect(url).toContain("direction=asc");
 });
+
+
+it("paginates on the applied filters, not edited-but-unapplied controls", async () => {
+  const request = vi.fn().mockResolvedValue({ transactions: [], total: 120 });
+  renderScreen([transaction({})], 120, request as unknown as typeof apiFetch);
+  fireEvent.change(screen.getByLabelText("Search descriptions"), {
+    target: { value: "unapplied" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Load 50 more" }));
+  await waitFor(() => expect(request).toHaveBeenCalled());
+  const url = (request.mock.calls[0] as Array<string>)[0];
+  expect(url).not.toContain("q=unapplied");
+  expect(url).toContain("offset=1");
+});

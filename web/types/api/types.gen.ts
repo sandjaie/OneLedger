@@ -1144,6 +1144,38 @@ export type ListTransactionsTransactionsGetData = {
          */
         q?: string | null;
         /**
+         * Merchantid
+         */
+        merchantId?: string | null;
+        /**
+         * Currency
+         */
+        currency?: string | null;
+        /**
+         * Country
+         */
+        country?: string | null;
+        /**
+         * Amountmin
+         */
+        amountMin?: string | null;
+        /**
+         * Amountmax
+         */
+        amountMax?: string | null;
+        /**
+         * Tag
+         */
+        tag?: string | null;
+        /**
+         * Reviewstate
+         */
+        reviewState?: string | null;
+        /**
+         * Sourcedocumentid
+         */
+        sourceDocumentId?: string | null;
+        /**
          * Sort
          */
         sort?: string;

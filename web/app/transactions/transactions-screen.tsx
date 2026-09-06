@@ -83,6 +83,9 @@ export function TransactionsScreen({
   const [rows, setRows] = useState(transactions);
   const [count, setCount] = useState(total);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  // Pagination continues the APPLIED set: edited-but-unapplied controls must not leak into
+  // "Load more", or the ledger would append one result set onto another.
+  const [applied, setApplied] = useState<Filters>(NO_FILTERS);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [draft, setDraft] = useState({
@@ -167,7 +170,7 @@ export function TransactionsScreen({
         headers: { "Content-Type": "application/json" },
       });
       setDraft({ ...draft, description: "", amount: "", notes: "" });
-      await reload(filters, 0, false);
+      await reload(applied, 0, false);
       onChanged();
     } catch (error) {
       setProblem(
@@ -272,6 +275,7 @@ export function TransactionsScreen({
         className="account-form"
         onSubmit={(event) => {
           event.preventDefault();
+          setApplied(filters);
           void reload(filters, 0, false);
         }}
       >
@@ -432,7 +436,7 @@ export function TransactionsScreen({
         <button
           className="text-action"
           disabled={busy}
-          onClick={() => void reload(filters, rows.length, true)}
+          onClick={() => void reload(applied, rows.length, true)}
           type="button"
         >
           Load {Math.min(PAGE, count - rows.length)} more
