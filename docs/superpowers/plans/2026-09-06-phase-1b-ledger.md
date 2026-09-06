@@ -18,7 +18,7 @@ reconciliation-gated pipeline ending in one atomic commit; classification is a d
 cascade with one implementation; reporting reads only `v_transaction_reportable` and frozen
 amounts.
 
-**Tech stack:** FastAPI + psycopg + Decimal; Postgres 16 + Flyway forward-only migrations;
+**Tech stack:** FastAPI + psycopg + Decimal; Postgres 18 + Flyway forward-only migrations;
 Next.js + generated API types; pytest, vitest, `db/tests/*.sql`.
 
 **Spec:** [Phase 1b specification](../specs/2026-09-06-phase-1b-ledger.md) — authoritative for
@@ -92,21 +92,21 @@ Entry: M1a merged (Phase 1 plan Task 11 complete, recorded in the progress file)
 
 ### Task 12: Categories, merchants and the seed taxonomy
 
-**Outcome:** The classification reference data exists: category tree with buckets, merchants and
-aliases, and the seed taxonomy loaded from versioned YAML packs.
+**Outcome:** The classification reference data exists: the category tree with buckets, and the
+merchant and alias tables, with the seed taxonomy loaded by the migration.
 **Files:** create `db/migrations/V9__categories_and_merchants.sql` (implements `schema.md`
-`0006`), `db/seeds/rules/global.yaml`, `db/seeds/rules/regions/<cc>.yaml`; extend
-`db/tests/0006_categories.sql`; update `schema.md` `0006` (mark applied as V9) and
-`data-model.html` in the same commit.
+`0006` and seeds the category taxonomy); extend `db/tests/0006_categories.sql`; update
+`schema.md` `0006` (mark applied as V9) and `data-model.html` in the same commit. The
+classification **rule** packs are not created here — their destination table arrives with
+Task 22's V13, and the packs move there with it.
 **Contracts:** the `0006` DDL in `schema.md` is the table shape. Every category carries a bucket
 in {need, want, investment, debt_service, income, ignore} (ADR-0008) as an editable default.
-Region packs are selected by `SELECT DISTINCT country FROM account`, not a setup question
-(classification §3). Merchant names are rows.
+Merchant names are rows.
 **Invariants/security:** ADR-0012 — no category, merchant or region content becomes an
-identifier; seed packs are data, versioned so later seed updates never disturb user edits.
+identifier; the taxonomy seed is versioned so later seed updates never disturb user edits.
 **Required test behaviours (failing first):** taxonomy loads from empty with every category
-carrying a valid bucket; the region pack for a fixture account's country loads and another
-region's does not; re-running seeds is idempotent; no test names a real currency or bank.
+carrying a valid bucket; re-running the seed is idempotent; no test names a real currency or
+bank.
 **Validation:** the DB gate.
 **Branch:** `feature/task-12-categories-and-seed-taxonomy`.
 **Acceptance:** DB gate green from empty; `schema.md`/`data-model.html` updated in the same
@@ -124,9 +124,10 @@ including `v_transaction_reportable`); create `db/tests/0007_transactions.sql`; 
 `source_document_id`, I6), `dedupe_hash` unique on `(household_id, account_id, dedupe_hash)`,
 `fx_rate_is_carried`/`fx_rate_date` labels (I7). Columns referencing tables that arrive in
 later milestones (`source_document_id`, `statement_layout_id`, `classification_rule_id`, the
-import-batch reference) are created as bare UUID columns per `schema.md`'s deferred-foreign-key
-pattern (`0018`); their constraints are applied by Task 22's migration, once every target
-exists.
+import-batch reference) are created as bare UUID columns — the same pattern `schema.md` `0018`
+already applies to `transfer_id` and its siblings; these four are constrained by Task 22's V13
+once every target exists, while each `0018` clause proper lands in the forward migration that
+creates its own target.
 **Invariants/security:** I1 — `UPDATE` of `amount` or `currency` raises (trigger); I2 — signed
 balances sum with no `CASE`; I5 — frozen columns never recomputed; the view excludes transfers
 and duplicates by construction (I3, I4 groundwork).
@@ -238,7 +239,9 @@ additions; `data-model.html` updated same commit.
 and row number; `status ∈ new|duplicate|near_duplicate|needs_review|accepted|rejected`;
 dedupe layer 2 disambiguates by **occurrence index within the day, never row ordinal**
 (statement-ingestion §6 — ordinal double-imports overlapping statements); layer 3 (±3 days,
-similarity ≥0.85) warns and never blocks. Reconciliation verdicts: `reconciled` proceed,
+similarity ≥0.85) warns and never blocks. The §9 shape's two forward references are created
+bare in V12: `classification_rule_id` as a plain UUID (constrained by Task 22's V13) and the
+proposed transfer kind as text validated in the service until V14 creates the enum. Reconciliation verdicts: `reconciled` proceed,
 `mismatched` and `running_balance_break` raise `ImportBlocked` naming the row, `unavailable`
 warns and flags the batch.
 **Invariants/security:** an import never proceeds against a missing FX rate and never falls
@@ -322,10 +325,15 @@ Entry: M2 merged (parallel with M3 allowed).
 `classification_rule` store, stamping every transaction.
 **Files:** create `db/migrations/V13__classification_rules.sql` (implements `schema.md`
 `0009`), `api/oneledger/classify.py` (+ tests), `db/tests/0009_rules.sql`; wire the import
-pipeline and manual paths to the single caller; docs updated same commit. Creating
-`classification_rule` completes the targets of the ledger's deferred references, so V13 also
-applies the `schema.md` `0018` foreign-key clauses whose targets now all exist, with a test
-behaviour proving an orphan reference is rejected afterwards.
+pipeline and manual paths to the single caller; create `db/seeds/rules/global.yaml` and
+`db/seeds/rules/regions/<cc>.yaml`, loaded by the migration (classification §3 — region packs
+selected by `SELECT DISTINCT country FROM account`, not a setup question); docs updated same
+commit. V13 also constrains the deferred references whose targets now all exist — the
+ledger's and staging's `document`, `import_batch`, `statement_layout` (V11) and
+`classification_rule` (this migration) columns — with a test behaviour proving an orphan
+reference is rejected afterwards. The `schema.md` `0018` clauses are separate: each lands in
+the forward migration that creates its own target (transfers, cards, investments), and the
+loan and recurring clauses stay deferred with their features.
 **Contracts:** cascade order (first match wins, stops): user override → user rule (priority
 asc, default 100) → merchant alias → prior match (same account + text) → seed rule (priority
 500) → unclassified → review. Confidence fixed: 1.000 / 0.980 / 0.950 / 0.900 (fuzzy 0.700) /
@@ -369,6 +377,13 @@ Entry: M3 and M4 merged.
 confirmation (nothing auto-linked), and `v_transaction_reportable` enforced end-to-end.
 **Sharpened at dispatch** — engine internals argue from `transfers-and-reconciliation.html` §3
 and `multi-currency-and-fx.html` §5 against the tree as it stands.
+**Precondition inside the task:** the `0010` shape cannot hold a pending one-sided transfer or
+a confirmed external outflow — it requires a destination account, a destination amount and, via
+its confirmed-has-legs check, both transaction legs — while transfers §3 and ADR-0007 require
+exactly those states. `schema.md` is the bug (design documents specify; the schema file is the
+table reference): reconcile `0010` with the one-sided and external-outflow requirements
+**before** writing V14, updating `schema.md` and `data-model.html` together as a reviewed
+`docs/` delivery — the same pattern as M9b's `0015`/F03 precondition.
 **Files:** create `db/migrations/V14__transfers.sql` (implements `schema.md` `0010`),
 `api/oneledger/transfers.py`, `POST /transfers`, `DELETE /transfers/{id}` (+ tests); review
 integration; static check that no reporting query reads the base table; docs same commit.
