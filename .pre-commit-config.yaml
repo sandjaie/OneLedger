@@ -104,6 +104,14 @@ repos:
         always_run: true
         stages: [pre-push]
 
+      - id: api-types
+        name: generated API types are current (web)
+        entry: scripts/hooks/web.sh api-types-check
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: db-invariants
         name: db invariant tests
         entry: scripts/hooks/db-tests.sh

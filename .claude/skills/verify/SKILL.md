@@ -43,7 +43,8 @@ with **the number of checks that actually ran**, then one verdict line.
 
    (`flyway clean` is not the reset to reach for either: it has been disabled by default since
    Flyway 10, and a dropped scratch volume is a truer "from empty" anyway.)
-5. `cd web && npx tsc --noEmit && npx vitest run && npm run build`, then grep `.next/static/` for
+5. `cd web && npm run api:types:check && npx tsc --noEmit && npx vitest run && npm run build`,
+   then grep `.next/static/` for
    `SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://`
 
 ## What green means
