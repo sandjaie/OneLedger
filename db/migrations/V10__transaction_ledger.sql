@@ -208,7 +208,10 @@ BEGIN
     END IF;
   END IF;
   IF NEW.parent_transaction_id IS NOT NULL THEN
-    SELECT * INTO parent FROM transaction WHERE id = NEW.parent_transaction_id;
+    -- Locked: two overlapping reparents (A under B while B goes under C) must serialize, or
+    -- both read pre-edit parents and commit a three-level chain. Whichever waits re-reads the
+    -- committed row and is rejected by the depth checks below.
+    SELECT * INTO parent FROM transaction WHERE id = NEW.parent_transaction_id FOR UPDATE;
     IF parent.id IS NULL THEN
       RETURN NEW;  -- the foreign key reports a missing parent with the right error
     END IF;

@@ -158,7 +158,7 @@ FROM (VALUES
   ('investment-income', 'Capital gains',        'capital-gains',       30),
   ('investment-income', 'Rental',               'rental',              40),
   ('other-income',      'Gifts received',       'gifts-received',      10),
-  ('other-income',      'Other',                'other',               20),
+  ('other-income',      'Other income',         'other',               20),
   ('housing',           'Rent',                 'rent',                10),
   ('housing',           'Mortgage interest',    'mortgage-interest',   20),
   ('housing',           'Service charge',       'service-charge',      30),
