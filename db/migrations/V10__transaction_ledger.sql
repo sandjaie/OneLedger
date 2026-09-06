@@ -204,7 +204,8 @@ BEGIN
     OR NEW.description_clean    IS DISTINCT FROM OLD.description_clean
     OR NEW.reference_raw        IS DISTINCT FROM OLD.reference_raw
     OR NEW.counterparty_raw     IS DISTINCT FROM OLD.counterparty_raw
-    OR NEW.receipt_document_id  IS DISTINCT FROM OLD.receipt_document_id THEN
+    OR NEW.receipt_document_id  IS DISTINCT FROM OLD.receipt_document_id
+    OR NEW.tags                 IS DISTINCT FROM OLD.tags THEN
       RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
     END IF;
   END IF;
@@ -267,7 +268,8 @@ BEGIN
     -- every child exactly when the parent has one (the sum check holds the totals equal).
     OR NEW.original_currency     IS DISTINCT FROM parent.original_currency
     OR (NEW.original_amount IS NULL) <> (parent.original_amount IS NULL)
-    OR NEW.receipt_document_id   IS DISTINCT FROM parent.receipt_document_id THEN
+    OR NEW.receipt_document_id   IS DISTINCT FROM parent.receipt_document_id
+    OR NEW.tags                  IS DISTINCT FROM parent.tags THEN
       RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;
