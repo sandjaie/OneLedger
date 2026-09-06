@@ -184,13 +184,38 @@ describe("authenticated workspace", () => {
     await screen.findByRole("heading", { name: "Settings" });
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
-    expect(await screen.findByText("No FX rates are stored for 2024-01-31.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("status").textContent).toContain("No FX rates are stored for 2024-01-31."));
 
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
     expect((await screen.findByRole("alert")).textContent).toContain("FX rates could not be loaded.");
 
     fireEvent.click(screen.getByRole("button", { name: "Retry FX rate" }));
     expect(await screen.findByText("0.0441234567")).toBeTruthy();
+  });
+
+  it("announces FX loading and success while focus stays on the submit button", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const fx = deferred<Array<FxRateResponse>>();
+    const request = vi.fn().mockResolvedValueOnce(household).mockReturnValueOnce(fx.promise) as Request;
+    render(<Workspace request={request} navigate={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    const submit = screen.getByRole("button", { name: "Check FX rate" });
+    submit.focus();
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("");
+    fireEvent.click(submit);
+
+    expect(document.activeElement).toBe(submit);
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status.textContent).toContain("Checking stored FX rates for 2024-01-31.");
+
+    fx.resolve([rate]);
+
+    await waitFor(() => expect(status.textContent).toContain("Loaded 1 FX rate for 2024-01-31."));
+    expect(screen.getByRole("status")).toBe(status);
+    expect(document.activeElement).toBe(submit);
   });
 
   it("keeps FX results tied to the latest requested date", async () => {
@@ -232,5 +257,64 @@ describe("authenticated workspace", () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
     expect(screen.queryByRole("heading", { name: "Settings" })).toBeNull();
+  });
+
+  it("keeps successful logout routing stable when active FX returns 403 during sign-out", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const fx = deferred<Array<FxRateResponse>>();
+    const logout = deferred<void>();
+    const navigate = vi.fn();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockReturnValueOnce(fx.promise)
+      .mockReturnValueOnce(logout.promise) as Request;
+
+    render(<Workspace request={request} navigate={navigate} />);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(true);
+
+    fx.reject(new ApiError(403, "revoked"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(navigate).not.toHaveBeenCalledWith("/unauthorized");
+
+    logout.resolve();
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login"));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).not.toHaveBeenCalledWith("/unauthorized");
+  });
+
+  it("keeps FX usable when sign-out fails after cancelling an active lookup", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const fx = deferred<Array<FxRateResponse>>();
+    const navigate = vi.fn();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockReturnValueOnce(fx.promise)
+      .mockRejectedValueOnce(new TypeError("offline")) as Request;
+
+    render(<Workspace request={request} navigate={navigate} />);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+    expect(screen.getByText("Checking stored FX rates for 2024-01-31.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("could not confirm");
+
+    expect(screen.queryByText("Checking stored FX rates for 2024-01-31.")).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

@@ -46,6 +46,15 @@ function sectionFromPath() {
   return window.location.pathname === "/settings" ? "settings" : "overview";
 }
 
+function fxStatusText(fx: FxState) {
+  if (fx.status === "loading") return `Checking stored FX rates for ${fx.requestedDate}.`;
+  if (fx.status === "empty") return `No FX rates are stored for ${fx.requestedDate}.`;
+  if (fx.status === "ready") {
+    return `Loaded ${fx.rates.length} FX ${fx.rates.length === 1 ? "rate" : "rates"} for ${fx.requestedDate}.`;
+  }
+  return "";
+}
+
 export function Workspace({
   section,
   request = apiFetch,
@@ -89,9 +98,17 @@ export function Workspace({
     if (destination) navigate(destination);
   }, [destination, navigate]);
 
+  function retireFxRequest() {
+    const id = (fxRequest.current?.id ?? 0) + 1;
+    fxRequest.current?.controller.abort();
+    fxRequest.current = { id, controller: new AbortController() };
+    setFx({ status: "idle" });
+  }
+
   async function logout() {
     setSigningOut(true);
     setLogoutFailed(false);
+    retireFxRequest();
     try {
       await request<void>("/auth/logout", { method: "POST" });
       setHousehold(undefined);
@@ -130,7 +147,7 @@ export function Workspace({
 
   async function loadFx() {
     const requestedDate = fxDate;
-    if (!requestedDate) return;
+    if (!requestedDate || signingOut) return;
     fxRequest.current?.controller.abort();
     const controller = new AbortController();
     const id = (fxRequest.current?.id ?? 0) + 1;
@@ -241,12 +258,11 @@ export function Workspace({
                     value={fxDate}
                   />
                 </label>
-                <button className="primary-action" disabled={!fxDate} onClick={loadFx} type="button">
+                <button className="primary-action" disabled={!fxDate || signingOut} onClick={loadFx} type="button">
                   {fx.status === "service" ? "Retry FX rate" : "Check FX rate"}
                 </button>
 
-                {fx.status === "loading" && <p className="fx-empty">Checking stored FX rates for {fx.requestedDate}.</p>}
-                {fx.status === "empty" && <p className="fx-empty">No FX rates are stored for {fx.requestedDate}.</p>}
+                <p className="fx-empty" role="status" aria-atomic="true">{fxStatusText(fx)}</p>
                 {fx.status === "service" && <p className="inline-alert" role="alert">FX rates could not be loaded. Check the API service and retry.</p>}
                 {fx.status === "ready" && (
                   <div className="fx-results">
