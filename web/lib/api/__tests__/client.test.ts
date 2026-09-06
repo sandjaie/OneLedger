@@ -2,8 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiFetch } from "@/lib/api/client";
 
+const stalledFetch = (_url: RequestInfo | URL, init?: RequestInit) =>
+  new Promise<Response>((_resolve, reject) => init?.signal?.addEventListener(
+    "abort", () => reject(init.signal?.reason), { once: true },
+  ));
+
 describe("apiFetch", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -83,5 +89,22 @@ describe("apiFetch", () => {
       detail: "sign in required",
       message: "401: sign in required",
     });
+  });
+
+  it("keeps the timeout when the caller also supplies a cancellation signal", async () => {
+    const timeout = new AbortController();
+    vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const result = apiFetch("/household", { signal: new AbortController().signal });
+    timeout.abort(new DOMException("timed out", "TimeoutError"));
+    await expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("preserves caller cancellation while a timeout is active", async () => {
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const caller = new AbortController();
+    const result = apiFetch("/fx/on", { signal: caller.signal });
+    caller.abort(new DOMException("superseded", "AbortError"));
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
   });
 });

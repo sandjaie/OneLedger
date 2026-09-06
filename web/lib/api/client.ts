@@ -17,9 +17,12 @@ export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const timeout = AbortSignal.timeout(10_000);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
+    signal,
   });
 
   if (!response.ok) {
