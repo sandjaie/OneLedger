@@ -198,14 +198,21 @@ and checksum dedupe (layer 1).
 **Files:** create `db/migrations/V11__documents_and_layouts.sql` (implements `schema.md`
 `0008`), `db/tests/0008_documents.sql`, `api/oneledger/routes/documents.py` (+ tests); update
 `schema.md`/`data-model.html`, `api-contracts.html` §2, regenerate types.
-**Contracts:** `document.sha256` unique per household — an identical file is rejected before
-parsing, naming the earlier import; `statement_layout` carries fingerprints, header pattern,
+**Contracts:** statement writes follow the api-contracts §4 error contract — every parse
+failure (missing password, unknown layout, missing FX rate, reconciliation mismatch) leaves the
+database unchanged, so a statement's `document` row and blob are written by Task 18's staging
+transaction, never at upload; the incoming file's checksum is checked against previously staged
+or committed documents (`document.sha256` unique per household), rejecting an identical file
+before parsing and naming the earlier import. Non-statement vault uploads (M10) persist
+immediately; `statement_layout` carries fingerprints, header pattern,
 column x-bands, date format, sign convention and quirks as **data** (ADR-0012);
 `statement_layout_id` + `layout_version` will be stamped on every imported transaction.
 **Invariants/security:** originals stored unmodified (I1); owner-only access; filenames may
 contain account numbers — never logged.
-**Required test behaviours (failing first):** duplicate upload rejected pre-parse with the
-earlier batch named; layout rows round-trip; stored blob is byte-identical on retrieval.
+**Required test behaviours (failing first):** a duplicate of a staged or committed statement is
+rejected pre-parse with the earlier batch named; a failed parse leaves no document, batch or
+staged row (api-contracts §4); layout rows round-trip; a staged statement's blob is
+byte-identical on retrieval.
 **Validation:** the API and DB gates.
 **Branch:** `feature/task-16-documents-and-layouts`.
 
@@ -241,7 +248,12 @@ dedupe layer 2 disambiguates by **occurrence index within the day, never row ord
 (statement-ingestion §6 — ordinal double-imports overlapping statements); layer 3 (±3 days,
 similarity ≥0.85) warns and never blocks. The §9 shape's two forward references are created
 bare in V12: `classification_rule_id` as a plain UUID (constrained by Task 22's V13) and the
-proposed transfer kind as text validated in the service until V14 creates the enum. Reconciliation verdicts: `reconciled` proceed,
+proposed transfer kind as text validated in the service until V14 creates the enum. The staging
+write is atomic — `document`, `import_batch` and staged rows commit together only once
+reconciliation yields a stageable verdict (api-contracts §4). Staged rows carry frozen
+`amount_base`/`amount_secondary` and `reporting_pair_is_locked()` discovers every table with an
+`amount_base` column, so the staging transaction is M2's B3.5 frozen writer: it takes the
+household row lock before reading the reporting pair. Reconciliation verdicts: `reconciled` proceed,
 `mismatched` and `running_balance_break` raise `ImportBlocked` naming the row, `unavailable`
 warns and flags the batch.
 **Invariants/security:** an import never proceeds against a missing FX rate and never falls
@@ -250,7 +262,8 @@ authoritative.
 **Required test behaviours (failing first):** re-import stages zero rows; overlapping statement
 stages only non-overlapping rows; a corrupted amount blocks the batch naming the divergent row
 (I8); the running-balance layout reconciles via its running column (statement-ingestion §13);
-carried-forward FX labelled per I7.
+carried-forward FX labelled per I7; a reporting-pair change racing a staging batch serializes
+correctly in both interleavings (B3.5).
 **Validation:** the API and DB gates.
 **Branch:** `feature/task-18-ingest-pipeline` (split staging-schema/pipeline deliveries allowed
 at dispatch).
@@ -470,7 +483,10 @@ Task 16's V11; if it lands here instead it takes its own next-version forward mi
 applied V11 is never edited (ADR-0015).
 **Required test behaviours (failing first):** every imported transaction links to document,
 page and row; deleting a referenced document is refused; re-upload detected before parsing;
-disk usage reported for documents and database separately; export manifest names coverage.
+disk usage reported for documents and database separately; export manifest names coverage; the
+export archive is built in an owner-only temporary location and cleaned up deterministically —
+no artifact remains on disk after a completed export or a failed one (Phase 1 spec §7, M10's
+protected-temporary-file contract).
 **Validation:** all three gates. **Branch:** `feature/task-28-documents-vault`.
 
 ## M9b — full history and attribution

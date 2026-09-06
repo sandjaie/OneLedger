@@ -24,8 +24,10 @@ Phase 1b covers M1b, M2, M3, M4, M5, M9a, M6, M7, M10 and M9b, in this order:
 M1a → M1b → M2 → M3 + M4 → M5 → M9a → M6 / M7 / M10 → M9b
 ```
 
-M3 and M4 may run in parallel once M2 has merged. M6, M7 and M10 may run in parallel once M5
-has merged; M10 needs only M2. M8 (loans) stays descheduled and conditional on an actual loan
+M3 and M4 are order-independent once M2 has merged, as are M6, M7 and M10 once M5 has merged
+(M10 needs only M2): the orchestrator schedules whichever is ready. Dispatch itself stays
+sequential — one implementation agent in the single active checkout at a time (AGENTS.md) —
+so order-independent milestones interleave between tasks, never concurrently. M8 (loans) stays descheduled and conditional on an actual loan
 existing; it never blocks anything in this chain.
 
 **Entry criterion for the phase**: Task 11 of the
@@ -172,7 +174,7 @@ classification and transfers.
 
 ### 3.4 M4 — Classification
 
-**Entry criteria.** M2 merged. May run in parallel with M3.
+**Entry criteria.** M2 merged. Order-independent with M3; dispatch stays sequential.
 
 **Scope.** The full cascade, rule CRUD with live preview, seed rules, merchant aliases,
 learn-from-correction with an affected count, confidence scoring, and Settings › Rules.
@@ -261,7 +263,7 @@ which M6 supplies to this screen once it exists.
 
 ### 3.7 M6 — Credit cards
 
-**Entry criteria.** M5 merged. May run in parallel with M7 and M10.
+**Entry criteria.** M5 merged. Order-independent with M7 and M10; dispatch stays sequential.
 
 **Scope.** Statement records, dues, utilisation, paid-in-full detection, and purchase spending
 separated from bill settlement.
@@ -282,7 +284,7 @@ distinct from one paid in full.
 
 ### 3.8 M7 — Investments
 
-**Entry criteria.** M5 merged. May run in parallel with M6 and M10.
+**Entry criteria.** M5 merged. Order-independent with M6 and M10; dispatch stays sequential.
 
 **Scope.** Lot-level holdings, XIRR with a bisection fallback, allocation, and lifecycle
 continuity through dividends, reinvestment, partial sales, charges, splits and platform transfers
@@ -305,7 +307,7 @@ any trading action.
 
 ### 3.9 M10 — Documents and owner export
 
-**Entry criteria.** M2 merged. May run in parallel with M6 and M7.
+**Entry criteria.** M2 merged. Order-independent with M6 and M7; dispatch stays sequential.
 
 **Scope.** The document library with bidirectional traceability, checksum duplicate prevention,
 deletion blocked while a document is referenced, and the owner export of open tabular records plus
