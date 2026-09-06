@@ -92,9 +92,11 @@ The same violation exists in two sibling fixtures and is fixed with it, because 
 requirement simply moves. `db/tests/0003_accounts.sql` and `db/tests/0005_sessions.sql` insert
 `household(base_currency, secondary_currency)` as literal `'INR'`/`'AED'`, and those columns
 carry a foreign key to `currency(code)` — so both files require those two rows to be seeded.
-Both must select their fixture pair from the `currency` table instead. `db/tests/0004_fx.sql` is
-already compliant: `fx_rate` has no foreign key to `currency`, so its currency literals are
-fixture values rather than a seeding requirement, and it stays as it is.
+Both must select their fixture pair from the `currency` table instead. The same household
+foreign-key requirement exists in `db/tests/0002_rls.sql`. `db/tests/0004_fx.sql` was described
+as already compliant on the claim that `fx_rate` has no foreign key to `currency`; V4 does
+(`base_currency` and `quote_currency` both `REFERENCES currency(code)`), so its named pair is
+the same seeding requirement and must select from `currency` as well.
 
 Python and TypeScript tests already show the intended pattern and are the model: they use the
 reserved-range synthetic codes `XIN` and `XAE` rather than real ones.

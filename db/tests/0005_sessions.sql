@@ -9,8 +9,13 @@ BEGIN
 END $$;
 
 BEGIN;
-  INSERT INTO household (id, name, base_currency, secondary_currency) VALUES
-    ('51111111-1111-1111-1111-111111111111', 'session fixture', 'INR', 'AED');
+  WITH pair AS (
+    SELECT (SELECT min(code) FROM currency) AS base,
+           (SELECT min(code) FROM currency
+             WHERE code > (SELECT min(code) FROM currency)) AS secondary
+  )
+  INSERT INTO household (id, name, base_currency, secondary_currency)
+  SELECT '51111111-1111-1111-1111-111111111111', 'session fixture', base, secondary FROM pair;
   INSERT INTO person (id, household_id, display_name) VALUES
     ('52222222-2222-2222-2222-222222222222',
      '51111111-1111-1111-1111-111111111111', 'owner'),
