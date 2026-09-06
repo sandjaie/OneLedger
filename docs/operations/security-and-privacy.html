@@ -491,7 +491,9 @@ authenticating is rejected by the service even though Google authenticated it su
 HttpOnly, SameSite=Lax, valid for ten minutes and Secure when <code>COOKIE_SECURE=1</code>. Callback checks
 that cookie and state before any token exchange, then verifies the ID token's RSA signature with
 Google's JWKS, documented issuer, configured audience, expiry, nonce, nonempty subject and boolean
-verified-email claim. Google discovery and JWKS are not fetched at startup.</p>
+verified-email claim. The authorization request fixes <code>prompt=select_account</code> so retrying after
+a denied account offers the chooser instead of silently reusing that Google session. Google discovery
+and JWKS are not fetched at startup.</p>
 <p>The verified normalized email must match exactly one seeded owner. A single conditional update binds
 the Google subject only if its stored value is null or already equal, so ambiguous rows and competing
 different subjects fail closed. The seeded local UUID remains the application session subject.</p>
