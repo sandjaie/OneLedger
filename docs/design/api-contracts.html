@@ -377,7 +377,7 @@ type on either side of the wire, and no schema-parity test to maintain — the g
 <h2 id="type-generation">1. Type generation</h2>
 <pre><code class="language-bash"># Pydantic models -> OpenAPI -> TypeScript client
 uv run --project api python scripts/openapi.py &gt; web/openapi.json
-npx openapi-typescript openapi.json -o web/types/api.ts
+npx openapi-typescript web/openapi.json -o web/types/api.ts
 </code></pre>
 <p>Run in CI. A model change that is not reflected in the committed schema fails the build, which is the
 cheapest possible place to catch it.</p>
