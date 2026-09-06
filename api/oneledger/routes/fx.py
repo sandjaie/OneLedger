@@ -42,7 +42,9 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
         row = cur.fetchone()
         if row is None:
             # Seeded by Task 3. Failing here with a sentence beats unpacking None.
-            raise RuntimeError("no household row — run the Task 3 seed before backfilling")
+            raise RuntimeError(
+                "no household row — apply the migrations: docker compose run --rm flyway migrate"
+            )
         quote, secondary = row
         cur.execute("SELECT code, pegged_to, peg_rate FROM currency WHERE pegged_to IS NOT NULL")
         pegs = {code: Peg(anchor, rate) for code, anchor, rate in cur.fetchall()}

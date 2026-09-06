@@ -9,6 +9,7 @@ from uuid import UUID
 
 import httpx
 import jwt
+import psycopg
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -233,3 +234,124 @@ def test_identity_or_database_denial_gets_no_session(
     suffix = "/login?reason=authentication_failed" if failure == "database" else "/unauthorized"
     assert response.headers["location"] == "http://localhost:3000" + suffix
     assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+
+
+@pytest.mark.parametrize(
+    "missing", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"]
+)
+def test_login_without_google_configuration_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    monkeypatch.setenv(missing, "")
+    response = TestClient(app).get("/auth/login", follow_redirects=False)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "sign-in unavailable"}
+    assert "oidc_flow" not in response.cookies
+
+
+def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The RuntimeError arm of the handler: session_secret() raises when the key is unset."""
+    monkeypatch.setenv("SESSION_SECRET", "")
+    response = TestClient(app).get("/auth/login", follow_redirects=False)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "sign-in unavailable"}
+
+
+def test_owner_binding_rejects_a_subject_already_bound_elsewhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A subject stored on a different app_user is a conflicting binding, not an outage.
+
+    Without a collision guard the UPDATE of an unbound owner hits idx_app_user_google_subject
+    and UniqueViolation is routed to retry. The statement must match no row instead.
+    """
+
+    class Cursor:
+        row: tuple[UUID] | None = None
+
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def execute(self, sql: str, _params: tuple[object, ...]) -> None:
+            if "NOT EXISTS" not in sql:
+                raise psycopg.errors.UniqueViolation("idx_app_user_google_subject")
+            self.row = None
+
+        def fetchone(self) -> tuple[UUID] | None:
+            return self.row
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    monkeypatch.setattr(auth, "connect", lambda: Connection(), raising=False)
+    with pytest.raises(auth.NotAuthorized):
+        auth.bind_google_owner("taken-subject", EMAIL)
+
+
+def test_a_conflicting_subject_is_unauthorized_not_a_retry(
+    monkeypatch: pytest.MonkeyPatch, google_keys: tuple[RSAPrivateKey, dict[str, Any]]
+) -> None:
+    private_key, jwk = google_keys
+    client = TestClient(app)
+    login = client.get("/auth/login", follow_redirects=False)
+    flow = decode_flow(login.cookies["oidc_flow"])
+    token = sign_google_token(private_key, nonce=flow["nonce"])
+
+    monkeypatch.setattr(auth_routes, "_exchange_code", lambda *_: token)
+    monkeypatch.setattr(auth, "_google_jwks_client", lambda: StaticJwksClient(jwk))
+    monkeypatch.setattr(
+        auth, "bind_google_owner", lambda *_: (_ for _ in ()).throw(auth.NotAuthorized("taken"))
+    )
+
+    response = client.get(
+        f"/auth/callback?code={SENTINEL}&state={flow['state']}", follow_redirects=False
+    )
+    assert response.headers["location"] == "http://localhost:3000/unauthorized"
+    assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+
+
+def test_owner_binding_lets_database_failures_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unreachable() -> object:
+        raise psycopg.OperationalError("connection refused")
+
+    monkeypatch.setattr(auth, "connect", unreachable, raising=False)
+    with pytest.raises(psycopg.OperationalError):
+        auth.bind_google_owner("google-subject", EMAIL)
+
+
+def test_a_database_outage_during_binding_offers_retry_not_rejection(
+    monkeypatch: pytest.MonkeyPatch, google_keys: tuple[RSAPrivateKey, dict[str, Any]]
+) -> None:
+    """A correctly permitted owner must never be told their account is not allowed because the
+    database was down. /unauthorized is a verdict about identity; this is an outage."""
+    private_key, jwk = google_keys
+    client = TestClient(app)
+    login = client.get("/auth/login", follow_redirects=False)
+    flow = decode_flow(login.cookies["oidc_flow"])
+    token = sign_google_token(private_key, nonce=flow["nonce"])
+
+    monkeypatch.setattr(auth_routes, "_exchange_code", lambda *_: token)
+    monkeypatch.setattr(auth, "_google_jwks_client", lambda: StaticJwksClient(jwk))
+    monkeypatch.setattr(
+        auth, "connect", lambda: (_ for _ in ()).throw(psycopg.OperationalError("down"))
+    )
+
+    response = client.get(
+        f"/auth/callback?code={SENTINEL}&state={flow['state']}", follow_redirects=False
+    )
+
+    assert response.headers["location"] == (
+        "http://localhost:3000/login?reason=authentication_failed"
+    )
+    assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+    assert SENTINEL not in response.text

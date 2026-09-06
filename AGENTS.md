@@ -2,6 +2,8 @@
 
 Read [CLAUDE.md](CLAUDE.md) for the shared repository rules and current planning references.
 They apply to Codex and all implementation/review agents.
+Branching, phase integration and releases follow [docs/git-workflow.md](docs/git-workflow.md);
+no other document defines the branch model.
 
 Use the active repository checkout for sequential development. Resolve its root with
 `git rev-parse --show-toplevel`; do not substitute a path from another machine or create Git worktrees.

@@ -8,6 +8,7 @@
 | How to execute the work | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — task requirements and verification steps |
 | What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — branch/review workflow and the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
+| How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
@@ -26,6 +27,32 @@ All new implementation plans go in `docs/superpowers/plans/`; use dated filename
 All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
+
+### Plans are execution maps (every plan and spec written after Phase 1's)
+
+An implementation plan is an execution map, not a pre-written patch. Do not include complete
+production implementations or complete test implementations unless the task is a trivial
+deterministic repair. This owner rule overrides skill defaults that require full embedded code
+in plan steps; Phase 1's existing plan and spec predate it and stay as delivered.
+
+For feature work, a task specifies: outcome; affected files/modules; dependencies;
+interfaces/contracts; invariants; security requirements; required test behaviours; validation
+commands; acceptance criteria.
+
+Use code snippets only when they define:
+
+1. an exact cross-task interface,
+2. a schema/API contract,
+3. a non-obvious invariant or algorithm where prose is ambiguous, or
+4. a tiny deterministic change.
+
+The implementation agent must inspect the current repository before deciding the exact
+implementation. The specification is authoritative; the plan is the intended execution path;
+repository reality determines the exact implementation. An implementation agent may deviate
+from plan implementation details when necessary to fit existing code, provided the
+specification, contracts and acceptance criteria remain satisfied and the deviation is
+recorded — in the PR and `docs/superpowers/progress.md`, not by editing the plan after
+dispatch.
 
 **Maintain implementation progress in one file: `docs/superpowers/progress.md`.** The orchestrator
 updates it during Superpowers execution with completed work, remaining gates and evidence links.
@@ -98,9 +125,12 @@ Settings › Data Quality. There is no `oneledger` command.
 reason*, implement, watch it pass, commit. A test that has never failed has never been shown to
 test anything. Every step states its expected output — run the command and compare.
 
-**Branches** carry a type prefix and say what is inside them: `feature/`, `fix/`, `docs/`,
-`chore/`. New work branches from `develop` and merges back into it. Integration to `main`
-still needs a separate owner request.
+**Branches, phases and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the
+single branching and release reference; do not restate its model elsewhere. In short: task
+branches `<type>/task-<n>-<description>` (types `feature/`, `fix/`, `docs/`, `chore/`) PR into
+the active phase's `feature/phase-<n>-<description>` branch; a completed phase PRs into
+`develop`; a `release/*` branch carries changelog, release notes and the tag into `main`.
+Phase completion, release and any integration toward `main` need a separate owner request.
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before

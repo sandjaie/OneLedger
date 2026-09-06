@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from urllib.parse import quote
+from uuid import UUID
 
 import psycopg
 
@@ -46,3 +47,13 @@ def connect() -> psycopg.Connection:
         user=_user(),
         password=_password(),
     )
+
+
+def scope_to_owner(conn: psycopg.Connection, user_id: UUID) -> None:
+    """Identity for the SECURITY DEFINER functions, per transaction (data-model.html section 3).
+
+    set_config() rather than SET LOCAL because SET takes a literal, and a literal assembled from
+    a value is string-interpolated SQL. The third argument makes the setting transaction-local,
+    so a pooled connection never carries one request's identity into the next.
+    """
+    conn.execute("SELECT set_config('app.user_id', %s, true)", (str(user_id),))

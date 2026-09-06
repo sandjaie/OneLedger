@@ -5,6 +5,301 @@ export type ClientOptions = {
 };
 
 /**
+ * AccountCreate
+ */
+export type AccountCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId?: string | null;
+    /**
+     * Accounttype
+     */
+    accountType: string;
+    /**
+     * Accountsubtype
+     */
+    accountSubtype?: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked?: string | null;
+    /**
+     * Openedon
+     */
+    openedOn?: string | null;
+    /**
+     * Includeinnetworth
+     */
+    includeInNetWorth?: boolean;
+    /**
+     * Isliquid
+     */
+    isLiquid?: boolean;
+    /**
+     * Openingbalance
+     */
+    openingBalance: string;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string;
+    /**
+     * Openingbalancenote
+     */
+    openingBalanceNote?: string | null;
+    /**
+     * Creditlimit
+     */
+    creditLimit?: string | null;
+};
+
+/**
+ * AccountGroupTotal
+ *
+ * Computed by Postgres. Native per currency: an untagged converted total would be a dated
+ * position without its date.
+ */
+export type AccountGroupTotal = {
+    /**
+     * Accountclass
+     */
+    accountClass: 'asset' | 'liability';
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Total
+     */
+    total: string;
+};
+
+/**
+ * AccountRow
+ */
+export type AccountRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId: string | null;
+    /**
+     * Institutionname
+     */
+    institutionName: string | null;
+    /**
+     * Accounttype
+     */
+    accountType: string;
+    /**
+     * Accountclass
+     */
+    accountClass: 'asset' | 'liability';
+    /**
+     * Accountsubtype
+     */
+    accountSubtype: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string | null;
+    /**
+     * Openedon
+     */
+    openedOn: string | null;
+    /**
+     * Closedon
+     */
+    closedOn: string | null;
+    /**
+     * Isactive
+     */
+    isActive: boolean;
+    /**
+     * Includeinnetworth
+     */
+    includeInNetWorth: boolean;
+    /**
+     * Isliquid
+     */
+    isLiquid: boolean;
+    /**
+     * Openingbalance
+     */
+    openingBalance: string;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string;
+    /**
+     * Openingbalancenote
+     */
+    openingBalanceNote: string | null;
+    /**
+     * Openingbalanceconfirmedat
+     */
+    openingBalanceConfirmedAt: string | null;
+    /**
+     * Currentbalance
+     */
+    currentBalance: string;
+    /**
+     * Currentbalanceasof
+     */
+    currentBalanceAsOf: string | null;
+    /**
+     * Creditlimit
+     */
+    creditLimit: string | null;
+};
+
+/**
+ * AccountUpdate
+ *
+ * Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
+ * and the client always holds the whole row. Spec C2 requires type, currency, country, the
+ * opening anchor and credit limit to be correctable; account_class stays trigger-derived.
+ */
+export type AccountUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId?: string | null;
+    /**
+     * Accounttype
+     */
+    accountType: string;
+    /**
+     * Accountsubtype
+     */
+    accountSubtype?: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked?: string | null;
+    /**
+     * Openedon
+     */
+    openedOn?: string | null;
+    /**
+     * Closedon
+     */
+    closedOn?: string | null;
+    /**
+     * Includeinnetworth
+     */
+    includeInNetWorth: boolean;
+    /**
+     * Isliquid
+     */
+    isLiquid: boolean;
+    /**
+     * Openingbalance
+     */
+    openingBalance: string;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string;
+    /**
+     * Openingbalancenote
+     */
+    openingBalanceNote?: string | null;
+    /**
+     * Creditlimit
+     */
+    creditLimit?: string | null;
+    /**
+     * Acknowledgeopeningbalance
+     */
+    acknowledgeOpeningBalance: boolean;
+};
+
+/**
+ * AccountsResponse
+ */
+export type AccountsResponse = {
+    /**
+     * Accounts
+     */
+    accounts: Array<AccountRow>;
+    /**
+     * Totals
+     */
+    totals: Array<AccountGroupTotal>;
+};
+
+/**
+ * CurrencyRow
+ */
+export type CurrencyRow = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Symbol
+     */
+    symbol: string;
+    /**
+     * Decimals
+     */
+    decimals: number;
+    /**
+     * Numberformat
+     */
+    numberFormat: 'international' | 'indian';
+};
+
+/**
  * FxRateResponse
  */
 export type FxRateResponse = {
@@ -75,6 +370,18 @@ export type HouseholdResponse = {
      */
     id: string;
     /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ownerdisplayname
+     */
+    ownerDisplayName: string;
+    /**
+     * Ownertaxresidency
+     */
+    ownerTaxResidency: string | null;
+    /**
      * Basecurrency
      */
     baseCurrency: string;
@@ -83,9 +390,87 @@ export type HouseholdResponse = {
      */
     secondaryCurrency: string;
     /**
+     * Reportingpairlocked
+     */
+    reportingPairLocked: boolean;
+    /**
      * Currencies
      */
     currencies: Array<HouseholdCurrency>;
+};
+
+/**
+ * HouseholdUpdate
+ */
+export type HouseholdUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ownerdisplayname
+     */
+    ownerDisplayName: string;
+    /**
+     * Ownertaxresidency
+     */
+    ownerTaxResidency?: string | null;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+};
+
+/**
+ * InstitutionCreate
+ */
+export type InstitutionCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Shortname
+     */
+    shortName?: string | null;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Institutiontype
+     */
+    institutionType: string;
+};
+
+/**
+ * InstitutionRow
+ */
+export type InstitutionRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Shortname
+     */
+    shortName: string | null;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Institutiontype
+     */
+    institutionType: string;
 };
 
 /**
@@ -285,6 +670,190 @@ export type HouseholdHouseholdGetResponses = {
 };
 
 export type HouseholdHouseholdGetResponse = HouseholdHouseholdGetResponses[keyof HouseholdHouseholdGetResponses];
+
+export type UpdateHouseholdHouseholdPatchData = {
+    body: HouseholdUpdate;
+    path?: never;
+    query?: never;
+    url: '/household';
+};
+
+export type UpdateHouseholdHouseholdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateHouseholdHouseholdPatchError = UpdateHouseholdHouseholdPatchErrors[keyof UpdateHouseholdHouseholdPatchErrors];
+
+export type UpdateHouseholdHouseholdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UpdateHouseholdHouseholdPatchResponse = UpdateHouseholdHouseholdPatchResponses[keyof UpdateHouseholdHouseholdPatchResponses];
+
+export type CurrenciesCurrenciesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/currencies';
+};
+
+export type CurrenciesCurrenciesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CurrenciesCurrenciesGetError = CurrenciesCurrenciesGetErrors[keyof CurrenciesCurrenciesGetErrors];
+
+export type CurrenciesCurrenciesGetResponses = {
+    /**
+     * Response Currencies Currencies Get
+     *
+     * Successful Response
+     */
+    200: Array<CurrencyRow>;
+};
+
+export type CurrenciesCurrenciesGetResponse = CurrenciesCurrenciesGetResponses[keyof CurrenciesCurrenciesGetResponses];
+
+export type ListAccountsAccountsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/accounts';
+};
+
+export type ListAccountsAccountsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAccountsAccountsGetError = ListAccountsAccountsGetErrors[keyof ListAccountsAccountsGetErrors];
+
+export type ListAccountsAccountsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AccountsResponse;
+};
+
+export type ListAccountsAccountsGetResponse = ListAccountsAccountsGetResponses[keyof ListAccountsAccountsGetResponses];
+
+export type CreateAccountAccountsPostData = {
+    body: AccountCreate;
+    path?: never;
+    query?: never;
+    url: '/accounts';
+};
+
+export type CreateAccountAccountsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateAccountAccountsPostError = CreateAccountAccountsPostErrors[keyof CreateAccountAccountsPostErrors];
+
+export type CreateAccountAccountsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AccountRow;
+};
+
+export type CreateAccountAccountsPostResponse = CreateAccountAccountsPostResponses[keyof CreateAccountAccountsPostResponses];
+
+export type UpdateAccountAccountsAccountIdPatchData = {
+    body: AccountUpdate;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/accounts/{account_id}';
+};
+
+export type UpdateAccountAccountsAccountIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateAccountAccountsAccountIdPatchError = UpdateAccountAccountsAccountIdPatchErrors[keyof UpdateAccountAccountsAccountIdPatchErrors];
+
+export type UpdateAccountAccountsAccountIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: AccountRow;
+};
+
+export type UpdateAccountAccountsAccountIdPatchResponse = UpdateAccountAccountsAccountIdPatchResponses[keyof UpdateAccountAccountsAccountIdPatchResponses];
+
+export type ListInstitutionsInstitutionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/institutions';
+};
+
+export type ListInstitutionsInstitutionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListInstitutionsInstitutionsGetError = ListInstitutionsInstitutionsGetErrors[keyof ListInstitutionsInstitutionsGetErrors];
+
+export type ListInstitutionsInstitutionsGetResponses = {
+    /**
+     * Response List Institutions Institutions Get
+     *
+     * Successful Response
+     */
+    200: Array<InstitutionRow>;
+};
+
+export type ListInstitutionsInstitutionsGetResponse = ListInstitutionsInstitutionsGetResponses[keyof ListInstitutionsInstitutionsGetResponses];
+
+export type CreateInstitutionInstitutionsPostData = {
+    body: InstitutionCreate;
+    path?: never;
+    query?: never;
+    url: '/institutions';
+};
+
+export type CreateInstitutionInstitutionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateInstitutionInstitutionsPostError = CreateInstitutionInstitutionsPostErrors[keyof CreateInstitutionInstitutionsPostErrors];
+
+export type CreateInstitutionInstitutionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: InstitutionRow;
+};
+
+export type CreateInstitutionInstitutionsPostResponse = CreateInstitutionInstitutionsPostResponses[keyof CreateInstitutionInstitutionsPostResponses];
 
 export type HealthHealthGetData = {
     body?: never;

@@ -4,9 +4,11 @@ services:
   db:
     image: postgres:18
     environment:
-      POSTGRES_USER: oneledger
+      # The same three variables the API and Flyway read. Hardcoding them here created the
+      # database under one identity while every client was configured with another.
+      POSTGRES_USER: ${POSTGRES_USER:-oneledger}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
-      POSTGRES_DB: oneledger
+      POSTGRES_DB: ${POSTGRES_DB:-oneledger}
     # Loopback only. ADR-0014 exposes Caddy and nothing else; a short-form mapping would
     # publish Postgres on every host interface, reachable the moment a firewall rule slips.
     # DB_PORT lets a scratch stack run beside the working one without a port clash.
@@ -16,7 +18,7 @@ services:
     # start on it.
     volumes: ["pgdata:/var/lib/postgresql"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oneledger"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oneledger} -d ${POSTGRES_DB:-oneledger}"]
       interval: 5s
       retries: 10
 
@@ -57,8 +59,8 @@ services:
     image: flyway/flyway:13.5.0-alpine
     profiles: ["tools"]
     environment:
-      FLYWAY_URL: jdbc:postgresql://db:5432/oneledger
-      FLYWAY_USER: oneledger
+      FLYWAY_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oneledger}
+      FLYWAY_USER: ${POSTGRES_USER:-oneledger}
       FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-oneledger}
       FLYWAY_LOCATIONS: filesystem:/flyway/sql
       FLYWAY_CONNECT_RETRIES: "20"

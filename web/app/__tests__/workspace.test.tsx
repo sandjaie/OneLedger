@@ -5,16 +5,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { FxRateResponse, HouseholdResponse } from "@/types/api";
+import type { AccountsResponse, CurrencyRow, FxRateResponse, HouseholdResponse, InstitutionRow } from "@/types/api";
+
+const catalogue: Array<CurrencyRow> = [
+  { code: "XAE", name: "Synthetic A", symbol: "A", decimals: 2, numberFormat: "international" },
+  { code: "XIN", name: "Synthetic I", symbol: "I", decimals: 2, numberFormat: "indian" },
+  { code: "XZZ", name: "Synthetic Z", symbol: "Z", decimals: 3, numberFormat: "international" },
+];
 
 const household: HouseholdResponse = {
   id: "synthetic-owner",
+  name: "Household",
+  ownerDisplayName: "Owner",
+  ownerTaxResidency: null,
   baseCurrency: "XIN",
   secondaryCurrency: "XAE",
+  reportingPairLocked: false,
   currencies: [
     { code: "XIN", symbol: "₹", decimals: 2, numberFormat: "indian" },
     { code: "XAE", symbol: "AED", decimals: 2, numberFormat: "international" },
   ],
+};
+
+const swappedHousehold: HouseholdResponse = {
+  ...household,
+  baseCurrency: "XAE",
+  secondaryCurrency: "XIN",
+  currencies: [household.currencies[1], household.currencies[0]],
 };
 
 type Request = typeof apiFetch;
@@ -76,7 +93,8 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Activity.*unavailable/i }).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe("/accounts");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Plans.*unavailable/i }).disabled).toBe(true);
   });
 
   it.each([
@@ -159,7 +177,7 @@ describe("authenticated workspace", () => {
 
   it("renders the Settings FX rate provenance for the requested date", async () => {
     window.history.replaceState(null, "", "/settings");
-    render(<Workspace request={requestThat(household, [rate])} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue, [rate])} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
@@ -178,7 +196,7 @@ describe("authenticated workspace", () => {
 
   it("shows empty and retryable FX service states", async () => {
     window.history.replaceState(null, "", "/settings");
-    const request = requestThat(household, [], new TypeError("offline"), [rate]);
+    const request = requestThat(household, catalogue, [], new TypeError("offline"), [rate]);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "Settings" });
@@ -196,7 +214,11 @@ describe("authenticated workspace", () => {
   it("announces FX loading and success while focus stays on the submit button", async () => {
     window.history.replaceState(null, "", "/settings");
     const fx = deferred<Array<FxRateResponse>>();
-    const request = vi.fn().mockResolvedValueOnce(household).mockReturnValueOnce(fx.promise) as Request;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
+      .mockReturnValueOnce(fx.promise) as Request;
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
 
@@ -225,6 +247,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(stale.promise)
       .mockReturnValueOnce(latest.promise) as Request;
 
@@ -249,7 +272,7 @@ describe("authenticated workspace", () => {
   ])("clears protected content when FX returns %i", async (status, destination) => {
     window.history.replaceState(null, "", "/settings");
     const navigate = vi.fn();
-    render(<Workspace request={requestThat(household, new ApiError(status, "synthetic"))} navigate={navigate} />);
+    render(<Workspace request={requestThat(household, catalogue, new ApiError(status, "synthetic"))} navigate={navigate} />);
 
     await screen.findByRole("heading", { name: "Settings" });
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
@@ -267,6 +290,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(fx.promise)
       .mockReturnValueOnce(logout.promise) as Request;
 
@@ -300,6 +324,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(fx.promise)
       .mockRejectedValueOnce(new TypeError("offline")) as Request;
 
@@ -316,5 +341,130 @@ describe("authenticated workspace", () => {
     expect(screen.queryByText("Checking stored FX rates for 2024-01-31.")).toBeNull();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the reporting-currency toggle after the pair changes", async () => {
+    const request = requestThat(household, catalogue, undefined, swappedHousehold, catalogue);
+    render(<Workspace section="settings" request={request} navigate={vi.fn()} />);
+    await screen.findByLabelText("Base currency");
+    fireEvent.change(screen.getByLabelText("Base currency"), { target: { value: "XAE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save household" }));
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Reporting currency" }).textContent).toContain("XAE"),
+    );
+  });
+
+  it("renders the accounts inventory and marks the nav current", async () => {
+    const inventory: AccountsResponse = {
+      accounts: [{
+        id: "acct-savings",
+        name: "Inventory Savings",
+        institutionId: "inst-1",
+        institutionName: "Synthetic Bank",
+        accountType: "savings",
+        accountClass: "asset",
+        accountSubtype: null,
+        currency: "XIN",
+        country: "XB",
+        accountNumberMasked: "****1234",
+        openedOn: "2024-01-01",
+        closedOn: null,
+        isActive: true,
+        includeInNetWorth: true,
+        isLiquid: true,
+        openingBalance: "250000.0000",
+        openingBalanceDate: "2024-01-01",
+        openingBalanceNote: null,
+        openingBalanceConfirmedAt: null,
+        currentBalance: "250000.0000",
+        currentBalanceAsOf: null,
+        creditLimit: null,
+      }],
+      totals: [{ accountClass: "asset", country: "XB", currency: "XIN", total: "250000.0000" }],
+    };
+    const institutions: Array<InstitutionRow> = [
+      { id: "inst-1", name: "Synthetic Bank", shortName: "SB", country: "XB", institutionType: "bank" },
+    ];
+    render(
+      <Workspace
+        section="accounts"
+        request={requestThat(household, inventory, institutions, catalogue)}
+        navigate={vi.fn()}
+      />,
+    );
+    expect((await screen.findByRole("link", { name: "Accounts" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByText("Inventory Savings")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Assets · XB" })).toBeTruthy();
+  });
+
+  it.each([
+    [401, "/login"], [403, "/unauthorized"],
+  ])("clears Accounts when create returns %i", async (status, destination) => {
+    const inventory: AccountsResponse = {
+      accounts: [{
+        id: "acct-savings",
+        name: "Inventory Savings",
+        institutionId: "inst-1",
+        institutionName: "Synthetic Bank",
+        accountType: "savings",
+        accountClass: "asset",
+        accountSubtype: null,
+        currency: "XIN",
+        country: "XB",
+        accountNumberMasked: "****1234",
+        openedOn: "2024-01-01",
+        closedOn: null,
+        isActive: true,
+        includeInNetWorth: true,
+        isLiquid: true,
+        openingBalance: "250000.0000",
+        openingBalanceDate: "2024-01-01",
+        openingBalanceNote: null,
+        openingBalanceConfirmedAt: null,
+        currentBalance: "250000.0000",
+        currentBalanceAsOf: null,
+        creditLimit: null,
+      }],
+      totals: [],
+    };
+    const institutions: Array<InstitutionRow> = [
+      { id: "inst-1", name: "Synthetic Bank", shortName: "SB", country: "XB", institutionType: "bank" },
+    ];
+    const navigate = vi.fn();
+    render(
+      <Workspace
+        section="accounts"
+        request={requestThat(household, inventory, institutions, catalogue, new ApiError(status, "synthetic"))}
+        navigate={navigate}
+      />,
+    );
+    await screen.findByText("Inventory Savings");
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "1.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"), { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
+    expect(screen.queryByText("Inventory Savings")).toBeNull();
+  });
+
+  it("does not fetch the currency catalogue on overview", async () => {
+    const request = requestThat(household);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+    await screen.findByText("₹12,34,567.89");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("/household");
+  });
+
+  it.each([
+    [401, "/login"], [403, "/unauthorized"],
+  ])("clears Settings when household save returns %i", async (status, destination) => {
+    const navigate = vi.fn();
+    const request = requestThat(household, catalogue, new ApiError(status, "synthetic"));
+    render(<Workspace section="settings" request={request} navigate={navigate} />);
+    await screen.findByLabelText("Household name");
+    fireEvent.click(screen.getByRole("button", { name: "Save household" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
+    expect(screen.queryByLabelText("Household name")).toBeNull();
   });
 });

@@ -3,15 +3,25 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { AccountsScreen } from "@/app/accounts/accounts-screen";
+import { HouseholdForm } from "@/app/settings/household-form";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
-import type { FxRateResponse, HouseholdCurrency, HouseholdResponse } from "@/types/api";
+import type {
+  AccountsResponse,
+  CurrencyRow,
+  FxRateResponse,
+  HouseholdCurrency,
+  HouseholdResponse,
+  HouseholdUpdate,
+  InstitutionRow,
+} from "@/types/api";
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 const PREVIEW_VALUE = "1234567.89";
 
 type Props = {
-  section?: "overview" | "settings";
+  section?: "overview" | "settings" | "accounts";
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
@@ -43,7 +53,9 @@ function configuredCurrency(household: HouseholdResponse): HouseholdCurrency {
 
 function sectionFromPath() {
   if (typeof window === "undefined") return "overview";
-  return window.location.pathname === "/settings" ? "settings" : "overview";
+  if (window.location.pathname === "/settings") return "settings";
+  if (window.location.pathname === "/accounts") return "accounts";
+  return "overview";
 }
 
 function fxStatusText(fx: FxState) {
@@ -62,6 +74,9 @@ export function Workspace({
 }: Props = {}) {
   const activeSection = section ?? sectionFromPath();
   const [household, setHousehold] = useState<HouseholdResponse>();
+  const [currencies, setCurrencies] = useState<Array<CurrencyRow>>();
+  const [inventory, setInventory] = useState<AccountsResponse>();
+  const [institutions, setInstitutions] = useState<Array<InstitutionRow>>();
   const [currency, setCurrency] = useState<HouseholdCurrency>();
   const [state, setState] = useState<"loading" | "ready" | "service" | "leaving">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -75,10 +90,26 @@ export function Workspace({
   useEffect(() => {
     let current = true;
     request<HouseholdResponse>("/household")
-      .then((configuration) => {
+      .then(async (configuration) => {
         if (!current) return;
         setHousehold(configuration);
         setCurrency(configuredCurrency(configuration));
+        if (activeSection === "settings") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
+        }
+        if (activeSection === "accounts") {
+          const nextInventory = await request<AccountsResponse>("/accounts");
+          if (!current) return;
+          const nextInstitutions = await request<Array<InstitutionRow>>("/institutions");
+          if (!current) return;
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setInventory(nextInventory);
+          setInstitutions(nextInstitutions);
+          setCurrencies(catalogue);
+        }
         setState("ready");
       })
       .catch((error: unknown) => {
@@ -90,7 +121,7 @@ export function Workspace({
     return () => {
       current = false;
     };
-  }, [attempt, request]);
+  }, [attempt, request, activeSection]);
 
   useEffect(() => () => fxRequest.current?.controller.abort(), []);
 
@@ -113,6 +144,8 @@ export function Workspace({
       await request<void>("/auth/logout", { method: "POST" });
       setHousehold(undefined);
       setCurrency(undefined);
+      setInventory(undefined);
+      setInstitutions(undefined);
       setState("leaving");
       setDestination("/login");
     } catch (error) {
@@ -120,6 +153,8 @@ export function Workspace({
       if (next) {
         setHousehold(undefined);
         setCurrency(undefined);
+        setInventory(undefined);
+        setInstitutions(undefined);
         setState("leaving");
         setDestination(next);
       } else {
@@ -141,6 +176,8 @@ export function Workspace({
     fxRequest.current?.controller.abort();
     setHousehold(undefined);
     setCurrency(undefined);
+    setInventory(undefined);
+    setInstitutions(undefined);
     setState("leaving");
     setDestination(path);
   }
@@ -174,10 +211,22 @@ export function Workspace({
           <span className="brand-mark" aria-hidden="true">OL</span>
           <span>OneLedger</span>
         </div>
-        {state === "ready" && (
-          <button className="text-action" disabled={signingOut} onClick={logout} type="button">
-            {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
-          </button>
+        {state === "ready" && household && currency && (
+          <div className="masthead-actions">
+            <div className="currency-toggle" role="group" aria-label="Reporting currency">
+              {household.currencies.map((option) => (
+                <button
+                  aria-pressed={currency.code === option.code}
+                  key={option.code}
+                  onClick={() => selectCurrency(option)}
+                  type="button"
+                >{option.code}</button>
+              ))}
+            </div>
+            <button className="text-action" disabled={signingOut} onClick={logout} type="button">
+              {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
+            </button>
+          </div>
         )}
       </header>
 
@@ -195,14 +244,10 @@ export function Workspace({
         <main className="workspace-grid">
           <nav className="workspace-nav" aria-label="Workspace">
             <Link aria-current={activeSection === "overview" ? "page" : undefined} href="/">Overview</Link>
-            {[
-              ["Activity", "Ledger import arrives later"],
-              ["Plans", "Available after ledger import"],
-            ].map(([label, note]) => (
-              <button aria-label={`${label} unavailable — ${note}`} disabled key={label} type="button">
-                <span>{label}</span><small>{note}</small>
-              </button>
-            ))}
+            <Link aria-current={activeSection === "accounts" ? "page" : undefined} href="/accounts">Accounts</Link>
+            <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
+              <span>Plans</span><small>Available after ledger import</small>
+            </button>
             <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
           </nav>
 
@@ -218,16 +263,6 @@ export function Workspace({
                   <p className="section-label">Display preference</p>
                   <h2 id="currency-title">Reporting currency</h2>
                 </div>
-                <div className="currency-toggle" role="group" aria-label="Reporting currency">
-                  {household.currencies.map((option) => (
-                    <button
-                      aria-pressed={currency.code === option.code}
-                      key={option.code}
-                      onClick={() => selectCurrency(option)}
-                      type="button"
-                    >{option.code}</button>
-                  ))}
-                </div>
                 <div className="format-preview">
                   <span>Formatting preview · synthetic value</span>
                   <output aria-live="polite">{formatMoney(PREVIEW_VALUE, currency)}</output>
@@ -237,12 +272,52 @@ export function Workspace({
             </section>
           )}
 
+          {activeSection === "accounts" && inventory && institutions && currencies && (
+            <AccountsScreen
+              accounts={inventory.accounts}
+              currencies={currencies}
+              institutions={institutions}
+              onChanged={() => setAttempt((value) => value + 1)}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+              totals={inventory.totals}
+            />
+          )}
+
           {activeSection === "settings" && (
             <section className="workspace-content" aria-labelledby="settings-title">
               <p className="eyebrow">Owner settings</p>
               <h1 className="workspace-title" id="settings-title">Settings</h1>
               <p className="lede">Choose a date to inspect recorded exchange rates, their sources and whether a prior rate was carried forward.</p>
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
+
+              {currencies && (
+                <HouseholdForm
+                  currencies={currencies}
+                  household={household}
+                  onSaved={() => setAttempt((value) => value + 1)}
+                  save={async (body: HouseholdUpdate) => {
+                    try {
+                      await request<void>("/household", {
+                        method: "PATCH",
+                        body: JSON.stringify(body),
+                        headers: { "Content-Type": "application/json" },
+                      });
+                    } catch (error) {
+                      const next = authDestination(error);
+                      if (next) leaveForAuth(next);
+                      throw error;
+                    }
+                  }}
+                />
+              )}
 
               <section className="fx-card" aria-labelledby="fx-title">
                 <div>

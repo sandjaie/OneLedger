@@ -16,8 +16,9 @@ attribution, commitments, actions, reservations, goals and protection records. I
 unapplied `0015` attribution shape must be reconciled with F03 before implementation. Update the
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
-Applied migrations use their Flyway names. Owner sessions occupy V5, so the unapplied reference
-sequence now begins at `0006` and deferred foreign keys move to `0018`.
+Applied migrations use their Flyway names. V1–V5 are Phase 0; V6 (account current_balance starts
+at opening) is the first Phase 1 migration. V7–V8 are reserved for this phase. The unapplied
+reference sequence in this file still begins at `0006` and deferred foreign keys remain `0018`.
 
 ---
 
@@ -70,6 +71,10 @@ CREATE TABLE household (
 
   CONSTRAINT reporting_pair_differs CHECK (base_currency <> secondary_currency)
 );
+
+-- V7 seeds one household named Household whose reporting pair is the first two seeded
+-- currency codes (no code is written in the migration) and one person named Owner.
+-- reporting_pair_is_locked() and update_household_configuration(...) live in V7.
 
 CREATE TABLE person (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -138,7 +143,9 @@ CREATE TABLE account (
 
   opening_balance        NUMERIC(20,4) NOT NULL DEFAULT 0,
   opening_balance_date   DATE NOT NULL,
-  current_balance        NUMERIC(20,4) NOT NULL DEFAULT 0,   -- materialised
+  opening_balance_note   TEXT,                    -- where the figure came from (V8)
+  opening_balance_confirmed_at TIMESTAMPTZ,       -- NULL until the owner acknowledges it (V8)
+  current_balance        NUMERIC(20,4) NOT NULL,  -- materialised; starts at opening_balance (V6)
   current_balance_as_of  TIMESTAMPTZ,
 
   -- credit card only
@@ -158,6 +165,7 @@ CREATE TABLE account (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT closed_after_opened CHECK (closed_on IS NULL OR opened_on IS NULL OR closed_on >= opened_on),
+  CONSTRAINT closed_account_has_a_date CHECK (is_active OR closed_on IS NOT NULL),
   CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL)
 );
 
