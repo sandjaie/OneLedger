@@ -4,7 +4,7 @@
 
 | Need | Open |
 |---|---|
-| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–9 delivered by GitHub PRs #3–#8 |
+| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–9 delivered by GitHub PRs #3–#10 |
 | What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — seven PRs, the review gate, the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
@@ -26,10 +26,10 @@ All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
-Phase 0 is in progress. GitHub PRs #3–#9 are merged into `feature/phase-0-foundations`, covering
-original Tasks 1–9, the reviewed web foundation and the revocable owner-session core. This endpoint
-slice completes protected logout/CSRF/household configuration before the remaining Google OIDC
-bootstrap and Task 11 money/navigation work. Product-review additions do not expand Phase 0.
+Phase 0 is in progress. GitHub PRs #3–#10 are merged into `feature/phase-0-foundations`, covering
+original Tasks 1–9, the reviewed web foundation, revocable owner sessions, protected logout/CSRF and
+owner-scoped household configuration. The current delivery adds Google OIDC bootstrap before Task 11
+money/navigation work. Product-review additions do not expand Phase 0.
 
 ## Rules you will otherwise break by reflex
 

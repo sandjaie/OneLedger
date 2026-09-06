@@ -54,11 +54,12 @@ Investment Rate                    X %
 | #7 | FX pipeline: peg derivation, carry-forward and backfill; merge confirmed |
 | #8 | Reviewed Next.js foundation and cookie-aware typed API client |
 | #9 | Revocable owner-session persistence and strict session verification |
+| #10 | Protected logout, CSRF origin checks and owner-scoped household configuration |
 
-This endpoint slice completes protected logout, CSRF origin checks and owner-scoped household
-configuration. **Next:** Google OIDC login/callback, then Task 11 exact money formatting,
-configured currency toggle and navigation, followed by phase-exit checks. Task 9 is complete;
-this does not imply the full Compose exit check or Phase 0 is complete.
+Protected logout, CSRF origin checks and owner-scoped household configuration are merged. This
+delivery adds Google OIDC login/callback with pinned-owner binding. **Next:** Task 11 exact money
+formatting, configured currency toggle and navigation, followed by phase-exit checks. Task 9 is
+complete; this does not imply a live Google sign-in or that Phase 0 is complete.
 
 - **[Master implementation plan](docs/superpowers/plans/implementation-plan.md)** — current status,
   remaining Phase 0 work and the revised delivery order. All new plans live in `docs/superpowers/plans/`.
@@ -91,6 +92,14 @@ financial data does not enter this repository, and test fixtures are redacted �
                  └─────────────────────────────────────┘
                    one docker compose file
                    your laptop now, one small VPS later
+```
+
+Run the API locally without raw access logging so an OIDC callback code is not copied from the
+request target into terminal output or captured logs:
+
+```bash
+cd api
+uv run uvicorn oneledger.main:app --reload --port 8000 --no-access-log
 ```
 
 Three jobs, cleanly split: **React renders, Python computes, Postgres guarantees.** The invariants

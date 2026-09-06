@@ -16,13 +16,14 @@ Supporting specifications: [architecture](../design/architecture.html), [data mo
 
 ## Current execution status — 6 September 2026
 
-GitHub PRs **#3–#9 are merged** into `feature/phase-0-foundations`. They cover original Tasks
-**1–9**, including the reviewed web foundation, typed API client and revocable session core. This
-status records delivered work, not a new run of every verification command printed below.
+GitHub PRs **#3–#10 are merged** into `feature/phase-0-foundations`. They cover original Tasks
+**1–9**, including the reviewed web foundation, typed API client, revocable session core and
+protected owner endpoints. This status records delivered work, not a new run of every verification
+command printed below.
 
-This endpoint slice completes protected logout, CSRF origin checks and owner-scoped household
-configuration. **Resume at Google OIDC login/callback**, then Task 11 and Phase 0 exit
-verification. The numbered PR headings in this document set are ordinal groups: original PR 6
+Protected logout, CSRF origin checks and owner-scoped household configuration are merged. This
+delivery implements Google OIDC login/callback. **Resume at Task 11**, then Phase 0 exit verification.
+The numbered PR headings in this document set are ordinal groups: original PR 6
 corresponds to GitHub #8; original PR 7 remains. Do not restart completed tasks because their
 original instructional checkboxes are blank.
 

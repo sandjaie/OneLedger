@@ -52,9 +52,9 @@ infrastructure or dependency is selected by this documentation update.
 
 ## 1. Baseline and the next authorized development step
 
-GitHub #9 merged on 6 September 2026. Local integration history contains the reviewed FX work, the
-web foundation and revocable owner-session core through `796e7c2`. This records delivered code and
-review evidence, not a claim that the phase-exit suite was re-run.
+GitHub #10 merged on 6 September 2026. Local integration history contains the reviewed FX work, web
+foundation, revocable owner-session core and protected owner endpoints through `fe54461`. This
+records delivered code and review evidence, not a claim that the phase-exit suite was re-run.
 
 | GitHub PR | Completed scope | Original task numbers | Original PR ordinal |
 |---|---|---|---|
@@ -65,26 +65,27 @@ review evidence, not a claim that the phase-exit suite was re-run.
 | #7 | FX source, peg derivation, carry-forward, backfill; three review rounds reported | 7–8 | 5 |
 | #8 | Reviewed Next.js foundation and cookie-aware typed API client | 9 | 6 |
 | #9 | Revocable owner-session persistence and strict session verification | 10 partial | 7 partial |
+| #10 | Protected logout, CSRF origin checks and household configuration | 10 partial | 7 partial |
 
-The original plan's “PR 7” is split across reviewed session core, this endpoint slice, the
-still-pending Google OIDC bootstrap and money-formatting work; its ordinal does not refer to
-GitHub #7.
+The original plan's “PR 7” is split across reviewed session core, the merged endpoint slice, this
+Google OIDC delivery and pending money-formatting work; its ordinal does not refer to GitHub #7.
 
 ### Finish Phase 0
 
 Files and runnable steps remain in the existing plans; do not duplicate their code in this master.
 
-- [x] Record completed GitHub PRs #3–#9 and verify their code is in the integration history.
+- [x] Record completed GitHub PRs #3–#10 and verify their code is in the integration history.
 - [x] Execute [Task 9: web shell and typed client](../phase-0-foundations.md#task-9-nextjs-shell-with-a-typed-api-client)
   using [original PR 6](../phase-0-pull-requests.md#pr-6-nextjs-scaffold-and-the-typed-api-client).
   Delivered by reviewed GitHub #8: web scaffold/client, buildable against the current API, without
   secrets in its bundle. Full Compose integration remains a phase-exit check.
-- [ ] Execute [Task 10: Google OIDC](../phase-0-foundations.md#task-10-google-oidc-in-the-service-with-a-pinned-account)
-  and [Task 11: money and navigation](../phase-0-foundations.md#task-11-money-formatting-currency-toggle-and-navigation)
+- [x] Execute [Task 10: Google OIDC](../phase-0-foundations.md#task-10-google-oidc-in-the-service-with-a-pinned-account)
   using [original PR 7](../phase-0-pull-requests.md#pr-7-google-oidc-the-seed-money-formatting-and-the-toggle).
-  Session persistence is merged; this endpoint slice completes logout, CSRF origin checks and
-  household configuration. Remaining deliverable: permitted Google sign-in/callback, rejected
-  unauthorized identity, currency display and navigation.
+  This delivery implements signed state/nonce/PKCE context, cryptographic ID-token validation,
+  immutable pinned-owner binding and safe callback handling. Live sign-in remains an exit check.
+- [ ] Execute [Task 11: money and navigation](../phase-0-foundations.md#task-11-money-formatting-currency-toggle-and-navigation)
+  using [original PR 7](../phase-0-pull-requests.md#pr-7-google-oidc-the-seed-money-formatting-and-the-toggle).
+  Remaining deliverable: exact currency display, configured preference and navigation.
 - [ ] Run the existing [Phase 0 exit criteria](../phase-0-foundations.md#phase-0-exit-criteria)
   and [closing review gate](../phase-0-pull-requests.md#closing-the-phase). Record actual results.
   The compose definition alone does not prove a working web service; merged code alone does not prove
