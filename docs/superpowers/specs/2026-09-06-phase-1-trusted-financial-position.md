@@ -335,6 +335,8 @@ table exists, editing the opening anchor also rewrites `current_balance` /
 An opening balance typed from a bank app is a stated fact and must read as one until a statement
 supersedes it (Invariant I7). Two columns carry it: a free-text note recording where the figure
 came from, and a confirmation timestamp that is `NULL` until the owner acknowledges the figure.
+Editing the opening balance or its date clears the confirmation — a timestamp never predates
+the figure it confirms — and the replacement waits for a fresh, explicit acknowledgment.
 The UI shows an unacknowledged opening balance as unacknowledged. The evidence document link is
 deliberately not modelled here — `document` arrives with M2/M10, and a forward migration adds the
 reference then.

@@ -75,9 +75,9 @@ master plan's global constraints.
 
 ## Workspace and branches
 
-**Workspace:** the active repository checkout. Resolve its root with
-`git rev-parse --show-toplevel` and run every command from that root (or via
-`cd "$(git rev-parse --show-toplevel)/…"`). Never hardcode a machine-specific path and never
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — the active repository checkout, recorded
+here before dispatch as AGENTS.md requires. Confirm it with `git rev-parse --show-toplevel` and
+run every command from that root (or via `cd "$(git rev-parse --show-toplevel)/…"`); never
 substitute a path from another machine. Do **not** create a Git worktree — this owner preference
 overrides the skill default. Only one implementation agent works at a time; wait for any
 reviewer using this checkout before switching branches.
@@ -1931,6 +1931,30 @@ def test_acknowledging_an_opening_balance_is_recorded_and_reversible(
     assert True in connection.parameters[0]
 
 
+def test_changing_the_opening_anchor_clears_the_acknowledgment(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A confirmation timestamp must never predate the figure it confirms (Invariant I7). The
+    statement nulls the timestamp when either anchor field changes, before the acknowledge flag
+    is consulted, so a full-replacement body still carrying acknowledgeOpeningBalance=True
+    cannot re-date the old acknowledgment onto a replacement figure."""
+    connection = AccountsConnection(rows=[FETCHED_ROW], totals=[])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openingBalance": "999.0000", "acknowledgeOpeningBalance": True},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    statement = connection.statements[0]
+    anchor_guard = statement.index("opening_balance IS DISTINCT FROM")
+    assert anchor_guard < statement.index("COALESCE(opening_balance_confirmed_at")
+    assert "opening_balance_date IS DISTINCT FROM" in statement
+
+
 def test_accounts_are_never_deleted() -> None:
     assert not any(
         "DELETE" in (route.methods or ()) and route.path.startswith("/accounts")
@@ -2241,6 +2265,10 @@ def update_account(
     # materialised current_balance to match (opening_balance + SUM(transactions) with an empty
     # sum). When M1b/M2 add transactions, a later migration teaches this path to refuse or
     # recompute only when the sum is still zero.
+    # Changing either anchor field also clears the acknowledgment: a confirmation timestamp
+    # must never predate the figure it confirms (Invariant I7), so the replacement waits for a
+    # fresh, explicit acknowledgment instead of inheriting the old one from a full-replacement
+    # body that still carries acknowledgeOpeningBalance=True.
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
@@ -2256,7 +2284,9 @@ def update_account(
                           current_balance_as_of = %s::date::timestamptz,
                           opening_balance_note = %s, credit_limit = %s,
                           opening_balance_confirmed_at =
-                            CASE WHEN %s THEN COALESCE(opening_balance_confirmed_at, now())
+                            CASE WHEN opening_balance IS DISTINCT FROM %s
+                                   OR opening_balance_date IS DISTINCT FROM %s THEN NULL
+                                 WHEN %s THEN COALESCE(opening_balance_confirmed_at, now())
                                  ELSE NULL END
                     WHERE id = %s AND household_id = %s
                    RETURNING id""",
@@ -2268,6 +2298,7 @@ def update_account(
                     Decimal(body.openingBalance), body.openingBalanceDate,
                     body.openingBalanceNote,
                     None if body.creditLimit is None else Decimal(body.creditLimit),
+                    Decimal(body.openingBalance), body.openingBalanceDate,
                     body.acknowledgeOpeningBalance,
                     account_id, owner.household_id,
                 ),
@@ -2483,7 +2514,9 @@ Expected: FAIL — `Failed to resolve import "@/app/accounts/accounts-screen"`.
   carried by the words and a class, never by colour alone.
 - `Opening balance not acknowledged` beside any account whose `openingBalanceConfirmedAt` is
   null, with an `Acknowledge` action that PATCHes `acknowledgeOpeningBalance: true` and an
-  optional note field for where the figure came from.
+  optional note field for where the figure came from. Editing the opening balance or its date
+  clears `openingBalanceConfirmedAt`, and the row reads as not acknowledged again until the
+  owner acknowledges the replacement figure.
 - A `Closed <date>` group for inactive accounts, always rendered when any exist.
 - `Add an account` opening a form with name, institution (from `/institutions`, plus
   **Add institution** that POSTs `/institutions` and selects the new row), type, subtype,
