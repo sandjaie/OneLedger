@@ -55,11 +55,21 @@ Investment Rate                    X %
 | #8 | Reviewed Next.js foundation and cookie-aware typed API client |
 | #9 | Revocable owner-session persistence and strict session verification |
 | #10 | Protected logout, CSRF origin checks and owner-scoped household configuration |
+| #11 | Google OIDC, state/nonce/PKCE and pinned subject binding |
+| #12 | Exact money formatting and generated API types with drift enforcement |
+| #14 | Bounded browser requests and compatible caller cancellation; prerequisite to #13 |
+| #13 | Authenticated shell, configured currency preference and recovery |
+| #15 | Protected Settings FX inspector with exact rates and provenance |
+| #16 | Fixed account chooser on sign-in retry |
+| #17 | Explicit dual-compiler verification and current API boundary comments |
 
-Protected logout, CSRF origin checks and owner-scoped household configuration are merged. This
-delivery adds Google OIDC login/callback with pinned-owner binding. **Next:** Task 11 exact money
-formatting, configured currency toggle and navigation, followed by phase-exit checks. Task 9 is
-complete; this does not imply a live Google sign-in or that Phase 0 is complete.
+Original Tasks 1–11 are implemented. Automated API/web/database checks, production images,
+offline startup and synthetic-session browser checks pass. **Remaining:** real permitted-account
+Google sign-in and second-account rejection after private OAuth configuration. Phase 0 stays open
+until that live gate passes. All work remains on the integration branch.
+
+See the [verification and dependency report](docs/superpowers/reports/2026-09-06-phase-0-verification.md)
+for actual results, review evidence, compatibility exceptions and execution decisions.
 
 - **[Master implementation plan](docs/superpowers/plans/implementation-plan.md)** — current status,
   remaining Phase 0 work and the revised delivery order. All new plans live in `docs/superpowers/plans/`.
@@ -144,7 +154,7 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/superpowers/questions.html) | Scoping questions — **17 of 24 answered** |
 | **[Implementation Plan](docs/superpowers/plans/implementation-plan.md)** | **The build order. Start here to write code** |
-| [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | How the 11 tasks become seven reviewable PRs, and what gates each |
+| [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | Historical seven-PR grouping and review gates; current status records the actual split deliveries |
 | [Schema Reference](docs/superpowers/schema.md) | The complete DDL, by migration |
 | [Test Suite Reference](docs/superpowers/test-suite.md) | The invariant suite and static checks |
 

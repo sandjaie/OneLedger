@@ -333,6 +333,7 @@ body {
       <ul><li><a href="./superpowers/plans/implementation-plan.md">Implementation plan</a></li>
 <li><a href="./superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="./superpowers/phase-0-pull-requests.md">Phase 0 pull requests</a></li>
+<li><a href="./superpowers/reports/2026-09-06-phase-0-verification.md">Phase 0 verification</a></li>
 <li><a href="./superpowers/schema.md">Schema reference</a></li>
 <li><a href="./superpowers/test-suite.md">Test suite reference</a></li>
 <li><a href="./superpowers/questions.html">Questions</a></li></ul>
@@ -363,6 +364,7 @@ body {
 <li><a href="./adr/0013-python-backend-service.html">0013 Python backend service</a></li>
 <li><a href="./adr/0014-one-vps-one-compose-file.html">0014 One VPS, one compose file</a></li>
 <li><a href="./adr/0015-flyway-for-schema-migrations.html">0015 Flyway for migrations</a></li>
+<li><a href="./adr/0016-revocable-owner-sessions.html">0016 Revocable owner sessions</a></li>
 <li><a href="./adr/superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
@@ -370,10 +372,11 @@ body {
         <article class="prose">
           <h1 id="oneledger--specification-set">OneLedger — Specification Set</h1>
 <p>The product, design and operational specifications, decision records and implementation plans.
-<strong>Phase 0 is in progress:</strong> GitHub PRs #3–#10 are merged into
-<code>feature/phase-0-foundations</code>; this delivery adds Google OIDC, while money formatting,
-navigation and exit checks remain. See
-<a href="./product/roadmap.html#current-baseline">the current baseline</a>.</p>
+<strong>Phase 0 is in progress:</strong> GitHub PRs #3–#17 are merged into
+<code>feature/phase-0-foundations</code>. Original Tasks 1–11 and automated/synthetic-session
+verification are delivered; real Google permitted-account and second-account checks remain. See
+<a href="./product/roadmap.html#current-baseline">the current baseline</a> and the
+<a href="./superpowers/reports/2026-09-06-phase-0-verification.md">verification and dependency report</a>.</p>
 <p>The accepted <a href="./product/finance-os.html">finance OS product review</a> adds planning,
 resilience and follow-up requirements for later phases. New implementation plans live in
 <a href="./superpowers/plans/implementation-plan.md">docs/superpowers/plans/</a>; Phase 0 is not expanded.</p>
@@ -387,8 +390,7 @@ resilience and follow-up requirements for later phases. New implementation plans
 ├── operations/    how it stays correct       09 Security · 12 Testing
 ├── reference/     vocabulary                 13 Glossary
 ├── adr/           the decisions, with trade-offs
-├── plan/          existing Phase 0 plans · schema/tests · questions
-└── superpowers/   all new implementation plans · current master
+└── superpowers/   all plans · specs · verification reports · schema/tests · questions
 </code></pre>
 <hr>
 <h2 id="reading-order">Reading order</h2>
