@@ -8,6 +8,7 @@
 | How to execute the work | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — task requirements and verification steps |
 | What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — branch/review workflow and the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
+| How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
@@ -98,9 +99,12 @@ Settings › Data Quality. There is no `oneledger` command.
 reason*, implement, watch it pass, commit. A test that has never failed has never been shown to
 test anything. Every step states its expected output — run the command and compare.
 
-**Branches** carry a type prefix and say what is inside them: `feature/`, `fix/`, `docs/`,
-`chore/`. New work branches from `develop` and merges back into it. Integration to `main`
-still needs a separate owner request.
+**Branches, phases and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the
+single branching and release reference; do not restate its model elsewhere. In short: task
+branches `<type>/task-<n>-<description>` (types `feature/`, `fix/`, `docs/`, `chore/`) PR into
+the active phase's `feature/phase-<n>-<description>` branch; a completed phase PRs into
+`develop`; a `release/*` branch carries changelog, release notes and the tag into `main`.
+Phase completion, release and any integration toward `main` need a separate owner request.
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before

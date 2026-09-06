@@ -26,9 +26,11 @@ infrastructure or dependency is selected by this documentation update.
 
 ## Global constraints
 
-- New work targets integration branch `develop`; consult the progress file before choosing work.
-  Do not add product-expansion features under a closed Phase 0 label. Integration to `main`
-  still needs a separate owner request.
+- Branching, phase integration and releases follow [docs/git-workflow.md](../../git-workflow.md);
+  the active phase's integration branch is named in that phase's plan and the progress file.
+  Consult the progress file before choosing work, and do not add product-expansion features under
+  a closed phase label. Phase completion and any integration toward `main` still need a separate
+  owner request.
 - Postgres 18, Python 3.14 and Node 24 LTS remain the documented baseline.
 - Money is `NUMERIC(20,4)` in Postgres, `Decimal` in Python and a string on the wire. FX rates are
   `NUMERIC(20,10)`; units `NUMERIC(28,8)`; prices `NUMERIC(20,6)`; percentages `NUMERIC(9,4)`
