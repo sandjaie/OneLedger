@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..auth import require_owner
+from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..fx import (
     EcbFrankfurterSource,
@@ -122,7 +122,9 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
 
 
 @router.post("/backfill")
-def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[str, int]:
+def backfill(
+    start: date, end: date, _: Annotated[OwnerSession, Depends(require_owner)]
+) -> dict[str, int]:
     # carry_forward fills every calendar day in the range, so an end date in the future
     # writes the last known rate forward into it — years of invented history from one typo.
     # Nothing is silently invented (Invariant 7): refuse rather than clamp, so the caller
@@ -148,7 +150,7 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
 
 
 @router.get("/{on}")
-def rate_on(on: date, _: str = Depends(require_owner)) -> list[dict[str, Any]]:
+def rate_on(on: date, _: Annotated[OwnerSession, Depends(require_owner)]) -> list[dict[str, Any]]:
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT base_currency, quote_currency, rate, source,

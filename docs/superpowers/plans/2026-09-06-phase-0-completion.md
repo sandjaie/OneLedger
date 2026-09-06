@@ -45,18 +45,21 @@ Read it together with [the original task reference](../phase-0-foundations.md) a
 
 ### Task 1: Web scaffold and API client
 
+**Delivered:** reviewed GitHub PR #8. The standalone container and HTTP response were verified;
+the whole-Compose integration remains part of Task 4 rather than a Phase 0 completion claim.
+
 **Branch:** `feature/phase-0-web-shell`.
 **Files:** create `web/package.json`, lockfile, App Router scaffold, `web/Dockerfile`, `.dockerignore`,
 `web/vitest.config.ts`, `web/lib/api/client.ts`, `web/lib/api/__tests__/client.test.ts`.
 **Interfaces:** consumes existing API; produces `apiFetch<T>` and `ApiError` per spec.
 
-- [ ] Resolve current Next.js setup docs using ctx7 outside the sandbox; scaffold with npm, TypeScript,
+- [x] Resolve current Next.js setup docs using ctx7 outside the sandbox; scaffold with npm, TypeScript,
   Tailwind, App Router, no src directory and the existing @ alias. Use system fonts.
-- [ ] Audit every direct dependency against current stable releases and peer ranges as of 6 September
+- [x] Audit every direct dependency against current stable releases and peer ranges as of 6 September
   2026. Pin Node 24 LTS in local and container configuration with matching Node declarations; replace
   unverified scaffold ranges and document any required compatibility package rather than suppressing
   install, lint, type or build failures.
-- [ ] Add meaningful client tests first. At minimum, use mocked fetch with this assertion:
+- [x] Add meaningful client tests first. At minimum, use mocked fetch with this assertion:
 
 ```typescript
 const request = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
@@ -66,13 +69,13 @@ expect(request).toHaveBeenCalledWith(expect.stringContaining("/auth/logout"),
   expect.objectContaining({ method: "POST", credentials: "include" }));
 ```
 
-- [ ] Confirm tests fail for the missing client behavior, then implement the specified request contract;
+- [x] Confirm tests fail for the missing client behavior, then implement the specified request contract;
   add JSON, non-2xx and caller Headers preservation checks. Restore stubbed globals between tests.
-- [ ] Add npm lint/typecheck/test scripts, Dockerfile honoring public API build arg, and Docker exclusions
+- [x] Add npm lint/typecheck/test scripts, Dockerfile honoring public API build arg, and Docker exclusions
   for node_modules, builds, env and secrets. Render a truthful foundation page; no live auth UI yet.
-- [ ] Run Vitest, ESLint, TypeScript and production build. Build the web image, start it with the existing
+- [x] Run Vitest, ESLint, TypeScript and production build. Build the web image, start it with the existing
   Compose stack and verify HTTP 200. Scan the browser bundle for secret-shaped names and DSNs.
-- [ ] Commit, write test evidence to the task report, submit to controller for local and Cloud review.
+- [x] Commit, write test evidence to the task report, submit to controller for local and Cloud review.
 
 ### Task 2: Verified Google identity and revocable sessions
 

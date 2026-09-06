@@ -26,7 +26,7 @@ infrastructure or dependency is selected by this documentation update.
 ## Global constraints
 
 - Current phase is **Phase 0**, on integration branch `feature/phase-0-foundations`.
-- GitHub PRs **#3–#7 are merged** into that branch; do not repeat them or add product-expansion work to Phase 0.
+- GitHub PRs **#3–#8 are merged** into that branch; do not repeat them or add product-expansion work to Phase 0.
 - Postgres 18, Python 3.14 and Node 24 LTS remain the documented baseline.
 - Money is `NUMERIC(20,4)` in Postgres, `Decimal` in Python and a string on the wire. FX rates are
   `NUMERIC(20,10)`; units `NUMERIC(28,8)`; prices `NUMERIC(20,6)`; percentages `NUMERIC(9,4)`
@@ -52,10 +52,9 @@ infrastructure or dependency is selected by this documentation update.
 
 ## 1. Baseline and the next authorized development step
 
-The owner confirmed GitHub #7 merged on 6 September 2026. Local integration history contains the
-FX feature (`fea3404`) and review fixes through `fd6b5db`, with `e122b61` at the checked HEAD.
-The GitHub connector did not independently return PR metadata; merge status is owner-confirmed,
-and code presence was checked locally. This is not a claim that the phase-exit suite was re-run.
+GitHub #8 merged on 6 September 2026. Local integration history contains the reviewed FX work and
+the web foundation through `7aa111f`. This records delivered code and review evidence, not a claim
+that the phase-exit suite was re-run.
 
 | GitHub PR | Completed scope | Original task numbers | Original PR ordinal |
 |---|---|---|---|
@@ -64,18 +63,20 @@ and code presence was checked locally. This is not a claim that the phase-exit s
 | #5 | V3–V4 accounts and FX rates | 4–5 | 3 |
 | #6 | FastAPI, `require_owner`, `resolve_owner`, `connect` | 6 | 4 |
 | #7 | FX source, peg derivation, carry-forward, backfill; three review rounds reported | 7–8 | 5 |
+| #8 | Reviewed Next.js foundation and cookie-aware typed API client | 9 | 6 |
 
-**GitHub #7 is not the original plan's “PR 7.”** The latter is the still-pending Google OIDC and
-money-formatting work. Do not mark it complete because the numbers happen to match.
+The original plan's “PR 7” is the still-pending Google OIDC and money-formatting work; its ordinal
+does not refer to GitHub #7.
 
 ### Finish Phase 0
 
 Files and runnable steps remain in the existing plans; do not duplicate their code in this master.
 
-- [x] Record completed GitHub PRs #3–#7 and verify FX code is in the integration history.
-- [ ] Execute [Task 9: web shell and typed client](../phase-0-foundations.md#task-9-nextjs-shell-with-a-typed-api-client)
+- [x] Record completed GitHub PRs #3–#8 and verify their code is in the integration history.
+- [x] Execute [Task 9: web shell and typed client](../phase-0-foundations.md#task-9-nextjs-shell-with-a-typed-api-client)
   using [original PR 6](../phase-0-pull-requests.md#pr-6-nextjs-scaffold-and-the-typed-api-client).
-  Deliverable: web scaffold/client, buildable against the current API, without secrets in its bundle.
+  Delivered by reviewed GitHub #8: web scaffold/client, buildable against the current API, without
+  secrets in its bundle. Full Compose integration remains a phase-exit check.
 - [ ] Execute [Task 10: Google OIDC](../phase-0-foundations.md#task-10-google-oidc-in-the-service-with-a-pinned-account)
   and [Task 11: money and navigation](../phase-0-foundations.md#task-11-money-formatting-currency-toggle-and-navigation)
   using [original PR 7](../phase-0-pull-requests.md#pr-7-google-oidc-the-seed-money-formatting-and-the-toggle).
@@ -86,7 +87,7 @@ Files and runnable steps remain in the existing plans; do not duplicate their co
   a real Google sign-in or a populated history range.
 - [ ] Mark Phase 0 complete in the roadmap only after those checks and the required integration review.
 
-This documentation task does not execute any of those unchecked development steps.
+Phase 0 remains in progress until the unchecked authentication, money/navigation and exit checks pass.
 
 ## 2. Phase 1 — trust my position
 

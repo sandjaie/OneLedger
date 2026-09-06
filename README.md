@@ -52,10 +52,11 @@ Investment Rate                    X %
 | #5 | V3–V4: accounts and FX rates |
 | #6 | FastAPI service and its authorization boundary |
 | #7 | FX pipeline: peg derivation, carry-forward and backfill; merge confirmed |
+| #8 | Reviewed Next.js foundation and cookie-aware typed API client |
 
-**Next:** existing Phase 0 Task 9 (web shell/typed client), then Tasks 10–11 (Google OIDC,
-seed, money formatting, currency toggle and navigation), followed by the phase-exit checks.
-The original plan's “PR 7” is a different number from GitHub #7 and is still pending.
+**Next:** existing Phase 0 Task 10 (Google OIDC and revocable owner sessions), then Task 11
+(exact money formatting, configured currency toggle and navigation), followed by phase-exit checks.
+Task 9 is complete; this does not imply the full Compose exit check or Phase 0 is complete.
 
 - **[Master implementation plan](docs/superpowers/plans/implementation-plan.md)** — current status,
   remaining Phase 0 work and the revised delivery order. All new plans live in `docs/superpowers/plans/`.

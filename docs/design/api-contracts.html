@@ -386,8 +386,11 @@ cheapest possible place to catch it.</p>
 that introspects <code>information_schema</code> — a migration that changes a table without updating the
 model fails CI.</p>
 <h2 id="the-route-surface">2. The route surface</h2>
-<p>Every route requires a valid session cookie that resolves to the pinned <code>app_user</code>; anything
-else gets <code>403</code> (<a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §3).</p>
+<p>Every current route except <code>GET /health</code> requires a valid session cookie that resolves to
+an active server record for the pinned owner. The future OIDC bootstrap routes
+<code>GET /auth/login</code> and <code>GET /auth/callback</code> complete the intended public set when that
+flow lands; they expose no financial data. See
+<a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
 <table><thead><tr><th>Route</th><th>Does</th></tr></thead><tbody>
 <tr><td><code>POST /parse</code></td><td>Multipart file plus optional password. Detects the layout, extracts, normalizes, dedupes, freezes FX, classifies, proposes transfers, reconciles, stages. Returns the batch and its reconciliation verdict</td></tr>
 <tr><td><code>POST /layouts/propose</code></td><td>Finds the header row and proposes column bands for an unrecognised document (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>)</td></tr>
