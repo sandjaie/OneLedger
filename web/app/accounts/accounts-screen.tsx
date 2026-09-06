@@ -78,6 +78,17 @@ const ACCOUNT_TYPES = [
   "payable",
 ] as const;
 
+const LIABILITY_TYPES = new Set([
+  "credit_card",
+  "personal_loan",
+  "home_loan",
+  "auto_loan",
+  "education_loan",
+  "gold_loan",
+  "loan_other",
+  "payable",
+]);
+
 const MONTHS: Record<string, string> = {
   "01": "Jan",
   "02": "Feb",
@@ -124,7 +135,9 @@ function draftFrom(account: AccountRow): Draft {
     openedOn: account.openedOn ?? "",
     includeInNetWorth: account.includeInNetWorth,
     isLiquid: account.isLiquid,
-    openingBalance: account.openingBalance,
+    openingBalance: LIABILITY_TYPES.has(account.accountType)
+      ? unsigned(account.openingBalance)
+      : account.openingBalance,
     openingBalanceDate: account.openingBalanceDate,
     openingBalanceNote: account.openingBalanceNote ?? "",
     creditLimit: account.creditLimit ?? "",
@@ -152,6 +165,13 @@ function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
 }
 
+function signedOpening(accountType: string, value: string) {
+  if (!LIABILITY_TYPES.has(accountType) || value === "" || value.startsWith("-")) {
+    return value;
+  }
+  return `-${value}`;
+}
+
 function markFor(account: AccountRow, institutions: Array<InstitutionRow>) {
   const match = institutions.find((row) => row.id === account.institutionId);
   const source = match?.shortName || account.institutionName || account.name;
@@ -170,7 +190,7 @@ function toCreate(draft: Draft): AccountCreate {
     openedOn: draft.openedOn || null,
     includeInNetWorth: draft.includeInNetWorth,
     isLiquid: draft.isLiquid,
-    openingBalance: draft.openingBalance,
+    openingBalance: signedOpening(draft.accountType, draft.openingBalance),
     openingBalanceDate: draft.openingBalanceDate,
     openingBalanceNote: draft.openingBalanceNote || null,
     creditLimit: draft.creditLimit || null,
@@ -190,7 +210,7 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
     closedOn,
     includeInNetWorth: draft.includeInNetWorth,
     isLiquid: draft.isLiquid,
-    openingBalance: draft.openingBalance,
+    openingBalance: signedOpening(draft.accountType, draft.openingBalance),
     openingBalanceDate: draft.openingBalanceDate,
     openingBalanceNote: draft.openingBalanceNote || null,
     creditLimit: draft.creditLimit || null,
@@ -328,6 +348,24 @@ export function AccountsScreen({
     } catch (error) {
       if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The account could not be closed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reopenAccount(account: AccountRow) {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      await request<AccountRow>(`/accounts/${account.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(toUpdate(draftFrom(account), null, Boolean(account.openingBalanceConfirmedAt))),
+      });
+      onChanged();
+    } catch (error) {
+      if (isAuthError(error)) return;
+      setProblem(error instanceof ApiError ? error.detail : "The account could not be reopened.");
     } finally {
       setBusy(false);
     }
@@ -483,7 +521,7 @@ export function AccountsScreen({
           <input onChange={(event) => field("openedOn", event.target.value)} type="date" value={draft.openedOn} />
         </label>
         <label className="text-field">
-          <span>Opening balance</span>
+          <span>{LIABILITY_TYPES.has(draft.accountType) ? "Amount owed" : "Opening balance"}</span>
           <input
             inputMode="decimal"
             onChange={(event) => field("openingBalance", event.target.value)}
@@ -568,7 +606,7 @@ export function AccountsScreen({
               : null}
         </td>
         <td>
-          {account.isActive && !account.openingBalanceConfirmedAt && (
+          {!account.openingBalanceConfirmedAt && (
             <div className="opening-evidence">
               <span>Opening balance not acknowledged</span>
               <button disabled={busy} onClick={() => void acknowledge(account)} type="button">
@@ -578,14 +616,18 @@ export function AccountsScreen({
           )}
         </td>
         <td>
-          {account.isActive && (
-            <div className="account-row-actions">
-              <button onClick={() => openEdit(account)} type="button">Edit {account.name}</button>
+          <div className="account-row-actions">
+            <button onClick={() => openEdit(account)} type="button">Edit {account.name}</button>
+            {account.isActive ? (
               <button disabled={busy} onClick={() => void closeAccount(account)} type="button">
                 Close account
               </button>
-            </div>
-          )}
+            ) : (
+              <button disabled={busy} onClick={() => void reopenAccount(account)} type="button">
+                Reopen account
+              </button>
+            )}
+          </div>
         </td>
       </tr>
     );
@@ -634,8 +676,9 @@ export function AccountsScreen({
             <div className="account-group-head">
               <h3>{title}</h3>
               <p>
-                {groupTotals.map((row) => (
+                {groupTotals.map((row, index) => (
                   <span key={`${row.currency}-${row.total}`}>
+                    {index > 0 ? " · " : ""}
                     {formatMoney(row.total.startsWith("-") ? unsigned(row.total) : row.total, currencyOf(currencies, row.currency))}
                     {row.accountClass === "liability" ? " owed" : ""}
                   </span>

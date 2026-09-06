@@ -178,6 +178,22 @@ def test_money_must_be_an_exact_decimal_string() -> None:
     assert accounts.AccountCreate.model_validate({**CREATE, "openingBalance": "-4500.0000"})
 
 
+def test_a_liability_opening_balance_must_not_be_positive() -> None:
+    """A positive liability opening would increase net worth (README invariant 2)."""
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate(
+            {**CREATE, "accountType": "credit_card", "openingBalance": "4500.0000"}
+        )
+    with pytest.raises(ValidationError):
+        accounts.AccountUpdate.model_validate(
+            {**UPDATE, "accountType": "payable", "openingBalance": "100.0000"}
+        )
+    assert accounts.AccountCreate.model_validate(
+        {**CREATE, "accountType": "credit_card", "openingBalance": "-4500.0000"}
+    )
+    assert accounts.AccountUpdate.model_validate({**UPDATE, "openingBalance": "0.0000"})
+
+
 def test_a_full_account_number_is_never_accepted() -> None:
     """The never-store list is absolute (security-and-privacy.html section 1). A fifth digit
     makes the value an account number, not a mask; both write models refuse it."""

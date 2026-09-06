@@ -170,4 +170,39 @@ describe("Accounts", () => {
     expect(body.openingBalance).toBe("1234.50");
     expect(typeof body.openingBalance).toBe("string");
   });
+
+  it("sends a liability opening as a negative decimal string", async () => {
+    const request = vi.fn().mockResolvedValue(props.accounts[1]);
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Card" } });
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "credit_card" } });
+    fireEvent.change(screen.getByLabelText("Amount owed"), { target: { value: "4500.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const body = JSON.parse(request.mock.calls[0][1].body as string) as { openingBalance: string };
+    expect(body.openingBalance).toBe("-4500.00");
+  });
+
+  it("keeps edit and reopen on a closed account", () => {
+    render(<AccountsScreen {...props} />);
+    expect(screen.getByRole("button", { name: /edit old savings/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /reopen/i })).toBeTruthy();
+  });
+
+  it("separates native subtotals when a group has more than one currency", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        totals={[
+          ...props.totals,
+          { accountClass: "asset", country: "XB", currency: "XAE", total: "1000.0000" },
+        ]}
+      />,
+    );
+    const head = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
+    expect(head?.textContent).toContain("I 2,50,000.00 · A 1,000.00");
+  });
 });
