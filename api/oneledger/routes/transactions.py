@@ -416,17 +416,29 @@ def create_transaction(
             )
             counted = cur.fetchone()
             occurrence = int(counted[0]) if counted else 0
-            dedupe = hashlib.sha256(
-                "|".join(
-                    [
-                        str(body.accountId),
-                        body.bookedDate.isoformat(),
-                        str(amount),
-                        body.description,
-                        str(occurrence),
-                    ]
-                ).encode()
-            ).hexdigest()
+            # The count is a starting point, not an allocation: after a deletion, a surviving
+            # row may still hold this occurrence's hash. Probe forward to the first free one —
+            # race-free under the household lock held above.
+            while True:
+                dedupe = hashlib.sha256(
+                    "|".join(
+                        [
+                            str(body.accountId),
+                            body.bookedDate.isoformat(),
+                            str(amount),
+                            body.description,
+                            str(occurrence),
+                        ]
+                    ).encode()
+                ).hexdigest()
+                cur.execute(
+                    """SELECT 1 FROM transaction
+                        WHERE household_id = %s AND account_id = %s AND dedupe_hash = %s""",
+                    (owner.household_id, body.accountId, dedupe),
+                )
+                if cur.fetchone() is None:
+                    break
+                occurrence += 1
 
             cur.execute(
                 """INSERT INTO transaction (

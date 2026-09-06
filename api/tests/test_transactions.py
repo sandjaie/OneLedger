@@ -79,9 +79,11 @@ class LedgerConnection:
         rows: list[tuple[object, ...]] | None = None,
         total: int = 0,
         category_ok: tuple[object, ...] | None = (1,),
+        dedupe_taken: int = 0,
     ) -> None:
         self.category_ok = category_ok
         self.container = container
+        self.dedupe_taken = dedupe_taken
         self.account = account
         self.pair = pair
         # (base, quote) -> (rate, is_carried_forward, carried_from)
@@ -135,6 +137,12 @@ class LedgerCursor:
             self._one = self.connection.fx.get((str(base), str(quote)))
         elif "count(*)" in sql and "FROM transaction" in sql and "description_raw =" in sql:
             self._one = (0,)  # occurrence index for the dedupe hash
+        elif "dedupe_hash = %s" in sql and "SELECT 1" in sql:
+            if self.connection.dedupe_taken > 0:
+                self.connection.dedupe_taken -= 1
+                self._one = (1,)
+            else:
+                self._one = None
         elif "count(*)" in sql:
             self._one = (self.connection.total,)
         elif "INSERT INTO transaction" in sql:
@@ -507,3 +515,18 @@ def test_a_categorized_manual_entry_is_reviewed_at_full_confidence(
         _teardown()
     insert = next(i for i, s in enumerate(connection.statements) if "INSERT INTO transaction" in s)
     assert Decimal("0.000") in connection.params[insert]
+
+
+def test_dedupe_occurrences_skip_surviving_hashes(monkeypatch: MonkeyPatch) -> None:
+    """After a deletion, the count can point at an occurrence a surviving row still holds;
+    the allocator probes forward to the first free hash instead of colliding."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], dedupe_taken=2)
+    try:
+        response = _client(connection, monkeypatch).post(
+            "/transactions", json=CREATE, headers=ORIGIN
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 201
+    probes = [s for s in connection.statements if "dedupe_hash = %s" in s and "SELECT 1" in s]
+    assert len(probes) == 3, "two taken occurrences were skipped before the free one"
