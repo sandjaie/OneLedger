@@ -555,3 +555,17 @@ def test_an_anchor_edit_keeps_the_as_of_at_the_latest_posting(
     update = next(s for s in connection.statements if "UPDATE account" in s)
     assert "GREATEST" in update
     assert "max(t.booked_date)" in update
+
+
+def test_an_account_edit_serializes_on_the_household_row(monkeypatch: MonkeyPatch) -> None:
+    """The same lock order as POST /transactions (B3.5), so the currency guard cannot race an
+    in-flight ledger insert."""
+    connection = AccountsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).patch(f"/accounts/{ACCOUNT_ID}", json=UPDATE, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    first = connection.statements[0]
+    assert "FOR UPDATE" in first and "FROM household" in first

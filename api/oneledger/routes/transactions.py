@@ -160,6 +160,22 @@ def _one(cur: psycopg.Cursor[Any], txn_id: UUID, household_id: UUID) -> Transact
     return transaction_row(row)
 
 
+def _assert_category_allowed(
+    cur: psycopg.Cursor[Any], category_id: UUID | None, household_id: UUID
+) -> None:
+    """The category foreign key is not tenant-aware; the boundary is this predicate. Only the
+    seeded taxonomy and the household's own categories may be assigned."""
+    if category_id is None:
+        return
+    cur.execute(
+        """SELECT 1 FROM category WHERE id = %s
+            AND (household_id IS NULL OR household_id = %s)""",
+        (category_id, household_id),
+    )
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=422, detail="category is not available to this household")
+
+
 def _rate_leg(
     cur: psycopg.Cursor[Any], on: date, base: str, quote: str
 ) -> tuple[Decimal, bool, date]:
@@ -287,6 +303,7 @@ def create_transaction(
             if account is None:
                 raise HTTPException(status_code=404, detail="no such account")
             currency = str(account[0]).strip()
+            _assert_category_allowed(cur, body.categoryId, owner.household_id)
 
             rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
                 cur, body.bookedDate, currency, base, secondary
@@ -370,6 +387,7 @@ def update_transaction(
 ) -> TransactionRow:
     try:
         with connect() as conn, conn.cursor() as cur:
+            _assert_category_allowed(cur, body.categoryId, owner.household_id)
             cur.execute(
                 """UPDATE transaction
                       SET category_id = %s, notes = %s,

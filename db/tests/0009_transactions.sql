@@ -255,6 +255,61 @@ BEGIN
     END IF;
   END;
 
+  -- A child's inherited columns are revalidated on every update, not only reparenting.
+  BEGIN
+    UPDATE transaction SET account_id = a_sav WHERE id = t_child;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'moving a split child to another account must be rejected';
+    END IF;
+  END;
+
+  -- A parent's inherited facts are fixed while children exist.
+  BEGIN
+    UPDATE transaction SET account_id = a_sav WHERE id = t_parent;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'moving a split parent with children must be rejected';
+    END IF;
+  END;
+
+  -- Reparenting validates the losing parent too: a move that satisfies its new parent but
+  -- leaves the old parent's children short must be rejected.
+  DECLARE p3 UUID; p4 UUID; c3b UUID;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_card, '2024-02-08', 'SPLIT THREE', -200.0000, base,
+              '2024-02-08', 1, 20, -200.0000, -4000.0000, 'expense', 'manual', 'p3')
+      RETURNING id INTO p3;
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_card, '2024-02-08', 'SPLIT FOUR', -50.0000, base,
+              '2024-02-08', 1, 20, -50.0000, -1000.0000, 'expense', 'manual', 'p4')
+      RETURNING id INTO p4;
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                             parent_transaction_id)
+      VALUES (h, a_card, '2024-02-08', 'SPLIT THREE', -150.0000, base,
+              '2024-02-08', 1, 20, -150.0000, -3000.0000, 'expense', 'manual', 'p3a', p3),
+             (h, a_card, '2024-02-08', 'SPLIT THREE', -50.0000, base,
+              '2024-02-08', 1, 20, -50.0000, -1000.0000, 'expense', 'manual', 'p3b', p3);
+    SELECT id INTO c3b FROM transaction WHERE dedupe_hash = 'p3b';
+    BEGIN
+      UPDATE transaction SET parent_transaction_id = p4 WHERE id = c3b;
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'a reparent that leaves the old parent short must be rejected';
+      END IF;
+    END;
+  END;
+
   RAISE NOTICE 'PASS 0009';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN

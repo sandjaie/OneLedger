@@ -165,6 +165,22 @@ CREATE FUNCTION assert_split_one_level() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 DECLARE parent transaction%ROWTYPE;
 BEGIN
+  -- The parent side: while children exist, the facts they inherited are fixed. Without this,
+  -- moving the parent to another account would leave every child reporting a movement that
+  -- now lives elsewhere.
+  IF TG_OP = 'UPDATE' AND EXISTS (SELECT FROM transaction c WHERE c.parent_transaction_id = NEW.id) THEN
+    IF NEW.household_id         IS DISTINCT FROM OLD.household_id
+    OR NEW.account_id           IS DISTINCT FROM OLD.account_id
+    OR NEW.booked_date          IS DISTINCT FROM OLD.booked_date
+    OR NEW.currency             IS DISTINCT FROM OLD.currency
+    OR NEW.source_document_id   IS DISTINCT FROM OLD.source_document_id
+    OR NEW.fx_rate_date         IS DISTINCT FROM OLD.fx_rate_date
+    OR NEW.fx_rate_is_carried   IS DISTINCT FROM OLD.fx_rate_is_carried
+    OR NEW.fx_rate_to_base      IS DISTINCT FROM OLD.fx_rate_to_base
+    OR NEW.fx_rate_to_secondary IS DISTINCT FROM OLD.fx_rate_to_secondary THEN
+      RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
+    END IF;
+  END IF;
   IF NEW.parent_transaction_id IS NOT NULL THEN
     SELECT * INTO parent FROM transaction WHERE id = NEW.parent_transaction_id;
     IF parent.id IS NULL THEN
@@ -191,8 +207,10 @@ BEGIN
   RETURN NEW;
 END $$;
 
+-- On every update, not only parent changes: a child's inherited columns are mutable to the
+-- owner connection, and an edit to any of them must revalidate against the parent.
 CREATE TRIGGER trg_split_one_level
-  BEFORE INSERT OR UPDATE OF parent_transaction_id ON transaction
+  BEFORE INSERT OR UPDATE ON transaction
   FOR EACH ROW EXECUTE FUNCTION assert_split_one_level();
 
 -- SUM(child.amount) = parent.amount, enforced at statement end (deferrable, so a complete
@@ -202,15 +220,23 @@ CREATE FUNCTION assert_split_sums_to_parent() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 DECLARE pid UUID; parent_amount NUMERIC(20,4); child_sum NUMERIC(20,4);
 BEGIN
-  pid := COALESCE(NEW.parent_transaction_id, OLD.parent_transaction_id);
-  IF pid IS NULL THEN RETURN NULL; END IF;
-  SELECT amount INTO parent_amount FROM transaction WHERE id = pid;
-  IF parent_amount IS NULL THEN RETURN NULL; END IF;
-  SELECT sum(amount) INTO child_sum FROM transaction WHERE parent_transaction_id = pid;
-  IF child_sum IS NOT NULL AND child_sum <> parent_amount THEN
-    RAISE EXCEPTION 'split children of % sum to %, not the parent''s % — a split never changes a balance',
-      pid, child_sum, parent_amount;
-  END IF;
+  -- A reparent involves two splits: the one gaining this child and the one losing it. Both
+  -- must balance, or the losing parent's leaves diverge from the materialised balance.
+  FOREACH pid IN ARRAY ARRAY(
+    SELECT DISTINCT unnest(ARRAY[
+      CASE WHEN TG_OP <> 'DELETE' THEN NEW.parent_transaction_id END,
+      CASE WHEN TG_OP <> 'INSERT' THEN OLD.parent_transaction_id END
+    ])
+  ) LOOP
+    IF pid IS NULL THEN CONTINUE; END IF;
+    SELECT amount INTO parent_amount FROM transaction WHERE id = pid;
+    IF parent_amount IS NULL THEN CONTINUE; END IF;
+    SELECT sum(amount) INTO child_sum FROM transaction WHERE parent_transaction_id = pid;
+    IF child_sum IS NOT NULL AND child_sum <> parent_amount THEN
+      RAISE EXCEPTION 'split children of % sum to %, not the parent''s % — a split never changes a balance',
+        pid, child_sum, parent_amount;
+    END IF;
+  END LOOP;
   RETURN NULL;
 END $$;
 

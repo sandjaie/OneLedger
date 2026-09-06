@@ -670,7 +670,10 @@ matching an incoming statement to an account. See
 on it constantly. A trigger keeps it consistent; it is never set by hand.</p>
 <hr>
 <h2 id="6-categories-and-merchants">6. Categories and merchants</h2>
-<p>Two enums carry the meaning: <code>category_kind</code> (<code>income</code>/<code>expense</code>/<code>transfer</code>/<code>investment</code>/<code>debt</code>) and <code>category_bucket</code> (<code>need</code>/<code>want</code>/<code>investment</code>/<code>debt_service</code>/<code>income</code>/<code>ignore</code>). <code>category</code> is a two-level tree; the depth limit is a trigger, not a <code>CHECK</code>, because a subquery in a <code>CHECK</code> is not valid PostgreSQL.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
+<p>Two enums carry the meaning: <code>category_kind</code> (<code>income</code>/<code>expense</code>/<code>transfer</code>/<code>investment</code>/<code>debt</code>) and <code>category_bucket</code> (<code>need</code>/<code>want</code>/<code>investment</code>/<code>debt_service</code>/<code>income</code>/<code>ignore</code>). <code>category</code> is a two-level tree; the depth limit is a trigger, not a <code>CHECK</code>, because a subquery in a <code>CHECK</code> is not valid PostgreSQL.
+The seeded tree is versioned shared data: a household's bucket or activity choice on a seed row is a
+<code>category_override</code> row (V11) merged over it on read, never an edit of the seed itself, so seed
+updates stay recognisable and one household's choice is never another's default.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
 <blockquote>
 <p>The two-level <code>CHECK</code> above is illustrative — a subquery in a <code>CHECK</code> is not valid PostgreSQL.
 It is implemented as a <code>BEFORE INSERT OR UPDATE</code> trigger. Noted explicitly so it is not copied
@@ -926,27 +929,28 @@ V5__owner_sessions.sql                Google subject binding, revocable sessions
 V6__account_current_balance_starts_at_opening.sql
 V7__household_configuration.sql       reserved — Phase 1 Task 6
 V8__account_inventory.sql             reserved — Phase 1 Task 8
-V9__categories_and_merchants.sql      + seed taxonomy
-V10__transactions.sql                 + v_transaction_reportable
-V11__documents_and_import.sql         + statement_layout
-V12__classification_rules.sql         + seed rules
-V13__transfers.sql
-V14__card_statements.sql
-V15__investments.sql
-V16__loans.sql
-V17__valuations.sql
-V18__net_worth.sql
-V19__audit_log.sql
-V20__phase2_tables.sql                recurring, budget, payslip
-V21__deferred_foreign_keys.sql        the circular references, added last
+V9__categories_and_merchants.sql      + seed taxonomy (applied)
+V10__transaction_ledger.sql           + posting/reportable views (applied)
+V11__category_overrides.sql           household choices beside the seed (applied)
+V12__documents_and_import.sql         + statement_layout
+V13__classification_rules.sql         + seed rules
+V14__transfers.sql
+V15__card_statements.sql
+V16__investments.sql
+V17__loans.sql
+V18__valuations.sql
+V19__net_worth.sql
+V20__audit_log.sql
+V21__phase2_tables.sql                recurring, budget, payslip
+V22__deferred_foreign_keys.sql        the circular references, added last
 </code></pre>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
-<code>transaction</code> (Flyway V13–V20), and <code>transfer</code> references <code>transaction</code> back. V10
+<code>transaction</code> (Flyway V14–V21), and <code>transfer</code> references <code>transaction</code> back. V10
 (<code>schema.md</code> section <code>0007</code>) therefore cannot declare those columns as foreign keys — the
 targets do not exist yet.</p>
-<p>The columns are created as bare <code>UUID</code> in V10; the constraints are added in V21
+<p>The columns are created as bare <code>UUID</code> in V10; the constraints are added in V22
 (<code>schema.md</code> section <code>0018</code>), once every table exists:</p>
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
