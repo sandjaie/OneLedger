@@ -513,6 +513,7 @@ export function TransactionsScreen({
                     <span aria-label="Transfer leg, linked to its peer" role="img"> 🔗</span>
                   )}
                   {row.parentTransactionId && <small> · split</small>}
+                  <small> · {row.source}</small>
                 </td>
                 <td>
                   <label className="select-field">
