@@ -15,7 +15,7 @@ from .routes import auth, fx, household
 session_secret()
 
 # /docs, /redoc and /openapi.json are registered by default and depend on nothing, which
-# would make three unauthenticated routes rather than the one the boundary allows —
+# would add three public routes beyond health and the login/callback bootstrap boundary.
 # /openapi.json alone hands an anonymous caller the entire route surface. Generating the
 # client's types does not need them served: `scripts/openapi.py` writes the schema to a file.
 app = FastAPI(
@@ -57,7 +57,7 @@ app.include_router(household.router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """The only route that does not require authorization."""
+    """Public health route; login/callback are public, while financial routes require the owner."""
     return {"status": "ok"}
 
 
