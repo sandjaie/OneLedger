@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
@@ -229,4 +229,42 @@ it("paginates on the applied filters, not edited-but-unapplied controls", async 
   const url = (request.mock.calls[0] as Array<string>)[0];
   expect(url).not.toContain("q=unapplied");
   expect(url).toContain("offset=1");
+});
+
+
+it("refetches the page when a recategorized row may leave the applied filter", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce({ transactions: [transaction({})], total: 1 }) // apply filter
+    .mockResolvedValueOnce(transaction({ categoryId: "cat-groceries" })) // PATCH
+    .mockResolvedValueOnce({ transactions: [], total: 0 }); // refetch
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
+  fireEvent.change(within(filterForm).getByLabelText("Category"), {
+    target: { value: "cat-food" },
+  });
+  fireEvent.submit(filterForm);
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+    target: { value: "cat-groceries" },
+  });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+  const refetch = (request.mock.calls[2] as Array<string>)[0];
+  expect(refetch).toContain("categoryId=cat-food");
+});
+
+it("round-trips the remaining filter controls", async () => {
+  const request = vi.fn().mockResolvedValue({ transactions: [], total: 0 });
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  fireEvent.change(screen.getByLabelText("Amount from"), { target: { value: "-1000.0000" } });
+  fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "XAE" } });
+  fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "trip" } });
+  fireEvent.change(screen.getByLabelText("Review state"), { target: { value: "unreviewed" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
+  await waitFor(() => expect(request).toHaveBeenCalled());
+  const url = (request.mock.calls[0] as Array<string>)[0];
+  expect(url).toContain("amountMin=-1000.0000");
+  expect(url).toContain("currency=XAE");
+  expect(url).toContain("tag=trip");
+  expect(url).toContain("reviewState=unreviewed");
 });

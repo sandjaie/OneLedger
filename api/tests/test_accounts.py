@@ -113,7 +113,7 @@ class AccountsConnection:
         totals: list[tuple[object, ...]] | None = None,
         institutions: list[tuple[object, ...]] | None = None,
         self_people: list[tuple[object, ...]] | None = None,
-        ledger_state: tuple[object, ...] = ("XIN", False),
+        ledger_state: tuple[object, ...] = ("XIN", False, date(2024, 1, 1), False),
     ) -> None:
         self.ledger_state = ledger_state
         self.fail_institution = fail_institution
@@ -521,7 +521,9 @@ def test_a_currency_change_is_refused_once_ledger_rows_exist(
 ) -> None:
     """The rows' native amounts are immutable facts in their denomination; relabelling the
     account would mix denominations in one balance."""
-    connection = AccountsConnection(rows=[FETCHED_ROW], ledger_state=("XIN", True))
+    connection = AccountsConnection(
+        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), False)
+    )
     monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
     app.dependency_overrides[auth.require_owner] = owner
     try:
@@ -569,3 +571,24 @@ def test_an_account_edit_serializes_on_the_household_row(monkeypatch: MonkeyPatc
         app.dependency_overrides.clear()
     first = connection.statements[0]
     assert "FOR UPDATE" in first and "FROM household" in first
+
+
+def test_reanchoring_past_existing_postings_is_refused(monkeypatch: MonkeyPatch) -> None:
+    """A posting before the new anchor would be counted twice: once inside the new opening
+    balance by definition, once as a ledger row. Nothing is reinterpreted silently."""
+    connection = AccountsConnection(
+        rows=[FETCHED_ROW], ledger_state=("XIN", True, date(2024, 1, 1), True)
+    )
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openingBalanceDate": "2024-02-15"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert "double-count" in response.json()["detail"]
+    assert not any("UPDATE account" in s for s in connection.statements)

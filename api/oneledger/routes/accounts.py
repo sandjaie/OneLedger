@@ -396,9 +396,15 @@ def update_account(
             # denominations in one balance. A wrong currency with history is a migration
             # workflow, not an edit.
             cur.execute(
-                """SELECT a.currency, EXISTS (SELECT FROM transaction t WHERE t.account_id = a.id)
+                """SELECT a.currency,
+                          EXISTS (SELECT FROM transaction t WHERE t.account_id = a.id),
+                          a.opening_balance_date,
+                          EXISTS (SELECT FROM transaction t
+                                   WHERE t.account_id = a.id
+                                     AND t.parent_transaction_id IS NULL
+                                     AND t.booked_date < %s)
                      FROM account a WHERE a.id = %s AND a.household_id = %s""",
-                (account_id, owner.household_id),
+                (body.openingBalanceDate, account_id, owner.household_id),
             )
             existing = cur.fetchone()
             if (
@@ -409,6 +415,21 @@ def update_account(
                 raise HTTPException(
                     status_code=409,
                     detail="an account's currency is fixed once it has ledger entries",
+                )
+            # Re-anchoring past existing postings would define them as already inside the new
+            # opening balance while they still sit in the ledger — double-counted history.
+            # Nothing about money is reinterpreted silently: refuse and say why.
+            if (
+                existing is not None
+                and existing[2] != body.openingBalanceDate
+                and bool(existing[3])
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "ledger entries exist before the new anchor date; the opening balance "
+                        "would double-count them. Delete those entries or pick an earlier date"
+                    ),
                 )
             cur.execute(
                 """UPDATE account

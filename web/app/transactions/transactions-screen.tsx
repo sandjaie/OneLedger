@@ -41,6 +41,12 @@ type Filters = {
   q: string;
   sort: string;
   direction: string;
+  amountMin: string;
+  amountMax: string;
+  currency: string;
+  country: string;
+  tag: string;
+  reviewState: string;
 };
 
 const NO_FILTERS: Filters = {
@@ -52,6 +58,12 @@ const NO_FILTERS: Filters = {
   q: "",
   sort: "bookedDate",
   direction: "desc",
+  amountMin: "",
+  amountMax: "",
+  currency: "",
+  country: "",
+  tag: "",
+  reviewState: "",
 };
 
 function query(filters: Filters, offset: number) {
@@ -62,6 +74,12 @@ function query(filters: Filters, offset: number) {
   if (filters.dateFrom) parameters.set("dateFrom", filters.dateFrom);
   if (filters.dateTo) parameters.set("dateTo", filters.dateTo);
   if (filters.q.trim()) parameters.set("q", filters.q.trim());
+  if (filters.amountMin.trim()) parameters.set("amountMin", filters.amountMin.trim());
+  if (filters.amountMax.trim()) parameters.set("amountMax", filters.amountMax.trim());
+  if (filters.currency) parameters.set("currency", filters.currency);
+  if (filters.country.trim()) parameters.set("country", filters.country.trim());
+  if (filters.tag.trim()) parameters.set("tag", filters.tag.trim());
+  if (filters.reviewState) parameters.set("reviewState", filters.reviewState);
   if (filters.sort !== "bookedDate") parameters.set("sort", filters.sort);
   if (filters.direction !== "desc") parameters.set("direction", filters.direction);
   parameters.set("limit", String(PAGE));
@@ -142,7 +160,13 @@ export function TransactionsScreen({
         body: JSON.stringify({ categoryId: categoryId || null, notes: row.notes }),
         headers: { "Content-Type": "application/json" },
       });
-      setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
+      if (applied.categoryId) {
+        // The row may no longer match the applied category filter; a stale local replacement
+        // would also make the next page's offset skip a real match. Refetch the page.
+        await reload(applied, 0, false);
+      } else {
+        setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
+      }
     } catch {
       setProblem("The category change was not saved. Retry.");
     } finally {
@@ -339,6 +363,60 @@ export function TransactionsScreen({
             type="date"
             value={filters.dateTo}
           />
+        </label>
+        <label className="text-field">
+          <span>Amount from</span>
+          <input
+            inputMode="decimal"
+            onChange={(event) => setFilters({ ...filters, amountMin: event.target.value })}
+            value={filters.amountMin}
+          />
+        </label>
+        <label className="text-field">
+          <span>Amount to</span>
+          <input
+            inputMode="decimal"
+            onChange={(event) => setFilters({ ...filters, amountMax: event.target.value })}
+            value={filters.amountMax}
+          />
+        </label>
+        <label className="select-field">
+          <span>Currency</span>
+          <select
+            onChange={(event) => setFilters({ ...filters, currency: event.target.value })}
+            value={filters.currency}
+          >
+            <option value="">All currencies</option>
+            {currencies.map((option) => (
+              <option key={option.code} value={option.code}>{option.code}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-field">
+          <span>Country</span>
+          <input
+            maxLength={2}
+            onChange={(event) => setFilters({ ...filters, country: event.target.value })}
+            value={filters.country}
+          />
+        </label>
+        <label className="text-field">
+          <span>Tag</span>
+          <input
+            onChange={(event) => setFilters({ ...filters, tag: event.target.value })}
+            value={filters.tag}
+          />
+        </label>
+        <label className="select-field">
+          <span>Review state</span>
+          <select
+            onChange={(event) => setFilters({ ...filters, reviewState: event.target.value })}
+            value={filters.reviewState}
+          >
+            <option value="">All rows</option>
+            <option value="reviewed">Reviewed</option>
+            <option value="unreviewed">Unreviewed</option>
+          </select>
         </label>
         <label className="select-field">
           <span>Sort by</span>
