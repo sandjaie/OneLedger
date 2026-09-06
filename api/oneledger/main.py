@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
 from .auth import OwnerSession, require_owner, session_secret
-from .routes import accounts, auth, currencies, fx, household
+from .routes import accounts, auth, currencies, fx, household, transactions
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
@@ -55,6 +55,7 @@ app.include_router(fx.router)
 app.include_router(household.router)
 app.include_router(currencies.router)
 app.include_router(accounts.router)
+app.include_router(transactions.router)
 
 
 @app.get("/health")

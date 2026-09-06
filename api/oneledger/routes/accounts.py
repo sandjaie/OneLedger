@@ -375,10 +375,10 @@ def update_account(
     body: AccountUpdate,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
-    # M1a has no transaction table yet. Changing the opening anchor therefore rewrites the
-    # materialised current_balance to match (opening_balance + SUM(transactions) with an empty
-    # sum). When M1b/M2 add transactions, a later migration teaches this path to refuse or
-    # recompute only when the sum is still zero.
+    # Changing the opening anchor recomputes the materialised balance from the ledger:
+    # opening_balance + the sum of the account's posting rows (split children move nothing).
+    # Postgres does the arithmetic; before M1b's ledger existed the sum was empty and this
+    # reduced to the bare opening balance.
     # Changing either anchor field also clears the acknowledgment: a confirmation timestamp
     # must never predate the figure it confirms (Invariant I7), so the replacement waits for a
     # fresh, explicit acknowledgment instead of inheriting the old one from a full-replacement
@@ -396,7 +396,11 @@ def update_account(
                           opening_balance = %s, opening_balance_date = %s,
                           current_balance = CASE
                             WHEN opening_balance IS DISTINCT FROM %s
-                              OR opening_balance_date IS DISTINCT FROM %s THEN %s
+                              OR opening_balance_date IS DISTINCT FROM %s
+                            THEN %s + (SELECT COALESCE(sum(t.amount), 0)
+                                         FROM transaction t
+                                        WHERE t.account_id = account.id
+                                          AND t.parent_transaction_id IS NULL)
                             ELSE current_balance END,
                           current_balance_as_of = CASE
                             WHEN opening_balance IS DISTINCT FROM %s
