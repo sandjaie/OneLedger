@@ -32,6 +32,12 @@ typecheck, test and build scripts, lockfile, Dockerfile and Docker context exclu
 container receives only public configuration. Verify an actual image build and HTTP response.
 Do not add business pages or a second auth library in this delivery.
 
+The 6 September 2026 dependency audit verifies every direct package against the current stable npm
+release and its peer ranges. Pin the Node 24 LTS development and container runtime and use matching
+Node 24 declarations. Do not retain broad scaffold ranges without verifying them. When a current
+tool cannot yet consume a newer compiler API, keep the smallest compatible package beside the current
+compiler, document why it remains, and continue to run both checks without suppressing failures.
+
 ## Delivery 2 — Google authentication and revocable owner sessions
 
 Retain the pinned-email plus seeded app_user policy, and preserve the existing UUID app_user id
