@@ -22,9 +22,9 @@ synthetic checks do not substitute for them.
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | 1 — restore API package import | `fix/task-1-api-import-syntax` | Complete | [PR #23](https://github.com/sandjaie/OneLedger/pull/23) |
-| 2 — currency-agnostic SQL fixtures | `fix/task-2-db-tests-currency-agnostic` | Review | [PR #25](https://github.com/sandjaie/OneLedger/pull/25) |
-| 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | Pending | |
-| 4 — distinct DB vs auth failures | `fix/task-4-auth-database-errors` | Pending | |
+| 2 — currency-agnostic SQL fixtures | `fix/task-2-db-tests-currency-agnostic` | Complete | [PR #25](https://github.com/sandjaie/OneLedger/pull/25) |
+| 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | This PR | clubbed with Task 4 |
+| 4 — distinct DB vs auth failures | `fix/task-3-account-opening-balance` | This PR | clubbed with Task 3 |
 | 5 — Compose DB identity | `chore/task-5-compose-database-identity` | Pending | |
 | 6 — household configuration API | `feature/task-6-household-configuration-api` | Pending | |
 | 7 — Settings › Household UI | `feature/task-7-household-settings-ui` | Pending | |
