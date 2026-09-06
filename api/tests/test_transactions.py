@@ -452,3 +452,14 @@ def test_recategorizing_a_split_container_is_refused(monkeypatch: MonkeyPatch) -
         _teardown()
     assert response.status_code == 409
     assert not any("UPDATE transaction" in s for s in connection.statements)
+
+
+def test_a_malformed_amount_filter_is_a_422(monkeypatch: MonkeyPatch) -> None:
+    connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
+    try:
+        response = _client(connection, monkeypatch).get(
+            "/transactions", params={"amountMin": "abc"}
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 422

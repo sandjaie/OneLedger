@@ -179,6 +179,17 @@ def _one(cur: psycopg.Cursor[Any], txn_id: UUID, household_id: UUID) -> Transact
     return transaction_row(row)
 
 
+def _money_query(value: str | None) -> Decimal | None:
+    """Filter money arrives as a query string; a malformed one is the caller's 422, never a
+    500 from deep inside the route."""
+    if value is None:
+        return None
+    try:
+        return Decimal(_money(value) or "0")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _assert_category_allowed(
     cur: psycopg.Cursor[Any], category_id: UUID | None, household_id: UUID
 ) -> None:
@@ -293,10 +304,10 @@ def list_transactions(
         params.append(country)
     if amountMin is not None:
         clauses.append("t.amount >= %s")
-        params.append(Decimal(_money(amountMin) or "0"))
+        params.append(_money_query(amountMin))
     if amountMax is not None:
         clauses.append("t.amount <= %s")
-        params.append(Decimal(_money(amountMax) or "0"))
+        params.append(_money_query(amountMax))
     if tag is not None:
         clauses.append("%s = ANY(t.tags)")
         params.append(tag)
