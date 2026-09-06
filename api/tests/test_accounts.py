@@ -256,6 +256,7 @@ def test_a_full_account_number_is_never_accepted() -> None:
         "4111-1111-1111-1111",
         "AE07 0331 2345 6789 0123 456",
         "12345",
+        "¹²³⁴⁵",
     ]
     for bad in full_numbers:
         with pytest.raises(ValidationError):

@@ -303,6 +303,54 @@ describe("Accounts", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("does not transmit a full number written with compatibility digits", async () => {
+    const request = vi.fn();
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "¹²³⁴⁵" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("shows a positive liability balance as a credit, not as amount owed", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[account({
+          ...card,
+          currentBalance: "250.0000",
+          openingBalanceConfirmedAt: "2026-01-01T00:00:00Z",
+        })]}
+        totals={[{ accountClass: "liability", country: "XA", currency: "XAE", total: "250.0000" }]}
+      />,
+    );
+    expect(screen.getByLabelText("Inventory Card balance A 250.00")).toBeTruthy();
+    const head = screen.getByRole("heading", { name: "Liabilities · XA" }).closest(".account-group-head");
+    expect(head?.textContent).toContain("A 250.00");
+    expect(head?.textContent).not.toContain("owed");
+  });
+
+  it("omits the subtotal date when an included account has none", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[
+          account({ currentBalanceAsOf: "2026-01-15T00:00:00Z" }),
+          account({ id: "acct-undated", name: "Undated", currentBalanceAsOf: null }),
+        ]}
+        totals={[{ accountClass: "asset", country: "XB", currency: "XIN", total: "250100.0000" }]}
+      />,
+    );
+    const head = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
+    expect(head?.textContent).toContain("I 2,50,100.00");
+    expect(head?.textContent).not.toContain("as of");
+  });
+
   it("marks an account that is excluded from group totals", () => {
     render(
       <AccountsScreen
