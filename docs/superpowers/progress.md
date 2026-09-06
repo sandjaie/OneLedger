@@ -9,12 +9,29 @@ Updated: 6 September 2026.
 ## Current phase
 
 **Phase 1 — trusted financial position.**
-M1a (this plan's Tasks 1–11) is on `develop` by owner request. The former integration branch
-`feature/phase-1-trusted-financial-position` is deleted after that merge. Later Phase 1 work
-(M1b onward) branches from `develop` until a new phase branch is named.
-Active M1a plan: [Phase 1 trusted financial position](plans/2026-09-06-phase-1-trusted-financial-position.md).
-Branching, phase integration and releases follow [docs/git-workflow.md](../git-workflow.md).
-Any path to `main` still needs a separate owner request.
+M1a (the Phase 1 plan's Tasks 1–11) is on `develop` by owner request; the former phase branch
+is deleted. `develop` is the standing integration branch: one milestone per branch and PR,
+carrying its plan and implementation together, merging on Codex's thumbs-up
+([docs/git-workflow.md](../git-workflow.md)). Any path to `main` still needs a separate owner
+request.
+
+**M1b — manual transactions and taxonomy — is implemented on
+`feature/m1b-manual-transactions` and in review.**
+Plan: [M1b manual transactions](plans/2026-09-06-m1b-manual-transactions.md), on the same
+branch. Delivered there: V9 (category taxonomy, merchants, two-level trigger, seeded tree),
+V10 (the transaction ledger, immutability and split-sum triggers, the posting and reportable
+views, balance maintenance), the manual transaction API freezing both reporting amounts under
+the B3.5 household lock with the live interleaving proof, the categories API, and the
+transactions screen with Settings category management. Recorded deviations: the categories API
+(the plan named no such surface), `db/tests/0008`/`0009` numbering (the test sequence is
+independent of `schema.md`), and V10 gaining the account-balance trigger before publication.
+
+| M1b task | Status | Evidence |
+| --- | --- | --- |
+| 12 — categories, merchants, seed taxonomy (V9) | Implemented | `1e7e229`; `db/tests/0008_categories.sql` |
+| 13 — transaction ledger and reporting views (V10) | Implemented | `028f554`; `db/tests/0009_transactions.sql` |
+| 14 — manual transaction API, B3.5 lock | Implemented | `7967aba`; `api/tests/test_transactions*.py` |
+| 15 — transactions screen, category management | Implemented | `3885d86`; component tests |
 
 Phase 1 remains active. This merge is M1a, not Phase 1 completion. Phase 0's live Google
 identity gates remain open below — synthetic checks do not substitute for them.
