@@ -113,7 +113,9 @@ class AccountsConnection:
         totals: list[tuple[object, ...]] | None = None,
         institutions: list[tuple[object, ...]] | None = None,
         self_people: list[tuple[object, ...]] | None = None,
+        ledger_state: tuple[object, ...] = ("XIN", False),
     ) -> None:
+        self.ledger_state = ledger_state
         self.fail_institution = fail_institution
         self.rows = rows or []
         self.totals = totals or []
@@ -164,6 +166,8 @@ class AccountsCursor:
             self._many = list(self.connection.totals)
         elif "FROM institution" in sql:
             self._many = list(self.connection.institutions or [])
+        elif "EXISTS (SELECT FROM transaction" in sql:
+            self._one = self.connection.ledger_state
         elif "WHERE a.id =" in sql:
             self._one = self.connection.rows[0] if self.connection.rows else None
         else:
@@ -410,7 +414,9 @@ def test_closing_an_account_derives_is_active_from_the_closing_date(
         app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()["isActive"] is False
-    assert "is_active = (%s::date IS NULL)" in connection.statements[0]
+    assert "is_active = (%s::date IS NULL)" in next(
+        s for s in connection.statements if "UPDATE account" in s
+    )
 
 
 def test_a_non_anchor_patch_preserves_the_observed_current_balance(
@@ -429,7 +435,7 @@ def test_a_non_anchor_patch_preserves_the_observed_current_balance(
         )
     finally:
         app.dependency_overrides.clear()
-    statement = connection.statements[0]
+    statement = next(s for s in connection.statements if "UPDATE account" in s)
     rewrite = statement[
         statement.index("current_balance =") : statement.index("ELSE current_balance")
     ]
@@ -452,8 +458,9 @@ def test_acknowledging_an_opening_balance_is_recorded_and_reversible(
         )
     finally:
         app.dependency_overrides.clear()
-    assert "opening_balance_confirmed_at" in connection.statements[0]
-    assert True in connection.parameters[0]
+    update_at = next(i for i, s in enumerate(connection.statements) if "UPDATE account" in s)
+    assert "opening_balance_confirmed_at" in connection.statements[update_at]
+    assert True in connection.parameters[update_at]
 
 
 def test_changing_the_opening_anchor_clears_the_acknowledgment(
@@ -474,7 +481,7 @@ def test_changing_the_opening_anchor_clears_the_acknowledgment(
         )
     finally:
         app.dependency_overrides.clear()
-    statement = connection.statements[0]
+    statement = next(s for s in connection.statements if "UPDATE account" in s)
     anchor_guard = statement.index("opening_balance IS DISTINCT FROM")
     assert anchor_guard < statement.index("COALESCE(opening_balance_confirmed_at")
     assert "opening_balance_date IS DISTINCT FROM" in statement
@@ -507,3 +514,44 @@ def test_an_anchor_edit_recomputes_the_balance_from_the_ledger(
     update = next(s for s in connection.statements if "UPDATE account" in s)
     assert "COALESCE(sum(t.amount), 0)" in update
     assert "parent_transaction_id IS NULL" in update
+
+
+def test_a_currency_change_is_refused_once_ledger_rows_exist(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The rows' native amounts are immutable facts in their denomination; relabelling the
+    account would mix denominations in one balance."""
+    connection = AccountsConnection(rows=[FETCHED_ROW], ledger_state=("XIN", True))
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "currency": "XAE"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert not any("UPDATE account" in s for s in connection.statements)
+
+
+def test_an_anchor_edit_keeps_the_as_of_at_the_latest_posting(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The stored figure carries the date it is actually true for (I7): with postings in the
+    balance, the as-of is the later of the opening date and the latest posting."""
+    connection = AccountsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openingBalance": "999.0000"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    update = next(s for s in connection.statements if "UPDATE account" in s)
+    assert "GREATEST" in update
+    assert "max(t.booked_date)" in update

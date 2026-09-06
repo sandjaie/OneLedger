@@ -67,6 +67,10 @@ class CategoriesCursor:
         self.connection.params.append(params or ())
         if "SELECT household_id IS NULL" in sql:
             self._one = self.connection.existing
+        elif "category_override" in sql and "INSERT" in sql:
+            self._one = None
+        elif "WHERE c.id =" in sql:
+            self._one = self.connection.created
         elif "INSERT INTO category" in sql or "UPDATE category" in sql:
             self._one = self.connection.created
         else:
@@ -97,7 +101,8 @@ def test_the_listing_is_scoped_and_ordered(monkeypatch: MonkeyPatch) -> None:
         _teardown()
     assert [row["slug"] for row in body] == ["food-dining", "food-dining-coffee"]
     listing = connection.statements[0]
-    assert "household_id IS NULL OR household_id = %s" in listing
+    assert "c.household_id IS NULL OR c.household_id = %s" in listing
+    assert "COALESCE(o.bucket" in listing, "the household's overrides win on read"
     assert HOUSEHOLD_ID in connection.params[0]
 
 
@@ -150,5 +155,10 @@ def test_a_seeded_category_keeps_its_name_but_not_its_bucket(monkeypatch: Monkey
     finally:
         _teardown()
     assert rebucketed.status_code == 200
-    update = next(s for s in connection.statements if "UPDATE category" in s)
-    assert "bucket = %s::category_bucket" in update
+    override = next(s for s in connection.statements if "category_override" in s and "INSERT" in s)
+    assert "ON CONFLICT (household_id, category_id)" in override
+    assert not any(
+        "UPDATE category" in s and "category_override" not in s for s in connection.statements
+    ), "the seed row itself is never rewritten"
+    merged = next(s for s in connection.statements if "COALESCE(o.bucket" in s)
+    assert merged

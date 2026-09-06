@@ -213,6 +213,48 @@ BEGIN
     IF SQLERRM = 'unreachable' THEN RAISE EXCEPTION 'a split child cannot itself be split'; END IF;
   END;
 
+  -- A split child inherits its parent's facts (data-model, Splits): another account, date or
+  -- rate would report the movement somewhere it never happened.
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                             parent_transaction_id)
+      VALUES (h, a_sav, '2024-02-06', 'SUPERMARKET', -100.0000, base,
+              '2024-02-06', 1, 20, -100.0000, -2000.0000, 'expense', 'manual', 'd8x1', t_parent);
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a child in another account must be rejected';
+    END IF;
+  END;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                             parent_transaction_id)
+      VALUES (h, a_card, '2024-02-07', 'SUPERMARKET', -100.0000, base,
+              '2024-02-06', 1, 20, -100.0000, -2000.0000, 'expense', 'manual', 'd8x2', t_parent);
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a child on another date must be rejected';
+    END IF;
+  END;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                             parent_transaction_id)
+      VALUES (h, a_card, '2024-02-06', 'SUPERMARKET', -100.0000, base,
+              '2024-02-06', 2, 20, -200.0000, -2000.0000, 'expense', 'manual', 'd8x3', t_parent);
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a child with different frozen rates must be rejected';
+    END IF;
+  END;
+
   RAISE NOTICE 'PASS 0009';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN

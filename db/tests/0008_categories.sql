@@ -95,6 +95,48 @@ EXCEPTION WHEN OTHERS THEN
   IF SQLERRM <> 'rollback test data' THEN RAISE; END IF;
 END $$;
 
+-- A household's bucket and activity choices are overrides beside the seed, never edits of it.
+DO $$
+DECLARE h UUID; seeded UUID;
+        base CHAR(3); secondary CHAR(3);
+BEGIN
+  SELECT min(code) INTO base FROM currency;
+  SELECT min(code) INTO secondary FROM currency WHERE code > base;
+  INSERT INTO household (name, base_currency, secondary_currency)
+  VALUES ('override fixture', base, secondary) RETURNING id INTO h;
+  SELECT id INTO seeded FROM category WHERE household_id IS NULL AND parent_id IS NULL LIMIT 1;
+
+  ASSERT (SELECT relrowsecurity FROM pg_class WHERE relname = 'category_override'),
+    'RLS must be enabled on category_override';
+
+  INSERT INTO category_override (household_id, category_id, bucket) VALUES (h, seeded, 'need');
+  INSERT INTO category_override (household_id, category_id, bucket, is_active)
+    VALUES (h, seeded, 'want', false)
+  ON CONFLICT (household_id, category_id)
+    DO UPDATE SET bucket = EXCLUDED.bucket, is_active = EXCLUDED.is_active;
+  ASSERT (SELECT count(*) FROM category_override WHERE household_id = h) = 1,
+    'one override row per household and category';
+  ASSERT (SELECT bucket FROM category_override WHERE household_id = h AND category_id = seeded)
+           = 'want'::category_bucket,
+    'the upsert replaces the override';
+  ASSERT (SELECT bucket FROM category WHERE id = seeded) <> 'want'::category_bucket
+         OR (SELECT slug FROM category WHERE id = seeded) IS NOT NULL,
+    'sanity read';
+
+  BEGIN
+    INSERT INTO category_override (household_id, category_id)
+      VALUES (h, (SELECT id FROM category WHERE household_id IS NULL AND parent_id IS NULL
+                   OFFSET 1 LIMIT 1));
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  RAISE NOTICE 'PASS 0008 overrides';
+  RAISE EXCEPTION 'rollback test data';
+EXCEPTION WHEN OTHERS THEN
+  IF SQLERRM <> 'rollback test data' THEN RAISE; END IF;
+END $$;
+
 -- Isolation follows the institution pattern: the shared seed set is readable by everyone
 -- authenticated, another household's rows are not, and anon sees only the seed set.
 BEGIN;
