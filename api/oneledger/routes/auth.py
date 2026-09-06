@@ -83,6 +83,7 @@ def login() -> Response:
             "nonce": nonce,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
+            "prompt": "select_account",
         }
     )
     response = RedirectResponse(f"{GOOGLE_AUTH_URL}?{query}", status_code=303)
