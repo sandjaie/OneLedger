@@ -52,6 +52,10 @@ Read it together with [the original task reference](../phase-0-foundations.md) a
 
 - [ ] Resolve current Next.js setup docs using ctx7 outside the sandbox; scaffold with npm, TypeScript,
   Tailwind, App Router, no src directory and the existing @ alias. Use system fonts.
+- [ ] Audit every direct dependency against current stable releases and peer ranges as of 6 September
+  2026. Pin Node 24 LTS in local and container configuration with matching Node declarations; replace
+  unverified scaffold ranges and document any required compatibility package rather than suppressing
+  install, lint, type or build failures.
 - [ ] Add meaningful client tests first. At minimum, use mocked fetch with this assertion:
 
 ```typescript

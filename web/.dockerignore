@@ -1,0 +1,16 @@
+.git
+.next
+node_modules
+coverage
+out
+build
+dist
+
+.env
+.env.*
+*.pem
+*.key
+secrets
+
+npm-debug.log*
+.DS_Store
