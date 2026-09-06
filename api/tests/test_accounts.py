@@ -214,6 +214,27 @@ def test_a_credit_card_requires_a_credit_limit() -> None:
     )
 
 
+def test_a_credit_limit_must_be_positive() -> None:
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate(
+            {
+                **CREATE,
+                "accountType": "credit_card",
+                "openingBalance": "-1.0000",
+                "creditLimit": "-20000.0000",
+            }
+        )
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate(
+            {
+                **CREATE,
+                "accountType": "credit_card",
+                "openingBalance": "-1.0000",
+                "creditLimit": "0.0000",
+            }
+        )
+
+
 def test_a_credit_limit_belongs_only_on_a_credit_card() -> None:
     with pytest.raises(ValidationError):
         accounts.AccountCreate.model_validate({**CREATE, "creditLimit": "20000.0000"})

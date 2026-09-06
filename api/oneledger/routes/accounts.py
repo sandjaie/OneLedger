@@ -73,6 +73,8 @@ def _liability_opening_must_not_increase_net_worth(account_type: str, opening: s
 def _credit_card_needs_a_limit(account_type: str, credit_limit: str | None) -> None:
     if account_type == "credit_card" and credit_limit is None:
         raise ValueError("a credit card needs a credit limit")
+    if account_type == "credit_card" and credit_limit is not None and Decimal(credit_limit) <= 0:
+        raise ValueError("a credit limit must be positive")
     if account_type != "credit_card" and credit_limit is not None:
         raise ValueError("only a credit card carries a credit limit")
 
