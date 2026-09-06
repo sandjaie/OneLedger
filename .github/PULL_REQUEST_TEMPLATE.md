@@ -28,3 +28,6 @@ steps or remaining verification gates. State None if there are no material notes
 
 <!-- Link the task plan/spec and related issues. The plan/spec declares the branch and PR target.
 If needed, explain scope splits or generated/configuration exclusions from the PR line cap. -->
+
+<!-- Update live implementation status only in docs/superpowers/progress.md. Do not copy it into
+the documentation index, README, roadmap or plans. This PR's verification evidence belongs above. -->

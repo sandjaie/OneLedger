@@ -41,45 +41,14 @@ Investment Rate                    X %
 
 ---
 
-## Status
+## Documentation
 
-**Phase 0 in progress (6 September 2026).** Merged into `feature/phase-0-foundations`:
-
-| GitHub PR | Completed scope |
-|---|---|
-| #3 | Compose definition, environment template, secret hygiene |
-| #4 | V1–V2: reference data, identity, RLS |
-| #5 | V3–V4: accounts and FX rates |
-| #6 | FastAPI service and its authorization boundary |
-| #7 | FX pipeline: peg derivation, carry-forward and backfill; merge confirmed |
-| #8 | Reviewed Next.js foundation and cookie-aware typed API client |
-| #9 | Revocable owner-session persistence and strict session verification |
-| #10 | Protected logout, CSRF origin checks and owner-scoped household configuration |
-| #11 | Google OIDC, state/nonce/PKCE and pinned subject binding |
-| #12 | Exact money formatting and generated API types with drift enforcement |
-| #14 | Bounded browser requests and compatible caller cancellation; prerequisite to #13 |
-| #13 | Authenticated shell, configured currency preference and recovery |
-| #15 | Protected Settings FX inspector with exact rates and provenance |
-| #16 | Fixed account chooser on sign-in retry |
-| #17 | Explicit dual-compiler verification and current API boundary comments |
-
-Original Tasks 1–11 are implemented. Automated API/web/database checks, production images,
-offline startup and synthetic-session browser checks pass. **Remaining:** real permitted-account
-Google sign-in and second-account rejection after private OAuth configuration. Phase 0 stays open
-until that live gate passes. All work remains on the integration branch.
-
-See the [verification and dependency report](docs/superpowers/reports/2026-09-06-phase-0-verification.md)
-for actual results, review evidence, compatibility exceptions and execution decisions.
-
-- **[Master implementation plan](docs/superpowers/plans/implementation-plan.md)** — current status,
-  remaining Phase 0 work and the revised delivery order. All new plans live in `docs/superpowers/plans/`.
-- [Existing Phase 0 task plan](docs/superpowers/phase-0-foundations.md) — retained to finish the current phase.
-- [Product roadmap](docs/product/roadmap.html) — delivery gates and progress.
-- [Finance OS requirements](docs/product/finance-os.html) — accepted product-review findings:
-  verified positions, upcoming cash needs, resilience, goals, protection, actions and owner export.
-
-Phase 0 scope is unchanged. These product requirements guide later milestones; they are not
-claims that those features are already implemented.
+- [Specification index](docs/index.html) — product, design and operational documentation.
+- [Master implementation plan](docs/superpowers/plans/implementation-plan.md) — scope and build order.
+- [Implementation progress](docs/superpowers/progress.md) — the single maintained execution tracker.
+- [Product roadmap](docs/product/roadmap.html) — milestone scope and acceptance criteria.
+- [Finance OS requirements](docs/product/finance-os.html) — verified positions, cash needs,
+  resilience, goals, protection, actions and owner export.
 
 **Statements are never committed.** `pdf-statements/`, `*.pdf` and `.env` are git-ignored. Real
 financial data does not enter this repository, and test fixtures are redacted — see
@@ -154,7 +123,7 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/superpowers/questions.html) | Scoping questions — **17 of 24 answered** |
 | **[Implementation Plan](docs/superpowers/plans/implementation-plan.md)** | **The build order. Start here to write code** |
-| [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | Historical seven-PR grouping and review gates; current status records the actual split deliveries |
+| [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | Historical PR grouping and review workflow |
 | [Schema Reference](docs/superpowers/schema.md) | The complete DDL, by migration |
 | [Test Suite Reference](docs/superpowers/test-suite.md) | The invariant suite and static checks |
 

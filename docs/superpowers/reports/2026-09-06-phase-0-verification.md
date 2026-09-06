@@ -1,8 +1,10 @@
 # Phase 0 implementation and verification record
 
-Date: 6 September 2026. Integration branch: `feature/phase-0-foundations`.
+Snapshot date: 6 September 2026. Integration branch: `feature/phase-0-foundations`.
+This report preserves verification evidence from that run. For live implementation status, use
+[the progress file](../progress.md); do not refresh this report as a tracker.
 
-Phase 0 remains in progress. Automated and synthetic-session checks do not substitute for the required real permitted-account and second-account Google sign-in checks. The final presence-only configuration check still found the Google client ID and secret missing and the allowed email placeholder unchanged. No credential values are included in this record.
+At this snapshot, real permitted-account and second-account Google checks were unverified. Automated and synthetic-session checks do not substitute for those checks. The presence-only configuration check found the Google client ID and secret missing and the allowed email placeholder unchanged. No credential values are included in this record.
 
 ## Reviewed deliveries
 
@@ -97,10 +99,10 @@ command shim: either compiler failure propagates; the second is skipped when the
 The final follow-up changes only the verification gate and comments; application behavior and
 web dependencies remain those exercised by the production acceptance checks.
 
-## Required external exit gate
+## Unverified at the snapshot
 
-Phase 0 is **implemented and integration-verified, but remains in progress** until these real
-identity checks are recorded:
+The implementation and synthetic integration checks above were verified; these real identity
+steps had not been verified at the snapshot:
 
 1. Privately configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and the real
    `ALLOWED_USER_EMAIL` in ignored `.env`; ensure the seeded owner matches the permitted email.
@@ -110,9 +112,9 @@ identity checks are recorded:
    no protected API access.
 
 Mocked Google protocol tests, synthetic signed sessions and browser checks are separate evidence.
-They do not satisfy this live gate. Do not mark the roadmap complete or begin the next phase on
-that basis. All implementation remains on `feature/phase-0-foundations`; merging it to `main`
-requires a separate owner request.
+They do not establish those live results. Subsequent verification and phase-closure state belong
+in the progress file. The reviewed implementation was on `feature/phase-0-foundations`; merging
+it to `main` requires a separate owner request.
 
 ## Execution decisions and trade-offs
 

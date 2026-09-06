@@ -6,9 +6,9 @@ same implementer and sequential merges. Product-expansion features remain outsid
 
 ## Baseline and scope
 
-GitHub PRs #3–#7 are merged. The API/database baseline passes 20 Python tests and four SQL suites.
-Remain: original Task 9 web scaffold/client; Task 10 Google OIDC; Task 11 exact money display,
-configured currency toggle/navigation; full-stack and scratch-database exit verification.
+This specification covers original Task 9 web scaffold/client, Task 10 Google OIDC, Task 11 exact
+money display and configured currency navigation, plus full-stack and scratch-database exit
+verification. Consult [implementation progress](../progress.md) for execution state before starting work.
 
 The previous executable snippets are historical guidance. This spec resolves identified gaps:
 the environment-only client test does not exercise a client; `Number()` loses money precision;
@@ -112,8 +112,7 @@ FX range endpoints and full-stack web navigation. Browser checks cover the login
 keyboard focus and the Settings FX inspector. Test mocked Google flows separately from real Google
 sign-in; do not describe mocked evidence as a successful live Google login.
 
-Local GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are currently missing and ALLOWED_USER_EMAIL is a
-placeholder. The owner has been asked to configure these privately. Finish all independent work while
-waiting. Real permitted and second-account sign-in checks remain explicitly pending until valid
-configuration and interactive identity approval are available. Never commit secrets or test with real
-statements. Do not claim Phase 0 complete while a required exit check remains unverified.
+Live Google checks require privately configured GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and the
+permitted ALLOWED_USER_EMAIL, plus interactive identity approval. Record configuration blockers and
+completed checks only in the progress file. Never commit secrets or test with real statements.
+Do not claim Phase 0 complete while a required exit check remains unverified.
