@@ -28,6 +28,32 @@ All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
+### Plans are execution maps (every plan and spec written after Phase 1's)
+
+An implementation plan is an execution map, not a pre-written patch. Do not include complete
+production implementations or complete test implementations unless the task is a trivial
+deterministic repair. This owner rule overrides skill defaults that require full embedded code
+in plan steps; Phase 1's existing plan and spec predate it and stay as delivered.
+
+For feature work, a task specifies: outcome; affected files/modules; dependencies;
+interfaces/contracts; invariants; security requirements; required test behaviours; validation
+commands; acceptance criteria.
+
+Use code snippets only when they define:
+
+1. an exact cross-task interface,
+2. a schema/API contract,
+3. a non-obvious invariant or algorithm where prose is ambiguous, or
+4. a tiny deterministic change.
+
+The implementation agent must inspect the current repository before deciding the exact
+implementation. The specification is authoritative; the plan is the intended execution path;
+repository reality determines the exact implementation. An implementation agent may deviate
+from plan implementation details when necessary to fit existing code, provided the
+specification, contracts and acceptance criteria remain satisfied and the deviation is
+recorded — in the PR and `docs/superpowers/progress.md`, not by editing the plan after
+dispatch.
+
 **Maintain implementation progress in one file: `docs/superpowers/progress.md`.** The orchestrator
 updates it during Superpowers execution with completed work, remaining gates and evidence links.
 Read it before dispatch and update it at task boundaries; do not maintain parallel status tables
