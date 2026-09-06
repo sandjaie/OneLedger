@@ -218,6 +218,23 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
   };
 }
 
+function AccountTableHead() {
+  return (
+    <thead className="visually-hidden">
+      <tr>
+        <th scope="col">Institution</th>
+        <th scope="col">Account</th>
+        <th scope="col">Detail</th>
+        <th scope="col">Masked number</th>
+        <th scope="col">Balance</th>
+        <th scope="col">Status</th>
+        <th scope="col">Evidence</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+  );
+}
+
 function isAuthError(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
 }
@@ -551,6 +568,7 @@ export function AccountsScreen({
           <input
             inputMode="decimal"
             onChange={(event) => field("creditLimit", event.target.value)}
+            required={draft.accountType === "credit_card"}
             type="text"
             value={draft.creditLimit}
           />
@@ -687,6 +705,7 @@ export function AccountsScreen({
             </div>
             <table className="account-table">
               <caption className="visually-hidden">{title}</caption>
+              <AccountTableHead />
               <tbody>{rows.map(renderRow)}</tbody>
             </table>
           </section>
@@ -697,6 +716,7 @@ export function AccountsScreen({
         <section className="account-group">
           <table className="account-table">
             <caption className="visually-hidden">Closed accounts</caption>
+            <AccountTableHead />
             <tbody>{closed.map(renderRow)}</tbody>
           </table>
         </section>
