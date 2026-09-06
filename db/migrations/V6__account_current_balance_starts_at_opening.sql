@@ -10,10 +10,9 @@ CREATE FUNCTION derive_account_current_balance() RETURNS TRIGGER LANGUAGE plpgsq
 BEGIN
   IF NEW.current_balance IS NULL THEN
     NEW.current_balance := NEW.opening_balance;
-    -- The materialised figure carries the date it is actually true for. Nothing derived is
-    -- presented as if observed (Invariant I7).
-    NEW.current_balance_as_of := COALESCE(NEW.current_balance_as_of,
-                                          NEW.opening_balance_date::timestamptz);
+    -- The materialised figure is true on the opening date. A caller-supplied as-of is not
+    -- kept: that would present opening_balance as observed on another day (Invariant I7).
+    NEW.current_balance_as_of := NEW.opening_balance_date::timestamptz;
   END IF;
   RETURN NEW;
 END $$;

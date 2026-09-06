@@ -54,6 +54,15 @@ BEGIN
   ASSERT (SELECT current_balance FROM account WHERE name = 'Explicitly Zero') = 0,
     'an explicit current_balance is never overwritten';
 
+  -- A derived opening amount is true on the opening date. A caller-supplied as-of must not
+  -- survive that derivation (I7): it would present opening_balance as observed on another day.
+  INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                       country, opening_balance, opening_balance_date, current_balance_as_of)
+    VALUES (h,p,'Stale As Of','savings',base,'XB',100000,'2024-01-01','2020-06-01');
+  ASSERT (SELECT current_balance_as_of FROM account WHERE name = 'Stale As Of')
+           = '2024-01-01'::timestamptz,
+    'a derived balance does not keep a caller-supplied as-of date';
+
   RAISE NOTICE 'PASS 0003';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN
