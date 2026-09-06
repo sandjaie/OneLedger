@@ -17,9 +17,9 @@ unapplied `0015` attribution shape must be reconciled with F03 before implementa
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
 Applied migrations use their Flyway names. V1–V5 are Phase 0. V6–V8 are Phase 1 M1a: the
-current-balance derivation, household configuration, and the account inventory. V9 — categories,
-merchants and the seed taxonomy — is M1b's first migration. The unapplied reference sequence in
-this file now begins at `0007`; deferred foreign keys remain `0018`.
+current-balance derivation, household configuration, and the account inventory. V9 and V10 are
+M1b: categories, merchants and the seed taxonomy, then the transaction ledger. The unapplied
+reference sequence in this file now begins at `0008`; deferred foreign keys remain `0018`.
 
 ---
 
@@ -292,9 +292,16 @@ CREATE TABLE merchant_alias (
 
 ---
 
-## `0007`
+## `V10` (applied)
 
 ### The transaction ledger
+
+Applied with one widening of the `0018` deferred-foreign-key pattern: besides `transfer_id` and
+its siblings, the references to `document` (`source_document_id`, `receipt_document_id`),
+`import_batch`, `statement_layout` and `classification_rule` are bare `UUID` columns in V10,
+because those tables arrive with M2 and M4; the M4 migration that completes the target set adds
+their foreign keys. The `REFERENCES` clauses below on those columns are the target shape, not
+yet constraints.
 
 ```sql
 CREATE TYPE txn_type AS ENUM (
@@ -397,7 +404,10 @@ CREATE TABLE transaction (
   CONSTRAINT fx_rates_positive    CHECK (fx_rate_to_base > 0 AND fx_rate_to_secondary > 0),
   CONSTRAINT original_pair        CHECK ((original_amount IS NULL) = (original_currency IS NULL)),
   CONSTRAINT transfer_type_agrees CHECK (
-    transfer_id IS NULL OR txn_type IN ('transfer_in','transfer_out'))
+    transfer_id IS NULL OR txn_type IN ('transfer_in','transfer_out')),
+  -- I6: nothing claims to come from a statement without naming the statement.
+  CONSTRAINT import_has_document  CHECK (
+    source <> 'statement_import' OR source_document_id IS NOT NULL)
 );
 
 CREATE UNIQUE INDEX idx_txn_dedupe   ON transaction (household_id, account_id, dedupe_hash);
