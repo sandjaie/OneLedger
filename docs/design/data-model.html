@@ -608,8 +608,9 @@ person is added. See <a href="../operations/security-and-privacy.html">security-
 <p><strong>Google will authenticate any Google account.</strong> A valid sign-in proves identity and nothing
 more. Authorization is the service's job
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>): it checks the address against
-<code>ALLOWED_USER_EMAIL</code>, resolves the session to a row in <code>app_user</code>, and only then scopes
-the database connection with <code>SET LOCAL app.user_id</code>.</p>
+<code>ALLOWED_USER_EMAIL</code>, resolves the session to an active, unexpired and unrevoked
+<code>app_session</code> row joined to an owner <code>app_user</code> whose normalized address matches the
+pinned address, and only then scopes the database connection with <code>SET LOCAL app.user_id</code>.</p>
 <p>An unscoped connection therefore reads nothing, because every policy predicate is <code>NULL</code>. The
 remaining hole is <code>SECURITY DEFINER</code> functions, which bypass RLS by design:</p>
 <pre><code class="language-sql">-- Called first by every SECURITY DEFINER function. Authentication is not authorization.

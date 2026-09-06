@@ -449,7 +449,7 @@ steal that would let an attacker touch an actual bank account.</p>
 <td><strong>Unpermitted Google account calling the database directly</strong></td>
 <td><strong>Medium</strong></td>
 <td><strong>High</strong></td>
-<td>The service resolves the session to an <code>app_user</code> row and rejects with <code>403</code> otherwise; RLS returns nothing on an unscoped connection; reference tables are read-only. See §3</td>
+<td>The service resolves the session to an active, unexpired and unrevoked <code>app_session</code> row joined to an owner <code>app_user</code> whose normalized address matches the pinned address, and rejects with <code>403</code> otherwise; RLS returns nothing on an unscoped connection; reference tables are read-only. See §3</td>
 </tr>
 <tr>
 <td>Session hijack</td>
@@ -522,7 +522,7 @@ one household and is permanently single-tenant, but the property is genuinely lo
 </tr>
 <tr>
 <td>Every API request</td>
-<td>Session cookie verified; it must resolve to an <code>app_user</code> row, and the address must match the pinned one. A stranger who signs in with Google gets <code>403</code> from every route</td>
+<td>Session cookie verified; it must resolve to an active, unexpired and unrevoked <code>app_session</code> row joined to an owner <code>app_user</code>, and the normalized address must match the pinned one. A stranger who signs in with Google gets <code>403</code> from every route</td>
 </tr>
 <tr>
 <td>Reference tables (<code>fx_rate</code>, <code>currency</code>, <code>price_snapshot</code>)</td>

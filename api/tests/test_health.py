@@ -23,5 +23,5 @@ def test_a_forged_session_is_403() -> None:
 
 
 @pytest.mark.parametrize("route", ["/whoami"])
-def test_every_route_but_health_requires_the_owner(route: str) -> None:
+def test_whoami_boundary_smoke_requires_the_owner(route: str) -> None:
     assert client.get(route).status_code in (401, 403)
