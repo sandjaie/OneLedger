@@ -180,7 +180,7 @@ function unsigned(value: string) {
 }
 
 function isMask(value: string) {
-  return [...value].reduce((count, ch) => count + (ch >= "0" && ch <= "9" ? 1 : 0), 0) <= 4;
+  return [...value].reduce((count, ch) => count + (/\p{Nd}/u.test(ch) ? 1 : 0), 0) <= 4;
 }
 
 function signedOpening(accountType: string, value: string) {

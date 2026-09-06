@@ -318,17 +318,28 @@ def create_account(
         with connect() as conn, conn.cursor() as cur:
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
             cur.execute(
+                "SELECT id FROM person WHERE household_id = %s AND is_self",
+                (owner.household_id,),
+            )
+            selves = cur.fetchall()
+            if len(selves) == 0:
+                raise HTTPException(status_code=409, detail="no self person for this household")
+            if len(selves) > 1:
+                raise HTTPException(
+                    status_code=409, detail="this household has more than one self person"
+                )
+            cur.execute(
                 """INSERT INTO account (
                        household_id, owner_person_id, institution_id, name, account_type,
                        account_subtype, currency, country, account_number_masked, opened_on,
                        include_in_net_worth, is_liquid, opening_balance, opening_balance_date,
                        opening_balance_note, credit_limit)
-                   SELECT %s, p.id, %s, %s, %s::account_type, %s, %s, %s, %s, %s, %s, %s,
-                          %s, %s, %s, %s
-                     FROM person p WHERE p.household_id = %s AND p.is_self
+                   VALUES (%s, %s, %s, %s, %s::account_type, %s, %s, %s, %s, %s, %s, %s,
+                           %s, %s, %s, %s)
                    RETURNING id""",
                 (
                     owner.household_id,
+                    selves[0][0],
                     body.institutionId,
                     body.name,
                     body.accountType,
@@ -343,12 +354,11 @@ def create_account(
                     body.openingBalanceDate,
                     body.openingBalanceNote,
                     None if body.creditLimit is None else Decimal(body.creditLimit),
-                    owner.household_id,
                 ),
             )
             created = cur.fetchone()
             if created is None:
-                raise HTTPException(status_code=409, detail="no self person for this household")
+                raise HTTPException(status_code=500, detail="the account could not be created")
             return _one(cur, UUID(str(created[0])), owner.household_id)
     except (
         psycopg.errors.InvalidTextRepresentation,
