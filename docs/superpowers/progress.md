@@ -9,15 +9,17 @@ Updated: 6 September 2026.
 ## Current phase
 
 **Phase 1 — trusted financial position.**
-Integration branch: `feature/phase-1-trusted-financial-position`.
-Active plan: [Phase 1 trusted financial position](plans/2026-09-06-phase-1-trusted-financial-position.md).
+M1a (this plan's Tasks 1–11) is on `develop` by owner request. The former integration branch
+`feature/phase-1-trusted-financial-position` is deleted after that merge. Later Phase 1 work
+(M1b onward) branches from `develop` until a new phase branch is named.
+Active M1a plan: [Phase 1 trusted financial position](plans/2026-09-06-phase-1-trusted-financial-position.md).
 Specification: [Phase 1 spec](specs/2026-09-06-phase-1-trusted-financial-position.md).
+M1b–M9b plan/spec: [PR #28](https://github.com/sandjaie/OneLedger/pull/28).
 Branching, phase integration and releases follow [docs/git-workflow.md](../git-workflow.md).
-Integration of the phase branch into `develop`, and any path to `main`, still need a separate
-owner request.
+Any path to `main` still needs a separate owner request.
 
-Phase 1 is active by owner request. Phase 0's live Google identity gates remain open below —
-synthetic checks do not substitute for them.
+Phase 1 remains active. This merge is M1a, not Phase 1 completion. Phase 0's live Google
+identity gates remain open below — synthetic checks do not substitute for them.
 
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
@@ -29,9 +31,9 @@ synthetic checks do not substitute for them.
 | 6 — household configuration API | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5, 7, 8) |
 | 7 — Settings › Household UI | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5, 6, 8) |
 | 8 — account inventory schema | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5–7) |
-| 9 — account inventory API | `feature/task-9-11-account-inventory` | This PR | clubbed with 10–11 |
-| 10 — account inventory UI | `feature/task-9-11-account-inventory` | This PR | clubbed with 9, 11 |
-| 11 — progress evidence and M1a/M1b split | `feature/task-9-11-account-inventory` | This PR | clubbed with 9–10 |
+| 9 — account inventory API | `feature/task-9-11-account-inventory` | Complete | [PR #29](https://github.com/sandjaie/OneLedger/pull/29); follow-up `1d7aab5` |
+| 10 — account inventory UI | `feature/task-9-11-account-inventory` | Complete | [PR #29](https://github.com/sandjaie/OneLedger/pull/29); follow-up `1d7aab5` |
+| 11 — progress evidence and M1a/M1b split | `feature/task-9-11-account-inventory` | Complete | [PR #29](https://github.com/sandjaie/OneLedger/pull/29) |
 
 Roadmap M1 is delivered as **M1a** (Tasks 8–10 in this plan) and **M1b** (its own dated plan).
 Roadmap M1's *Done when* list is complete only when both are.
