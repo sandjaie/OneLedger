@@ -1,12 +1,31 @@
 -- db/tests/0001_reference.sql
+-- Reference data is asserted by property, never by membership. Naming a currency here would
+-- make it a required seed row, and every currency in these documents is an example (ADR-0012):
+-- a household reporting in any other pair must pass this suite unchanged.
 \set ON_ERROR_STOP on
 DO $$
 BEGIN
-  ASSERT (SELECT count(*) FROM currency WHERE code IN ('AED','INR','USD')) = 3,
-    'expected AED, INR and USD seeded';
-  ASSERT (SELECT number_format FROM currency WHERE code = 'INR') = 'indian',
-    'INR must use Indian digit grouping';
+  ASSERT (SELECT count(*) FROM currency) >= 2,
+    'a reporting pair needs at least two seeded currencies';
+  ASSERT NOT EXISTS (SELECT FROM currency WHERE decimals < 0 OR decimals > 6),
+    'currency decimals are a plausible minor-unit scale';
+  ASSERT NOT EXISTS (SELECT FROM currency WHERE number_format NOT IN ('international', 'indian')),
+    'number_format is one of the two supported values';
+  ASSERT NOT EXISTS (
+    SELECT FROM currency WHERE (pegged_to IS NULL) IS DISTINCT FROM (peg_rate IS NULL)),
+    'a peg is complete or absent';
+  ASSERT NOT EXISTS (
+    SELECT FROM currency c
+     WHERE c.pegged_to IS NOT NULL
+       AND NOT EXISTS (SELECT FROM currency a WHERE a.code = c.pegged_to)),
+    'every peg anchor is itself a seeded currency';
+  ASSERT NOT EXISTS (SELECT FROM currency WHERE peg_rate IS NOT NULL AND peg_rate <= 0),
+    'a peg rate is positive';
+  ASSERT NOT EXISTS (
+    SELECT FROM currency c JOIN currency anchor ON anchor.code = c.pegged_to
+     WHERE anchor.pegged_to IS NOT NULL),
+    'a peg anchor is not itself pegged, so every derivation chain terminates';
   ASSERT (SELECT count(*) FROM institution WHERE household_id IS NULL) >= 6,
-    'expected system-seeded institutions';
+    'the shared institution suggestions are seeded';
   RAISE NOTICE 'PASS 0001';
 END $$;

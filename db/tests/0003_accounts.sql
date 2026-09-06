@@ -2,18 +2,26 @@
 \set ON_ERROR_STOP on
 DO $$
 DECLARE h UUID; p UUID; a_card UUID; a_sav UUID; cls account_class;
+        base CHAR(3); secondary CHAR(3);
 BEGIN
+  -- The fixture takes whatever two currencies this deployment seeded. Naming them would make
+  -- them required seed rows (ADR-0012). Countries use the ISO user-assigned range for the
+  -- same reason.
+  SELECT min(code) INTO base FROM currency;
+  SELECT min(code) INTO secondary FROM currency WHERE code > base;
+  ASSERT base IS NOT NULL AND secondary IS NOT NULL, 'this fixture needs two seeded currencies';
+
   INSERT INTO household (name, base_currency, secondary_currency)
-  VALUES ('test', 'INR', 'AED') RETURNING id INTO h;
+  VALUES ('test', base, secondary) RETURNING id INTO h;
   INSERT INTO person (household_id, display_name, is_self) VALUES (h,'self',true) RETURNING id INTO p;
 
   INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
                        country, opening_balance, opening_balance_date, credit_limit)
-    VALUES (h,p,'Test Card','credit_card','AED','AE',-4500,'2024-01-01',20000)
+    VALUES (h,p,'Test Card','credit_card',secondary,'XA',-4500,'2024-01-01',20000)
     RETURNING id INTO a_card;
   INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
                        country, opening_balance, opening_balance_date)
-    VALUES (h,p,'Test Savings','savings','INR','IN',100000,'2024-01-01')
+    VALUES (h,p,'Test Savings','savings',base,'XB',100000,'2024-01-01')
     RETURNING id INTO a_sav;
 
   SELECT account_class INTO cls FROM account WHERE id = a_card;
