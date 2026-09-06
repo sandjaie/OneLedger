@@ -709,8 +709,9 @@ export type TransactionRow = {
 /**
  * TransactionUpdate
  *
- * The two owner-editable fields, always sent. Money is immutable (I1/I5); the database
- * trigger enforces what this model does not offer.
+ * The two owner-editable fields, always sent — omitting notes would silently erase an
+ * existing note, so it is required and an explicit null is the deliberate clear. Money is
+ * immutable (I1/I5); the database trigger enforces what this model does not offer.
  */
 export type TransactionUpdate = {
     /**
@@ -720,7 +721,7 @@ export type TransactionUpdate = {
     /**
      * Notes
      */
-    notes?: string | null;
+    notes: string | null;
 };
 
 /**
