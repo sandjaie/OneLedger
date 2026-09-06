@@ -343,6 +343,33 @@ BEGIN
       'a released child counts again';
   END;
 
+  -- Each leaf derives its frozen amounts from its own amount and rates: totals that balance
+  -- while one child hoards the converted value are rejected per row.
+  DECLARE p6 UUID;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_card, '2024-02-11', 'SPLIT SIX', -60.0000, base,
+              '2024-02-11', 20, 1, -1200.0000, -60.0000, 'expense', 'manual', 'p6')
+      RETURNING id INTO p6;
+    BEGIN
+      INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                               currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                               amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                               parent_transaction_id)
+        VALUES (h, a_card, '2024-02-11', 'SPLIT SIX', -30.0000, base,
+                '2024-02-11', 20, 1, -1200.0000, -30.0000, 'expense', 'manual', 'p6a', p6),
+               (h, a_card, '2024-02-11', 'SPLIT SIX', -30.0000, base,
+                '2024-02-11', 20, 1, 0.0000, -30.0000, 'expense', 'manual', 'p6b', p6);
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'a child hoarding the converted value must be rejected';
+      END IF;
+    END;
+  END;
+
   -- The frozen sums balance too: reports read amount_base/amount_secondary, and children
   -- replace their parent there. Native agreement alone is not enough.
   DECLARE p5 UUID;
@@ -406,6 +433,21 @@ BEGIN
       IF SQLERRM = 'unreachable' THEN
         RAISE EXCEPTION 'a cross-household transaction must be rejected';
       END IF;
+    END;
+
+    -- Nor may a row wear another household's category.
+    DECLARE foreign_cat UUID;
+    BEGIN
+      INSERT INTO category (household_id, name, slug, kind, bucket)
+        VALUES (h2, 'Their Category', 'their-cat', 'expense', 'want') RETURNING id INTO foreign_cat;
+      BEGIN
+        UPDATE transaction SET category_id = foreign_cat WHERE id = t_lone;
+        RAISE EXCEPTION 'unreachable';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM = 'unreachable' THEN
+          RAISE EXCEPTION 'a cross-household category must be rejected';
+        END IF;
+      END;
     END;
   END;
 
