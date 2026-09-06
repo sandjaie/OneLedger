@@ -487,6 +487,14 @@ addressed by unglamorous measures that are easy to skip and shouldn&#39;t be.</p
 authenticating is rejected by the service even though Google authenticated it successfully.</li>
 <li>MFA is inherited from the Google account, where it should live.</li>
 </ul>
+<p>Login uses authorization code flow with random state, nonce and PKCE S256. The signed flow cookie is
+HttpOnly, SameSite=Lax, valid for ten minutes and Secure when <code>COOKIE_SECURE=1</code>. Callback checks
+that cookie and state before any token exchange, then verifies the ID token's RSA signature with
+Google's JWKS, documented issuer, configured audience, expiry, nonce, nonempty subject and boolean
+verified-email claim. Google discovery and JWKS are not fetched at startup.</p>
+<p>The verified normalized email must match exactly one seeded owner. A single conditional update binds
+the Google subject only if its stored value is null or already equal, so ambiguous rows and competing
+different subjects fail closed. The seeded local UUID remains the application session subject.</p>
 <pre><code class="language-python"># Every authenticated route, in the service
 def require_owner(session: str = Cookie(default=&quot;&quot;)) -&gt; OwnerSession:
     claims = verify_signed_claims(session)    # 401 if absent; 403 if forged or expired
@@ -500,7 +508,7 @@ def require_owner(session: str = Cookie(default=&quot;&quot;)) -&gt; OwnerSessio
 redirect to <code>/unauthorized</code> is a page-level control, not a wall.</p>
 <p><strong>The API service is the authorization boundary</strong>
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>). Sign-in verifies Google's <code>id_token</code> against Google's JWKS and checks the address
-against <code>ALLOWED_USER_EMAIL</code>; the service then issues its own signed, httpOnly session cookie.
+against <code>ALLOWED_USER_EMAIL</code>; the service then issues its own signed, HttpOnly session cookie.
 Every request resolves that session to an unexpired, unrevoked <code>app_session</code> row joined to
 the owner <code>app_user</code>, and rejects with <code>403</code> if there is none. Every query it issues is
 scoped to that household explicitly.</p>
@@ -557,6 +565,11 @@ expiry requires sign-in again. Sign-out revokes the exact server record before c
 so replay of the old cookie fails. Cookie-authenticated mutations require an exact
 <code>Origin</code> match with <code>WEB_ORIGIN</code>. See
 <a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
+<p>Callback errors clear the transient cookie and redirect only to the configured web origin. Identity
+denial uses the unauthorized page; recoverable failures use one generic login reason. Codes, tokens
+and raw exceptions are absent from responses. The shipped API command disables raw Uvicorn access
+logs because callback request targets contain authorization codes. Use
+<code>uv run uvicorn oneledger.main:app --reload --port 8000 --no-access-log</code> locally as well.</p>
 <hr>
 <h2 id="4-account-number-handling">4. Account number handling</h2>
 <p>Statements must be matched to accounts, which requires recognising an account number — without

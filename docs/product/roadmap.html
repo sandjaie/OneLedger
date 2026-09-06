@@ -400,23 +400,25 @@ according to which is most useful at the time.</p>
 <p><strong>M8 (Loans) is descheduled.</strong> No loan appears in any of the 71 statements gathered, and Q18 is
 unanswered. Building an amortisation engine for a loan that may not exist is the clearest possible
 case of speculative work. The milestone stays specified below, ready to be scheduled when a loan is confirmed.
-Phase 0 applies V1–V4 only; loan schema and any required references belong to later forward migrations.</p>
+Phase 0 applies V1–V5 only; loan schema and any required references belong to later forward migrations.</p>
 <hr>
 <h2 id="current-baseline">Current baseline — 6 September 2026</h2>
 <p>GitHub PR numbers below are repository PR numbers, not the ordinal PR headings or task numbers
-in the original Phase 0 plan. All five are merged into <code>feature/phase-0-foundations</code>.
-The owner confirmed #7 merged; its FX implementation and review fixes through <code>fd6b5db</code>
-are present in local branch history. Merge status is not a new claim that phase-exit checks passed.</p>
+in the original Phase 0 plan. All eight are merged into <code>feature/phase-0-foundations</code>.
+They cover the reviewed foundation through protected owner endpoints at <code>fe54461</code>.
+Merge status is not a new claim that phase-exit checks passed.</p>
 <table><thead><tr><th>GitHub PR</th><th>Delivered</th><th>Original plan tasks</th></tr></thead><tbody>
 <tr><td>#3</td><td>Compose definition, environment template and secret hygiene</td><td>1</td></tr>
 <tr><td>#4</td><td>V1–V2: reference data, identity and RLS</td><td>2–3</td></tr>
 <tr><td>#5</td><td>V3–V4: accounts and FX rates</td><td>4–5</td></tr>
 <tr><td>#6</td><td>FastAPI and require_owner / resolve_owner / connect</td><td>6</td></tr>
 <tr><td>#7</td><td>FX pipeline: peg derivation, carry-forward and backfill; three Codex review rounds reported</td><td>7–8</td></tr>
+<tr><td>#8</td><td>Next.js foundation and cookie-aware typed API client</td><td>9</td></tr>
+<tr><td>#9</td><td>Revocable owner-session persistence and strict session verification</td><td>10 partial</td></tr>
+<tr><td>#10</td><td>Protected logout, CSRF origin checks and household configuration</td><td>10 partial</td></tr>
 </tbody></table>
-<p><strong>Remaining:</strong> Task 9 web shell and typed client; Tasks 10–11 Google OIDC, seed,
-money formatting, currency toggle and navigation; then all Phase 0 exit checks. The existing
-compose definition does not mean the web service is implemented. Do not restart merged tasks.</p>
+<p><strong>Remaining:</strong> this delivery's Google OIDC bootstrap, then Task 11 exact money formatting,
+currency toggle and navigation, followed by all Phase 0 exit checks. Do not restart merged tasks.</p>
 <h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
 <p>Everything needed before feature work has somewhere to land.</p>
 <p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
@@ -849,8 +851,11 @@ external tracker for a single-person project; the overhead exceeds the benefit.<
           ☑ GitHub #5 V3–V4
           ☑ GitHub #6 API authorization boundary
           ☑ GitHub #7 FX pipeline including backfill
-          ☐ Task 9 Web shell and typed client
-          ☐ Tasks 10–11 Google OIDC, seed, money and navigation
+          ☑ GitHub #8 Web foundation and typed client
+          ☑ GitHub #9 Revocable owner-session core
+          ☑ GitHub #10 Protected owner endpoints
+          ◐ Task 10 Google OIDC bootstrap — current delivery
+          ☐ Task 11 Money and navigation
           ☐ Phase 0 exit verification
 
 Phase 1   ☐ M1   Accounts + manual transactions
