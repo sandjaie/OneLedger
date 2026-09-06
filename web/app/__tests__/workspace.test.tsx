@@ -177,7 +177,7 @@ describe("authenticated workspace", () => {
 
   it("renders the Settings FX rate provenance for the requested date", async () => {
     window.history.replaceState(null, "", "/settings");
-    render(<Workspace request={requestThat(household, catalogue, [rate])} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue, [], [rate])} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
@@ -196,7 +196,7 @@ describe("authenticated workspace", () => {
 
   it("shows empty and retryable FX service states", async () => {
     window.history.replaceState(null, "", "/settings");
-    const request = requestThat(household, catalogue, [], new TypeError("offline"), [rate]);
+    const request = requestThat(household, catalogue, [], [], new TypeError("offline"), [rate]);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "Settings" });
@@ -218,6 +218,7 @@ describe("authenticated workspace", () => {
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce([])
       .mockReturnValueOnce(fx.promise) as Request;
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
@@ -248,6 +249,7 @@ describe("authenticated workspace", () => {
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce([])
       .mockReturnValueOnce(stale.promise)
       .mockReturnValueOnce(latest.promise) as Request;
 
@@ -272,7 +274,7 @@ describe("authenticated workspace", () => {
   ])("clears protected content when FX returns %i", async (status, destination) => {
     window.history.replaceState(null, "", "/settings");
     const navigate = vi.fn();
-    render(<Workspace request={requestThat(household, catalogue, new ApiError(status, "synthetic"))} navigate={navigate} />);
+    render(<Workspace request={requestThat(household, catalogue, [], new ApiError(status, "synthetic"))} navigate={navigate} />);
 
     await screen.findByRole("heading", { name: "Settings" });
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
@@ -291,6 +293,7 @@ describe("authenticated workspace", () => {
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce([])
       .mockReturnValueOnce(fx.promise)
       .mockReturnValueOnce(logout.promise) as Request;
 
@@ -325,6 +328,7 @@ describe("authenticated workspace", () => {
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce([])
       .mockReturnValueOnce(fx.promise)
       .mockRejectedValueOnce(new TypeError("offline")) as Request;
 
@@ -344,7 +348,7 @@ describe("authenticated workspace", () => {
   });
 
   it("refreshes the reporting-currency toggle after the pair changes", async () => {
-    const request = requestThat(household, catalogue, undefined, swappedHousehold, catalogue);
+    const request = requestThat(household, catalogue, [], undefined, swappedHousehold, catalogue, []);
     render(<Workspace section="settings" request={request} navigate={vi.fn()} />);
     await screen.findByLabelText("Base currency");
     fireEvent.change(screen.getByLabelText("Base currency"), { target: { value: "XAE" } });
@@ -460,7 +464,7 @@ describe("authenticated workspace", () => {
     [401, "/login"], [403, "/unauthorized"],
   ])("clears Settings when household save returns %i", async (status, destination) => {
     const navigate = vi.fn();
-    const request = requestThat(household, catalogue, new ApiError(status, "synthetic"));
+    const request = requestThat(household, catalogue, [], new ApiError(status, "synthetic"));
     render(<Workspace section="settings" request={request} navigate={navigate} />);
     await screen.findByLabelText("Household name");
     fireEvent.click(screen.getByRole("button", { name: "Save household" }));

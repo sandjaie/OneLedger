@@ -274,6 +274,91 @@ export type AccountsResponse = {
 };
 
 /**
+ * CategoryCreate
+ */
+export type CategoryCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Parentid
+     */
+    parentId?: string | null;
+    /**
+     * Kind
+     */
+    kind?: string | null;
+    /**
+     * Bucket
+     */
+    bucket?: string | null;
+};
+
+/**
+ * CategoryRow
+ */
+export type CategoryRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Parentid
+     */
+    parentId: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Slug
+     */
+    slug: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Bucket
+     */
+    bucket: string;
+    /**
+     * Sortorder
+     */
+    sortOrder: number;
+    /**
+     * Issystem
+     */
+    isSystem: boolean;
+    /**
+     * Isactive
+     */
+    isActive: boolean;
+};
+
+/**
+ * CategoryUpdate
+ *
+ * Always sent in full. Name changes apply to the household's own rows; bucket and
+ * activity apply to any row, because both are stated to be the owner's defaults.
+ */
+export type CategoryUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Bucket
+     */
+    bucket: string;
+    /**
+     * Isactive
+     */
+    isActive: boolean;
+};
+
+/**
  * CurrencyRow
  */
 export type CurrencyRow = {
@@ -1134,6 +1219,88 @@ export type UpdateTransactionTransactionsTransactionIdPatchResponses = {
 };
 
 export type UpdateTransactionTransactionsTransactionIdPatchResponse = UpdateTransactionTransactionsTransactionIdPatchResponses[keyof UpdateTransactionTransactionsTransactionIdPatchResponses];
+
+export type ListCategoriesCategoriesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/categories';
+};
+
+export type ListCategoriesCategoriesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCategoriesCategoriesGetError = ListCategoriesCategoriesGetErrors[keyof ListCategoriesCategoriesGetErrors];
+
+export type ListCategoriesCategoriesGetResponses = {
+    /**
+     * Response List Categories Categories Get
+     *
+     * Successful Response
+     */
+    200: Array<CategoryRow>;
+};
+
+export type ListCategoriesCategoriesGetResponse = ListCategoriesCategoriesGetResponses[keyof ListCategoriesCategoriesGetResponses];
+
+export type CreateCategoryCategoriesPostData = {
+    body: CategoryCreate;
+    path?: never;
+    query?: never;
+    url: '/categories';
+};
+
+export type CreateCategoryCategoriesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCategoryCategoriesPostError = CreateCategoryCategoriesPostErrors[keyof CreateCategoryCategoriesPostErrors];
+
+export type CreateCategoryCategoriesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: CategoryRow;
+};
+
+export type CreateCategoryCategoriesPostResponse = CreateCategoryCategoriesPostResponses[keyof CreateCategoryCategoriesPostResponses];
+
+export type UpdateCategoryCategoriesCategoryIdPatchData = {
+    body: CategoryUpdate;
+    path: {
+        /**
+         * Category Id
+         */
+        category_id: string;
+    };
+    query?: never;
+    url: '/categories/{category_id}';
+};
+
+export type UpdateCategoryCategoriesCategoryIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCategoryCategoriesCategoryIdPatchError = UpdateCategoryCategoriesCategoryIdPatchErrors[keyof UpdateCategoryCategoriesCategoryIdPatchErrors];
+
+export type UpdateCategoryCategoriesCategoryIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: CategoryRow;
+};
+
+export type UpdateCategoryCategoriesCategoryIdPatchResponse = UpdateCategoryCategoriesCategoryIdPatchResponses[keyof UpdateCategoryCategoriesCategoryIdPatchResponses];
 
 export type HealthHealthGetData = {
     body?: never;

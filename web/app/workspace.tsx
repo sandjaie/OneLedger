@@ -4,24 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
+import { CategoriesManager } from "@/app/settings/categories-manager";
 import { HouseholdForm } from "@/app/settings/household-form";
+import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
   AccountsResponse,
+  CategoryRow,
   CurrencyRow,
   FxRateResponse,
   HouseholdCurrency,
   HouseholdResponse,
   HouseholdUpdate,
   InstitutionRow,
+  TransactionsResponse,
 } from "@/types/api";
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 const PREVIEW_VALUE = "1234567.89";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts";
+  section?: "overview" | "settings" | "accounts" | "transactions";
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
@@ -55,6 +59,7 @@ function sectionFromPath() {
   if (typeof window === "undefined") return "overview";
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/accounts") return "accounts";
+  if (window.location.pathname === "/transactions") return "transactions";
   return "overview";
 }
 
@@ -77,6 +82,8 @@ export function Workspace({
   const [currencies, setCurrencies] = useState<Array<CurrencyRow>>();
   const [inventory, setInventory] = useState<AccountsResponse>();
   const [institutions, setInstitutions] = useState<Array<InstitutionRow>>();
+  const [ledger, setLedger] = useState<TransactionsResponse>();
+  const [categories, setCategories] = useState<Array<CategoryRow>>();
   const [currency, setCurrency] = useState<HouseholdCurrency>();
   const [state, setState] = useState<"loading" | "ready" | "service" | "leaving">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -97,6 +104,23 @@ export function Workspace({
         if (activeSection === "settings") {
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
           if (!current) return;
+          const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
+          setCurrencies(catalogue);
+          setCategories(taxonomy);
+        }
+        if (activeSection === "transactions") {
+          const page = await request<TransactionsResponse>("/transactions?limit=50&offset=0");
+          if (!current) return;
+          const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
+          const nextInventory = await request<AccountsResponse>("/accounts");
+          if (!current) return;
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setLedger(page);
+          setCategories(taxonomy);
+          setInventory(nextInventory);
           setCurrencies(catalogue);
         }
         if (activeSection === "accounts") {
@@ -146,6 +170,8 @@ export function Workspace({
       setCurrency(undefined);
       setInventory(undefined);
       setInstitutions(undefined);
+      setLedger(undefined);
+      setCategories(undefined);
       setState("leaving");
       setDestination("/login");
     } catch (error) {
@@ -155,6 +181,8 @@ export function Workspace({
         setCurrency(undefined);
         setInventory(undefined);
         setInstitutions(undefined);
+        setLedger(undefined);
+        setCategories(undefined);
         setState("leaving");
         setDestination(next);
       } else {
@@ -178,6 +206,8 @@ export function Workspace({
     setCurrency(undefined);
     setInventory(undefined);
     setInstitutions(undefined);
+    setLedger(undefined);
+    setCategories(undefined);
     setState("leaving");
     setDestination(path);
   }
@@ -245,6 +275,7 @@ export function Workspace({
           <nav className="workspace-nav" aria-label="Workspace">
             <Link aria-current={activeSection === "overview" ? "page" : undefined} href="/">Overview</Link>
             <Link aria-current={activeSection === "accounts" ? "page" : undefined} href="/accounts">Accounts</Link>
+            <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
             <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
               <span>Plans</span><small>Available after ledger import</small>
             </button>
@@ -291,6 +322,28 @@ export function Workspace({
             />
           )}
 
+          {activeSection === "transactions" && ledger && categories && inventory && currencies && (
+            <TransactionsScreen
+              accounts={inventory.accounts}
+              categories={categories}
+              currencies={currencies}
+              currency={currency}
+              household={household}
+              onChanged={() => setAttempt((value) => value + 1)}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+              total={ledger.total}
+              transactions={ledger.transactions}
+            />
+          )}
+
           {activeSection === "settings" && (
             <section className="workspace-content" aria-labelledby="settings-title">
               <p className="eyebrow">Owner settings</p>
@@ -310,6 +363,22 @@ export function Workspace({
                         body: JSON.stringify(body),
                         headers: { "Content-Type": "application/json" },
                       });
+                    } catch (error) {
+                      const next = authDestination(error);
+                      if (next) leaveForAuth(next);
+                      throw error;
+                    }
+                  }}
+                />
+              )}
+
+              {categories && (
+                <CategoriesManager
+                  categories={categories}
+                  onChanged={() => setAttempt((value) => value + 1)}
+                  request={async (path, init) => {
+                    try {
+                      return await request(path, init);
                     } catch (error) {
                       const next = authDestination(error);
                       if (next) leaveForAuth(next);
