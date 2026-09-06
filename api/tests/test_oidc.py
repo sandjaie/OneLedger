@@ -94,6 +94,7 @@ def test_login_uses_state_nonce_and_pkce_in_a_signed_short_lived_cookie(
         "nonce": [flow["nonce"]],
         "code_challenge": [expected_challenge],
         "code_challenge_method": ["S256"],
+        "prompt": ["select_account"],
     }
     assert flow["exp"] - flow["iat"] == 600
     assert all(flag in cookie for flag in ("HttpOnly", "Max-Age=600", "Path=/", "SameSite=lax"))
