@@ -125,12 +125,14 @@ Settings › Data Quality. There is no `oneledger` command.
 reason*, implement, watch it pass, commit. A test that has never failed has never been shown to
 test anything. Every step states its expected output — run the command and compare.
 
-**Branches, phases and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the
-single branching and release reference; do not restate its model elsewhere. In short: task
-branches `<type>/task-<n>-<description>` (types `feature/`, `fix/`, `docs/`, `chore/`) PR into
-the active phase's `feature/phase-<n>-<description>` branch; a completed phase PRs into
-`develop`; a `release/*` branch carries changelog, release notes and the tag into `main`.
-Phase completion, release and any integration toward `main` need a separate owner request.
+**Branches and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the single
+branching and release reference; do not restate its model elsewhere. In short: `develop` is the
+standing integration branch; one milestone or feature per branch `<type>/<name>` (types
+`feature/`, `fix/`, `docs/`, `chore/`) created from `develop`, carrying its plan **and** its
+implementation, delivered as one PR into `develop`. The delivery cycle is: plan and implement →
+Codex review → patch the findings → Codex thumbs-up → merge. A `release/*` branch carries
+changelog, release notes and the tag into `main`; release and any integration toward `main`
+need a separate owner request.
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before
@@ -149,9 +151,9 @@ branches and dispatches the agent. Preserve unrelated changes; never reset or ov
 **Use the repository PR template.** After implementation and local review, the orchestrator creates
 the PR from `.github/PULL_REQUEST_TEMPLATE.md`, filled with the actual change, implementation and
 verification evidence. Record failures, skipped checks and reasons honestly; do not pre-check
-success. Send Cloud findings to the same implementer on the same branch, re-review the current
-head, merge to the recorded target, then synchronize that target before starting the next task.
-Integration-to-main still requires a separate owner request.
+success. Verify Codex findings against the tree, patch them on the same branch, push for
+re-review, and merge to `develop` only on Codex's thumbs-up; then delete the branch and start
+the next milestone. Integration-to-main still requires a separate owner request.
 
 **The hooks are the gate, not the pull request.** Install once:
 
@@ -163,9 +165,9 @@ Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest an
 `db/tests/*.sql` against a live database. A failing push is not a reason to reach for
 `--no-verify`; fix it and push again.
 
-**Every PR waits for Codex review on GitHub** and merges only on approval. No PR exceeds 500 lines
-of implementation and test code — documentation, configuration and generated files do not count,
-because nobody reads a lockfile.
+**Every PR waits for Codex review on GitHub** and merges only on Codex's thumbs-up. A PR carries
+one milestone's plan and implementation together; there is no per-PR line cap — keep commits
+small and task-shaped inside it, because the commits are what a reviewer walks.
 
 **Commits**: `type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci
 chore refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —
