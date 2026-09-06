@@ -16,9 +16,10 @@ attribution, commitments, actions, reservations, goals and protection records. I
 unapplied `0015` attribution shape must be reconciled with F03 before implementation. Update the
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
-Applied migrations use their Flyway names. V1–V5 are Phase 0; V6 (account current_balance starts
-at opening) is the first Phase 1 migration. V7–V8 are reserved for this phase. The unapplied
-reference sequence in this file still begins at `0006` and deferred foreign keys remain `0018`.
+Applied migrations use their Flyway names. V1–V5 are Phase 0. V6–V8 are Phase 1 M1a: the
+current-balance derivation, household configuration, and the account inventory. V9 — categories,
+merchants and the seed taxonomy — is M1b's first migration. The unapplied reference sequence in
+this file now begins at `0007`; deferred foreign keys remain `0018`.
 
 ---
 
@@ -221,7 +222,7 @@ CREATE TABLE app_session (
 
 ---
 
-## `0006`
+## `V9` (applied)
 
 ### Categories
 
@@ -243,12 +244,20 @@ CREATE TABLE category (
   is_system    BOOLEAN NOT NULL DEFAULT false,
   is_active    BOOLEAN NOT NULL DEFAULT true,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT max_two_levels CHECK (parent_id IS NULL OR
-    NOT EXISTS (SELECT 1 FROM category p WHERE p.id = parent_id AND p.parent_id IS NOT NULL))
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  -- The two-level depth limit is a trigger in V9, not a CHECK: a subquery in a CHECK is not
+  -- valid PostgreSQL (data-model.html records the same). It rejects a child of a child and
+  -- re-parenting a category that has children.
 );
+
+CREATE UNIQUE INDEX category_system_slug    ON category (slug) WHERE household_id IS NULL;
+CREATE UNIQUE INDEX category_household_slug ON category (household_id, slug)
+  WHERE household_id IS NOT NULL;
 ```
+
+V9 also seeds the classification §3 taxonomy as system rows (`household_id IS NULL`,
+`is_system`), idempotently via the system-slug index; a child starts with its parent's kind and
+bucket as the editable default (ADR-0008). Merchant seed rows arrive with M4's rule packs.
 
 ### Merchants
 
