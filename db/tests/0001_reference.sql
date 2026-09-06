@@ -21,10 +21,29 @@ BEGIN
     'every peg anchor is itself a seeded currency';
   ASSERT NOT EXISTS (SELECT FROM currency WHERE peg_rate IS NOT NULL AND peg_rate <= 0),
     'a peg rate is positive';
+  -- A peg may point at another peg (A→B→USD). The API walks that chain
+  -- (anchor_chain); forbidding a pegged anchor would fail a valid seed. A cycle
+  -- is the case that cannot terminate.
   ASSERT NOT EXISTS (
-    SELECT FROM currency c JOIN currency anchor ON anchor.code = c.pegged_to
-     WHERE anchor.pegged_to IS NOT NULL),
-    'a peg anchor is not itself pegged, so every derivation chain terminates';
+    WITH RECURSIVE walk AS (
+      SELECT rtrim(code) AS origin,
+             rtrim(pegged_to) AS at,
+             ARRAY[rtrim(code)] AS seen
+        FROM currency
+       WHERE pegged_to IS NOT NULL
+      UNION ALL
+      SELECT w.origin,
+             rtrim(c.pegged_to),
+             w.seen || w.at
+        FROM walk w
+        JOIN currency c ON rtrim(c.code) = w.at
+       WHERE w.at IS NOT NULL
+         AND NOT (w.at = ANY (w.seen))
+    )
+    SELECT 1 FROM walk
+     WHERE at IS NOT NULL AND at = ANY (seen)
+  ),
+    'a peg chain must not cycle';
   ASSERT (SELECT count(*) FROM institution WHERE household_id IS NULL) >= 6,
     'the shared institution suggestions are seeded';
   RAISE NOTICE 'PASS 0001';
