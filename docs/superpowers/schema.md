@@ -16,8 +16,9 @@ attribution, commitments, actions, reservations, goals and protection records. I
 unapplied `0015` attribution shape must be reconciled with F03 before implementation. Update the
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
-Applied migrations use their Flyway names. Owner sessions occupy V5, so the unapplied reference
-sequence now begins at `0006` and deferred foreign keys move to `0018`.
+Applied migrations use their Flyway names. V1–V5 are Phase 0; V6 (account current_balance starts
+at opening) is the first Phase 1 migration. V7–V8 are reserved for this phase. The unapplied
+reference sequence in this file still begins at `0006` and deferred foreign keys remain `0018`.
 
 ---
 
@@ -138,7 +139,7 @@ CREATE TABLE account (
 
   opening_balance        NUMERIC(20,4) NOT NULL DEFAULT 0,
   opening_balance_date   DATE NOT NULL,
-  current_balance        NUMERIC(20,4) NOT NULL DEFAULT 0,   -- materialised
+  current_balance        NUMERIC(20,4) NOT NULL,  -- materialised; starts at opening_balance (V6)
   current_balance_as_of  TIMESTAMPTZ,
 
   -- credit card only

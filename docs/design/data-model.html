@@ -655,7 +655,7 @@ CREATE POLICY reference_read ON price_snapshot FOR SELECT TO authenticated USING
 <p>Keyed on <code>(rate_date, base_currency, quote_currency)</code>, with the rate as <code>NUMERIC(20,10)</code>. Every row records its <strong>provenance</strong>: <code>source</code> is <code>ecb</code>, <code>derived_peg</code>, <code>manual</code> or <code>actual_transfer</code>, and a carried-forward rate must name the date it came from — a <code>CHECK</code> enforces that, so a derived value can never masquerade as an observed one (Invariant I7).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0004</code>.</p>
 <hr>
 <h2 id="5-accounts">5. Accounts</h2>
-<p>One <code>account_type</code> enum spans everything from <code>cash</code> to <code>property</code> to <code>payable</code>; <code>account_class</code> (<code>asset</code>/<code>liability</code>) is derived from it by trigger and never set by hand.</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>Globalising attributes</td><td><code>country</code>, <code>currency</code>, <code>institution_id</code>, <code>account_subtype</code> (NRE/NRO/PPF/EPF), <code>tax_residency_context</code>. These are what make one model serve both countries.</td></tr><tr><td>Identity</td><td><code>account_number_masked</code> for display, <code>account_number_hash</code> for matching statements. The full number is never stored.</td></tr><tr><td>Anchoring</td><td><code>opening_balance</code> + <code>opening_balance_date</code> — the anchor every derived balance is computed from.</td></tr><tr><td>Toggles</td><td><code>include_in_net_worth</code>, and <code>is_liquid</code> (defaults true; the user de-selects what shouldn't count as liquid).</td></tr><tr><td>Type-specific</td><td><code>credit_limit</code>, <code>statement_day</code>, <code>payment_due_day</code> for cards; <code>interest_rate_pct</code>, <code>maturity_date</code> for deposits.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0003</code>.</p>
+<p>One <code>account_type</code> enum spans everything from <code>cash</code> to <code>property</code> to <code>payable</code>; <code>account_class</code> (<code>asset</code>/<code>liability</code>) is derived from it by trigger and never set by hand.</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>Globalising attributes</td><td><code>country</code>, <code>currency</code>, <code>institution_id</code>, <code>account_subtype</code> (NRE/NRO/PPF/EPF), <code>tax_residency_context</code>. These are what make one model serve both countries.</td></tr><tr><td>Identity</td><td><code>account_number_masked</code> for display, <code>account_number_hash</code> for matching statements. The full number is never stored.</td></tr><tr><td>Anchoring</td><td><code>opening_balance</code> + <code>opening_balance_date</code> — the anchor every derived balance is computed from. On insert, an omitted <code>current_balance</code> starts at the opening balance and carries <code>current_balance_as_of</code> (V6); an explicit value, including zero, is kept.</td></tr><tr><td>Toggles</td><td><code>include_in_net_worth</code>, and <code>is_liquid</code> (defaults true; the user de-selects what shouldn't count as liquid).</td></tr><tr><td>Type-specific</td><td><code>credit_limit</code>, <code>statement_day</code>, <code>payment_due_day</code> for cards; <code>interest_rate_pct</code>, <code>maturity_date</code> for deposits.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0003</code>.</p>
 <p><strong>The full account number is never stored</strong> — only a mask for display and a salted hash for
 matching an incoming statement to an account. See
 <a href="../operations/security-and-privacy.html">security-and-privacy.html</a> §4.</p>
@@ -916,19 +916,22 @@ V2__identity_and_rls.sql              household, person, app_user, RLS policies
 V3__accounts.sql
 V4__fx_rates.sql
 V5__owner_sessions.sql                Google subject binding, revocable sessions
-V6__categories_and_merchants.sql      + seed taxonomy
-V7__transactions.sql                  + v_transaction_reportable
-V8__documents_and_import.sql          + statement_layout
-V9__classification_rules.sql          + seed rules
-V10__transfers.sql
-V11__card_statements.sql
-V12__investments.sql
-V13__loans.sql
-V14__valuations.sql
-V15__net_worth.sql
-V16__audit_log.sql
-V17__phase2_tables.sql                recurring, budget, payslip
-V18__deferred_foreign_keys.sql        the circular references, added last
+V6__account_current_balance_starts_at_opening.sql
+V7__household_configuration.sql       reserved — Phase 1 Task 6
+V8__account_inventory.sql             reserved — Phase 1 Task 8
+V9__categories_and_merchants.sql      + seed taxonomy
+V10__transactions.sql                 + v_transaction_reportable
+V11__documents_and_import.sql         + statement_layout
+V12__classification_rules.sql         + seed rules
+V13__transfers.sql
+V14__card_statements.sql
+V15__investments.sql
+V16__loans.sql
+V17__valuations.sql
+V18__net_worth.sql
+V19__audit_log.sql
+V20__phase2_tables.sql                recurring, budget, payslip
+V21__deferred_foreign_keys.sql        the circular references, added last
 </code></pre>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,

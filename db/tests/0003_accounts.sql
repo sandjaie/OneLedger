@@ -37,6 +37,23 @@ BEGIN
   -- is_liquid defaults on (Q22): everything counts unless explicitly de-selected
   ASSERT (SELECT is_liquid FROM account WHERE id = a_card), 'is_liquid must default true';
 
+  -- balance = opening_balance + SUM(transactions). No transaction table exists yet, so a new
+  -- account's current balance is its opening balance, dated to the opening balance date.
+  ASSERT (SELECT current_balance FROM account WHERE id = a_sav) = 100000,
+    'an omitted current_balance starts at the opening balance';
+  ASSERT (SELECT current_balance FROM account WHERE id = a_card) = -4500,
+    'a liability account starts at its signed opening balance';
+  ASSERT (SELECT current_balance_as_of FROM account WHERE id = a_sav)
+           = '2024-01-01'::timestamptz,
+    'a derived balance carries the date it is true for';
+
+  -- An explicit value is still the caller's, including a deliberate zero.
+  INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                       country, opening_balance, opening_balance_date, current_balance)
+    VALUES (h,p,'Explicitly Zero','savings',base,'XB',100000,'2024-01-01',0);
+  ASSERT (SELECT current_balance FROM account WHERE name = 'Explicitly Zero') = 0,
+    'an explicit current_balance is never overwritten';
+
   RAISE NOTICE 'PASS 0003';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN
