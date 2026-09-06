@@ -232,6 +232,30 @@ describe("Accounts", () => {
     expect(screen.getByRole("button", { name: /reopen/i })).toBeTruthy();
   });
 
+  it("names close and reopen after the account they mutate", () => {
+    render(<AccountsScreen {...props} />);
+    expect(screen.getByRole("button", { name: "Close Inventory Savings" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close Inventory Card" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reopen Old Savings" })).toBeTruthy();
+  });
+
+  it("keeps the minus on a negative asset subtotal", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        totals={[
+          { accountClass: "asset", country: "XB", currency: "XIN", total: "-250000.0000" },
+          { accountClass: "liability", country: "XA", currency: "XAE", total: "-4500.0000" },
+        ]}
+      />,
+    );
+    const assets = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
+    expect(assets?.textContent).toContain("-I 2,50,000.00");
+    const liabilities = screen.getByRole("heading", { name: "Liabilities · XA" }).closest(".account-group-head");
+    expect(liabilities?.textContent).toContain("A 4,500.00 owed");
+    expect(liabilities?.textContent).not.toContain("-A");
+  });
+
   it("separates native subtotals when a group has more than one currency", () => {
     render(
       <AccountsScreen
