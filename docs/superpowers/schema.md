@@ -9,16 +9,15 @@
 > So a migration having more than this file shows is expected. A migration *disagreeing* with it is
 > not: a change to a table edits the migration and this file in the same commit.
 
-**Product-review scope (2026-09-06):** V1–V4 are the completed Phase 0 schema work. Later
+**Product-review scope (2026-09-06):** V1–V5 are the completed Phase 0 schema work. Later
 sections are reference designs, not a claim that every accepted capability already has a table.
 [Finance OS requirements](../product/finance-os.html) govern household outflows, consolidated
 attribution, commitments, actions, reservations, goals and protection records. In particular, the
-unapplied `0014` attribution shape must be reconciled with F03 before implementation. Update the
+unapplied `0015` attribution shape must be reconciled with F03 before implementation. Update the
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
-Ordered by migration. Phase 0 covers `0001`–`0004`; the rest land with the milestone that needs
-them. The circular foreign keys on `transaction` are added last, in `0017`, because their targets
-do not exist until `0009`–`0016`.
+Applied migrations use their Flyway names. Owner sessions occupy V5, so the unapplied reference
+sequence now begins at `0006` and deferred foreign keys move to `0018`.
 
 ---
 
@@ -83,9 +82,9 @@ CREATE TABLE person (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Maps an authenticated Google identity to a person. Exactly one row in Phase 1.
+-- Stable local identity and session subject. Exactly one row in Phase 1.
 CREATE TABLE app_user (
-  id            UUID PRIMARY KEY,                 -- = auth.users.id
+  id            UUID PRIMARY KEY,
   household_id  UUID NOT NULL REFERENCES household(id),
   person_id     UUID NOT NULL REFERENCES person(id),
   email         TEXT NOT NULL,
@@ -193,7 +192,28 @@ CREATE INDEX idx_fx_lookup ON fx_rate (base_currency, quote_currency, rate_date 
 
 ---
 
-## `0005`
+## `V5` (applied)
+
+### Owner identity and revocable sessions
+
+```sql
+ALTER TABLE app_user ADD COLUMN google_subject TEXT;
+CREATE UNIQUE INDEX idx_app_user_google_subject
+  ON app_user (google_subject) WHERE google_subject IS NOT NULL;
+
+CREATE TABLE app_session (
+  id          UUID PRIMARY KEY,
+  app_user_id UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+  expires_at  TIMESTAMPTZ NOT NULL,
+  revoked_at  TIMESTAMPTZ,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT session_expires_after_creation CHECK (expires_at > created_at)
+);
+```
+
+---
+
+## `0006`
 
 ### Categories
 
@@ -255,7 +275,7 @@ CREATE TABLE merchant_alias (
 
 ---
 
-## `0006`
+## `0007`
 
 ### The transaction ledger
 
@@ -377,7 +397,7 @@ CREATE INDEX idx_txn_search          ON transaction
 
 ---
 
-## `0007`
+## `0008`
 
 ### Documents
 
@@ -534,7 +554,7 @@ CREATE POLICY household_isolation ON statement_layout
 
 ---
 
-## `0008`
+## `0009`
 
 ### Classification rules
 
@@ -586,7 +606,7 @@ CREATE INDEX idx_rule_priority ON classification_rule (household_id, priority) W
 
 ---
 
-## `0009`
+## `0010`
 
 ### Transfers
 
@@ -650,7 +670,7 @@ CREATE UNIQUE INDEX idx_transfer_dest   ON transfer (destination_transaction_id)
 
 ---
 
-## `0010`
+## `0011`
 
 ### Credit card statements
 
@@ -704,7 +724,7 @@ CREATE UNIQUE INDEX idx_card_stmt_period ON card_statement (account_id, period_e
 
 ---
 
-## `0011`
+## `0012`
 
 ### Investments
 
@@ -833,7 +853,7 @@ CREATE TABLE price_snapshot (
 
 ---
 
-## `0012`
+## `0013`
 
 ### Loans
 
@@ -910,7 +930,7 @@ CREATE TABLE loan_event (
 
 ---
 
-## `0013`
+## `0014`
 
 ### Valuations
 
@@ -945,7 +965,7 @@ CREATE UNIQUE INDEX idx_valuation_unique
 
 ---
 
-## `0014`
+## `0015`
 
 ### Net worth
 
@@ -1002,7 +1022,7 @@ CREATE TABLE net_worth_attribution (
 
 ---
 
-## `0015`
+## `0016`
 
 ### Audit log
 
@@ -1026,7 +1046,7 @@ CREATE INDEX idx_audit_time   ON audit_log (household_id, created_at DESC);
 
 ---
 
-## `0016`
+## `0017`
 
 ### Phase 2 tables
 
@@ -1108,12 +1128,12 @@ CREATE TABLE payslip_line (
 
 ---
 
-## `0017` — Deferred foreign keys
+## `0018` — Deferred foreign keys
 
 `transaction` references `transfer`, `card_statement`, `investment_transaction`, `loan`,
 `loan_schedule_entry` and `recurring_series`, every one of which is created after it — and
 `transfer` references `transaction` back. Those columns are therefore created as bare `UUID` in
-`0006` and constrained here, once every target exists.
+`0007` and constrained here, once every target exists.
 
 ```sql
 ALTER TABLE transaction

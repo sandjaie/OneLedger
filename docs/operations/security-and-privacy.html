@@ -488,11 +488,12 @@ authenticating is rejected by the service even though Google authenticated it su
 <li>MFA is inherited from the Google account, where it should live.</li>
 </ul>
 <pre><code class="language-python"># Every authenticated route, in the service
-def require_owner(session: str = Cookie(default=&quot;&quot;)) -&gt; str:
-    claims = verify_session(session)          # 401 if absent, forged or expired
-    if claims[&quot;email&quot;] != os.environ[&quot;ALLOWED_USER_EMAIL&quot;]:
-        raise HTTPException(403)              # authenticated, still not authorized
-    return claims[&quot;sub&quot;]
+def require_owner(session: str = Cookie(default=&quot;&quot;)) -&gt; OwnerSession:
+    claims = verify_signed_claims(session)    # 401 if absent; 403 if forged or expired
+    owner = lookup_active_owner_session(claims[&quot;sub&quot;], claims[&quot;jti&quot;], claims[&quot;email&quot;])
+    if owner is None:
+        raise HTTPException(403)
+    return owner
 </code></pre>
 <h3 id="the-authorization-boundary">Where authorization actually happens</h3>
 <p><strong>Google will authenticate any Google account.</strong> Authentication is not authorization, and a
@@ -500,8 +501,9 @@ redirect to <code>/unauthorized</code> is a page-level control, not a wall.</p>
 <p><strong>The API service is the authorization boundary</strong>
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>). Sign-in verifies Google's <code>id_token</code> against Google's JWKS and checks the address
 against <code>ALLOWED_USER_EMAIL</code>; the service then issues its own signed, httpOnly session cookie.
-Every request resolves that session to a row in <code>app_user</code> and rejects with <code>403</code> if
-there is none. Every query it issues is scoped to that household explicitly.</p>
+Every request resolves that session to an unexpired, unrevoked <code>app_session</code> row joined to
+the owner <code>app_user</code>, and rejects with <code>403</code> if there is none. Every query it issues is
+scoped to that household explicitly.</p>
 <p><strong>This is a weaker guarantee than what it replaces, and the change is deliberate.</strong> Under
 <a href="../adr/superseded.html#parse-in-the-browser">browser parsing</a> a forgotten <code>WHERE</code> clause returned
 nothing, because RLS was the boundary. Now it would return another household&#39;s rows — in a system that has
@@ -545,8 +547,12 @@ it matters more now than it did under RLS, because the service is the only thing
 reset flows are where a large share of authentication vulnerabilities live. Not building them
 removes the class entirely. This is the single biggest advantage a single-user system has, and it
 would be careless not to take it.</p>
-<p>Session: JWT in a secure, httpOnly, sameSite=lax cookie. Short access-token lifetime with
-rotating refresh. Sign-out revokes server-side.</p>
+<p>Session: a signed 12-hour JWT in a secure, httpOnly, sameSite=lax cookie, backed by an
+unexpired and unrevoked <code>app_session</code> row. There is no refresh token or silent refresh;
+expiry requires sign-in again. The next auth slice wires sign-out to revoke the exact server record
+before clearing the cookie and requires an exact <code>Origin</code> match with <code>WEB_ORIGIN</code>
+for cookie-authenticated mutations. See
+<a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
 <hr>
 <h2 id="4-account-number-handling">4. Account number handling</h2>
 <p>Statements must be matched to accounts, which requires recognising an account number — without

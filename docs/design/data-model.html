@@ -550,11 +550,11 @@ currency                         -- reference
 <p>Single user now, household-capable from day one
 (<a href="../adr/0004-google-auth-single-user.html">ADR-0004</a>). The columns exist and RLS uses them; no
 multi-user <em>behaviour</em> is built.</p>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>household</code></td><td>Name and the reporting pair: <code>base_currency</code> (the default) and <code>secondary_currency</code> (the toggle).</td></tr><tr><td><code>person</code></td><td>Display name, <code>is_self</code>, tax residency, and <em>last four only</em> of a tax ID and a national ID (PAN and Emirates ID, in the first deployment). Full numbers are never stored.</td></tr><tr><td><code>app_user</code></td><td>Maps an authenticated Google identity to a person. Exactly one row in Phase 1; <code>role</code> exists for a future second member.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0002</code>.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>household</code></td><td>Name and the reporting pair: <code>base_currency</code> (the default) and <code>secondary_currency</code> (the toggle).</td></tr><tr><td><code>person</code></td><td>Display name, <code>is_self</code>, tax residency, and <em>last four only</em> of a tax ID and a national ID (PAN and Emirates ID, in the first deployment). Full numbers are never stored.</td></tr><tr><td><code>app_user</code></td><td>The stable local UUID, owner role and normalized email; nullable unique <code>google_subject</code> binds the verified Google identity on first login.</td></tr><tr><td><code>app_session</code></td><td>A random session id, local owner, expiry and optional revocation time. Every cookie must match an active row.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0002</code> and <code>V5</code>.</p>
 <p><strong>Since <a href="../adr/0013-python-backend-service.html">ADR-0013</a>, RLS is defence in depth
 rather than the primary boundary.</strong> The Python service connects with the service-role key and therefore
 bypasses these policies; it enforces authorization itself, scoping every query to the household resolved from
-the request's JWT. The policies below are kept because they cost nothing to maintain, they remain correct, and
+the request's signed claims and active session record. The policies below are kept because they cost nothing to maintain, they remain correct, and
 they protect any future client that connects as a user rather than as the service.</p>
 <p>What is genuinely lost is the property that a forgotten <code>WHERE</code> clause returned <em>nothing</em>.
 It would now return another household's rows — in a system that has one household and is permanently
@@ -570,7 +570,7 @@ CREATE FUNCTION current_household_id() RETURNS UUID
   LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
 AS $$
   SELECT household_id FROM app_user
-  WHERE id = NULLIF(current_setting('app.user_id', true), '')::UUID
+  WHERE id = NULLIF(current_setting('app.user_id', true), '')::UUID AND role = 'owner'
 $$;
 </code></pre>
 <p><a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a> removed Supabase, and with it
@@ -662,7 +662,7 @@ matching an incoming statement to an account. See
 on it constantly. A trigger keeps it consistent; it is never set by hand.</p>
 <hr>
 <h2 id="6-categories-and-merchants">6. Categories and merchants</h2>
-<p>Two enums carry the meaning: <code>category_kind</code> (<code>income</code>/<code>expense</code>/<code>transfer</code>/<code>investment</code>/<code>debt</code>) and <code>category_bucket</code> (<code>need</code>/<code>want</code>/<code>investment</code>/<code>debt_service</code>/<code>income</code>/<code>ignore</code>). <code>category</code> is a two-level tree; the depth limit is a trigger, not a <code>CHECK</code>, because a subquery in a <code>CHECK</code> is not valid PostgreSQL.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0005</code>.</p>
+<p>Two enums carry the meaning: <code>category_kind</code> (<code>income</code>/<code>expense</code>/<code>transfer</code>/<code>investment</code>/<code>debt</code>) and <code>category_bucket</code> (<code>need</code>/<code>want</code>/<code>investment</code>/<code>debt_service</code>/<code>income</code>/<code>ignore</code>). <code>category</code> is a two-level tree; the depth limit is a trigger, not a <code>CHECK</code>, because a subquery in a <code>CHECK</code> is not valid PostgreSQL.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
 <blockquote>
 <p>The two-level <code>CHECK</code> above is illustrative — a subquery in a <code>CHECK</code> is not valid PostgreSQL.
 It is implemented as a <code>BEFORE INSERT OR UPDATE</code> trigger. Noted explicitly so it is not copied
@@ -672,13 +672,13 @@ verbatim into a migration.</p>
 yields both the detailed category tree and the coarse view, without asking for the same judgement
 twice (<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>). Seed taxonomy is listed in
 <a href="./classification.html">classification.html</a> §3.</p>
-<p>One <code>merchant</code>, many <code>merchant_alias</code> rows — because the same coffee shop appears as <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements. Each alias carries a <code>pattern_kind</code> (<code>exact</code>, <code>prefix</code>, <code>contains</code>, <code>regex</code>) and a priority, and counts how often it has matched.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0005</code>.</p>
+<p>One <code>merchant</code>, many <code>merchant_alias</code> rows — because the same coffee shop appears as <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements. Each alias carries a <code>pattern_kind</code> (<code>exact</code>, <code>prefix</code>, <code>contains</code>, <code>regex</code>) and a priority, and counts how often it has matched.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
 <p>One merchant, many aliases — because the same coffee shop appears as
 <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements.</p>
 <hr>
 <h2 id="7-the-transaction-ledger">7. The transaction ledger</h2>
 <p>The centre of the system.</p>
-<p>The centre of the system. Its columns fall into eight groups:</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>identity</td><td><code>booked_date</code>, <code>value_date</code>, <code>description_raw</code> (never edited — it is the audit record), <code>description_clean</code>, <code>reference_raw</code></td></tr><tr><td>money</td><td><code>amount</code> + <code>currency</code>, <strong>immutable</strong> (I1). <code>original_amount</code>/<code>original_currency</code> where the bank converted for you</td></tr><tr><td>frozen FX</td><td><code>fx_rate_date</code>, <code>fx_rate_is_carried</code>, <code>fx_rate_to_base</code>, <code>fx_rate_to_secondary</code>, <code>amount_base</code>, <code>amount_secondary</code> — computed once, never recomputed (I5)</td></tr><tr><td>meaning</td><td><code>txn_type</code>, <code>category_id</code>, <code>merchant_id</code>, <code>counterparty_raw</code></td></tr><tr><td>context</td><td><code>country</code>, <code>payment_method</code></td></tr><tr><td>links</td><td><code>transfer_id</code>, <code>card_statement_id</code>, <code>investment_transaction_id</code>, <code>loan_id</code>, <code>recurring_series_id</code>, <code>parent_transaction_id</code>. <strong>Any non-null link changes how the row is reported.</strong></td></tr><tr><td>provenance</td><td><code>source</code>, <code>source_document_id</code>, page and row number, <code>import_batch_id</code>, <code>statement_layout_id</code>, <code>layout_version</code>, <code>dedupe_hash</code> (I6)</td></tr><tr><td>classification</td><td><code>classified_by</code>, <code>classification_rule_id</code>, <code>classification_confidence</code>, <code>is_reviewed</code> — so the UI can always answer <em>why is this Food &amp; Dining?</em></td></tr></tbody></table><p>A partial index on <code>is_reviewed = false</code> serves the review queue, and a GIN index over <code>description_raw</code> serves free-text search.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
+<p>The centre of the system. Its columns fall into eight groups:</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>identity</td><td><code>booked_date</code>, <code>value_date</code>, <code>description_raw</code> (never edited — it is the audit record), <code>description_clean</code>, <code>reference_raw</code></td></tr><tr><td>money</td><td><code>amount</code> + <code>currency</code>, <strong>immutable</strong> (I1). <code>original_amount</code>/<code>original_currency</code> where the bank converted for you</td></tr><tr><td>frozen FX</td><td><code>fx_rate_date</code>, <code>fx_rate_is_carried</code>, <code>fx_rate_to_base</code>, <code>fx_rate_to_secondary</code>, <code>amount_base</code>, <code>amount_secondary</code> — computed once, never recomputed (I5)</td></tr><tr><td>meaning</td><td><code>txn_type</code>, <code>category_id</code>, <code>merchant_id</code>, <code>counterparty_raw</code></td></tr><tr><td>context</td><td><code>country</code>, <code>payment_method</code></td></tr><tr><td>links</td><td><code>transfer_id</code>, <code>card_statement_id</code>, <code>investment_transaction_id</code>, <code>loan_id</code>, <code>recurring_series_id</code>, <code>parent_transaction_id</code>. <strong>Any non-null link changes how the row is reported.</strong></td></tr><tr><td>provenance</td><td><code>source</code>, <code>source_document_id</code>, page and row number, <code>import_batch_id</code>, <code>statement_layout_id</code>, <code>layout_version</code>, <code>dedupe_hash</code> (I6)</td></tr><tr><td>classification</td><td><code>classified_by</code>, <code>classification_rule_id</code>, <code>classification_confidence</code>, <code>is_reviewed</code> — so the UI can always answer <em>why is this Food &amp; Dining?</em></td></tr></tbody></table><p>A partial index on <code>is_reviewed = false</code> serves the review queue, and a GIN index over <code>description_raw</code> serves free-text search.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0007</code>.</p>
 <h3 id="splits-the-container-versus-posting-rule">Splits: the container-versus-posting rule</h3>
 <p>Splitting one ₹8,000 supermarket bill into ₹6,500 groceries and ₹1,500 household creates child
 rows via <code>parent_transaction_id</code>. Both the parent and its children then exist in <code>transaction</code>, so
@@ -739,7 +739,7 @@ CREATE VIEW v_debt_service_flow WITH (security_invoker = true) AS
 </code></pre>
 <hr>
 <h2 id="8-transfers">8. Transfers</h2>
-<p>A transfer links two legs and records what the movement actually cost. Beyond the two account and two transaction references it holds <code>source_amount</code>/<code>destination_amount</code> with their currencies, and the FX truth: <code>implied_rate</code> (what you got), <code>market_rate</code> (what it was worth), <code>fx_spread_pct</code>, <code>fx_spread_cost_source</code>, <code>explicit_fee_amount</code> and <code>total_cost_source</code>. Plus <code>transfer_kind</code>, <code>provider</code>, <code>match_confidence</code> and <code>status</code> (<code>candidate</code>/<code>confirmed</code>/<code>rejected</code>).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
+<p>A transfer links two legs and records what the movement actually cost. Beyond the two account and two transaction references it holds <code>source_amount</code>/<code>destination_amount</code> with their currencies, and the FX truth: <code>implied_rate</code> (what you got), <code>market_rate</code> (what it was worth), <code>fx_spread_pct</code>, <code>fx_spread_cost_source</code>, <code>explicit_fee_amount</code> and <code>total_cost_source</code>. Plus <code>transfer_kind</code>, <code>provider</code>, <code>match_confidence</code> and <code>status</code> (<code>candidate</code>/<code>confirmed</code>/<code>rejected</code>).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0010</code>.</p>
 <p>The partial unique indexes stop one <em>transfer</em> from claiming the same transaction twice in the
 same role. They do <strong>not</strong> stop one <em>transaction</em> from being the source of transfer A and the
 destination of transfer B — each index is satisfied independently, while
@@ -762,14 +762,14 @@ alternatives; confirmation is what resolves to one.</p>
 would not have satisfied.</p>
 <hr>
 <h2 id="9-credit-card-statements">9. Credit card statements</h2>
-<p>One row per statement cycle: period and statement dates, payment due date, opening and closing balance (signed), <code>statement_balance</code> (positive — what was due), minimum due, total debits and credits, credit and cash limits, finance charges, late fees, reward points opening/earned/redeemed/closing, and whether it was <code>is_paid_in_full</code> with the payment transaction that settled it.</p><p>Utilisation is <em>computed</em>, not stored — <code>ABS(closing_balance) / credit_limit</code>. Storing it would be a second source of truth for the same fact.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0010</code>.</p>
+<p>One row per statement cycle: period and statement dates, payment due date, opening and closing balance (signed), <code>statement_balance</code> (positive — what was due), minimum due, total debits and credits, credit and cash limits, finance charges, late fees, reward points opening/earned/redeemed/closing, and whether it was <code>is_paid_in_full</code> with the payment transaction that settled it.</p><p>Utilisation is <em>computed</em>, not stored — <code>ABS(closing_balance) / credit_limit</code>. Storing it would be a second source of truth for the same fact.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0011</code>.</p>
 <p>Utilisation is computed, not stored: <code>ABS(closing_balance) / credit_limit</code>. Storing it would be
 a second source of truth for the same fact.</p>
 <hr>
 <h2 id="10-investments">10. Investments</h2>
 <p>Transaction-level lots (<a href="../adr/0005-transaction-level-investment-lots.html">ADR-0005</a>) — XIRR is
 impossible to reconstruct from snapshots.</p>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>security</code></td><td>The instrument. ISIN, a price-feed <code>provider_code</code> (an AMFI scheme code, say), ticker, exchange, <code>asset_class</code>, sub-class, fund house, expense ratio. <code>household_id IS NULL</code> for shared reference data.</td></tr><tr><td><code>holding</code></td><td>A position: units, average cost, invested amount, realised gain, current price and value, <code>xirr_pct</code> with <code>xirr_computed_at</code> so a stale figure reads as stale.</td></tr><tr><td><code>investment_transaction</code></td><td>The lot. Signed units, NAV, gross and net amount, charges, tax withheld, frozen FX, and the bank transaction that funded it.</td></tr><tr><td><code>price_snapshot</code></td><td>Price per security per date, with its source (<code>amfi</code>/<code>manual</code>/<code>statement</code>).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0011</code>.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>security</code></td><td>The instrument. ISIN, a price-feed <code>provider_code</code> (an AMFI scheme code, say), ticker, exchange, <code>asset_class</code>, sub-class, fund house, expense ratio. <code>household_id IS NULL</code> for shared reference data.</td></tr><tr><td><code>holding</code></td><td>A position: units, average cost, invested amount, realised gain, current price and value, <code>xirr_pct</code> with <code>xirr_computed_at</code> so a stale figure reads as stale.</td></tr><tr><td><code>investment_transaction</code></td><td>The lot. Signed units, NAV, gross and net amount, charges, tax withheld, frozen FX, and the bank transaction that funded it.</td></tr><tr><td><code>price_snapshot</code></td><td>Price per security per date, with its source (<code>amfi</code>/<code>manual</code>/<code>statement</code>).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0012</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
@@ -780,27 +780,27 @@ with <code>xirr_computed_at</code> so a stale figure is visible as stale.</p>
 <h3 id="manual-valuations">Manual valuations</h3>
 <p>For property, physical gold, EPF, PPF — anything with no importable statement
 (<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>).</p>
-<p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> Targets either an account or a holding — a <code>CHECK</code> enforces exactly one — and freezes the FX rates at <code>as_of_date</code> alongside the native value. Carries a <code>method</code> and a <code>confidence</code>, both displayed, never hidden.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0013</code>.</p>
+<p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> Targets either an account or a holding — a <code>CHECK</code> enforces exactly one — and freezes the FX rates at <code>as_of_date</code> alongside the native value. Carries a <code>method</code> and a <code>confidence</code>, both displayed, never hidden.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0014</code>.</p>
 <p><strong>Carried forward flat, never extrapolated.</strong> The valuation in effect on any date is the most
 recent snapshot at or before it. A trend line between two snapshots is drawn as a step, not a
 slope, because a smooth line would imply knowledge that does not exist (Invariant I7).</p>
 <hr>
 <h2 id="11-loans">11. Loans</h2>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>loan</code></td><td>Original and outstanding principal, rate and rate type (with benchmark and spread for floating), EMI, start and both end dates, totals paid, prepayment penalty.</td></tr><tr><td><code>loan_schedule_entry</code></td><td>One row per installment: opening principal, EMI, principal and interest components, closing principal, and the actual transaction that paid it. Versioned, not mutated.</td></tr><tr><td><code>loan_event</code></td><td>Prepayment, rate change, EMI change, moratorium, restructure, closure — each regenerates the schedule as a new version.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0012</code>.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>loan</code></td><td>Original and outstanding principal, rate and rate type (with benchmark and spread for floating), EMI, start and both end dates, totals paid, prepayment penalty.</td></tr><tr><td><code>loan_schedule_entry</code></td><td>One row per installment: opening principal, EMI, principal and interest components, closing principal, and the actual transaction that paid it. Versioned, not mutated.</td></tr><tr><td><code>loan_event</code></td><td>Prepayment, rate change, EMI change, moratorium, restructure, closure — each regenerates the schedule as a new version.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0013</code>.</p>
 <p><strong>Schedules are versioned rather than mutated.</strong> A rate change or prepayment generates
 <code>schedule_version + 1</code>; the prior version is retained. This preserves what was expected at the
 time, which is what makes &quot;interest saved by prepaying&quot; a computable number rather than a
 remembered one.</p>
 <hr>
 <h2 id="12-documents-and-import">12. Documents and import</h2>
-<p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0007</code>.</p>
-<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0007</code>.</p>
+<p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
+<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
 <h3 id="statement-layouts">Statement layouts</h3>
 <p><strong>No bank name appears anywhere in application code</strong>
 (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A statement layout is a row, created
 through the mapping UI on first import of an unrecognised format. One generic extraction engine
 reads any profile.</p>
-<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0007</code>.</p>
+<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
 <p><code>has_a_balance_anchor</code> is the constraint that keeps Invariant I8 enforceable: a layout must offer
 <em>some</em> way to verify the extracted rows, either a declared closing balance or a running balance
 column. A profile that offers neither cannot be reconciled, and would let a mis-mapped column
@@ -810,21 +810,21 @@ through silently — so it is rejected at creation.</p>
 serves.</p>
 <hr>
 <h2 id="13-classification-rules">13. Classification rules</h2>
-<p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
+<p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
 <hr>
 <h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>net_worth_snapshot</code></td><td>Month-end totals in both currencies, broken out by cash, investments, property, other assets, loans and card debt — <em>with the rates used</em>, so a past figure is reproducible.</td></tr><tr><td><code>net_worth_attribution</code></td><td>The consolidated decomposition: retained income, market appreciation, asset revaluation, FX translation, other identified external changes and <code>unexplained_base</code>. Internal investment funding and principal reduction are supporting movements that cancel their cash legs, not additive wealth creation (F03).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0014</code>.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>net_worth_snapshot</code></td><td>Month-end totals in both currencies, broken out by cash, investments, property, other assets, loans and card debt — <em>with the rates used</em>, so a past figure is reproducible.</td></tr><tr><td><code>net_worth_attribution</code></td><td>The consolidated decomposition: retained income, market appreciation, asset revaluation, FX translation, other identified external changes and <code>unexplained_base</code>. Internal investment funding and principal reduction are supporting movements that cancel their cash legs, not additive wealth creation (F03).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0015</code>.</p>
 <p>Method in <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7. <code>unexplained_base</code> is
 displayed in the UI (Invariant I7) — a non-trivial residual indicates missing data, which is
 exactly what the user needs to know.</p>
-<p>The unapplied attribution table in <a href="../superpowers/schema.md">schema.md</a> is an earlier reference shape. Align it with F03 during M9b design before writing its migration; preserve applied V1–V4.</p>
+<p>The unapplied attribution table in <a href="../superpowers/schema.md">schema.md</a> is an earlier reference shape. Align it with F03 during M9b design before writing its migration; preserve applied V1–V5.</p>
 <h3 id="phase-2-tables">Phase 2 tables</h3>
-<p><strong>Planning boundary:</strong> Phase 0 applies V1–V4. The table shapes below describe later
+<p><strong>Planning boundary:</strong> Phase 0 applies V1–V5. The table shapes below describe later
 work, not already-applied migrations. The accepted <a href="../product/finance-os.html">finance OS
 requirements</a> also need commitments, actions, reservations, protection/claim records and freshness
 contracts. Their exact schema is designed with the corresponding milestone; no speculative tables
 are added to Phase 0.</p>
-<p>Existing later-phase reference shapes: <code>recurring_series</code> (cadence, expected amount, tolerances, confidence), <code>budget_period</code> and <code>budget_line</code> (per category or per bucket, with rollover), and <code>payslip</code> with <code>payslip_line</code> — line items rather than fixed columns, because UAE and Indian payslips differ too much for one schema.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0016</code>.</p>
+<p>Existing later-phase reference shapes: <code>recurring_series</code> (cadence, expected amount, tolerances, confidence), <code>budget_period</code> and <code>budget_line</code> (per category or per bucket, with rollover), and <code>payslip</code> with <code>payslip_line</code> — line items rather than fixed columns, because UAE and Indian payslips differ too much for one schema.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0017</code>.</p>
 <hr>
 <h2 id="15-audit-log">15. Audit log</h2>
 <h3 id="why-every-child-table-carries-household_id">Why every child table carries <code>household_id</code></h3>
@@ -857,7 +857,7 @@ Redundancy is cheaper than a leak.</p>
 <td>Scoped on its own <code>id</code>: <code>USING (id = current_household_id())</code></td>
 </tr>
 </tbody></table>
-<p>Append-only: actor, action, entity type and id, <code>before</code> and <code>after</code> as JSONB, and context. Written by trigger on <code>transaction</code>, <code>account</code>, <code>transfer</code>, <code>loan</code>, <code>holding</code> and <code>valuation_snapshot</code>, so it cannot be bypassed by forgetting to call a logging function. The application role holds <code>INSERT</code> only — no <code>UPDATE</code>, no <code>DELETE</code>.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0015</code>.</p>
+<p>Append-only: actor, action, entity type and id, <code>before</code> and <code>after</code> as JSONB, and context. Written by trigger on <code>transaction</code>, <code>account</code>, <code>transfer</code>, <code>loan</code>, <code>holding</code> and <code>valuation_snapshot</code>, so it cannot be bypassed by forgetting to call a logging function. The application role holds <code>INSERT</code> only — no <code>UPDATE</code>, no <code>DELETE</code>.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0016</code>.</p>
 <p>Written by trigger on <code>transaction</code>, <code>account</code>, <code>transfer</code>, <code>loan</code>, <code>holding</code> and
 <code>valuation_snapshot</code>. Append-only: no <code>UPDATE</code> or <code>DELETE</code> grant exists on this table for the
 application role.</p>
@@ -914,26 +914,27 @@ forward-only schema most needs.</p>
 V2__identity_and_rls.sql              household, person, app_user, RLS policies
 V3__accounts.sql
 V4__fx_rates.sql
-V5__categories_and_merchants.sql      + seed taxonomy
-V6__transactions.sql                  + v_transaction_reportable
-V7__documents_and_import.sql          + statement_layout
-V8__classification_rules.sql          + seed rules
-V9__transfers.sql
-V10__card_statements.sql
-V11__investments.sql
-V12__loans.sql
-V13__valuations.sql
-V14__net_worth.sql
-V15__audit_log.sql
-V16__phase2_tables.sql                recurring, budget, payslip
-V17__deferred_foreign_keys.sql        the circular references, added last
+V5__owner_sessions.sql                Google subject binding, revocable sessions
+V6__categories_and_merchants.sql      + seed taxonomy
+V7__transactions.sql                  + v_transaction_reportable
+V8__documents_and_import.sql          + statement_layout
+V9__classification_rules.sql          + seed rules
+V10__transfers.sql
+V11__card_statements.sql
+V12__investments.sql
+V13__loans.sql
+V14__valuations.sql
+V15__net_worth.sql
+V16__audit_log.sql
+V17__phase2_tables.sql                recurring, budget, payslip
+V18__deferred_foreign_keys.sql        the circular references, added last
 </code></pre>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
-<code>transaction</code> (migrations 0009–0016), and <code>transfer</code> references <code>transaction</code> back. Migration
-<code>0006</code> therefore cannot declare those columns as foreign keys — the targets do not exist yet.</p>
-<p>The columns are created as bare <code>UUID</code> in <code>0006</code>; the constraints are added in <code>0017</code>, once every
+<code>transaction</code> (migrations 0010–0017), and <code>transfer</code> references <code>transaction</code> back. Migration
+<code>0007</code> therefore cannot declare those columns as foreign keys — the targets do not exist yet.</p>
+<p>The columns are created as bare <code>UUID</code> in <code>0007</code>; the constraints are added in <code>0018</code>, once every
 table exists:</p>
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
