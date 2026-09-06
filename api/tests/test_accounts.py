@@ -189,9 +189,29 @@ def test_a_liability_opening_balance_must_not_be_positive() -> None:
             {**UPDATE, "accountType": "payable", "openingBalance": "100.0000"}
         )
     assert accounts.AccountCreate.model_validate(
-        {**CREATE, "accountType": "credit_card", "openingBalance": "-4500.0000"}
+        {
+            **CREATE,
+            "accountType": "credit_card",
+            "openingBalance": "-4500.0000",
+            "creditLimit": "20000.0000",
+        }
     )
     assert accounts.AccountUpdate.model_validate({**UPDATE, "openingBalance": "0.0000"})
+
+
+def test_a_credit_card_requires_a_credit_limit() -> None:
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate(
+            {**CREATE, "accountType": "credit_card", "openingBalance": "-1.0000"}
+        )
+    assert accounts.AccountCreate.model_validate(
+        {
+            **CREATE,
+            "accountType": "credit_card",
+            "openingBalance": "-1.0000",
+            "creditLimit": "20000.0000",
+        }
+    )
 
 
 def test_a_full_account_number_is_never_accepted() -> None:

@@ -70,6 +70,11 @@ def _liability_opening_must_not_increase_net_worth(account_type: str, opening: s
         raise ValueError("a liability opening balance must be zero or negative")
 
 
+def _credit_card_needs_a_limit(account_type: str, credit_limit: str | None) -> None:
+    if account_type == "credit_card" and credit_limit is None:
+        raise ValueError("a credit card needs a credit limit")
+
+
 class AccountRow(BaseModel):
     id: UUID
     name: str
@@ -143,6 +148,7 @@ class AccountCreate(BaseModel):
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountCreate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
+        _credit_card_needs_a_limit(self.accountType, self.creditLimit)
         return self
 
 
@@ -181,6 +187,7 @@ class AccountUpdate(BaseModel):
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountUpdate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
+        _credit_card_needs_a_limit(self.accountType, self.creditLimit)
         return self
 
 

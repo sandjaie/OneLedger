@@ -156,6 +156,45 @@ describe("Accounts", () => {
     expect(screen.getByLabelText("Credit limit")).toBeTruthy();
   });
 
+  it("requires a credit limit when the type is a credit card", () => {
+    render(<AccountsScreen {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    const limit = screen.getByLabelText("Credit limit") as HTMLInputElement;
+    expect(limit.required).toBe(false);
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "credit_card" } });
+    expect((screen.getByLabelText("Credit limit") as HTMLInputElement).required).toBe(true);
+  });
+
+  it("names every account-table column for screen-reader navigation", () => {
+    render(<AccountsScreen {...props} />);
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Institution",
+      "Account",
+      "Detail",
+      "Masked number",
+      "Balance",
+      "Status",
+      "Evidence",
+      "Actions",
+      "Institution",
+      "Account",
+      "Detail",
+      "Masked number",
+      "Balance",
+      "Status",
+      "Evidence",
+      "Actions",
+      "Institution",
+      "Account",
+      "Detail",
+      "Masked number",
+      "Balance",
+      "Status",
+      "Evidence",
+      "Actions",
+    ]);
+  });
+
   it("sends the opening balance as a decimal string", async () => {
     const request = vi.fn().mockResolvedValue(props.accounts[0]);
     render(<AccountsScreen {...props} request={request} />);
@@ -178,6 +217,7 @@ describe("Accounts", () => {
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "Card" } });
     fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "credit_card" } });
     fireEvent.change(screen.getByLabelText("Amount owed"), { target: { value: "4500.00" } });
+    fireEvent.change(screen.getByLabelText("Credit limit"), { target: { value: "20000.00" } });
     fireEvent.change(screen.getByLabelText("Opening balance date"),
       { target: { value: "2024-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
