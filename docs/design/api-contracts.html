@@ -411,6 +411,9 @@ CORS is not the CSRF boundary. See
 <tr><td><code>GET /transactions</code></td><td>The household ledger over the base table — transfer legs and duplicates stay visible and labelled (the one deliberate non-report reader; reports read <code>v_transaction_reportable</code>). Filters by account, category, type, date range and text; paged; money fields are decimal strings</td></tr>
 <tr><td><code>POST /transactions</code></td><td>Manual entry. Freezes <code>amount_base</code>/<code>amount_secondary</code> from the booked-date rate under the household row lock (spec B3.5); a missing rate refuses the save with the date named — never a fallback. A carried-forward rate stores its real date, flagged</td></tr>
 <tr><td><code>PATCH /transactions/{id}</code></td><td>Category and notes only — money is immutable (I1/I5). Stamps <code>classified_by = 'user_manual'</code></td></tr>
+<tr><td><code>GET /categories</code></td><td>The seeded taxonomy plus this household's categories, for pickers and Settings</td></tr>
+<tr><td><code>POST /categories</code></td><td>Creates a household category. A child inherits its parent's kind, and its bucket unless one is given; the tree stays two levels</td></tr>
+<tr><td><code>PATCH /categories/{id}</code></td><td>Bucket and activity on any category — the bucket is an editable default (<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>); a seeded category keeps its name</td></tr>
 <tr><td><code>GET /institutions</code></td><td>Shared seeds plus this household's institutions</td></tr>
 <tr><td><code>POST /institutions</code></td><td>Creates a household-scoped institution. Shared seeds stay suggestions</td></tr>
 <tr><td><code>POST /parse</code></td><td>Multipart file plus optional password. Detects the layout, extracts, normalizes, dedupes, freezes FX, classifies, proposes transfers, reconciles, stages. Returns the batch and its reconciliation verdict</td></tr>
