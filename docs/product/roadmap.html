@@ -368,7 +368,7 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="08--roadmap">08 — Roadmap</h1>
-<p>Phase 0 (in progress) → Phase 1 (trusted position) → Phase 2A (next month)
+<p>Phase 0 (foundations) → Phase 1 (trusted position) → Phase 2A (next month)
 → Phase 2B (resilience) → Phase 2C (deeper analysis) → V2.</p>
 <p><strong>Product review accepted 6 September 2026.</strong> The
 <a href="./finance-os.html">finance OS requirements</a> add planning and follow-through while
@@ -402,32 +402,6 @@ unanswered. Building an amortisation engine for a loan that may not exist is the
 case of speculative work. The milestone stays specified below, ready to be scheduled when a loan is confirmed.
 Phase 0 applies V1–V5 only; loan schema and any required references belong to later forward migrations.</p>
 <hr>
-<h2 id="current-baseline">Current baseline — 6 September 2026</h2>
-<p>GitHub PR numbers below are repository PR numbers, not the ordinal PR headings or task numbers
-in the original Phase 0 plan. All fifteen (#3–#17) are merged into <code>feature/phase-0-foundations</code>.
-They cover original Tasks 1–11 through <code>0cb557b</code>. The
-<a href="../superpowers/reports/2026-09-06-phase-0-verification.md">verification report</a> records
-automated and synthetic-session evidence separately from the pending live Google identity gate.</p>
-<table><thead><tr><th>GitHub PR</th><th>Delivered</th><th>Original plan tasks</th></tr></thead><tbody>
-<tr><td>#3</td><td>Compose definition, environment template and secret hygiene</td><td>1</td></tr>
-<tr><td>#4</td><td>V1–V2: reference data, identity and RLS</td><td>2–3</td></tr>
-<tr><td>#5</td><td>V3–V4: accounts and FX rates</td><td>4–5</td></tr>
-<tr><td>#6</td><td>FastAPI and require_owner / resolve_owner / connect</td><td>6</td></tr>
-<tr><td>#7</td><td>FX pipeline: peg derivation, carry-forward and backfill; three Codex review rounds reported</td><td>7–8</td></tr>
-<tr><td>#8</td><td>Next.js foundation and cookie-aware typed API client</td><td>9</td></tr>
-<tr><td>#9</td><td>Revocable owner-session persistence and strict session verification</td><td>10 partial</td></tr>
-<tr><td>#10</td><td>Protected logout, CSRF origin checks and household configuration</td><td>10 partial</td></tr>
-<tr><td>#11</td><td>Google OIDC and pinned subject binding</td><td>10</td></tr>
-<tr><td>#12</td><td>Exact money display and generated API contracts</td><td>11 partial</td></tr>
-<tr><td>#14</td><td>Bounded browser requests and caller cancellation; prerequisite to #13</td><td>9 follow-up</td></tr>
-<tr><td>#13</td><td>Authenticated shell, configured currency preference and recovery</td><td>11 partial</td></tr>
-<tr><td>#15</td><td>Protected Settings FX inspector with exact rates and provenance</td><td>11</td></tr>
-<tr><td>#16</td><td>Account chooser for sign-in retry</td><td>10 follow-up</td></tr>
-<tr><td>#17</td><td>Dual-compiler verification and boundary comment follow-ups</td><td>Final review</td></tr>
-</tbody></table>
-<p><strong>Remaining:</strong> live permitted-account Google sign-in and second-account rejection after
-private OAuth configuration. The automated and synthetic-session checks have passed; these do not
-replace live identity verification. Do not restart merged tasks or advance the phase before this gate passes.</p>
 <h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
 <p>Everything needed before feature work has somewhere to land.</p>
 <p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
@@ -851,46 +825,9 @@ pushing through.</li>
 export to advisors · crypto beyond manual valuation · options and derivatives · business
 accounting.</p>
 <hr>
-<h2 id="progress-tracking">Progress tracking</h2>
-<p>Milestone state lives in <code>product/roadmap.html</code> itself — this file — updated as work completes. No
-external tracker for a single-person project; the overhead exceeds the benefit.</p>
-<pre><code>Phase 0   ◐ Foundations — in progress
-          ☑ GitHub #3 Compose and secret hygiene
-          ☑ GitHub #4 V1–V2
-          ☑ GitHub #5 V3–V4
-          ☑ GitHub #6 API authorization boundary
-          ☑ GitHub #7 FX pipeline including backfill
-          ☑ GitHub #8 Web foundation and typed client
-          ☑ GitHub #9 Revocable owner-session core
-          ☑ GitHub #10 Protected owner endpoints
-          ☑ GitHub #11 Google OIDC bootstrap
-          ☑ GitHub #12 Exact money and generated API types
-          ☑ GitHub #14 Bounded requests (prerequisite to #13)
-          ☑ GitHub #13 Authenticated shell and currency preference
-          ☑ GitHub #15 Settings FX inspector
-          ☑ GitHub #16 Sign-in account chooser
-          ☑ GitHub #17 Final review follow-ups
-          ☑ Automated and synthetic-session exit checks
-          ☐ Live Google allowed/second-account verification
-          ☐ Phase 0 closure
-
-Phase 1   ☐ M1   Accounts + manual transactions
-          ☐ M2   Importer: UAE card layout, end-to-end
-          ☐ M3   Remaining layouts — mapped, not coded
-          ☐ M4   Classification engine
-          ☐ M5   Transfers
-          ☐ M6   Credit cards
-          ☐ M7   Investments
-          ☐ M8   Loans                            — descheduled, pending Q18
-          ☐ M9a  Basic verified overview (after M5)
-          ☐ M9b  Full net worth + attribution (after M7)
-          ☐ M10  Documents vault
-
-Phase 2   ☐ 2A Next month
-          ☐ 2B Resilience
-          ☐ 2C Deeper analysis
-V2        ☐ Not started
-</code></pre>
+<h2 id="progress-tracking">Implementation progress</h2>
+<p>This roadmap defines scope, sequence and acceptance criteria. Execution status is maintained
+in <a href="../superpowers/progress.md">the Superpowers progress file</a>.</p>
 
         </article>
       </main>

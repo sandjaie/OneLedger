@@ -1,8 +1,8 @@
 # Phase 0 — Foundations Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
-> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> (recommended) or superpowers:executing-plans to implement this plan task-by-task. Historical step
+> checkboxes below are instructions; maintain execution state only in [progress.md](progress.md).
 
 **Goal:** A working local stack — schema, RLS, auth and 36 months of FX rates — with nothing built
 on top of it yet.
@@ -29,25 +29,13 @@ uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · Typ
 [09-security-and-privacy.md](../operations/security-and-privacy.html),
 [ADR-0013](../adr/0013-python-backend-service.html)
 
-## Current execution status — 6 September 2026
+## Using this plan
 
-GitHub PRs **#3–#17 are merged** into `feature/phase-0-foundations`. Original Tasks
-**1–11 are implemented**, including verified Google OIDC, revocable sessions, exact money display,
-configured navigation and the Settings FX inspector. The completion deliveries were split into
-bounded PRs, including the request-timeout prerequisite and account-chooser follow-up.
-
-Phase 0 remains **in progress pending live Google identity verification**. Automated and
-synthetic-session evidence is recorded in the [verification report](reports/2026-09-06-phase-0-verification.md).
-Do not restart delivered work because historical instructional checkboxes below remain blank.
-The [completion specification](specs/2026-09-06-phase-0-completion.md) supersedes conflicting old
-snippets, including cookie-only logout and floating-point formatting. The numbered PR headings
-below are original ordinal groups, not GitHub PR numbers. Integration-to-main requires a separate
-owner request.
-
-The [current master](plans/implementation-plan.md) carries the revised product
-sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0
-plan stays here for continuity, and Phase 0 scope remains unchanged.
-
+This is an execution reference, not a status tracker. Read [implementation progress](progress.md)
+before starting work. Original PR headings are ordinal groups, not GitHub PR numbers.
+The [completion specification](specs/2026-09-06-phase-0-completion.md) supersedes conflicting
+historical snippets. The [master plan](plans/implementation-plan.md) defines product sequencing.
+New plans and specifications live under `docs/superpowers/`.
 
 ## Global Constraints
 
