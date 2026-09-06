@@ -28,9 +28,10 @@ and sends 401/403 responses to `/login` or `/unauthorized`. The sign-in link per
 navigation to the API's `GET /auth/login`; `POST /auth/logout` must succeed before the owner view is
 cleared. A transient API or logout failure stays visible with a retry action.
 
-Activity, planning, ledger import and financial views are not available in Phase 0. Settings and the
-FX inspector remain visibly unavailable until the next delivery; the current amount is explicitly a
-synthetic formatting preview rather than account data.
+Activity, planning, ledger import and financial views are not available in Phase 0. Settings is
+available as a protected route with an FX inspector that reads `GET /fx/{date}` and displays stored
+rate provenance for the requested date. The overview amount is explicitly a synthetic formatting
+preview rather than account data.
 
 ## API Types
 

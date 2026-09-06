@@ -134,7 +134,7 @@ expect(formatMoney("9007199254740993.12", {code:"XUS", symbol:"$", decimals:2,
   loading; logout clears the view after the server invalidates the session. Handle offline service errors.
 - [x] Add a configured pair toggle with persistence, invalid-preference fallback, storage-error tolerance
   and accessible pressed state. It must change the displayed currency, not only its own button style.
-- [ ] Task 3c enables Settings and adds its FX inspector with date input and protected API request; show stored
+- [x] Task 3c enables Settings and adds its FX inspector with date input and protected API request; show stored
   source/carry origin. Keep unavailable financial modules disabled or clearly labelled.
 - [ ] Run unit/integration tests, lint/types, production build and secret scan; browser-check keyboard
   access, auth transitions, preference reload and FX display using safe synthetic test sessions.
