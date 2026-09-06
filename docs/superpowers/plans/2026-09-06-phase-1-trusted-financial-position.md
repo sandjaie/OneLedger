@@ -93,15 +93,18 @@ branch carrying the changelog, release notes and tag.
 |---|---|---|
 | 1 | `fix/task-1-api-import-syntax` | `feature/phase-1-trusted-financial-position` |
 | 2 | `fix/task-2-db-tests-currency-agnostic` | `feature/phase-1-trusted-financial-position` |
-| 3 | `fix/task-3-account-opening-balance` | `feature/phase-1-trusted-financial-position` |
-| 4 | `fix/task-4-auth-database-errors` | `feature/phase-1-trusted-financial-position` |
-| 5 | `chore/task-5-compose-database-identity` | `feature/phase-1-trusted-financial-position` |
-| 6 | `feature/task-6-household-configuration-api` | `feature/phase-1-trusted-financial-position` |
-| 7 | `feature/task-7-household-settings-ui` | `feature/phase-1-trusted-financial-position` |
-| 8 | `feature/task-8-account-inventory-schema` | `feature/phase-1-trusted-financial-position` |
+| 3 and 4 | `fix/task-3-account-opening-balance` | `feature/phase-1-trusted-financial-position` |
+| 5 through 8 | `feature/task-5-to-8-compose-household-inventory` | `feature/phase-1-trusted-financial-position` |
 | 9 | `feature/task-9-account-inventory-api` | `feature/phase-1-trusted-financial-position` |
 | 10 | `feature/task-10-account-inventory-ui` | `feature/phase-1-trusted-financial-position` |
 | 11 | `docs/task-11-phase-1-progress` | `feature/phase-1-trusted-financial-position` |
+
+The owner asked to club consecutive tasks onto one branch and one PR when the combined
+implementation-and-test delta stays under the 500-line cap, so Codex reviews a finished
+delivery instead of a commit that will be pushed again mid-review. Tasks 3 and 4 share
+`fix/task-3-account-opening-balance` (this PR). Tasks 5–8 share
+`feature/task-5-to-8-compose-household-inventory` after this PR merges. Split a club if the
+cap would be exceeded.
 
 Tasks run in order. Tasks 2 and 3 both touch `db/tests/0003_accounts.sql`; merge 2 before
 starting 3. Task 1 unblocks every Python check and must merge first.

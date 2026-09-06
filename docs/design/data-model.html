@@ -936,10 +936,11 @@ V21__deferred_foreign_keys.sql        the circular references, added last
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
-<code>transaction</code> (migrations 0010–0017), and <code>transfer</code> references <code>transaction</code> back. Migration
-<code>0007</code> therefore cannot declare those columns as foreign keys — the targets do not exist yet.</p>
-<p>The columns are created as bare <code>UUID</code> in <code>0007</code>; the constraints are added in <code>0018</code>, once every
-table exists:</p>
+<code>transaction</code> (Flyway V13–V20), and <code>transfer</code> references <code>transaction</code> back. V10
+(<code>schema.md</code> section <code>0007</code>) therefore cannot declare those columns as foreign keys — the
+targets do not exist yet.</p>
+<p>The columns are created as bare <code>UUID</code> in V10; the constraints are added in V21
+(<code>schema.md</code> section <code>0018</code>), once every table exists:</p>
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
   ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
