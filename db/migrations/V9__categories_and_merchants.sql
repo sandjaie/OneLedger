@@ -39,12 +39,17 @@ CREATE INDEX category_parent ON category (parent_id) WHERE parent_id IS NOT NULL
 -- third level from below).
 CREATE FUNCTION assert_category_two_levels() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
+DECLARE parent_of_parent UUID; parent_found BOOLEAN;
 BEGIN
   IF NEW.parent_id IS NOT NULL THEN
     IF NEW.parent_id = NEW.id THEN
       RAISE EXCEPTION 'a category cannot be its own parent: %', NEW.slug;
     END IF;
-    IF EXISTS (SELECT FROM category p WHERE p.id = NEW.parent_id AND p.parent_id IS NOT NULL) THEN
+    -- Locked, so two overlapping reparents (A under B while B goes under C) serialize:
+    -- whichever waits re-reads the committed row and fails the depth checks.
+    SELECT parent_id, true INTO parent_of_parent, parent_found
+      FROM category WHERE id = NEW.parent_id FOR UPDATE;
+    IF parent_found AND parent_of_parent IS NOT NULL THEN
       RAISE EXCEPTION 'the category tree is two levels: % cannot be a child of a child', NEW.slug;
     END IF;
     IF EXISTS (SELECT FROM category c WHERE c.parent_id = NEW.id) THEN

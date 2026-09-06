@@ -290,3 +290,25 @@ it("refetches when the applied review-state filter can go stale", async () => {
   const refetch = (request.mock.calls[2] as Array<string>)[0];
   expect(refetch).toContain("reviewState=unreviewed");
 });
+
+it("round-trips merchant and source-document filters", async () => {
+  const request = vi.fn().mockResolvedValue({ transactions: [], total: 0 });
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  fireEvent.change(screen.getByLabelText("Merchant id"), { target: { value: "m-1" } });
+  fireEvent.change(screen.getByLabelText("Source document id"), { target: { value: "doc-1" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
+  await waitFor(() => expect(request).toHaveBeenCalled());
+  const url = (request.mock.calls[0] as Array<string>)[0];
+  expect(url).toContain("merchantId=m-1");
+  expect(url).toContain("sourceDocumentId=doc-1");
+});
+
+it("filters offer every ledger type while entry stays manual-only", () => {
+  renderScreen([transaction({})], 1);
+  const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
+  const filterType = within(filterForm).getByLabelText("Type");
+  expect(within(filterType).queryByRole("option", { name: "transfer_out" })).not.toBeNull();
+  const entryForm = screen.getByRole("form", { name: "Record a transaction" });
+  const entryType = within(entryForm).getByLabelText("Type");
+  expect(within(entryType).queryByRole("option", { name: "transfer_out" })).toBeNull();
+});

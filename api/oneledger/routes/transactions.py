@@ -527,15 +527,24 @@ def update_transaction(
             cur.execute(
                 """UPDATE transaction
                       SET category_id = %s, notes = %s,
-                          classified_by = 'user_manual', is_reviewed = true,
-                          -- One answer to "why this category": the owner said so. A stale
-                          -- rule id beside user_manual would be a second, contradictory one.
+                          -- One answer to "why this category": the owner said so — or said
+                          -- nothing, which is the unclassified contract (0.000, queued).
+                          classified_by = %s::classified_by,
+                          is_reviewed = %s,
                           classification_rule_id = NULL,
-                          classification_confidence = 1.000,
+                          classification_confidence = %s,
                           updated_at = now()
                     WHERE id = %s AND household_id = %s
                    RETURNING id""",
-                (body.categoryId, body.notes, transaction_id, owner.household_id),
+                (
+                    body.categoryId,
+                    body.notes,
+                    "user_manual" if body.categoryId is not None else "unclassified",
+                    body.categoryId is not None,
+                    Decimal("1.000") if body.categoryId is not None else Decimal("0.000"),
+                    transaction_id,
+                    owner.household_id,
+                ),
             )
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="no such transaction")

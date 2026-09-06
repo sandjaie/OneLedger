@@ -29,6 +29,20 @@ type Props = {
 // The manual-entry set: linked types (transfers, investments, loans) arrive with their
 // features, and the importer stamps its own.
 const MANUAL_TYPES = ["expense", "income", "fee", "interest", "tax", "refund"] as const;
+// The FILTER offers every type the ledger can hold — rows of the linked types become visible
+// as their features land, and an unfilterable visible row would be a dead end.
+const ALL_TYPES = [
+  ...MANUAL_TYPES,
+  "transfer_in",
+  "transfer_out",
+  "investment_buy",
+  "investment_sell",
+  "investment_income",
+  "loan_disbursement",
+  "loan_repayment",
+  "adjustment",
+  "opening_balance",
+] as const;
 
 const PAGE = 50;
 
@@ -351,7 +365,7 @@ export function TransactionsScreen({
             value={filters.txnType}
           >
             <option value="">All types</option>
-            {MANUAL_TYPES.map((value) => (
+            {ALL_TYPES.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
