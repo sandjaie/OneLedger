@@ -160,9 +160,10 @@ export function TransactionsScreen({
         body: JSON.stringify({ categoryId: categoryId || null, notes: row.notes }),
         headers: { "Content-Type": "application/json" },
       });
-      if (applied.categoryId) {
-        // The row may no longer match the applied category filter; a stale local replacement
-        // would also make the next page's offset skip a real match. Refetch the page.
+      if (applied.categoryId || applied.reviewState) {
+        // The row may no longer match the applied category filter — and every PATCH marks the
+        // row reviewed, so an unreviewed filter goes stale the same way. A stale local
+        // replacement would also make the next page's offset skip a real match.
         await reload(applied, 0, false);
       } else {
         setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
