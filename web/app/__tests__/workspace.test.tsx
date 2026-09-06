@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { CurrencyRow, FxRateResponse, HouseholdResponse } from "@/types/api";
+import type { AccountsResponse, CurrencyRow, FxRateResponse, HouseholdResponse, InstitutionRow } from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
   { code: "XAE", name: "Synthetic A", symbol: "A", decimals: 2, numberFormat: "international" },
@@ -93,7 +93,8 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Activity.*unavailable/i }).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe("/accounts");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Plans.*unavailable/i }).disabled).toBe(true);
   });
 
   it.each([
@@ -351,6 +352,49 @@ describe("authenticated workspace", () => {
     await waitFor(() =>
       expect(screen.getByRole("group", { name: "Reporting currency" }).textContent).toContain("XAE"),
     );
+  });
+
+  it("renders the accounts inventory and marks the nav current", async () => {
+    const inventory: AccountsResponse = {
+      accounts: [{
+        id: "acct-savings",
+        name: "Inventory Savings",
+        institutionId: "inst-1",
+        institutionName: "Synthetic Bank",
+        accountType: "savings",
+        accountClass: "asset",
+        accountSubtype: null,
+        currency: "XIN",
+        country: "XB",
+        accountNumberMasked: "****1234",
+        openedOn: "2024-01-01",
+        closedOn: null,
+        isActive: true,
+        includeInNetWorth: true,
+        isLiquid: true,
+        openingBalance: "250000.0000",
+        openingBalanceDate: "2024-01-01",
+        openingBalanceNote: null,
+        openingBalanceConfirmedAt: null,
+        currentBalance: "250000.0000",
+        currentBalanceAsOf: null,
+        creditLimit: null,
+      }],
+      totals: [{ accountClass: "asset", country: "XB", currency: "XIN", total: "250000.0000" }],
+    };
+    const institutions: Array<InstitutionRow> = [
+      { id: "inst-1", name: "Synthetic Bank", shortName: "SB", country: "XB", institutionType: "bank" },
+    ];
+    render(
+      <Workspace
+        section="accounts"
+        request={requestThat(household, inventory, institutions, catalogue)}
+        navigate={vi.fn()}
+      />,
+    );
+    expect((await screen.findByRole("link", { name: "Accounts" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByText("Inventory Savings")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Assets · XB" })).toBeTruthy();
   });
 
   it("does not fetch the currency catalogue on overview", async () => {

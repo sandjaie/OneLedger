@@ -313,6 +313,88 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
+.accounts-card {
+  display: grid;
+  gap: 28px;
+  margin-top: 12px;
+}
+.accounts-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+.accounts-heading .primary-action,
+.accounts-card .primary-action { justify-self: start; margin-top: 0; }
+.account-group { display: grid; gap: 14px; }
+.account-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.account-group-head h3 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  font-weight: 400;
+}
+.account-group-head p { margin: 0; color: var(--muted); }
+.account-table { width: 100%; border-collapse: collapse; }
+.account-table td {
+  padding: 14px 10px 14px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.account-mark {
+  width: 42px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.account-owed { font-weight: 700; }
+.opening-evidence,
+.account-row-actions,
+.account-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.account-form {
+  display: grid;
+  gap: 16px;
+  padding: clamp(24px, 4vw, 38px);
+  border: 1px solid var(--rule);
+  border-top: 4px solid var(--green);
+  background: rgba(255, 255, 255, 0.9);
+}
+.account-form h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.institution-fields {
+  display: grid;
+  gap: 14px;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+.check-field {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--ink);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (max-width: 760px) {
   body {
     background:
@@ -334,6 +416,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   .currency-card,
   .household-card,
   .fx-card,
+  .accounts-heading,
   .fx-result dl { grid-template-columns: 1fr; }
   .currency-toggle { justify-self: start; }
   .format-preview { grid-column: 1; }
