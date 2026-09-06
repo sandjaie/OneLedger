@@ -214,6 +214,13 @@ def test_a_credit_card_requires_a_credit_limit() -> None:
     )
 
 
+def test_a_credit_limit_belongs_only_on_a_credit_card() -> None:
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate({**CREATE, "creditLimit": "20000.0000"})
+    with pytest.raises(ValidationError):
+        accounts.AccountUpdate.model_validate({**UPDATE, "creditLimit": "1.0000"})
+
+
 def test_a_full_account_number_is_never_accepted() -> None:
     """The never-store list is absolute (security-and-privacy.html section 1). A fifth digit
     makes the value an account number, not a mask; both write models refuse it."""
