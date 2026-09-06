@@ -136,7 +136,12 @@ CREATE INDEX idx_txn_search          ON transaction
 CREATE FUNCTION assert_transaction_money_immutable() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.amount            IS DISTINCT FROM OLD.amount
+  -- household_id and account_id are identity, not attributes: a transaction belongs to the
+  -- account it happened in, and the balance trigger never has to move money between accounts.
+  -- Reassignment is a delete and a recreate, both of which rebalance correctly.
+  IF NEW.household_id      IS DISTINCT FROM OLD.household_id
+  OR NEW.account_id        IS DISTINCT FROM OLD.account_id
+  OR NEW.amount            IS DISTINCT FROM OLD.amount
   OR NEW.currency          IS DISTINCT FROM OLD.currency
   OR NEW.original_amount   IS DISTINCT FROM OLD.original_amount
   OR NEW.original_currency IS DISTINCT FROM OLD.original_currency
@@ -185,7 +190,16 @@ BEGIN
     OR NEW.investment_transaction_id IS DISTINCT FROM OLD.investment_transaction_id
     OR NEW.loan_id              IS DISTINCT FROM OLD.loan_id
     OR NEW.loan_schedule_entry_id IS DISTINCT FROM OLD.loan_schedule_entry_id
-    OR NEW.recurring_series_id  IS DISTINCT FROM OLD.recurring_series_id THEN
+    OR NEW.recurring_series_id  IS DISTINCT FROM OLD.recurring_series_id
+    OR NEW.merchant_id          IS DISTINCT FROM OLD.merchant_id
+    OR NEW.country              IS DISTINCT FROM OLD.country
+    OR NEW.payment_method       IS DISTINCT FROM OLD.payment_method
+    OR NEW.source               IS DISTINCT FROM OLD.source
+    OR NEW.source_page_number   IS DISTINCT FROM OLD.source_page_number
+    OR NEW.source_row_number    IS DISTINCT FROM OLD.source_row_number
+    OR NEW.import_batch_id      IS DISTINCT FROM OLD.import_batch_id
+    OR NEW.statement_layout_id  IS DISTINCT FROM OLD.statement_layout_id
+    OR NEW.layout_version       IS DISTINCT FROM OLD.layout_version THEN
       RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
     END IF;
   END IF;
@@ -219,8 +233,19 @@ BEGIN
     OR NEW.investment_transaction_id IS DISTINCT FROM parent.investment_transaction_id
     OR NEW.loan_id               IS DISTINCT FROM parent.loan_id
     OR NEW.loan_schedule_entry_id IS DISTINCT FROM parent.loan_schedule_entry_id
-    OR NEW.recurring_series_id   IS DISTINCT FROM parent.recurring_series_id THEN
-      RAISE EXCEPTION 'a split child inherits its parent''s account, date, currency, provenance, rates, type, exclusion and links; % diverges from parent %', NEW.id, parent.id;
+    OR NEW.recurring_series_id   IS DISTINCT FROM parent.recurring_series_id
+    -- Children differ only in amount, category and notes (data-model, Splits): merchant,
+    -- context and every import-provenance fact stay the parent's.
+    OR NEW.merchant_id           IS DISTINCT FROM parent.merchant_id
+    OR NEW.country               IS DISTINCT FROM parent.country
+    OR NEW.payment_method        IS DISTINCT FROM parent.payment_method
+    OR NEW.source                IS DISTINCT FROM parent.source
+    OR NEW.source_page_number    IS DISTINCT FROM parent.source_page_number
+    OR NEW.source_row_number     IS DISTINCT FROM parent.source_row_number
+    OR NEW.import_batch_id       IS DISTINCT FROM parent.import_batch_id
+    OR NEW.statement_layout_id   IS DISTINCT FROM parent.statement_layout_id
+    OR NEW.layout_version        IS DISTINCT FROM parent.layout_version THEN
+      RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;
   RETURN NEW;

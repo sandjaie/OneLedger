@@ -370,6 +370,16 @@ BEGIN
     END;
   END;
 
+  -- A transaction belongs to its account: reassignment is a delete and a recreate.
+  BEGIN
+    UPDATE transaction SET account_id = a_sav WHERE id = t_lone;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'reassigning an unsplit transaction''s account must be rejected';
+    END IF;
+  END;
+
   -- Deleting the latest posting rewinds the as-of to a date the ledger still supports (I7).
   DELETE FROM transaction WHERE dedupe_hash = 'd6';
   ASSERT (SELECT current_balance FROM account WHERE id = a_sav) = 95000.0000,
