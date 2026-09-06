@@ -72,6 +72,21 @@ they are about to read; `feature/phase0-5` does not.
 
 Task branches are cut **from `feature/phase-0-foundations`** and merged **back into it**. `feature/phase-0-foundations` goes to `main` as one PR when the phase is complete and every invariant test passes.
 
+**Current checkout, sequential work.** Use the active repository root, resolved with
+`git rev-parse --show-toplevel`; do not create Git worktrees or substitute another host's path.
+This owner preference supersedes skill defaults. Each task plan or spec must declare
+the exact workspace, branch and base/PR target before agent dispatch, including separate branch
+names for split deliveries. The orchestrator owns branch switches and preserves unrelated local
+changes. Finish the active implementer and any reviewer using the checkout before switching it.
+
+**Use the PR template.** The orchestrator fills
+[.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) with what changed,
+what was implemented, actual verification commands/results and relevant notes or remaining gates.
+Do not copy a generic success claim or mark checks passed without evidence. Send Cloud findings
+to the same implementer on the same branch. After approval and merge, synchronize the integration
+branch in this checkout before dispatching the next task. Integration-to-main requires a separate
+owner request even when phase checks pass.
+
 **The review gate.** Every PR waits for **Codex review on GitHub**. Merge only after Codex approves. If Codex raises findings, address them on the same branch and let it re-review — do not merge past an open finding, and do not close and reopen to dodge one.
 
 **The 500-line cap counts code, and only code.** No pull request exceeds **500 lines of actual

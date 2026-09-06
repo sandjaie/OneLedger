@@ -1,21 +1,30 @@
-## What is now true
+## What changed
 
-<!-- One paragraph. What was wrong or missing, and what this changes. Not a list of files. -->
+<!-- Explain the problem or missing capability and the resulting behavior. -->
 
-## Invariants
+## Implementation
 
-Delete every line this diff cannot violate. Leave the rest, checked.
-
-- [ ] Money is `Decimal` / `NUMERIC` / a string on the wire — no float, no `parseFloat`, no JSON number
-- [ ] No currency, institution or country name appears as an identifier, type, enum value or locale constant
-- [ ] Reporting queries read `v_transaction_reportable` and the frozen `amount_base` / `amount_secondary`
-- [ ] New routes depend on `require_owner()`; new `SECURITY DEFINER` functions call `assert_is_owner()`
-- [ ] Migrations are forward-only, no applied migration was edited, and `schema.md` changed with them
-- [ ] No real financial data, no secret, nothing behind `NEXT_PUBLIC_` that is not a URL
+<!-- Summarize the meaningful changes. For docs/config-only work, describe what was updated. -->
 
 ## Verification
 
 <!--
-The command you ran and what it printed — not "tests pass".
-Generated files, if any, and their line count, so the 500-line cap can be read honestly.
+Record actual evidence for the current change: applicable tests, lint/types, build, migrations,
+browser/manual checks, documentation checks, dependency audit and commit/push hooks.
+Use Pass, Fail, Not run or Not applicable. Include counts where useful and explain checks not run.
+Do not claim all tests passed if only selected checks ran. Replace the placeholder row.
 -->
+
+| Check | Command or evidence | Result |
+| --- | --- | --- |
+| <!-- check --> | <!-- command/evidence --> | <!-- result and any explanation --> |
+
+## Notes
+
+<!-- Record relevant risks, compatibility/dependency choices, migrations/configuration, rollout
+steps or remaining verification gates. State None if there are no material notes. -->
+
+## References
+
+<!-- Link the task plan/spec and related issues. The plan/spec declares the branch and PR target.
+If needed, explain scope splits or generated/configuration exclusions from the PR line cap. -->
