@@ -203,7 +203,8 @@ BEGIN
     OR NEW.value_date           IS DISTINCT FROM OLD.value_date
     OR NEW.description_clean    IS DISTINCT FROM OLD.description_clean
     OR NEW.reference_raw        IS DISTINCT FROM OLD.reference_raw
-    OR NEW.counterparty_raw     IS DISTINCT FROM OLD.counterparty_raw THEN
+    OR NEW.counterparty_raw     IS DISTINCT FROM OLD.counterparty_raw
+    OR NEW.receipt_document_id  IS DISTINCT FROM OLD.receipt_document_id THEN
       RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
     END IF;
   END IF;
@@ -265,7 +266,8 @@ BEGIN
     -- The bank's own conversion splits with the movement: same currency, and an amount on
     -- every child exactly when the parent has one (the sum check holds the totals equal).
     OR NEW.original_currency     IS DISTINCT FROM parent.original_currency
-    OR (NEW.original_amount IS NULL) <> (parent.original_amount IS NULL) THEN
+    OR (NEW.original_amount IS NULL) <> (parent.original_amount IS NULL)
+    OR NEW.receipt_document_id   IS DISTINCT FROM parent.receipt_document_id THEN
       RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;
@@ -349,6 +351,25 @@ WHERE  transfer_id IS NULL             -- a transfer leg is never income or expe
 ALTER TABLE transaction ENABLE ROW LEVEL SECURITY;
 CREATE POLICY household_isolation ON transaction
   USING (household_id = current_household_id());
+
+-- A transaction is denominated in its account's currency: amount joins current_balance
+-- directly, so a foreign-denominated row would corrupt the native balance. The bank's own
+-- conversion belongs in original_amount/original_currency.
+CREATE FUNCTION assert_transaction_currency_matches_account() RETURNS TRIGGER
+  LANGUAGE plpgsql AS $$
+DECLARE account_currency CHAR(3);
+BEGIN
+  SELECT currency INTO account_currency FROM account WHERE id = NEW.account_id;
+  IF account_currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(account_currency) THEN
+    RAISE EXCEPTION 'transaction currency % must match the account''s %; the bank''s conversion belongs in original_amount',
+      rtrim(NEW.currency), rtrim(account_currency);
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER trg_transaction_currency
+  BEFORE INSERT ON transaction
+  FOR EACH ROW EXECUTE FUNCTION assert_transaction_currency_matches_account();
 
 -- The account's materialised balance follows the ledger: opening_balance + the sum of its
 -- posting rows. A split child recategorizes part of its parent's movement — it never moves

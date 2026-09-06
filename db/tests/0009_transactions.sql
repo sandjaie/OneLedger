@@ -370,6 +370,20 @@ BEGIN
     END;
   END;
 
+  -- A transaction is denominated in its account's currency.
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_sav, '2024-02-10', 'WRONG DENOMINATION', -5.0000, secondary,
+              '2024-02-10', 1, 20, -5.0000, -100.0000, 'expense', 'manual', 'wd1');
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a foreign-denominated transaction must be rejected';
+    END IF;
+  END;
+
   -- Nothing is its own container.
   BEGIN
     UPDATE transaction SET parent_transaction_id = t_lone WHERE id = t_lone;
