@@ -525,6 +525,10 @@ one household and is permanently single-tenant, but the property is genuinely lo
 <td>Session cookie verified; it must resolve to an active, unexpired and unrevoked <code>app_session</code> row joined to an owner <code>app_user</code>, and the normalized address must match the pinned one. A stranger who signs in with Google gets <code>403</code> from every route</td>
 </tr>
 <tr>
+<td>Cookie-authenticated mutations</td>
+<td>In addition to the owner session, every <code>POST</code>, <code>PUT</code>, <code>PATCH</code> and <code>DELETE</code> carrying a session cookie must send an exact <code>Origin</code> header matching <code>WEB_ORIGIN</code>. CORS is not treated as CSRF protection</td>
+</tr>
+<tr>
 <td>Reference tables (<code>fx_rate</code>, <code>currency</code>, <code>price_snapshot</code>)</td>
 <td>RLS enabled with a <code>SELECT</code>-only policy. No write policy exists, so writes are denied to every role</td>
 </tr>
@@ -549,9 +553,9 @@ removes the class entirely. This is the single biggest advantage a single-user s
 would be careless not to take it.</p>
 <p>Session: a signed 12-hour JWT in a secure, httpOnly, sameSite=lax cookie, backed by an
 unexpired and unrevoked <code>app_session</code> row. There is no refresh token or silent refresh;
-expiry requires sign-in again. The next auth slice wires sign-out to revoke the exact server record
-before clearing the cookie and requires an exact <code>Origin</code> match with <code>WEB_ORIGIN</code>
-for cookie-authenticated mutations. See
+expiry requires sign-in again. Sign-out revokes the exact server record before clearing the cookie,
+so replay of the old cookie fails. Cookie-authenticated mutations require an exact
+<code>Origin</code> match with <code>WEB_ORIGIN</code>. See
 <a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
 <hr>
 <h2 id="4-account-number-handling">4. Account number handling</h2>

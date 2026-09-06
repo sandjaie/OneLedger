@@ -16,13 +16,15 @@ Supporting specifications: [architecture](../design/architecture.html), [data mo
 
 ## Current execution status — 6 September 2026
 
-GitHub PRs **#3–#8 are merged** into `feature/phase-0-foundations`. They cover original Tasks
-**1–9**, including the reviewed web foundation and typed API client. This status records delivered
-work, not a new run of every verification command printed below.
+GitHub PRs **#3–#9 are merged** into `feature/phase-0-foundations`. They cover original Tasks
+**1–9**, including the reviewed web foundation, typed API client and revocable session core. This
+status records delivered work, not a new run of every verification command printed below.
 
-**Resume at Task 10**, then Task 11 and Phase 0 exit verification. The numbered PR headings in this
-document set are ordinal groups: original PR 6 corresponds to GitHub #8; original PR 7 remains.
-Do not restart completed tasks because their original instructional checkboxes are blank.
+This endpoint slice completes protected logout, CSRF origin checks and owner-scoped household
+configuration. **Resume at Google OIDC login/callback**, then Task 11 and Phase 0 exit
+verification. The numbered PR headings in this document set are ordinal groups: original PR 6
+corresponds to GitHub #8; original PR 7 remains. Do not restart completed tasks because their
+original instructional checkboxes are blank.
 
 The [current master](plans/implementation-plan.md) carries the revised product
 sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0

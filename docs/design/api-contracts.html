@@ -387,11 +387,14 @@ that introspects <code>information_schema</code> — a migration that changes a 
 model fails CI.</p>
 <h2 id="the-route-surface">2. The route surface</h2>
 <p>Every current route except <code>GET /health</code> requires a valid session cookie that resolves to
-an active server record for the pinned owner. The future OIDC bootstrap routes
-<code>GET /auth/login</code> and <code>GET /auth/callback</code> complete the intended public set when that
-flow lands; they expose no financial data. See
+an active server record for the pinned owner. Mutating cookie-authenticated requests also require an
+exact <code>Origin</code> match with <code>WEB_ORIGIN</code>; CORS is not the CSRF boundary. The future OIDC
+bootstrap routes <code>GET /auth/login</code> and <code>GET /auth/callback</code> complete the intended
+public set when that flow lands; they expose no financial data. See
 <a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
 <table><thead><tr><th>Route</th><th>Does</th></tr></thead><tbody>
+<tr><td><code>POST /auth/logout</code></td><td>Revokes the exact current session record, then clears the session cookie. Replaying the old cookie is rejected</td></tr>
+<tr><td><code>GET /household</code></td><td>Returns the authenticated owner's household id, configured reporting pair and currency display metadata. The browser cannot select a household id</td></tr>
 <tr><td><code>POST /parse</code></td><td>Multipart file plus optional password. Detects the layout, extracts, normalizes, dedupes, freezes FX, classifies, proposes transfers, reconciles, stages. Returns the batch and its reconciliation verdict</td></tr>
 <tr><td><code>POST /layouts/propose</code></td><td>Finds the header row and proposes column bands for an unrecognised document (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>)</td></tr>
 <tr><td><code>POST /layouts</code></td><td>Saves a mapped layout profile</td></tr>
