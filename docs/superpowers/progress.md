@@ -23,12 +23,12 @@ synthetic checks do not substitute for them.
 | --- | --- | --- | --- |
 | 1 — restore API package import | `fix/task-1-api-import-syntax` | Complete | [PR #23](https://github.com/sandjaie/OneLedger/pull/23) |
 | 2 — currency-agnostic SQL fixtures | `fix/task-2-db-tests-currency-agnostic` | Complete | [PR #25](https://github.com/sandjaie/OneLedger/pull/25) |
-| 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | This PR | clubbed with Task 4 |
-| 4 — distinct DB vs auth failures | `fix/task-3-account-opening-balance` | This PR | clubbed with Task 3 |
-| 5 — Compose DB identity | `chore/task-5-compose-database-identity` | Pending | |
-| 6 — household configuration API | `feature/task-6-household-configuration-api` | Pending | |
-| 7 — Settings › Household UI | `feature/task-7-household-settings-ui` | Pending | |
-| 8 — account inventory schema | `feature/task-8-account-inventory-schema` | Pending | |
+| 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | This PR | [PR #26](https://github.com/sandjaie/OneLedger/pull/26) (with Task 4) |
+| 4 — distinct DB vs auth failures | `fix/task-3-account-opening-balance` | This PR | [PR #26](https://github.com/sandjaie/OneLedger/pull/26) (with Task 3) |
+| 5 — Compose DB identity | `feature/task-5-to-8-compose-household-inventory` | Pending | clubbed with 6–8 after #26 |
+| 6 — household configuration API | `feature/task-5-to-8-compose-household-inventory` | Pending | clubbed with 5, 7, 8 |
+| 7 — Settings › Household UI | `feature/task-5-to-8-compose-household-inventory` | Pending | clubbed with 5, 6, 8 |
+| 8 — account inventory schema | `feature/task-5-to-8-compose-household-inventory` | Pending | clubbed with 5–7 |
 | 9 — account inventory API | `feature/task-9-account-inventory-api` | Pending | |
 | 10 — account inventory UI | `feature/task-10-account-inventory-ui` | Pending | |
 | 11 — progress evidence and M1a/M1b split | `docs/task-11-phase-1-progress` | Pending | |
