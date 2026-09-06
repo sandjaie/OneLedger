@@ -17,9 +17,10 @@ unapplied `0015` attribution shape must be reconciled with F03 before implementa
 relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
 
 Applied migrations use their Flyway names. V1–V5 are Phase 0. V6–V8 are Phase 1 M1a: the
-current-balance derivation, household configuration, and the account inventory. V9 and V10 are
-M1b: categories, merchants and the seed taxonomy, then the transaction ledger. The unapplied
-reference sequence in this file now begins at `0008`; deferred foreign keys remain `0018`.
+current-balance derivation, household configuration, and the account inventory. V9–V11 are
+M1b: categories, merchants and the seed taxonomy; the transaction ledger; and the household's
+category overrides. The unapplied reference sequence in this file now begins at `0008`;
+deferred foreign keys remain `0018`.
 
 ---
 
@@ -420,6 +421,27 @@ CREATE INDEX idx_txn_unreviewed      ON transaction (household_id, booked_date D
 CREATE INDEX idx_txn_transfer        ON transaction (transfer_id) WHERE transfer_id IS NOT NULL;
 CREATE INDEX idx_txn_search          ON transaction
                                      USING gin (to_tsvector('simple', description_raw));
+```
+
+---
+
+## `V11` (applied)
+
+### Category overrides
+
+The seeded taxonomy is versioned shared data; the service connects privileged, so a bucket or
+activity choice on a seed row is stored beside it and wins on read, never rewriting the seed.
+
+```sql
+CREATE TABLE category_override (
+  household_id UUID NOT NULL REFERENCES household(id),
+  category_id  UUID NOT NULL REFERENCES category(id) ON DELETE CASCADE,
+  bucket       category_bucket,
+  is_active    BOOLEAN,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, category_id),
+  CONSTRAINT override_overrides_something CHECK (bucket IS NOT NULL OR is_active IS NOT NULL)
+);
 ```
 
 ---

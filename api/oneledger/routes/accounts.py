@@ -386,6 +386,25 @@ def update_account(
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
+            # An account's currency is fixed once ledger rows exist: the rows' native amounts
+            # are immutable facts in that denomination, and relabelling the account would mix
+            # denominations in one balance. A wrong currency with history is a migration
+            # workflow, not an edit.
+            cur.execute(
+                """SELECT a.currency, EXISTS (SELECT FROM transaction t WHERE t.account_id = a.id)
+                     FROM account a WHERE a.id = %s AND a.household_id = %s""",
+                (account_id, owner.household_id),
+            )
+            existing = cur.fetchone()
+            if (
+                existing is not None
+                and bool(existing[1])
+                and str(existing[0]).strip() != body.currency
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail="an account's currency is fixed once it has ledger entries",
+                )
             cur.execute(
                 """UPDATE account
                       SET name = %s, institution_id = %s, account_type = %s::account_type,
@@ -405,7 +424,12 @@ def update_account(
                           current_balance_as_of = CASE
                             WHEN opening_balance IS DISTINCT FROM %s
                               OR opening_balance_date IS DISTINCT FROM %s
-                            THEN %s::date::timestamptz
+                            THEN GREATEST(%s::date::timestamptz,
+                                          (SELECT COALESCE(max(t.booked_date)::timestamptz,
+                                                           '-infinity'::timestamptz)
+                                             FROM transaction t
+                                            WHERE t.account_id = account.id
+                                              AND t.parent_transaction_id IS NULL))
                             ELSE current_balance_as_of END,
                           opening_balance_note = %s, credit_limit = %s,
                           opening_balance_confirmed_at =

@@ -63,6 +63,14 @@ class CategoryUpdate(BaseModel):
 
 
 COLUMNS = "id, parent_id, name, slug, kind::text, bucket::text, sort_order, is_system, is_active"
+# The read merges the household's overrides over the seed: the seed row is versioned shared
+# data the service must not rewrite, and the household's bucket/activity choices win on read.
+MERGED = """c.id, c.parent_id, c.name, c.slug, c.kind::text,
+            COALESCE(o.bucket, c.bucket)::text, c.sort_order, c.is_system,
+            COALESCE(o.is_active, c.is_active)"""
+MERGED_FROM = """FROM category c
+                 LEFT JOIN category_override o
+                        ON o.category_id = c.id AND o.household_id = %s"""
 FIELDS = [
     "id",
     "parentId",
@@ -86,10 +94,10 @@ def list_categories(
 ) -> list[CategoryRow]:
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
-            f"""SELECT {COLUMNS} FROM category
-                 WHERE household_id IS NULL OR household_id = %s
-                 ORDER BY parent_id NULLS FIRST, sort_order, name""",
-            (owner.household_id,),
+            f"""SELECT {MERGED} {MERGED_FROM}
+                 WHERE c.household_id IS NULL OR c.household_id = %s
+                 ORDER BY c.parent_id NULLS FIRST, c.sort_order, c.name""",
+            (owner.household_id, owner.household_id),
         )
         return [category_row(row) for row in cur.fetchall()]
 
@@ -169,19 +177,29 @@ def update_category(
                 raise HTTPException(
                     status_code=422, detail="a seeded category keeps its name; add your own"
                 )
+            if system_row:
+                # Never rewrite the seed in place: the household's choice is an override row
+                # beside it, upserted so repeat edits replace themselves.
+                cur.execute(
+                    """INSERT INTO category_override (household_id, category_id, bucket, is_active)
+                       VALUES (%s, %s, %s::category_bucket, %s)
+                       ON CONFLICT (household_id, category_id)
+                         DO UPDATE SET bucket = EXCLUDED.bucket,
+                                       is_active = EXCLUDED.is_active,
+                                       updated_at = now()""",
+                    (owner.household_id, category_id, body.bucket, body.isActive),
+                )
+            else:
+                cur.execute(
+                    """UPDATE category
+                          SET bucket = %s::category_bucket, is_active = %s, name = %s,
+                              updated_at = now()
+                        WHERE id = %s AND household_id = %s""",
+                    (body.bucket, body.isActive, body.name, category_id, owner.household_id),
+                )
             cur.execute(
-                f"""UPDATE category
-                       SET bucket = %s::category_bucket, is_active = %s, name = %s,
-                           updated_at = now()
-                     WHERE id = %s AND (household_id IS NULL OR household_id = %s)
-                    RETURNING {COLUMNS}""",
-                (
-                    body.bucket,
-                    body.isActive,
-                    current_name if system_row else body.name,
-                    category_id,
-                    owner.household_id,
-                ),
+                f"SELECT {MERGED} {MERGED_FROM} WHERE c.id = %s",
+                (owner.household_id, category_id),
             )
             updated = cur.fetchone()
             if updated is None:

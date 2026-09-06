@@ -157,17 +157,35 @@ CREATE TRIGGER trg_transaction_money_immutable
   BEFORE UPDATE ON transaction
   FOR EACH ROW EXECUTE FUNCTION assert_transaction_money_immutable();
 
--- Splits are one level deep, in both directions.
+-- Splits are one level deep, in both directions, and a child recategorizes part of its
+-- parent's movement — nothing else. The documented inherited facts (data-model, Splits) must
+-- match the parent, or a child would be reported under attributes whose movement lives in
+-- another account, date or denomination.
 CREATE FUNCTION assert_split_one_level() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
+DECLARE parent transaction%ROWTYPE;
 BEGIN
   IF NEW.parent_transaction_id IS NOT NULL THEN
-    IF EXISTS (SELECT FROM transaction p
-                WHERE p.id = NEW.parent_transaction_id AND p.parent_transaction_id IS NOT NULL) THEN
+    SELECT * INTO parent FROM transaction WHERE id = NEW.parent_transaction_id;
+    IF parent.id IS NULL THEN
+      RETURN NEW;  -- the foreign key reports a missing parent with the right error
+    END IF;
+    IF parent.parent_transaction_id IS NOT NULL THEN
       RAISE EXCEPTION 'splits are one level deep: the parent of % is itself a split child', NEW.id;
     END IF;
     IF EXISTS (SELECT FROM transaction c WHERE c.parent_transaction_id = NEW.id) THEN
       RAISE EXCEPTION 'splits are one level deep: % has children and cannot become a child', NEW.id;
+    END IF;
+    IF NEW.household_id          IS DISTINCT FROM parent.household_id
+    OR NEW.account_id            IS DISTINCT FROM parent.account_id
+    OR NEW.booked_date           IS DISTINCT FROM parent.booked_date
+    OR NEW.currency              IS DISTINCT FROM parent.currency
+    OR NEW.source_document_id    IS DISTINCT FROM parent.source_document_id
+    OR NEW.fx_rate_date          IS DISTINCT FROM parent.fx_rate_date
+    OR NEW.fx_rate_is_carried    IS DISTINCT FROM parent.fx_rate_is_carried
+    OR NEW.fx_rate_to_base       IS DISTINCT FROM parent.fx_rate_to_base
+    OR NEW.fx_rate_to_secondary  IS DISTINCT FROM parent.fx_rate_to_secondary THEN
+      RAISE EXCEPTION 'a split child inherits its parent''s account, date, currency, provenance and frozen rates; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;
   RETURN NEW;
