@@ -45,13 +45,17 @@ body {
 }
 
 .masthead {
+  flex-wrap: wrap;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--ink);
 }
 .masthead-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
+  min-width: 0;
 }
 
 .brand {
@@ -345,6 +349,17 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 
 @media (max-width: 440px) {
+  .masthead {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .masthead-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .phase-label {
     max-width: 100px;
     text-align: right;
