@@ -635,3 +635,21 @@ def test_mixed_leg_dates_are_refused(monkeypatch: MonkeyPatch) -> None:
         _teardown()
     assert response.status_code == 422
     assert "different dates" in response.json()["detail"]
+
+
+def test_a_note_edit_survives_a_deactivated_historical_category(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Historical assignments stay usable: availability gates new assignments only."""
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW], container=(False, CATEGORY_ID), category_ok=None
+    )
+    try:
+        response = _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": "still valid"},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 200

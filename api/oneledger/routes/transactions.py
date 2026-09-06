@@ -533,7 +533,6 @@ def update_transaction(
             # The same household lock every ledger writer takes: without it a concurrent
             # splitter could add children between the container check and the update.
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-            _assert_category_allowed(cur, body.categoryId, owner.household_id)
             # A split parent is a container: reports read its children, so recategorizing it
             # would change the ledger row while every report kept the old categories.
             cur.execute(
@@ -551,6 +550,10 @@ def update_transaction(
                     detail="a split parent is a container; recategorize its children",
                 )
             category_unchanged = container[1] == body.categoryId
+            # Availability gates NEW assignments only: a historical category the owner later
+            # deactivated stays on its rows, and a note-only edit resending it must pass.
+            if not category_unchanged:
+                _assert_category_allowed(cur, body.categoryId, owner.household_id)
             if category_unchanged:
                 # A note-only edit changes no classification: the audit trail must not claim
                 # the owner chose a category they did not change.
