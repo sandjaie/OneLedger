@@ -140,25 +140,25 @@ def bind_google_owner(subject: str, email: str) -> UUID:
     normalized = email.strip().lower()
     if normalized != _allowed_email():
         raise NotAuthorized("address is not the permitted account")
-    try:
-        with connect() as conn, conn.cursor() as cur:
-            cur.execute(
-                """WITH candidate AS (
-                     SELECT id FROM app_user
-                      WHERE role = 'owner' AND lower(btrim(email)) = %s
-                   ), eligible AS (
-                     SELECT id FROM candidate WHERE (SELECT count(*) FROM candidate) = 1
-                   )
-                   UPDATE app_user u SET google_subject = COALESCE(u.google_subject, %s)
-                    FROM eligible e
-                   WHERE u.id = e.id
-                     AND (u.google_subject IS NULL OR u.google_subject = %s)
-                   RETURNING u.id""",
-                (normalized, subject, subject),
-            )
-            row = cur.fetchone()
-    except Exception as exc:
-        raise NotAuthorized("owner binding failed") from exc
+    # A database failure is not a verdict about this identity. Converting one into NotAuthorized
+    # sent a correctly configured owner to /unauthorized instead of the retry path; the callback
+    # already routes unexpected exceptions to retry, exactly as it does for issue_session.
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """WITH candidate AS (
+                 SELECT id FROM app_user
+                  WHERE role = 'owner' AND lower(btrim(email)) = %s
+               ), eligible AS (
+                 SELECT id FROM candidate WHERE (SELECT count(*) FROM candidate) = 1
+               )
+               UPDATE app_user u SET google_subject = COALESCE(u.google_subject, %s)
+                FROM eligible e
+               WHERE u.id = e.id
+                 AND (u.google_subject IS NULL OR u.google_subject = %s)
+               RETURNING u.id""",
+            (normalized, subject, subject),
+        )
+        row = cur.fetchone()
     if row is None:
         raise NotAuthorized("no unique permitted owner binding")
     return UUID(str(row[0]))

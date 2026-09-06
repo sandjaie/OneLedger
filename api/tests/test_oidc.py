@@ -9,6 +9,7 @@ from uuid import UUID
 
 import httpx
 import jwt
+import psycopg
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -254,3 +255,40 @@ def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.Monke
     response = TestClient(app).get("/auth/login", follow_redirects=False)
     assert response.status_code == 503
     assert response.json() == {"detail": "sign-in unavailable"}
+
+
+def test_owner_binding_lets_database_failures_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unreachable() -> object:
+        raise psycopg.OperationalError("connection refused")
+
+    monkeypatch.setattr(auth, "connect", unreachable, raising=False)
+    with pytest.raises(psycopg.OperationalError):
+        auth.bind_google_owner("google-subject", EMAIL)
+
+
+def test_a_database_outage_during_binding_offers_retry_not_rejection(
+    monkeypatch: pytest.MonkeyPatch, google_keys: tuple[RSAPrivateKey, dict[str, Any]]
+) -> None:
+    """A correctly permitted owner must never be told their account is not allowed because the
+    database was down. /unauthorized is a verdict about identity; this is an outage."""
+    private_key, jwk = google_keys
+    client = TestClient(app)
+    login = client.get("/auth/login", follow_redirects=False)
+    flow = decode_flow(login.cookies["oidc_flow"])
+    token = sign_google_token(private_key, nonce=flow["nonce"])
+
+    monkeypatch.setattr(auth_routes, "_exchange_code", lambda *_: token)
+    monkeypatch.setattr(auth, "_google_jwks_client", lambda: StaticJwksClient(jwk))
+    monkeypatch.setattr(
+        auth, "connect", lambda: (_ for _ in ()).throw(psycopg.OperationalError("down"))
+    )
+
+    response = client.get(
+        f"/auth/callback?code={SENTINEL}&state={flow['state']}", follow_redirects=False
+    )
+
+    assert response.headers["location"] == (
+        "http://localhost:3000/login?reason=authentication_failed"
+    )
+    assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+    assert SENTINEL not in response.text
