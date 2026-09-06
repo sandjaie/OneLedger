@@ -486,3 +486,24 @@ def test_accounts_are_never_deleted() -> None:
         for route in app.routes
         if isinstance(route, APIRoute)
     )
+
+
+def test_an_anchor_edit_recomputes_the_balance_from_the_ledger(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """opening + the sum of the account's posting rows — Postgres arithmetic, split-neutral,
+    so an anchor correction after M1b's ledger exists cannot erase transaction history."""
+    connection = AccountsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openingBalance": "999.0000"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    update = next(s for s in connection.statements if "UPDATE account" in s)
+    assert "COALESCE(sum(t.amount), 0)" in update
+    assert "parent_transaction_id IS NULL" in update

@@ -474,6 +474,173 @@ export type InstitutionRow = {
 };
 
 /**
+ * TransactionCreate
+ */
+export type TransactionCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Txntype
+     */
+    txnType: string;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+    /**
+     * Country
+     */
+    country?: string | null;
+    /**
+     * Paymentmethod
+     */
+    paymentMethod?: string | null;
+};
+
+/**
+ * TransactionRow
+ */
+export type TransactionRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Descriptionraw
+     */
+    descriptionRaw: string;
+    /**
+     * Descriptionclean
+     */
+    descriptionClean: string | null;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Amountsecondary
+     */
+    amountSecondary: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string;
+    /**
+     * Fxrateiscarried
+     */
+    fxRateIsCarried: boolean;
+    /**
+     * Txntype
+     */
+    txnType: string;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Merchantid
+     */
+    merchantId: string | null;
+    /**
+     * Transferid
+     */
+    transferId: string | null;
+    /**
+     * Parenttransactionid
+     */
+    parentTransactionId: string | null;
+    /**
+     * Isexcluded
+     */
+    isExcluded: boolean;
+    /**
+     * Classifiedby
+     */
+    classifiedBy: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Notes
+     */
+    notes: string | null;
+};
+
+/**
+ * TransactionUpdate
+ *
+ * The two owner-editable fields, always sent. Money is immutable (I1/I5); the database
+ * trigger enforces what this model does not offer.
+ */
+export type TransactionUpdate = {
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+};
+
+/**
+ * TransactionsResponse
+ */
+export type TransactionsResponse = {
+    /**
+     * Transactions
+     */
+    transactions: Array<TransactionRow>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -854,6 +1021,119 @@ export type CreateInstitutionInstitutionsPostResponses = {
 };
 
 export type CreateInstitutionInstitutionsPostResponse = CreateInstitutionInstitutionsPostResponses[keyof CreateInstitutionInstitutionsPostResponses];
+
+export type ListTransactionsTransactionsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Accountid
+         */
+        accountId?: string | null;
+        /**
+         * Categoryid
+         */
+        categoryId?: string | null;
+        /**
+         * Txntype
+         */
+        txnType?: string | null;
+        /**
+         * Datefrom
+         */
+        dateFrom?: string | null;
+        /**
+         * Dateto
+         */
+        dateTo?: string | null;
+        /**
+         * Q
+         */
+        q?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/transactions';
+};
+
+export type ListTransactionsTransactionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTransactionsTransactionsGetError = ListTransactionsTransactionsGetErrors[keyof ListTransactionsTransactionsGetErrors];
+
+export type ListTransactionsTransactionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TransactionsResponse;
+};
+
+export type ListTransactionsTransactionsGetResponse = ListTransactionsTransactionsGetResponses[keyof ListTransactionsTransactionsGetResponses];
+
+export type CreateTransactionTransactionsPostData = {
+    body: TransactionCreate;
+    path?: never;
+    query?: never;
+    url: '/transactions';
+};
+
+export type CreateTransactionTransactionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTransactionTransactionsPostError = CreateTransactionTransactionsPostErrors[keyof CreateTransactionTransactionsPostErrors];
+
+export type CreateTransactionTransactionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TransactionRow;
+};
+
+export type CreateTransactionTransactionsPostResponse = CreateTransactionTransactionsPostResponses[keyof CreateTransactionTransactionsPostResponses];
+
+export type UpdateTransactionTransactionsTransactionIdPatchData = {
+    body: TransactionUpdate;
+    path: {
+        /**
+         * Transaction Id
+         */
+        transaction_id: string;
+    };
+    query?: never;
+    url: '/transactions/{transaction_id}';
+};
+
+export type UpdateTransactionTransactionsTransactionIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateTransactionTransactionsTransactionIdPatchError = UpdateTransactionTransactionsTransactionIdPatchErrors[keyof UpdateTransactionTransactionsTransactionIdPatchErrors];
+
+export type UpdateTransactionTransactionsTransactionIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TransactionRow;
+};
+
+export type UpdateTransactionTransactionsTransactionIdPatchResponse = UpdateTransactionTransactionsTransactionIdPatchResponses[keyof UpdateTransactionTransactionsTransactionIdPatchResponses];
 
 export type HealthHealthGetData = {
     body?: never;
