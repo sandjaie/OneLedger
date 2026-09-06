@@ -198,9 +198,12 @@ def _assert_category_allowed(
     if category_id is None:
         return
     cur.execute(
-        """SELECT 1 FROM category WHERE id = %s
-            AND (household_id IS NULL OR household_id = %s)""",
-        (category_id, household_id),
+        """SELECT 1 FROM category c
+             LEFT JOIN category_override o
+                    ON o.category_id = c.id AND o.household_id = %s
+            WHERE c.id = %s AND (c.household_id IS NULL OR c.household_id = %s)
+              AND COALESCE(o.is_active, c.is_active)""",
+        (household_id, category_id, household_id),
     )
     if cur.fetchone() is None:
         raise HTTPException(status_code=422, detail="category is not available to this household")
@@ -479,6 +482,9 @@ def update_transaction(
 ) -> TransactionRow:
     try:
         with connect() as conn, conn.cursor() as cur:
+            # The same household lock every ledger writer takes: without it a concurrent
+            # splitter could add children between the container check and the update.
+            cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             _assert_category_allowed(cur, body.categoryId, owner.household_id)
             # A split parent is a container: reports read its children, so recategorizing it
             # would change the ledger row while every report kept the old categories.

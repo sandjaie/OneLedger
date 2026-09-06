@@ -268,3 +268,25 @@ it("round-trips the remaining filter controls", async () => {
   expect(url).toContain("tag=trip");
   expect(url).toContain("reviewState=unreviewed");
 });
+
+
+it("refetches when the applied review-state filter can go stale", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce({ transactions: [transaction({})], total: 1 }) // apply filter
+    .mockResolvedValueOnce(transaction({ categoryId: "cat-groceries" })) // PATCH marks reviewed
+    .mockResolvedValueOnce({ transactions: [], total: 0 }); // refetch
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
+  fireEvent.change(within(filterForm).getByLabelText("Review state"), {
+    target: { value: "unreviewed" },
+  });
+  fireEvent.submit(filterForm);
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+    target: { value: "cat-groceries" },
+  });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+  const refetch = (request.mock.calls[2] as Array<string>)[0];
+  expect(refetch).toContain("reviewState=unreviewed");
+});

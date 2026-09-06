@@ -199,7 +199,11 @@ BEGIN
     OR NEW.source_row_number    IS DISTINCT FROM OLD.source_row_number
     OR NEW.import_batch_id      IS DISTINCT FROM OLD.import_batch_id
     OR NEW.statement_layout_id  IS DISTINCT FROM OLD.statement_layout_id
-    OR NEW.layout_version       IS DISTINCT FROM OLD.layout_version THEN
+    OR NEW.layout_version       IS DISTINCT FROM OLD.layout_version
+    OR NEW.value_date           IS DISTINCT FROM OLD.value_date
+    OR NEW.description_clean    IS DISTINCT FROM OLD.description_clean
+    OR NEW.reference_raw        IS DISTINCT FROM OLD.reference_raw
+    OR NEW.counterparty_raw     IS DISTINCT FROM OLD.counterparty_raw THEN
       RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
     END IF;
   END IF;
@@ -244,7 +248,14 @@ BEGIN
     OR NEW.source_row_number     IS DISTINCT FROM parent.source_row_number
     OR NEW.import_batch_id       IS DISTINCT FROM parent.import_batch_id
     OR NEW.statement_layout_id   IS DISTINCT FROM parent.statement_layout_id
-    OR NEW.layout_version        IS DISTINCT FROM parent.layout_version THEN
+    OR NEW.layout_version        IS DISTINCT FROM parent.layout_version
+    -- Source identity too: one bank movement never presents its portions under different
+    -- dates, descriptions, references or counterparties.
+    OR NEW.value_date            IS DISTINCT FROM parent.value_date
+    OR NEW.description_raw       IS DISTINCT FROM parent.description_raw
+    OR NEW.description_clean     IS DISTINCT FROM parent.description_clean
+    OR NEW.reference_raw         IS DISTINCT FROM parent.reference_raw
+    OR NEW.counterparty_raw      IS DISTINCT FROM parent.counterparty_raw THEN
       RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;

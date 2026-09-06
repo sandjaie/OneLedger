@@ -128,7 +128,7 @@ class LedgerCursor:
             self._one = self.connection.account
         elif "parent_transaction_id = %s" in sql and "EXISTS" in sql:
             self._one = self.connection.container
-        elif "FROM category WHERE id" in sql:
+        elif "COALESCE(o.is_active" in sql:
             self._one = self.connection.category_ok
         elif "FROM fx_rate" in sql:
             base, quote = (params or ())[1], (params or ())[2]
@@ -338,6 +338,24 @@ def test_a_foreign_household_category_is_refused(monkeypatch: MonkeyPatch) -> No
         _teardown()
     assert update.status_code == 422
     assert not any("UPDATE transaction" in s for s in connection.statements)
+    predicate = next(s for s in connection.statements if "COALESCE(o.is_active" in s)
+    assert "c.is_active" in predicate, "an effectively inactive category is not assignable"
+
+
+def test_the_patch_serializes_on_the_household_row(monkeypatch: MonkeyPatch) -> None:
+    """A concurrent splitter must not add children between the container check and the
+    update; the household row is the rendezvous every ledger writer shares."""
+    connection = LedgerConnection(rows=[FETCHED_ROW])
+    try:
+        _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": None},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    first = connection.statements[0]
+    assert "FOR UPDATE" in first and "FROM household" in first
 
 
 def test_manual_entry_accepts_unlinked_types_only() -> None:
