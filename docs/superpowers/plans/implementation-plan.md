@@ -89,7 +89,7 @@ M8 is conditional on an actual loan; it does not block unrelated work.
 ### Task group A: Accounts, imports and classification — M1–M4
 
 **Read:** PRD §5.1–5.5, ingestion, classification, finance OS F01/F05/F06.
-**Plan outputs:** one dated plan each for M1, M2, M3 and M4 in this directory.
+**Plan outputs:** M1a is [2026-09-06-phase-1-trusted-financial-position.md](2026-09-06-phase-1-trusted-financial-position.md). M1b, M2, M3 and M4 each still get their own dated plan in this directory.
 **Files owned by those plans:** `api/oneledger/routes/`, extraction/normalization/classification
 modules when created, relevant `web/` screens, forward migrations and existing schema/test references.
 Choose exact new filenames and API contracts from the working tree when each plan is written.
