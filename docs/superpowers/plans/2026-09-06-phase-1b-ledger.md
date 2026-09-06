@@ -99,14 +99,16 @@ merchant and alias tables, with the seed taxonomy loaded by the migration.
 `schema.md` `0006` (mark applied as V9) and `data-model.html` in the same commit. The
 classification **rule** packs are not created here — their destination table arrives with
 Task 22's V13, and the packs move there with it.
-**Contracts:** the `0006` DDL in `schema.md` is the table shape. Every category carries a bucket
-in {need, want, investment, debt_service, income, ignore} (ADR-0008) as an editable default.
-Merchant names are rows.
+**Contracts:** the `0006` DDL in `schema.md` is the table shape, with one reconciliation first:
+its `max_two_levels` CHECK contains a subquery, which PostgreSQL rejects in CHECK constraints —
+`schema.md` is the bug, so the two-level rule is enforced by a trigger and `schema.md` is
+corrected in the same commit as V9. Every category carries a bucket in {need, want, investment,
+debt_service, income, ignore} (ADR-0008) as an editable default. Merchant names are rows.
 **Invariants/security:** ADR-0012 — no category, merchant or region content becomes an
 identifier; the taxonomy seed is versioned so later seed updates never disturb user edits.
 **Required test behaviours (failing first):** taxonomy loads from empty with every category
-carrying a valid bucket; re-running the seed is idempotent; no test names a real currency or
-bank.
+carrying a valid bucket; a third category level is rejected; re-running the seed is idempotent;
+no test names a real currency or bank.
 **Validation:** the DB gate.
 **Branch:** `feature/task-12-categories-and-seed-taxonomy`.
 **Acceptance:** DB gate green from empty; `schema.md`/`data-model.html` updated in the same
@@ -122,9 +124,15 @@ including `v_transaction_reportable`); create `db/tests/0007_transactions.sql`; 
 **Contracts:** `0007` DDL is the shape: frozen `amount_base`/`amount_secondary`, `classified_by`
 + `classification_rule_id`, `source` with provenance (`source = 'statement_import'` requires
 `source_document_id`, I6), `dedupe_hash` unique on `(household_id, account_id, dedupe_hash)`,
-`fx_rate_is_carried`/`fx_rate_date` labels (I7). Columns referencing tables that arrive in
-later milestones (`source_document_id`, `statement_layout_id`, `classification_rule_id`, the
-import-batch reference) are created as bare UUID columns — the same pattern `schema.md` `0018`
+`fx_rate_is_carried`/`fx_rate_date` labels (I7). The split-safe posting layer ships with the
+view: split children are one level deep, inheriting account, date, provenance and frozen FX
+from their parent; the deferred `trg_split_sums_to_parent` constraint trigger holds every
+split's children to exactly the parent's amount; and `v_transaction_reportable` selects only
+leaf rows through the posting view, created `WITH (security_invoker = true)` — load-bearing,
+not style (data-model on splits and the reporting guard). Columns referencing tables that
+arrive in later milestones (`source_document_id`, `receipt_document_id`,
+`statement_layout_id`, `classification_rule_id`, the import-batch reference) are created as
+bare UUID columns — the same pattern `schema.md` `0018`
 already applies to `transfer_id` and its siblings; these four are constrained by Task 22's V13
 once every target exists, while each `0018` clause proper lands in the forward migration that
 creates its own target.
@@ -134,7 +142,10 @@ and duplicates by construction (I3, I4 groundwork).
 **Required test behaviours (failing first):** immutability trigger raises on amount/currency
 update; an insert without frozen amounts is refused; the view returns exactly non-transfer,
 non-duplicate rows; provenance constraint rejects an import-sourced row without a document id;
-the signed-balance sum matches to 4 dp for an asset and a liability fixture.
+the signed-balance sum matches to 4 dp for an asset and a liability fixture; a split parent is
+excluded from the reportable view while its children report, so spending is never
+double-counted; children that do not sum to the parent are rejected at commit; a child of a
+child is rejected.
 **Validation:** the DB gate.
 **Branch:** `feature/task-13-transaction-ledger`.
 **Acceptance:** all I1/I2/I5/I6/I7 behaviours proven in `db/tests/0007_transactions.sql`.
@@ -342,9 +353,13 @@ pipeline and manual paths to the single caller; create `db/seeds/rules/global.ya
 `db/seeds/rules/regions/<cc>.yaml`, loaded by the migration (classification §3 — region packs
 selected by `SELECT DISTINCT country FROM account`, not a setup question); docs updated same
 commit. V13 also constrains the deferred references whose targets now all exist — the
-ledger's and staging's `document`, `import_batch`, `statement_layout` (V11) and
-`classification_rule` (this migration) columns — with a test behaviour proving an orphan
-reference is rejected afterwards. The `schema.md` `0018` clauses are separate: each lands in
+ledger's `source_document_id` and `receipt_document_id`, the ledger and staging
+`import_batch`/`statement_layout` references (V11), and both `classification_rule_id` columns
+(this migration) — with a test behaviour proving an orphan reference is rejected afterwards.
+Pack loading is not a one-time snapshot: opening an account in a new country loads that
+country's pack idempotently (classification §3 — "there is no list to keep in sync with
+reality"), so the loader is one service path callable from the migration and from account
+creation. The `schema.md` `0018` clauses are separate: each lands in
 the forward migration that creates its own target (transfers, cards, investments), and the
 loan and recurring clauses stay deferred with their features.
 **Contracts:** cascade order (first match wins, stops): user override → user rule (priority
@@ -357,7 +372,8 @@ Statement-ingestion.html owns the pipeline stage ordering where classification.h
 **Required test behaviours (failing first):** each cascade step wins over the next in a
 directed fixture; a user rule beats a seed rule without either referencing the other;
 evaluation stops at first match; the engine abstains rather than guesses (a low-confidence rule
-returns nothing); seed rules reach ≥70% on the redacted first-import fixture.
+returns nothing); seed rules reach ≥70% on the redacted first-import fixture; creating an
+account in a country whose pack is not yet installed loads it exactly once.
 **Validation:** the API and DB gates.
 **Branch:** `feature/task-22-classification-cascade`.
 
