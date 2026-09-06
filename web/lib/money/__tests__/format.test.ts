@@ -60,7 +60,7 @@ describe("formatMoney", () => {
     ).toBe("₹1.36 Cr");
     expect(
       formatMoney(
-        "4210000",
+        "4210400",
         currency({ code: "XIN", symbol: "₹", numberFormat: "indian" }),
         { abbreviate: true },
       ),
@@ -70,6 +70,48 @@ describe("formatMoney", () => {
         abbreviate: true,
       }),
     ).toBe("AED 5.98 M");
+  });
+
+  it("uses abbreviation thresholds without currency-code branches", () => {
+    expect(
+      formatMoney("99999.99", currency({ symbol: "¤", numberFormat: "indian" }), {
+        abbreviate: true,
+      }),
+    ).toBe("¤99,999.99");
+    expect(
+      formatMoney("100000", currency({ symbol: "¤", numberFormat: "indian" }), {
+        abbreviate: true,
+      }),
+    ).toBe("¤1.00 L");
+    expect(
+      formatMoney("9999999.99", currency({ symbol: "¤", numberFormat: "indian" }), {
+        abbreviate: true,
+      }),
+    ).toBe("¤100.00 L");
+    expect(
+      formatMoney("10000000", currency({ symbol: "¤", numberFormat: "indian" }), {
+        abbreviate: true,
+      }),
+    ).toBe("¤1.00 Cr");
+    expect(formatMoney("999999.99", currency(), { abbreviate: true })).toBe(
+      "$999,999.99",
+    );
+    expect(formatMoney("1000000", currency(), { abbreviate: true })).toBe(
+      "$1.00 M",
+    );
+  });
+
+  it("abbreviates negative values and rounds large precise decimal strings", () => {
+    expect(
+      formatMoney(
+        "-13642180",
+        currency({ code: "XIN", symbol: "₹", numberFormat: "indian" }),
+        { abbreviate: true },
+      ),
+    ).toBe("-₹1.36 Cr");
+    expect(formatMoney("9007199254740993.125", currency())).toBe(
+      "$9,007,199,254,740,993.13",
+    );
   });
 
   it("rejects non-string, nonfinite, and malformed decimal input", () => {

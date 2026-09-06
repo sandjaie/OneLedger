@@ -380,12 +380,13 @@ cd web
 npm run api:types
 npm run api:types:check
 </code></pre>
-<p>The generator command runs <code>uv run --project api python scripts/openapi.py</code> locally, then
+<p>The generator command runs <code>uv run --project api --frozen python scripts/openapi.py</code> locally, then
 <code>@hey-api/openapi-ts</code> 0.99.0 with only the <code>@hey-api/typescript</code> plugin. It commits
 the generated output under <code>web/types/api/</code> and does not create an SDK, runtime client,
 validator, telemetry hook or anonymous OpenAPI route.</p>
-<p>Run the drift check in CI. A model change that is not reflected in the committed types fails the
-build, which is the cheapest possible place to catch it.</p>
+<p>The repository pre-push gate and canonical verify skill run the drift check. A model change that is
+not reflected in the committed types fails before review without requiring Python in the web
+production image.</p>
 <p>The database schema is generated from separately, for the service's own row types:</p>
 <p>The service's own row types are hand-written Pydantic models, checked against the live schema by a test
 that introspects <code>information_schema</code> — a migration that changes a table without updating the

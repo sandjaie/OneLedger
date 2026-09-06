@@ -32,9 +32,13 @@ function run(command, args, options = {}) {
 try {
   const schemaFd = openSync(schemaPath, "w");
   try {
-    run("uv", ["run", "--project", "api", "python", "scripts/openapi.py"], {
-      stdio: ["ignore", schemaFd, "inherit"],
-    });
+    run(
+      "uv",
+      ["run", "--project", "api", "--frozen", "python", "scripts/openapi.py"],
+      {
+        stdio: ["ignore", schemaFd, "inherit"],
+      },
+    );
   } finally {
     closeSync(schemaFd);
   }

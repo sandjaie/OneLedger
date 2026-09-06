@@ -10,5 +10,6 @@ case "$1" in
   lint)      exec npx --no-install eslint . ;;
   typecheck) exec npx --no-install tsc --noEmit ;;
   test)      exec npx --no-install vitest run --passWithNoTests ;;
+  api-types-check) exec npm run api:types:check ;;
   *)         echo "unknown web check: $1"; exit 1 ;;
 esac

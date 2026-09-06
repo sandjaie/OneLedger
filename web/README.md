@@ -32,9 +32,11 @@ npm run api:types
 npm run api:types:check
 ```
 
-`npm run api:types` runs `uv run --project api python scripts/openapi.py`, then
+`npm run api:types` runs `uv run --project api --frozen python scripts/openapi.py`, then
 `@hey-api/openapi-ts` with only the `@hey-api/typescript` plugin. The committed output lives in
 `web/types/api/`. The check command regenerates into a temporary directory and fails on drift.
+It is part of the repository pre-push gate and the canonical verify skill. It is not part of the
+web image build, so the production container stays Node-only.
 
 ## Authentication Configuration
 
@@ -55,9 +57,9 @@ npm run build
 ```
 
 `typecheck` runs the current native TypeScript 7 compiler. `typecheck:compat` keeps the documented
-TypeScript 6 compiler-API compatibility check for Next.js and ESLint consumers.
-`npm run build` uses Next.js' documented Webpack build mode because the current Turbopack path
-panics in this local host while evaluating the PostCSS pipeline.
+TypeScript 6 compiler-API compatibility check for Next.js and ESLint consumers. `npm run build`
+uses the default Next.js production build. On a host affected by the local Turbopack/PostCSS
+port-binding panic, use `npm run build -- --webpack` as a diagnostic fallback only.
 
 ## Container
 
@@ -70,3 +72,23 @@ docker run --rm -p 127.0.0.1:3000:3000 oneledger-web
 
 The Docker context excludes local dependencies, build output, environment files, keys, and secret
 directories. Next.js telemetry is disabled in build and runtime stages.
+
+## Dependency Roles
+
+- Next.js and React provide the App Router runtime; `client-only` enforces the browser API boundary.
+- Tailwind CSS and its PostCSS adapter compile the application styles.
+- React and Node type packages provide declarations for the target runtimes.
+- ESLint 9 plus `eslint-config-next` enforce framework, React, accessibility, and TypeScript rules.
+  ESLint 9 remains pinned because the current Next import plugin peer excludes ESLint 10.
+- Native TypeScript 7 performs the primary typecheck. TypeScript 6 remains installed under the
+  standard `typescript` package name for compiler-API consumers that have not moved to native TS 7.
+- `@hey-api/openapi-ts` 0.99.0 generates type-only API artifacts. It supports the TypeScript 6
+  compiler-API package, while the previously proposed `openapi-typescript` release peers only
+  against TypeScript 5.
+- The narrow `js-yaml` 4.3.1 override patches `@hey-api/json-schema-ref-parser`'s exact 4.2.0
+  transitive dependency and keeps `npm audit` clean without `--force` or legacy peer resolution.
+- Vitest runs the browser API client and money formatter contract suites in Node.
+
+Direct dependency versions are intentionally pinned. Audit them against current stable releases and
+peer ranges before changing the lockfile; record compatibility exceptions instead of suppressing
+install, type, lint, build, generator or audit failures.
