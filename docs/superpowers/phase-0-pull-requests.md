@@ -16,16 +16,18 @@ Supporting specifications: [architecture](../design/architecture.html), [data mo
 
 ## Current execution status — 6 September 2026
 
-GitHub PRs **#3–#10 are merged** into `feature/phase-0-foundations`. They cover original Tasks
-**1–9**, including the reviewed web foundation, typed API client, revocable session core and
-protected owner endpoints. This status records delivered work, not a new run of every verification
-command printed below.
+GitHub PRs **#3–#17 are merged** into `feature/phase-0-foundations`. Original Tasks
+**1–11 are implemented**, including verified Google OIDC, revocable sessions, exact money display,
+configured navigation and the Settings FX inspector. The completion deliveries were split into
+bounded PRs, including the request-timeout prerequisite and account-chooser follow-up.
 
-Protected logout, CSRF origin checks and owner-scoped household configuration are merged. This
-delivery implements Google OIDC login/callback. **Resume at Task 11**, then Phase 0 exit verification.
-The numbered PR headings in this document set are ordinal groups: original PR 6
-corresponds to GitHub #8; original PR 7 remains. Do not restart completed tasks because their
-original instructional checkboxes are blank.
+Phase 0 remains **in progress pending live Google identity verification**. Automated and
+synthetic-session evidence is recorded in the [verification report](reports/2026-09-06-phase-0-verification.md).
+Do not restart delivered work because historical instructional checkboxes below remain blank.
+The [completion specification](specs/2026-09-06-phase-0-completion.md) supersedes conflicting old
+snippets, including cookie-only logout and floating-point formatting. The numbered PR headings
+below are original ordinal groups, not GitHub PR numbers. Integration-to-main requires a separate
+owner request.
 
 The [current master](plans/implementation-plan.md) carries the revised product
 sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0

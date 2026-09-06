@@ -404,9 +404,10 @@ Phase 0 applies V1–V5 only; loan schema and any required references belong to 
 <hr>
 <h2 id="current-baseline">Current baseline — 6 September 2026</h2>
 <p>GitHub PR numbers below are repository PR numbers, not the ordinal PR headings or task numbers
-in the original Phase 0 plan. All eight are merged into <code>feature/phase-0-foundations</code>.
-They cover the reviewed foundation through protected owner endpoints at <code>fe54461</code>.
-Merge status is not a new claim that phase-exit checks passed.</p>
+in the original Phase 0 plan. All fifteen (#3–#17) are merged into <code>feature/phase-0-foundations</code>.
+They cover original Tasks 1–11 through <code>0cb557b</code>. The
+<a href="../superpowers/reports/2026-09-06-phase-0-verification.md">verification report</a> records
+automated and synthetic-session evidence separately from the pending live Google identity gate.</p>
 <table><thead><tr><th>GitHub PR</th><th>Delivered</th><th>Original plan tasks</th></tr></thead><tbody>
 <tr><td>#3</td><td>Compose definition, environment template and secret hygiene</td><td>1</td></tr>
 <tr><td>#4</td><td>V1–V2: reference data, identity and RLS</td><td>2–3</td></tr>
@@ -416,9 +417,17 @@ Merge status is not a new claim that phase-exit checks passed.</p>
 <tr><td>#8</td><td>Next.js foundation and cookie-aware typed API client</td><td>9</td></tr>
 <tr><td>#9</td><td>Revocable owner-session persistence and strict session verification</td><td>10 partial</td></tr>
 <tr><td>#10</td><td>Protected logout, CSRF origin checks and household configuration</td><td>10 partial</td></tr>
+<tr><td>#11</td><td>Google OIDC and pinned subject binding</td><td>10</td></tr>
+<tr><td>#12</td><td>Exact money display and generated API contracts</td><td>11 partial</td></tr>
+<tr><td>#14</td><td>Bounded browser requests and caller cancellation; prerequisite to #13</td><td>9 follow-up</td></tr>
+<tr><td>#13</td><td>Authenticated shell, configured currency preference and recovery</td><td>11 partial</td></tr>
+<tr><td>#15</td><td>Protected Settings FX inspector with exact rates and provenance</td><td>11</td></tr>
+<tr><td>#16</td><td>Account chooser for sign-in retry</td><td>10 follow-up</td></tr>
+<tr><td>#17</td><td>Dual-compiler verification and boundary comment follow-ups</td><td>Final review</td></tr>
 </tbody></table>
-<p><strong>Remaining:</strong> this delivery's Google OIDC bootstrap, then Task 11 exact money formatting,
-currency toggle and navigation, followed by all Phase 0 exit checks. Do not restart merged tasks.</p>
+<p><strong>Remaining:</strong> live permitted-account Google sign-in and second-account rejection after
+private OAuth configuration. The automated and synthetic-session checks have passed; these do not
+replace live identity verification. Do not restart merged tasks or advance the phase before this gate passes.</p>
 <h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
 <p>Everything needed before feature work has somewhere to land.</p>
 <p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
@@ -428,13 +437,13 @@ start earning their keep. Nothing is dropped; it is sequenced.</p>
 <ul>
 <li>Monorepo skeleton per <a href="../design/architecture.html">architecture.html</a> §3.</li>
 <li>The full <code>docker compose</code> stack — <code>web</code>, <code>api</code>, <code>db</code> — running locally. The same file deploys later (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>).</li>
-<li>Migrations <code>0001</code>–<code>0004</code>: extensions, reference data, identity, RLS, accounts, FX rates.</li>
-<li>Google OIDC implemented in the service; a signed session cookie; one <code>app_user</code> row.</li>
+<li>Migrations <code>V1</code>–<code>V5</code>: extensions, reference data, identity, RLS, accounts, FX rates and revocable owner sessions.</li>
+<li>Google OIDC in the service with a pinned, verified subject; a signed 12-hour session backed by revocable server-side state; one seeded owner.</li>
 <li>RLS enabled on every household-scoped table, with a test proving isolation.</li>
 <li>FX backfill: <strong>36 months</strong> of USD/INR from ECB back to 01 Jan 2024, AED/INR derived through the
 peg (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
 <li>Next.js app shell: layout, navigation, auth guard, currency toggle in the header.</li>
-<li><strong>The Python service skeleton</strong> — FastAPI, <code>uv</code>, <code>ruff</code>, <code>mypy --strict</code>, <code>pytest</code>, and the <code>require_owner()</code> dependency that every route depends on (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>).</li>
+<li><strong>The Python service skeleton</strong> — FastAPI, <code>uv</code>, <code>ruff</code>, <code>mypy --strict</code>, <code>pytest</code>, and the <code>require_owner()</code> dependency protecting every financial route; only health and OIDC bootstrap are public (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>).</li>
 <li><code>.gitignore</code> excluding <code>pdf-statements/</code>, <code>*.pdf</code> and <code>.env</code>; pre-commit secret scan.</li>
 </ul>
 <p><strong>Done when</strong></p>
@@ -854,9 +863,16 @@ external tracker for a single-person project; the overhead exceeds the benefit.<
           ☑ GitHub #8 Web foundation and typed client
           ☑ GitHub #9 Revocable owner-session core
           ☑ GitHub #10 Protected owner endpoints
-          ◐ Task 10 Google OIDC bootstrap — current delivery
-          ☐ Task 11 Money and navigation
-          ☐ Phase 0 exit verification
+          ☑ GitHub #11 Google OIDC bootstrap
+          ☑ GitHub #12 Exact money and generated API types
+          ☑ GitHub #14 Bounded requests (prerequisite to #13)
+          ☑ GitHub #13 Authenticated shell and currency preference
+          ☑ GitHub #15 Settings FX inspector
+          ☑ GitHub #16 Sign-in account chooser
+          ☑ GitHub #17 Final review follow-ups
+          ☑ Automated and synthetic-session exit checks
+          ☐ Live Google allowed/second-account verification
+          ☐ Phase 0 closure
 
 Phase 1   ☐ M1   Accounts + manual transactions
           ☐ M2   Importer: UAE card layout, end-to-end

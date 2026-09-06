@@ -102,7 +102,7 @@ revocable require_owner and owner-scoped household configuration from the comple
   Update route authorization coverage so a newly unguarded financial route fails the tests.
 - [x] Run targeted auth tests, all Python checks, fresh migrations and SQL tests; report red-green evidence,
   line count and live-configuration limitations. Split before exceeding the PR cap; never weaken checks.
-- [ ] Commit and return to controller for review, Cloud review, fixes and merge before Task 3.
+- [x] Commit and return to controller for review, Cloud review, fixes and merge before Task 3.
 
 ### Task 3: Exact money, configured shell and FX inspector
 
@@ -136,9 +136,9 @@ expect(formatMoney("9007199254740993.12", {code:"XUS", symbol:"$", decimals:2,
   and accessible pressed state. It must change the displayed currency, not only its own button style.
 - [x] Task 3c enables Settings and adds its FX inspector with date input and protected API request; show stored
   source/carry origin. Keep unavailable financial modules disabled or clearly labelled.
-- [ ] Run unit/integration tests, lint/types, production build and secret scan; browser-check keyboard
+- [x] Run unit/integration tests, lint/types, production build and secret scan; browser-check keyboard
   access, auth transitions, preference reload and FX display using safe synthetic test sessions.
-- [ ] Commit and return for local/Cloud review, fixes and merge.
+- [x] Commit and return for local/Cloud review, fixes and merge.
 
 ### Task 4: Phase exit verification and integration closeout
 
@@ -146,12 +146,14 @@ expect(formatMoney("9007199254740993.12", {code:"XUS", symbol:"$", decimals:2,
 implementer and a reviewed PR, not directly to integration.
 **Interfaces:** consumes all three merged deliveries and local owner OAuth configuration.
 
-- [ ] Run all existing Python/SQL/web checks on the integration head and build/start all Compose services.
-- [ ] Apply every migration and seed to a scratch Compose project, run every SQL suite, and prove RLS
+- [x] Run all existing Python/SQL/web checks on the integration head and build/start all Compose services.
+- [x] Apply every migration and seed to a scratch Compose project, run every SQL suite, and prove RLS
   tests fail with a deliberately permissive policy in that scratch database only. Remove only scratch volumes.
-- [ ] Verify dated FX rows/history coverage and peg checks without printing private ledger data.
+- [x] Verify dated FX rows/history coverage and peg checks without printing private ledger data.
 - [ ] Verify real permitted Google login and a second-account rejection when owner configuration is ready;
   explicitly distinguish mocked protocol evidence from live identity verification.
-- [ ] Obtain final whole-phase review, resolve findings through the responsible implementer and reviewed PR.
-- [ ] Record actual check results and update Phase 0 status. Mark complete only if every required gate is met.
+- [x] Obtain final whole-phase review, resolve findings through the responsible implementer and reviewed PR.
+- [x] Record actual check results and update Phase 0 status. Mark complete only if every required gate is met.
   Push final records to integration. Integration-to-main merge occurs only if the user requests it separately.
+
+Current evidence: [Phase 0 verification report](../reports/2026-09-06-phase-0-verification.md).

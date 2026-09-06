@@ -26,7 +26,7 @@ infrastructure or dependency is selected by this documentation update.
 ## Global constraints
 
 - Current phase is **Phase 0**, on integration branch `feature/phase-0-foundations`.
-- GitHub PRs **#3–#9 are merged** into that branch; do not repeat them or add product-expansion work to Phase 0.
+- GitHub PRs **#3–#17 are merged** into that branch; do not repeat them or add product-expansion work to Phase 0.
 - Postgres 18, Python 3.14 and Node 24 LTS remain the documented baseline.
 - Money is `NUMERIC(20,4)` in Postgres, `Decimal` in Python and a string on the wire. FX rates are
   `NUMERIC(20,10)`; units `NUMERIC(28,8)`; prices `NUMERIC(20,6)`; percentages `NUMERIC(9,4)`
@@ -40,7 +40,7 @@ infrastructure or dependency is selected by this documentation update.
   calculations and must identify their dates and assumptions.
 - Every household-scoped table has household identity and RLS. The API owner check remains the
   authorization boundary. No financial data, passwords or secrets enter the repository or logs.
-- Migrations are forward-only and applied by Flyway. **V1–V4 are completed work**; do not rewrite
+- Migrations are forward-only and applied by Flyway. **V1–V5 are completed work**; do not rewrite
   them. Design future schema changes with their feature and update the schema reference concurrently.
 - No institution, country or currency becomes a hardcoded domain identifier. Reuse existing patterns.
 - No LLM calls in Phase 1 or Phase 2. No automatic payments, trades or new shared access.
@@ -52,9 +52,10 @@ infrastructure or dependency is selected by this documentation update.
 
 ## 1. Baseline and the next authorized development step
 
-GitHub #10 merged on 6 September 2026. Local integration history contains the reviewed FX work, web
-foundation, revocable owner-session core and protected owner endpoints through `fe54461`. This
-records delivered code and review evidence, not a claim that the phase-exit suite was re-run.
+GitHub #17 merged on 6 September 2026. Integration contains the complete Phase 0 implementation
+through `0cb557b`: web foundation, revocable sessions, Google OIDC, exact formatting, configured
+shell and FX inspection. See the [verification report](../reports/2026-09-06-phase-0-verification.md)
+for actual checks, dependency choices, reviews and the outstanding live identity gate.
 
 | GitHub PR | Completed scope | Original task numbers | Original PR ordinal |
 |---|---|---|---|
@@ -66,33 +67,33 @@ records delivered code and review evidence, not a claim that the phase-exit suit
 | #8 | Reviewed Next.js foundation and cookie-aware typed API client | 9 | 6 |
 | #9 | Revocable owner-session persistence and strict session verification | 10 partial | 7 partial |
 | #10 | Protected logout, CSRF origin checks and household configuration | 10 partial | 7 partial |
+| #11 | Google OIDC, state/nonce/PKCE and pinned subject binding | 10 | 7 partial |
+| #12 | Exact money formatting and generated API types with drift enforcement | 11 partial | 7 partial |
+| #14 | Bounded API requests and compatible caller cancellation | 9 follow-up | 6 follow-up |
+| #13 | Authenticated shell, configured currency preference and recovery | 11 partial | 7 partial |
+| #15 | Protected Settings FX inspector, exact rates and provenance | 11 | 7 partial |
+| #16 | Fixed account chooser on sign-in retry | 10 follow-up | 7 follow-up |
+| #17 | Explicit dual-compiler verification and current API boundary comments | Final review follow-up | Closeout |
 
-The original plan's “PR 7” is split across reviewed session core, the merged endpoint slice, this
-Google OIDC delivery and pending money-formatting work; its ordinal does not refer to GitHub #7.
+The original plan's “PR 7” was split across reviewed persistence, endpoints, OIDC, money and shell
+deliveries; its ordinal does not refer to GitHub #7. PR #14 merged before #13 as a prerequisite.
 
 ### Finish Phase 0
 
-Files and runnable steps remain in the existing plans; do not duplicate their code in this master.
+- [x] Record GitHub PRs #3–#17 and verify their code is in the integration history.
+- [x] Deliver [Task 9: web shell and typed client](../phase-0-foundations.md#task-9-nextjs-shell-with-a-typed-api-client).
+- [x] Deliver [Task 10: Google OIDC](../phase-0-foundations.md#task-10-google-oidc-in-the-service-with-a-pinned-account),
+  persistent revocation and the account-chooser recovery follow-up. Live sign-in is a separate exit gate.
+- [x] Deliver [Task 11: money and navigation](../phase-0-foundations.md#task-11-money-formatting-currency-toggle-and-navigation),
+  configured preference and the protected FX inspector.
+- [x] Run automated API, web, SQL, fresh-migration/RLS, production-image, offline-startup and synthetic-session
+  browser checks. Evidence and limitations are recorded in the verification report.
+- [ ] Verify real permitted-account sign-in and rejection of a second Google account after private configuration.
+- [x] Complete the whole-phase review and merge both minor follow-ups after local/Cloud re-review.
+- [ ] Mark Phase 0 complete only after all required exit checks pass.
 
-- [x] Record completed GitHub PRs #3–#10 and verify their code is in the integration history.
-- [x] Execute [Task 9: web shell and typed client](../phase-0-foundations.md#task-9-nextjs-shell-with-a-typed-api-client)
-  using [original PR 6](../phase-0-pull-requests.md#pr-6-nextjs-scaffold-and-the-typed-api-client).
-  Delivered by reviewed GitHub #8: web scaffold/client, buildable against the current API, without
-  secrets in its bundle. Full Compose integration remains a phase-exit check.
-- [x] Execute [Task 10: Google OIDC](../phase-0-foundations.md#task-10-google-oidc-in-the-service-with-a-pinned-account)
-  using [original PR 7](../phase-0-pull-requests.md#pr-7-google-oidc-the-seed-money-formatting-and-the-toggle).
-  This delivery implements signed state/nonce/PKCE context, cryptographic ID-token validation,
-  immutable pinned-owner binding and safe callback handling. Live sign-in remains an exit check.
-- [ ] Execute [Task 11: money and navigation](../phase-0-foundations.md#task-11-money-formatting-currency-toggle-and-navigation)
-  using [original PR 7](../phase-0-pull-requests.md#pr-7-google-oidc-the-seed-money-formatting-and-the-toggle).
-  Remaining deliverable: exact currency display, configured preference and navigation.
-- [ ] Run the existing [Phase 0 exit criteria](../phase-0-foundations.md#phase-0-exit-criteria)
-  and [closing review gate](../phase-0-pull-requests.md#closing-the-phase). Record actual results.
-  The compose definition alone does not prove a working web service; merged code alone does not prove
-  a real Google sign-in or a populated history range.
-- [ ] Mark Phase 0 complete in the roadmap only after those checks and the required integration review.
-
-Phase 0 remains in progress until the unchecked authentication, money/navigation and exit checks pass.
+Phase 0 remains in progress while the live Google identity gate is unverified. Do not begin M1 or
+merge integration to main as part of this closeout; the latter needs a separate owner request.
 
 ## 2. Phase 1 — trust my position
 
