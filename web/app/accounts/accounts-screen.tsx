@@ -175,14 +175,8 @@ function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
 }
 
-function isDigit(ch: string) {
-  if (/\p{Nd}/u.test(ch)) return true;
-  const folded = ch.normalize("NFKC");
-  return folded.length === 1 && folded >= "0" && folded <= "9";
-}
-
 function isMask(value: string) {
-  return [...value].reduce((count, ch) => count + (isDigit(ch) ? 1 : 0), 0) <= 4;
+  return [...value].reduce((count, ch) => count + (/\p{N}/u.test(ch) ? 1 : 0), 0) <= 4;
 }
 
 function signedOpening(accountType: string, value: string) {
@@ -670,7 +664,9 @@ export function AccountsScreen({
         </td>
         <td>
           <div className="account-row-actions">
-            <button onClick={() => openEdit(account)} type="button">Edit {account.name}</button>
+            <button disabled={busy} onClick={() => openEdit(account)} type="button">
+              Edit {account.name}
+            </button>
             {account.isActive ? (
               <button disabled={busy} onClick={() => void closeAccount(account)} type="button">
                 Close {account.name}

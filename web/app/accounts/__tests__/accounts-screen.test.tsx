@@ -308,13 +308,35 @@ describe("Accounts", () => {
     render(<AccountsScreen {...props} request={request} />);
     fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "¹²³⁴⁵" } });
+    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "፩፪፫፬፭" } });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
     fireEvent.change(screen.getByLabelText("Opening balance date"),
       { target: { value: "2024-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("does not transmit a full number written with Ethiopic digits", async () => {
+    const request = vi.fn();
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "፩፪፫፬፭" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("disables edit while a row mutation is pending", async () => {
+    const request = vi.fn(() => new Promise(() => undefined));
+    render(<AccountsScreen {...props} request={request as unknown as typeof props.request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Inventory Savings" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows a positive liability balance as a credit, not as amount owed", () => {
