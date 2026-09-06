@@ -208,6 +208,9 @@ BEGIN
     END IF;
   END IF;
   IF NEW.parent_transaction_id IS NOT NULL THEN
+    IF NEW.parent_transaction_id = NEW.id THEN
+      RAISE EXCEPTION 'a transaction cannot be its own split parent: %', NEW.id;
+    END IF;
     -- Locked: two overlapping reparents (A under B while B goes under C) must serialize, or
     -- both read pre-edit parents and commit a three-level chain. Whichever waits re-reads the
     -- committed row and is rejected by the depth checks below.

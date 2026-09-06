@@ -530,3 +530,24 @@ def test_dedupe_occurrences_skip_surviving_hashes(monkeypatch: MonkeyPatch) -> N
     assert response.status_code == 201
     probes = [s for s in connection.statements if "dedupe_hash = %s" in s and "SELECT 1" in s]
     assert len(probes) == 3, "two taken occurrences were skipped before the free one"
+
+
+def test_stored_amounts_derive_from_the_stored_rate(monkeypatch: MonkeyPatch) -> None:
+    """The frozen facts must agree with each other: amount_secondary equals the amount times
+    the RATE AS STORED (10 dp), not a full-precision intermediate the row never keeps."""
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW],
+        account=("XIN", None, None, None),
+        pair=("XIN", "XAE"),
+        fx={("XAE", "XIN"): (Decimal("3"), False, None)},
+    )
+    body = {**CREATE, "amount": "3000000.0000"}
+    try:
+        _client(connection, monkeypatch).post("/transactions", json=body, headers=ORIGIN)
+    finally:
+        _teardown()
+    insert = next(i for i, s in enumerate(connection.statements) if "INSERT INTO transaction" in s)
+    params = connection.params[insert]
+    assert Decimal("0.3333333333") in params, "the rate stores at 10 dp"
+    assert Decimal("999999.9999") in params, "the amount derives from the stored rate"
+    assert Decimal("1000000.0000") not in params
