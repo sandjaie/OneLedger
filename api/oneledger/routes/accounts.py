@@ -385,6 +385,11 @@ def update_account(
     # body that still carries acknowledgeOpeningBalance=True.
     try:
         with connect() as conn, conn.cursor() as cur:
+            # Serialize with transaction creation: every ledger writer takes the household row
+            # lock first (B3.5), so holding it here means no insert is in flight between the
+            # currency guard's read and the update below — the same lock order as
+            # POST /transactions, so the two paths cannot deadlock.
+            cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
             # An account's currency is fixed once ledger rows exist: the rows' native amounts
             # are immutable facts in that denomination, and relabelling the account would mix

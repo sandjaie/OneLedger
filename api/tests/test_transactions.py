@@ -75,7 +75,9 @@ class LedgerConnection:
         fx: dict[tuple[str, str], tuple[object, ...]] | None = None,
         rows: list[tuple[object, ...]] | None = None,
         total: int = 0,
+        category_ok: tuple[object, ...] | None = (1,),
     ) -> None:
+        self.category_ok = category_ok
         self.account = account
         self.pair = pair
         # (base, quote) -> (rate, is_carried_forward, carried_from)
@@ -120,6 +122,8 @@ class LedgerCursor:
             self._one = self.connection.pair
         elif "FROM account" in sql:
             self._one = self.connection.account
+        elif "FROM category WHERE id" in sql:
+            self._one = self.connection.category_ok
         elif "FROM fx_rate" in sql:
             base, quote = (params or ())[1], (params or ())[2]
             self._one = self.connection.fx.get((str(base), str(quote)))
@@ -298,3 +302,30 @@ def test_filters_round_trip_as_parameters(monkeypatch: MonkeyPatch) -> None:
     for value in (ACCOUNT_ID, CATEGORY_ID, "expense", date(2024, 2, 1), date(2024, 2, 29)):
         assert value in connection.params[idx]
     assert not any("coffee" in s for s in connection.statements), "search terms are parameters"
+
+
+def test_a_foreign_household_category_is_refused(monkeypatch: MonkeyPatch) -> None:
+    """The category foreign key is not tenant-aware; the route predicate is the boundary."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], category_ok=None)
+    try:
+        create = _client(connection, monkeypatch).post(
+            "/transactions",
+            json={**CREATE, "categoryId": str(CATEGORY_ID)},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert create.status_code == 422
+    assert not any("INSERT INTO transaction" in s for s in connection.statements)
+
+    connection = LedgerConnection(rows=[FETCHED_ROW], category_ok=None)
+    try:
+        update = _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": None},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert update.status_code == 422
+    assert not any("UPDATE transaction" in s for s in connection.statements)
