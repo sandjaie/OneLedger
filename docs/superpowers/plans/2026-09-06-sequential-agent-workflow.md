@@ -21,13 +21,13 @@ limits. Preserve the existing local/Cloud review and same-implementer fix workfl
 
 ## Steps
 
-- [x] Update `CLAUDE.md` and a root `AGENTS.md` entry point with the owner's workflow preference.
-- [x] Update the master plan and Phase 0 workflow references, including the current completion plan.
-- [x] Replace the finance-specific PR template with reusable sections and evidence instructions.
-- [x] Run documentation and whitespace checks; no application behavior changes.
+- Update `CLAUDE.md` and a root `AGENTS.md` entry point with the owner's workflow preference.
+- Update the master plan and Phase 0 workflow references, including the current completion plan.
+- Replace the finance-specific PR template with reusable sections and evidence instructions.
+- Run documentation and whitespace checks; no application behavior changes.
 
 **Delivery gate:** required commit/push hooks, a PR using the revised template, and current-head
 Codex review before integration merge. GitHub records the final review and merge status.
 
-Phase 0's pending live Google verification remains unchanged. This workflow update does not
+The phase exit requirements remain unchanged. This workflow update does not
 authorize integration-to-main or removal of existing worktrees.

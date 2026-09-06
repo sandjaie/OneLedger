@@ -4,7 +4,8 @@
 
 | Need | Open |
 |---|---|
-| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — implementation delivered; live Google verification remains |
+| What is complete and what to do next | `docs/superpowers/progress.md` — the single maintained implementation tracker |
+| How to execute the work | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — task requirements and verification steps |
 | What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — branch/review workflow and the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
@@ -19,17 +20,25 @@ say which, in the PR, and fix it there rather than working around it.
 `docs/superpowers/schema.md` is the table reference. It carries no trigger, function, view or RLS policy,
 so a migration having *more* than it shows is expected; a migration *disagreeing* with it is not.
 
-## Planning location and current phase
+## Planning location and progress ownership
 
 All new implementation plans go in `docs/superpowers/plans/`; use dated filenames per feature.
 All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
-Phase 0 is in progress pending live Google identity verification. GitHub PRs #3–#17 delivered
-original Tasks 1–11 and the final review follow-ups into `feature/phase-0-foundations`.
-See `docs/superpowers/reports/2026-09-06-phase-0-verification.md` for actual evidence and remaining
-gates. Product-review additions do not expand Phase 0.
+**Maintain implementation progress in one file: `docs/superpowers/progress.md`.** The orchestrator
+updates it during Superpowers execution with completed work, remaining gates and evidence links.
+Read it before dispatch and update it at task boundaries; do not maintain parallel status tables
+or completion checkboxes in plans. This owner preference overrides skill defaults that would
+publish task state elsewhere. Private Superpowers recovery notes may support resuming work but
+are not another published tracker.
+
+The documentation index is a navigation page. The README introduces the project; the roadmap
+defines scope, sequence and acceptance criteria; plans/specs define work and contracts. Keep PR
+merge lists, current-phase banners, test-run summaries and pending-work recaps out of those files.
+Use a neutral link to the progress file where needed. Dated verification reports and PR reviews
+are historical evidence, not live trackers; retain their results without refreshing them as status.
 
 ## Rules you will otherwise break by reflex
 

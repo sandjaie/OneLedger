@@ -9,3 +9,7 @@ Before dispatch, the task plan or spec must state the exact workspace, branch an
 Only one implementation agent works at a time; the orchestrator owns branch switching and PRs.
 Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) and report actual
 verification results, including any failures or checks not run. See the full workflow in CLAUDE.md.
+
+Maintain implementation status only in [docs/superpowers/progress.md](docs/superpowers/progress.md).
+Keep index/README/roadmap/plan pages free of mirrored progress summaries. Dated reports are
+historical evidence; private Superpowers notes are recovery aids, not additional published trackers.

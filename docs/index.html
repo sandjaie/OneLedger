@@ -333,7 +333,7 @@ body {
       <ul><li><a href="./superpowers/plans/implementation-plan.md">Implementation plan</a></li>
 <li><a href="./superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="./superpowers/phase-0-pull-requests.md">Phase 0 pull requests</a></li>
-<li><a href="./superpowers/reports/2026-09-06-phase-0-verification.md">Phase 0 verification</a></li>
+<li><a href="./superpowers/progress.md">Implementation progress</a></li>
 <li><a href="./superpowers/schema.md">Schema reference</a></li>
 <li><a href="./superpowers/test-suite.md">Test suite reference</a></li>
 <li><a href="./superpowers/questions.html">Questions</a></li></ul>
@@ -371,15 +371,7 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="oneledger--specification-set">OneLedger — Specification Set</h1>
-<p>The product, design and operational specifications, decision records and implementation plans.
-<strong>Phase 0 is in progress:</strong> GitHub PRs #3–#17 are merged into
-<code>feature/phase-0-foundations</code>. Original Tasks 1–11 and automated/synthetic-session
-verification are delivered; real Google permitted-account and second-account checks remain. See
-<a href="./product/roadmap.html#current-baseline">the current baseline</a> and the
-<a href="./superpowers/reports/2026-09-06-phase-0-verification.md">verification and dependency report</a>.</p>
-<p>The accepted <a href="./product/finance-os.html">finance OS product review</a> adds planning,
-resilience and follow-up requirements for later phases. New implementation plans live in
-<a href="./superpowers/plans/implementation-plan.md">docs/superpowers/plans/</a>; Phase 0 is not expanded.</p>
+<p>The product, design and operational specifications, decision records and implementation plans for OneLedger.</p>
 <hr>
 <h2 id="layout">Layout</h2>
 <pre><code>docs/
@@ -636,8 +628,7 @@ Do not silently edit the old ADR; mark it <code>Superseded by ADR-XXXX</code>.</
 <li>A change to the schema updates <a href="./design/data-model.html">data-model.html</a> <strong>and</strong> ships a migration
 in the same commit.</li>
 <li>A change that moves work between phases updates <a href="./product/roadmap.html">roadmap.html</a>
-and records its scope tradeoff. The 6 September review preserves Phase 0, brings part of M9 forward,
-and explicitly sequences the added planning capabilities as Phase 2A–2C.</li>
+and records its scope tradeoff.</li>
 <li>All new implementation plans go in <code>docs/superpowers/plans/</code>, and all new
 specifications go in <code>docs/superpowers/specs/</code>. Existing Phase 0 plans and references
 live directly in <code>docs/superpowers/</code>.</li>
