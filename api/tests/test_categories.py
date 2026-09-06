@@ -67,7 +67,7 @@ class CategoriesCursor:
         self.connection.params.append(params or ())
         if "SELECT household_id IS NULL" in sql:
             self._one = self.connection.existing
-        elif "category_override" in sql and "INSERT" in sql:
+        elif "INSERT INTO category_override" in sql:
             self._one = None
         elif "WHERE c.id =" in sql:
             self._one = self.connection.created
@@ -118,7 +118,10 @@ def test_a_child_inherits_from_its_parent(monkeypatch: MonkeyPatch) -> None:
         _teardown()
     assert response.status_code == 201
     insert = next(s for s in connection.statements if "INSERT INTO category" in s)
-    assert "p.kind" in insert and "p.bucket" in insert, "kind and bucket come from the parent"
+    assert "p.kind" in insert, "kind comes from the parent"
+    assert "COALESCE(%s::category_bucket, o.bucket, p.bucket)" in insert, (
+        "the default bucket is the household's effective parent bucket, override included"
+    )
 
 
 def test_a_root_needs_a_kind_and_a_bucket(monkeypatch: MonkeyPatch) -> None:
@@ -155,7 +158,7 @@ def test_a_seeded_category_keeps_its_name_but_not_its_bucket(monkeypatch: Monkey
     finally:
         _teardown()
     assert rebucketed.status_code == 200
-    override = next(s for s in connection.statements if "category_override" in s and "INSERT" in s)
+    override = next(s for s in connection.statements if "INSERT INTO category_override" in s)
     assert "ON CONFLICT (household_id, category_id)" in override
     assert not any(
         "UPDATE category" in s and "category_override" not in s for s in connection.statements

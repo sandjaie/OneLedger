@@ -294,7 +294,7 @@ def list_transactions(
             cur.execute(
                 f"""SELECT {COLUMNS} {FROM}
                      WHERE {where}
-                     ORDER BY {order}, t.created_at DESC
+                     ORDER BY {order}, t.created_at DESC, t.id DESC
                      LIMIT %s OFFSET %s""",
                 (*params, limit, offset),
             )

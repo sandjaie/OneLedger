@@ -237,7 +237,9 @@ CREATE TRIGGER trg_split_one_level
 -- child in one statement dissolves the split.
 CREATE FUNCTION assert_split_sums_to_parent() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE pid UUID; parent_amount NUMERIC(20,4); child_sum NUMERIC(20,4);
+DECLARE pid UUID;
+        parent_amount NUMERIC(20,4); parent_base NUMERIC(20,4); parent_secondary NUMERIC(20,4);
+        child_sum NUMERIC(20,4); child_base NUMERIC(20,4); child_secondary NUMERIC(20,4);
 BEGIN
   -- A reparent involves two splits: the one gaining this child and the one losing it. Both
   -- must balance, or the losing parent's leaves diverge from the materialised balance.
@@ -250,12 +252,22 @@ BEGIN
     IF pid IS NULL THEN CONTINUE; END IF;
     -- Serialize concurrent splitters of the same parent: without the lock, two sessions each
     -- see only their own children, both sums match, and the committed total is double.
-    SELECT amount INTO parent_amount FROM transaction WHERE id = pid FOR UPDATE;
+    SELECT amount, amount_base, amount_secondary
+      INTO parent_amount, parent_base, parent_secondary
+      FROM transaction WHERE id = pid FOR UPDATE;
     IF parent_amount IS NULL THEN CONTINUE; END IF;
-    SELECT sum(amount) INTO child_sum FROM transaction WHERE parent_transaction_id = pid;
-    IF child_sum IS NOT NULL AND child_sum <> parent_amount THEN
-      RAISE EXCEPTION 'split children of % sum to %, not the parent''s % — a split never changes a balance',
-        pid, child_sum, parent_amount;
+    SELECT sum(amount), sum(amount_base), sum(amount_secondary)
+      INTO child_sum, child_base, child_secondary
+      FROM transaction WHERE parent_transaction_id = pid;
+    -- All three sums, not only the native one: the frozen columns are what reports read, and
+    -- children replace their parent there. A splitter allocates any rounding residual
+    -- explicitly so the equalities hold exactly.
+    IF child_sum IS NOT NULL
+       AND (child_sum <> parent_amount
+            OR child_base <> parent_base
+            OR child_secondary <> parent_secondary) THEN
+      RAISE EXCEPTION 'split children of % must sum to the parent in amount, amount_base and amount_secondary — a split never changes a balance or a report',
+        pid;
     END IF;
   END LOOP;
   RETURN NULL;
