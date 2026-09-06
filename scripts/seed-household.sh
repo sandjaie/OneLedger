@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# Seeds household, person and app_user from .env. Deliberately NOT idempotent — a second run
-# creates a second household, which the app has no concept of. Run it once per database.
+# Seeds the owner's app_user row against the household and person created by V7. The household
+# name, the owner's display name and tax residency, and the reporting pair are application data
+# and are edited in Settings > Household, not here.
 #
-# It lives here rather than with OIDC because Task 8's reporting_config() reads the household's
-# reporting pair and raises without a row: PR 5 would otherwise depend on PR 7.
+# ALLOWED_USER_EMAIL stays in .env: it is the authorization pin, and Flyway cannot read it.
+# Deliberately refuses a second owner — the app has no concept of one.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# shellcheck disable=SC1091
 . scripts/load-env.sh
+: "${ALLOWED_USER_EMAIL:?ALLOWED_USER_EMAIL is unset — copy .env.example to .env}"
 : "${DATABASE_URL:=$(scripts/dsn.sh)}"
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
-  -v household="$HOUSEHOLD_NAME"    -v person="$OWNER_DISPLAY_NAME" \
-  -v residency="$OWNER_TAX_RESIDENCY" -v email="$ALLOWED_USER_EMAIL" \
-  -v base="$BASE_CURRENCY"          -v secondary="$SECONDARY_CURRENCY" <<'SQL'
-WITH h AS (
-  INSERT INTO household (name, base_currency, secondary_currency)
-  VALUES (:'household', :'base', :'secondary') RETURNING id
-), p AS (
-  INSERT INTO person (household_id, display_name, is_self, tax_residency)
-  SELECT id, :'person', true, :'residency' FROM h RETURNING id, household_id
-)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v email="$ALLOWED_USER_EMAIL" <<'SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM person WHERE is_self) THEN
+    RAISE EXCEPTION 'no household yet — run: docker compose run --rm flyway migrate';
+  END IF;
+  IF EXISTS (SELECT FROM app_user WHERE role = 'owner') THEN
+    RAISE EXCEPTION 'an owner already exists — this script runs once per database';
+  END IF;
+END $$;
+
 INSERT INTO app_user (id, household_id, person_id, email, role)
-SELECT gen_random_uuid(), p.household_id, p.id, :'email', 'owner' FROM p;
+SELECT gen_random_uuid(), p.household_id, p.id, :'email', 'owner'
+  FROM person p WHERE p.is_self LIMIT 1;
 SQL
 psql "$DATABASE_URL" -c "SELECT email, role FROM app_user;"

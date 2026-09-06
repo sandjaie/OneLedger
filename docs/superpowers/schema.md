@@ -72,6 +72,10 @@ CREATE TABLE household (
   CONSTRAINT reporting_pair_differs CHECK (base_currency <> secondary_currency)
 );
 
+-- V7 seeds one household named Household whose reporting pair is the first two seeded
+-- currency codes (no code is written in the migration) and one person named Owner.
+-- reporting_pair_is_locked() and update_household_configuration(...) live in V7.
+
 CREATE TABLE person (
   id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id        UUID NOT NULL REFERENCES household(id),
@@ -139,6 +143,8 @@ CREATE TABLE account (
 
   opening_balance        NUMERIC(20,4) NOT NULL DEFAULT 0,
   opening_balance_date   DATE NOT NULL,
+  opening_balance_note   TEXT,                    -- where the figure came from (V8)
+  opening_balance_confirmed_at TIMESTAMPTZ,       -- NULL until the owner acknowledges it (V8)
   current_balance        NUMERIC(20,4) NOT NULL,  -- materialised; starts at opening_balance (V6)
   current_balance_as_of  TIMESTAMPTZ,
 
@@ -159,6 +165,7 @@ CREATE TABLE account (
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT closed_after_opened CHECK (closed_on IS NULL OR opened_on IS NULL OR closed_on >= opened_on),
+  CONSTRAINT closed_account_has_a_date CHECK (is_active OR closed_on IS NOT NULL),
   CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL)
 );
 

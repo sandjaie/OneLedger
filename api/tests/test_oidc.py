@@ -257,6 +257,69 @@ def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.Monke
     assert response.json() == {"detail": "sign-in unavailable"}
 
 
+def test_owner_binding_rejects_a_subject_already_bound_elsewhere(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A subject stored on a different app_user is a conflicting binding, not an outage.
+
+    Without a collision guard the UPDATE of an unbound owner hits idx_app_user_google_subject
+    and UniqueViolation is routed to retry. The statement must match no row instead.
+    """
+
+    class Cursor:
+        row: tuple[UUID] | None = None
+
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def execute(self, sql: str, _params: tuple[object, ...]) -> None:
+            if "NOT EXISTS" not in sql:
+                raise psycopg.errors.UniqueViolation("idx_app_user_google_subject")
+            self.row = None
+
+        def fetchone(self) -> tuple[UUID] | None:
+            return self.row
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    monkeypatch.setattr(auth, "connect", lambda: Connection(), raising=False)
+    with pytest.raises(auth.NotAuthorized):
+        auth.bind_google_owner("taken-subject", EMAIL)
+
+
+def test_a_conflicting_subject_is_unauthorized_not_a_retry(
+    monkeypatch: pytest.MonkeyPatch, google_keys: tuple[RSAPrivateKey, dict[str, Any]]
+) -> None:
+    private_key, jwk = google_keys
+    client = TestClient(app)
+    login = client.get("/auth/login", follow_redirects=False)
+    flow = decode_flow(login.cookies["oidc_flow"])
+    token = sign_google_token(private_key, nonce=flow["nonce"])
+
+    monkeypatch.setattr(auth_routes, "_exchange_code", lambda *_: token)
+    monkeypatch.setattr(auth, "_google_jwks_client", lambda: StaticJwksClient(jwk))
+    monkeypatch.setattr(
+        auth, "bind_google_owner", lambda *_: (_ for _ in ()).throw(auth.NotAuthorized("taken"))
+    )
+
+    response = client.get(
+        f"/auth/callback?code={SENTINEL}&state={flow['state']}", follow_redirects=False
+    )
+    assert response.headers["location"] == "http://localhost:3000/unauthorized"
+    assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+
+
 def test_owner_binding_lets_database_failures_through(monkeypatch: pytest.MonkeyPatch) -> None:
     def unreachable() -> object:
         raise psycopg.OperationalError("connection refused")

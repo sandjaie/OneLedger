@@ -402,7 +402,9 @@ CORS is not the CSRF boundary. See
 <tr><td><code>GET /auth/login</code></td><td>Starts Google authorization with signed ten-minute state, nonce and PKCE S256 context</td></tr>
 <tr><td><code>GET /auth/callback</code></td><td>Validates flow context and Google's signed identity, binds the permitted seeded owner, and issues the revocable local session</td></tr>
 <tr><td><code>POST /auth/logout</code></td><td>Revokes the exact current session record, then clears the session cookie. Replaying the old cookie is rejected</td></tr>
-<tr><td><code>GET /household</code></td><td>Returns the authenticated owner's household id, configured reporting pair and currency display metadata. The browser cannot select a household id</td></tr>
+<tr><td><code>GET /household</code></td><td>Returns the authenticated owner's household id, name, owner display name and tax residency, configured reporting pair, whether that pair is locked, and currency display metadata. The browser cannot select a household id</td></tr>
+<tr><td><code>PATCH /household</code></td><td>Updates the household name, owner display name and tax residency, and the reporting pair. A locked pair is refused with the ADR-0002 backfill explanation (409); an identical or unknown pair is 422</td></tr>
+<tr><td><code>GET /currencies</code></td><td>Returns every seeded currency row so Settings can offer the catalogue, never a hardcoded union</td></tr>
 <tr><td><code>POST /parse</code></td><td>Multipart file plus optional password. Detects the layout, extracts, normalizes, dedupes, freezes FX, classifies, proposes transfers, reconciles, stages. Returns the batch and its reconciliation verdict</td></tr>
 <tr><td><code>POST /layouts/propose</code></td><td>Finds the header row and proposes column bands for an unrecognised document (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>)</td></tr>
 <tr><td><code>POST /layouts</code></td><td>Saves a mapped layout profile</td></tr>

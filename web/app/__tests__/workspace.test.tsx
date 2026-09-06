@@ -5,16 +5,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { FxRateResponse, HouseholdResponse } from "@/types/api";
+import type { CurrencyRow, FxRateResponse, HouseholdResponse } from "@/types/api";
+
+const catalogue: Array<CurrencyRow> = [
+  { code: "XAE", name: "Synthetic A", symbol: "A", decimals: 2, numberFormat: "international" },
+  { code: "XIN", name: "Synthetic I", symbol: "I", decimals: 2, numberFormat: "indian" },
+  { code: "XZZ", name: "Synthetic Z", symbol: "Z", decimals: 3, numberFormat: "international" },
+];
 
 const household: HouseholdResponse = {
   id: "synthetic-owner",
+  name: "Household",
+  ownerDisplayName: "Owner",
+  ownerTaxResidency: null,
   baseCurrency: "XIN",
   secondaryCurrency: "XAE",
+  reportingPairLocked: false,
   currencies: [
     { code: "XIN", symbol: "₹", decimals: 2, numberFormat: "indian" },
     { code: "XAE", symbol: "AED", decimals: 2, numberFormat: "international" },
   ],
+};
+
+const swappedHousehold: HouseholdResponse = {
+  ...household,
+  baseCurrency: "XAE",
+  secondaryCurrency: "XIN",
+  currencies: [household.currencies[1], household.currencies[0]],
 };
 
 type Request = typeof apiFetch;
@@ -64,7 +81,10 @@ describe("authenticated workspace", () => {
 
   it("guards owner content with the household request and labels unavailable modules", async () => {
     let resolve!: (value: HouseholdResponse) => void;
-    const request = vi.fn(() => new Promise<HouseholdResponse>((done) => (resolve = done))) as Request;
+    const request = vi.fn((path: string) => {
+      if (path === "/currencies") return Promise.resolve(catalogue);
+      return new Promise<HouseholdResponse>((done) => (resolve = done));
+    }) as Request;
 
     render(<Workspace request={request} navigate={vi.fn()} />);
     expect(screen.getByText("Checking owner access…")).toBeTruthy();
@@ -94,7 +114,7 @@ describe("authenticated workspace", () => {
   });
 
   it("offers retry after a service failure instead of exposing owner content", async () => {
-    const request = requestThat(new TypeError("offline"), household);
+    const request = requestThat(new TypeError("offline"), household, catalogue);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "OneLedger is unavailable" })).toBeTruthy();
@@ -105,7 +125,7 @@ describe("authenticated workspace", () => {
 
   it("keeps the owner view on transient logout failure and clears it after retry succeeds", async () => {
     const navigate = vi.fn();
-    const request = requestThat(household, new TypeError("offline"), undefined);
+    const request = requestThat(household, catalogue, new TypeError("offline"), undefined);
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -124,7 +144,7 @@ describe("authenticated workspace", () => {
     [401, "/login"], [403, "/unauthorized"],
   ])("clears the owner view when logout returns %i and routes to %s", async (status, destination) => {
     const navigate = vi.fn();
-    const request = requestThat(household, new ApiError(status, "synthetic"));
+    const request = requestThat(household, catalogue, new ApiError(status, "synthetic"));
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -136,7 +156,7 @@ describe("authenticated workspace", () => {
 
   it("persists the configured toggle, falls back from obsolete choices, and tolerates storage errors", async () => {
     localStorage.setItem("oneledger.reportingCurrency", "obsolete");
-    const first = render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
+    const first = render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
 
     const secondary = screen.getByRole("button", { name: "XAE" });
@@ -146,20 +166,20 @@ describe("authenticated workspace", () => {
     expect(localStorage.getItem("oneledger.reportingCurrency")).toBe("XAE");
 
     first.unmount();
-    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
     expect(await screen.findByText("AED 1,234,567.89")).toBeTruthy();
 
     cleanup();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
   });
 
   it("renders the Settings FX rate provenance for the requested date", async () => {
     window.history.replaceState(null, "", "/settings");
-    render(<Workspace request={requestThat(household, [rate])} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue, [rate])} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
@@ -178,7 +198,7 @@ describe("authenticated workspace", () => {
 
   it("shows empty and retryable FX service states", async () => {
     window.history.replaceState(null, "", "/settings");
-    const request = requestThat(household, [], new TypeError("offline"), [rate]);
+    const request = requestThat(household, catalogue, [], new TypeError("offline"), [rate]);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "Settings" });
@@ -196,7 +216,11 @@ describe("authenticated workspace", () => {
   it("announces FX loading and success while focus stays on the submit button", async () => {
     window.history.replaceState(null, "", "/settings");
     const fx = deferred<Array<FxRateResponse>>();
-    const request = vi.fn().mockResolvedValueOnce(household).mockReturnValueOnce(fx.promise) as Request;
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
+      .mockReturnValueOnce(fx.promise) as Request;
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
 
@@ -225,6 +249,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(stale.promise)
       .mockReturnValueOnce(latest.promise) as Request;
 
@@ -249,7 +274,7 @@ describe("authenticated workspace", () => {
   ])("clears protected content when FX returns %i", async (status, destination) => {
     window.history.replaceState(null, "", "/settings");
     const navigate = vi.fn();
-    render(<Workspace request={requestThat(household, new ApiError(status, "synthetic"))} navigate={navigate} />);
+    render(<Workspace request={requestThat(household, catalogue, new ApiError(status, "synthetic"))} navigate={navigate} />);
 
     await screen.findByRole("heading", { name: "Settings" });
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
@@ -267,6 +292,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(fx.promise)
       .mockReturnValueOnce(logout.promise) as Request;
 
@@ -300,6 +326,7 @@ describe("authenticated workspace", () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
       .mockReturnValueOnce(fx.promise)
       .mockRejectedValueOnce(new TypeError("offline")) as Request;
 
@@ -316,5 +343,16 @@ describe("authenticated workspace", () => {
     expect(screen.queryByText("Checking stored FX rates for 2024-01-31.")).toBeNull();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(false);
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the reporting-currency toggle after the pair changes", async () => {
+    const request = requestThat(household, catalogue, undefined, swappedHousehold, catalogue);
+    render(<Workspace section="settings" request={request} navigate={vi.fn()} />);
+    await screen.findByLabelText("Base currency");
+    fireEvent.change(screen.getByLabelText("Base currency"), { target: { value: "XAE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save household" }));
+    await waitFor(() =>
+      expect(screen.getByRole("group", { name: "Reporting currency" }).textContent).toContain("XAE"),
+    );
   });
 });

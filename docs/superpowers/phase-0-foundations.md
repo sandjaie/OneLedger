@@ -207,6 +207,10 @@ now.
 
 - [ ] **Step 4: Write `.env.example`**
 
+The five household variables that once lived in this block (`HOUSEHOLD_NAME`,
+`OWNER_DISPLAY_NAME`, `OWNER_TAX_RESIDENCY`, `BASE_CURRENCY`, `SECONDARY_CURRENCY`) moved into
+the database in Phase 1 and are edited in Settings › Household.
+
 ```bash
 # .env.example — committed. Copy to .env (git-ignored) and fill in.
 # Public — the browser needs to know where the API is.
