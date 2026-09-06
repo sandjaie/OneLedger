@@ -226,6 +226,18 @@ describe("Accounts", () => {
     expect(body.openingBalance).toBe("-4500.00");
   });
 
+  it("keeps a signed opening when a liability is reclassified as an asset", async () => {
+    const request = vi.fn().mockResolvedValue(card);
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Card" }));
+    expect((screen.getByLabelText("Amount owed") as HTMLInputElement).value).toBe("4500.0000");
+    fireEvent.change(screen.getByLabelText("Account type"), { target: { value: "current" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save account" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const body = JSON.parse(request.mock.calls[0][1].body as string) as { openingBalance: string };
+    expect(body.openingBalance).toBe("-4500.0000");
+  });
+
   it("keeps edit and reopen on a closed account", () => {
     render(<AccountsScreen {...props} />);
     expect(screen.getByRole("button", { name: /edit old savings/i })).toBeTruthy();
@@ -337,6 +349,26 @@ describe("Accounts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Acknowledge Inventory Savings" }));
     await waitFor(() => expect(request).toHaveBeenCalled());
     expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps row actions disabled until the inventory refreshes", async () => {
+    const request = vi.fn().mockResolvedValue(savings);
+    const { rerender } = render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge Inventory Savings" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    await waitFor(() => expect(props.onChanged).toHaveBeenCalled());
+    expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Acknowledge Inventory Savings" }) as HTMLButtonElement).disabled).toBe(true);
+    rerender(
+      <AccountsScreen
+        {...props}
+        request={request}
+        accounts={[account({ openingBalanceConfirmedAt: "2026-01-01T00:00:00Z" }), card, closed]}
+      />,
+    );
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: "Edit Inventory Savings" }) as HTMLButtonElement).disabled).toBe(false);
+    });
   });
 
   it("shows a positive liability balance as a credit, not as amount owed", () => {

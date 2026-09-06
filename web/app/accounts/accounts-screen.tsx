@@ -135,9 +135,7 @@ function draftFrom(account: AccountRow): Draft {
     openedOn: account.openedOn ?? "",
     includeInNetWorth: account.includeInNetWorth,
     isLiquid: account.isLiquid,
-    openingBalance: LIABILITY_TYPES.has(account.accountType)
-      ? unsigned(account.openingBalance)
-      : account.openingBalance,
+    openingBalance: account.openingBalance,
     openingBalanceDate: account.openingBalanceDate,
     openingBalanceNote: account.openingBalanceNote ?? "",
     creditLimit: account.creditLimit ?? "",
@@ -280,6 +278,15 @@ export function AccountsScreen({
   });
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [held, setHeld] = useState<{
+    accounts: Array<AccountRow>;
+    institutions: Array<InstitutionRow>;
+  }>();
+  const locked = busy || (held != null && held.accounts === accounts && held.institutions === institutions);
+
+  function holdUntilRefresh() {
+    setHeld({ accounts, institutions });
+  }
 
   const active = accounts.filter((row) => row.isActive);
   const closed = accounts.filter((row) => !row.isActive);
@@ -322,6 +329,7 @@ export function AccountsScreen({
         body: JSON.stringify(toCreate(draft)),
       });
       setMode("view");
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -347,6 +355,7 @@ export function AccountsScreen({
       });
       setMode("view");
       setEditing(undefined);
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -365,6 +374,7 @@ export function AccountsScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toUpdate(draftFrom(account), account.closedOn, true)),
       });
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -383,6 +393,7 @@ export function AccountsScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toUpdate(draftFrom(account), today(), Boolean(account.openingBalanceConfirmedAt))),
       });
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -401,6 +412,7 @@ export function AccountsScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(toUpdate(draftFrom(account), null, Boolean(account.openingBalanceConfirmedAt))),
       });
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -428,6 +440,7 @@ export function AccountsScreen({
         country: current.country || created.country,
       }));
       setAddingInstitution(false);
+      holdUntilRefresh();
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
@@ -515,7 +528,7 @@ export function AccountsScreen({
                 ))}
               </select>
             </label>
-            <button disabled={busy} onClick={() => void saveInstitution()} type="button">Save institution</button>
+            <button disabled={locked} onClick={() => void saveInstitution()} type="button">Save institution</button>
           </fieldset>
         )}
         <label className="select-field">
@@ -563,10 +576,19 @@ export function AccountsScreen({
           <span>{LIABILITY_TYPES.has(draft.accountType) ? "Amount owed" : "Opening balance"}</span>
           <input
             inputMode="decimal"
-            onChange={(event) => field("openingBalance", event.target.value)}
+            onChange={(event) => field(
+              "openingBalance",
+              LIABILITY_TYPES.has(draft.accountType)
+                ? signedOpening(draft.accountType, event.target.value)
+                : event.target.value,
+            )}
             required
             type="text"
-            value={draft.openingBalance}
+            value={
+              LIABILITY_TYPES.has(draft.accountType)
+                ? unsigned(draft.openingBalance)
+                : draft.openingBalance
+            }
           />
         </label>
         <label className="date-field">
@@ -613,7 +635,7 @@ export function AccountsScreen({
         </label>
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         <div className="account-form-actions">
-          <button className="primary-action" disabled={busy} type="submit">
+          <button className="primary-action" disabled={locked} type="submit">
             {creating ? "Create account" : "Save account"}
           </button>
           <button onClick={() => { setMode("view"); setEditing(undefined); }} type="button">Cancel</button>
@@ -656,7 +678,7 @@ export function AccountsScreen({
           {!account.openingBalanceConfirmedAt && (
             <div className="opening-evidence">
               <span>Opening balance not acknowledged</span>
-              <button disabled={busy} onClick={() => void acknowledge(account)} type="button">
+              <button disabled={locked} onClick={() => void acknowledge(account)} type="button">
                 Acknowledge {account.name}
               </button>
             </div>
@@ -664,15 +686,15 @@ export function AccountsScreen({
         </td>
         <td>
           <div className="account-row-actions">
-            <button disabled={busy} onClick={() => openEdit(account)} type="button">
+            <button disabled={locked} onClick={() => openEdit(account)} type="button">
               Edit {account.name}
             </button>
             {account.isActive ? (
-              <button disabled={busy} onClick={() => void closeAccount(account)} type="button">
+              <button disabled={locked} onClick={() => void closeAccount(account)} type="button">
                 Close {account.name}
               </button>
             ) : (
-              <button disabled={busy} onClick={() => void reopenAccount(account)} type="button">
+              <button disabled={locked} onClick={() => void reopenAccount(account)} type="button">
                 Reopen {account.name}
               </button>
             )}
