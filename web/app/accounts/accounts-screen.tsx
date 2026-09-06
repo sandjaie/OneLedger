@@ -657,7 +657,7 @@ export function AccountsScreen({
             <div className="opening-evidence">
               <span>Opening balance not acknowledged</span>
               <button disabled={busy} onClick={() => void acknowledge(account)} type="button">
-                Acknowledge
+                Acknowledge {account.name}
               </button>
             </div>
           )}

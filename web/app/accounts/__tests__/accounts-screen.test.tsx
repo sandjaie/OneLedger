@@ -232,6 +232,11 @@ describe("Accounts", () => {
     expect(screen.getByRole("button", { name: /reopen/i })).toBeTruthy();
   });
 
+  it("names acknowledge after the account it confirms", () => {
+    render(<AccountsScreen {...props} />);
+    expect(screen.getByRole("button", { name: "Acknowledge Inventory Savings" })).toBeTruthy();
+  });
+
   it("names close and reopen after the account they mutate", () => {
     render(<AccountsScreen {...props} />);
     expect(screen.getByRole("button", { name: "Close Inventory Savings" })).toBeTruthy();
