@@ -7,6 +7,7 @@ from typing import Annotated, Any
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
@@ -20,6 +21,15 @@ from ..fx import (
 )
 
 router = APIRouter(prefix="/fx", tags=["fx"])
+
+
+class FxRateResponse(BaseModel):
+    base: str = Field(min_length=3, max_length=3)
+    quote: str = Field(min_length=3, max_length=3)
+    rate: str
+    source: str
+    carried: bool
+    carried_from: date | None
 
 
 def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str, Peg]]:
@@ -150,7 +160,7 @@ def backfill(
 
 
 @router.get("/{on}")
-def rate_on(on: date, _: Annotated[OwnerSession, Depends(require_owner)]) -> list[dict[str, Any]]:
+def rate_on(on: date, _: Annotated[OwnerSession, Depends(require_owner)]) -> list[FxRateResponse]:
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT base_currency, quote_currency, rate, source,
@@ -159,6 +169,13 @@ def rate_on(on: date, _: Annotated[OwnerSession, Depends(require_owner)]) -> lis
             (on,),
         )
         return [
-            {"base": b, "quote": q, "rate": str(r), "source": s, "carried": c, "carried_from": cf}
+            FxRateResponse(
+                base=b,
+                quote=q,
+                rate=str(r),
+                source=s,
+                carried=c,
+                carried_from=cf,
+            )
             for b, q, r, s, c, cf in cur.fetchall()
         ]

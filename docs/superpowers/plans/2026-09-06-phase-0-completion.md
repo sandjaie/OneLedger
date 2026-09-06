@@ -90,15 +90,15 @@ revocable require_owner and owner-scoped household configuration from the comple
   HTTP/database seams so real protocol branches can be tested with synthetic identities.
 - [ ] Write failure checks first for state/cookie mismatch and missing expiry; prove callback makes no
   token exchange or session issuance for invalid state. Also cover denied identity and unverified email.
-- [ ] Add a forward session/Google-subject migration with RLS and expiry/revocation semantics, updating
+- [x] Add a forward session/Google-subject migration with RLS and expiry/revocation semantics, updating
   schema references. Keep original V1–V4 bytes unchanged and preserve the existing seeded UUID id.
 - [ ] Implement state/nonce/PKCE, Google signature/issuer/audience/expiry validation, pinned verified
   identity and persisted subject binding; handle denial, malformed tokens and network failure without leaks.
-- [ ] Implement exp/iat/jti/issuer/audience session verification plus active-record lookup, protected logout
+- [x] Implement exp/iat/jti/issuer/audience session verification plus active-record lookup, protected logout
   and allowed-origin mutation checks. Verify a captured cookie fails after logout.
-- [ ] Implement GET /household using only the owner resolved from the request; expose the configured pair
+- [x] Implement GET /household using only the owner resolved from the request; expose the configured pair
   and currency metadata required by Task 3. Test no-cookie, forged, wrong-owner and correct-owner paths.
-- [ ] Document the narrow bootstrap exceptions and 12-hour sign-in-again policy in a new ADR/current docs.
+- [x] Document the narrow bootstrap exceptions and 12-hour sign-in-again policy in a new ADR/current docs.
   Update route authorization coverage so a newly unguarded financial route fails the tests.
 - [ ] Run targeted auth tests, all Python checks, fresh migrations and SQL tests; report red-green evidence,
   line count and live-configuration limitations. Split before exceeding the PR cap; never weaken checks.
