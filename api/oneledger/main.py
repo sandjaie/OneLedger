@@ -1,10 +1,11 @@
 # api/oneledger/main.py
 import os
+from typing import Annotated
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .auth import require_owner, session_secret
+from .auth import OwnerSession, require_owner, session_secret
 from .routes import fx
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
@@ -46,5 +47,5 @@ def health() -> dict[str, str]:
 
 
 @app.get("/whoami")
-def whoami(household_id: str = Depends(require_owner)) -> dict[str, str]:
-    return {"household_id": household_id}
+def whoami(owner: Annotated[OwnerSession, Depends(require_owner)]) -> dict[str, str]:
+    return {"household_id": str(owner.household_id)}

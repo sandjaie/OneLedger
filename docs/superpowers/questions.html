@@ -723,7 +723,7 @@ in Postgres for retroactive apply and manual linking. Resolved by
 <a href="../adr/0013-python-backend-service.html">ADR-0013</a>: one implementation, in the service.</li>
 <li><strong>Circular foreign keys break migration order.</strong> <code>transaction</code> references <code>transfer</code>,
 <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code> and <code>recurring_series</code>, all created in later
-migrations, and <code>transfer</code> references <code>transaction</code> back. Migration <code>0006</code> cannot apply as
+migrations, and <code>transfer</code> references <code>transaction</code> back. Migration <code>0007</code> cannot apply as
 written. Fixed by adding those FKs via <code>ALTER TABLE</code> once both sides exist.</li>
 <li><strong>M2 assumed a clean CSV export exists.</strong> None does (Q7). M2 is re-planned around the UAE card
 layout — the cleanest of the four, and the one covering the most files.</li>

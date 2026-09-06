@@ -4,13 +4,13 @@
 
 | Need | Open |
 |---|---|
-| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–8 delivered by GitHub PRs #3–#7 |
+| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–9 delivered by GitHub PRs #3–#8 |
 | What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — seven PRs, the review gate, the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
-| Decisions in force | `docs/adr/index.html` — 15, plus four replaced ones kept apart in `superseded.html` |
+| Decisions in force | `docs/adr/index.html` — 16, plus four replaced ones kept apart in `superseded.html` |
 
 **When documents disagree**, and they do: ADRs decide, `docs/design/` and `docs/operations/`
 specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of them —
@@ -26,10 +26,10 @@ All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
-Phase 0 is in progress. GitHub PRs #3–#7 are merged into `feature/phase-0-foundations`, including
-the FX pipeline and review fixes. These cover original Tasks 1–8. Next are Task 9 (web shell),
-Tasks 10–11 (Google OIDC, seed, money and navigation), then phase-exit checks. GitHub #7 is not
-the original plan's seventh PR. Product-review additions do not expand Phase 0.
+Phase 0 is in progress. GitHub PRs #3–#8 are merged into `feature/phase-0-foundations`, covering
+original Tasks 1–9 through the reviewed web foundation and typed client. Next are Task 10
+(Google OIDC and revocable sessions), Task 11 (money and navigation), then phase-exit checks.
+Product-review additions do not expand Phase 0.
 
 ## Rules you will otherwise break by reflex
 
@@ -49,10 +49,11 @@ example (ADR-0012). A static check fails the build on this; do not silence it.
 and savings-rate queries read `v_transaction_reportable` and the frozen `amount_base` /
 `amount_secondary` columns. Both are static checks, not conventions.
 
-**The authorization boundary is `require_owner()` in the API service** (ADR-0013). Every route
-depends on it; `/health` is the only exception and there will not be a second. RLS is depth, not
-the wall — the service connects privileged and bypasses it. Every `SECURITY DEFINER` function
-calls `assert_is_owner()` first. The UI is never the boundary.
+**The authorization boundary is `require_owner()` in the API service** (ADR-0013, refined by
+ADR-0016). Every financial route depends on it. `/health` and the future `/auth/login` and
+`/auth/callback` bootstrap routes are the complete public set. RLS is depth, not the wall — the
+service connects privileged and bypasses it. Every `SECURITY DEFINER` function calls
+`assert_is_owner()` first. The UI is never the boundary.
 
 **Migrations are forward-only and run by Flyway** (ADR-0015). `db/migrations/V<n>__<name>.sql`,
 applied with `docker compose run --rm flyway migrate`. **Never edit an applied migration** —

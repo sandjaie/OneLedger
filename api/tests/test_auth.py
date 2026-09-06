@@ -1,30 +1,113 @@
-# api/tests/test_auth.py
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
+import jwt
 import pytest
+from fastapi.testclient import TestClient
 
-from oneledger.auth import NotAuthorized, resolve_owner
+from oneledger import auth
+from oneledger.main import app
 
-
-def test_rejects_a_token_with_no_matching_app_user() -> None:
-    """Google authenticates any Google account. Authentication is not authorization."""
-    with pytest.raises(NotAuthorized):
-        resolve_owner(
-            claims={"sub": "00000000-0000-0000-0000-000000000000", "email": "stranger@example.com"},
-            lookup=lambda uid: None,
-            allowed_email="owner@example.com",
-        )
+USER_ID = UUID("11111111-1111-1111-1111-111111111111")
+HOUSEHOLD_ID = UUID("22222222-2222-2222-2222-222222222222")
+SESSION_ID = UUID("33333333-3333-3333-3333-333333333333")
+EMAIL = "owner@example.com"
 
 
-def test_rejects_a_missing_subject_rather_than_defaulting_open() -> None:
-    with pytest.raises(NotAuthorized):
-        resolve_owner(
-            claims={}, lookup=lambda uid: "household-1", allowed_email="owner@example.com"
-        )
+def signed_token(**changes: object) -> str:
+    now = datetime.now(UTC)
+    claims: dict[str, object] = {
+        "sub": str(USER_ID),
+        "email": EMAIL,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(hours=12)).timestamp()),
+        "jti": str(SESSION_ID),
+        "iss": "oneledger",
+        "aud": "oneledger-web",
+    }
+    claims.update(changes)
+    return jwt.encode(claims, auth.session_secret(), algorithm="HS256")
 
 
-def test_accepts_a_token_that_resolves_to_an_app_user() -> None:
-    household = resolve_owner(
-        claims={"sub": "11111111-1111-1111-1111-111111111111", "email": "owner@example.com"},
-        lookup=lambda uid: "household-1",
-        allowed_email="owner@example.com",
+def owner() -> auth.OwnerSession:
+    return auth.OwnerSession(
+        user_id=USER_ID, household_id=HOUSEHOLD_ID, session_id=SESSION_ID, email=EMAIL
     )
-    assert household == "household-1"
+
+
+def client_with(token: str) -> TestClient:
+    client = TestClient(app)
+    client.cookies.set("session", token)
+    return client
+
+
+def allow_old_and_new_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth, "_lookup_active_session", lambda *_: owner(), raising=False)
+
+
+def test_session_without_expiry_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    allow_old_and_new_lookup(monkeypatch)
+    token = signed_token()
+    claims = jwt.decode(
+        token, auth.session_secret(), algorithms=["HS256"], options={"verify_signature": False}
+    )
+    for claim in ("exp", "iat", "jti", "iss", "aud"):
+        del claims[claim]
+    token = jwt.encode(claims, auth.session_secret(), algorithm="HS256")
+    assert client_with(token).get("/whoami").status_code == 403
+
+
+@pytest.mark.parametrize("claim,value", [("sub", "not-a-uuid"), ("jti", 7), ("iat", "now")])
+def test_malformed_session_claims_fail_safely(
+    monkeypatch: pytest.MonkeyPatch, claim: str, value: object
+) -> None:
+    allow_old_and_new_lookup(monkeypatch)
+    assert client_with(signed_token(**{claim: value})).get("/whoami").status_code == 403
+
+
+def test_session_without_an_active_owner_record_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(auth, "_lookup_active_session", lambda *_: None, raising=False)
+    assert client_with(signed_token()).get("/whoami").status_code == 403
+
+
+def test_issue_session_persists_matching_twelve_hour_record() -> None:
+    saved: list[tuple[UUID, UUID, datetime]] = []
+    token = auth.issue_session(USER_ID, EMAIL, store=lambda *args: saved.append(args))
+    claims = jwt.decode(
+        token,
+        auth.session_secret(),
+        algorithms=["HS256"],
+        issuer="oneledger",
+        audience="oneledger-web",
+    )
+    session_id, user_id, expires_at = saved[0]
+    assert (UUID(claims["jti"]), UUID(claims["sub"])) == (session_id, user_id)
+    assert claims["email"] == EMAIL
+    assert claims["exp"] - claims["iat"] == 12 * 60 * 60
+    assert int(expires_at.timestamp()) == claims["exp"]
+    assert auth.verify_session(token, lookup=lambda *_: owner()) == owner()
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"email": "member@example.com"},
+        {"iss": "another-service"},
+        {"aud": "another-client"},
+        {"exp": int((datetime.now(UTC) - timedelta(seconds=1)).timestamp())},
+    ],
+)
+def test_wrong_identity_or_expired_signature_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, changes: dict[str, object]
+) -> None:
+    allow_old_and_new_lookup(monkeypatch)
+    assert client_with(signed_token(**changes)).get("/whoami").status_code == 403
+
+
+def test_session_lifetime_must_be_exactly_twelve_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    allow_old_and_new_lookup(monkeypatch)
+    issued = int(datetime.now(UTC).timestamp())
+    token = signed_token(iat=issued, exp=issued + 13 * 60 * 60)
+    assert client_with(token).get("/whoami").status_code == 403

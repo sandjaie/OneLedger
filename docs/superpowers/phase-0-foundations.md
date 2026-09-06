@@ -31,14 +31,13 @@ uv · ruff · mypy --strict · pytest · hypothesis · Next.js App Router · Typ
 
 ## Current execution status — 6 September 2026
 
-GitHub PRs **#3–#7 are merged** into `feature/phase-0-foundations`. They cover original Tasks
-**1–8**, including the FX backfill endpoint. The owner confirmed #7 merged; its feature and review
-fixes through `fd6b5db` are present in the local integration branch. This status records delivered
+GitHub PRs **#3–#8 are merged** into `feature/phase-0-foundations`. They cover original Tasks
+**1–9**, including the reviewed web foundation and typed API client. This status records delivered
 work, not a new run of every verification command printed below.
 
-**Resume at Task 9**, then Tasks 10–11 and Phase 0 exit verification. The numbered PR headings in
-this document set are ordinal groups: original PR 5 corresponds to GitHub #7; original PRs 6–7
-remain. Do not restart completed tasks because their original instructional checkboxes are blank.
+**Resume at Task 10**, then Task 11 and Phase 0 exit verification. The numbered PR headings in this
+document set are ordinal groups: original PR 6 corresponds to GitHub #8; original PR 7 remains.
+Do not restart completed tasks because their original instructional checkboxes are blank.
 
 The [current master](plans/implementation-plan.md) carries the revised product
 sequence. All new implementation plans go in `docs/superpowers/plans/`. This existing Phase 0
