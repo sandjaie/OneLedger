@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { HouseholdResponse } from "@/types/api";
+import type { FxRateResponse, HouseholdResponse } from "@/types/api";
 
 const household: HouseholdResponse = {
   id: "synthetic-owner",
@@ -18,6 +18,11 @@ const household: HouseholdResponse = {
 };
 
 type Request = typeof apiFetch;
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+};
 
 function requestThat(...results: Array<unknown | Error>): Request {
   const request = vi.fn(async () => {
@@ -28,8 +33,30 @@ function requestThat(...results: Array<unknown | Error>): Request {
   return request as Request;
 }
 
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+const rate: FxRateResponse = {
+  base: "XIN",
+  quote: "XAE",
+  rate: "0.0441234567",
+  source: "synthetic-closing-rate",
+  carried: true,
+  carried_from: "2024-01-05",
+};
+
 describe("authenticated workspace", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    localStorage.clear();
+    window.history.replaceState(null, "", "/");
+  });
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -47,7 +74,9 @@ describe("authenticated workspace", () => {
     expect(await screen.findByText("Reporting currency")).toBeTruthy();
     expect(screen.getByText("₹12,34,567.89")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Settings.*unavailable/i }).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Activity.*unavailable/i }).disabled).toBe(true);
   });
 
   it.each([
@@ -126,5 +155,82 @@ describe("authenticated workspace", () => {
     });
     render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+  });
+
+  it("renders the Settings FX rate provenance for the requested date", async () => {
+    window.history.replaceState(null, "", "/settings");
+    render(<Workspace request={requestThat(household, [rate])} navigate={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByLabelText<HTMLInputElement>("FX date").value).toBe("");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+
+    expect(await screen.findByText("0.0441234567")).toBeTruthy();
+    expect(screen.getByText("XIN/XAE")).toBeTruthy();
+    expect(screen.getByText("synthetic-closing-rate")).toBeTruthy();
+    expect(screen.getByText("Carried from 2024-01-05")).toBeTruthy();
+    expect(screen.getByText("As of 2024-01-31")).toBeTruthy();
+  });
+
+  it("shows empty and retryable FX service states", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const request = requestThat(household, [], new TypeError("offline"), [rate]);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+    expect(await screen.findByText("No FX rates are stored for 2024-01-31.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("FX rates could not be loaded.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry FX rate" }));
+    expect(await screen.findByText("0.0441234567")).toBeTruthy();
+  });
+
+  it("keeps FX results tied to the latest requested date", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const stale = deferred<Array<FxRateResponse>>();
+    const latest = deferred<Array<FxRateResponse>>();
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(latest.promise) as Request;
+
+    render(<Workspace request={request} navigate={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-02-02" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+
+    stale.resolve([{ ...rate, rate: "9.9999999999", source: "stale-rate" }]);
+    latest.resolve([{ ...rate, rate: "0.0500000000", carried: false, carried_from: null }]);
+
+    expect(await screen.findByText("0.0500000000")).toBeTruthy();
+    expect(screen.getByText("As of 2024-02-02")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("9.9999999999")).toBeNull());
+  });
+
+  it.each([
+    [401, "/login"], [403, "/unauthorized"],
+  ])("clears protected content when FX returns %i", async (status, destination) => {
+    window.history.replaceState(null, "", "/settings");
+    const navigate = vi.fn();
+    render(<Workspace request={requestThat(household, new ApiError(status, "synthetic"))} navigate={navigate} />);
+
+    await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
+    expect(screen.queryByRole("heading", { name: "Settings" })).toBeNull();
   });
 });
