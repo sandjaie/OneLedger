@@ -121,9 +121,13 @@ is never edited ([ADR-0015](../../adr/0015-flyway-for-schema-migrations.html)):
   observed). A `BEFORE` row trigger runs before the `NOT NULL` check, so the column stays
   `NOT NULL`.
 - An explicitly supplied `current_balance`, including `0`, is honoured unchanged.
-- Existing rows are backfilled. No table carrying transactions exists yet, so
-  `opening_balance + SUM(transactions)` is exactly `opening_balance` for every row at this point
-  in the schema timeline, and the backfill says so in a comment.
+- Existing rows are **not** silently backfilled: for a pre-existing row, `current_balance = 0`
+  beside a nonzero opening balance is exactly the ambiguity `DEFAULT 0` created — an observed
+  zero and an omitted value are the same stored bytes, and rewriting both would overwrite a
+  possible observation (Invariant I7). No account write path shipped before this migration and
+  no migration seeds account rows, so no legitimate database holds such a row; if one exists,
+  the migration refuses with a message naming the rows, and the operator resolves each
+  explicitly before re-running it.
 
 `db/tests/0003_accounts.sql` gains assertions for all four behaviours, for an asset account and
 for a liability account, so the signed-balance convention
@@ -253,6 +257,14 @@ directly:
    amounts are frozen, and that changing it is a backfill from FX history under ADR-0002 rather
    than a settings change. F06 requires exactly this — *"changing reporting currency pair follows
    ADR-0002 rather than relabelling stored amounts."*
+5. **The guard and every frozen write serialize on the household row.** The guard alone cannot
+   see a transaction that has read the old pair but not yet committed its first frozen row.
+   `update_household_configuration(...)` therefore takes `SELECT … FOR UPDATE` on the household
+   row before consulting the guard, and every writer of a frozen `amount_base` /
+   `amount_secondary` row — M1b's manual entry first, M2's import after it — must take the same
+   household row lock before writing. This is a standing contract on those plans, and the
+   interleaving test (a pair change racing a concurrent first frozen insert) lands with M1b,
+   where the second participant first exists.
 
 "A frozen amount exists" is answered by a `SECURITY DEFINER` function that counts the household's
 rows in every table in the schema carrying an `amount_base` column. Today that set is empty and
@@ -399,7 +411,7 @@ reference, not invented in advance.
 
 | Milestone | Entry criteria | Scope boundary | Fixed interfaces to build from |
 |---|---|---|---|
-| **M1b** — manual transactions and taxonomy | M1a merged | Manual entry with FX frozen on save, transaction list with filter/sort/search and inline category edit, seed taxonomy, category management. No import. | `schema.md` `0006` categories/merchants, `0007` transaction and `v_transaction_reportable`; classification §3 seed taxonomy |
+| **M1b** — manual transactions and taxonomy | M1a merged | Manual entry with FX frozen on save — taking the §B3 household row lock before the first frozen write — transaction list with filter/sort/search and inline category edit, seed taxonomy, category management. No import. | `schema.md` `0006` categories/merchants, `0007` transaction and `v_transaction_reportable`; classification §3 seed taxonomy |
 | **M2** — importer, one layout end-to-end | M1b merged; FX backfill reaching 01 Jan 2024 verified | Generic extraction engine plus the mapping UI, proven by mapping one layout. Dedupe, FX enrichment with fetch-on-missing, reconciliation blocking on mismatch (I8), staging, review screen, atomic commit. Deferred in from Phase 0: CI and `scripts/backup-db.sh`. | `schema.md` `0008` document/import_batch/statement_layout; API contracts §4 staging contract and error table; ADR-0012 |
 | **M3** — the remaining layouts | M2 merged and its layout reconciling on real statements | A mapping exercise: three more layouts, password-protected PDFs, multi-line descriptions, redacted golden fixtures, diagnostics panel, scanned-PDF refusal. New quirks are additive and considered. | M2's saved profile shape; ADR-0012 quirks vocabulary |
 | **M4** — classification | M2 merged; M3 may run in parallel | Full cascade, rule CRUD with live preview, seed rules, merchant aliases, learn-from-correction with affected count, confidence scoring, Settings › Rules. | `schema.md` `0009` classification_rule; classification §4; ADR-0008 |
