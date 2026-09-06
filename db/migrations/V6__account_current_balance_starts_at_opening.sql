@@ -39,12 +39,17 @@ CREATE TRIGGER trg_account_current_balance
 -- Then re-run. This DO block drops _v6_confirm_observed_zero when present.
 DO $$
 DECLARE ambiguous BIGINT;
+        ids TEXT;
 BEGIN
   IF to_regclass('public._v6_confirm_observed_zero') IS NULL THEN
-    SELECT count(*) INTO ambiguous FROM account
+    SELECT count(*), string_agg(quote_literal(id::text), ', ' ORDER BY id)
+      INTO ambiguous, ids
+      FROM account
      WHERE current_balance = 0 AND opening_balance <> 0;
   ELSE
-    SELECT count(*) INTO ambiguous FROM account a
+    SELECT count(*), string_agg(quote_literal(a.id::text), ', ' ORDER BY a.id)
+      INTO ambiguous, ids
+      FROM account a
      WHERE a.current_balance = 0 AND a.opening_balance <> 0
        AND NOT EXISTS (
              SELECT 1 FROM _v6_confirm_observed_zero z WHERE z.account_id = a.id
@@ -52,14 +57,15 @@ BEGIN
   END IF;
   IF ambiguous > 0 THEN
     RAISE EXCEPTION USING MESSAGE = format(
-      'V6: %s account row(s) have current_balance = 0 beside a nonzero opening balance. '
+      'V6: %s account row(s) have current_balance = 0 beside a nonzero opening balance: %s. '
       'DEFAULT 0 hid whether that zero was observed or merely omitted. Resolve each row: '
       'UPDATE account SET current_balance = opening_balance, '
-      'current_balance_as_of = opening_balance_date WHERE id = …  (DEFAULT bug), or '
-      'INSERT INTO _v6_confirm_observed_zero(account_id) VALUES (…) after '
+      'current_balance_as_of = opening_balance_date WHERE id IN (%s)  (DEFAULT bug), or '
+      'INSERT INTO _v6_confirm_observed_zero(account_id) SELECT unnest(ARRAY[%s]::uuid[]) after '
       'CREATE TABLE IF NOT EXISTS _v6_confirm_observed_zero '
       '(account_id UUID PRIMARY KEY REFERENCES account(id))  (preserve observed zero); '
-      'then re-run the migration.', ambiguous);
+      'then re-run the migration.',
+      ambiguous, ids, ids, ids);
   END IF;
   DROP TABLE IF EXISTS _v6_confirm_observed_zero;
 END $$;
