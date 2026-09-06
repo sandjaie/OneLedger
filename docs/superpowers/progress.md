@@ -8,12 +8,38 @@ Updated: 6 September 2026.
 
 ## Current phase
 
-**Phase 0: implementation delivered to `main`; live Google identity verification pending.**
-Integration branch: `develop`.
+**Phase 1 — trusted financial position.**
+Integration branch: `feature/phase-1-trusted-financial-position`.
+Active plan: [Phase 1 trusted financial position](plans/2026-09-06-phase-1-trusted-financial-position.md).
+Specification: [Phase 1 spec](specs/2026-09-06-phase-1-trusted-financial-position.md).
+Branching, phase integration and releases follow [docs/git-workflow.md](../git-workflow.md).
+Integration of the phase branch into `develop`, and any path to `main`, still need a separate
+owner request.
+
+Phase 1 is active by owner request. Phase 0's live Google identity gates remain open below —
+synthetic checks do not substitute for them.
+
+| Phase 1 task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 — restore API package import | `fix/task-1-api-import-syntax` | Pending | |
+| 2 — currency-agnostic SQL fixtures | `fix/task-2-db-tests-currency-agnostic` | Pending | |
+| 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | Pending | |
+| 4 — distinct DB vs auth failures | `fix/task-4-auth-database-errors` | Pending | |
+| 5 — Compose DB identity | `chore/task-5-compose-database-identity` | Pending | |
+| 6 — household configuration API | `feature/task-6-household-configuration-api` | Pending | |
+| 7 — Settings › Household UI | `feature/task-7-household-settings-ui` | Pending | |
+| 8 — account inventory schema | `feature/task-8-account-inventory-schema` | Pending | |
+| 9 — account inventory API | `feature/task-9-account-inventory-api` | Pending | |
+| 10 — account inventory UI | `feature/task-10-account-inventory-ui` | Pending | |
+| 11 — progress evidence and M1a/M1b split | `docs/task-11-phase-1-progress` | Pending | |
+
+Roadmap M1 is delivered as **M1a** (Tasks 8–10 in this plan) and **M1b** (its own dated plan).
+Roadmap M1's *Done when* list is complete only when both are.
+
+## Phase 0 (prior)
+
+**Phase 0: implementation delivered to `main`; live Google identity verification still pending.**
 `feature/phase-0-foundations` merged to `main` as [PR #20](https://github.com/sandjaie/OneLedger/pull/20).
-Later work branches from `develop` and merges back into it. Integration to `main` still needs a
-separate owner request.
-Active execution plan: [Phase 0 completion](plans/2026-09-06-phase-0-completion.md).
 
 | Completion-plan task | Status | Evidence |
 | --- | --- | --- |
@@ -42,10 +68,13 @@ Active execution plan: [Phase 0 completion](plans/2026-09-06-phase-0-completion.
 | #16 | Fixed account chooser on sign-in retry | 10 follow-up | 7 follow-up |
 | #17 | Explicit dual-compiler verification and current API boundary comments | Final review follow-up | Closeout |
 | #18 | Sequential current-checkout workflow and generic PR template | Workflow | Documentation |
+| #21 | Phase 1 plan, spec and git workflow | Phase 1 planning | Documentation |
 
 PR #14 merged before #13 as a prerequisite. Original plan PR ordinals are not GitHub PR numbers.
-The original Tasks 1–11 are implemented. The whole-phase review found no blocking defects;
+The original Phase 0 Tasks 1–11 are implemented. The whole-phase review found no blocking defects;
 both minor follow-ups were addressed in #17 and passed scoped and Cloud re-review.
+
+The Phase 0 "59 tests" API evidence predates the import SyntaxError fixed by Phase 1 Task 1.
 
 ## Verified gates
 
@@ -61,7 +90,7 @@ both minor follow-ups were addressed in #17 and passed scoped and Cloud re-revie
 Evidence: [dated verification and dependency report](reports/2026-09-06-phase-0-verification.md).
 These results describe the verified integration, not a new test run whenever this file is edited.
 
-## Remaining exit gates and next action
+## Remaining Phase 0 exit gates
 
 - [ ] Privately configure the Google client credentials and real permitted email, matching the seeded owner.
 - [ ] Verify real permitted-account sign-in and protected application access.
@@ -71,14 +100,13 @@ These results describe the verified integration, not a new test run whenever thi
 The last configuration check found missing Google client credentials and a placeholder permitted
 email. The owner was asked to configure ignored `.env` privately; no credential values belong here.
 Synthetic protocol/session/browser tests do not substitute for live Google identity checks.
-Do not begin Phase 1 on the assumption these gates passed. Integration-to-main requires a separate
-owner request.
+Integration-to-main requires a separate owner request.
 
 ## Later phases
 
 | Phase | Status |
 | --- | --- |
-| Phase 1 — trusted financial position | Not started |
+| Phase 1 — trusted financial position | Active (this file) |
 | Phase 2A — next month | Not started |
 | Phase 2B — resilience | Not started |
 | Phase 2C — deeper analysis | Not started |

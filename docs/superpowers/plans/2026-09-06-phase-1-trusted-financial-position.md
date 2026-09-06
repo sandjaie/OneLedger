@@ -75,10 +75,12 @@ master plan's global constraints.
 
 ## Workspace and branches
 
-**Workspace:** `/Users/sandjaieravi/dev/OneLedger` (confirm with `git rev-parse --show-toplevel`;
-never substitute a path from another machine). Do **not** create a Git worktree — this owner
-preference overrides the skill default. Only one implementation agent works at a time; wait for
-any reviewer using this checkout before switching branches.
+**Workspace:** the active repository checkout. Resolve its root with
+`git rev-parse --show-toplevel` and run every command from that root (or via
+`cd "$(git rev-parse --show-toplevel)/…"`). Never hardcode a machine-specific path and never
+substitute a path from another machine. Do **not** create a Git worktree — this owner preference
+overrides the skill default. Only one implementation agent works at a time; wait for any
+reviewer using this checkout before switching branches.
 
 **Branching follows [docs/git-workflow.md](../../git-workflow.md).** The Phase 1 integration
 branch is `feature/phase-1-trusted-financial-position`: every task below branches from it and
@@ -124,6 +126,20 @@ work in this plan. Later tasks then fill their reserved slots without renumberin
 | Error envelope | API contracts §6 specifies `{"error": {"code", "message", "detail"}}`; every delivered route uses FastAPI's `{"detail": …}` | The typed envelope arrives with the first route that needs machine-readable failure classes — the import path (`RECONCILIATION_FAILED`), which is the doc's own example. Until then `PATCH /household` distinguishes cases by status code: 409 locked, 422 invalid, 403 unscoped |
 | Account number hash | `account_number_hash` matches an incoming statement to an account, which needs the full number once | M1a stores the mask only and leaves the hash NULL; M2 designs the matching flow and pays that cost. No full account number is accepted, transmitted or logged in this plan |
 | First-login onboarding | `require_owner()` needs `app_user` → `person` → `household`, so no authenticated moment exists before the household does | V7 seeds one neutral household and person; the owner edits them in Settings. `scripts/seed-household.sh` seeds only the `app_user` row from `ALLOWED_USER_EMAIL` |
+| V6 ambiguous zeros | An observed zero and a DEFAULT-0 omission store the same bytes; silent backfill would invent money (I7) | Migration refuses those rows. Operator either sets `current_balance = opening_balance` (DEFAULT bug) or registers the id in `_v6_confirm_observed_zero` (preserve zero), then re-runs |
+| Institution picker | Shared seeds are suggestions, not a closed list ([data-model.html](../../design/data-model.html) §4) | `POST /institutions` creates a household-scoped institution; create/update account validate `institution.household_id IS NULL OR = owner` |
+| Account edit surface | Spec C2 requires create/read/edit of type, currency, country, opening anchor and credit limit | `AccountUpdate` carries those fields; before any transaction table exists, changing the opening anchor rewrites `current_balance` / `current_balance_as_of` to match |
+| Phase activation | Progress said not to begin Phase 1 while live Google gates were pending, but activation lived in Task 11 | Activate Phase 1 in `progress.md` before Task 1 (honest about any still-open live gate); Task 11 records completion evidence only |
+
+## Pre-dispatch (before Task 1)
+
+1. Confirm the workspace root with `git rev-parse --show-toplevel` — every step below uses that root.
+2. Update [`docs/superpowers/progress.md`](../progress.md) so **Current phase** is Phase 1 on
+   `feature/phase-1-trusted-financial-position`, with this plan and its spec linked, and with an
+   eleven-row task table (all pending). Record Phase 0 live Google identity gates honestly: closed
+   only when the owner has confirmed them; otherwise leave them open and note that Phase 1 is
+   active by owner request without treating synthetic checks as a substitute.
+3. Only then open `fix/task-1-api-import-syntax`.
 
 ---
 
@@ -421,18 +437,40 @@ CREATE TRIGGER trg_account_current_balance
 -- before this migration and no migration seeds account rows, so a real database has no such
 -- row; if one exists it was inserted by hand, and the migration refuses and names the rows
 -- for the operator to resolve explicitly instead of guessing.
+--
+-- Executable remediation (setting current_balance to the zero it already holds is a no-op and
+-- would leave the predicate true forever):
+--   1. DEFAULT-bug row → UPDATE account SET current_balance = opening_balance,
+--      current_balance_as_of = opening_balance_date WHERE id = '<id>';
+--   2. Observed-zero row → CREATE TABLE IF NOT EXISTS _v6_confirm_observed_zero (
+--        account_id UUID PRIMARY KEY REFERENCES account(id));
+--      INSERT INTO _v6_confirm_observed_zero (account_id) VALUES ('<id>');
+-- Then re-run. This DO block drops _v6_confirm_observed_zero when present.
 DO $$
 DECLARE ambiguous BIGINT;
 BEGIN
-  SELECT count(*) INTO ambiguous FROM account
-   WHERE current_balance = 0 AND opening_balance <> 0;
+  IF to_regclass('public._v6_confirm_observed_zero') IS NULL THEN
+    SELECT count(*) INTO ambiguous FROM account
+     WHERE current_balance = 0 AND opening_balance <> 0;
+  ELSE
+    SELECT count(*) INTO ambiguous FROM account a
+     WHERE a.current_balance = 0 AND a.opening_balance <> 0
+       AND NOT EXISTS (
+             SELECT 1 FROM _v6_confirm_observed_zero z WHERE z.account_id = a.id
+           );
+  END IF;
   IF ambiguous > 0 THEN
     RAISE EXCEPTION USING MESSAGE = format(
       'V6: %s account row(s) have current_balance = 0 beside a nonzero opening balance. '
-      'DEFAULT 0 hid whether that zero was observed or merely omitted. Set each row''s '
-      'current_balance explicitly — to the observed zero it already holds, or to its '
-      'opening balance — then re-run the migration.', ambiguous);
+      'DEFAULT 0 hid whether that zero was observed or merely omitted. Resolve each row: '
+      'UPDATE account SET current_balance = opening_balance, '
+      'current_balance_as_of = opening_balance_date WHERE id = …  (DEFAULT bug), or '
+      'INSERT INTO _v6_confirm_observed_zero(account_id) VALUES (…) after '
+      'CREATE TABLE IF NOT EXISTS _v6_confirm_observed_zero '
+      '(account_id UUID PRIMARY KEY REFERENCES account(id))  (preserve observed zero); '
+      'then re-run the migration.', ambiguous);
   END IF;
+  DROP TABLE IF EXISTS _v6_confirm_observed_zero;
 END $$;
 ```
 
@@ -1723,7 +1761,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Create: `api/oneledger/routes/accounts.py`
 - Create: `api/tests/test_accounts.py`
 - Modify: `api/oneledger/main.py` (register the router)
-- Modify: `docs/design/api-contracts.html` §2 (the four new rows)
+- Modify: `docs/design/api-contracts.html` §2 (the five new rows)
 - Regenerate: `web/types/api/`
 
 **Interfaces:**
@@ -1733,12 +1771,16 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
   - `POST /accounts` ← `AccountCreate` → `AccountRow`
   - `PATCH /accounts/{account_id}` ← `AccountUpdate` → `AccountRow`
   - `GET /institutions` → `InstitutionRow[] { id, name, shortName, country, institutionType }`
+  - `POST /institutions` ← `InstitutionCreate` → `InstitutionRow` (household-scoped; shared seeds
+    stay suggestions per data-model.html §4)
   - `AccountRow` fields: `id, name, institutionId, institutionName, accountType, accountClass,
     accountSubtype, currency, country, accountNumberMasked, openedOn, closedOn, isActive,
     includeInNetWorth, isLiquid, openingBalance, openingBalanceDate, openingBalanceNote,
     openingBalanceConfirmedAt, currentBalance, currentBalanceAsOf, creditLimit`. Every money
     field is a decimal string.
   - `AccountGroupTotal` fields: `accountClass, country, currency, total` (a decimal string).
+  - Institution create/update on an account validates
+    `institution.household_id IS NULL OR institution.household_id = owner.household_id`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1765,6 +1807,48 @@ def test_a_full_account_number_is_never_accepted() -> None:
             accounts.AccountUpdate(**{**UPDATE, "accountNumberMasked": bad})
     assert accounts.AccountCreate(**{**CREATE, "accountNumberMasked": "****1234"})
     assert accounts.AccountUpdate(**{**UPDATE, "accountNumberMasked": "HDFC ··1234"})
+
+
+def test_creating_an_account_rejects_another_households_institution(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """UUID secrecy is not the household boundary; the insert must scope the institution."""
+    connection = AccountsConnection(fail_institution=True)
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/accounts", json=CREATE)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert "institution" in response.json()["detail"].lower()
+
+
+def test_creating_an_institution_scopes_it_to_the_owner(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = AccountsConnection(institutions=[])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        body = TestClient(app).post(
+            "/institutions",
+            json={"name": "My Broker", "shortName": "MB", "country": "XB",
+                  "institutionType": "broker"},
+        ).json()
+    finally:
+        app.dependency_overrides.clear()
+    assert body["name"] == "My Broker"
+    assert "INSERT INTO institution" in connection.statements[0]
+    assert connection.params[0][0] == owner.household_id
+
+
+def test_account_update_carries_the_core_editable_fields() -> None:
+    """Spec C2: type, currency, country, opening anchor and credit limit are editable."""
+    for field in (
+        "accountType", "currency", "country", "openingBalance", "openingBalanceDate", "creditLimit",
+    ):
+        assert field in accounts.AccountUpdate.model_fields
 
 
 def test_creating_an_account_never_accepts_a_class_from_the_client() -> None:
@@ -1987,23 +2071,42 @@ class AccountCreate(BaseModel):
 
 class AccountUpdate(BaseModel):
     """Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
-    and the client always holds the whole row."""
+    and the client always holds the whole row. Spec C2 requires type, currency, country, the
+    opening anchor and credit limit to be correctable; account_class stays trigger-derived."""
 
     name: str = Field(min_length=1, max_length=120)
     institutionId: UUID | None = None
+    accountType: str = Field(min_length=1, max_length=40)
     accountSubtype: str | None = Field(default=None, max_length=40)
+    currency: str = Field(min_length=3, max_length=3)
+    country: str = Field(min_length=2, max_length=2)
     accountNumberMasked: str | None = Field(default=None, max_length=32)
     openedOn: date | None = None
     closedOn: date | None = None
     includeInNetWorth: bool
     isLiquid: bool
+    openingBalance: str
+    openingBalanceDate: date
     openingBalanceNote: str | None = None
+    creditLimit: str | None = None
     acknowledgeOpeningBalance: bool
+
+    @field_validator("openingBalance", "creditLimit")
+    @classmethod
+    def exact_decimal_string(cls, value: str | None) -> str | None:
+        return _money(value)
 
     @field_validator("accountNumberMasked")
     @classmethod
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
+
+
+class InstitutionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    shortName: str | None = Field(default=None, max_length=40)
+    country: str = Field(min_length=2, max_length=2)
+    institutionType: str = Field(min_length=1, max_length=40)
 
 
 class InstitutionRow(BaseModel):
@@ -2037,6 +2140,20 @@ def account_row(values: tuple[Any, ...]) -> AccountRow:
     for name in MONEY_FIELDS:
         fields[name] = _out(fields[name])
     return AccountRow(**fields)
+
+
+def _assert_institution_allowed(
+    cur: psycopg.Cursor, institution_id: UUID | None, household_id: UUID
+) -> None:
+    if institution_id is None:
+        return
+    cur.execute(
+        """SELECT 1 FROM institution
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (institution_id, household_id),
+    )
+    if cur.fetchone() is None:
+        raise HTTPException(status_code=422, detail="institution is not available to this household")
 
 
 def _one(cur: psycopg.Cursor, account_id: UUID, household_id: UUID) -> AccountRow:
@@ -2084,6 +2201,7 @@ def create_account(
 ) -> AccountRow:
     try:
         with connect() as conn, conn.cursor() as cur:
+            _assert_institution_allowed(cur, body.institutionId, owner.household_id)
             cur.execute(
                 """INSERT INTO account (
                        household_id, owner_person_id, institution_id, name, account_type,
@@ -2119,30 +2237,46 @@ def update_account(
     body: AccountUpdate,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
+    # M1a has no transaction table yet. Changing the opening anchor therefore rewrites the
+    # materialised current_balance to match (opening_balance + SUM(transactions) with an empty
+    # sum). When M1b/M2 add transactions, a later migration teaches this path to refuse or
+    # recompute only when the sum is still zero.
     try:
         with connect() as conn, conn.cursor() as cur:
+            _assert_institution_allowed(cur, body.institutionId, owner.household_id)
             cur.execute(
                 """UPDATE account
-                      SET name = %s, institution_id = %s, account_subtype = %s,
+                      SET name = %s, institution_id = %s, account_type = %s::account_type,
+                          account_subtype = %s, currency = %s, country = %s,
                           account_number_masked = %s, opened_on = %s, closed_on = %s,
                           is_active = (%s::date IS NULL),
-                          include_in_net_worth = %s, is_liquid = %s, opening_balance_note = %s,
+                          include_in_net_worth = %s, is_liquid = %s,
+                          opening_balance = %s, opening_balance_date = %s,
+                          current_balance = %s,
+                          current_balance_as_of = %s::date::timestamptz,
+                          opening_balance_note = %s, credit_limit = %s,
                           opening_balance_confirmed_at =
                             CASE WHEN %s THEN COALESCE(opening_balance_confirmed_at, now())
                                  ELSE NULL END
                     WHERE id = %s AND household_id = %s
                    RETURNING id""",
                 (
-                    body.name, body.institutionId, body.accountSubtype, body.accountNumberMasked,
+                    body.name, body.institutionId, body.accountType, body.accountSubtype,
+                    body.currency, body.country, body.accountNumberMasked,
                     body.openedOn, body.closedOn, body.closedOn, body.includeInNetWorth,
-                    body.isLiquid, body.openingBalanceNote, body.acknowledgeOpeningBalance,
+                    body.isLiquid, Decimal(body.openingBalance), body.openingBalanceDate,
+                    Decimal(body.openingBalance), body.openingBalanceDate,
+                    body.openingBalanceNote,
+                    None if body.creditLimit is None else Decimal(body.creditLimit),
+                    body.acknowledgeOpeningBalance,
                     account_id, owner.household_id,
                 ),
             )
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="no such account")
             return _one(cur, account_id, owner.household_id)
-    except (psycopg.errors.CheckViolation, psycopg.errors.ForeignKeyViolation) as exc:
+    except (psycopg.errors.InvalidTextRepresentation, psycopg.errors.CheckViolation,
+            psycopg.errors.ForeignKeyViolation) as exc:
         raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
 
 
@@ -2164,6 +2298,31 @@ def list_institutions(
             )
             for i, n, s, c, t in cur.fetchall()
         ]
+
+
+@router.post("/institutions", status_code=201)
+def create_institution(
+    body: InstitutionCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> InstitutionRow:
+    """Shared seeds are suggestions; any household can add its own (data-model.html §4)."""
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO institution (
+                       household_id, name, short_name, country, institution_type)
+                   VALUES (%s, %s, %s, %s, %s)
+                   RETURNING id, name, short_name, country, institution_type""",
+                (
+                    owner.household_id, body.name, body.shortName, body.country,
+                    body.institutionType,
+                ),
+            )
+            i, n, s, c, t = cur.fetchone()
+            return InstitutionRow(
+                id=i, name=n, shortName=s, country=c, institutionType=t
+            )
+    except (psycopg.errors.CheckViolation, psycopg.errors.UniqueViolation) as exc:
+        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
 ```
 
 with `def _first_line(exc: Exception) -> str: return str(exc).splitlines()[0]` so a constraint
@@ -2180,9 +2339,10 @@ cd "$(git rev-parse --show-toplevel)/web" && npm run api:types && npm run typech
 ```
 
 Expected: ruff and mypy clean; every `test_accounts.py` case green;
-`test_every_current_non_bootstrap_route_depends_on_the_owner` still passing for the four new
+`test_every_current_non_bootstrap_route_depends_on_the_owner` still passing for the five new
 routes. `web/types/api/` gains `AccountRow`, `AccountsResponse`, `AccountCreate`,
-`AccountUpdate`, `AccountGroupTotal` and `InstitutionRow`; commit the regenerated output.
+`AccountUpdate`, `AccountGroupTotal`, `InstitutionRow` and `InstitutionCreate`; commit the
+regenerated output.
 
 Then exercise the routes against the running stack with a synthetic session, confirming that
 `openingBalance` and `currentBalance` arrive as quoted strings — `"250000.0000"`, never
@@ -2196,9 +2356,10 @@ git add api/oneledger/routes/accounts.py api/oneledger/main.py api/tests/test_ac
 git commit -m "feat(api): the account inventory reads, creates and edits accounts
 
 M1a had no route surface: accounts could only be created by hand in SQL, so opening-balance
-evidence and closed-account history had no way into the product. The four routes list, create
-and edit accounts and list institutions, with money as decimal strings both ways, group totals
-aggregated in Postgres, and no delete - closing an account preserves its history.
+evidence and closed-account history had no way into the product. The routes list, create and
+edit accounts, list and create institutions, with money as decimal strings both ways, group
+totals aggregated in Postgres, institution picks scoped to the household, and no delete —
+closing an account preserves its history.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -2223,7 +2384,8 @@ currency, bank and figure in the artboard is example data (ADR-0012).
 
 **Interfaces:**
 - Consumes: `AccountsResponse`, `AccountRow`, `AccountCreate`, `AccountUpdate`,
-  `InstitutionRow`, `CurrencyRow` from `@/types/api`; `formatMoney` from `@/lib/money/format`.
+  `InstitutionRow`, `InstitutionCreate`, `CurrencyRow` from `@/types/api`;
+  `formatMoney` from `@/lib/money/format`.
 - Produces: `<AccountsScreen accounts totals institutions currencies request onChanged />`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2269,6 +2431,18 @@ describe("Accounts", () => {
     const currency = screen.getByLabelText("Currency") as HTMLSelectElement;
     expect([...currency.options].map((o) => o.value)).toEqual(["XAE", "XIN", "XZZ"]);
     expect(screen.getByLabelText("Institution")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add institution/i })).toBeInTheDocument();
+  });
+
+  it("lets the owner correct type, currency, country and the opening anchor", () => {
+    render(<AccountsScreen {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /edit inventory savings/i }));
+    expect(screen.getByLabelText("Account type")).toBeInTheDocument();
+    expect(screen.getByLabelText("Currency")).toBeInTheDocument();
+    expect(screen.getByLabelText("Country")).toBeInTheDocument();
+    expect(screen.getByLabelText("Opening balance")).toBeInTheDocument();
+    expect(screen.getByLabelText("Opening balance date")).toBeInTheDocument();
+    expect(screen.getByLabelText("Credit limit")).toBeInTheDocument();
   });
 
   it("sends the opening balance as a decimal string", async () => {
@@ -2311,11 +2485,15 @@ Expected: FAIL — `Failed to resolve import "@/app/accounts/accounts-screen"`.
   null, with an `Acknowledge` action that PATCHes `acknowledgeOpeningBalance: true` and an
   optional note field for where the figure came from.
 - A `Closed <date>` group for inactive accounts, always rendered when any exist.
-- `Add an account` opening a form with name, institution (from `/institutions`), type, subtype,
-  currency and country selects, masked number, opened date, opening balance and its date, the
-  evidence note, and the `includeInNetWorth` / `isLiquid` toggles. Money inputs are `type="text"`
-  with an `inputMode="decimal"` and are sent verbatim as strings — never through `Number()` or
-  `parseFloat`.
+- `Add an account` opening a form with name, institution (from `/institutions`, plus
+  **Add institution** that POSTs `/institutions` and selects the new row), type, subtype,
+  currency and country selects, masked number, opened date, opening balance and its date, credit
+  limit when the type needs one, the evidence note, and the `includeInNetWorth` / `isLiquid`
+  toggles. Money inputs are `type="text"` with an `inputMode="decimal"` and are sent verbatim as
+  strings — never through `Number()` or `parseFloat`.
+- `Edit` on a row opens the same fields the create form uses (type, currency, country, opening
+  anchor, credit limit included). Saving PATCHes the full `AccountUpdate`. Changing the opening
+  anchor updates the shown current balance to match (M1a has no transactions yet).
 - `Close account` on a row, setting `closedOn`; no delete anywhere.
 - The empty state explains what an account is here and offers the first one.
 - Skeleton rows while loading, never a spinner where a number belongs.
@@ -2356,7 +2534,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ---
 
-### Task 11: Record Phase 0 closed, Phase 1 active, and the M1a/M1b split
+### Task 11: Record task evidence and the M1a/M1b split
 
 **Files:**
 - Modify: `docs/superpowers/progress.md`
@@ -2364,6 +2542,9 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
   the branching constraint already defers to `docs/git-workflow.md`)
 
 **Interfaces:** none. Documentation only; no implementation or test lines count against the cap.
+
+Phase 1 activation and the eleven-row task table already exist from the pre-dispatch step.
+This task records completion evidence and the master-plan pointer only.
 
 - [ ] **Step 1: Confirm the state you are about to record**
 
@@ -2374,29 +2555,19 @@ gh pr list --state merged --base feature/phase-1-trusted-financial-position
 ```
 
 Record only what the owner has confirmed and what these commands show. The Phase 0 live Google
-identity checks are the owner's to confirm; if any remains unverified, say so rather than
-marking Phase 0 closed.
+identity checks are the owner's to confirm; if any remains unverified, leave them open rather
+than marking Phase 0 closed.
 
 - [ ] **Step 2: Update the progress file**
 
 In `docs/superpowers/progress.md`:
 
-- Change **Current phase** to Phase 1 — trusted financial position, integration branch
-  `feature/phase-1-trusted-financial-position`, linking the active plan
-  (`plans/2026-09-06-phase-1-trusted-financial-position.md`) and its specification
-  (`specs/2026-09-06-phase-1-trusted-financial-position.md`) as relative links from
-  `progress.md`.
-- Replace the old "branches from `develop`" sentences with one link to the
-  [git workflow](../../git-workflow.md) (relative from `progress.md` that is
-  `../git-workflow.md`); the progress file names the active phase branch and defers the model
-  to that file.
-- Record Phase 0 as closed on the owner's confirmed live identity checks, keeping the existing
-  evidence table and the dated verification report link intact.
-- Replace the "Later phases" row for Phase 1 with a task table for this plan — the eleven tasks,
-  their branches and their evidence — and add the note that roadmap M1 is delivered as M1a and
-  M1b and is complete only when both are.
+- Fill the Phase 1 task table with each task's PR evidence (Tasks 1–10).
+- Keep the note that roadmap M1 is delivered as M1a and M1b and is complete only when both are.
 - Record that the API import defect existed on `main` and `develop` and was fixed by Task 1, so
   the earlier "59 tests" evidence is understood as predating it.
+- If the owner has now confirmed the live Google identity checks, mark those Phase 0 exit gates
+  closed; otherwise leave them open honestly.
 
 - [ ] **Step 3: Point the master plan at this plan for M1a**
 
@@ -2423,12 +2594,10 @@ branch from `develop` for Phase 1.
 
 ```bash
 git add docs/superpowers/progress.md docs/superpowers/plans/implementation-plan.md
-git commit -m "docs(plan): the progress file records phase 1 active on its own branch
+git commit -m "docs(plan): the progress file records Phase 1 task evidence and the M1a split
 
-Phase 0 is closed on the owner's confirmed live identity checks, and Phase 1 integrates on
-feature/phase-1-trusted-financial-position per docs/git-workflow.md. The progress file now
-names that branch, defers the branch model to the workflow file, and carries the Phase 1
-task table with the M1a/M1b split of roadmap M1.
+Phase 1 was activated before Task 1. This closeout fills the task table with PR evidence,
+keeps the M1a/M1b split of roadmap M1 visible, and points the master plan at this plan for M1a.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
