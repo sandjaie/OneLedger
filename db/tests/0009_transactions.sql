@@ -81,6 +81,17 @@ BEGIN
     classified_by = 'user_manual'
    WHERE id = t_lone;
 
+  -- Frozen amounts reproduce their stored rate on every row, whoever the writer is.
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_sav, '2024-02-12', 'MADE UP FROZEN', -10.0000, base,
+              '2024-02-12', 1, 20, -999.0000, -200.0000, 'expense', 'manual', 'mf1');
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
   -- Frozen amounts are required at insert.
   BEGIN
     INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
@@ -363,32 +374,31 @@ BEGIN
                (h, a_card, '2024-02-11', 'SPLIT SIX', -30.0000, base,
                 '2024-02-11', 20, 1, 0.0000, -30.0000, 'expense', 'manual', 'p6b', p6);
       RAISE EXCEPTION 'unreachable';
-    EXCEPTION WHEN raise_exception THEN
-      IF SQLERRM = 'unreachable' THEN
-        RAISE EXCEPTION 'a child hoarding the converted value must be rejected';
-      END IF;
+    EXCEPTION WHEN check_violation THEN NULL;
     END;
   END;
 
-  -- The frozen sums balance too: reports read amount_base/amount_secondary, and children
-  -- replace their parent there. Native agreement alone is not enough.
+  -- The frozen sums balance too: each row may carry a cent of allocated residual, so the
+  -- aggregate check is what stops residues accumulating into a divergent converted total.
   DECLARE p5 UUID;
   BEGIN
     INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
                              currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                              amount_base, amount_secondary, txn_type, source, dedupe_hash)
-      VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -60.0000, base,
-              '2024-02-09', 20, 1, -1200.0000, -60.0000, 'expense', 'manual', 'p5')
+      VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -0.0002, base,
+              '2024-02-09', 3, 1, -0.0006, -0.0002, 'expense', 'manual', 'p5')
       RETURNING id INTO p5;
     BEGIN
+      -- Each child stays within its one-cent row tolerance, but the residues line up the
+      -- same way and the total drifts: -0.0008 against the parent's -0.0006.
       INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
                                currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                amount_base, amount_secondary, txn_type, source, dedupe_hash,
                                parent_transaction_id)
-        VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -30.0000, base,
-                '2024-02-09', 20, 1, -600.0000, -30.0000, 'expense', 'manual', 'p5a', p5),
-               (h, a_card, '2024-02-09', 'SPLIT FIVE', -30.0000, base,
-                '2024-02-09', 20, 1, -500.0000, -30.0000, 'expense', 'manual', 'p5b', p5);
+        VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -0.0001, base,
+                '2024-02-09', 3, 1, -0.0004, -0.0001, 'expense', 'manual', 'p5a', p5),
+               (h, a_card, '2024-02-09', 'SPLIT FIVE', -0.0001, base,
+                '2024-02-09', 3, 1, -0.0004, -0.0001, 'expense', 'manual', 'p5b', p5);
       RAISE EXCEPTION 'unreachable';
     EXCEPTION WHEN raise_exception THEN
       IF SQLERRM = 'unreachable' THEN

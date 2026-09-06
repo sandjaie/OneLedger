@@ -115,7 +115,12 @@ CREATE TABLE transaction (
     transfer_id IS NULL OR txn_type IN ('transfer_in','transfer_out')),
   -- I6: nothing claims to come from a statement without naming the statement.
   CONSTRAINT import_has_document  CHECK (
-    source <> 'statement_import' OR source_document_id IS NOT NULL)
+    source <> 'statement_import' OR source_document_id IS NOT NULL),
+  -- The frozen facts reproduce each other on every row: the stored amounts derive from the
+  -- stored rates within one allocated cent, whoever the writer is.
+  CONSTRAINT frozen_amounts_derive CHECK (
+    abs(amount_base - round(amount * fx_rate_to_base, 4)) <= 0.0001
+    AND abs(amount_secondary - round(amount * fx_rate_to_secondary, 4)) <= 0.0001)
 );
 
 CREATE UNIQUE INDEX idx_txn_dedupe   ON transaction (household_id, account_id, dedupe_hash);
@@ -271,13 +276,6 @@ BEGIN
     OR NEW.receipt_document_id   IS DISTINCT FROM parent.receipt_document_id
     OR NEW.tags                  IS DISTINCT FROM parent.tags THEN
       RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
-    END IF;
-    -- Each leaf's frozen amounts derive from its own amount and the inherited rates, one
-    -- cent of allocated residual allowed: totals that balance while one child hoards the
-    -- converted value would report false per-category spending.
-    IF abs(NEW.amount_base - round(NEW.amount * NEW.fx_rate_to_base, 4)) > 0.0001
-    OR abs(NEW.amount_secondary - round(NEW.amount * NEW.fx_rate_to_secondary, 4)) > 0.0001 THEN
-      RAISE EXCEPTION 'a split child''s frozen amounts must derive from its amount and rates: %', NEW.id;
     END IF;
   END IF;
   RETURN NEW;

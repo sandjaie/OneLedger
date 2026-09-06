@@ -169,7 +169,7 @@ def update_category(
     try:
         with connect() as conn, conn.cursor() as cur:
             cur.execute(
-                """SELECT household_id IS NULL, name FROM category
+                """SELECT household_id IS NULL, name, bucket::text, is_active FROM category
                     WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
                 (category_id, owner.household_id),
             )
@@ -177,22 +177,35 @@ def update_category(
             if existing is None:
                 raise HTTPException(status_code=404, detail="no such category")
             system_row, current_name = bool(existing[0]), str(existing[1])
+            seed_bucket, seed_active = str(existing[2]), bool(existing[3])
             if system_row and body.name != current_name:
                 raise HTTPException(
                     status_code=422, detail="a seeded category keeps its name; add your own"
                 )
             if system_row:
-                # Never rewrite the seed in place: the household's choice is an override row
-                # beside it, upserted so repeat edits replace themselves.
-                cur.execute(
-                    """INSERT INTO category_override (household_id, category_id, bucket, is_active)
-                       VALUES (%s, %s, %s::category_bucket, %s)
-                       ON CONFLICT (household_id, category_id)
-                         DO UPDATE SET bucket = EXCLUDED.bucket,
-                                       is_active = EXCLUDED.is_active,
-                                       updated_at = now()""",
-                    (owner.household_id, category_id, body.bucket, body.isActive),
-                )
+                # Never rewrite the seed in place — and store only the actual divergence:
+                # a pinned copy of an unchanged field would hide later seed corrections the
+                # owner never overrode. Matching values are NULL (inherit); no divergence at
+                # all removes the override entirely.
+                override_bucket = body.bucket if body.bucket != seed_bucket else None
+                override_active = body.isActive if body.isActive != seed_active else None
+                if override_bucket is None and override_active is None:
+                    cur.execute(
+                        """DELETE FROM category_override
+                            WHERE household_id = %s AND category_id = %s""",
+                        (owner.household_id, category_id),
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO category_override
+                               (household_id, category_id, bucket, is_active)
+                           VALUES (%s, %s, %s::category_bucket, %s)
+                           ON CONFLICT (household_id, category_id)
+                             DO UPDATE SET bucket = EXCLUDED.bucket,
+                                           is_active = EXCLUDED.is_active,
+                                           updated_at = now()""",
+                        (owner.household_id, category_id, override_bucket, override_active),
+                    )
             else:
                 cur.execute(
                     """UPDATE category
