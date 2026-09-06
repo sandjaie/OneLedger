@@ -263,11 +263,33 @@ def test_category_edit_stamps_user_manual_and_never_touches_amounts(
     finally:
         _teardown()
     assert response.status_code == 200
-    update = next(s for s in connection.statements if "UPDATE transaction" in s)
-    assert "user_manual" in update
+    update_at = next(i for i, s in enumerate(connection.statements) if "UPDATE transaction" in s)
+    update = connection.statements[update_at]
     assert "classification_rule_id = NULL" in update, "one answer to why, not two"
-    assert "classification_confidence = 1.000" in update
+    assert "user_manual" in connection.params[update_at]
+    assert Decimal("1.000") in connection.params[update_at]
     assert "amount" not in update.split("SET", 1)[1].split("WHERE", 1)[0]
+
+
+def test_clearing_the_category_restores_the_unclassified_contract(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """An unclassified transaction is confidence 0.000 and queues for review — including one
+    the owner just cleared."""
+    connection = LedgerConnection(rows=[FETCHED_ROW])
+    try:
+        response = _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": None, "notes": None},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 200
+    update_at = next(i for i, s in enumerate(connection.statements) if "UPDATE transaction" in s)
+    assert "unclassified" in connection.params[update_at]
+    assert Decimal("0.000") in connection.params[update_at]
+    assert False in connection.params[update_at]
 
 
 def test_the_ledger_lists_transfer_legs_and_reads_the_base_table(
