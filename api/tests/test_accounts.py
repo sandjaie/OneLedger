@@ -112,11 +112,13 @@ class AccountsConnection:
         rows: list[tuple[object, ...]] | None = None,
         totals: list[tuple[object, ...]] | None = None,
         institutions: list[tuple[object, ...]] | None = None,
+        self_people: list[tuple[object, ...]] | None = None,
     ) -> None:
         self.fail_institution = fail_institution
         self.rows = rows or []
         self.totals = totals or []
         self.institutions = institutions
+        self.self_people = self_people if self_people is not None else [(USER_ID,)]
         self.statements: list[str] = []
         self.params: list[tuple[object, ...]] = []
         self.parameters = self.params
@@ -150,6 +152,10 @@ class AccountsCursor:
             self._one = (INSTITUTION_ID, "My Broker", "MB", "XB", "broker")
         elif "SELECT 1 FROM institution" in sql:
             self._one = None if self.connection.fail_institution else (1,)
+        elif "FROM person" in sql and "INSERT" not in sql:
+            selves = self.connection.self_people
+            self._many = list(selves)
+            self._one = selves[0] if len(selves) == 1 else None
         elif "INSERT INTO account" in sql:
             self._one = (ACCOUNT_ID,)
         elif "UPDATE account" in sql:
@@ -258,6 +264,20 @@ def test_a_full_account_number_is_never_accepted() -> None:
             accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": bad})
     assert accounts.AccountCreate.model_validate({**CREATE, "accountNumberMasked": "****1234"})
     assert accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": "HDFC ··1234"})
+
+
+def test_creating_an_account_refuses_ambiguous_self_person(monkeypatch: MonkeyPatch) -> None:
+    """V2 allows more than one is_self row; INSERT … SELECT would create one account per row."""
+    connection = AccountsConnection(self_people=[(USER_ID,), (ACCOUNT_ID,)])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/accounts", json=CREATE, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+    assert "self" in response.json()["detail"].lower()
+    assert not any("INSERT INTO account" in statement for statement in connection.statements)
 
 
 def test_creating_an_account_rejects_another_households_institution(

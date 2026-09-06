@@ -289,6 +289,20 @@ describe("Accounts", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("does not transmit a full number written with Unicode digits", async () => {
+    const request = vi.fn();
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "٤١١١١١١١١١١١١١١١" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("marks an account that is excluded from group totals", () => {
     render(
       <AccountsScreen
