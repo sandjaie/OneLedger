@@ -40,6 +40,19 @@ type Draft = {
   creditLimit: string;
 };
 
+const INSTITUTION_TYPES = [
+  "bank",
+  "card_issuer",
+  "broker",
+  "fund_house",
+  "lender",
+  "govt",
+  "insurer",
+  "employer",
+  "exchange_house",
+  "other",
+] as const;
+
 const ACCOUNT_TYPES = [
   "cash",
   "current",
@@ -185,6 +198,10 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
   };
 }
 
+function isAuthError(error: unknown) {
+  return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
 function today() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -252,6 +269,7 @@ export function AccountsScreen({
       setMode("view");
       onChanged();
     } catch (error) {
+      if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The account could not be created. Try again.");
     } finally {
       setBusy(false);
@@ -272,6 +290,7 @@ export function AccountsScreen({
       setEditing(undefined);
       onChanged();
     } catch (error) {
+      if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The account could not be saved. Try again.");
     } finally {
       setBusy(false);
@@ -289,6 +308,7 @@ export function AccountsScreen({
       });
       onChanged();
     } catch (error) {
+      if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The opening balance could not be acknowledged.");
     } finally {
       setBusy(false);
@@ -306,6 +326,7 @@ export function AccountsScreen({
       });
       onChanged();
     } catch (error) {
+      if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The account could not be closed.");
     } finally {
       setBusy(false);
@@ -332,6 +353,7 @@ export function AccountsScreen({
       setAddingInstitution(false);
       onChanged();
     } catch (error) {
+      if (isAuthError(error)) return;
       setProblem(error instanceof ApiError ? error.detail : "The institution could not be created.");
     } finally {
       setBusy(false);
@@ -411,7 +433,7 @@ export function AccountsScreen({
                 }))}
                 value={institutionDraft.institutionType}
               >
-                {["bank", "card_issuer", "broker", "fund_house", "lender", "other"].map((type) => (
+                {INSTITUTION_TYPES.map((type) => (
                   <option key={type} value={type}>{type}</option>
                 ))}
               </select>
@@ -531,7 +553,7 @@ export function AccountsScreen({
         <td>{meta}</td>
         <td>{account.accountNumberMasked}</td>
         <td
-          aria-label={`${account.name} balance`}
+          aria-label={`${account.name} balance ${balanceLabel(account)}`}
           className={account.accountClass === "liability" ? "account-owed" : undefined}
         >
           {balanceLabel(account)}

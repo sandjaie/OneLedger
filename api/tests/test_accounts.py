@@ -282,6 +282,20 @@ def test_the_inventory_includes_closed_accounts_and_database_computed_totals(
     assert "SUM(" in connection.statements[-1] and "GROUP BY" in connection.statements[-1]
 
 
+def test_the_inventory_join_does_not_name_another_households_institution(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """The service bypasses RLS; a foreign key on institution.id is not a household boundary."""
+    connection = AccountsConnection(rows=[FETCHED_ROW], totals=[])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        TestClient(app).get("/accounts")
+    finally:
+        app.dependency_overrides.clear()
+    assert "i.household_id IS NULL OR i.household_id = a.household_id" in connection.statements[0]
+
+
 def test_every_statement_is_scoped_to_the_resolved_household(monkeypatch: MonkeyPatch) -> None:
     """The service connects privileged and bypasses RLS, so the predicate is the boundary."""
     connection = AccountsConnection(rows=[FETCHED_ROW], totals=[])

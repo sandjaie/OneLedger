@@ -176,7 +176,10 @@ COLUMNS = """a.id, a.name, a.institution_id, i.name, a.account_type::text, a.acc
              a.opening_balance_date, a.opening_balance_note, a.opening_balance_confirmed_at,
              a.current_balance, a.current_balance_as_of, a.credit_limit"""
 
-FROM = "FROM account a LEFT JOIN institution i ON i.id = a.institution_id"
+FROM = (
+    "FROM account a LEFT JOIN institution i ON i.id = a.institution_id"
+    " AND (i.household_id IS NULL OR i.household_id = a.household_id)"
+)
 
 FIELDS = [
     "id",

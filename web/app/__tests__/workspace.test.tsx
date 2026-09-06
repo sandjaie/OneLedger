@@ -397,6 +397,57 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("heading", { name: "Assets · XB" })).toBeTruthy();
   });
 
+  it.each([
+    [401, "/login"], [403, "/unauthorized"],
+  ])("clears Accounts when create returns %i", async (status, destination) => {
+    const inventory: AccountsResponse = {
+      accounts: [{
+        id: "acct-savings",
+        name: "Inventory Savings",
+        institutionId: "inst-1",
+        institutionName: "Synthetic Bank",
+        accountType: "savings",
+        accountClass: "asset",
+        accountSubtype: null,
+        currency: "XIN",
+        country: "XB",
+        accountNumberMasked: "****1234",
+        openedOn: "2024-01-01",
+        closedOn: null,
+        isActive: true,
+        includeInNetWorth: true,
+        isLiquid: true,
+        openingBalance: "250000.0000",
+        openingBalanceDate: "2024-01-01",
+        openingBalanceNote: null,
+        openingBalanceConfirmedAt: null,
+        currentBalance: "250000.0000",
+        currentBalanceAsOf: null,
+        creditLimit: null,
+      }],
+      totals: [],
+    };
+    const institutions: Array<InstitutionRow> = [
+      { id: "inst-1", name: "Synthetic Bank", shortName: "SB", country: "XB", institutionType: "bank" },
+    ];
+    const navigate = vi.fn();
+    render(
+      <Workspace
+        section="accounts"
+        request={requestThat(household, inventory, institutions, catalogue, new ApiError(status, "synthetic"))}
+        navigate={navigate}
+      />,
+    );
+    await screen.findByText("Inventory Savings");
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "1.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"), { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
+    expect(screen.queryByText("Inventory Savings")).toBeNull();
+  });
+
   it("does not fetch the currency catalogue on overview", async () => {
     const request = requestThat(household);
     render(<Workspace request={request} navigate={vi.fn()} />);
