@@ -653,3 +653,19 @@ def test_a_note_edit_survives_a_deactivated_historical_category(
     finally:
         _teardown()
     assert response.status_code == 200
+
+
+def test_a_note_only_edit_on_a_container_passes(monkeypatch: MonkeyPatch) -> None:
+    """The container guard protects the category, not the notes."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], container=(True, CATEGORY_ID))
+    try:
+        response = _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": "container note"},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 200
+    update = next(s for s in connection.statements if "UPDATE transaction" in s)
+    assert "classified_by" not in update
