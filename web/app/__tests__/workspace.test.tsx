@@ -81,10 +81,7 @@ describe("authenticated workspace", () => {
 
   it("guards owner content with the household request and labels unavailable modules", async () => {
     let resolve!: (value: HouseholdResponse) => void;
-    const request = vi.fn((path: string) => {
-      if (path === "/currencies") return Promise.resolve(catalogue);
-      return new Promise<HouseholdResponse>((done) => (resolve = done));
-    }) as Request;
+    const request = vi.fn(() => new Promise<HouseholdResponse>((done) => (resolve = done))) as Request;
 
     render(<Workspace request={request} navigate={vi.fn()} />);
     expect(screen.getByText("Checking owner access…")).toBeTruthy();
@@ -114,7 +111,7 @@ describe("authenticated workspace", () => {
   });
 
   it("offers retry after a service failure instead of exposing owner content", async () => {
-    const request = requestThat(new TypeError("offline"), household, catalogue);
+    const request = requestThat(new TypeError("offline"), household);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "OneLedger is unavailable" })).toBeTruthy();
@@ -125,7 +122,7 @@ describe("authenticated workspace", () => {
 
   it("keeps the owner view on transient logout failure and clears it after retry succeeds", async () => {
     const navigate = vi.fn();
-    const request = requestThat(household, catalogue, new TypeError("offline"), undefined);
+    const request = requestThat(household, new TypeError("offline"), undefined);
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -144,7 +141,7 @@ describe("authenticated workspace", () => {
     [401, "/login"], [403, "/unauthorized"],
   ])("clears the owner view when logout returns %i and routes to %s", async (status, destination) => {
     const navigate = vi.fn();
-    const request = requestThat(household, catalogue, new ApiError(status, "synthetic"));
+    const request = requestThat(household, new ApiError(status, "synthetic"));
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -156,7 +153,7 @@ describe("authenticated workspace", () => {
 
   it("persists the configured toggle, falls back from obsolete choices, and tolerates storage errors", async () => {
     localStorage.setItem("oneledger.reportingCurrency", "obsolete");
-    const first = render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
+    const first = render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
 
     const secondary = screen.getByRole("button", { name: "XAE" });
@@ -166,14 +163,14 @@ describe("authenticated workspace", () => {
     expect(localStorage.getItem("oneledger.reportingCurrency")).toBe("XAE");
 
     first.unmount();
-    render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
     expect(await screen.findByText("AED 1,234,567.89")).toBeTruthy();
 
     cleanup();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    render(<Workspace request={requestThat(household, catalogue)} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
   });
 
@@ -354,5 +351,25 @@ describe("authenticated workspace", () => {
     await waitFor(() =>
       expect(screen.getByRole("group", { name: "Reporting currency" }).textContent).toContain("XAE"),
     );
+  });
+
+  it("does not fetch the currency catalogue on overview", async () => {
+    const request = requestThat(household);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+    await screen.findByText("₹12,34,567.89");
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("/household");
+  });
+
+  it.each([
+    [401, "/login"], [403, "/unauthorized"],
+  ])("clears Settings when household save returns %i", async (status, destination) => {
+    const navigate = vi.fn();
+    const request = requestThat(household, catalogue, new ApiError(status, "synthetic"));
+    render(<Workspace section="settings" request={request} navigate={navigate} />);
+    await screen.findByLabelText("Household name");
+    fireEvent.click(screen.getByRole("button", { name: "Save household" }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
+    expect(screen.queryByLabelText("Household name")).toBeNull();
   });
 });
