@@ -165,7 +165,7 @@ def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.Monke
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run pytest -q`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run pytest -q`
 Expected: collection fails, not a test failure —
 `File ".../api/oneledger/routes/auth.py", line 74` … `except OAuthExchangeError, RuntimeError:` …
 `SyntaxError: invalid syntax`. Confirm `uv run ruff check .` reports the same parse error.
@@ -184,7 +184,7 @@ nothing else.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run ruff check . && uv run mypy . && uv run pytest -q`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
 Expected: ruff and mypy clean; pytest collects the whole suite and reports **63 passed**
 (59 previously reported plus the 4 added here). A run collecting 0 tests is a failure.
 
@@ -289,7 +289,7 @@ Prove the previous assertion was membership-based rather than property-based, in
 database only:
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger
+cd "$(git rev-parse --show-toplevel)"
 export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432 \
        POSTGRES_PASSWORD=oneledger POSTGRES_PORT=55432
 export DATABASE_URL="$(scripts/dsn.sh)"
@@ -414,14 +414,26 @@ CREATE TRIGGER trg_account_current_balance
   BEFORE INSERT ON account
   FOR EACH ROW EXECUTE FUNCTION derive_account_current_balance();
 
--- Existing rows predate the trigger. No table carrying transactions exists at this point in the
--- schema timeline, so opening_balance + SUM(transactions) is exactly opening_balance for all
--- of them.
-UPDATE account
-   SET current_balance = opening_balance,
-       current_balance_as_of = COALESCE(current_balance_as_of,
-                                        opening_balance_date::timestamptz)
- WHERE current_balance = 0 AND opening_balance <> 0;
+-- Existing rows predate the trigger — but for them "current_balance = 0 with a nonzero opening
+-- balance" is exactly the ambiguity DEFAULT 0 created: an omitted value and an observed zero
+-- are the same stored bytes, and rewriting both would overwrite a possible observation
+-- (Invariant I7: nothing about money is invented silently). No account write path shipped
+-- before this migration and no migration seeds account rows, so a real database has no such
+-- row; if one exists it was inserted by hand, and the migration refuses and names the rows
+-- for the operator to resolve explicitly instead of guessing.
+DO $$
+DECLARE ambiguous BIGINT;
+BEGIN
+  SELECT count(*) INTO ambiguous FROM account
+   WHERE current_balance = 0 AND opening_balance <> 0;
+  IF ambiguous > 0 THEN
+    RAISE EXCEPTION USING MESSAGE = format(
+      'V6: %s account row(s) have current_balance = 0 beside a nonzero opening balance. '
+      'DEFAULT 0 hid whether that zero was observed or merely omitted. Set each row''s '
+      'current_balance explicitly — to the observed zero it already holds, or to its '
+      'opening balance — then re-run the migration.', ambiguous);
+  END IF;
+END $$;
 ```
 
 In `docs/superpowers/schema.md`, change the `current_balance` line of the `0003` account DDL to
@@ -455,7 +467,9 @@ git commit -m "fix(db): a new account's current balance starts at its opening ba
 An account created with a nonzero opening balance and no explicit current balance was stored
 with a current balance of zero, contradicting balance = opening_balance + SUM(transactions).
 DEFAULT 0 was the cause: it hid the difference between an omitted value and a deliberate zero.
-V6 drops the default and derives the balance and its as-of date on insert.
+V6 drops the default and derives the balance and its as-of date on insert. Pre-existing rows
+carrying that ambiguity make the migration fail with instructions rather than being silently
+rewritten, because an observed zero is indistinguishable from a defaulted one.
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
@@ -521,7 +535,7 @@ non-permitted address still redirects to `/unauthorized`. Do not weaken it.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run pytest -q -k "binding or outage" -v`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run pytest -q -k "binding or outage" -v`
 Expected: `test_owner_binding_lets_database_failures_through` FAILS with
 `DID NOT RAISE <class 'psycopg.OperationalError'>` (it raises `NotAuthorized` instead), and
 `test_a_database_outage_during_binding_offers_retry_not_rejection` FAILS on the location
@@ -568,7 +582,7 @@ correct and must not regress.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run ruff check . && uv run mypy . && uv run pytest -q`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
 Expected: ruff and mypy clean; **65 passed** (63 after Task 1, plus 2 here).
 
 - [ ] **Step 5: Commit**
@@ -604,7 +618,7 @@ There is no unit-test seam for a Compose file, and adding one would be more mach
 fix. The runnable check is `docker compose config`, which resolves interpolation:
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger
+cd "$(git rev-parse --show-toplevel)"
 POSTGRES_USER=ledgerowner POSTGRES_DB=ledgerdb docker compose config \
   | grep -E 'POSTGRES_USER|POSTGRES_DB|FLYWAY_URL|FLYWAY_USER|pg_isready'
 ```
@@ -887,7 +901,10 @@ BEGIN
 END $$;
 
 -- The guard and the write are one function because an import could otherwise freeze the first
--- amount between a separate check and a separate UPDATE (api-contracts.html section 3).
+-- amount between a separate check and a separate UPDATE (api-contracts.html section 3). One
+-- function gives atomic rollback but not inter-transaction serialization, so the function also
+-- locks the household row; every writer of a frozen amount_base/amount_secondary row takes the
+-- same lock before writing (spec B3.5 — M1b manual entry first, M2 import after it).
 CREATE FUNCTION update_household_configuration(
   p_name               TEXT,
   p_display_name       TEXT,
@@ -900,6 +917,12 @@ DECLARE h UUID;
 BEGIN
   PERFORM assert_is_owner();
   h := current_household_id();
+
+  -- Serialize with any concurrent frozen-amount writer: a transaction that has read the old
+  -- pair but not yet committed its first frozen row would make reporting_pair_is_locked()
+  -- answer false here while old-pair amounts are about to freeze. The household row is the
+  -- rendezvous; the interleaving test arrives with M1b's manual entry, the first such writer.
+  PERFORM 1 FROM household WHERE id = h FOR UPDATE;
 
   IF p_base_currency = p_secondary_currency THEN
     RAISE EXCEPTION 'the reporting pair must name two different currencies'
@@ -1028,7 +1051,7 @@ ORIGIN = {"Origin": "http://localhost:3000"}
 
 - [ ] **Step 6: Run the API tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run pytest -q tests/test_household.py -v`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run pytest -q tests/test_household.py -v`
 Expected: FAIL — `AttributeError: module 'oneledger.routes' has no attribute 'currencies'`, and
 `405 Method Not Allowed` for the PATCH cases because the route does not exist.
 
@@ -1157,8 +1180,8 @@ In `api/oneledger/routes/fx.py`, replace the `reporting_config` error message
 - [ ] **Step 8: Run the API tests to verify they pass**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger/api && uv run ruff check . && uv run mypy . && uv run pytest -q
-cd /Users/sandjaieravi/dev/OneLedger/web && npm run api:types && npm run typecheck && npm run typecheck:compat
+cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q
+cd "$(git rev-parse --show-toplevel)/web" && npm run api:types && npm run typecheck && npm run typecheck:compat
 ```
 
 Expected: ruff and mypy clean; pytest green with the new cases, and
@@ -1229,7 +1252,7 @@ text.
 - [ ] **Step 10: Verify the whole path from empty**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger
+cd "$(git rev-parse --show-toplevel)"
 python3 scripts/check-docs.py
 # scratch stack, as in Task 2 Step 2
 docker compose down -v && docker compose up -d db && docker compose run --rm flyway migrate
@@ -1404,7 +1427,7 @@ it("refreshes the reporting-currency toggle after the pair changes", async () =>
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/web && npx vitest run app/settings app/__tests__/workspace.test.tsx`
+Run: `cd "$(git rev-parse --show-toplevel)/web" && npx vitest run app/settings app/__tests__/workspace.test.tsx`
 Expected: FAIL — `Failed to resolve import "@/app/settings/household-form"`.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -1538,7 +1561,7 @@ toggle updates. Add the matching styles to `web/app/globals.css` in the existing
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger/web
+cd "$(git rev-parse --show-toplevel)/web"
 npx vitest run && npm run lint && npm run typecheck && npm run typecheck:compat && npm run build
 grep -rE 'SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://' .next/static/ || echo "no secrets in the bundle"
 ```
@@ -1731,6 +1754,19 @@ def test_money_must_be_an_exact_decimal_string() -> None:
     assert accounts.AccountCreate(**{**CREATE, "openingBalance": "-4500.0000"})
 
 
+def test_a_full_account_number_is_never_accepted() -> None:
+    """The never-store list is absolute (security-and-privacy.html section 1). A fifth digit
+    makes the value an account number, not a mask; both write models refuse it."""
+    full_numbers = ["4111111111111111", "4111-1111-1111-1111", "AE07 0331 2345 6789 0123 456", "12345"]
+    for bad in full_numbers:
+        with pytest.raises(ValidationError):
+            accounts.AccountCreate(**{**CREATE, "accountNumberMasked": bad})
+        with pytest.raises(ValidationError):
+            accounts.AccountUpdate(**{**UPDATE, "accountNumberMasked": bad})
+    assert accounts.AccountCreate(**{**CREATE, "accountNumberMasked": "****1234"})
+    assert accounts.AccountUpdate(**{**UPDATE, "accountNumberMasked": "HDFC ··1234"})
+
+
 def test_creating_an_account_never_accepts_a_class_from_the_client() -> None:
     """account_class is derived by the V3 trigger; a client value would be a second source."""
     assert "accountClass" not in accounts.AccountCreate.model_fields
@@ -1821,7 +1857,7 @@ def test_accounts_are_never_deleted() -> None:
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/api && uv run pytest -q tests/test_accounts.py -v`
+Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run pytest -q tests/test_accounts.py -v`
 Expected: FAIL at import — `ModuleNotFoundError: No module named 'oneledger.routes.accounts'`.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -1859,6 +1895,18 @@ def _money(value: str | None) -> str | None:
         return None
     if not isinstance(value, str) or not MONEY.fullmatch(value):
         raise ValueError("money must be a decimal string with at most four decimal places")
+    return value
+
+
+def _masked(value: str | None) -> str | None:
+    """At most the last four digits may be visible. A fifth digit makes the value an account
+    number, and no full number is ever accepted, transmitted or logged
+    (security-and-privacy.html section 1)."""
+    if value is not None and sum(ch.isdigit() for ch in value) > 4:
+        raise ValueError(
+            "accountNumberMasked takes a mask, not an account number: "
+            "at most four digits may be visible"
+        )
     return value
 
 
@@ -1931,6 +1979,11 @@ class AccountCreate(BaseModel):
     def exact_decimal_string(cls, value: str | None) -> str | None:
         return _money(value)
 
+    @field_validator("accountNumberMasked")
+    @classmethod
+    def masked_never_full(cls, value: str | None) -> str | None:
+        return _masked(value)
+
 
 class AccountUpdate(BaseModel):
     """Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
@@ -1946,6 +1999,11 @@ class AccountUpdate(BaseModel):
     isLiquid: bool
     openingBalanceNote: str | None = None
     acknowledgeOpeningBalance: bool
+
+    @field_validator("accountNumberMasked")
+    @classmethod
+    def masked_never_full(cls, value: str | None) -> str | None:
+        return _masked(value)
 
 
 class InstitutionRow(BaseModel):
@@ -2117,8 +2175,8 @@ router in `api/oneledger/main.py`.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger/api && uv run ruff check . && uv run mypy . && uv run pytest -q
-cd /Users/sandjaieravi/dev/OneLedger/web && npm run api:types && npm run typecheck && npm run typecheck:compat
+cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q
+cd "$(git rev-parse --show-toplevel)/web" && npm run api:types && npm run typecheck && npm run typecheck:compat
 ```
 
 Expected: ruff and mypy clean; every `test_accounts.py` case green;
@@ -2234,7 +2292,7 @@ Add one workspace test asserting `/accounts` renders the screen and the nav mark
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /Users/sandjaieravi/dev/OneLedger/web && npx vitest run app/accounts`
+Run: `cd "$(git rev-parse --show-toplevel)/web" && npx vitest run app/accounts`
 Expected: FAIL — `Failed to resolve import "@/app/accounts/accounts-screen"`.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -2270,7 +2328,7 @@ fetch `/accounts` and `/institutions` when that section is active.
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger/web
+cd "$(git rev-parse --show-toplevel)/web"
 npx vitest run && npm run lint && npm run typecheck && npm run typecheck:compat && npm run build
 grep -rnE 'parseFloat|Number\(' app/accounts lib/money || echo "no float money"
 ```
@@ -2310,7 +2368,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Confirm the state you are about to record**
 
 ```bash
-cd /Users/sandjaieravi/dev/OneLedger
+cd "$(git rev-parse --show-toplevel)"
 git log --oneline feature/phase-1-trusted-financial-position -15
 gh pr list --state merged --base feature/phase-1-trusted-financial-position
 ```
