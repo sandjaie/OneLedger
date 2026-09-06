@@ -1,20 +1,20 @@
 # OneLedger web
 
-This is the Phase 0 browser foundation for OneLedger. It currently provides the application shell
-and the tested browser-to-API client. Owner sign-in and financial views are later deliveries.
+Phase 0 web code is a Next.js App Router app that talks only to the FastAPI service. The API
+service owns authentication and financial access control; the browser uses `apiFetch` with cookies
+and generated OpenAPI response types.
 
-## Local setup
+## Setup
 
-Use the pinned Node 24 LTS release, then install exactly what the lockfile records:
+Use the pinned Node release and install from the committed lockfile:
 
 ```bash
 nvm use
 npm ci
 ```
 
-The browser calls `http://localhost:8000` by default. To use another public API origin, set
-`NEXT_PUBLIC_API_URL` before starting or building the app. It is the only supported
-`NEXT_PUBLIC_` variable and must never contain credentials.
+The browser calls `http://localhost:8000` unless `NEXT_PUBLIC_API_URL` is set. That is the only
+supported `NEXT_PUBLIC_` variable and it must contain only a public API origin.
 
 ```bash
 npm run dev
@@ -22,24 +22,46 @@ npm run dev
 
 Open <http://localhost:3000>.
 
+## API Types
+
+The TypeScript API contract is generated from FastAPI's local OpenAPI exporter. The schema is not
+served as an anonymous runtime route.
+
+```bash
+npm run api:types
+npm run api:types:check
+```
+
+`npm run api:types` runs `uv run --project api --frozen python scripts/openapi.py`, then
+`@hey-api/openapi-ts` with only the `@hey-api/typescript` plugin. The committed output lives in
+`web/types/api/`. The check command regenerates into a temporary directory and fails on drift.
+It is part of the repository pre-push gate and the canonical verify skill. It is not part of the
+web image build, so the production container stays Node-only.
+
+## Authentication Configuration
+
+Google sign-in is configured on the API service, not in the web bundle. Local authenticated flows
+need API-side values for `WEB_ORIGIN`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`ALLOWED_USER_EMAIL`, `SESSION_SECRET`, and `COOKIE_SECURE` as appropriate for the environment.
+Do not commit those values.
+
 ## Checks
 
 ```bash
 npm test
+npm run api:types:check
 npm run lint
 npm run typecheck
 npm run typecheck:compat
 npm run build
 ```
 
-`typecheck` runs the current native TypeScript 7 compiler. `typecheck:compat` runs TypeScript 6,
-which remains installed under the standard `typescript` package name because Next.js and
-typescript-eslint still consume its JavaScript compiler API.
+`typecheck` runs the current native TypeScript 7 compiler. `typecheck:compat` keeps the documented
+TypeScript 6 compiler-API compatibility check for Next.js and ESLint consumers. `npm run build`
+uses the default Next.js production build. On a host affected by the local Turbopack/PostCSS
+port-binding panic, use `npm run build -- --webpack` as a diagnostic fallback only.
 
 ## Container
-
-The production image uses the pinned Node 24 LTS release and Next.js standalone output, so build,
-lint, and test dependencies do not ship in the runtime stage.
 
 ```bash
 docker build \
@@ -49,17 +71,24 @@ docker run --rm -p 127.0.0.1:3000:3000 oneledger-web
 ```
 
 The Docker context excludes local dependencies, build output, environment files, keys, and secret
-directories. Next.js CLI telemetry is disabled in both build and runtime stages.
+directories. Next.js telemetry is disabled in build and runtime stages.
 
-## Dependency roles
+## Dependency Roles
 
 - Next.js and React provide the App Router runtime; `client-only` enforces the browser API boundary.
 - Tailwind CSS and its PostCSS adapter compile the application styles.
 - React and Node type packages provide declarations for the target runtimes.
-- ESLint plus `eslint-config-next` enforce framework, React, accessibility, and TypeScript rules.
-- Native TypeScript 7 performs the primary typecheck; TypeScript 6 supports compiler-API consumers.
-- Vitest runs the API-client contract suite in Node.
+- ESLint 9 plus `eslint-config-next` enforce framework, React, accessibility, and TypeScript rules.
+  ESLint 9 remains pinned because the current Next import plugin peer excludes ESLint 10.
+- Native TypeScript 7 performs the primary typecheck. TypeScript 6 remains installed under the
+  standard `typescript` package name for compiler-API consumers that have not moved to native TS 7.
+- `@hey-api/openapi-ts` 0.99.0 generates type-only API artifacts. It supports the TypeScript 6
+  compiler-API package, while the previously proposed `openapi-typescript` release peers only
+  against TypeScript 5.
+- The narrow `js-yaml` 4.3.1 override patches `@hey-api/json-schema-ref-parser`'s exact 4.2.0
+  transitive dependency and keeps `npm audit` clean without `--force` or legacy peer resolution.
+- Vitest runs the browser API client and money formatter contract suites in Node.
 
 Direct dependency versions are intentionally pinned. Audit them against current stable releases and
-peer ranges before changing the lockfile; record any compatibility exception instead of suppressing
-an install, type, lint, or build failure.
+peer ranges before changing the lockfile; record compatibility exceptions instead of suppressing
+install, type, lint, build, generator or audit failures.
