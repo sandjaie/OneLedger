@@ -72,7 +72,7 @@ class LedgerConnection:
     def __init__(
         self,
         *,
-        account: tuple[object, ...] | None = ("XAE",),
+        account: tuple[object, ...] | None = ("XAE", None, None),
         pair: tuple[object, ...] | None = ("XIN", "XAE"),
         fx: dict[tuple[str, str], tuple[object, ...]] | None = None,
         rows: list[tuple[object, ...]] | None = None,
@@ -212,7 +212,7 @@ def test_frozen_amounts_are_rounded_half_up_at_storage(monkeypatch: MonkeyPatch)
     """multi-currency: half-up at the point of storage; never round intermediates."""
     connection = LedgerConnection(
         rows=[FETCHED_ROW],
-        account=("XAE",),
+        account=("XAE", None, None),
         pair=("XIN", "XAE"),
         fx={("XAE", "XIN"): (Decimal("2"), False, None)},
     )
@@ -304,6 +304,9 @@ def test_filters_round_trip_as_parameters(monkeypatch: MonkeyPatch) -> None:
     for value in (ACCOUNT_ID, CATEGORY_ID, "expense", date(2024, 2, 1), date(2024, 2, 29)):
         assert value in connection.params[idx]
     assert not any("coffee" in s for s in connection.statements), "search terms are parameters"
+    assert any("plainto_tsquery" in s for s in connection.statements), (
+        "free-text search uses the predicate the GIN index serves"
+    )
 
 
 def test_a_foreign_household_category_is_refused(monkeypatch: MonkeyPatch) -> None:
@@ -355,3 +358,60 @@ def test_sort_is_a_bounded_contract(monkeypatch: MonkeyPatch) -> None:
     assert "t.amount ASC" in listing
     assert "t.id DESC" in listing, "a unique tie-breaker keeps offset pages disjoint"
     assert bad.status_code == 422
+
+
+def test_a_posting_outside_the_account_lifetime_is_refused(monkeypatch: MonkeyPatch) -> None:
+    """The UI's active-account picker is not the boundary."""
+    from datetime import date as _date
+
+    closed = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", None, _date(2024, 1, 31)))
+    try:
+        response = _client(closed, monkeypatch).post("/transactions", json=CREATE, headers=ORIGIN)
+    finally:
+        _teardown()
+    assert response.status_code == 422
+    assert "closed" in response.json()["detail"]
+
+    unopened = LedgerConnection(rows=[FETCHED_ROW], account=("XAE", _date(2024, 3, 1), None))
+    try:
+        response = _client(unopened, monkeypatch).post("/transactions", json=CREATE, headers=ORIGIN)
+    finally:
+        _teardown()
+    assert response.status_code == 422
+    assert "opened" in response.json()["detail"]
+
+
+def test_the_full_filter_contract_round_trips(monkeypatch: MonkeyPatch) -> None:
+    """UI section 4's filter list: what the API does not accept, the UI can never offer."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
+    try:
+        _client(connection, monkeypatch).get(
+            "/transactions",
+            params={
+                "merchantId": str(CATEGORY_ID),
+                "currency": "XAE",
+                "country": "XA",
+                "amountMin": "-1000.0000",
+                "amountMax": "0.0000",
+                "tag": "trip",
+                "reviewState": "unreviewed",
+                "sourceDocumentId": str(TXN_ID),
+            },
+        )
+    finally:
+        _teardown()
+    listing = next(s for s in connection.statements if "ORDER BY" in s)
+    idx = connection.statements.index(listing)
+    for fragment in (
+        "t.merchant_id = %s",
+        "t.currency = %s",
+        "t.country = %s",
+        "t.amount >= %s",
+        "t.amount <= %s",
+        "%s = ANY(t.tags)",
+        "t.is_reviewed = %s",
+        "t.source_document_id = %s",
+    ):
+        assert fragment in listing
+    assert Decimal("-1000.0000") in connection.params[idx]
+    assert False in connection.params[idx]

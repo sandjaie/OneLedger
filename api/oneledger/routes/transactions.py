@@ -247,6 +247,14 @@ def list_transactions(
     dateFrom: Annotated[date | None, Query()] = None,
     dateTo: Annotated[date | None, Query()] = None,
     q: Annotated[str | None, Query(max_length=200)] = None,
+    merchantId: Annotated[UUID | None, Query()] = None,
+    currency: Annotated[str | None, Query(min_length=3, max_length=3)] = None,
+    country: Annotated[str | None, Query(min_length=2, max_length=2)] = None,
+    amountMin: Annotated[str | None, Query(max_length=25)] = None,
+    amountMax: Annotated[str | None, Query(max_length=25)] = None,
+    tag: Annotated[str | None, Query(max_length=60)] = None,
+    reviewState: Annotated[str | None, Query(pattern="^(reviewed|unreviewed)$")] = None,
+    sourceDocumentId: Annotated[UUID | None, Query()] = None,
     sort: Annotated[str, Query(pattern="^(bookedDate|amount|description|account)$")] = "bookedDate",
     direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -270,8 +278,34 @@ def list_transactions(
         clauses.append("t.booked_date <= %s")
         params.append(dateTo)
     if q is not None and q.strip():
-        clauses.append("t.description_raw ILIKE '%%' || %s || '%%'")
+        # The V10 GIN index is on to_tsvector('simple', description_raw); this predicate is
+        # the one it serves. Word search, parameterised, never interpolated.
+        clauses.append("to_tsvector('simple', t.description_raw) @@ plainto_tsquery('simple', %s)")
         params.append(q.strip())
+    if merchantId is not None:
+        clauses.append("t.merchant_id = %s")
+        params.append(merchantId)
+    if currency is not None:
+        clauses.append("t.currency = %s")
+        params.append(currency)
+    if country is not None:
+        clauses.append("t.country = %s")
+        params.append(country)
+    if amountMin is not None:
+        clauses.append("t.amount >= %s")
+        params.append(Decimal(_money(amountMin) or "0"))
+    if amountMax is not None:
+        clauses.append("t.amount <= %s")
+        params.append(Decimal(_money(amountMax) or "0"))
+    if tag is not None:
+        clauses.append("%s = ANY(t.tags)")
+        params.append(tag)
+    if reviewState is not None:
+        clauses.append("t.is_reviewed = %s")
+        params.append(reviewState == "reviewed")
+    if sourceDocumentId is not None:
+        clauses.append("t.source_document_id = %s")
+        params.append(sourceDocumentId)
     where = " AND ".join(clauses)
     # A dictionary of static fragments: user input selects a key, never SQL text.
     order = {
@@ -324,13 +358,22 @@ def create_transaction(
             base, secondary = str(pair[0]).strip(), str(pair[1]).strip()
 
             cur.execute(
-                "SELECT currency FROM account WHERE id = %s AND household_id = %s",
+                """SELECT currency, opened_on, closed_on FROM account
+                    WHERE id = %s AND household_id = %s""",
                 (body.accountId, owner.household_id),
             )
             account = cur.fetchone()
             if account is None:
                 raise HTTPException(status_code=404, detail="no such account")
             currency = str(account[0]).strip()
+            opened_on, closed_on = account[1], account[2]
+            # The UI's active-account picker is not the boundary: a posting outside the
+            # account's lifetime would move the balance of an account that did not exist yet
+            # or was already closed.
+            if opened_on is not None and body.bookedDate < opened_on:
+                raise HTTPException(status_code=422, detail=f"the account opened on {opened_on}")
+            if closed_on is not None and body.bookedDate > closed_on:
+                raise HTTPException(status_code=422, detail=f"the account closed on {closed_on}")
             _assert_category_allowed(cur, body.categoryId, owner.household_id)
 
             rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
