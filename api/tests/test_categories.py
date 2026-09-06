@@ -137,7 +137,7 @@ def test_a_root_needs_a_kind_and_a_bucket(monkeypatch: MonkeyPatch) -> None:
 
 def test_a_seeded_category_keeps_its_name_but_not_its_bucket(monkeypatch: MonkeyPatch) -> None:
     """The bucket is an editable default (ADR-0008); the seeded name is not."""
-    connection = CategoriesConnection(existing=(True, "Food & Dining"), created=ROOT)
+    connection = CategoriesConnection(existing=(True, "Food & Dining", "want", True), created=ROOT)
     try:
         renamed = _client(connection, monkeypatch).patch(
             f"/categories/{ROOT_ID}",
@@ -148,7 +148,7 @@ def test_a_seeded_category_keeps_its_name_but_not_its_bucket(monkeypatch: Monkey
         _teardown()
     assert renamed.status_code == 422
 
-    connection = CategoriesConnection(existing=(True, "Food & Dining"), created=ROOT)
+    connection = CategoriesConnection(existing=(True, "Food & Dining", "want", True), created=ROOT)
     try:
         rebucketed = _client(connection, monkeypatch).patch(
             f"/categories/{ROOT_ID}",
@@ -165,3 +165,34 @@ def test_a_seeded_category_keeps_its_name_but_not_its_bucket(monkeypatch: Monkey
     ), "the seed row itself is never rewritten"
     merged = next(s for s in connection.statements if "COALESCE(o.bucket" in s)
     assert merged
+
+
+def test_an_override_stores_only_the_divergence(monkeypatch: MonkeyPatch) -> None:
+    """A pinned copy of an unchanged field would hide later seed corrections the owner never
+    overrode; reverting to the seed removes the override entirely."""
+    connection = CategoriesConnection(existing=(True, "Food & Dining", "want", True), created=ROOT)
+    try:
+        _client(connection, monkeypatch).patch(
+            f"/categories/{ROOT_ID}",
+            json={"name": "Food & Dining", "bucket": "need", "isActive": True},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    upsert_at = next(
+        i for i, s in enumerate(connection.statements) if "INSERT INTO category_override" in s
+    )
+    assert "need" in connection.params[upsert_at]
+    assert None in connection.params[upsert_at], "the unchanged activity stays NULL — inherit"
+
+    connection = CategoriesConnection(existing=(True, "Food & Dining", "want", True), created=ROOT)
+    try:
+        _client(connection, monkeypatch).patch(
+            f"/categories/{ROOT_ID}",
+            json={"name": "Food & Dining", "bucket": "want", "isActive": True},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    assert any("DELETE FROM category_override" in s for s in connection.statements)
+    assert not any("INSERT INTO category_override" in s for s in connection.statements)
