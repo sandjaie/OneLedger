@@ -44,6 +44,9 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
       });
       onSaved();
     } catch (error) {
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+        return;
+      }
       setProblem(
         error instanceof ApiError ? error.detail : "The household could not be saved. Try again.",
       );

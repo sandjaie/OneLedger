@@ -90,4 +90,15 @@ describe("Settings › Household", () => {
     );
     expect(screen.getByLabelText<HTMLInputElement>("Household name").disabled).toBe(false);
   });
+
+  it("does not convert an expired session into an inline save error", async () => {
+    const save = vi.fn().mockRejectedValue(new ApiError(401, "not signed in"));
+    const onSaved = vi.fn();
+    render(<HouseholdForm household={household} currencies={currencies}
+      save={save} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "Save household" }));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
 });

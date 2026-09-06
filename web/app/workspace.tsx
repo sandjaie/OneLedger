@@ -78,11 +78,14 @@ export function Workspace({
     let current = true;
     request<HouseholdResponse>("/household")
       .then(async (configuration) => {
-        const catalogue = await request<Array<CurrencyRow>>("/currencies");
         if (!current) return;
         setHousehold(configuration);
-        setCurrencies(catalogue);
         setCurrency(configuredCurrency(configuration));
+        if (activeSection === "settings") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
+        }
         setState("ready");
       })
       .catch((error: unknown) => {
@@ -94,7 +97,7 @@ export function Workspace({
     return () => {
       current = false;
     };
-  }, [attempt, request]);
+  }, [attempt, request, activeSection]);
 
   useEffect(() => () => fxRequest.current?.controller.abort(), []);
 
@@ -255,13 +258,19 @@ export function Workspace({
                   currencies={currencies}
                   household={household}
                   onSaved={() => setAttempt((value) => value + 1)}
-                  save={(body: HouseholdUpdate) =>
-                    request<void>("/household", {
-                      method: "PATCH",
-                      body: JSON.stringify(body),
-                      headers: { "Content-Type": "application/json" },
-                    })
-                  }
+                  save={async (body: HouseholdUpdate) => {
+                    try {
+                      await request<void>("/household", {
+                        method: "PATCH",
+                        body: JSON.stringify(body),
+                        headers: { "Content-Type": "application/json" },
+                      });
+                    } catch (error) {
+                      const next = authDestination(error);
+                      if (next) leaveForAuth(next);
+                      throw error;
+                    }
+                  }}
                 />
               )}
 
