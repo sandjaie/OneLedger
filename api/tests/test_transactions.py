@@ -74,7 +74,7 @@ class LedgerConnection:
         self,
         *,
         account: tuple[object, ...] | None = ("XAE", None, None, None),
-        container: tuple[object, ...] | None = (False,),
+        container: tuple[object, ...] | None = (False, None),
         pair: tuple[object, ...] | None = ("XIN", "XAE"),
         fx: dict[tuple[str, str], tuple[object, ...]] | None = None,
         rows: list[tuple[object, ...]] | None = None,
@@ -277,7 +277,7 @@ def test_clearing_the_category_restores_the_unclassified_contract(
 ) -> None:
     """An unclassified transaction is confidence 0.000 and queues for review — including one
     the owner just cleared."""
-    connection = LedgerConnection(rows=[FETCHED_ROW])
+    connection = LedgerConnection(rows=[FETCHED_ROW], container=(False, CATEGORY_ID))
     try:
         response = _client(connection, monkeypatch).patch(
             f"/transactions/{TXN_ID}",
@@ -492,7 +492,7 @@ def test_a_posting_before_the_anchor_is_refused(monkeypatch: MonkeyPatch) -> Non
 
 def test_recategorizing_a_split_container_is_refused(monkeypatch: MonkeyPatch) -> None:
     """Reports read the children; editing the container would change nothing they show."""
-    connection = LedgerConnection(rows=[FETCHED_ROW], container=(True,))
+    connection = LedgerConnection(rows=[FETCHED_ROW], container=(True, None))
     try:
         response = _client(connection, monkeypatch).patch(
             f"/transactions/{TXN_ID}",
@@ -588,3 +588,50 @@ def test_an_overflowing_conversion_is_a_422(monkeypatch: MonkeyPatch) -> None:
     finally:
         _teardown()
     assert response.status_code == 422
+
+
+def test_omitting_notes_is_invalid_and_null_is_the_clear() -> None:
+    """Full replacement means full: a payload without notes would silently erase a note."""
+    with pytest.raises(ValidationError):
+        transactions.TransactionUpdate.model_validate({"categoryId": None})
+    assert transactions.TransactionUpdate.model_validate({"categoryId": None, "notes": None})
+
+
+def test_a_note_only_edit_keeps_the_classification_story(monkeypatch: MonkeyPatch) -> None:
+    """Resending the unchanged category must not relabel a rule's work as the owner's."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], container=(False, CATEGORY_ID))
+    try:
+        _client(connection, monkeypatch).patch(
+            f"/transactions/{TXN_ID}",
+            json={"categoryId": str(CATEGORY_ID), "notes": "checked"},
+            headers=ORIGIN,
+        )
+    finally:
+        _teardown()
+    update = next(s for s in connection.statements if "UPDATE transaction" in s)
+    assert "classified_by" not in update
+    assert "classification_rule_id" not in update
+
+
+def test_mixed_leg_dates_are_refused(monkeypatch: MonkeyPatch) -> None:
+    """One row stores one rate date; two legs from different days cannot be labelled by
+    either one honestly."""
+    from datetime import date as _date
+
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW],
+        account=("XZZ", None, None, None),
+        pair=("XIN", "XAE"),
+        fx={
+            ("XZZ", "XIN"): (Decimal("5"), False, None),
+            ("XAE", "XIN"): (Decimal("3"), True, _date(2024, 1, 31)),
+        },
+    )
+    try:
+        response = _client(connection, monkeypatch).post(
+            "/transactions", json=CREATE, headers=ORIGIN
+        )
+    finally:
+        _teardown()
+    assert response.status_code == 422
+    assert "different dates" in response.json()["detail"]

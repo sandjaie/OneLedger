@@ -113,11 +113,12 @@ class TransactionCreate(BaseModel):
 
 
 class TransactionUpdate(BaseModel):
-    """The two owner-editable fields, always sent. Money is immutable (I1/I5); the database
-    trigger enforces what this model does not offer."""
+    """The two owner-editable fields, always sent — omitting notes would silently erase an
+    existing note, so it is required and an explicit null is the deliberate clear. Money is
+    immutable (I1/I5); the database trigger enforces what this model does not offer."""
 
     categoryId: UUID | None
-    notes: str | None = None
+    notes: str | None
 
 
 COLUMNS = """t.id, t.account_id, a.name, t.booked_date, t.description_raw, t.description_clean,
@@ -248,11 +249,22 @@ def _frozen(
         return rate_sb, Decimal(1), carried, effective
     rate_cb, carried_cb, effective_cb = _rate_leg(cur, on, txn_currency, base)
     rate_sb, carried_sb, effective_sb = _rate_leg(cur, on, secondary, base)
+    # One row stores one rate date and one carried flag. Two legs from different days cannot
+    # be labelled by either one honestly, so the mismatch is refused with the cure named —
+    # backfilling rates for the booked date makes the legs agree.
+    if effective_cb != effective_sb:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the FX legs for {on} come from different dates ({effective_cb} and "
+                f"{effective_sb}); backfill rates for the booked date first"
+            ),
+        )
     return (
         rate_cb,
         rate_cb / rate_sb,
         carried_cb or carried_sb,
-        min(effective_cb, effective_sb),
+        effective_cb,
     )
 
 
@@ -525,7 +537,8 @@ def update_transaction(
             # A split parent is a container: reports read its children, so recategorizing it
             # would change the ledger row while every report kept the old categories.
             cur.execute(
-                """SELECT EXISTS (SELECT FROM transaction c WHERE c.parent_transaction_id = %s)
+                """SELECT EXISTS (SELECT FROM transaction c WHERE c.parent_transaction_id = %s),
+                          t.category_id
                      FROM transaction t WHERE t.id = %s AND t.household_id = %s""",
                 (transaction_id, transaction_id, owner.household_id),
             )
@@ -537,28 +550,40 @@ def update_transaction(
                     status_code=409,
                     detail="a split parent is a container; recategorize its children",
                 )
-            cur.execute(
-                """UPDATE transaction
-                      SET category_id = %s, notes = %s,
-                          -- One answer to "why this category": the owner said so — or said
-                          -- nothing, which is the unclassified contract (0.000, queued).
-                          classified_by = %s::classified_by,
-                          is_reviewed = %s,
-                          classification_rule_id = NULL,
-                          classification_confidence = %s,
-                          updated_at = now()
-                    WHERE id = %s AND household_id = %s
-                   RETURNING id""",
-                (
-                    body.categoryId,
-                    body.notes,
-                    "user_manual" if body.categoryId is not None else "unclassified",
-                    body.categoryId is not None,
-                    Decimal("1.000") if body.categoryId is not None else Decimal("0.000"),
-                    transaction_id,
-                    owner.household_id,
-                ),
-            )
+            category_unchanged = container[1] == body.categoryId
+            if category_unchanged:
+                # A note-only edit changes no classification: the audit trail must not claim
+                # the owner chose a category they did not change.
+                cur.execute(
+                    """UPDATE transaction
+                          SET notes = %s, updated_at = now()
+                        WHERE id = %s AND household_id = %s
+                       RETURNING id""",
+                    (body.notes, transaction_id, owner.household_id),
+                )
+            else:
+                cur.execute(
+                    """UPDATE transaction
+                          SET category_id = %s, notes = %s,
+                              -- One answer to "why this category": the owner said so — or
+                              -- said nothing, which is unclassified (0.000, queued).
+                              classified_by = %s::classified_by,
+                              is_reviewed = %s,
+                              classification_rule_id = NULL,
+                              classification_confidence = %s,
+                              updated_at = now()
+                        WHERE id = %s AND household_id = %s
+                       RETURNING id""",
+                    (
+                        body.categoryId,
+                        body.notes,
+                        "user_manual" if body.categoryId is not None else "unclassified",
+                        body.categoryId is not None,
+                        Decimal("1.000") if body.categoryId is not None else Decimal("0.000"),
+                        transaction_id,
+                        owner.household_id,
+                    ),
+                )
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="no such transaction")
             return _one(cur, transaction_id, owner.household_id)

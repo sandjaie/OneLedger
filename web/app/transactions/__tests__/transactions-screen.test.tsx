@@ -76,6 +76,13 @@ const food: CategoryRow = {
 };
 
 const groceries: CategoryRow = { ...food, id: "cat-groceries", name: "Groceries", slug: "groceries" };
+const coffee: CategoryRow = {
+  ...food,
+  id: "cat-coffee",
+  name: "Coffee",
+  slug: "food-dining-coffee",
+  parentId: "cat-food",
+};
 
 function transaction(overrides: Partial<TransactionRow>): TransactionRow {
   return {
@@ -116,7 +123,7 @@ function renderScreen(
   return render(
     <TransactionsScreen
       accounts={[account]}
-      categories={[food, groceries]}
+      categories={[food, groceries, coffee]}
       currencies={currencies}
       currency={reporting}
       household={household}
@@ -320,4 +327,14 @@ it("disables category editing on a split container", () => {
   const select = screen.getByLabelText("Category for COFFEE") as HTMLSelectElement;
   expect(select.disabled).toBe(true);
   expect(select.title).toContain("recategorize its children");
+});
+
+
+it("labels a subcategory with its parent path", () => {
+  renderScreen([transaction({})], 1);
+  const entryForm = screen.getByRole("form", { name: "Record a transaction" });
+  const entryCategory = within(entryForm).getByLabelText("Category");
+  expect(
+    within(entryCategory).queryByRole("option", { name: "Food & Dining → Coffee" }),
+  ).not.toBeNull();
 });

@@ -138,6 +138,13 @@ export function TransactionsScreen({
   });
 
   const categoryName = new Map(categories.map((row) => [row.id, row.name]));
+  // A child option names its parent too — "Insurance → Health" and "Health" are different
+  // classifications, and a bare leaf name cannot tell them apart.
+  function categoryLabel(row: CategoryRow) {
+    if (!row.parentId) return row.name;
+    const parent = categoryName.get(row.parentId);
+    return parent ? `${parent} → ${row.name}` : row.name;
+  }
   const active = accounts.filter((account) => account.isActive);
 
   // Original currency first, converted second — never the conversion alone (UI section 4).
@@ -303,9 +310,7 @@ export function TransactionsScreen({
           >
             <option value="">Unclassified</option>
             {categories.filter((row) => row.isActive).map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.parentId ? `— ${row.name}` : row.name}
-              </option>
+              <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
             ))}
           </select>
         </label>
@@ -352,9 +357,7 @@ export function TransactionsScreen({
           >
             <option value="">All categories</option>
             {categories.map((row) => (
-              <option key={row.id} value={row.id}>
-                {row.parentId ? `— ${row.name}` : row.name}
-              </option>
+              <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
             ))}
           </select>
         </label>
@@ -527,9 +530,7 @@ export function TransactionsScreen({
                       <option value="">Unclassified</option>
                       {categories.filter((one) => one.isActive || one.id === row.categoryId).map(
                         (one) => (
-                          <option key={one.id} value={one.id}>
-                            {one.parentId ? `— ${one.name}` : one.name}
-                          </option>
+                          <option key={one.id} value={one.id}>{categoryLabel(one)}</option>
                         ),
                       )}
                     </select>
