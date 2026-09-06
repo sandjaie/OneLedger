@@ -55,9 +55,12 @@ restatement here.
 
 ## Workspace and branches
 
-**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — the active repository checkout, recorded
-before dispatch as AGENTS.md requires. Confirm with `git rev-parse --show-toplevel`; run every
-command repo-relative from that root. No new worktrees; one implementation agent at a time.
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — the dispatch machine's active repository
+checkout, recorded before dispatch as AGENTS.md requires. Confirm with
+`git rev-parse --show-toplevel`; run every command repo-relative from that root. If
+implementation ever moves machines, the orchestrator re-records this line before dispatch —
+an agent never substitutes a path mid-task. No new worktrees; one implementation agent at a
+time.
 
 **Base and PR target for every task:** `feature/phase-1-trusted-financial-position`. Phase
 completion PRs to `develop` only on a separate owner request (`docs/git-workflow.md`).
@@ -73,8 +76,11 @@ cd "$(git rev-parse --show-toplevel)/web" && npm run lint && npm run typecheck &
 ```
 
 ```bash
-docker compose run --rm flyway migrate && for f in db/tests/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
+docker compose run --rm flyway migrate && scripts/hooks/db-tests.sh
 ```
+
+(`scripts/hooks/db-tests.sh` derives the DSN from `.env` via `scripts/dsn.sh`; `DATABASE_URL`
+is normally unset and is never assumed.)
 
 The pre-push hook runs all three; a failing push is fixed, never bypassed.
 
@@ -116,7 +122,11 @@ including `v_transaction_reportable`); create `db/tests/0007_transactions.sql`; 
 **Contracts:** `0007` DDL is the shape: frozen `amount_base`/`amount_secondary`, `classified_by`
 + `classification_rule_id`, `source` with provenance (`source = 'statement_import'` requires
 `source_document_id`, I6), `dedupe_hash` unique on `(household_id, account_id, dedupe_hash)`,
-`fx_rate_is_carried`/`fx_rate_date` labels (I7).
+`fx_rate_is_carried`/`fx_rate_date` labels (I7). Columns referencing tables that arrive in
+later milestones (`source_document_id`, `statement_layout_id`, `classification_rule_id`, the
+import-batch reference) are created as bare UUID columns per `schema.md`'s deferred-foreign-key
+pattern (`0018`); their constraints are applied by Task 22's migration, once every target
+exists.
 **Invariants/security:** I1 — `UPDATE` of `amount` or `currency` raises (trigger); I2 — signed
 balances sum with no `CASE`; I5 — frozen columns never recomputed; the view excludes transfers
 and duplicates by construction (I3, I4 groundwork).
@@ -137,7 +147,10 @@ modify `api/oneledger/main.py`; add the routes to `api-contracts.html` §2 and r
 `web/types/api/` in the same delivery.
 **Interfaces (produced):** `POST /transactions` (create; freezes `amount_base`/
 `amount_secondary` from the booked-date FX row, labelling a carried-forward rate per I7),
-`GET /transactions` (filter/sort/search with paging; reads the view for reportable figures),
+`GET /transactions` (filter/sort/search with paging; a household-scoped ledger query over the
+base table — transfer legs and duplicates stay visible and labelled per IA §4's 🔗 peer link —
+while spending and income aggregates read `v_transaction_reportable`; the reporting static
+check governs reports, and this ledger endpoint is its one deliberate non-report reader),
 `PATCH /transactions/{id}` (category override → `classified_by='user_manual'`). All money as
 decimal strings; all statements household-scoped.
 **Invariants/security:** every frozen write takes the household row lock **before** reading the
@@ -309,7 +322,10 @@ Entry: M2 merged (parallel with M3 allowed).
 `classification_rule` store, stamping every transaction.
 **Files:** create `db/migrations/V13__classification_rules.sql` (implements `schema.md`
 `0009`), `api/oneledger/classify.py` (+ tests), `db/tests/0009_rules.sql`; wire the import
-pipeline and manual paths to the single caller; docs updated same commit.
+pipeline and manual paths to the single caller; docs updated same commit. Creating
+`classification_rule` completes the targets of the ledger's deferred references, so V13 also
+applies the `schema.md` `0018` foreign-key clauses whose targets now all exist, with a test
+behaviour proving an orphan reference is rejected afterwards.
 **Contracts:** cascade order (first match wins, stops): user override → user rule (priority
 asc, default 100) → merchant alias → prior match (same account + text) → seed rule (priority
 500) → unclassified → review. Confidence fixed: 1.000 / 0.980 / 0.950 / 0.900 (fuzzy 0.700) /
@@ -434,8 +450,9 @@ Entry: M2 merged (schedulable alongside M6/M7).
 **Outcome:** Document library with bidirectional traceability and the owner export (open
 tabular records + selected originals with provenance and a coverage manifest, F12).
 **Files:** vault screen under `web/app/documents/` (IA §6; the Statement-import artboard's
-Documents nav); export route; deletion-blocked-while-referenced constraint if not already in
-V11.
+Documents nav); export route. The deletion-blocked-while-referenced constraint belongs in
+Task 16's V11; if it lands here instead it takes its own next-version forward migration — an
+applied V11 is never edited (ADR-0015).
 **Required test behaviours (failing first):** every imported transaction links to document,
 page and row; deleting a referenced document is refused; re-upload detected before parsing;
 disk usage reported for documents and database separately; export manifest names coverage.
