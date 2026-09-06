@@ -353,4 +353,5 @@ def test_sort_is_a_bounded_contract(monkeypatch: MonkeyPatch) -> None:
     assert ok.status_code == 200
     listing = next(s for s in connection.statements if "ORDER BY" in s)
     assert "t.amount ASC" in listing
+    assert "t.id DESC" in listing, "a unique tie-breaker keeps offset pages disjoint"
     assert bad.status_code == 422

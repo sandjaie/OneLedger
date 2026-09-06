@@ -122,14 +122,17 @@ def create_category(
                     (owner.household_id, body.name, _slug(body.name), body.kind, body.bucket),
                 )
             else:
-                # A child inherits its parent's kind, and its bucket unless one is given.
+                # A child inherits its parent's kind, and its EFFECTIVE bucket unless one is
+                # given — the household's override on the parent, not the seed's original.
                 # The parent must be visible to this household; the two-level trigger
                 # rejects a child of a child.
                 cur.execute(
                     f"""INSERT INTO category (household_id, parent_id, name, slug, kind, bucket)
                         SELECT %s, p.id, %s, p.slug || '-' || %s, p.kind,
-                               COALESCE(%s::category_bucket, p.bucket)
+                               COALESCE(%s::category_bucket, o.bucket, p.bucket)
                           FROM category p
+                          LEFT JOIN category_override o
+                                 ON o.category_id = p.id AND o.household_id = %s
                          WHERE p.id = %s
                            AND (p.household_id IS NULL OR p.household_id = %s)
                         RETURNING {COLUMNS}""",
@@ -138,6 +141,7 @@ def create_category(
                         body.name,
                         _slug(body.name),
                         body.bucket,
+                        owner.household_id,
                         body.parentId,
                         owner.household_id,
                     ),

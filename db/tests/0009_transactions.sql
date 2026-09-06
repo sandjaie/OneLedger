@@ -343,6 +343,33 @@ BEGIN
       'a released child counts again';
   END;
 
+  -- The frozen sums balance too: reports read amount_base/amount_secondary, and children
+  -- replace their parent there. Native agreement alone is not enough.
+  DECLARE p5 UUID;
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -60.0000, base,
+              '2024-02-09', 20, 1, -1200.0000, -60.0000, 'expense', 'manual', 'p5')
+      RETURNING id INTO p5;
+    BEGIN
+      INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                               currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                               amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                               parent_transaction_id)
+        VALUES (h, a_card, '2024-02-09', 'SPLIT FIVE', -30.0000, base,
+                '2024-02-09', 20, 1, -600.0000, -30.0000, 'expense', 'manual', 'p5a', p5),
+               (h, a_card, '2024-02-09', 'SPLIT FIVE', -30.0000, base,
+                '2024-02-09', 20, 1, -500.0000, -30.0000, 'expense', 'manual', 'p5b', p5);
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'children whose frozen sums diverge from the parent must be rejected';
+      END IF;
+    END;
+  END;
+
   -- Deleting the latest posting rewinds the as-of to a date the ledger still supports (I7).
   DELETE FROM transaction WHERE dedupe_hash = 'd6';
   ASSERT (SELECT current_balance FROM account WHERE id = a_sav) = 95000.0000,
