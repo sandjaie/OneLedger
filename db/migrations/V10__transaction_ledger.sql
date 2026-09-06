@@ -272,6 +272,13 @@ BEGIN
     OR NEW.tags                  IS DISTINCT FROM parent.tags THEN
       RAISE EXCEPTION 'a split child inherits everything but amount, category and notes; % diverges from parent %', NEW.id, parent.id;
     END IF;
+    -- Each leaf's frozen amounts derive from its own amount and the inherited rates, one
+    -- cent of allocated residual allowed: totals that balance while one child hoards the
+    -- converted value would report false per-category spending.
+    IF abs(NEW.amount_base - round(NEW.amount * NEW.fx_rate_to_base, 4)) > 0.0001
+    OR abs(NEW.amount_secondary - round(NEW.amount * NEW.fx_rate_to_secondary, 4)) > 0.0001 THEN
+      RAISE EXCEPTION 'a split child''s frozen amounts must derive from its amount and rates: %', NEW.id;
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
@@ -371,11 +378,21 @@ BEGIN
     RAISE EXCEPTION 'transaction currency % must match the account''s %; the bank''s conversion belongs in original_amount',
       rtrim(NEW.currency), rtrim(account_currency);
   END IF;
+  -- The category is the seed set's or this household's own: the service bypasses RLS and the
+  -- ledger joins categories by id, so a foreign reference would leak another tenant's name.
+  IF NEW.category_id IS NOT NULL THEN
+    IF EXISTS (SELECT FROM category c
+                WHERE c.id = NEW.category_id
+                  AND c.household_id IS NOT NULL
+                  AND c.household_id <> NEW.household_id) THEN
+      RAISE EXCEPTION 'category % belongs to another household', NEW.category_id;
+    END IF;
+  END IF;
   RETURN NEW;
 END $$;
 
 CREATE TRIGGER trg_transaction_currency
-  BEFORE INSERT ON transaction
+  BEFORE INSERT OR UPDATE OF category_id ON transaction
   FOR EACH ROW EXECUTE FUNCTION assert_transaction_currency_matches_account();
 
 -- The account's materialised balance follows the ledger: opening_balance + the sum of its
