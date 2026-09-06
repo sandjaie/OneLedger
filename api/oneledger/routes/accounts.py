@@ -12,7 +12,7 @@ from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
@@ -21,6 +21,20 @@ router = APIRouter(tags=["accounts"])
 
 # Money crosses the wire as a decimal string in both directions. api-contracts.html section 6.
 MONEY = re.compile(r"-?\d{1,16}(\.\d{1,4})?")
+# Same set as set_account_class() in V3. A second copy is the drift risk we accept so a
+# positive liability cannot increase net worth before the trigger runs.
+LIABILITY_TYPES = frozenset(
+    {
+        "credit_card",
+        "personal_loan",
+        "home_loan",
+        "auto_loan",
+        "education_loan",
+        "gold_loan",
+        "loan_other",
+        "payable",
+    }
+)
 
 
 def _money(value: str | None) -> str | None:
@@ -49,6 +63,11 @@ def _out(value: Decimal | None) -> str | None:
 
 def _first_line(exc: Exception) -> str:
     return str(exc).splitlines()[0]
+
+
+def _liability_opening_must_not_increase_net_worth(account_type: str, opening: str) -> None:
+    if account_type in LIABILITY_TYPES and Decimal(opening) > 0:
+        raise ValueError("a liability opening balance must be zero or negative")
 
 
 class AccountRow(BaseModel):
@@ -121,6 +140,11 @@ class AccountCreate(BaseModel):
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
 
+    @model_validator(mode="after")
+    def liability_opening_is_signed(self) -> AccountCreate:
+        _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
+        return self
+
 
 class AccountUpdate(BaseModel):
     """Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
@@ -153,6 +177,11 @@ class AccountUpdate(BaseModel):
     @classmethod
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
+
+    @model_validator(mode="after")
+    def liability_opening_is_signed(self) -> AccountUpdate:
+        _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
+        return self
 
 
 class InstitutionCreate(BaseModel):
