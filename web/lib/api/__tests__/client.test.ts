@@ -2,8 +2,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiFetch } from "@/lib/api/client";
 
+const stalled = <T>(signal?: AbortSignal | null) =>
+  new Promise<T>((_resolve, reject) => {
+    if (signal?.aborted) reject(signal.reason);
+    else signal?.addEventListener(
+      "abort", () => reject(signal.reason), { once: true },
+    );
+  });
+const stalledFetch = (_url: RequestInfo | URL, init?: RequestInit) =>
+  stalled<Response>(init?.signal);
+
 describe("apiFetch", () => {
   afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -83,5 +95,47 @@ describe("apiFetch", () => {
       detail: "sign in required",
       message: "401: sign in required",
     });
+  });
+
+  it("keeps the timeout with a caller signal when AbortSignal.any is unavailable", async () => {
+    vi.useFakeTimers();
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    vi.stubGlobal("AbortSignal", { timeout });
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const result = apiFetch("/household", { signal: new AbortController().signal });
+    const rejection = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+  });
+
+  it("keeps the timeout active while the response body is read", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => stalled(init?.signal),
+      } as Response),
+    ));
+    const result = apiFetch("/household");
+    const rejection = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+  });
+
+  it("preserves caller cancellation while a timeout is active", async () => {
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const caller = new AbortController();
+    const result = apiFetch("/fx/on", { signal: caller.signal });
+    caller.abort(new DOMException("superseded", "AbortError"));
+    await expect(result).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("rejects immediately when the caller signal is already aborted", async () => {
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const caller = new AbortController();
+    caller.abort(new DOMException("superseded", "AbortError"));
+    await expect(apiFetch("/fx/on", { signal: caller.signal }))
+      .rejects.toMatchObject({ name: "AbortError" });
   });
 });
