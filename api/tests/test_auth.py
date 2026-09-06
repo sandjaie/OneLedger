@@ -113,10 +113,15 @@ def test_session_lifetime_must_be_exactly_twelve_hours(monkeypatch: pytest.Monke
     assert client_with(token).get("/whoami").status_code == 403
 
 
+@pytest.mark.parametrize(
+    ("cookie_secure", "secure_attribute"),
+    [("0", False), ("1", True)],
+)
 def test_logout_revokes_the_exact_session_and_rejects_replay(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, cookie_secure: str, secure_attribute: bool
 ) -> None:
     revoked: set[UUID] = set()
+    monkeypatch.setenv("COOKIE_SECURE", cookie_secure)
     monkeypatch.setattr(
         auth,
         "_lookup_active_session",
@@ -136,7 +141,14 @@ def test_logout_revokes_the_exact_session_and_rejects_replay(
 
     assert response.status_code == 204
     assert SESSION_ID in revoked
-    assert "session=" in response.headers["set-cookie"]
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith("session=")
+    assert "Max-Age=0" in cookie
+    assert "expires=" in cookie.lower()
+    assert "Path=/" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert ("Secure" in cookie) is secure_attribute
     client.cookies.set("session", old_cookie)
     assert client.get("/whoami").status_code == 403
 
