@@ -1,7 +1,8 @@
 # OneLedger Implementation Plan
 
 > **For agentic workers:** Use `superpowers:executing-plans` to execute a scoped task plan.
-> Use `superpowers:subagent-driven-development` when parallel agent work is explicitly authorized.
+> Use `superpowers:subagent-driven-development` for authorized sequential agent implementation
+> in the current repository checkout. The owner's no-worktree preference overrides skill defaults.
 > This is the master sequencing plan; each feature has its own detailed plan with checkbox steps,
 > exact files/interfaces, failing checks, implementation and verification before execution.
 
@@ -49,6 +50,14 @@ infrastructure or dependency is selected by this documentation update.
 - Preserve the current repository review process: scoped branches, at most 500 lines of implementation
   and test code per PR (docs/config/generated excluded), required checks and Codex review before merge.
 - New implementation plans go in `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
+- Each task plan or spec declares its exact `Workspace`, `Branch` and `Base and PR target` before
+  dispatch; split deliveries declare a branch each. Use `feature/`, `fix/`, `docs/` or `chore/`.
+- Work sequentially in `/Users/sandjaieravi/dev/OneLedger`; do not create Git worktrees. The
+  orchestrator preserves local changes and owns branch switches. Finish any agent/reviewer using
+  the checkout before switching it to another task.
+- Create every PR from [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md),
+  recording what changed, implementation details, actual checks/results and any remaining limits.
+  Address Cloud findings through the same implementer and merge before starting the next task.
 
 ## 1. Baseline and the next authorized development step
 

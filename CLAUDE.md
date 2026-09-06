@@ -4,8 +4,8 @@
 
 | Need | Open |
 |---|---|
-| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — remaining Phase 0 work; original Tasks 1–9 delivered by GitHub PRs #3–#10 |
-| What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — seven PRs, the review gate, the 500-line cap |
+| What to type next | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — implementation delivered; live Google verification remains |
+| What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — branch/review workflow and the 500-line cap |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
@@ -26,10 +26,10 @@ All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
-Phase 0 is in progress. GitHub PRs #3–#10 are merged into `feature/phase-0-foundations`, covering
-original Tasks 1–9, the reviewed web foundation, revocable owner sessions, protected logout/CSRF and
-owner-scoped household configuration. The current delivery adds Google OIDC bootstrap before Task 11
-money/navigation work. Product-review additions do not expand Phase 0.
+Phase 0 is in progress pending live Google identity verification. GitHub PRs #3–#17 delivered
+original Tasks 1–11 and the final review follow-ups into `feature/phase-0-foundations`.
+See `docs/superpowers/reports/2026-09-06-phase-0-verification.md` for actual evidence and remaining
+gates. Product-review additions do not expand Phase 0.
 
 ## Rules you will otherwise break by reflex
 
@@ -50,7 +50,7 @@ and savings-rate queries read `v_transaction_reportable` and the frozen `amount_
 `amount_secondary` columns. Both are static checks, not conventions.
 
 **The authorization boundary is `require_owner()` in the API service** (ADR-0013, refined by
-ADR-0016). Every financial route depends on it. `/health` and the future `/auth/login` and
+ADR-0016). Every financial route depends on it. `/health` and the `/auth/login` and
 `/auth/callback` bootstrap routes are the complete public set. RLS is depth, not the wall — the
 service connects privileged and bypasses it. Every `SECURITY DEFINER` function calls
 `assert_is_owner()` first. The UI is never the boundary.
@@ -91,6 +91,26 @@ test anything. Every step states its expected output — run the command and com
 
 **Branches** carry a type prefix and say what is inside them: `feature/`, `fix/`, `docs/`,
 `chore/`. Phase 0 work branches from `feature/phase-0-foundations` and merges back into it.
+
+**Sequential agents use the current checkout.** The owner requests development in
+`/Users/sandjaieravi/dev/OneLedger`, with no Git worktrees. This preference overrides skill defaults
+that request an isolated worktree. Do not remove existing worktrees as part of this preference change.
+Only one implementation agent may work at a time. Wait for any reviewer using this checkout to
+finish before changing its branch or files; do not run builds and type checks concurrently against
+the same generated output.
+
+**Put the branch in the plan or spec before dispatch.** Every task records `Workspace`, `Branch`
+and `Base and PR target`, using exact values and the prefixes above. Each split delivery has its
+own declared branch. Pass that file to the implementer; do not leave the branch name only in a
+chat message or let the agent invent another one. The orchestrator checks local changes, switches
+branches and dispatches the agent. Preserve unrelated changes; never reset or overwrite them.
+
+**Use the repository PR template.** After implementation and local review, the orchestrator creates
+the PR from `.github/PULL_REQUEST_TEMPLATE.md`, filled with the actual change, implementation and
+verification evidence. Record failures, skipped checks and reasons honestly; do not pre-check
+success. Send Cloud findings to the same implementer on the same branch, re-review the current
+head, merge to the recorded target, then synchronize that target before starting the next task.
+Integration-to-main still requires a separate owner request.
 
 **The hooks are the gate, not the pull request.** Install once:
 

@@ -30,6 +30,11 @@ Read it together with [the original task reference](../phase-0-foundations.md) a
   requests re-review. A clean bot review/comment for the current head counts as approval; silence does not.
 - Hooks and required checks run without bypass. Do not remove real database or document volumes.
 - Controller manages branches/PRs/merges; implementers may commit only their scoped task changes.
+- For future work, use the current checkout `/Users/sandjaieravi/dev/OneLedger` sequentially;
+  do not create Git worktrees. Declare exact branch and base/PR target in each task plan/spec before
+  dispatch. The controller waits for agents/reviewers using the checkout before switching branches.
+- Create PRs from the repository template with actual changes and check results. This workflow
+  preference applies going forward; the completed deliveries' historical evidence remains intact.
 
 ## Preflight rulings
 
