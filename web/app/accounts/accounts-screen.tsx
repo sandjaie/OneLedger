@@ -149,6 +149,20 @@ function formatDay(isoDate: string) {
   return `${day.replace(/^0/, "")} ${MONTHS[month]} ${year}`;
 }
 
+function asOfFor(rows: Array<AccountRow>, currency: string) {
+  const dates = [
+    ...new Set(
+      rows
+        .filter((row) => row.includeInNetWorth && row.currency === currency)
+        .map((row) => row.currentBalanceAsOf?.slice(0, 10))
+        .filter((day): day is string => Boolean(day)),
+    ),
+  ].sort();
+  if (dates.length === 0) return "";
+  if (dates.length === 1) return ` as of ${formatDay(dates[0])}`;
+  return ` as of ${formatDay(dates[0])}–${formatDay(dates[dates.length - 1])}`;
+}
+
 function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
   return (
     currencies.find((row) => row.code === code) ?? {
@@ -163,6 +177,10 @@ function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
 
 function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
+}
+
+function isMask(value: string) {
+  return [...value].reduce((count, ch) => count + (ch >= "0" && ch <= "9" ? 1 : 0), 0) <= 4;
 }
 
 function signedOpening(accountType: string, value: string) {
@@ -193,7 +211,7 @@ function toCreate(draft: Draft): AccountCreate {
     openingBalance: signedOpening(draft.accountType, draft.openingBalance),
     openingBalanceDate: draft.openingBalanceDate,
     openingBalanceNote: draft.openingBalanceNote || null,
-    creditLimit: draft.creditLimit || null,
+    creditLimit: draft.accountType === "credit_card" ? draft.creditLimit || null : null,
   };
 }
 
@@ -213,7 +231,7 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
     openingBalance: signedOpening(draft.accountType, draft.openingBalance),
     openingBalanceDate: draft.openingBalanceDate,
     openingBalanceNote: draft.openingBalanceNote || null,
-    creditLimit: draft.creditLimit || null,
+    creditLimit: draft.accountType === "credit_card" ? draft.creditLimit || null : null,
     acknowledgeOpeningBalance: acknowledge,
   };
 }
@@ -295,6 +313,10 @@ export function AccountsScreen({
   }
 
   async function saveCreate() {
+    if (!isMask(draft.accountNumberMasked)) {
+      setProblem("Masked number takes a mask, not an account number: at most four digits may be visible.");
+      return;
+    }
     setBusy(true);
     setProblem(undefined);
     try {
@@ -315,6 +337,10 @@ export function AccountsScreen({
 
   async function saveEdit() {
     if (!editing) return;
+    if (!isMask(draft.accountNumberMasked)) {
+      setProblem("Masked number takes a mask, not an account number: at most four digits may be visible.");
+      return;
+    }
     setBusy(true);
     setProblem(undefined);
     try {
@@ -615,13 +641,16 @@ export function AccountsScreen({
           {balanceLabel(account)}
         </td>
         <td>
-          {account.isActive
-            ? account.currentBalanceAsOf
-              ? `Updated ${formatDay(account.currentBalanceAsOf.slice(0, 10))}`
-              : null
-            : account.closedOn
-              ? `Closed ${formatDay(account.closedOn)}`
-              : null}
+          {[
+            account.isActive
+              ? account.currentBalanceAsOf
+                ? `Updated ${formatDay(account.currentBalanceAsOf.slice(0, 10))}`
+                : null
+              : account.closedOn
+                ? `Closed ${formatDay(account.closedOn)}`
+                : null,
+            account.includeInNetWorth ? null : "Excluded from totals",
+          ].filter(Boolean).join(" · ")}
         </td>
         <td>
           {!account.openingBalanceConfirmedAt && (
@@ -702,6 +731,7 @@ export function AccountsScreen({
                       currencyOf(currencies, row.currency),
                     )}
                     {row.accountClass === "liability" ? " owed" : ""}
+                    {asOfFor(rows, row.currency)}
                   </span>
                 ))}
               </p>

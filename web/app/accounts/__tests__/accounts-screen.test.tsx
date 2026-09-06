@@ -267,6 +267,46 @@ describe("Accounts", () => {
       />,
     );
     const head = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group-head");
-    expect(head?.textContent).toContain("I 2,50,000.00 · A 1,000.00");
+    expect(head?.textContent).toContain("I 2,50,000.00 as of 15 Jan 2026 · A 1,000.00");
+  });
+
+  it("does not transmit a full account number", async () => {
+    const request = vi.fn();
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "4111111111111111" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("marks an account that is excluded from group totals", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[account({ id: "acct-off", name: "Off books", includeInNetWorth: false })]}
+        totals={[]}
+      />,
+    );
+    expect(screen.getByRole("row", { name: /Off books/ }).textContent).toContain("Excluded from totals");
+  });
+
+  it("drops a leftover credit limit when the type is not a card", async () => {
+    const request = vi.fn().mockResolvedValue(props.accounts[0]);
+    render(<AccountsScreen {...props} request={request} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
+    fireEvent.change(screen.getByLabelText("Credit limit"), { target: { value: "20000.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
+    fireEvent.change(screen.getByLabelText("Opening balance date"),
+      { target: { value: "2024-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const body = JSON.parse(request.mock.calls[0][1].body as string) as { creditLimit: string | null };
+    expect(body.creditLimit).toBeNull();
   });
 });
