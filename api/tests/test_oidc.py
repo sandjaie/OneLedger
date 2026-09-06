@@ -233,3 +233,24 @@ def test_identity_or_database_denial_gets_no_session(
     suffix = "/login?reason=authentication_failed" if failure == "database" else "/unauthorized"
     assert response.headers["location"] == "http://localhost:3000" + suffix
     assert not any(c.startswith("session=") for c in response.headers.get_list("set-cookie"))
+
+
+@pytest.mark.parametrize(
+    "missing", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"]
+)
+def test_login_without_google_configuration_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    monkeypatch.setenv(missing, "")
+    response = TestClient(app).get("/auth/login", follow_redirects=False)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "sign-in unavailable"}
+    assert "oidc_flow" not in response.cookies
+
+
+def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The RuntimeError arm of the handler: session_secret() raises when the key is unset."""
+    monkeypatch.setenv("SESSION_SECRET", "")
+    response = TestClient(app).get("/auth/login", follow_redirects=False)
+    assert response.status_code == 503
+    assert response.json() == {"detail": "sign-in unavailable"}
