@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
 from .auth import OwnerSession, require_owner, session_secret
-from .routes import auth, fx, household
+from .routes import auth, currencies, fx, household
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
@@ -53,6 +53,7 @@ async def reject_cross_origin_mutations(
 app.include_router(auth.router)
 app.include_router(fx.router)
 app.include_router(household.router)
+app.include_router(currencies.router)
 
 
 @app.get("/health")

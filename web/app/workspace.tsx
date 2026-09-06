@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { HouseholdForm } from "@/app/settings/household-form";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
-import type { FxRateResponse, HouseholdCurrency, HouseholdResponse } from "@/types/api";
+import type { CurrencyRow, FxRateResponse, HouseholdCurrency, HouseholdResponse, HouseholdUpdate } from "@/types/api";
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 const PREVIEW_VALUE = "1234567.89";
@@ -62,6 +63,7 @@ export function Workspace({
 }: Props = {}) {
   const activeSection = section ?? sectionFromPath();
   const [household, setHousehold] = useState<HouseholdResponse>();
+  const [currencies, setCurrencies] = useState<Array<CurrencyRow>>();
   const [currency, setCurrency] = useState<HouseholdCurrency>();
   const [state, setState] = useState<"loading" | "ready" | "service" | "leaving">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -75,9 +77,11 @@ export function Workspace({
   useEffect(() => {
     let current = true;
     request<HouseholdResponse>("/household")
-      .then((configuration) => {
+      .then(async (configuration) => {
+        const catalogue = await request<Array<CurrencyRow>>("/currencies");
         if (!current) return;
         setHousehold(configuration);
+        setCurrencies(catalogue);
         setCurrency(configuredCurrency(configuration));
         setState("ready");
       })
@@ -174,10 +178,22 @@ export function Workspace({
           <span className="brand-mark" aria-hidden="true">OL</span>
           <span>OneLedger</span>
         </div>
-        {state === "ready" && (
-          <button className="text-action" disabled={signingOut} onClick={logout} type="button">
-            {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
-          </button>
+        {state === "ready" && household && currency && (
+          <div className="masthead-actions">
+            <div className="currency-toggle" role="group" aria-label="Reporting currency">
+              {household.currencies.map((option) => (
+                <button
+                  aria-pressed={currency.code === option.code}
+                  key={option.code}
+                  onClick={() => selectCurrency(option)}
+                  type="button"
+                >{option.code}</button>
+              ))}
+            </div>
+            <button className="text-action" disabled={signingOut} onClick={logout} type="button">
+              {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
+            </button>
+          </div>
         )}
       </header>
 
@@ -218,16 +234,6 @@ export function Workspace({
                   <p className="section-label">Display preference</p>
                   <h2 id="currency-title">Reporting currency</h2>
                 </div>
-                <div className="currency-toggle" role="group" aria-label="Reporting currency">
-                  {household.currencies.map((option) => (
-                    <button
-                      aria-pressed={currency.code === option.code}
-                      key={option.code}
-                      onClick={() => selectCurrency(option)}
-                      type="button"
-                    >{option.code}</button>
-                  ))}
-                </div>
                 <div className="format-preview">
                   <span>Formatting preview · synthetic value</span>
                   <output aria-live="polite">{formatMoney(PREVIEW_VALUE, currency)}</output>
@@ -243,6 +249,21 @@ export function Workspace({
               <h1 className="workspace-title" id="settings-title">Settings</h1>
               <p className="lede">Choose a date to inspect recorded exchange rates, their sources and whether a prior rate was carried forward.</p>
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
+
+              {currencies && (
+                <HouseholdForm
+                  currencies={currencies}
+                  household={household}
+                  onSaved={() => setAttempt((value) => value + 1)}
+                  save={(body: HouseholdUpdate) =>
+                    request<void>("/household", {
+                      method: "PATCH",
+                      body: JSON.stringify(body),
+                      headers: { "Content-Type": "application/json" },
+                    })
+                  }
+                />
+              )}
 
               <section className="fx-card" aria-labelledby="fx-title">
                 <div>

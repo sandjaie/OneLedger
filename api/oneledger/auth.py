@@ -155,8 +155,12 @@ def bind_google_owner(subject: str, email: str) -> UUID:
                 FROM eligible e
                WHERE u.id = e.id
                  AND (u.google_subject IS NULL OR u.google_subject = %s)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM app_user other
+                    WHERE other.id <> u.id AND other.google_subject = %s
+                 )
                RETURNING u.id""",
-            (normalized, subject, subject),
+            (normalized, subject, subject, subject),
         )
         row = cur.fetchone()
     if row is None:

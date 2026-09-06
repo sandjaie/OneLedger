@@ -48,6 +48,11 @@ body {
   padding-bottom: 20px;
   border-bottom: 1px solid var(--ink);
 }
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
 
 .brand {
   display: flex;
@@ -258,13 +263,31 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .format-preview { display: grid; grid-column: 1 / -1; gap: 8px; padding-top: 24px; border-top: 1px solid var(--rule); }
 .format-preview output { font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 4rem); }
 .format-preview small { color: var(--muted); }
+.household-card,
 .fx-card {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px;
   margin-top: 44px; padding: clamp(24px, 4vw, 38px);
   border: 1px solid var(--rule); border-top: 4px solid var(--blue);
   background: rgba(255, 255, 255, 0.9);
 }
+.household-card {
+  grid-template-columns: 1fr;
+  border-top-color: var(--green);
+}
+.household-card h2,
 .fx-card h2 { margin: 5px 0 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.text-field,
+.select-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.text-field input,
+.select-field select {
+  min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule);
+  color: var(--ink); background: var(--surface);
+}
+.text-field input:focus-visible,
+.select-field select:focus-visible,
+.date-field input:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.inline-note { margin: 0; color: var(--muted); line-height: 1.5; }
+.household-card .primary-action { justify-self: start; margin-top: 0; }
 .date-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
 .date-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
 .fx-card .primary-action { justify-self: start; grid-column: 1 / -1; margin-top: 0; }
@@ -305,6 +328,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 
   .workspace-grid { grid-template-columns: 1fr; gap: 40px; padding: 54px 0; }
   .currency-card,
+  .household-card,
   .fx-card,
   .fx-result dl { grid-template-columns: 1fr; }
   .currency-toggle { justify-self: start; }

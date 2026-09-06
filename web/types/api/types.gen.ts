@@ -5,6 +5,32 @@ export type ClientOptions = {
 };
 
 /**
+ * CurrencyRow
+ */
+export type CurrencyRow = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Symbol
+     */
+    symbol: string;
+    /**
+     * Decimals
+     */
+    decimals: number;
+    /**
+     * Numberformat
+     */
+    numberFormat: 'international' | 'indian';
+};
+
+/**
  * FxRateResponse
  */
 export type FxRateResponse = {
@@ -75,6 +101,18 @@ export type HouseholdResponse = {
      */
     id: string;
     /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ownerdisplayname
+     */
+    ownerDisplayName: string;
+    /**
+     * Ownertaxresidency
+     */
+    ownerTaxResidency: string | null;
+    /**
      * Basecurrency
      */
     baseCurrency: string;
@@ -83,9 +121,39 @@ export type HouseholdResponse = {
      */
     secondaryCurrency: string;
     /**
+     * Reportingpairlocked
+     */
+    reportingPairLocked: boolean;
+    /**
      * Currencies
      */
     currencies: Array<HouseholdCurrency>;
+};
+
+/**
+ * HouseholdUpdate
+ */
+export type HouseholdUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Ownerdisplayname
+     */
+    ownerDisplayName: string;
+    /**
+     * Ownertaxresidency
+     */
+    ownerTaxResidency?: string | null;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
 };
 
 /**
@@ -285,6 +353,58 @@ export type HouseholdHouseholdGetResponses = {
 };
 
 export type HouseholdHouseholdGetResponse = HouseholdHouseholdGetResponses[keyof HouseholdHouseholdGetResponses];
+
+export type UpdateHouseholdHouseholdPatchData = {
+    body: HouseholdUpdate;
+    path?: never;
+    query?: never;
+    url: '/household';
+};
+
+export type UpdateHouseholdHouseholdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateHouseholdHouseholdPatchError = UpdateHouseholdHouseholdPatchErrors[keyof UpdateHouseholdHouseholdPatchErrors];
+
+export type UpdateHouseholdHouseholdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type UpdateHouseholdHouseholdPatchResponse = UpdateHouseholdHouseholdPatchResponses[keyof UpdateHouseholdHouseholdPatchResponses];
+
+export type CurrenciesCurrenciesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/currencies';
+};
+
+export type CurrenciesCurrenciesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CurrenciesCurrenciesGetError = CurrenciesCurrenciesGetErrors[keyof CurrenciesCurrenciesGetErrors];
+
+export type CurrenciesCurrenciesGetResponses = {
+    /**
+     * Response Currencies Currencies Get
+     *
+     * Successful Response
+     */
+    200: Array<CurrencyRow>;
+};
+
+export type CurrenciesCurrenciesGetResponse = CurrenciesCurrenciesGetResponses[keyof CurrenciesCurrenciesGetResponses];
 
 export type HealthHealthGetData = {
     body?: never;

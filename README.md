@@ -182,12 +182,13 @@ appear as column names, code identifiers, enum values or required seed rows.
 
 ## What you choose at setup
 
-Three decisions, made in `.env` and applied by the Phase 0 seed. Two more that look like
+The permitted Google address is chosen in `.env`. The household name, the owner's display
+name and tax residency, and the reporting pair are chosen in the app. Two more that look like
 decisions answer themselves. Everything else is editable in the app later.
 
 | Choice | Notes |
 |---|---|
-| **Reporting pair** — `BASE_CURRENCY`, `SECONDARY_CURRENCY` | The one that is expensive to change afterwards: both amounts are frozen per row, so switching the *pair* later is a backfill. Denominate the base where the money will eventually be spent ([§4](docs/design/multi-currency-and-fx.html)) |
+| **Reporting pair** — chosen in **Settings › Household** before the first import | The one that is expensive to change afterwards: both amounts are frozen per row, so switching the *pair* later is a backfill. Denominate the base where the money will eventually be spent ([§4](docs/design/multi-currency-and-fx.html)) |
 | **The Google account allowed to sign in** | One address. Every other is rejected even if Google authenticates it ([ADR-0004](docs/adr/0004-google-auth-single-user.html)) |
 | **History anchor date** | 36 months back by default ([ADR-0011](docs/adr/0011-36-month-history-horizon.html)) |
 | **Countries you bank in** | Not asked — derived from your accounts, and it selects the merchant rule packs ([classification §3](docs/design/classification.html)) |
