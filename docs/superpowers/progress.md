@@ -25,13 +25,13 @@ synthetic checks do not substitute for them.
 | 2 — currency-agnostic SQL fixtures | `fix/task-2-db-tests-currency-agnostic` | Complete | [PR #25](https://github.com/sandjaie/OneLedger/pull/25) |
 | 3 — V6 opening-balance current_balance | `fix/task-3-account-opening-balance` | Complete | [PR #26](https://github.com/sandjaie/OneLedger/pull/26) (with Task 4) |
 | 4 — distinct DB vs auth failures | `fix/task-3-account-opening-balance` | Complete | [PR #26](https://github.com/sandjaie/OneLedger/pull/26) (with Task 3) |
-| 5 — Compose DB identity | `feature/task-5-8-compose-household-inventory` | This PR | clubbed with 6–8 |
-| 6 — household configuration API | `feature/task-5-8-compose-household-inventory` | This PR | clubbed with 5, 7, 8 |
-| 7 — Settings › Household UI | `feature/task-5-8-compose-household-inventory` | This PR | clubbed with 5, 6, 8 |
-| 8 — account inventory schema | `feature/task-5-8-compose-household-inventory` | This PR | clubbed with 5–7 |
-| 9 — account inventory API | `feature/task-9-account-inventory-api` | Pending | |
-| 10 — account inventory UI | `feature/task-10-account-inventory-ui` | Pending | |
-| 11 — progress evidence and M1a/M1b split | `docs/task-11-phase-1-progress` | Pending | |
+| 5 — Compose DB identity | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 6–8) |
+| 6 — household configuration API | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5, 7, 8) |
+| 7 — Settings › Household UI | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5, 6, 8) |
+| 8 — account inventory schema | `feature/task-5-8-compose-household-inventory` | Complete | [PR #27](https://github.com/sandjaie/OneLedger/pull/27) (with Tasks 5–7) |
+| 9 — account inventory API | `feature/task-9-11-account-inventory` | This PR | clubbed with 10–11 |
+| 10 — account inventory UI | `feature/task-9-11-account-inventory` | This PR | clubbed with 9, 11 |
+| 11 — progress evidence and M1a/M1b split | `feature/task-9-11-account-inventory` | This PR | clubbed with 9–10 |
 
 Roadmap M1 is delivered as **M1a** (Tasks 8–10 in this plan) and **M1b** (its own dated plan).
 Roadmap M1's *Done when* list is complete only when both are.

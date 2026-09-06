@@ -95,15 +95,14 @@ branch carrying the changelog, release notes and tag.
 | 2 | `fix/task-2-db-tests-currency-agnostic` | `feature/phase-1-trusted-financial-position` |
 | 3 and 4 | `fix/task-3-account-opening-balance` | `feature/phase-1-trusted-financial-position` |
 | 5 through 8 | `feature/task-5-8-compose-household-inventory` | `feature/phase-1-trusted-financial-position` |
-| 9 | `feature/task-9-account-inventory-api` | `feature/phase-1-trusted-financial-position` |
-| 10 | `feature/task-10-account-inventory-ui` | `feature/phase-1-trusted-financial-position` |
-| 11 | `docs/task-11-phase-1-progress` | `feature/phase-1-trusted-financial-position` |
+| 9 through 11 | `feature/task-9-11-account-inventory` | `feature/phase-1-trusted-financial-position` |
 
 The owner asked to club consecutive tasks onto one branch and one PR when the combined
 implementation-and-test delta stays under the 500-line cap, so Codex reviews a finished
 delivery instead of a commit that will be pushed again mid-review. Tasks 3 and 4 share
 `fix/task-3-account-opening-balance`. Tasks 5–8 share
-`feature/task-5-8-compose-household-inventory`. Split a club if the cap would be exceeded.
+`feature/task-5-8-compose-household-inventory`. Tasks 9–11 share
+`feature/task-9-11-account-inventory`. Split a club if the cap would be exceeded.
 
 Tasks run in order. Tasks 2 and 3 both touch `db/tests/0003_accounts.sql`; merge 2 before
 starting 3. Task 1 unblocks every Python check and must merge first.
