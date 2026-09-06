@@ -177,7 +177,15 @@ BEGIN
     OR NEW.fx_rate_date         IS DISTINCT FROM OLD.fx_rate_date
     OR NEW.fx_rate_is_carried   IS DISTINCT FROM OLD.fx_rate_is_carried
     OR NEW.fx_rate_to_base      IS DISTINCT FROM OLD.fx_rate_to_base
-    OR NEW.fx_rate_to_secondary IS DISTINCT FROM OLD.fx_rate_to_secondary THEN
+    OR NEW.fx_rate_to_secondary IS DISTINCT FROM OLD.fx_rate_to_secondary
+    OR NEW.is_excluded          IS DISTINCT FROM OLD.is_excluded
+    OR NEW.txn_type             IS DISTINCT FROM OLD.txn_type
+    OR NEW.transfer_id          IS DISTINCT FROM OLD.transfer_id
+    OR NEW.card_statement_id    IS DISTINCT FROM OLD.card_statement_id
+    OR NEW.investment_transaction_id IS DISTINCT FROM OLD.investment_transaction_id
+    OR NEW.loan_id              IS DISTINCT FROM OLD.loan_id
+    OR NEW.loan_schedule_entry_id IS DISTINCT FROM OLD.loan_schedule_entry_id
+    OR NEW.recurring_series_id  IS DISTINCT FROM OLD.recurring_series_id THEN
       RAISE EXCEPTION 'a split parent''s inherited facts are fixed while children exist: %', NEW.id;
     END IF;
   END IF;
@@ -200,8 +208,19 @@ BEGIN
     OR NEW.fx_rate_date          IS DISTINCT FROM parent.fx_rate_date
     OR NEW.fx_rate_is_carried    IS DISTINCT FROM parent.fx_rate_is_carried
     OR NEW.fx_rate_to_base       IS DISTINCT FROM parent.fx_rate_to_base
-    OR NEW.fx_rate_to_secondary  IS DISTINCT FROM parent.fx_rate_to_secondary THEN
-      RAISE EXCEPTION 'a split child inherits its parent''s account, date, currency, provenance and frozen rates; % diverges from parent %', NEW.id, parent.id;
+    OR NEW.fx_rate_to_secondary  IS DISTINCT FROM parent.fx_rate_to_secondary
+    -- Report-affecting fields too: a child that is excluded, retyped or linked while its
+    -- siblings are not would drop or reinterpret part of a movement the balance still holds
+    -- in full. Children differ only in amount, category and notes (data-model, Splits).
+    OR NEW.is_excluded           IS DISTINCT FROM parent.is_excluded
+    OR NEW.txn_type              IS DISTINCT FROM parent.txn_type
+    OR NEW.transfer_id           IS DISTINCT FROM parent.transfer_id
+    OR NEW.card_statement_id     IS DISTINCT FROM parent.card_statement_id
+    OR NEW.investment_transaction_id IS DISTINCT FROM parent.investment_transaction_id
+    OR NEW.loan_id               IS DISTINCT FROM parent.loan_id
+    OR NEW.loan_schedule_entry_id IS DISTINCT FROM parent.loan_schedule_entry_id
+    OR NEW.recurring_series_id   IS DISTINCT FROM parent.recurring_series_id THEN
+      RAISE EXCEPTION 'a split child inherits its parent''s account, date, currency, provenance, rates, type, exclusion and links; % diverges from parent %', NEW.id, parent.id;
     END IF;
   END IF;
   RETURN NEW;
@@ -229,7 +248,9 @@ BEGIN
     ])
   ) LOOP
     IF pid IS NULL THEN CONTINUE; END IF;
-    SELECT amount INTO parent_amount FROM transaction WHERE id = pid;
+    -- Serialize concurrent splitters of the same parent: without the lock, two sessions each
+    -- see only their own children, both sums match, and the committed total is double.
+    SELECT amount INTO parent_amount FROM transaction WHERE id = pid FOR UPDATE;
     IF parent_amount IS NULL THEN CONTINUE; END IF;
     SELECT sum(amount) INTO child_sum FROM transaction WHERE parent_transaction_id = pid;
     IF child_sum IS NOT NULL AND child_sum <> parent_amount THEN
@@ -283,13 +304,34 @@ BEGIN
                                             NEW.booked_date::timestamptz)
      WHERE id = NEW.account_id;
   ELSIF TG_OP = 'DELETE' AND OLD.parent_transaction_id IS NULL THEN
+    -- The as-of rewinds with the balance: a deleted latest posting must not keep labelling
+    -- the figure with a date no remaining entry supports (I7).
     UPDATE account
-       SET current_balance = current_balance - OLD.amount
+       SET current_balance = current_balance - OLD.amount,
+           current_balance_as_of = GREATEST(
+             opening_balance_date::timestamptz,
+             COALESCE((SELECT max(t.booked_date)::timestamptz FROM transaction t
+                        WHERE t.account_id = OLD.account_id
+                          AND t.parent_transaction_id IS NULL AND t.id <> OLD.id),
+                      opening_balance_date::timestamptz))
      WHERE id = OLD.account_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+    -- A topology change moves a row across the posting boundary: adopted as a child it stops
+    -- counting (its parent already carries the movement); released it counts again.
+    IF OLD.parent_transaction_id IS NULL AND NEW.parent_transaction_id IS NOT NULL THEN
+      UPDATE account SET current_balance = current_balance - NEW.amount
+       WHERE id = NEW.account_id;
+    ELSIF OLD.parent_transaction_id IS NOT NULL AND NEW.parent_transaction_id IS NULL THEN
+      UPDATE account
+         SET current_balance = current_balance + NEW.amount,
+             current_balance_as_of = GREATEST(current_balance_as_of,
+                                              NEW.booked_date::timestamptz)
+       WHERE id = NEW.account_id;
+    END IF;
   END IF;
   RETURN COALESCE(NEW, OLD);
 END $$;
 
 CREATE TRIGGER trg_transaction_balance
-  AFTER INSERT OR DELETE ON transaction
+  AFTER INSERT OR DELETE OR UPDATE OF parent_transaction_id ON transaction
   FOR EACH ROW EXECUTE FUNCTION apply_transaction_to_balance();

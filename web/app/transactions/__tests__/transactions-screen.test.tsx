@@ -91,6 +91,8 @@ function transaction(overrides: Partial<TransactionRow>): TransactionRow {
     amountSecondary: "-310.5000",
     fxRateDate: "2024-02-02",
     fxRateIsCarried: false,
+    fxRateToBase: "20.0000000000",
+    fxRateToSecondary: "1.0000000000",
     txnType: "expense",
     categoryId: "cat-food",
     categoryName: "Food & Dining",
@@ -134,12 +136,12 @@ describe("the transactions screen", () => {
     expect(row).not.toBeNull();
     expect(row!.textContent).toContain(formatMoney("-310.5000", currencies[0]));
     expect(row!.textContent).toContain(formatMoney("-6210.0000", reporting));
-    expect(row!.textContent).toContain("FX 2024-02-02");
+    expect(row!.textContent).toContain("FX 20.0000000000 on 2024-02-02");
   });
 
   it("labels a carried-forward rate", () => {
     renderScreen([transaction({ fxRateIsCarried: true, fxRateDate: "2024-01-31" })], 1);
-    expect(screen.getByText(/FX 2024-01-31 \(carried forward\)/)).toBeDefined();
+    expect(screen.getByText(/FX 20.0000000000 on 2024-01-31 \(carried forward\)/)).toBeDefined();
   });
 
   it("round-trips filters as query parameters, never interpolated", async () => {
@@ -200,4 +202,17 @@ describe("the transactions screen", () => {
     renderScreen([transaction({ transferId: "tr-1", txnType: "transfer_out" })], 1);
     expect(screen.getByLabelText("Transfer leg, linked to its peer")).toBeDefined();
   });
+});
+
+
+it("round-trips a non-default sort as bounded parameters", async () => {
+  const request = vi.fn().mockResolvedValue({ transactions: [], total: 0 });
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "amount" } });
+  fireEvent.change(screen.getByLabelText("Direction"), { target: { value: "asc" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
+  await waitFor(() => expect(request).toHaveBeenCalled());
+  const url = (request.mock.calls[0] as Array<string>)[0];
+  expect(url).toContain("sort=amount");
+  expect(url).toContain("direction=asc");
 });
