@@ -111,3 +111,56 @@ def test_session_lifetime_must_be_exactly_twelve_hours(monkeypatch: pytest.Monke
     issued = int(datetime.now(UTC).timestamp())
     token = signed_token(iat=issued, exp=issued + 13 * 60 * 60)
     assert client_with(token).get("/whoami").status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("cookie_secure", "secure_attribute"),
+    [("0", False), ("1", True)],
+)
+def test_logout_revokes_the_exact_session_and_rejects_replay(
+    monkeypatch: pytest.MonkeyPatch, cookie_secure: str, secure_attribute: bool
+) -> None:
+    revoked: set[UUID] = set()
+    monkeypatch.setenv("COOKIE_SECURE", cookie_secure)
+    monkeypatch.setattr(
+        auth,
+        "_lookup_active_session",
+        lambda *_: None if SESSION_ID in revoked else owner(),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        auth,
+        "revoke_session",
+        lambda session: revoked.add(session.session_id),
+        raising=False,
+    )
+
+    old_cookie = signed_token()
+    client = client_with(old_cookie)
+    response = client.post("/auth/logout", headers={"Origin": "http://localhost:3000"})
+
+    assert response.status_code == 204
+    assert SESSION_ID in revoked
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith("session=")
+    assert "Max-Age=0" in cookie
+    assert "expires=" in cookie.lower()
+    assert "Path=/" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+    assert ("Secure" in cookie) is secure_attribute
+    client.cookies.set("session", old_cookie)
+    assert client.get("/whoami").status_code == 403
+
+
+@pytest.mark.parametrize("origin", [None, "https://attacker.example"])
+def test_cookie_authenticated_mutation_requires_exact_origin(
+    monkeypatch: pytest.MonkeyPatch, origin: str | None
+) -> None:
+    monkeypatch.setattr(auth, "_lookup_active_session", lambda *_: owner(), raising=False)
+    headers = {"Origin": origin} if origin else {}
+    response = client_with(signed_token()).post(
+        "/fx/backfill?start=2024-01-02&end=2024-01-01", headers=headers
+    )
+    assert response.status_code == 403
+    assert response.json() == {"detail": "invalid origin"}

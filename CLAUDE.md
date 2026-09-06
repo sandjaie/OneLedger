@@ -26,10 +26,10 @@ All new specifications go in `docs/superpowers/specs/`. The current master is
 `docs/superpowers/plans/implementation-plan.md`; the existing Phase 0 plans and references live
 directly in `docs/superpowers/`.
 
-Phase 0 is in progress. GitHub PRs #3–#8 are merged into `feature/phase-0-foundations`, covering
-original Tasks 1–9 through the reviewed web foundation and typed client. Next are Task 10
-(Google OIDC and revocable sessions), Task 11 (money and navigation), then phase-exit checks.
-Product-review additions do not expand Phase 0.
+Phase 0 is in progress. GitHub PRs #3–#9 are merged into `feature/phase-0-foundations`, covering
+original Tasks 1–9, the reviewed web foundation and the revocable owner-session core. This endpoint
+slice completes protected logout/CSRF/household configuration before the remaining Google OIDC
+bootstrap and Task 11 money/navigation work. Product-review additions do not expand Phase 0.
 
 ## Rules you will otherwise break by reflex
 

@@ -1,12 +1,14 @@
 # api/oneledger/main.py
 import os
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse, Response
 
 from .auth import OwnerSession, require_owner, session_secret
-from .routes import fx
+from .routes import auth, fx, household
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
@@ -37,7 +39,20 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def reject_cross_origin_mutations(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.cookies.get("session"):
+        expected = os.environ.get("WEB_ORIGIN", "http://localhost:3000")
+        if request.headers.get("origin") != expected:
+            return JSONResponse({"detail": "invalid origin"}, status_code=403)
+    return await call_next(request)
+
+
+app.include_router(auth.router)
 app.include_router(fx.router)
+app.include_router(household.router)
 
 
 @app.get("/health")
