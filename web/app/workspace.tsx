@@ -278,7 +278,15 @@ export function Workspace({
               currencies={currencies}
               institutions={institutions}
               onChanged={() => setAttempt((value) => value + 1)}
-              request={request}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
               totals={inventory.totals}
             />
           )}

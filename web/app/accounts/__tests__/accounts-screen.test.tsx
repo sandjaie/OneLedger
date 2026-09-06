@@ -96,9 +96,9 @@ describe("Accounts", () => {
   it("shows a native balance formatted by its own currency row", () => {
     render(<AccountsScreen {...props} />);
     // XIN declares Indian grouping and 2 decimals in the catalogue. Letter symbols keep a gap.
-    expect(screen.getByLabelText("Inventory Savings balance").textContent).toContain("I 2,50,000.00");
+    expect(screen.getByLabelText("Inventory Savings balance I 2,50,000.00")).toBeTruthy();
     // A liability reads as what is owed while the stored value stays negative.
-    expect(screen.getByLabelText("Inventory Card balance").textContent).toContain("You owe A 4,500.00");
+    expect(screen.getByLabelText("Inventory Card balance You owe A 4,500.00")).toBeTruthy();
   });
 
   it("keeps closed accounts visible with their closing date", () => {
@@ -124,6 +124,25 @@ describe("Accounts", () => {
     expect([...currency.options].map((o) => o.value)).toEqual(["XAE", "XIN", "XZZ"]);
     expect(screen.getByLabelText("Institution")).toBeTruthy();
     expect(screen.getByRole("button", { name: /add institution/i })).toBeTruthy();
+  });
+
+  it("offers every database-supported institution type", () => {
+    render(<AccountsScreen {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    fireEvent.click(screen.getByRole("button", { name: /add institution/i }));
+    const type = screen.getByLabelText("Institution type") as HTMLSelectElement;
+    expect([...type.options].map((option) => option.value)).toEqual([
+      "bank",
+      "card_issuer",
+      "broker",
+      "fund_house",
+      "lender",
+      "govt",
+      "insurer",
+      "employer",
+      "exchange_house",
+      "other",
+    ]);
   });
 
   it("lets the owner correct type, currency, country and the opening anchor", () => {
