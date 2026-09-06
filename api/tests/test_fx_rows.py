@@ -3,11 +3,20 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
+from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
+
+from oneledger.auth import OwnerSession, require_owner
 from oneledger.fx import Peg
+from oneledger.main import app
 from oneledger.routes.fx import reporting_config, to_rows
 
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
+USER_ID = UUID("11111111-1111-1111-1111-111111111111")
+HOUSEHOLD_ID = UUID("22222222-2222-2222-2222-222222222222")
+SESSION_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 
 def test_rows_carry_provenance() -> None:
@@ -100,3 +109,84 @@ def test_a_pegged_reporting_currency_stores_its_own_anchor() -> None:
     )
     assert "USD" in bases, "a pegged reporting currency must store its anchor"
     assert "AED" not in bases
+
+
+def test_fx_rate_openapi_schema_has_structured_client_fields() -> None:
+    schema = app.openapi()
+    response_schema = schema["paths"]["/fx/{on}"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema["type"] == "array"
+    assert response_schema["items"] == {"$ref": "#/components/schemas/FxRateResponse"}
+
+    rate_schema = schema["components"]["schemas"]["FxRateResponse"]
+    assert set(rate_schema["required"]) == {
+        "base",
+        "quote",
+        "rate",
+        "source",
+        "carried",
+        "carried_from",
+    }
+    assert rate_schema["properties"]["base"]["type"] == "string"
+    assert rate_schema["properties"]["quote"]["type"] == "string"
+    assert rate_schema["properties"]["rate"]["type"] == "string"
+    assert rate_schema["properties"]["source"]["type"] == "string"
+    assert rate_schema["properties"]["carried"]["type"] == "boolean"
+    assert rate_schema["properties"]["carried_from"]["anyOf"] == [
+        {"type": "string", "format": "date"},
+        {"type": "null"},
+    ]
+
+
+def test_fx_rate_endpoint_serializes_decimal_rate_and_carry_date(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    from oneledger.routes import fx
+
+    class Cursor:
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def execute(self, *_: object) -> None:
+            pass
+
+        def fetchall(self) -> list[tuple[str, str, Decimal, str, bool, date | None]]:
+            return [("AED", "INR", Decimal("22.6800000000"), "derived_peg", True, date(2024, 1, 5))]
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    app.dependency_overrides[require_owner] = lambda: OwnerSession(
+        user_id=USER_ID,
+        household_id=HOUSEHOLD_ID,
+        session_id=SESSION_ID,
+        email="owner@example.com",
+    )
+    monkeypatch.setattr(fx, "connect", lambda: Connection(), raising=False)
+    try:
+        response = TestClient(app).get("/fx/2024-01-06")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "base": "AED",
+            "quote": "INR",
+            "rate": "22.6800000000",
+            "source": "derived_peg",
+            "carried": True,
+            "carried_from": "2024-01-05",
+        }
+    ]

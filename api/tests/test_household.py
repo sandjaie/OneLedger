@@ -57,7 +57,9 @@ def test_household_returns_the_authenticated_owners_config(monkeypatch: MonkeyPa
 
     monkeypatch.setattr(household, "connect", lambda: Connection(), raising=False)
 
-    assert household.fetch_household(owner()) == {
+    result = household.fetch_household(owner())
+    assert result is not None
+    assert result.model_dump(mode="json") == {
         "id": str(HOUSEHOLD_ID),
         "baseCurrency": "INR",
         "secondaryCurrency": "AED",
@@ -95,6 +97,35 @@ def test_household_endpoint_returns_the_authenticated_owners_config(
     assert response.status_code == 200
     assert response.json()["baseCurrency"] == "INR"
     assert response.json()["currencies"][1]["numberFormat"] == "international"
+
+
+def test_household_openapi_schema_has_structured_client_fields() -> None:
+    schema = app.openapi()
+    response_schema = schema["paths"]["/household"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert response_schema == {"$ref": "#/components/schemas/HouseholdResponse"}
+
+    household_schema = schema["components"]["schemas"]["HouseholdResponse"]
+    assert set(household_schema["required"]) == {
+        "id",
+        "baseCurrency",
+        "secondaryCurrency",
+        "currencies",
+    }
+    assert household_schema["properties"]["id"]["format"] == "uuid"
+    assert household_schema["properties"]["baseCurrency"]["type"] == "string"
+    assert household_schema["properties"]["secondaryCurrency"]["type"] == "string"
+    assert household_schema["properties"]["currencies"]["items"] == {
+        "$ref": "#/components/schemas/HouseholdCurrency"
+    }
+
+    currency_schema = schema["components"]["schemas"]["HouseholdCurrency"]
+    assert set(currency_schema["required"]) == {"code", "symbol", "decimals", "numberFormat"}
+    assert currency_schema["properties"]["code"]["type"] == "string"
+    assert currency_schema["properties"]["symbol"]["type"] == "string"
+    assert currency_schema["properties"]["decimals"]["type"] == "integer"
+    assert currency_schema["properties"]["numberFormat"]["enum"] == ["international", "indian"]
 
 
 def test_household_rejects_an_owner_without_a_matching_household(

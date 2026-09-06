@@ -1,6 +1,8 @@
-from typing import Annotated, Any
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
@@ -8,7 +10,21 @@ from ..db import connect
 router = APIRouter(tags=["household"])
 
 
-def fetch_household(owner: OwnerSession) -> dict[str, Any] | None:
+class HouseholdCurrency(BaseModel):
+    code: str = Field(min_length=3, max_length=3)
+    symbol: str = Field(min_length=1)
+    decimals: int = Field(ge=0)
+    numberFormat: Literal["international", "indian"]
+
+
+class HouseholdResponse(BaseModel):
+    id: UUID
+    baseCurrency: str = Field(min_length=3, max_length=3)
+    secondaryCurrency: str = Field(min_length=3, max_length=3)
+    currencies: list[HouseholdCurrency]
+
+
+def fetch_household(owner: OwnerSession) -> HouseholdResponse | None:
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT h.id, h.base_currency, h.secondary_currency,
@@ -36,29 +52,29 @@ def fetch_household(owner: OwnerSession) -> dict[str, Any] | None:
         sec_decimals,
         sec_format,
     ) = row
-    return {
-        "id": str(hid),
-        "baseCurrency": base,
-        "secondaryCurrency": secondary,
-        "currencies": [
-            {
-                "code": base,
-                "symbol": base_symbol,
-                "decimals": base_decimals,
-                "numberFormat": base_format,
-            },
-            {
-                "code": secondary,
-                "symbol": sec_symbol,
-                "decimals": sec_decimals,
-                "numberFormat": sec_format,
-            },
+    return HouseholdResponse(
+        id=hid,
+        baseCurrency=base,
+        secondaryCurrency=secondary,
+        currencies=[
+            HouseholdCurrency(
+                code=base,
+                symbol=base_symbol,
+                decimals=base_decimals,
+                numberFormat=base_format,
+            ),
+            HouseholdCurrency(
+                code=secondary,
+                symbol=sec_symbol,
+                decimals=sec_decimals,
+                numberFormat=sec_format,
+            ),
         ],
-    }
+    )
 
 
 @router.get("/household")
-def household(owner: Annotated[OwnerSession, Depends(require_owner)]) -> dict[str, Any]:
+def household(owner: Annotated[OwnerSession, Depends(require_owner)]) -> HouseholdResponse:
     result = fetch_household(owner)
     if result is None:
         raise HTTPException(status_code=403, detail="not authorized")

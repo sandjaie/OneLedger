@@ -376,7 +376,7 @@ in the same commit and every mismatched call site fails <code>tsc</code> immedia
 type on either side of the wire, and no schema-parity test to maintain — the generator is the check.</p>
 <h2 id="type-generation">1. Type generation</h2>
 <pre><code class="language-bash"># Pydantic models -> OpenAPI -> TypeScript client
-uv run python -m oneledger.openapi &gt; openapi.json
+uv run --project api python scripts/openapi.py &gt; web/openapi.json
 npx openapi-typescript openapi.json -o web/types/api.ts
 </code></pre>
 <p>Run in CI. A model change that is not reflected in the committed schema fails the build, which is the
