@@ -354,14 +354,19 @@ ALTER TABLE transaction ENABLE ROW LEVEL SECURITY;
 CREATE POLICY household_isolation ON transaction
   USING (household_id = current_household_id());
 
--- A transaction is denominated in its account's currency: amount joins current_balance
--- directly, so a foreign-denominated row would corrupt the native balance. The bank's own
+-- A transaction belongs to its account in both senses: same household — the balance trigger
+-- updates the account by id, and a cross-household row would move another tenant's money —
+-- and same denomination, because amount joins current_balance directly. The bank's own
 -- conversion belongs in original_amount/original_currency.
 CREATE FUNCTION assert_transaction_currency_matches_account() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE account_currency CHAR(3);
+DECLARE account_currency CHAR(3); account_household UUID;
 BEGIN
-  SELECT currency INTO account_currency FROM account WHERE id = NEW.account_id;
+  SELECT currency, household_id INTO account_currency, account_household
+    FROM account WHERE id = NEW.account_id;
+  IF account_household IS NOT NULL AND account_household <> NEW.household_id THEN
+    RAISE EXCEPTION 'transaction household % does not own account %', NEW.household_id, NEW.account_id;
+  END IF;
   IF account_currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(account_currency) THEN
     RAISE EXCEPTION 'transaction currency % must match the account''s %; the bank''s conversion belongs in original_amount',
       rtrim(NEW.currency), rtrim(account_currency);

@@ -384,6 +384,31 @@ BEGIN
     END IF;
   END;
 
+  -- A transaction's household owns its account: the balance trigger moves that account's
+  -- money, and a cross-household row would move another tenant's.
+  DECLARE h2 UUID; p2 UUID; a2 UUID;
+  BEGIN
+    INSERT INTO household (name, base_currency, secondary_currency)
+    VALUES ('other household', base, secondary) RETURNING id INTO h2;
+    INSERT INTO person (household_id, display_name, is_self) VALUES (h2,'self',true)
+      RETURNING id INTO p2;
+    INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                         country, opening_balance, opening_balance_date)
+      VALUES (h2,p2,'Foreign Savings','savings',base,'XB',0,'2024-01-01') RETURNING id INTO a2;
+    BEGIN
+      INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                               currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                               amount_base, amount_secondary, txn_type, source, dedupe_hash)
+        VALUES (h, a2, '2024-02-10', 'CROSS HOUSEHOLD', -5.0000, base,
+                '2024-02-10', 1, 20, -5.0000, -100.0000, 'expense', 'manual', 'xh1');
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'a cross-household transaction must be rejected';
+      END IF;
+    END;
+  END;
+
   -- Nothing is its own container.
   BEGIN
     UPDATE transaction SET parent_transaction_id = t_lone WHERE id = t_lone;
