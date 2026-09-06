@@ -41,6 +41,9 @@ CREATE FUNCTION assert_category_two_levels() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.parent_id IS NOT NULL THEN
+    IF NEW.parent_id = NEW.id THEN
+      RAISE EXCEPTION 'a category cannot be its own parent: %', NEW.slug;
+    END IF;
     IF EXISTS (SELECT FROM category p WHERE p.id = NEW.parent_id AND p.parent_id IS NOT NULL) THEN
       RAISE EXCEPTION 'the category tree is two levels: % cannot be a child of a child', NEW.slug;
     END IF;

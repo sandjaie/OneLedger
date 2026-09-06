@@ -89,6 +89,15 @@ BEGIN
     END IF;
   END;
 
+  BEGIN
+    UPDATE category SET parent_id = root2 WHERE id = root2;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a category must not be its own parent';
+    END IF;
+  END;
+
   RAISE NOTICE 'PASS 0008 two levels';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN

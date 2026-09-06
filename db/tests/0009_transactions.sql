@@ -370,6 +370,16 @@ BEGIN
     END;
   END;
 
+  -- Nothing is its own container.
+  BEGIN
+    UPDATE transaction SET parent_transaction_id = t_lone WHERE id = t_lone;
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'unreachable' THEN
+      RAISE EXCEPTION 'a transaction must not be its own split parent';
+    END IF;
+  END;
+
   -- A transaction belongs to its account: reassignment is a delete and a recreate.
   BEGIN
     UPDATE transaction SET account_id = a_sav WHERE id = t_lone;

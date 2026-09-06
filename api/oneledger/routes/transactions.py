@@ -403,6 +403,12 @@ def create_transaction(
             rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
                 cur, body.bookedDate, currency, base, secondary
             )
+            # The stored rate is the auditable fact, so it is fixed FIRST (10 dp, half-up)
+            # and the stored amounts derive from it — stored amount must equal
+            # round(stored amount x stored rate), or the frozen facts disagree with each
+            # other. A repeating cross-rate rounded after the multiplication would.
+            rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
+            rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
             amount_base = (amount * rate_to_base).quantize(CENT, rounding=ROUND_HALF_UP)
             amount_secondary = (amount * rate_to_secondary).quantize(CENT, rounding=ROUND_HALF_UP)
 
@@ -460,8 +466,8 @@ def create_transaction(
                     currency,
                     rate_date,
                     carried,
-                    rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP),
-                    rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP),
+                    rate_to_base,
+                    rate_to_secondary,
                     amount_base,
                     amount_secondary,
                     body.txnType,

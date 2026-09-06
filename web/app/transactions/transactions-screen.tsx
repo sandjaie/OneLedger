@@ -47,6 +47,8 @@ type Filters = {
   country: string;
   tag: string;
   reviewState: string;
+  merchantId: string;
+  sourceDocumentId: string;
 };
 
 const NO_FILTERS: Filters = {
@@ -64,6 +66,8 @@ const NO_FILTERS: Filters = {
   country: "",
   tag: "",
   reviewState: "",
+  merchantId: "",
+  sourceDocumentId: "",
 };
 
 function query(filters: Filters, offset: number) {
@@ -80,6 +84,9 @@ function query(filters: Filters, offset: number) {
   if (filters.country.trim()) parameters.set("country", filters.country.trim());
   if (filters.tag.trim()) parameters.set("tag", filters.tag.trim());
   if (filters.reviewState) parameters.set("reviewState", filters.reviewState);
+  if (filters.merchantId.trim()) parameters.set("merchantId", filters.merchantId.trim());
+  if (filters.sourceDocumentId.trim())
+    parameters.set("sourceDocumentId", filters.sourceDocumentId.trim());
   if (filters.sort !== "bookedDate") parameters.set("sort", filters.sort);
   if (filters.direction !== "desc") parameters.set("direction", filters.direction);
   parameters.set("limit", String(PAGE));
@@ -406,6 +413,22 @@ export function TransactionsScreen({
           <input
             onChange={(event) => setFilters({ ...filters, tag: event.target.value })}
             value={filters.tag}
+          />
+        </label>
+        <label className="text-field">
+          <span>Merchant id</span>
+          <input
+            onChange={(event) => setFilters({ ...filters, merchantId: event.target.value })}
+            value={filters.merchantId}
+          />
+        </label>
+        <label className="text-field">
+          <span>Source document id</span>
+          <input
+            onChange={(event) =>
+              setFilters({ ...filters, sourceDocumentId: event.target.value })
+            }
+            value={filters.sourceDocumentId}
           />
         </label>
         <label className="select-field">
