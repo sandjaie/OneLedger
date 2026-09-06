@@ -544,12 +544,14 @@ def update_transaction(
             container = cur.fetchone()
             if container is None:
                 raise HTTPException(status_code=404, detail="no such transaction")
-            if bool(container[0]):
+            category_unchanged = container[1] == body.categoryId
+            # A container's notes stay editable — the split trigger permits them — but its
+            # category belongs to its children, which is where reports read.
+            if bool(container[0]) and not category_unchanged:
                 raise HTTPException(
                     status_code=409,
                     detail="a split parent is a container; recategorize its children",
                 )
-            category_unchanged = container[1] == body.categoryId
             # Availability gates NEW assignments only: a historical category the owner later
             # deactivated stays on its rows, and a note-only edit resending it must pass.
             if not category_unchanged:
