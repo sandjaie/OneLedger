@@ -126,8 +126,16 @@ is never edited ([ADR-0015](../../adr/0015-flyway-for-schema-migrations.html)):
   zero and an omitted value are the same stored bytes, and rewriting both would overwrite a
   possible observation (Invariant I7). No account write path shipped before this migration and
   no migration seeds account rows, so no legitimate database holds such a row; if one exists,
-  the migration refuses with a message naming the rows, and the operator resolves each
-  explicitly before re-running it.
+  the migration refuses with a message naming the rows. The operator resolves each explicitly
+  before re-running it, by one of two executable paths — never by writing the zero it already
+  holds (that is a no-op and the predicate stays true):
+  1. Treat the zero as the old `DEFAULT 0` omission:
+     `UPDATE account SET current_balance = opening_balance,
+     current_balance_as_of = opening_balance_date WHERE id = …`.
+  2. Preserve an observed zero: create
+     `_v6_confirm_observed_zero(account_id UUID PRIMARY KEY REFERENCES account(id))`, insert
+     the account id, and re-run; the migration skips confirmed ids and then drops the helper
+     table.
 
 `db/tests/0003_accounts.sql` gains assertions for all four behaviours, for an asset account and
 for a liability account, so the signed-balance convention
@@ -316,10 +324,12 @@ records it that way. The roadmap's acceptance criteria are not weakened, only se
 ### C2 — Requirements
 
 **Account inventory.** Create, read and edit accounts of every `account_type`, with institution,
-currency, country, subtype, masked number, opened date and the `include_in_net_worth` /
-`is_liquid` toggles. `account_class` is never sent by the client — the V3 trigger derives it, and
-the existing test proving a hand-set value is overwritten stays. Accounts are never deleted; there
-is no delete route.
+currency, country, subtype, masked number, opened date, opening balance and date, credit limit
+where applicable, and the `include_in_net_worth` / `is_liquid` toggles. `account_class` is never
+sent by the client — the V3 trigger derives it, and the existing test proving a hand-set value is
+overwritten stays. Accounts are never deleted; there is no delete route. Before the transaction
+table exists, editing the opening anchor also rewrites `current_balance` /
+`current_balance_as_of` to match (the materialised equation with an empty sum).
 
 **Opening-balance evidence.** F05 requires *"account inventory, acknowledged opening balances"*.
 An opening balance typed from a bank app is a stated fact and must read as one until a statement
@@ -352,11 +362,19 @@ delivery — the never-store list is absolute
 ### C3 — Contract
 
 `GET /accounts` returns every account, active and closed, with per-group native subtotals.
-`POST /accounts` creates one. `PATCH /accounts/{id}` replaces the editable fields of one.
-`GET /institutions` returns the shared seed rows plus the household's own, for the picker. All
-four depend on `require_owner()` and scope every statement to the resolved household id
+`POST /accounts` creates one. `PATCH /accounts/{id}` replaces the editable fields of one —
+including type, currency, country, opening anchor and credit limit. `GET /institutions` returns
+the shared seed rows plus the household's own, for the picker. `POST /institutions` creates a
+household-scoped institution from the account form (shared seeds are suggestions, not a closed
+list — [data-model.html](../../design/data-model.html) §4). Create and update account paths
+accept an `institutionId` only when
+`institution.household_id IS NULL OR institution.household_id = owner.household_id`. All five
+routes depend on `require_owner()` and scope every statement to the resolved household id
 explicitly — the service connects privileged and bypasses RLS, so the predicate in the query is
 the boundary, and RLS is depth behind it.
+
+Incoming `accountNumberMasked` values expose at most four digits; a fifth digit is refused as a
+full account number (never-store list, [security §1](../../operations/security-and-privacy.html)).
 
 Money crosses the wire as a decimal string in both directions — `"-4500.0000"`, never a JSON
 number and never parsed with `Number()` or `parseFloat` on either side. Incoming money is
