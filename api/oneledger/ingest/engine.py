@@ -394,6 +394,18 @@ def _draft_columns(page: Page, matches: list[_HeaderMatch]) -> list[LayoutColumn
     return columns
 
 
+DATE_SAMPLE = re.compile(
+    r"^(?:\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})|\d{1,2}-\d{1,2}-\d{4}|"
+    r"\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{4}-\d{1,2}-\d{1,2})$"
+)
+
+
+def _is_transaction_sample(cells: dict[str, str]) -> bool:
+    booked_date = cells.get("booked_date", "").strip()
+    has_amount = any(_is_number(cells.get(field, "")) for field in ("amount", "debit", "credit"))
+    return bool(DATE_SAMPLE.fullmatch(booked_date) and has_amount)
+
+
 def _sample_cells(
     pages: list[Page],
     header_page: int,
@@ -412,7 +424,9 @@ def _sample_cells(
             line_text = " ".join(word.text for word in sorted(line.words, key=lambda word: word.x0))
             if _header_key(line_text) == header_key:
                 continue
-            sampled.append(_cells(columns, line.words))
+            cells = _cells(columns, line.words)
+            if _is_transaction_sample(cells):
+                sampled.append(cells)
     return sampled
 
 

@@ -474,6 +474,32 @@ def test_only_validated_financial_fields_are_exempt_from_preview_redaction() -> 
     assert "12345.67" not in public[0].rawText
 
 
+def test_long_integer_identifiers_are_redacted_even_in_financial_fields() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    identifier = "999988887777"
+    public = layouts._public_rows(
+        [
+            RawRow(
+                1,
+                1,
+                identifier,
+                {
+                    "booked_date": "13/02/2024",
+                    "amount": identifier,
+                    "debit": identifier,
+                    "credit": identifier,
+                    "running_balance": identifier,
+                },
+            )
+        ]
+    )
+
+    assert public[0].fields["booked_date"] == "13/02/2024"
+    for field in ("amount", "debit", "credit", "running_balance"):
+        assert public[0].fields[field] == "[redacted]"
+
+
 def test_reserved_capture_overrides_typed_field_protection() -> None:
     from oneledger.ingest.engine import RawRow
 

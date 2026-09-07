@@ -305,6 +305,33 @@ def test_repeated_headers_are_deduplicated_only_when_equivalent(
         assert [row.page_number for row in rows] == [1, 2]
 
 
+def test_propose_excludes_non_row_text_from_date_inference(tmp_path: Path) -> None:
+    placements = [
+        Placement(page=0, x=20, y=700, text="Date"),
+        Placement(page=0, x=180, y=700, text="Description"),
+        Placement(page=0, x=500, y=700, text="Amount"),
+        Placement(page=0, x=20, y=670, text="13/02/2024"),
+        Placement(page=0, x=180, y=670, text="FIRST"),
+        Placement(page=0, x=500, y=670, text="17.25"),
+        Placement(page=0, x=20, y=640, text="Closing Balance"),
+        Placement(page=0, x=500, y=640, text="17.25"),
+        Placement(page=1, x=20, y=730, text="ACCOUNT SUMMARY"),
+        Placement(page=1, x=20, y=700, text="Date"),
+        Placement(page=1, x=180, y=700, text="Description"),
+        Placement(page=1, x=500, y=700, text="Amount"),
+        Placement(page=1, x=20, y=670, text="14/02/2024"),
+        Placement(page=1, x=180, y=670, text="SECOND"),
+        Placement(page=1, x=500, y=670, text="20.00"),
+    ]
+    path = tmp_path / "multipage-with-non-rows.pdf"
+    path.write_bytes(build_pdf(placements))
+
+    draft, rows = engine.propose(path, None)
+
+    assert draft.dateFormat == "dd/MM/yyyy"
+    assert [row.fields["description"] for row in rows] == ["FIRST", "SECOND"]
+
+
 def test_dash_dates_do_not_silently_choose_day_first(tmp_path: Path) -> None:
     path = tmp_path / "ambiguous-dashes.pdf"
     path.write_bytes(
