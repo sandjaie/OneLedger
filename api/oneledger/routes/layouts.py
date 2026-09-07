@@ -1,0 +1,374 @@
+# api/oneledger/routes/layouts.py
+"""M2 Task 2: statement layout profiles (ADR-0012). A layout is a row, created through a mapping
+UI — no bank name enters application code. `POST /layouts` never mutates an existing version;
+re-saving a name inserts `version + 1`, so a row already imported keeps pointing at the version
+that produced it."""
+
+from __future__ import annotations
+
+import re
+from datetime import datetime
+from typing import Annotated, Any
+from uuid import UUID
+
+import psycopg
+from fastapi import APIRouter, Depends, HTTPException, Query
+from psycopg.types.json import Json
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from ..auth import OwnerSession, require_owner
+from ..db import connect
+
+router = APIRouter(tags=["layouts"])
+
+# statement-ingestion.html section 4: the fields a column band may claim.
+COLUMN_FIELDS = frozenset(
+    {
+        "booked_date",
+        "value_date",
+        "description",
+        "reference",
+        "amount",
+        "debit",
+        "credit",
+        "running_balance",
+    }
+)
+# The small, additive vocabulary (ADR-0012). A third entry is a considered addition, not a reflex.
+QUIRKS_VOCABULARY = frozenset({"filter_script:arabic", "continuation:no_date_and_no_amount"})
+# metadata_patterns keys the pipeline understands itself (plan section 4.4).
+RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_end"})
+# A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.
+TWO_DIGIT_YEAR = re.compile(r"(?<!y)yy(?!y)")
+
+
+def _compiled(pattern: str) -> re.Pattern[str]:
+    """A profile is executed as regexes at parse time; an uncompilable one must die at save."""
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"not a valid regular expression: {pattern!r} ({exc})") from exc
+
+
+def _first_line(exc: Exception) -> str:
+    return str(exc).splitlines()[0]
+
+
+class LayoutColumn(BaseModel):
+    field: str
+    xMin: float
+    xMax: float
+    label: str | None = None
+
+    @field_validator("field")
+    @classmethod
+    def known_field(cls, value: str) -> str:
+        if value not in COLUMN_FIELDS:
+            raise ValueError("column field must be one of: " + ", ".join(sorted(COLUMN_FIELDS)))
+        return value
+
+    @model_validator(mode="after")
+    def band_is_ordered(self) -> LayoutColumn:
+        if self.xMin >= self.xMax:
+            raise ValueError(f"column {self.field!r}: xMin must be less than xMax")
+        return self
+
+
+class LayoutProfile(BaseModel):
+    """GET /layouts item, POST /layouts response."""
+
+    id: UUID
+    name: str
+    version: int
+    institutionId: UUID | None
+    fingerprints: list[str]
+    headerRowPattern: str | None
+    columns: list[LayoutColumn]
+    dateFormat: str
+    signConvention: str
+    invertsSign: bool
+    chronologicalOrder: str
+    rowStartRule: str
+    continuationRule: str | None
+    skipLinePatterns: list[str]
+    openingBalancePattern: str | None
+    closingBalancePattern: str | None
+    hasRunningBalance: bool
+    quirks: list[str]
+    metadataPatterns: dict[str, str] | None
+    timesUsed: int
+    lastUsedAt: datetime | None
+
+
+class LayoutCreate(BaseModel):
+    """POST /layouts body. Validation the database cannot express — everything the has_a_balance
+    anchor CHECK and the sign_convention/chronological_order enums leave uncovered."""
+
+    name: str = Field(min_length=1, max_length=120)
+    institutionId: UUID | None = None
+    fingerprints: list[str]
+    headerRowPattern: str | None = None
+    columns: list[LayoutColumn]
+    dateFormat: str = Field(min_length=1, max_length=40)
+    signConvention: str
+    invertsSign: bool = False
+    chronologicalOrder: str = "ascending"
+    rowStartRule: str = "has_date_and_amount"
+    continuationRule: str | None = None
+    skipLinePatterns: list[str] = Field(default_factory=list)
+    openingBalancePattern: str | None = None
+    closingBalancePattern: str | None = None
+    hasRunningBalance: bool = False
+    quirks: list[str] = Field(default_factory=list)
+    metadataPatterns: dict[str, str] | None = None
+
+    @field_validator("fingerprints", "skipLinePatterns")
+    @classmethod
+    def patterns_compile(cls, value: list[str]) -> list[str]:
+        for pattern in value:
+            _compiled(pattern)
+        return value
+
+    @field_validator("openingBalancePattern", "closingBalancePattern")
+    @classmethod
+    def balance_pattern_compiles(cls, value: str | None) -> str | None:
+        if value is not None:
+            _compiled(value)
+        return value
+
+    @field_validator("quirks")
+    @classmethod
+    def known_quirks(cls, value: list[str]) -> list[str]:
+        unknown = sorted(set(value) - QUIRKS_VOCABULARY)
+        if unknown:
+            raise ValueError("unknown quirks: " + ", ".join(unknown))
+        return value
+
+    @field_validator("metadataPatterns")
+    @classmethod
+    def metadata_patterns_are_valid(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        if value is None:
+            return value
+        for key, pattern in value.items():
+            compiled = _compiled(pattern)
+            if key in RESERVED_METADATA_KEYS and compiled.groups != 1:
+                raise ValueError(
+                    f"reserved metadata key {key!r} must have exactly one capture group"
+                )
+        return value
+
+    @model_validator(mode="after")
+    def columns_are_ordered_and_non_overlapping(self) -> LayoutCreate:
+        ordered = sorted(self.columns, key=lambda c: c.xMin)
+        for prev, curr in zip(ordered, ordered[1:], strict=False):
+            if curr.xMin < prev.xMax:
+                raise ValueError("column bands must be ordered and must not overlap")
+        if sum(1 for c in self.columns if c.field == "booked_date") != 1:
+            raise ValueError("exactly one column must be booked_date")
+        return self
+
+    @model_validator(mode="after")
+    def sign_convention_matches_its_columns(self) -> LayoutCreate:
+        present = {c.field for c in self.columns}
+        if self.signConvention == "balance_delta":
+            if "running_balance" not in present:
+                raise ValueError("signConvention 'balance_delta' requires a running_balance column")
+            if present & {"amount", "debit", "credit"}:
+                raise ValueError(
+                    "signConvention 'balance_delta' forbids amount, debit and credit columns"
+                )
+        elif self.signConvention == "debit_credit_columns":
+            if not {"debit", "credit"} <= present:
+                raise ValueError(
+                    "signConvention 'debit_credit_columns' requires debit and credit columns"
+                )
+            if "amount" in present:
+                raise ValueError("signConvention 'debit_credit_columns' forbids an amount column")
+        elif "amount" not in present and not {"debit", "credit"} <= present:
+            raise ValueError(
+                f"signConvention {self.signConvention!r} requires an amount column, "
+                "or both debit and credit columns"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def two_digit_year_needs_both_period_captures(self) -> LayoutCreate:
+        if TWO_DIGIT_YEAR.search(self.dateFormat):
+            captured = set(self.metadataPatterns or {})
+            if not {"period_start", "period_end"} <= captured:
+                raise ValueError(
+                    "a dateFormat with a two-digit year requires metadataPatterns to capture "
+                    "both period_start and period_end, or the year cannot be windowed"
+                )
+        return self
+
+
+COLUMNS = """id, name, version, institution_id, fingerprints, header_row_pattern, columns,
+             date_format, sign_convention::text, inverts_sign, chronological_order,
+             row_start_rule, continuation_rule, skip_line_patterns, opening_balance_pattern,
+             closing_balance_pattern, has_running_balance, quirks, metadata_patterns,
+             times_used, last_used_at"""
+
+
+def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
+    (
+        id_,
+        name,
+        version,
+        institution_id,
+        fingerprints,
+        header_row_pattern,
+        columns_json,
+        date_format,
+        sign_convention,
+        inverts_sign,
+        chronological_order,
+        row_start_rule,
+        continuation_rule,
+        skip_line_patterns,
+        opening_balance_pattern,
+        closing_balance_pattern,
+        has_running_balance,
+        quirks,
+        metadata_patterns,
+        times_used,
+        last_used_at,
+    ) = row
+    return LayoutProfile(
+        id=id_,
+        name=name,
+        version=version,
+        institutionId=institution_id,
+        fingerprints=list(fingerprints or []),
+        headerRowPattern=header_row_pattern,
+        columns=[
+            LayoutColumn(field=c["field"], xMin=c["x_min"], xMax=c["x_max"], label=c.get("label"))
+            for c in (columns_json or [])
+        ],
+        dateFormat=date_format,
+        signConvention=sign_convention,
+        invertsSign=inverts_sign,
+        chronologicalOrder=chronological_order,
+        rowStartRule=row_start_rule,
+        continuationRule=continuation_rule,
+        skipLinePatterns=list(skip_line_patterns or []),
+        openingBalancePattern=opening_balance_pattern,
+        closingBalancePattern=closing_balance_pattern,
+        hasRunningBalance=has_running_balance,
+        quirks=list(quirks or []),
+        metadataPatterns=metadata_patterns,
+        timesUsed=times_used,
+        lastUsedAt=last_used_at,
+    )
+
+
+def _assert_institution_allowed(
+    cur: psycopg.Cursor[Any], institution_id: UUID | None, household_id: UUID
+) -> None:
+    """Shared seeds or this household's own — the pattern routes/accounts.py already uses."""
+    if institution_id is None:
+        return
+    cur.execute(
+        """SELECT 1 FROM institution
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (institution_id, household_id),
+    )
+    if cur.fetchone() is None:
+        raise HTTPException(
+            status_code=422, detail="institution is not available to this household"
+        )
+
+
+def _one(cur: psycopg.Cursor[Any], layout_id: UUID, household_id: UUID) -> LayoutProfile:
+    cur.execute(
+        f"SELECT {COLUMNS} FROM statement_layout WHERE id = %s AND household_id = %s",
+        (layout_id, household_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="no such layout")
+    return _row_to_profile(row)
+
+
+@router.get("/layouts")
+def list_layouts(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    allVersions: Annotated[bool, Query()] = False,
+) -> list[LayoutProfile]:
+    with connect() as conn, conn.cursor() as cur:
+        if allVersions:
+            cur.execute(
+                f"SELECT {COLUMNS} FROM statement_layout"
+                " WHERE household_id = %s ORDER BY name, version",
+                (owner.household_id,),
+            )
+        else:
+            # The highest version per name: schema.md's UNIQUE(household_id, name, version)
+            # makes version a plain ascending counter, so DISTINCT ON picks the newest per name.
+            cur.execute(
+                f"SELECT DISTINCT ON (name) {COLUMNS} FROM statement_layout"
+                " WHERE household_id = %s ORDER BY name, version DESC",
+                (owner.household_id,),
+            )
+        return [_row_to_profile(row) for row in cur.fetchall()]
+
+
+@router.post("/layouts", status_code=201)
+def create_layout(
+    body: LayoutCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> LayoutProfile:
+    columns_payload = [
+        {"field": c.field, "x_min": c.xMin, "x_max": c.xMax, "label": c.label} for c in body.columns
+    ]
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            _assert_institution_allowed(cur, body.institutionId, owner.household_id)
+            # version = COALESCE(MAX(version), 0) + 1 for this (household, name): re-saving an
+            # existing name inserts the next version and never mutates an earlier one
+            # (ADR-0012). The aggregate over zero matching rows still yields one row, so a new
+            # name inserts version 1 in the same statement.
+            cur.execute(
+                """INSERT INTO statement_layout (
+                       household_id, institution_id, name, version, fingerprints,
+                       header_row_pattern, columns, date_format, sign_convention, inverts_sign,
+                       chronological_order, row_start_rule, continuation_rule,
+                       skip_line_patterns, opening_balance_pattern, closing_balance_pattern,
+                       has_running_balance, quirks, metadata_patterns)
+                   SELECT %s, %s, %s, COALESCE(MAX(version), 0) + 1, %s, %s, %s::jsonb, %s,
+                          %s::sign_convention, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+                     FROM statement_layout
+                    WHERE household_id = %s AND name = %s
+                   RETURNING id""",
+                (
+                    owner.household_id,
+                    body.institutionId,
+                    body.name,
+                    body.fingerprints,
+                    body.headerRowPattern,
+                    Json(columns_payload),
+                    body.dateFormat,
+                    body.signConvention,
+                    body.invertsSign,
+                    body.chronologicalOrder,
+                    body.rowStartRule,
+                    body.continuationRule,
+                    body.skipLinePatterns,
+                    body.openingBalancePattern,
+                    body.closingBalancePattern,
+                    body.hasRunningBalance,
+                    body.quirks,
+                    Json(body.metadataPatterns) if body.metadataPatterns is not None else None,
+                    owner.household_id,
+                    body.name,
+                ),
+            )
+            created = cur.fetchone()
+            if created is None:
+                raise HTTPException(status_code=500, detail="the layout could not be created")
+            return _one(cur, UUID(str(created[0])), owner.household_id)
+    except (
+        psycopg.errors.InvalidTextRepresentation,
+        psycopg.errors.CheckViolation,
+        psycopg.errors.ForeignKeyViolation,
+    ) as exc:
+        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc

@@ -43,6 +43,25 @@ compose database: `fx_rate` spans `2024-01-01` to `2026-09-06`, 1,960 rows acros
 days per pair, complete daily coverage with no gaps. Phase 0's live Google identity gates remain
 open below — synthetic checks do not substitute for them.
 
+| M2 task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
+| 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
+| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Not started | — |
+| 4 — staged rows, normalization, dedupe, reconciliation (V13) | `feature/m2-staged-rows-and-normalization` | Not started | — |
+| 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
+| 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
+| 7 — `/import` screen | `feature/m2-import-screen` | Not started | — |
+| 8 — layout mapping UI | `feature/m2-layout-mapping-ui` | Not started | — |
+| 9 — review screen, diagnostics, end-to-end gate | `feature/m2-review-screen-and-acceptance` | Not started | — |
+
+Task 2 delivers V12 (`document`, `import_batch`, `statement_layout`, RLS on all three, and the
+four foreign keys V12 completes on `transaction` per schema.md's per-target `0018` rule) and the
+layouts API (`GET /layouts`, `POST /layouts`) behind `require_owner`, with every 422 validation
+rule Task 2's contract names (band ordering, sign-convention/column agreement, the quirks
+vocabulary, regex compilation, reserved metadata capture groups, the two-digit-year period-
+capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
+
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | 1 — restore API package import | `fix/task-1-api-import-syntax` | Complete | [PR #23](https://github.com/sandjaie/OneLedger/pull/23) |
