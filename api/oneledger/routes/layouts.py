@@ -395,6 +395,14 @@ def _parse_draft(value: str) -> LayoutCreate:
 
 
 IDENTIFIER_RUN = re.compile(r"\d(?:[\d\s–./-]*\d)?")
+PAN_SHAPED_IDENTIFIER = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b", re.IGNORECASE)
+CONTEXTUAL_SECRET = re.compile(
+    r"\b(?P<label>(?:(?:bank|upi)\s+)?pin|cvv|otp|password|passcode|pan|"
+    r"(?:tax|national|emirates)\s+id|passport(?:\s+(?:number|no))?|iban|"
+    r"(?:account|card)\s+(?:number|no))\b"
+    r"(?P<separator>\s*[:#=-]?\s*)(?P<secret>[A-Z0-9][A-Z0-9./-]*)",
+    re.IGNORECASE,
+)
 FINANCIAL_FIELDS = frozenset(
     {"booked_date", "value_date", "amount", "debit", "credit", "running_balance"}
 )
@@ -411,11 +419,16 @@ def _preview_redactor(capture: str | None) -> Callable[[str], str]:
     redact_capture = _capture_redactor(capture)
 
     def redact(value: str) -> str:
+        screened = PAN_SHAPED_IDENTIFIER.sub("[redacted]", redact_capture(value))
+        screened = CONTEXTUAL_SECRET.sub(
+            lambda match: f"{match.group('label')}{match.group('separator')}[redacted]",
+            screened,
+        )
         return IDENTIFIER_RUN.sub(
             lambda match: (
                 "[redacted]" if sum(c.isdigit() for c in match.group()) > 4 else match.group()
             ),
-            redact_capture(value),
+            screened,
         )
 
     return redact
