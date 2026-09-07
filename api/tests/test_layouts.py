@@ -500,6 +500,18 @@ def test_long_integer_identifiers_are_redacted_even_in_financial_fields() -> Non
         assert public[0].fields[field] == "[redacted]"
 
 
+def test_unicode_digit_identifiers_are_redacted_from_untyped_preview_text() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    identifier = "٤١١١ ١١١١ ١١١١ ١١١١"
+    public = layouts._public_rows(
+        [RawRow(1, 1, f"Reference {identifier}", {"reference": identifier})]
+    )
+
+    assert identifier not in public[0].rawText
+    assert identifier not in public[0].fields["reference"]
+
+
 def test_reserved_capture_overrides_typed_field_protection() -> None:
     from oneledger.ingest.engine import RawRow
 

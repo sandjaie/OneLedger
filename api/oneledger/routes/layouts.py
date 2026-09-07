@@ -367,7 +367,7 @@ def _parse_draft(value: str) -> LayoutCreate:
         raise HTTPException(status_code=422, detail=detail) from exc
 
 
-IDENTIFIER_RUN = re.compile(r"[0-9](?:[0-9\s–./-]*[0-9])?")
+IDENTIFIER_RUN = re.compile(r"\d(?:[\d\s–./-]*\d)?")
 FINANCIAL_FIELDS = frozenset(
     {"booked_date", "value_date", "amount", "debit", "credit", "running_balance"}
 )
