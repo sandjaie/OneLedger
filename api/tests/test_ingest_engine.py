@@ -423,6 +423,51 @@ def test_propose_builds_midpoint_bands_that_extract_the_statement(tmp_path: Path
     ]
 
 
+def test_propose_maps_a_second_date_header_to_value_date(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "dual-date-layout.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Transaction Date"),
+                Placement(page=0, x=135, y=700, text="Posting Date"),
+                Placement(page=0, x=260, y=700, text="Description"),
+                Placement(page=0, x=500, y=700, text="Amount"),
+                Placement(page=0, x=20, y=670, text="13/02/2024"),
+                Placement(page=0, x=140, y=670, text="14/02/2024"),
+                Placement(page=0, x=260, y=670, text="ALPHA"),
+                Placement(page=0, x=500, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="15/02/2024"),
+                Placement(page=0, x=140, y=640, text="16/02/2024"),
+                Placement(page=0, x=260, y=640, text="BETA"),
+                Placement(page=0, x=500, y=640, text="20.00"),
+            ]
+        )
+    )
+
+    draft, rows = engine.propose(pdf_path, None)
+
+    assert [column.field for column in draft.columns] == [
+        "booked_date",
+        "value_date",
+        "description",
+        "amount",
+    ]
+    assert [row.fields for row in rows] == [
+        {
+            "booked_date": "13/02/2024",
+            "value_date": "14/02/2024",
+            "description": "ALPHA",
+            "amount": "17.25",
+        },
+        {
+            "booked_date": "15/02/2024",
+            "value_date": "16/02/2024",
+            "description": "BETA",
+            "amount": "20.00",
+        },
+    ]
+
+
 def test_propose_infers_suffix_dates_and_descending_order(tmp_path: Path) -> None:
     pdf_path = tmp_path / "suffix-layout.pdf"
     pdf_path.write_bytes(

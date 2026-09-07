@@ -349,6 +349,33 @@ def _line_header_matches(line: Line) -> list[_HeaderMatch]:
                     candidates.append((end - start, start, end, synonym))
         if not candidates:
             continue
+        if field_name == "booked_date":
+            selected: list[tuple[int, int, int, str]] = []
+            ordered = sorted(
+                candidates,
+                key=lambda item: (item[1], -item[0], -len(item[3])),
+            )
+            for candidate in ordered:
+                _, start, end, _ = candidate
+                overlaps = any(
+                    start < chosen_end and end > chosen_start
+                    for _, chosen_start, chosen_end, _ in selected
+                )
+                if overlaps:
+                    continue
+                selected.append(candidate)
+                if len(selected) == 2:
+                    break
+            for index, (_, start, end, _) in enumerate(selected):
+                matches.append(
+                    _HeaderMatch(
+                        field="booked_date" if index == 0 else "value_date",
+                        x0=words[start].x0,
+                        x1=words[end - 1].x1,
+                        label=" ".join(word.text for word in words[start:end]),
+                    )
+                )
+            continue
         _, start, end, synonym = max(candidates, key=lambda item: (item[0], len(item[3]), -item[1]))
         matches.append(
             _HeaderMatch(
