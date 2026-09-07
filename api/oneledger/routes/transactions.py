@@ -60,6 +60,8 @@ class TransactionRow(BaseModel):
     descriptionClean: str | None
     amount: str
     currency: str = Field(min_length=3, max_length=3)
+    originalAmount: str | None
+    originalCurrency: str | None
     amountBase: str
     amountSecondary: str
     fxRateDate: date
@@ -122,7 +124,8 @@ class TransactionUpdate(BaseModel):
 
 
 COLUMNS = """t.id, t.account_id, a.name, t.booked_date, t.description_raw, t.description_clean,
-             t.amount, t.currency, t.amount_base, t.amount_secondary, t.fx_rate_date,
+             t.amount, t.currency, t.original_amount, t.original_currency,
+             t.amount_base, t.amount_secondary, t.fx_rate_date,
              t.fx_rate_is_carried, t.fx_rate_to_base, t.fx_rate_to_secondary,
              t.txn_type::text, t.category_id, c.name, t.merchant_id,
              t.transfer_id, t.parent_transaction_id,
@@ -145,6 +148,8 @@ FIELDS = [
     "descriptionClean",
     "amount",
     "currency",
+    "originalAmount",
+    "originalCurrency",
     "amountBase",
     "amountSecondary",
     "fxRateDate",
@@ -163,7 +168,14 @@ FIELDS = [
     "source",
     "notes",
 ]
-MONEY_FIELDS = {"amount", "amountBase", "amountSecondary", "fxRateToBase", "fxRateToSecondary"}
+MONEY_FIELDS = {
+    "amount",
+    "originalAmount",
+    "amountBase",
+    "amountSecondary",
+    "fxRateToBase",
+    "fxRateToSecondary",
+}
 
 
 def transaction_row(values: tuple[Any, ...]) -> TransactionRow:

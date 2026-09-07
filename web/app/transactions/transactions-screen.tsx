@@ -153,6 +153,16 @@ export function TransactionsScreen({
     return native ? formatMoney(row.amount, native) : `${row.amount} ${row.currency}`;
   }
 
+  // The bank's own conversion, when it made one: the merchant-currency figure that the
+  // account amount settled (product contract: the actual original stays visible).
+  function bankOriginal(row: TransactionRow) {
+    if (!row.originalAmount || !row.originalCurrency) return undefined;
+    const native = currencies.find(({ code }) => code === row.originalCurrency);
+    return native
+      ? formatMoney(row.originalAmount, native)
+      : `${row.originalAmount} ${row.originalCurrency}`;
+  }
+
   function converted(row: TransactionRow) {
     if (row.currency === currency.code) return undefined;
     const value = currency.code === household.baseCurrency ? row.amountBase : row.amountSecondary;
@@ -543,6 +553,7 @@ export function TransactionsScreen({
                 <td>{row.accountName}</td>
                 <td>
                   <span>{original(row)}</span>
+                  {bankOriginal(row) && <small> · originally {bankOriginal(row)}</small>}
                   {converted(row) && <small> · {converted(row)}</small>}
                   <small>
                     {" "}· FX {rateUsed(row)} on {row.fxRateDate}
