@@ -115,8 +115,9 @@ jobs:
           echo "Found ${#tests[@]} invariant test file(s)."
       - name: Run invariant tests
         run: scripts/hooks/db-tests.sh
-      - if: always()
-        run: docker compose down -v
+      # No teardown: the runner is ephemeral, and `docker compose down -v` resolves the
+      # whole compose model — including the api service's `env_file: .env`, which CI
+      # deliberately does not have. Only `up -d db` and `run flyway` avoid that resolution.
 
   # (e) the web gate, plus the type-drift check, the production build and the
   # client-bundle secret scan
