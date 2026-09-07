@@ -742,6 +742,25 @@ def test_sign_conventions_use_their_amount_columns(
     assert result.rows[0].fields[field] == amount
 
 
+@pytest.mark.parametrize("convention", ["signed", "cr_suffix"])
+def test_single_amount_conventions_accept_mapped_debit_credit_pairs(convention: str) -> None:
+    candidate = profile(
+        signConvention=convention,
+        columns=[
+            {"field": "booked_date", "xMin": 0, "xMax": 100},
+            {"field": "description", "xMin": 100, "xMax": 400},
+            {"field": "debit", "xMin": 400, "xMax": 500},
+            {"field": "credit", "xMin": 500, "xMax": 600},
+        ],
+    )
+    result = extract_pages(
+        candidate,
+        [page([word(20, 76, "01/02/2024"), word(130, 170, "VALID"), word(445, 482, "17.25")])],
+    )
+
+    assert result.rows[0].fields["debit"] == "17.25"
+
+
 def test_account_capture_is_not_exposed_in_result_repr() -> None:
     result = extract_pages(
         profile(metadataPatterns={"account_number": r"Account: (1234-5678)"}),
