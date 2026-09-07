@@ -47,7 +47,7 @@ open below — synthetic checks do not substitute for them.
 | --- | --- | --- | --- |
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
-| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Not started | — |
+| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Implementation complete; local review pending | [step-8 report](../../.superpowers/sdd/2026-09-07-m2-statement-importer/task-3-step8-report.md); API/web/docs gates pass |
 | 4 — staged rows, normalization, dedupe, reconciliation (V13) | `feature/m2-staged-rows-and-normalization` | Not started | — |
 | 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
 | 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
@@ -61,6 +61,12 @@ layouts API (`GET /layouts`, `POST /layouts`) behind `require_owner`, with every
 rule Task 2's contract names (band ordering, sign-convention/column agreement, the quirks
 vocabulary, regex compilation, reserved metadata capture groups, the two-digit-year period-
 capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
+
+Task 3 implementation is complete on `feature/m2-extraction-engine`; local review is pending and
+no PR or merge is claimed. The closeout gates passed on 2026-09-07: API `203 passed, 6 skipped,
+2 warnings`; web `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types
+were unchanged; and the documentation/whitespace checks passed. Full evidence is retained in the
+[Task 3 Step 8 report](../../.superpowers/sdd/2026-09-07-m2-statement-importer/task-3-step8-report.md).
 
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
