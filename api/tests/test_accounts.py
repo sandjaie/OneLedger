@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+import psycopg
 import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
@@ -114,8 +115,10 @@ class AccountsConnection:
         institutions: list[tuple[object, ...]] | None = None,
         self_people: list[tuple[object, ...]] | None = None,
         ledger_state: tuple[object, ...] = ("XIN", False, date(2024, 1, 1), False, None, None),
+        update_overflows: bool = False,
     ) -> None:
         self.ledger_state = ledger_state
+        self.update_overflows = update_overflows
         self.fail_institution = fail_institution
         self.rows = rows or []
         self.totals = totals or []
@@ -150,6 +153,8 @@ class AccountsCursor:
     def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
         self.connection.statements.append(sql)
         self.connection.params.append(params or ())
+        if "UPDATE account" in sql and self.connection.update_overflows:
+            raise psycopg.errors.NumericValueOutOfRange("numeric field overflow")
         if "INSERT INTO institution" in sql:
             self._one = (INSTITUTION_ID, "My Broker", "MB", "XB", "broker")
         elif "SELECT 1 FROM institution" in sql:
@@ -620,3 +625,20 @@ def test_lifecycle_edits_cannot_strand_existing_postings(monkeypatch: MonkeyPatc
     assert "predates" in opened_late.json()["detail"]
     assert closed_early.status_code == 409
     assert "postdates" in closed_early.json()["detail"]
+
+
+def test_a_recomputed_balance_that_overflows_is_a_422(monkeypatch: MonkeyPatch) -> None:
+    """opening + SUM can exceed NUMERIC(20,4) even when both inputs fit; the caller gets a
+    validation error, not a 500."""
+    connection = AccountsConnection(rows=[FETCHED_ROW], update_overflows=True)
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).patch(
+            f"/accounts/{ACCOUNT_ID}",
+            json={**UPDATE, "openingBalance": "999.0000"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
