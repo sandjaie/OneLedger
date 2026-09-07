@@ -332,6 +332,39 @@ def test_propose_excludes_non_row_text_from_date_inference(tmp_path: Path) -> No
     assert [row.fields["description"] for row in rows] == ["FIRST", "SECOND"]
 
 
+def test_proposed_header_pattern_skips_case_equivalent_repeated_headers(tmp_path: Path) -> None:
+    placements = []
+    for page_number, first_word, day, description in (
+        (0, "Transaction", 13, "FIRST"),
+        (1, "TRANSACTION", 14, "SECOND"),
+    ):
+        placements.extend(
+            [
+                Placement(page=page_number, x=20, y=700, text=first_word),
+                Placement(page=page_number, x=100, y=700, text="Date"),
+                Placement(page=page_number, x=180, y=700, text="Description"),
+                Placement(page=page_number, x=500, y=700, text="Amount"),
+                Placement(page=page_number, x=20, y=670, text=f"{day}/02/2024"),
+                Placement(page=page_number, x=180, y=670, text=description),
+                Placement(page=page_number, x=500, y=670, text="17.25"),
+            ]
+        )
+    path = tmp_path / "case-equivalent-headers.pdf"
+    path.write_bytes(build_pdf(placements))
+
+    draft, _ = engine.propose(path, None)
+    result = engine.extract(
+        profile(
+            skipLinePatterns=draft.skipLinePatterns,
+            continuationRule="no_date_and_no_amount",
+        ),
+        path,
+        None,
+    )
+
+    assert [row.fields["description"] for row in result.rows] == ["FIRST", "SECOND"]
+
+
 def test_dash_dates_do_not_silently_choose_day_first(tmp_path: Path) -> None:
     path = tmp_path / "ambiguous-dashes.pdf"
     path.write_bytes(

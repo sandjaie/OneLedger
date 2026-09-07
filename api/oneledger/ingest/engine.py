@@ -330,6 +330,11 @@ def _header_key(value: str) -> str:
     return "".join(character.casefold() for character in value if character.isalnum())
 
 
+def _equivalent_header_pattern(value: str) -> str:
+    separator = r"[\W_]*"
+    return f"(?i)^{separator.join(re.escape(character) for character in _header_key(value))}$"
+
+
 def _line_header_matches(line: Line) -> list[_HeaderMatch]:
     words = sorted(line.words, key=lambda word: word.x0)
     matches: list[_HeaderMatch] = []
@@ -506,7 +511,7 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
             if any(re.search(r"(?:CR|DR)\s*$", value, re.IGNORECASE) for value in amount_samples)
             else "signed"
         )
-    header_pattern = rf"^{re.escape(header_text)}$"
+    header_pattern = _equivalent_header_pattern(header_text)
     draft = LayoutDraft(
         name="Proposed layout",
         institutionId=None,
