@@ -283,12 +283,18 @@ def test_repeated_headers_are_deduplicated_only_when_equivalent(
 ) -> None:
     placements = []
     for index in range(2):
+        header = (
+            ("Date", "Description", "Amount") if index == 0 else ("DATE", "DESCRIPTION", "AMOUNT")
+        )
         placements.extend(
             [
-                Placement(page=index, x=20, y=700, text="Date"),
-                Placement(page=index, x=180, y=700, text="Description"),
+                Placement(page=index, x=20, y=700, text=header[0]),
+                Placement(page=index, x=180, y=700, text=header[1]),
                 Placement(
-                    page=index, x=500 if not different or index == 0 else 450, y=700, text="Amount"
+                    page=index,
+                    x=500 if not different or index == 0 else 450,
+                    y=700,
+                    text=header[2],
                 ),
                 Placement(page=index, x=20, y=670, text=f"{13 + index}/02/2024"),
                 Placement(page=index, x=180, y=670, text="ITEM"),
@@ -673,7 +679,7 @@ def test_out_of_period_rows_are_retained_for_normalization_to_reject() -> None:
     assert result.rows[0].fields["booked_date"] == "01/03/2024"
 
 
-@pytest.mark.parametrize("amount", ["1,,2", "12,", "(12.00", "12.00)"])
+@pytest.mark.parametrize("amount", ["1,,2", "12,", "1,2", "1,2,3", "(12.00", "12.00)"])
 def test_malformed_amount_does_not_start_a_row(amount: str) -> None:
     result = extract_pages(
         profile(),
@@ -681,6 +687,22 @@ def test_malformed_amount_does_not_start_a_row(amount: str) -> None:
     )
     assert result.rows == []
     assert result.lines_unparsed == 1
+
+
+def test_indian_grouped_amount_starts_a_row() -> None:
+    result = extract_pages(
+        profile(),
+        [
+            page(
+                [
+                    word(20, 76, "01/02/2024"),
+                    word(130, 170, "VALID"),
+                    word(445, 500, "1,23,456.7890"),
+                ]
+            )
+        ],
+    )
+    assert result.rows[0].fields["amount"] == "1,23,456.7890"
 
 
 @pytest.mark.parametrize(

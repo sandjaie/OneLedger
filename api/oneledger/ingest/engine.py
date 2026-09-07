@@ -89,7 +89,7 @@ HEADER_SYNONYMS: dict[str, tuple[str, ...]] = {
     "running_balance": ("balance", "closing balance", "running balance"),
 }
 ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]")
-NUMBER_BODY = r"\d+(?:,\d+)*(?:\.\d+)?"
+NUMBER_BODY = r"(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?:\.\d+)?"
 NUMBER = re.compile(
     rf"^(?:[-+]?{NUMBER_BODY}|\({NUMBER_BODY}\))(?:\s*(?:CR|DR))?$",
     re.IGNORECASE,
@@ -401,12 +401,16 @@ def _find_header(pages: list[Page]) -> tuple[int, int, list[_HeaderMatch]]:
         raise ExtractionError("no qualifying header found")
     best_score = max(len(matches) for _, _, matches in candidates)
     best = [candidate for candidate in candidates if len(candidate[2]) == best_score]
-    signatures = {
-        tuple((match.field, match.x0, match.x1, _header_key(match.label)) for match in candidate[2])
-        for candidate in best
-    }
-    if len(signatures) != 1:
-        raise ExtractionError("ambiguous header rows")
+    reference = best[0][2]
+    reference_semantics = tuple((match.field, _header_key(match.label)) for match in reference)
+    for _, _, matches in best[1:]:
+        semantics = tuple((match.field, _header_key(match.label)) for match in matches)
+        aligned = all(
+            abs(match.x0 - expected.x0) <= HEADER_ANCHOR_TOLERANCE
+            for match, expected in zip(matches, reference, strict=True)
+        )
+        if semantics != reference_semantics or not aligned:
+            raise ExtractionError("ambiguous header rows")
     return best[0]
 
 
@@ -430,6 +434,7 @@ DATE_SAMPLE = re.compile(
     r"^(?:\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})|\d{1,2}-\d{1,2}-\d{4}|"
     r"\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{4}-\d{1,2}-\d{1,2})$"
 )
+HEADER_ANCHOR_TOLERANCE = 3.0
 
 
 def _is_transaction_sample(cells: dict[str, str]) -> bool:

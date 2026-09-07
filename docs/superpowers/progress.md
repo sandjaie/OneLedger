@@ -65,10 +65,11 @@ capture requirement, and the institution predicate). No parsing exists yet — t
 Task 3 is on `feature/m2-extraction-engine`; its second local re-review found no remaining
 findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open, with its first GitHub
 Codex review's two privacy/proposal findings and its second review's two Unicode/header-equivalence
-findings fixed. Its third review's three dual-date, enum-validation and monetary-preview findings
-and its fourth review's two lone-directional-column/date-format findings are also fixed, with
-re-review pending; no merge is claimed yet. After those fixes, the closeout gates passed on
-2026-09-07: API `259 passed, 2 warnings` against the live Compose database with no skips; web
+findings fixed. Its third review's three dual-date, enum-validation and monetary-preview findings,
+its fourth review's two lone-directional-column/date-format findings, and its fifth review's three
+contextual-redaction/header-geometry/number-grouping findings are also fixed. Re-review is pending;
+no merge is claimed yet. After those fixes, the closeout gates passed on
+2026-09-08: API `263 passed, 2 warnings` against the live Compose database with no skips; web
 `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types were unchanged;
 and the documentation/whitespace checks passed. Original RED evidence for the recovered first
 three implementation steps is unavailable and is not claimed.
