@@ -33,8 +33,9 @@ independent of `schema.md`), and V10 gaining the account-balance trigger before 
 | 14 — manual transaction API, B3.5 lock | Implemented | `7967aba`; `api/tests/test_transactions*.py` |
 | 15 — transactions screen, category management | Implemented | `3885d86`; component tests |
 
-Phase 1 remains active. This merge is M1a, not Phase 1 completion. Phase 0's live Google
-identity gates remain open below — synthetic checks do not substitute for them.
+Phase 1 remains active: M1a is merged and M1b is the delivery in review; neither is Phase 1
+completion. Phase 0's live Google identity gates remain open below — synthetic checks do not
+substitute for them.
 
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
