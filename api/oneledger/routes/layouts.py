@@ -171,6 +171,13 @@ class LayoutCreate(BaseModel):
                 )
         return value
 
+    @field_validator("dateFormat")
+    @classmethod
+    def date_format_is_supported(cls, value: str) -> str:
+        if value not in engine.DATE_FORMATS:
+            raise ValueError("dateFormat must be one of: " + ", ".join(sorted(engine.DATE_FORMATS)))
+        return value
+
     @field_validator("signConvention")
     @classmethod
     def sign_convention_is_supported(cls, value: str) -> str:

@@ -529,6 +529,8 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
     date_samples = [cell["booked_date"] for cell in cells if "booked_date" in cell]
     date_format = _infer_date_format(date_samples)
     fields = {column.field for column in columns}
+    if len(fields & {"debit", "credit"}) == 1:
+        raise ExtractionError("cannot infer signs from a lone debit or credit column")
     if {"debit", "credit"} <= fields:
         sign_convention = "debit_credit_columns"
     else:
