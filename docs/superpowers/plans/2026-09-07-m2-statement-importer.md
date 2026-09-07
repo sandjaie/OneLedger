@@ -374,9 +374,14 @@ stated here rather than left to the implementer.
 Verdicts:
 
 - `matched` — the identity holds exactly (both sides are `Decimal`; there is no tolerance).
-- `mismatched` — it does not. Carries `declared_closing`, `computed_closing`, `delta` and
-  `first_divergent_row` (the first row index at which the running total departs from any
-  available running balance, else `None`). **Blocks.**
+- `mismatched` — it does not. Carries `declared_closing`, `computed_closing`, `delta`,
+  `first_divergent_row` and `candidate_rows`. `first_divergent_row` is the first row at which
+  the running total departs from the stated running balance — it exists **only when the layout
+  has a running-balance column**; with a closing anchor alone no algorithm can honestly name
+  *the* divergent row, because any single row could absorb the delta (I7 forbids inventing one).
+  In that case `first_divergent_row` is `None` and `candidate_rows` lists the rows whose amount
+  equals the delta exactly (the dropped-row case; empty for a corrupted amount), and the
+  message says row-level evidence is unavailable. **Blocks either way.**
 - `running_balance_break` — the layout has `has_running_balance` and no declared closing;
   `balanceₙ = balanceₙ₋₁ + amountₙ` fails at a row. Carries that row number, the previous
   balance, the amount and both the expected and stated balances. **Blocks.**
@@ -536,8 +541,15 @@ review — Task 4's Type contract), so acceptance always leaves a row that can c
 Per api-contracts.html §4: the service writes the original into the documents volume **first**,
 then writes `document`, `import_batch` and every staged row **inside one database transaction**.
 Original first, because a staged batch referencing a blob that failed to write is worse than an
-orphaned file. On any failure the database transaction rolls back and the blob is removed
-best-effort; a surviving blob with no `document` row is inert.
+orphaned file. The blob is written to a **uniquely named temporary file** in the same directory
+and atomically renamed to its final `<sha256>.pdf` path before the transaction opens, so a
+partial write never sits at the final name (two identical concurrent uploads renaming to the
+same path is harmless — the bytes are identical by construction of the name). On any failure the
+database transaction rolls back and cleanup is **ownership-aware**: the temporary file is always
+removed, but the final blob is removed only after confirming no `document` row exists for this
+`(household_id, sha256)` — an identical concurrent upload that won the unique-checksum race owns
+that file, and unconditional cleanup would delete the committed winner's original. A surviving
+blob with no `document` row is inert.
 
 ### 5.5 What a blocked batch leaves behind
 
@@ -558,12 +570,17 @@ correction in its PR. Do not work around it in code.
 
 `pdf-statements/` holds real statements **with card numbers in the filenames**. Two consequences:
 
-1. `document.original_filename` is stored **masked**: every run of 7 or more digits is replaced by
-   `…` plus its last four digits, before the value reaches the database. The unmasked filename
-   exists only as a local variable during the request.
+1. `document.original_filename` is stored **masked**: the mask detects identifier-length digit
+   sequences on a **normalized** view — separators that format an identifier (whitespace, `-`,
+   `–`, `.`, `_`, `/`) are ignored between digit groups — and replaces each whole formatted
+   sequence totalling 7 or more digits with `…` plus its last four digits, before the value
+   reaches the database. `statement-1234-5678-9012-3456.pdf` masks to `statement-…3456.pdf`;
+   checking only contiguous runs would store that full card number. The unmasked filename exists
+   only as a local variable during the request.
 2. **No log line, error message, exception detail or HTTP response may contain the raw filename,
-   the file bytes, a password, or any digit run of length ≥ 7 from the document.** Parse errors
-   name page and row numbers and the *masked* filename.
+   the file bytes, a password, or any digit sequence of 7 or more digits — contiguous or
+   separator-formatted — from the document.** Parse errors name page and row numbers and the
+   *masked* filename.
 
 Task 5 owns both, and Task 5's tests assert them.
 
@@ -639,6 +656,20 @@ worked around.
    leave M2's own commit path writing `import_batch_id`, `statement_layout_id` and
    `source_document_id` into `transaction` for two milestones with no referential check. Task 2
    corrects the `schema.md` sentence in the migration's commit.
+9. **The dedupe index in `statement-ingestion.html` §6.** The specification's own worked example
+   establishes that any statement covering a day carries the same set for that day — the
+   within-document property — yet one sentence then said the index is computed against the union
+   of committed rows and earlier batch rows. Under the union rule a committed overlap shifts
+   every incoming index and the recognition defeats itself. Corrected at source in Task 1's PR:
+   the index counts within the current document only; the split-boundary edge stages as a
+   visible `duplicate` for review instead of silently doubling a month.
+10. **The roadmap's "names the divergent row" gate.** With a closing-anchor-only layout (no
+    running-balance column) there is no per-row balance evidence, so no algorithm can honestly
+    name *the* divergent row — any single row could absorb the delta. §4.6 defines the honest
+    diagnostic: the row is named when running-balance evidence exists; otherwise the verdict
+    carries the exact delta and the candidate rows whose amount equals it (the dropped-row
+    case), and says that row-level evidence is unavailable. The roadmap gate is met in that
+    form; inventing a row number would violate I7.
 
 ---
 
@@ -689,9 +720,11 @@ before real data lands in it. This PR carries this plan document.
   rest wherever they are stored. The passphrase comes from `.env` via `scripts/load-env.sh`
   (`.env.example` gains an empty `BACKUP_PASSPHRASE=` with a comment); an unset or empty
   passphrase refuses the backup with the variable named, exactly as `dsn.sh` treats the
-  password. The pipeline writes to a temporary name, removes it on any failure, and renames to
-  the final path only after both `pg_dump` and `openssl` succeed — a mid-stream failure must
-  never leave a plausible-looking partial backup for a retention or copy job to preserve. The
+  password. The pipeline writes to a **uniquely created** temporary file (`mktemp`), removes it
+  on any failure, and claims the final path atomically only after both `pg_dump` and `openssl`
+  succeed (a hard-link claim that fails if a concurrent same-second run published first) — a
+  mid-stream failure must never leave a plausible-looking partial backup for a retention or copy
+  job to preserve, and two concurrent invocations must never share a temp file. The
   script refuses to overwrite an existing file, prints the path and byte size, exits non-zero on
   any failure, and records the decrypt-and-restore line in a comment
   (`openssl enc -d … -pass env:BACKUP_PASSPHRASE < file | pg_restore …`). `backups/` and
@@ -891,6 +924,9 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
   `POST /layouts` and returns it echoed alongside the rows `extract()` produces under it. This is
   the mapper's re-post path (Task 8): an edited band previews as the parse it will actually
   produce, rather than regenerating the original proposal. Persists nothing in either mode.
+  In this task the draft mode returns the draft and the raw extracted rows; **Task 5 extends it**
+  with the normalized preview and the reconciliation verdict once `normalize`/`reconcile` exist —
+  that extended response is what Task 8's mapper renders.
 - **Account resolution.** `POST /accounts` and `PATCH /accounts/{id}` gain an optional
   `accountNumber` field: the service derives `account_number_masked` (last four, the existing
   `_masked` helper's shape) and `account_number_hash =
@@ -989,8 +1025,9 @@ class Verdict:
     declared_closing: Decimal | None
     computed_closing: Decimal | None
     delta: Decimal | None
-    first_divergent_row: int | None
-    message: str            # owner-facing, names the numbers and the row
+    first_divergent_row: int | None   # only with running-balance evidence (§4.6)
+    candidate_rows: list[int]         # rows whose amount equals the delta, else empty
+    message: str            # owner-facing, names the numbers and the row or the delta
 ```
 
 **Contracts.**
@@ -1047,9 +1084,12 @@ worked around (§5.2).
   overlapping statement takes index 1, collides with nothing committed, and imports;
   a row with a reference uses the reference; a near-duplicate at ±3 days and 0.86 similarity is
   flagged and **not** blocked.
-- *Reconciliation*: a correct card statement reconciles exactly; **one dropped row yields
-  `mismatched` with the delta equal to the dropped amount** and a `first_divergent_row`; a
-  corrupted amount yields `mismatched` naming the divergent row; a running-balance layout with a
+- *Reconciliation*: a correct card statement reconciles exactly; on a **running-balance layout**
+  a corrupted amount yields `mismatched` naming `first_divergent_row`; on a
+  **closing-anchor-only layout** one dropped row yields `mismatched` with the delta equal to the
+  dropped amount, `first_divergent_row=None` and the twin amount's rows in `candidate_rows`,
+  while a corrupted amount yields empty candidates and a message saying row-level evidence is
+  unavailable (§4.6 — never an invented row); a running-balance layout with a
   broken row yields `running_balance_break` naming that row, the expected and the stated balance;
   a layout with no anchors and no running values yields `unavailable`; an `inverts_sign` statement
   reconciles in the ledger frame and **fails** if the declared balances are not inverted with the
@@ -1086,7 +1126,9 @@ a batch and staged rows, in one database transaction, with FX frozen and any mis
 - Create `api/tests/test_ingest_storage.py`, `api/tests/test_parse.py`.
 - Modify `api/oneledger/routes/transactions.py` (import from `money.py`; behaviour unchanged),
   `api/oneledger/routes/fx.py` (extract the backfill body into a callable both the route and the
-  pipeline use), `api/oneledger/main.py`, `api/tests/test_transactions.py`,
+  pipeline use), `api/oneledger/routes/layouts.py` and `api/tests/test_layouts.py` (the draft
+  mode gains its normalized preview and reconciliation verdict — see Contracts),
+  `api/oneledger/main.py`, `api/tests/test_transactions.py`,
   `api/tests/test_fx*.py` as the refactor requires.
 - Modify `docs/design/api-contracts.html` §2/§4. Regenerate `web/types/api/`.
 
@@ -1121,7 +1163,8 @@ class ReconciliationResult(BaseModel):
     declaredClosing: str | None
     computedClosing: str | None
     delta: str | None
-    firstDivergentRow: int | None
+    firstDivergentRow: int | None     # only with running-balance evidence (§4.6)
+    candidateRows: list[int]
     message: str
 ```
 
@@ -1148,6 +1191,12 @@ class ReconciliationResult(BaseModel):
 - The `money.py` move is a **pure move**: no behaviour change, and `test_transactions.py` must
   pass unchanged apart from import paths. Two implementations of the freeze would drift, and a
   drifted freeze is a wrong number that looks right.
+- **The draft preview completes here.** `POST /layouts/propose`'s draft mode (Task 3) now also
+  returns the normalized preview rows and a `reconciliation: ReconciliationResult` computed
+  under the draft's sign convention, `inverts_sign` and balance patterns. Reconciliation is a
+  within-statement identity on native amounts — no account, no FX — so an unsaved mapping
+  previews its true verdict. Auto-propose mode reports `unavailable` (a fresh draft proposes no
+  balance anchor). Still persists nothing in either mode.
 
 **Invariants / security.** I5 (frozen once, derived from the quantized rate), I6 (every staged row
 carries document, page and row), I7 (carried rates labelled; `wordsFiltered` and `linesUnparsed`
@@ -1164,8 +1213,10 @@ never-store rules of §5.6, tested.
   batch id, and writes nothing.
 - An overlapping statement stages only the non-overlapping rows; the overlapping ones stage as
   `duplicate` and are excluded from import by default.
-- A deliberately corrupted amount yields `mismatched`, names the divergent row, and **stages zero
-  rows** (Invariant I8) — assert the three tables are empty afterwards.
+- A deliberately corrupted amount yields `mismatched` and **stages zero rows** (Invariant I8) —
+  assert the three tables are empty afterwards. It names `firstDivergentRow` when the layout
+  carries a running balance; on a closing-anchor-only layout it reports the exact delta with
+  row-level evidence unavailable (§4.6).
 - A booked date with no stored FX rate triggers exactly one fetch covering the gap (the source is
   stubbed; **no test reaches the network**), then stages successfully; when the stub fails, the
   import is refused with the uncovered dates named and nothing is written, and no row falls back
@@ -1176,10 +1227,14 @@ never-store rules of §5.6, tested.
   (B3.5), matching the shape of the existing `test_transactions_live.py` proof.
 - An unidentified layout returns candidates and scores and writes nothing.
 - An unresolved account returns the account-picker state and writes nothing.
-- A filename containing a 16-digit run is stored masked; a parse failure's message contains
-  neither the raw filename nor any 7-or-more-digit run; the password never appears in any
-  response, log record or stored row.
+- A filename containing a 16-digit run is stored masked, and so is one carrying the same number
+  formatted in hyphenated groups of four (`…-1234-5678-9012-3456.pdf` → `…3456`); a parse
+  failure's message contains neither the raw filename nor any 7-or-more-digit sequence,
+  contiguous or formatted; the password never appears in any response, log record or stored row.
 - A scanned PDF is refused with the unsupported message and writes nothing.
+- The draft-mode propose response carries the normalized preview and the draft's own
+  reconciliation verdict: a correct draft yields `matched`, a deliberately shifted amount band
+  yields a blocking verdict, and nothing is written in either case.
 
 **Validation.** The API gate, the DB gate, the web gate for regenerated types.
 
@@ -1397,7 +1452,8 @@ reconciliation line beneath it. `ui-information-architecture.html` wins on disag
   re-posts the file with the edited `draft` field to `POST /layouts/propose`** (Task 3's second
   mode) for a fresh preview, so the parse shown is always the parse that will happen — the
   preview is never computed in TypeScript.
-- The reconciliation line is rendered from the API's verdict, never recomputed in the browser.
+- The reconciliation line is rendered from the draft-mode propose response's verdict (Task 5's
+  extended contract), never recomputed in the browser.
   Saving is permitted with a failing verdict (the owner may be mapping a period with no anchors),
   but the line states the verdict plainly; staging still refuses a blocking verdict.
 - The owner supplies the profile name, the balance patterns and the quirks; **the UI offers
@@ -1464,8 +1520,10 @@ diagnosable at a glance, and the whole milestone is proven end to end on synthet
 - Each row shows `description_raw` and its page and row number (the M2 form of traceability; the
   document link is M10).
 - **Diagnostics panel** (`statement-ingestion.html` §12): extracted rows beside the computed
-  running balance, with the divergent row highlighted, rendered from the parse response's preview.
-  It is the first thing to open when a layout changes.
+  running balance, rendered from the parse response's preview — the divergent row highlighted
+  when `firstDivergentRow` exists, and otherwise the delta stated with any `candidateRows`
+  called out and a plain line that row-level evidence is unavailable (§4.6). It is the first
+  thing to open when a layout changes.
 - Fully keyboard-operable via Tab, Enter and Space. **No vim-style bindings** — IA §3 is explicit
   that keyboard operability here is an accessibility requirement, not a power-user feature.
 
@@ -1507,7 +1565,7 @@ Mapped one-to-one to roadmap M2's "Done when" list. Each is checked in the PR na
 | Reconciliation passes for every one | **Owner-run**, recorded in `progress.md` | Task 9 |
 | Re-importing the same file imports zero rows and names the earlier import | Layer-1 checksum test; end-to-end test; owner-run on a real file | Tasks 5, 9 |
 | An overlapping statement imports only the new rows | Layer-2 occurrence-index test; owner-run | Tasks 4, 5, 9 |
-| A deliberately corrupted amount blocks the batch and names the divergent row | `mismatched` verdict + zero staged rows (I8) | Tasks 4, 5 |
+| A deliberately corrupted amount blocks the batch and names the divergent row | `mismatched` verdict + zero staged rows (I8); the row is named where running-balance evidence exists, else the exact delta and candidates — the honest form, §7.10 | Tasks 4, 5 |
 | The commit is atomic — an induced failure mid-import leaves zero rows | `db/tests/0012` induced-failure case | Task 6 |
 | A backup has run and been restored into a scratch database | `scripts/backup-db.sh`; **owner-run** restore | Tasks 1, 9 |
 | Deferred in from Phase 0: CI (lint, type-check, test, migrations-from-empty) | `.github/workflows/ci.yml` green on every PR | Task 1 |

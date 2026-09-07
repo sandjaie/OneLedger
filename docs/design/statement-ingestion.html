@@ -638,8 +638,13 @@ occurrence_index = prior_identical_rows_on_same_date
 second coffee is occurrence 1 in both documents and hashes identically in both. Two distinct
 same-day identical transactions still get distinct hashes, which is the property the ordinal was
 reaching for.</p>
-<p>The index is computed against the union of rows already committed for that date and rows earlier
-in the current batch, so a transaction split across a document boundary is counted once.</p>
+<p>The index is computed <strong>within the current document only</strong> — among this statement's
+own rows for that date, in statement order. Counting committed rows into the index would shift an
+overlapping row past its committed copy (the copy holds 0, the incoming would take 1), defeating
+the very recognition the example above establishes. The cost is the rare day whose identical pair
+is split across a statement boundary: its second occurrence collides with the committed first and
+stages as a visible <code>duplicate</code> the owner can accept in review — a surfaced judgement
+call, not a silently doubled month.</p>
 <p><strong>Layer 3 — near-duplicate warning.</strong> Same account, same amount, date within ±3 days, description
 similarity above 0.85 (token-set ratio). <strong>Warned, not blocked</strong> — this catches a genuinely
 double-charged subscription as well as a re-import, and only the user can tell those apart.</p>
