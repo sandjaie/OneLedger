@@ -259,7 +259,7 @@ wire (matching `routes/transactions.py` and `routes/accounts.py`).
 |---|---|---|
 | `GET /layouts` | 2 | The household's saved layout profiles, newest version per name |
 | `POST /layouts` | 2 | Saves a profile. Re-saving an existing `name` creates `version + 1` |
-| `POST /layouts/propose` | 3 | Multipart PDF → a draft profile: header row, column bands, sample rows. Persists nothing |
+| `POST /layouts/propose` | 3 | Multipart PDF → a draft profile: header row, column bands, sample rows. With an optional `draft` field, previews that edited draft against the file instead of auto-proposing. Persists nothing in either mode |
 | `POST /parse` | 5 | Multipart PDF + `stage` flag. Identify, extract, normalize, dedupe, reconcile; stage only when `stage=true` and the verdict allows it |
 | `GET /import/{batch_id}` | 6 | The batch, its verdict and its staged rows grouped for review |
 | `PATCH /import/{batch_id}/rows` | 6 | Bulk row decisions: accept, reject, categorize |
@@ -343,9 +343,13 @@ Given the pages of an unrecognised PDF:
    `yyyy-MM-dd` against the sampled date cells and keeping the one that parses every sample
    unambiguously; propose nothing rather than guess when two formats both parse every sample.
 5. Infer `chronological_order` from the sampled dates.
-6. Propose `fingerprints` as up to three distinctive lines from page 1 that are not the header row
-   and contain no digit run of length ≥ 4 (so a statement number or a card number never becomes a
-   fingerprint).
+6. Propose `fingerprints` as up to three distinctive lines from page 1 that are not the header
+   row. The digit screen runs on a **normalized** copy of the line — every separator that
+   formats an identifier (whitespace, `-`, `–`, `.`, `/`) removed between digits first — and
+   rejects any line whose normalized form contains a digit run of length ≥ 4. `123-456-789`
+   normalizes to a 9-digit run and is rejected; checking each raw 3-digit group independently
+   would wave it through, and a formatted full account number must never become a stored
+   fingerprint (the never-store list is absolute).
 7. Return the draft **plus the first 20 rows extracted with it**, so the UI can show the parse
    live. `propose()` persists nothing and never invents a balance anchor: the draft's balance
    patterns are empty and the owner supplies them, which the `has_a_balance_anchor` CHECK then
@@ -452,7 +456,8 @@ The function, in order:
 4. `INSERT INTO transaction (...) SELECT ... FROM staged_transaction WHERE import_batch_id = $1
    AND status = 'accepted'`, carrying `source='statement_import'`, `source_document_id`,
    `source_page_number`, `source_row_number`, `import_batch_id`, `statement_layout_id`,
-   `layout_version` and `dedupe_hash` through unchanged (Invariant I6).
+   `layout_version` and `dedupe_hash` through unchanged (Invariant I6), and `txn_type` from the
+   staged row's `proposed_txn_type` — non-null on every accepted row by V13's CHECK (§5.2).
 5. Calls `assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` — also
    created in V14, also `SECURITY DEFINER`, also calling `assert_is_owner()` first — which
    computes the account's balance **as of the statement close** in Postgres (the account's
@@ -507,6 +512,9 @@ as a new subsection under the `V13 (applied)` heading in the same commit. M2 del
 - `proposed_transfer_kind` is created as `TEXT` with a `CHECK` (the `transfer_kind` enum arrives
   with M5) and `classification_rule_id` as a bare `UUID` (the table arrives with M4) — the same
   deferred-reference pattern V10 already uses and documents.
+- A `CHECK`: `status <> 'accepted' OR proposed_txn_type IS NOT NULL` — an accepted row always
+  carries a committable type, because `transaction.txn_type` is `NOT NULL` and a row that can be
+  accepted but never committed is a dead end the database refuses to represent.
 - `ENABLE ROW LEVEL SECURITY` + `household_isolation`.
 - **Consequence to test, not to work around:** `reporting_pair_is_locked()` (V7) discovers every
   table carrying both `amount_base` and `household_id`. Creating `staged_transaction` therefore
@@ -519,6 +527,9 @@ as a new subsection under the `V13 (applied)` heading in the same commit. M2 del
 `staged_transaction.status ∈ {new, duplicate, near_duplicate, needs_review, accepted, rejected}`.
 M2 stages `new` (clean), `duplicate` (layer 2 hit) or `near_duplicate` (layer 3 hit); `needs_review`
 is set by M4's classifier. Review moves rows to `accepted` or `rejected`. Only `accepted` commits.
+Every staged row carries a `proposed_txn_type` (sign-derived at normalization, overridable in
+review — Task 4's Type contract), so acceptance always leaves a row that can commit into
+`transaction.txn_type NOT NULL`.
 
 ### 5.4 The staging transaction
 
@@ -678,8 +689,11 @@ before real data lands in it. This PR carries this plan document.
   rest wherever they are stored. The passphrase comes from `.env` via `scripts/load-env.sh`
   (`.env.example` gains an empty `BACKUP_PASSPHRASE=` with a comment); an unset or empty
   passphrase refuses the backup with the variable named, exactly as `dsn.sh` treats the
-  password. The script refuses to overwrite an existing file, prints the path and byte size,
-  exits non-zero on any failure, and records the decrypt-and-restore line in a comment
+  password. The pipeline writes to a temporary name, removes it on any failure, and renames to
+  the final path only after both `pg_dump` and `openssl` succeed — a mid-stream failure must
+  never leave a plausible-looking partial backup for a retention or copy job to preserve. The
+  script refuses to overwrite an existing file, prints the path and byte size, exits non-zero on
+  any failure, and records the decrypt-and-restore line in a comment
   (`openssl enc -d … -pass env:BACKUP_PASSPHRASE < file | pg_restore …`). `backups/` and
   `*.dump` are already git-ignored and the directory ignore covers the `.enc` name — verify,
   do not re-add. The script backs up the **database only**; the documents volume is a separate
@@ -872,6 +886,11 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
   filename is a claim, not evidence. Below a stated threshold the result is "no match", which the
   caller turns into "ask, and offer to map". The engine never guesses.
 - `propose()` follows §4.5. It persists nothing and proposes no balance anchor.
+- **The route has two modes.** Without `draft`, it auto-proposes (`propose()`). With an optional
+  multipart `draft` field — a `LayoutCreate` JSON — it validates the draft with the same rules as
+  `POST /layouts` and returns it echoed alongside the rows `extract()` produces under it. This is
+  the mapper's re-post path (Task 8): an edited band previews as the parse it will actually
+  produce, rather than regenerating the original proposal. Persists nothing in either mode.
 - **Account resolution.** `POST /accounts` and `PATCH /accounts/{id}` gain an optional
   `accountNumber` field: the service derives `account_number_masked` (last four, the existing
   `_masked` helper's shape) and `account_number_hash =
@@ -916,6 +935,9 @@ returned or logged (never-store list). `require_owner()` on `POST /layouts/propo
   convention and the date format, and proposes no fingerprint containing a 4-digit-or-longer digit
   run.
 - `propose()` refuses rather than guessing when two date formats both parse every sample.
+- Posting the same file with an edited `draft` returns that draft's extraction, not a regenerated
+  proposal — a deliberately shifted band changes the preview cells, and an invalid draft is 422
+  under the same rules as `POST /layouts`.
 - A PDF with zero text objects yields `has_text=False`, and `extract()` refuses with a message
   saying scanned PDFs are unsupported.
 - `POST /accounts` with a full account number stores only mask and hash; the full number appears
@@ -979,6 +1001,12 @@ class Verdict:
   applied last. A card purchase presented as a positive debit stores **negative**; a card payment
   stores positive. Assert this explicitly in tests — a sign error is internally consistent and
   therefore invisible.
+- **Type.** `proposed_txn_type` is set deterministically at normalization: `expense` for a
+  negative ledger amount, `income` for a positive one. `transaction.txn_type` is `NOT NULL`, so
+  a row with no type could be accepted but never committed. The sign-derived default is a
+  labelled mechanical rule shown in review and overridable there before acceptance — I7 bars
+  silent invention, and this is neither silent nor invented. Refund, transfer and settlement
+  types are M4/M5/M6 refinements.
 - **Description.** `description_raw` is **never modified** — it is the audit record.
   `description_clean` is derived by an ordered, inspectable list of removals (terminal and
   reference numbers, trailing dates, POS/ATM prefixes, repeated whitespace, trailing country and
@@ -987,8 +1015,8 @@ class Verdict:
 - **Currency.** The account's currency, unless the layout maps a foreign amount, in which case
   `original_amount`/`original_currency` carry it and `amount` stays the account's. The bank's own
   conversion is authoritative; the ledger never second-guesses it with a market rate.
-- **Dedupe** exactly per §4.7, including the occurrence-index disambiguator and the
-  union-of-committed-and-earlier-in-batch counting rule.
+- **Dedupe** exactly per §4.7, including the **within-document** occurrence-index disambiguator —
+  the index is counted among this statement's own rows only, never offset by committed rows.
 - **Reconciliation** exactly per §4.6, including the single-frame rule for `inverts_sign`.
 - `staged_transaction` DDL per §5.2.
 
@@ -998,7 +1026,8 @@ Task 5). RLS on `staged_transaction`. `reporting_pair_is_locked()`'s new reach i
 worked around (§5.2).
 
 **Required test behaviours (failing first).**
-- *DB (`0011`)*: RLS enabled and isolating; the status CHECK rejects an unknown status; a staged
+- *DB (`0011`)*: RLS enabled and isolating; the status CHECK rejects an unknown status; setting
+  `status='accepted'` with a null `proposed_txn_type` is rejected by the V13 CHECK; a staged
   row cascades away with its `import_batch`; **with one staged row present,
   `reporting_pair_is_locked()` returns true and `update_household_configuration` refuses a pair
   change** — and with none it returns false.
@@ -1197,6 +1226,7 @@ class StagedRow(BaseModel):
     fxRateDate: date
     fxRateIsCarried: bool
     status: str
+    proposedTxnType: str
     categoryId: UUID | None
     duplicateOfTransactionId: UUID | None
     nearDuplicateOfId: UUID | None
@@ -1226,6 +1256,7 @@ class BatchReview(BaseModel):
 class RowDecisions(BaseModel):      # PATCH /import/{id}/rows
     ids: list[UUID]
     status: str | None              # accepted | rejected
+    txnType: str | None             # overrides the sign-derived proposed type
     categoryId: UUID | None
     clearCategory: bool = False     # explicit, so "omitted" never means "clear"
 ```
@@ -1249,6 +1280,8 @@ class RowDecisions(BaseModel):      # PATCH /import/{id}/rows
 - `PATCH /import/{id}/rows` applies one decision to a set of ids in one statement — the review
   screen is bulk-first. A category must be available to the household (reuse
   `routes/transactions.py::_assert_category_allowed`; do not write a second predicate).
+  `txnType` must be a `txn_type` enum member M2 can produce or the owner can reasonably assign
+  (422 otherwise); an omitted `txnType` leaves the sign-derived proposal in place.
 - `GET /import/{id}` computes its totals **in Postgres**, not by summing in Python.
 
 **Invariants / security.** I1/I5 (committed money is immutable — the V10 trigger already enforces
@@ -1268,7 +1301,9 @@ Household predicate on every statement, including inside the functions.
   blocked; the review payload groups rows most-attention-first with the counts the UI renders;
   bulk accept of 200 ids is one statement; a category not available to the household is 422;
   `clearCategory` clears while an omitted `categoryId` does not; every committed row's
-  `source_document_id`, page and row trace back to the staged row it came from.
+  `source_document_id`, page and row trace back to the staged row it came from; every committed
+  row's `txn_type` equals its staged row's final `proposed_txn_type`, and a review override of
+  the type is what commits.
 
 **Validation.** The DB gate (12 tests passed), the API gate, the web gate for regenerated types.
 
@@ -1359,7 +1394,8 @@ reconciliation line beneath it. `ui-information-architecture.html` wins on disag
 - On **Map a new layout**, the file is posted to `POST /layouts/propose`; the response's draft and
   sample rows populate the mapper.
 - Band edges are draggable and each column is relabellable from the field list. **Every edit
-  re-posts for a fresh preview** so the parse shown is always the parse that will happen — the
+  re-posts the file with the edited `draft` field to `POST /layouts/propose`** (Task 3's second
+  mode) for a fresh preview, so the parse shown is always the parse that will happen — the
   preview is never computed in TypeScript.
 - The reconciliation line is rendered from the API's verdict, never recomputed in the browser.
   Saving is permitted with a failing verdict (the owner may be mapping a period with no anchors),

@@ -23,8 +23,15 @@ if [ -e "$out" ]; then
   exit 1
 fi
 
+# Write to a temporary name and rename only after the whole pipeline succeeds: a pg_dump
+# that fails mid-stream must not leave a plausible-looking partial backup at the final path
+# for a retention or copy job to preserve as if it were valid.
+tmp="$out.partial"
+trap 'rm -f "$tmp"' EXIT
 pg_dump -Fc "$DATABASE_URL" \
-  | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$out"
+  | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp"
+mv "$tmp" "$out"
+trap - EXIT
 
 bytes="$(wc -c < "$out" | tr -d ' ')"
 echo "$out ($bytes bytes)"
