@@ -468,6 +468,32 @@ def test_propose_maps_a_second_date_header_to_value_date(tmp_path: Path) -> None
     ]
 
 
+@pytest.mark.parametrize("amount_header", ["Debit", "Credit"])
+def test_propose_refuses_a_lone_directional_amount_column(
+    tmp_path: Path,
+    amount_header: str,
+) -> None:
+    pdf_path = tmp_path / "lone-directional-amount.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=180, y=700, text="Description"),
+                Placement(page=0, x=500, y=700, text=amount_header),
+                Placement(page=0, x=20, y=670, text="13/02/2024"),
+                Placement(page=0, x=180, y=670, text="ALPHA"),
+                Placement(page=0, x=500, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="14/02/2024"),
+                Placement(page=0, x=180, y=640, text="BETA"),
+                Placement(page=0, x=500, y=640, text="20.00"),
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match="lone debit or credit"):
+        engine.propose(pdf_path, None)
+
+
 def test_propose_infers_suffix_dates_and_descending_order(tmp_path: Path) -> None:
     pdf_path = tmp_path / "suffix-layout.pdf"
     pdf_path.write_bytes(
