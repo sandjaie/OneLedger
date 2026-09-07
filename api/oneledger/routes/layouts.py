@@ -7,6 +7,8 @@ that produced it."""
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from shutil import copyfileobj
@@ -22,6 +24,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..ingest import engine
+from ..ingest.words import ExtractionError
 
 router = APIRouter(tags=["layouts"])
 
@@ -251,7 +254,7 @@ class ProposedRawRow(BaseModel):
 class LayoutProposal(BaseModel):
     """POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation."""
 
-    draft: LayoutCreate
+    draft: engine.LayoutDraft | LayoutCreate
     rows: list[ProposedRawRow]
 
 
@@ -346,31 +349,82 @@ def _parse_draft(value: str) -> LayoutCreate:
     try:
         return LayoutCreate.model_validate_json(value)
     except ValidationError as exc:
+        redact = _preview_redactor(None)
         detail = [
             {
                 "type": error["type"],
                 "loc": ["draft", *error["loc"]],
-                "msg": error["msg"],
+                "msg": redact(error["msg"]),
             }
             for error in exc.errors(include_input=False, include_url=False)
         ]
         raise HTTPException(status_code=422, detail=detail) from exc
 
 
+IDENTIFIER_RUN = re.compile(r"[0-9](?:[0-9\s–./-]*[0-9])?")
+FINANCIAL_FIELDS = frozenset(
+    {"booked_date", "value_date", "amount", "debit", "credit", "running_balance"}
+)
+
+
+def _capture_redactor(capture: str | None) -> Callable[[str], str]:
+    normalized = re.sub(r"[\s–./-]", "", capture) if capture else ""
+    pattern = re.compile(r"[\s–./-]*".join(map(re.escape, normalized))) if normalized else None
+    return lambda value: pattern.sub("[redacted]", value) if pattern else value
+
+
+def _preview_redactor(capture: str | None) -> Callable[[str], str]:
+    """Unconditionally screen raw/untyped text; never restore financial-looking tokens."""
+    redact_capture = _capture_redactor(capture)
+
+    def redact(value: str) -> str:
+        return IDENTIFIER_RUN.sub(
+            lambda match: (
+                "[redacted]" if sum(c.isdigit() for c in match.group()) > 4 else match.group()
+            ),
+            redact_capture(value),
+        )
+
+    return redact
+
+
+def _validated_financial_field(key: str, value: str) -> bool:
+    if key not in FINANCIAL_FIELDS:
+        return False
+    if key in {"booked_date", "value_date"}:
+        return any(
+            engine._date(value, date_format) is not None for date_format in engine.DATE_FORMATS
+        )
+    return engine._is_number(value)
+
+
+def _redact_draft(value: object, redact: Callable[[str], str]) -> object:
+    if isinstance(value, str):
+        return redact(value)
+    if isinstance(value, list):
+        return [_redact_draft(item, redact) for item in value]
+    if isinstance(value, dict):
+        return {redact(key): _redact_draft(item, redact) for key, item in value.items()}
+    return value
+
+
 def _public_rows(
     rows: list[engine.RawRow], sensitive_account_capture: str | None = None
 ) -> list[ProposedRawRow]:
-    def redact(value: str) -> str:
-        if not sensitive_account_capture:
-            return value
-        return value.replace(sensitive_account_capture, "[redacted]")
+    redact = _preview_redactor(sensitive_account_capture)
+    redact_capture = _capture_redactor(sensitive_account_capture)
 
     return [
         ProposedRawRow(
             pageNumber=row.page_number,
             rowNumber=row.row_number,
             rawText=redact(row.raw_text),
-            fields={key: redact(value) for key, value in row.fields.items()},
+            fields={
+                key: redact_capture(value)
+                if _validated_financial_field(key, value)
+                else redact(value)
+                for key, value in row.fields.items()
+            },
         )
         for row in rows[:20]
     ]
@@ -392,19 +446,27 @@ def propose_layout(
             copyfileobj(file.file, temp)
         if parsed_draft is None:
             proposed, rows = engine.propose(temporary_path, password)
-            response_draft = LayoutCreate.model_validate(proposed, from_attributes=True)
+            response_draft: engine.LayoutDraft | LayoutCreate = proposed
             sensitive_account_capture = None
         else:
             response_draft = parsed_draft
             extraction = engine.extract(parsed_draft, temporary_path, password)
             rows = extraction.rows
             sensitive_account_capture = extraction.account_number_raw
-        return LayoutProposal(
-            draft=response_draft,
-            rows=_public_rows(rows, sensitive_account_capture),
+        public_draft = _redact_draft(
+            response_draft.model_dump()
+            if isinstance(response_draft, LayoutCreate)
+            else asdict(response_draft),
+            _preview_redactor(sensitive_account_capture),
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        return LayoutProposal.model_validate(
+            {
+                "draft": public_draft,
+                "rows": _public_rows(rows, sensitive_account_capture),
+            }
+        )
+    except ExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)

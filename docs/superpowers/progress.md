@@ -47,7 +47,7 @@ open below — synthetic checks do not substitute for them.
 | --- | --- | --- | --- |
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
-| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Implementation complete; local review pending | [step-8 report](../../.superpowers/sdd/2026-09-07-m2-statement-importer/task-3-step8-report.md); API/web/docs gates pass |
+| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Review fixes implemented; re-review pending | Focused regression and gate evidence below |
 | 4 — staged rows, normalization, dedupe, reconciliation (V13) | `feature/m2-staged-rows-and-normalization` | Not started | — |
 | 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
 | 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
@@ -62,11 +62,35 @@ rule Task 2's contract names (band ordering, sign-convention/column agreement, t
 vocabulary, regex compilation, reserved metadata capture groups, the two-digit-year period-
 capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
 
-Task 3 implementation is complete on `feature/m2-extraction-engine`; local review is pending and
-no PR or merge is claimed. The closeout gates passed on 2026-09-07: API `203 passed, 6 skipped,
+Task 3 is on `feature/m2-extraction-engine`; local re-review is pending and no PR or merge is
+claimed. Before review, the closeout gates passed on 2026-09-07: API `203 passed, 6 skipped,
 2 warnings`; web `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types
-were unchanged; and the documentation/whitespace checks passed. Full evidence is retained in the
-[Task 3 Step 8 report](../../.superpowers/sdd/2026-09-07-m2-statement-importer/task-3-step8-report.md).
+were unchanged; and the documentation/whitespace checks passed. Original RED evidence for the
+recovered first three implementation steps is unavailable and is not claimed.
+
+Task 3 review clarifications: ambiguous numeric day/month dates are refused for both slash and
+dash separators. Since the profile contract has no line-tolerance field, the PDF boundary infers
+tolerance from modal character height for both automatic proposal and saved-profile extraction;
+the fixed default is only a fallback when no reliable mode exists. Turning continuation off with
+`has_date` leaves the transaction count unchanged and instead drops description fragments while
+increasing `lines_unparsed`; this corrects the plan test's wording, not the binding row predicate.
+Automatic proposals may be incomplete unsaved drafts (including two-digit dates before period
+mapping); submitted drafts and saved profiles still enforce period captures. Raw diagnostics
+retain original PDF characters, including whitespace and filtered script text. Public previews
+redact identifiers in both modes, and account validation responses omit sensitive request input.
+
+The preview privacy boundary preserves a validated date or monetary value only in its known
+typed field. Raw diagnostics and description/reference text redact every identifier-length digit
+run, including separator variants, even when it resembles a date or amount. A deliberately
+captured account identifier overrides all field protections. This reduces detail in raw previews
+and incorrectly mapped fields; header/band semantics are the accepted boundary for auto-proposed
+financial cells. Internal extraction still retains the verbatim source text for transient parsing.
+
+Review-fix verification on 2026-09-07: the covering account/layout/engine/word/fixture run passed
+`135` tests against local PostgreSQL, with no skips and the same two upstream warnings. Targeted
+Ruff, formatting and strict mypy passed over 13 files. Regenerated API types passed the drift
+check and web typecheck; docs checked 125 documents and `git diff --check` passed. Full API/web
+suites are reserved for the fix re-review boundary; no new full-suite result is claimed here.
 
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
