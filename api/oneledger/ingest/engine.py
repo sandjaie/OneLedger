@@ -94,6 +94,13 @@ NUMBER = re.compile(
     rf"^(?:[-+]?{NUMBER_BODY}|\({NUMBER_BODY}\))(?:\s*(?:CR|DR))?$",
     re.IGNORECASE,
 )
+CONTEXTUAL_SECRET = re.compile(
+    r"\b(?P<label>(?:(?:bank|upi)\s+)?pin|cvv|otp|password|passcode|pan|"
+    r"(?:tax|national|emirates)\s+id|passport(?:\s+(?:number|no))?|iban|"
+    r"(?:account|card)\s+(?:number|no))\b"
+    r"(?P<separator>\s*[:#=-]?\s*)(?P<secret>\S+)",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -509,7 +516,12 @@ def _safe_fingerprints(page: Page, header_line: int) -> list[str]:
             continue
         text = " ".join(word.text for word in sorted(line.words, key=lambda word: word.x0)).strip()
         normalized = re.sub(r"(?<=\d)[\s\-–./]+(?=\d)", "", text)
-        if not text or re.search(r"\d{4,}", normalized) or not any(c.isalpha() for c in text):
+        if (
+            not text
+            or CONTEXTUAL_SECRET.search(text)
+            or re.search(r"\d{4,}", normalized)
+            or not any(c.isalpha() for c in text)
+        ):
             continue
         fingerprint = re.escape(text)
         if fingerprint not in fingerprints:

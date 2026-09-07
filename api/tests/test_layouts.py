@@ -250,6 +250,37 @@ def test_two_digit_year_auto_draft_previews_before_period_mapping() -> None:
         app.dependency_overrides.clear()
 
 
+def test_auto_propose_redacts_short_secrets_before_escaping_fingerprints() -> None:
+    pdf = build_pdf(
+        [
+            Placement(page=0, x=20, y=760, text="CVV 123"),
+            Placement(page=0, x=20, y=740, text="PIN 1234"),
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Description"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/2024"),
+            Placement(page=0, x=180, y=670, text="FIRST"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/2024"),
+            Placement(page=0, x=180, y=640, text="SECOND"),
+            Placement(page=0, x=500, y=640, text="18.25"),
+        ]
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("draft.pdf", pdf)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert "123" not in response.text
+    assert "1234" not in response.text
+
+
 @pytest.mark.parametrize("draft_mode", [False, True])
 def test_malformed_pdf_is_sanitized_and_temporary_file_removed(
     monkeypatch: pytest.MonkeyPatch,
