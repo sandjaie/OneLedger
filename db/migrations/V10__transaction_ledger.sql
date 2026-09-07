@@ -371,12 +371,19 @@ CREATE POLICY household_isolation ON transaction
 -- conversion belongs in original_amount/original_currency.
 CREATE FUNCTION assert_transaction_currency_matches_account() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE account_currency CHAR(3); account_household UUID;
+DECLARE account_currency CHAR(3); account_household UUID; account_anchor DATE;
 BEGIN
-  SELECT currency, household_id INTO account_currency, account_household
+  SELECT currency, household_id, opening_balance_date
+    INTO account_currency, account_household, account_anchor
     FROM account WHERE id = NEW.account_id;
   IF account_household IS NOT NULL AND account_household <> NEW.household_id THEN
     RAISE EXCEPTION 'transaction household % does not own account %', NEW.household_id, NEW.account_id;
+  END IF;
+  -- Movements before the anchor are already inside the opening balance; accepting one would
+  -- count it twice, whoever the writer is (the manual endpoint mirrors this refusal).
+  IF TG_OP = 'INSERT' AND account_anchor IS NOT NULL AND NEW.booked_date < account_anchor THEN
+    RAISE EXCEPTION 'transaction on % predates the balance anchor % of account %',
+      NEW.booked_date, account_anchor, NEW.account_id;
   END IF;
   IF account_currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(account_currency) THEN
     RAISE EXCEPTION 'transaction currency % must match the account''s %; the bank''s conversion belongs in original_amount',
@@ -392,11 +399,19 @@ BEGIN
       RAISE EXCEPTION 'category % belongs to another household', NEW.category_id;
     END IF;
   END IF;
+  IF NEW.merchant_id IS NOT NULL THEN
+    IF EXISTS (SELECT FROM merchant m
+                WHERE m.id = NEW.merchant_id
+                  AND m.household_id IS NOT NULL
+                  AND m.household_id <> NEW.household_id) THEN
+      RAISE EXCEPTION 'merchant % belongs to another household', NEW.merchant_id;
+    END IF;
+  END IF;
   RETURN NEW;
 END $$;
 
 CREATE TRIGGER trg_transaction_currency
-  BEFORE INSERT OR UPDATE OF category_id ON transaction
+  BEFORE INSERT OR UPDATE OF category_id, merchant_id ON transaction
   FOR EACH ROW EXECUTE FUNCTION assert_transaction_currency_matches_account();
 
 -- The account's materialised balance follows the ledger: opening_balance + the sum of its

@@ -39,7 +39,7 @@ CREATE INDEX category_parent ON category (parent_id) WHERE parent_id IS NOT NULL
 -- third level from below).
 CREATE FUNCTION assert_category_two_levels() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE parent_of_parent UUID; parent_found BOOLEAN;
+DECLARE parent_of_parent UUID; parent_found BOOLEAN; parent_household UUID;
 BEGIN
   IF NEW.parent_id IS NOT NULL THEN
     IF NEW.parent_id = NEW.id THEN
@@ -47,10 +47,17 @@ BEGIN
     END IF;
     -- Locked, so two overlapping reparents (A under B while B goes under C) serialize:
     -- whichever waits re-reads the committed row and fails the depth checks.
-    SELECT parent_id, true INTO parent_of_parent, parent_found
+    SELECT parent_id, true, household_id
+      INTO parent_of_parent, parent_found, parent_household
       FROM category WHERE id = NEW.parent_id FOR UPDATE;
     IF parent_found AND parent_of_parent IS NOT NULL THEN
       RAISE EXCEPTION 'the category tree is two levels: % cannot be a child of a child', NEW.slug;
+    END IF;
+    -- A parent is the seed set's or the child's own household's: a cross-tenant parent would
+    -- orphan the child in one tenant's tree and leak an identifier from the other's.
+    IF parent_found AND parent_household IS NOT NULL
+       AND parent_household IS DISTINCT FROM NEW.household_id THEN
+      RAISE EXCEPTION 'the parent of % belongs to another household', NEW.slug;
     END IF;
     IF EXISTS (SELECT FROM category c WHERE c.parent_id = NEW.id) THEN
       RAISE EXCEPTION 'the category tree is two levels: % has children and cannot become a child', NEW.slug;
