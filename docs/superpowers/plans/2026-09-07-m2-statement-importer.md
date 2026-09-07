@@ -115,10 +115,14 @@ Every task's requirements implicitly include this section.
 
 ## 2. Delivery model, workspace and branches
 
-**Workspace for every task:** `/Users/sandjaieravi/dev/OneLedger` — the dispatch machine's active
-repository checkout. Confirm with `git rev-parse --show-toplevel`; all commands are repo-relative.
-**Do not create Git worktrees** (owner preference, overriding skill defaults). Do not remove
-existing worktrees.
+**Workspace for every task:** `/Users/sandjaieravi/dev/OneLedger` — the **dispatch machine's**
+active repository checkout, resolved with `git rev-parse --show-toplevel` at planning time and
+recorded per AGENTS.md. The literal is a record, not a portable path: every implementer
+re-resolves the active root with `git rev-parse --show-toplevel` on the machine it runs on and
+works there; a reviewer or agent in a different environment (its own clone, a cloud sandbox)
+reads its own resolved root wherever a task says `Workspace`. Never substitute a path from
+another machine; all commands are repo-relative. **Do not create Git worktrees** (owner
+preference, overriding skill defaults). Do not remove existing worktrees.
 
 **Base and PR target for every task:** `develop`.
 
@@ -365,7 +369,7 @@ stated here rather than left to the implementer.
 
 Verdicts:
 
-- `reconciled` — the identity holds exactly (both sides are `Decimal`; there is no tolerance).
+- `matched` — the identity holds exactly (both sides are `Decimal`; there is no tolerance).
 - `mismatched` — it does not. Carries `declared_closing`, `computed_closing`, `delta` and
   `first_divergent_row` (the first row index at which the running total departs from any
   available running balance, else `None`). **Blocks.**
@@ -393,11 +397,15 @@ Three layers, per `statement-ingestion.html` §6.
   `sha256("|".join([account_id, booked_date.isoformat(), f"{amount:.4f}", normalise_for_hash(description_raw), disambiguator]))`
   where `normalise_for_hash` uppercases, collapses whitespace and strips punctuation, and
   `disambiguator` is `reference_raw` when the profile maps a reference column and the value is
-  non-empty, **otherwise the occurrence index within the day** — the nth identical
-  `(date, amount, normalised description)` on this account, counted from 0 **against the union of
-  rows already committed for that date and rows earlier in the same batch**. Never a row ordinal
-  within the document: an ordinal differs between a Jul–Aug and an Aug–Sep statement covering the
-  same day, so the overlap would not be recognised and August would import twice.
+  non-empty, **otherwise the occurrence index within the day, within this document** — the nth
+  identical `(date, amount, normalised description)` among this statement's own rows, counted
+  from 0 in statement order. Never counted against rows already committed: a statement is a
+  stable, self-contained ordering of its day, so the same transaction carries the same index in a
+  Jul–Aug and an Aug–Sep statement and the hashes collide — which is exactly how the overlap is
+  recognised. An offset by committed rows would hand the overlapping row index 1 while the
+  committed copy holds index 0, and August would import twice. And never a raw row ordinal within
+  the document either — an ordinal differs between two statements covering the same day even when
+  the day's identical rows are the same.
   A row whose hash already exists in `transaction` is staged with `status='duplicate'` and
   `duplicate_of_transaction_id` set, and is excluded from import by default.
 - **Layer 3 — near-duplicate warning.** Same account, same amount, `booked_date` within ±3 days,
@@ -419,8 +427,11 @@ implementation of either:
    `to_rows` → `upsert_rates` — into a plain function in `api/oneledger/routes/fx.py` (or a new
    `api/oneledger/fxrange.py` if the import graph reads better), called by both the route and the
    pipeline. The route's future-date and ordering guards stay on the route.
-2. The pipeline computes the batch's distinct booked dates, checks which lack a stored rate for
-   the pair it needs, and fetches **one contiguous range** covering the gaps before staging.
+2. **Only on the `stage=true` path.** A dry run (`stage=false`) skips the FX step entirely — no
+   fetch, no upsert, no `fx_rate` row: the preview shows native amounts only, and "a dry run
+   writes nothing" includes reference data. When staging, the pipeline computes the batch's
+   distinct booked dates, checks which lack a stored rate for the pair it needs, and fetches
+   **one contiguous range** covering the gaps before the staging transaction opens.
 3. If the fetch fails or leaves a date uncovered, **the import is refused** with the uncovered
    dates named. Never a fallback to `1.0`, never today's rate, never an interpolation
    (`multi-currency-and-fx.html` §3).
@@ -442,11 +453,15 @@ The function, in order:
    AND status = 'accepted'`, carrying `source='statement_import'`, `source_document_id`,
    `source_page_number`, `source_row_number`, `import_batch_id`, `statement_layout_id`,
    `layout_version` and `dedupe_hash` through unchanged (Invariant I6).
-5. Calls `assert_account_reconciles(p_account_id, p_declared_closing)` — also created in V14, also
-   `SECURITY DEFINER`, also calling `assert_is_owner()` first — which compares the account's
-   maintained `current_balance` (the V10 trigger keeps it) against the declared closing balance
-   and `RAISE`s on any difference. This is the post-commit verification, inside the same
-   transaction, so a raise rolls the whole batch back.
+5. Calls `assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` — also
+   created in V14, also `SECURITY DEFINER`, also calling `assert_is_owner()` first — which
+   computes the account's balance **as of the statement close** in Postgres (the account's
+   opening balance plus the sum of its posted transactions with `booked_date <= p_period_end`)
+   and `RAISE`s on any difference from the declared closing. Not the maintained
+   `current_balance`: the multi-file screen imposes no chronological commit order, and a valid
+   older statement committed after a newer one would compare its closing against a balance that
+   already contains the newer postings and wrongly roll back. This is the post-commit
+   verification, inside the same transaction, so a raise rolls the whole batch back.
 6. Updates `import_batch` to `status='completed'` with `rows_imported` and `completed_at`.
 
 M2's commit inserts `transaction` rows only. `transfer` (M5) and `card_statement` (M6) inserts
@@ -639,6 +654,7 @@ before real data lands in it. This PR carries this plan document.
   working tree; commit it here).
 - Create `.github/workflows/ci.yml`.
 - Create `scripts/backup-db.sh`.
+- Modify `.env.example` (`BACKUP_PASSPHRASE=`).
 - Modify `docs/superpowers/plans/implementation-plan.md` (the stale 500-line line — §7.1).
 - Modify `docs/superpowers/progress.md` (M2 opened; entry criterion recorded as satisfied with
   the 2026-09-07 figures).
@@ -655,20 +671,30 @@ before real data lands in it. This PR carries this plan document.
   publish anything (`docs.yml` owns Pages) and must not need a secret: every value it needs is a
   workflow-local literal for a throwaway database.
 - `scripts/backup-db.sh` is `set -euo pipefail`, takes the DSN from `scripts/dsn.sh` exactly as
-  `db-tests.sh` does (one source of truth for the password), writes
-  `backups/oneledger-<UTC timestamp>.dump` with `pg_dump -Fc`, refuses to overwrite an existing
-  file, prints the path and byte size, and exits non-zero on any failure. `backups/` and `*.dump`
-  are already git-ignored — verify, do not re-add. The script backs up the **database only**; the
-  documents volume is a separate concern and the script says so in one line rather than pretending
-  to cover it.
+  `db-tests.sh` does (one source of truth for the password), and writes
+  `backups/oneledger-<UTC timestamp>.dump.enc`: `pg_dump -Fc` piped straight through
+  `openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE` — **an unencrypted dump
+  never touches disk**, because `security-and-privacy.html` §6/§9 require backups encrypted at
+  rest wherever they are stored. The passphrase comes from `.env` via `scripts/load-env.sh`
+  (`.env.example` gains an empty `BACKUP_PASSPHRASE=` with a comment); an unset or empty
+  passphrase refuses the backup with the variable named, exactly as `dsn.sh` treats the
+  password. The script refuses to overwrite an existing file, prints the path and byte size,
+  exits non-zero on any failure, and records the decrypt-and-restore line in a comment
+  (`openssl enc -d … -pass env:BACKUP_PASSPHRASE < file | pg_restore …`). `backups/` and
+  `*.dump` are already git-ignored and the directory ignore covers the `.enc` name — verify,
+  do not re-add. The script backs up the **database only**; the documents volume is a separate
+  concern and the script says so in one line rather than pretending to cover it.
 
 **Invariants / security.** No credential, DSN or real path is written into the workflow file or
 the script. The workflow's database password is a literal throwaway, matching the verify skill's
 reasoning. The backup file lands outside the index.
 
 **Required test behaviours (TDD order).**
-1. Run `scripts/backup-db.sh` against the live compose database and confirm a `.dump` appears with
-   non-zero size; run it twice and confirm the second run refuses rather than overwriting.
+1. Run `scripts/backup-db.sh` against the live compose database and confirm a `.dump.enc` appears
+   with non-zero size; run it twice and confirm the second run refuses rather than overwriting;
+   confirm the file decrypts and lists with the configured passphrase
+   (`openssl enc -d … | pg_restore --list >/dev/null`) and refuses a wrong one; confirm an unset
+   `BACKUP_PASSPHRASE` refuses the backup.
 2. `git status --porcelain` after a backup shows nothing — the dump is ignored.
 3. Push the branch and confirm the CI run is green on GitHub, with a non-zero test count in the
    API, DB and web sections. A CI run that collects zero tests is a failure, not a pass.
@@ -985,8 +1011,11 @@ worked around (§5.2).
 - *Description*: `description_raw` is byte-identical to the extracted cell; a `POS 4821 … AE 030926
   REF 887262819` sample cleans to the merchant name with the applied rules listed.
 - *Dedupe*: the same transaction appearing in a Jul–Aug and an Aug–Sep statement hashes
-  identically (the occurrence index, not the ordinal — construct the case with different ordinals
-  and assert equality); two genuinely distinct same-day identical transactions hash differently;
+  identically (the within-document occurrence index, not the ordinal — construct the case with
+  different ordinals and assert equality, including with the Jul–Aug copy already committed);
+  two genuinely distinct same-day identical transactions in one statement hash differently
+  (indexes 0 and 1); a second same-day identical transaction appearing only in the later
+  overlapping statement takes index 1, collides with nothing committed, and imports;
   a row with a reference uses the reference; a near-duplicate at ±3 days and 0.86 similarity is
   flagged and **not** blocked.
 - *Reconciliation*: a correct card statement reconciles exactly; **one dropped row yields
@@ -1098,7 +1127,8 @@ never-store rules of §5.6, tested.
 
 **Required test behaviours (failing first).**
 - A synthetic statement parses dry-run and writes **nothing** — assert zero rows in `document`,
-  `import_batch` and `staged_transaction` afterwards.
+  `import_batch` and `staged_transaction` afterwards, and the `fx_rate` row count unchanged even
+  when the statement's dates have no stored rate (the dry run fetches nothing).
 - The same file with `stage=true` writes exactly one document, one batch and N staged rows, and
   the blob is byte-identical to the upload.
 - Re-posting the identical file is rejected before parsing, naming the earlier import's date and
@@ -1230,9 +1260,10 @@ Household predicate on every statement, including inside the functions.
 - *DB (`0012`)*: `commit_import_batch` raises when `app.user_id` is unset (`assert_is_owner`
   first); a batch belonging to another household is refused; committing a `mismatched` batch is
   refused; a clean batch commits and `account.current_balance` equals `opening + Σ(amount)` to
-  4 dp; **an induced failure mid-commit (a declared closing deliberately off by one unit) leaves
-  zero `transaction` rows and the batch not completed**; a second commit of a completed batch is
-  refused.
+  4 dp; **a valid older statement committed after a newer one succeeds** — the as-of-close
+  comparison, not `current_balance`, is what `assert_account_reconciles` reads; **an induced
+  failure mid-commit (a declared closing deliberately off by one unit) leaves zero `transaction`
+  rows and the batch not completed**; a second commit of a completed batch is refused.
 - *API*: an unticked (`new`) row never imports; only `accepted` rows import; commit is 409 while
   blocked; the review payload groups rows most-attention-first with the counts the UI renders;
   bulk accept of 200 ids is one statement; a category not available to the household is 422;
