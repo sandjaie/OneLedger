@@ -218,7 +218,7 @@ def _has_amount(profile: ProfileLike, fields: dict[str, str]) -> bool:
     amount_fields = {
         "balance_delta": ("running_balance",),
         "debit_credit_columns": ("debit", "credit"),
-    }.get(profile.signConvention, ("amount",))
+    }.get(profile.signConvention, ("amount", "debit", "credit"))
     return any(_is_number(fields.get(field, "")) for field in amount_fields)
 
 

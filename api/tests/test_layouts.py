@@ -529,8 +529,8 @@ def test_unicode_digit_identifiers_are_redacted_from_untyped_preview_text() -> N
 def test_contextual_and_pan_shaped_secrets_are_redacted_from_preview_text() -> None:
     from oneledger.ingest.engine import RawRow
 
-    secrets = ("1234", "123", "ABCDE1234F")
-    text = "PIN 1234 CVV 123 Tax ID ABCDE1234F"
+    secrets = ("1234", "123", "١٢٣٤", "١٢٣", "ABCDE1234F")
+    text = "PIN 1234 CVV 123 PIN ١٢٣٤ CVV ١٢٣ Tax ID ABCDE1234F"
     public = layouts._public_rows([RawRow(1, 1, text, {"reference": text})])
 
     for secret in secrets:

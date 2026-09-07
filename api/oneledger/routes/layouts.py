@@ -400,7 +400,7 @@ CONTEXTUAL_SECRET = re.compile(
     r"\b(?P<label>(?:(?:bank|upi)\s+)?pin|cvv|otp|password|passcode|pan|"
     r"(?:tax|national|emirates)\s+id|passport(?:\s+(?:number|no))?|iban|"
     r"(?:account|card)\s+(?:number|no))\b"
-    r"(?P<separator>\s*[:#=-]?\s*)(?P<secret>[A-Z0-9][A-Z0-9./-]*)",
+    r"(?P<separator>\s*[:#=-]?\s*)(?P<secret>\S+)",
     re.IGNORECASE,
 )
 FINANCIAL_FIELDS = frozenset(
