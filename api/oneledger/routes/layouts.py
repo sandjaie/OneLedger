@@ -50,6 +50,8 @@ RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_en
 # unconstrained TEXT in the database, so the service is what keeps garbage out of them.
 ROW_START_RULES = frozenset({"has_date_and_amount", "has_date"})
 CONTINUATION_RULES = frozenset({"no_date_and_no_amount"})
+SIGN_CONVENTIONS = frozenset({"debit_credit_columns", "signed", "cr_suffix", "balance_delta"})
+CHRONOLOGICAL_ORDERS = frozenset({"ascending", "descending"})
 # A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.
 TWO_DIGIT_YEAR = re.compile(r"(?<!y)yy(?!y)")
 
@@ -167,6 +169,24 @@ class LayoutCreate(BaseModel):
                 raise ValueError(
                     f"reserved metadata key {key!r} must have exactly one capture group"
                 )
+        return value
+
+    @field_validator("signConvention")
+    @classmethod
+    def sign_convention_is_supported(cls, value: str) -> str:
+        if value not in SIGN_CONVENTIONS:
+            raise ValueError(
+                "signConvention must be one of: " + ", ".join(sorted(SIGN_CONVENTIONS))
+            )
+        return value
+
+    @field_validator("chronologicalOrder")
+    @classmethod
+    def chronological_order_is_supported(cls, value: str) -> str:
+        if value not in CHRONOLOGICAL_ORDERS:
+            raise ValueError(
+                "chronologicalOrder must be one of: " + ", ".join(sorted(CHRONOLOGICAL_ORDERS))
+            )
         return value
 
     @model_validator(mode="after")
@@ -406,7 +426,7 @@ def _validated_financial_field(key: str, value: str) -> bool:
     digit_count = sum(character.isdigit() for character in value)
     if digit_count <= 4:
         return True
-    return bool(re.search(r"\.\d{1,2}(?:\s*(?:CR|DR))?$", value.strip(), re.IGNORECASE))
+    return re.fullmatch(r"\d{5,}", value.strip()) is None
 
 
 def _redact_draft(value: object, redact: Callable[[str], str]) -> object:

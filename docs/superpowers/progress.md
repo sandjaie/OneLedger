@@ -65,11 +65,12 @@ capture requirement, and the institution predicate). No parsing exists yet — t
 Task 3 is on `feature/m2-extraction-engine`; its second local re-review found no remaining
 findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open, with its first GitHub
 Codex review's two privacy/proposal findings and its second review's two Unicode/header-equivalence
-findings fixed, with re-review pending; no merge is claimed yet. After those fixes, the closeout
-gates passed on 2026-09-07: API `252 passed, 2 warnings` against the live Compose database with no
+findings fixed. Its third review's three dual-date, enum-validation and monetary-preview findings
+are also fixed, with re-review pending; no merge is claimed yet. After those fixes, the closeout
+gates passed on 2026-09-07: API `256 passed, 2 warnings` against the live Compose database with no
 skips; web `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types were
-unchanged; and the documentation/whitespace checks passed. Original RED evidence for the
-recovered first three implementation steps is unavailable and is not claimed.
+unchanged; and the documentation/whitespace checks passed. Original RED evidence for the recovered
+first three implementation steps is unavailable and is not claimed.
 
 Task 3 review clarifications: ambiguous numeric day/month dates are refused for both slash and
 dash separators. Since the profile contract has no line-tolerance field, the PDF boundary infers

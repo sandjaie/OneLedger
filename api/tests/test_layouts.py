@@ -500,6 +500,20 @@ def test_long_integer_identifiers_are_redacted_even_in_financial_fields() -> Non
         assert public[0].fields[field] == "[redacted]"
 
 
+def test_clearly_formatted_financial_values_remain_visible() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    values = {
+        "amount": "(12345.67)",
+        "debit": "12345.6789",
+        "credit": "12,345.67",
+        "running_balance": "12345.67 CR",
+    }
+    public = layouts._public_rows([RawRow(1, 1, "money", values)])
+
+    assert public[0].fields == values
+
+
 def test_unicode_digit_identifiers_are_redacted_from_untyped_preview_text() -> None:
     from oneledger.ingest.engine import RawRow
 
@@ -619,6 +633,27 @@ def test_propose_draft_uses_the_same_layout_validation_as_save() -> None:
     assert "overlap" in saved.text
     assert "overlap" in proposed.text
     assert proposed.json()["detail"][0]["loc"][0] == "draft"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("signConvention", "bogus"), ("chronologicalOrder", "bogus")],
+)
+def test_propose_draft_rejects_database_backed_enum_values(field: str, value: str) -> None:
+    invalid = {**VALID_CREATE, field: value}
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf(), "application/pdf")},
+            data={"draft": json.dumps(invalid)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][:2] == ["draft", field]
 
 
 def test_a_session_for_another_household_sees_no_layouts(monkeypatch: pytest.MonkeyPatch) -> None:
