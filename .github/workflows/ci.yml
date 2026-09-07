@@ -1,0 +1,169 @@
+name: ci
+
+# The gate every M2+ PR runs through before Codex review. This mirrors
+# .claude/skills/verify/SKILL.md section by section — it does not invent a
+# second gate. Jobs run in order and fail fast (each `needs` the one before)
+# so a broken docs check never burns minutes on a Postgres container.
+#
+# No secret is used anywhere below: every database credential is a
+# workflow-local throwaway literal for a database that exists only for the
+# life of the job, the same reasoning scripts/hooks/db-tests.sh documents.
+# This workflow publishes nothing — docs.yml owns Pages.
+# Manual-only by owner decision (2026-09-07): every gate this workflow mirrors already runs
+# locally in the pre-commit and pre-push hooks, which are the enforced gate. The workflow is
+# kept, proven green (three runs on PR #32), and runnable on demand from the Actions tab;
+# restore the pull_request/push triggers when automatic CI is wanted again.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "24"
+  # Throwaway credentials for a database that lives only for the "migrations"
+  # job, matching docker-compose.yml's own defaults.
+  POSTGRES_USER: oneledger
+  POSTGRES_PASSWORD: oneledger
+  POSTGRES_DB: oneledger
+
+jobs:
+  # (a) docs check + no-real-data scan
+  docs-and-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 scripts/check-docs.py
+      - run: scripts/check-no-real-data.sh
+
+  # (b) every pre-commit-stage hook, across the whole tree
+  pre-commit:
+    needs: docs-and-data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - working-directory: api
+        run: uv sync --frozen
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - working-directory: web
+        run: npm ci
+      - run: pip install "pre-commit>=4.0.0"
+      - run: pre-commit run --all-files
+
+  # (c) the API gate
+  api-gate:
+    needs: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - working-directory: api
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy --strict .
+          uv run pytest -q
+          # pytest exits 5 when it collects zero tests, which already fails
+          # this step — a suite that collects nothing is not a pass.
+
+  # (d) migrations from empty, then every db/tests/*.sql
+  migrations:
+    needs: api-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install postgresql client
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Start the database
+        run: docker compose up -d db
+      - name: Migrate from empty
+        run: docker compose run --rm flyway migrate
+      - name: Apply seed data
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$(scripts/dsn.sh)"
+          for f in db/seeds/*.sql; do
+            echo "  $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - name: Assert invariant tests exist
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(db/tests/*.sql)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo "FAIL: zero db/tests/*.sql files found — a suite that collects nothing is not a pass."
+            exit 1
+          fi
+          echo "Found ${#tests[@]} invariant test file(s)."
+      - name: Run invariant tests
+        run: scripts/hooks/db-tests.sh
+      # No teardown: the runner is ephemeral, and `docker compose down -v` resolves the
+      # whole compose model — including the api service's `env_file: .env`, which CI
+      # deliberately does not have. Only `up -d db` and `run flyway` avoid that resolution.
+
+  # (e) the web gate, plus the type-drift check, the production build and the
+  # client-bundle secret scan
+  web-gate:
+    needs: migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - working-directory: api
+        run: uv sync --frozen
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - working-directory: web
+        run: npm ci
+      - working-directory: web
+        run: npm run lint
+      - working-directory: web
+        run: npm run typecheck
+      - working-directory: web
+        run: npm run typecheck:compat
+      - working-directory: web
+        run: npm run test
+        # vitest run (no --passWithNoTests) exits non-zero on zero collected
+        # tests — the same reason the hook variant differs, see scripts/hooks/web.sh.
+      - name: API types are current (no drift)
+        working-directory: web
+        run: npm run api:types:check
+      - working-directory: web
+        run: npm run build
+      - name: No secret pattern in the client bundle
+        working-directory: web
+        run: |
+          set -euo pipefail
+          if grep -rE 'SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://' .next/static/; then
+            echo "FAIL: a secret pattern was found in the client bundle."
+            exit 1
+          fi
+          echo "OK: no secret pattern in the client bundle."

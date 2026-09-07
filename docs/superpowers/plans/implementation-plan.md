@@ -50,8 +50,9 @@ infrastructure or dependency is selected by this documentation update.
 - No LLM calls in Phase 1 or Phase 2. No automatic payments, trades or new shared access.
 - Read ADRs as decisions, design/operations as specifications and plans as execution instructions.
   Resolve conflicting specifications explicitly before implementing the affected feature.
-- Preserve the current repository review process: scoped branches, at most 500 lines of implementation
-  and test code per PR (docs/config/generated excluded), required checks and Codex review before merge.
+- Preserve the current repository review process: scoped branches, required checks and Codex review
+  before merge. There is no hard line cap on a PR; [docs/git-workflow.md](../../git-workflow.md) is
+  the authority — keep each PR reviewable at one sitting.
 - New implementation plans go in `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
 - Each task plan or spec declares its exact `Workspace`, `Branch` and `Base and PR target` before
   dispatch; split deliveries declare a branch each. Use `feature/`, `fix/`, `docs/` or `chore/`.
