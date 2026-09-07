@@ -401,7 +401,12 @@ def _validated_financial_field(key: str, value: str) -> bool:
         return any(
             engine._date(value, date_format) is not None for date_format in engine.DATE_FORMATS
         )
-    return engine._is_number(value)
+    if not engine._is_number(value):
+        return False
+    digit_count = sum(character.isdigit() for character in value)
+    if digit_count <= 4:
+        return True
+    return bool(re.search(r"\.\d{1,2}(?:\s*(?:CR|DR))?$", value.strip(), re.IGNORECASE))
 
 
 def _redact_draft(value: object, redact: Callable[[str], str]) -> object:

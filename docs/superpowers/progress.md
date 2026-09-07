@@ -47,7 +47,7 @@ open below — synthetic checks do not substitute for them.
 | --- | --- | --- | --- |
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
-| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Local review clean; PR pending | Focused regression and gate evidence below |
+| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Review fixes implemented; re-review pending | [PR #34](https://github.com/sandjaie/OneLedger/pull/34); focused regression and gate evidence below |
 | 4 — staged rows, normalization, dedupe, reconciliation (V13) | `feature/m2-staged-rows-and-normalization` | Not started | — |
 | 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
 | 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
@@ -63,11 +63,13 @@ vocabulary, regex compilation, reserved metadata capture groups, the two-digit-y
 capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
 
 Task 3 is on `feature/m2-extraction-engine`; its second local re-review found no remaining
-findings, and no PR or merge is claimed yet. After the review fixes, the closeout gates passed on
-2026-09-07: API `248 passed, 2 warnings` against the live Compose database with no skips; web
-`97 passed` across 8 Vitest files with lint/typecheck clean; generated API types were unchanged;
-and the documentation/whitespace checks passed. Original RED evidence for the recovered first
-three implementation steps is unavailable and is not claimed.
+findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open, with its first GitHub
+Codex review's two privacy/proposal findings fixed and re-review pending; no merge is claimed yet.
+After those fixes, the closeout gates passed on 2026-09-07: API `250 passed, 2 warnings` against
+the live Compose database with no skips; web `97 passed` across 8 Vitest files with lint/typecheck
+clean; generated API types were unchanged; and the documentation/whitespace checks passed.
+Original RED evidence for the recovered first three implementation steps is unavailable and is
+not claimed.
 
 Task 3 review clarifications: ambiguous numeric day/month dates are refused for both slash and
 dash separators. Since the profile contract has no line-tolerance field, the PDF boundary infers
