@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
@@ -25,6 +26,21 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def private_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Validation diagnostics describe the failure, never echo the submitted body."""
+    del request
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                {key: error[key] for key in ("type", "loc", "msg")} for error in exc.errors()
+            ]
+        },
+    )
+
 
 # The web app is served from :3000 and calls this service on :8000 — a different origin,
 # because the port differs. Without this the browser blocks every response, and because

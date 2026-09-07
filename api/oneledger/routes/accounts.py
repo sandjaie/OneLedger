@@ -59,8 +59,16 @@ def _masked(value: str | None) -> str | None:
     return value
 
 
+def _account_digits(value: str) -> str:
+    # Only ASCII digits and the statement separator vocabulary are supported; letters and other
+    # punctuation are not silently removed to turn different identifiers into one.
+    if not re.fullmatch(r"[0-9\s–./-]+", value) or not re.search(r"[0-9]", value):
+        raise ValueError("accountNumber requires ASCII digits with optional separators")
+    return re.sub(r"[\s–./-]", "", value)
+
+
 def _account_number_identity(value: str) -> tuple[str, str]:
-    digits = "".join(character for character in value if character in "0123456789")
+    digits = _account_digits(value)
     salt = os.environ.get("ACCOUNT_HASH_SALT", "").strip()
     if not salt:
         raise HTTPException(status_code=503, detail="ACCOUNT_HASH_SALT is not configured")
@@ -76,6 +84,14 @@ def _out(value: Decimal | None) -> str | None:
 
 def _first_line(exc: Exception) -> str:
     return str(exc).splitlines()[0]
+
+
+def _account_write_error(exc: psycopg.Error) -> str:
+    # Database exception text may echo rejected parameters. Return only stable
+    # service-owned descriptions, including the established duplicate constraint.
+    if exc.diag.constraint_name == "idx_account_number_hash":
+        return "account identity already exists (idx_account_number_hash)"
+    return "account fields violate a type, relationship or balance constraint"
 
 
 def _liability_opening_must_not_increase_net_worth(account_type: str, opening: str) -> None:
@@ -163,6 +179,13 @@ class AccountCreate(BaseModel):
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
 
+    @field_validator("accountNumber")
+    @classmethod
+    def numeric_account_number(cls, value: str | None) -> str | None:
+        if value is not None:
+            _account_digits(value)
+        return value
+
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountCreate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
@@ -202,6 +225,13 @@ class AccountUpdate(BaseModel):
     @classmethod
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
+
+    @field_validator("accountNumber")
+    @classmethod
+    def numeric_account_number(cls, value: str | None) -> str | None:
+        if value is not None:
+            _account_digits(value)
+        return value
 
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountUpdate:
@@ -399,7 +429,7 @@ def create_account(
         psycopg.errors.ForeignKeyViolation,
         psycopg.errors.UniqueViolation,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=_account_write_error(exc)) from None
 
 
 @router.patch("/accounts/{account_id}")
@@ -409,10 +439,15 @@ def update_account(
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
     replace_account_identity = "accountNumber" in body.model_fields_set
+    replace_account_mask = (
+        replace_account_identity or "accountNumberMasked" in body.model_fields_set
+    )
     account_number_masked: str | None = None
     account_number_hash: str | None = None
     if body.accountNumber is not None:
         account_number_masked, account_number_hash = _account_number_identity(body.accountNumber)
+    elif not replace_account_identity:
+        account_number_masked = body.accountNumberMasked
     # Changing the opening anchor recomputes the materialised balance from the ledger:
     # opening_balance + the sum of the account's posting rows (split children move nothing).
     # Postgres does the arithmetic; before M1b's ledger existed the sum was empty and this
@@ -429,6 +464,24 @@ def update_account(
             # POST /transactions, so the two paths cannot deadlock.
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
+            if replace_account_mask and not replace_account_identity:
+                cur.execute(
+                    """SELECT account_number_masked, account_number_hash FROM account
+                       WHERE id = %s AND household_id = %s""",
+                    (account_id, owner.household_id),
+                )
+                identity = cur.fetchone()
+                if (
+                    identity is not None
+                    and identity[1] is not None
+                    and identity[0] != account_number_masked
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "provide accountNumber to change a mask linked to an account identity"
+                        ),
+                    )
             # An account's currency is fixed once ledger rows exist: the rows' native amounts
             # are immutable facts in that denomination, and relabelling the account would mix
             # denominations in one balance. A wrong currency with history is a migration
@@ -535,7 +588,7 @@ def update_account(
                     body.accountSubtype,
                     body.currency,
                     body.country,
-                    replace_account_identity,
+                    replace_account_mask,
                     account_number_masked,
                     replace_account_identity,
                     account_number_hash,
@@ -571,7 +624,7 @@ def update_account(
         psycopg.errors.NumericValueOutOfRange,
         psycopg.errors.UniqueViolation,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=_account_write_error(exc)) from None
 
 
 @router.get("/institutions")

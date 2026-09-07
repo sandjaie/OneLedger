@@ -334,6 +334,123 @@ def test_a_full_account_number_is_never_accepted() -> None:
     )
 
 
+@pytest.mark.parametrize("method,payload", [("post", CREATE), ("patch", UPDATE)])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"accountNumber": 723456009812},
+        {"accountNumberMasked": "723456009812"},
+        {"accountNumber": "723456009812", "accountType": "credit_card", "creditLimit": None},
+    ],
+)
+def test_account_validation_never_echoes_input(
+    method: str,
+    payload: dict[str, object],
+    bad: dict[str, object],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).request(
+            method,
+            "/accounts" if method == "post" else f"/accounts/{ACCOUNT_ID}",
+            json={**payload, **bad},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert "723456009812" not in response.text
+    assert "723456009812" not in caplog.text
+    assert all(set(error) <= {"type", "loc", "msg"} for error in response.json()["detail"])
+
+
+@pytest.mark.parametrize("value", ["", "---", "ABC", "123ABC456", "123_456", "١٢٣٤"])
+def test_account_identity_refuses_non_numeric_identifiers(
+    value: str,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    with pytest.raises(ValidationError):
+        accounts.AccountCreate.model_validate({**CREATE, "accountNumber": value})
+    with pytest.raises(ValidationError):
+        accounts.AccountUpdate.model_validate({**UPDATE, "accountNumber": value})
+
+
+def test_account_identity_uses_statement_separator_vocabulary(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    assert accounts._account_number_identity("7234\t–56.00/98 12") == (
+        "****9812",
+        "75c4febe3d619e74f50bbbed373c532d6663d9908e4f27b55a902cbf2364d46c",
+    )
+
+
+@pytest.mark.parametrize("method", ["post", "patch"])
+def test_account_database_validation_cannot_echo_identifier(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+    method: str,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    response = TestClient(app).request(
+        method,
+        "/accounts" if method == "post" else f"/accounts/{ACCOUNT_ID}",
+        json={
+            **(CREATE if method == "post" else UPDATE),
+            "institutionId": None,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": "999988887777",
+            "accountType": "999988887777",
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 422
+    assert "999988887777" not in response.text
+
+
+@pytest.mark.parametrize("hashed", [False, True])
+def test_patch_mask_edits_require_consistent_identity(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+    hashed: bool,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    client = TestClient(app)
+    created = client.post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "currency": "USD",
+            "country": "XA",
+            **(
+                {"accountNumber": "7234-5600-9812"}
+                if hashed
+                else {"accountNumberMasked": "****9812"}
+            ),
+        },
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201
+    response = client.patch(
+        f"/accounts/{created.json()['id']}",
+        json={
+            **UPDATE,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumberMasked": "****1234",
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == (409 if hashed else 200)
+    with live_accounts[0].cursor() as cur:
+        cur.execute(
+            "SELECT account_number_masked FROM account WHERE id = %s", (created.json()["id"],)
+        )
+        assert cur.fetchone() == (("****9812",) if hashed else ("****1234",))
+
+
 def test_create_hashes_and_masks_the_account_number_without_exposing_it(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
     monkeypatch: MonkeyPatch,
