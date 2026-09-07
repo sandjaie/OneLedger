@@ -138,8 +138,9 @@ preference, overriding skill defaults). Do not remove existing worktrees.
 | 8 | `feature/m2-layout-mapping-ui` | The mapping UI: bands, drag, live preview, save | — |
 | 9 | `feature/m2-review-screen-and-acceptance` | Review screen, diagnostics panel, end-to-end gate | — |
 
-Tasks are strictly ordered: 2 → 3 → 4 → 5 → 6 → {7, 8} → 9. Task 1 goes first so every later PR
-is CI-gated. Tasks 7 and 8 are independent of each other and may be delivered in either order,
+Tasks are strictly ordered: 2 → 3 → 4 → 5 → 6 → {7, 8} → 9. Task 1 goes first so the operational
+pieces (the proven CI workflow, kept manual-only by owner decision — §3.1 — and the restorable
+backup) exist before any importer table does; the enforced per-PR gate is the local hook suite. Tasks 7 and 8 are independent of each other and may be delivered in either order,
 but both after 5 (they consume `POST /parse` and `POST /layouts/propose`).
 
 ---
@@ -187,6 +188,12 @@ The pre-push hook runs all three gates. A failing push is fixed, never bypassed 
 `db/tests/*.sql`, and the web gate including `api:types:check` and the bundle secret scan.
 Everything CI runs is deterministic, synthetic and offline except the ECB fetch, which is
 stubbed in tests — **no test may reach the network**.
+
+**Owner decision (2026-09-07): the workflow is kept but disabled** — `workflow_dispatch` only,
+no automatic runs. Every gate it mirrors already runs locally in the pre-commit and pre-push
+hooks, which are the enforced gate for every M2 PR; the workflow was proven green (three runs
+on PR #32) before being switched to manual, and can be dispatched on demand or re-armed by
+restoring its triggers.
 
 **Owner-run** (recorded honestly in `docs/superpowers/progress.md` with the date and the counts;
 never automated, never in CI, never in the repository):
@@ -385,9 +392,16 @@ Verdicts:
 - `running_balance_break` — the layout has `has_running_balance` and no declared closing;
   `balanceₙ = balanceₙ₋₁ + amountₙ` fails at a row. Carries that row number, the previous
   balance, the amount and both the expected and stated balances. **Blocks.**
-- `unavailable` — the layout declares neither anchor. Warns, flags the batch, does not block.
-  (The `has_a_balance_anchor` CHECK makes this reachable only for a running-balance layout whose
-  column produced no values — a real parse failure worth surfacing, not hiding.)
+- `unavailable` — the layout's configured balance evidence did not extract. **Blocks in M2.**
+  The `has_a_balance_anchor` CHECK means every saved layout declares a closing pattern or a
+  running-balance column, so `unavailable` at parse time is never "this statement has no
+  balances" — it is a shifted band, a changed label or a parse regression, and letting it
+  through would commit rows that bypassed reconciliation entirely. The message says the
+  configured evidence failed to extract and points at remapping the layout. A genuinely
+  anchorless statement source, if one ever exists, is a separate explicit case for the
+  milestone that meets it — not this value. (The **draft-preview** in the mapper is the one
+  place `unavailable` renders without blocking anything: an auto-proposed draft has no anchors
+  yet, and nothing is being staged.)
 
 **Reconciliation runs immediately after normalization, before FX enrichment.** The documented
 stage order in `statement-ingestion.html` §1 puts it after FX; running the cheap, purely local,
@@ -457,7 +471,8 @@ The function, in order:
 1. `PERFORM assert_is_owner();`
 2. Locks the household row `FOR UPDATE` — it is a writer of frozen amounts (spec B3.5).
 3. Refuses unless the batch belongs to the current household and its `reconciliation_status` is
-   `matched` or `unavailable`.
+   `matched` — the only status a staged batch can carry in M2, since every other verdict blocks
+   staging (§4.6, §5.5); the function still checks rather than assumes.
 4. `INSERT INTO transaction (...) SELECT ... FROM staged_transaction WHERE import_batch_id = $1
    AND status = 'accepted'`, carrying `source='statement_import'`, `source_document_id`,
    `source_page_number`, `source_row_number`, `import_batch_id`, `statement_layout_id`,
@@ -545,15 +560,18 @@ orphaned file. The blob is written to a **uniquely named temporary file** in the
 and atomically renamed to its final `<sha256>.pdf` path before the transaction opens, so a
 partial write never sits at the final name (two identical concurrent uploads renaming to the
 same path is harmless — the bytes are identical by construction of the name). On any failure the
-database transaction rolls back and cleanup is **ownership-aware**: the temporary file is always
-removed, but the final blob is removed only after confirming no `document` row exists for this
-`(household_id, sha256)` — an identical concurrent upload that won the unique-checksum race owns
-that file, and unconditional cleanup would delete the committed winner's original. A surviving
-blob with no `document` row is inert.
+database transaction rolls back and cleanup removes **only the request's own uniquely named
+temporary file — never the final-path blob**. A committed-rows ownership check cannot close the
+race: a concurrent identical upload's `document` row may be inserted but not yet committed, so
+under MVCC the failing request would see no owner and delete a blob the winner is about to
+reference. A final-path orphan is the safe residue instead — it is inert, content-addressed
+(identical bytes by construction), and self-healing: the next identical upload renames over it,
+and `GET /doctor` may report unreferenced blobs when the document library arrives (M10).
 
 ### 5.5 What a blocked batch leaves behind
 
-**Nothing.** A reconciliation mismatch, a running-balance break, an unidentified layout, an
+**Nothing.** A reconciliation mismatch, a running-balance break, an `unavailable` verdict
+(configured evidence that failed to extract — §4.6), an unidentified layout, an
 unresolved account, a missing FX rate or a parse failure leaves the database **unchanged** —
 no `document`, no `import_batch`, no staged row (api-contracts.html §4's error table; Invariant
 I8's "stages zero rows"). The verdict travels in the `POST /parse` response body so the
@@ -709,7 +727,8 @@ before real data lands in it. This PR carries this plan document.
   every `db/tests/*.sql`; (e) the web gate plus `npm run api:types:check`, `npm run build` and the
   `.next/static/` secret grep for
   `SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://`.
-- CI triggers on `pull_request` targeting `develop` and on `push` to `develop`. It must **not**
+- The workflow is `workflow_dispatch`-only (the §3.1 owner decision — local hooks are the
+  enforced gate; it was proven green on automatic triggers first). It must **not**
   publish anything (`docs.yml` owns Pages) and must not need a secret: every value it needs is a
   workflow-local literal for a throwaway database.
 - `scripts/backup-db.sh` is `set -euo pipefail`, takes the DSN from `scripts/dsn.sh` exactly as
@@ -743,13 +762,15 @@ reasoning. The backup file lands outside the index.
    (`openssl enc -d … | pg_restore --list >/dev/null`) and refuses a wrong one; confirm an unset
    `BACKUP_PASSPHRASE` refuses the backup.
 2. `git status --porcelain` after a backup shows nothing — the dump is ignored.
-3. Push the branch and confirm the CI run is green on GitHub, with a non-zero test count in the
-   API, DB and web sections. A CI run that collects zero tests is a failure, not a pass.
+3. Confirm the workflow is green on GitHub with a non-zero test count in the API, DB and web
+   sections — satisfied by the three automatic runs on PR #32 before the owner switched it to
+   `workflow_dispatch`. A CI run that collects zero tests is a failure, not a pass.
 
 **Validation.** `python3 scripts/check-docs.py` → no findings. `pre-commit run --all-files` → all
 hooks pass. The CI run on the PR → green, all five jobs.
 
-**Acceptance.** CI green on this PR; a backup produced and its path recorded in the PR;
+**Acceptance.** The workflow proven green on this PR (before the switch to manual-only); a
+backup produced and its path recorded in the PR;
 `implementation-plan.md`'s stale cap line fixed; CLAUDE.md's index row flagged to the owner;
 `progress.md` records M2 opened and the entry criterion satisfied.
 
@@ -899,7 +920,12 @@ class ExtractionResult:
     rows: list[RawRow]
     declared_opening: str | None     # verbatim capture-group text, not parsed
     declared_closing: str | None
-    metadata: dict[str, str]         # from metadata_patterns; verbatim
+    metadata: dict[str, str]         # from metadata_patterns; verbatim — NEVER contains
+                                     # the reserved account_number key (see below)
+    account_number_raw: str | None   # the reserved metadata_patterns key "account_number";
+                                     # transient and sensitive: hashed and discarded by the
+                                     # pipeline, excluded from metadata, storage, responses,
+                                     # logs and errors
     page_count: int
     has_text: bool                   # False = scanned; extraction refused
     words_filtered: int              # dropped by filter_script:*, reported (I7)
@@ -933,9 +959,14 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
   sha256(ACCOUNT_HASH_SALT + normalised digits)` and stores **only those two**. The full value
   never reaches the database, a log, or a response. `ACCOUNT_HASH_SALT` is already in
   `.env.example`; a missing or empty salt refuses the write with the variable named rather than
-  hashing with an empty salt. A resolution helper takes a candidate number found in a statement
-  and returns the matching account or `None` — it never guesses, because a wrong guess corrupts
-  two accounts at once.
+  hashing with an empty salt. **The statement-side source is the reserved `metadata_patterns`
+  key `account_number`**: a profile that captures it feeds `ExtractionResult.account_number_raw`
+  (one capture group, verbatim), which the pipeline normalizes (separators stripped), hashes
+  with the same salted formula, uses for lookup and discards — it never enters `metadata`, a
+  stored row, a response, a log or an error, and `propose()` never proposes the key (the owner
+  maps it deliberately). A resolution helper takes that hash and returns the matching account or
+  `None` — it never guesses, because a wrong guess corrupts two accounts at once. A profile with
+  no such capture simply always asks (the account picker), which is honest, not broken.
 - **The synthetic PDF generator** writes minimal, valid PDF bytes from a list of
   `(page, x, y, text, size)` placements using base-14 Helvetica, with no new dependency and no
   file committed — the caller gets bytes or a `tmp_path` file. It must be able to produce: a
@@ -1091,7 +1122,9 @@ worked around (§5.2).
   while a corrupted amount yields empty candidates and a message saying row-level evidence is
   unavailable (§4.6 — never an invented row); a running-balance layout with a
   broken row yields `running_balance_break` naming that row, the expected and the stated balance;
-  a layout with no anchors and no running values yields `unavailable`; an `inverts_sign` statement
+  a draft or layout whose configured evidence produced no values yields `unavailable` — a
+  blocking verdict in M2 (§4.6), non-blocking only in the mapper's draft preview; an
+  `inverts_sign` statement
   reconciles in the ledger frame and **fails** if the declared balances are not inverted with the
   rows.
 - *Property (hypothesis)*: for any generated row set, `opening + Σ(amounts) == computed_closing`
@@ -1175,11 +1208,18 @@ class ReconciliationResult(BaseModel):
   only, then ask. When no profile scores above the threshold, the response carries
   `layoutCandidates` with scores and `blockedReason` explaining that the layout must be chosen or
   mapped; nothing is written.
-- **Account resolution**: by `account_number_hash` from the number found in the statement. When it
-  does not resolve, the response says so and the caller must supply `accountId`; the service never
-  guesses.
+- **Account resolution**: by `account_number_hash` from the profile's reserved `account_number`
+  metadata capture (Task 3's transient contract — normalized, hashed, discarded). When the
+  profile captures nothing or the hash matches no account, the response says so and the caller
+  must supply `accountId`; the service never guesses.
 - **FX** per §4.8. Fetching happens **after** reconciliation passes and **before** the staging
-  transaction opens, so no network call happens inside an open transaction.
+  transaction opens, so no network call happens inside an open transaction. The prefetch reads
+  the reporting pair **optimistically**; the staging transaction, after acquiring the household
+  lock, **re-reads the pair and revalidates**. If the pair changed since the prefetch (possible
+  only before the first frozen write pins it), the transaction aborts cleanly, the pipeline
+  refetches for the new pair, and retries once — a second change refuses the import naming the
+  cause. Frozen amounts are always derived under the pair read inside the lock, never the
+  prefetch's.
 - **Staging** per §5.4 and §5.5: blob first, then `document` + `import_batch` + rows in one
   transaction, taking the household row lock **before** reading the reporting pair (spec B3.5).
   A blocked verdict writes nothing at all.
@@ -1224,7 +1264,11 @@ never-store rules of §5.6, tested.
 - A weekend booked date stages with `fx_rate_is_carried = true` and an earlier `fx_rate_date`
   (I7).
 - A reporting-pair change racing a staging batch serializes correctly in both interleavings
-  (B3.5), matching the shape of the existing `test_transactions_live.py` proof.
+  (B3.5), matching the shape of the existing `test_transactions_live.py` proof — and the
+  assertions cover the outcome, not just the contention: after a pair change that lands between
+  the FX prefetch and the household lock, the staged rows' frozen `amount_base` /
+  `amount_secondary` are derived under the **final** pair with rates that cover it (the
+  locked-revalidation retry), never under the stale prefetch pair.
 - An unidentified layout returns candidates and scores and writes nothing.
 - An unresolved account returns the account-picker state and writes nothing.
 - A filename containing a 16-digit run is stored masked, and so is one carrying the same number
@@ -1323,8 +1367,8 @@ class RowDecisions(BaseModel):      # PATCH /import/{id}/rows
 - Commit inserts **only** `status='accepted'` rows. Nothing is accepted implicitly: staging sets
   `new`/`duplicate`/`near_duplicate`, and only an explicit decision moves a row to `accepted`.
   "Nothing imports without a click" is a property of the data, not of the UI.
-- Commit is refused (409) while `reconciliation_status` is `mismatched` or
-  `running_balance_break`.
+- Commit is refused (409) for any `reconciliation_status` other than `matched` — in M2 a staged
+  batch can only be `matched` (every other verdict blocks staging), and the check holds anyway.
 - Committing an already-completed batch is refused (409), not silently repeated.
 - A commit that raises leaves **zero** `transaction` rows and the batch not `completed` — the
   induced-failure gate.
@@ -1541,7 +1585,8 @@ diagnosable at a glance, and the whole milestone is proven end to end on synthet
   **This test fails if the engine or a saved profile regresses** — it is the golden-fixture role,
   played by a generated fixture because no PDF may be committed.
 
-**Validation.** The web gate, the API gate, the DB gate, and CI green.
+**Validation.** The web gate, the API gate, the DB gate — the full local hook suite, which is
+the enforced gate (§3.1); a manual CI dispatch is optional corroboration.
 
 **Owner-run acceptance** (recorded in `docs/superpowers/progress.md`, not automated — §3.1):
 all 38 real card statements import end to end with reconciliation passing on each; a re-import
@@ -1568,7 +1613,7 @@ Mapped one-to-one to roadmap M2's "Done when" list. Each is checked in the PR na
 | A deliberately corrupted amount blocks the batch and names the divergent row | `mismatched` verdict + zero staged rows (I8); the row is named where running-balance evidence exists, else the exact delta and candidates — the honest form, §7.10 | Tasks 4, 5 |
 | The commit is atomic — an induced failure mid-import leaves zero rows | `db/tests/0012` induced-failure case | Task 6 |
 | A backup has run and been restored into a scratch database | `scripts/backup-db.sh`; **owner-run** restore | Tasks 1, 9 |
-| Deferred in from Phase 0: CI (lint, type-check, test, migrations-from-empty) | `.github/workflows/ci.yml` green on every PR | Task 1 |
+| Deferred in from Phase 0: CI (lint, type-check, test, migrations-from-empty) | `.github/workflows/ci.yml`, proven green on PR #32, then kept manual-only by owner decision (§3.1); the local hook suite is the enforced gate | Task 1 |
 | Deferred in from Phase 0: `scripts/backup-db.sh` | The script, run | Task 1 |
 
 Roadmap M2's **Build** list maps as: generic engine → Task 3; mapping UI → Task 8; field-name
