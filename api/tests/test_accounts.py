@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
-from uuid import UUID
+from typing import Any, cast
+from uuid import UUID, uuid4
 
 import psycopg
 import pytest
@@ -50,7 +53,7 @@ FETCHED_ROW = (
     ACCOUNT_ID,
     "Inventory Savings",
     INSTITUTION_ID,
-    "Synthetic Bank",
+    "Institution A",
     "savings",
     "asset",
     None,
@@ -103,6 +106,56 @@ def owner() -> auth.OwnerSession:
     return auth.OwnerSession(
         user_id=USER_ID, household_id=HOUSEHOLD_ID, session_id=SESSION_ID, email=EMAIL
     )
+
+
+@pytest.fixture
+def live_accounts(
+    monkeypatch: MonkeyPatch,
+) -> Iterator[tuple[psycopg.Connection, auth.OwnerSession]]:
+    """A real PostgreSQL household used through the real FastAPI account routes."""
+    if "POSTGRES_PASSWORD" not in os.environ:
+        pytest.skip("no database credentials in the environment")
+    from oneledger.db import connect as live_connect
+
+    try:
+        admin = live_connect()
+    except psycopg.OperationalError:
+        pytest.skip("database unreachable")
+
+    household_id = uuid4()
+    person_id = uuid4()
+    request_owner = auth.OwnerSession(
+        user_id=uuid4(),
+        household_id=household_id,
+        session_id=uuid4(),
+        email="owner@example.com",
+    )
+    with admin.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (id, name, base_currency, secondary_currency)
+               VALUES (%s, %s, %s, %s)""",
+            (household_id, "Household A", "USD", "EUR"),
+        )
+        cur.execute(
+            """INSERT INTO person (id, household_id, display_name, is_self)
+               VALUES (%s, %s, %s, true)""",
+            (person_id, household_id, "Owner A"),
+        )
+    admin.commit()
+
+    monkeypatch.setattr(accounts, "connect", live_connect)
+    app.dependency_overrides[auth.require_owner] = lambda: request_owner
+    try:
+        yield admin, request_owner
+    finally:
+        app.dependency_overrides.clear()
+        admin.rollback()
+        with admin.cursor() as cur:
+            cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
+        admin.commit()
+        admin.close()
 
 
 class AccountsConnection:
@@ -173,6 +226,8 @@ class AccountsCursor:
             self._many = list(self.connection.institutions or [])
         elif "EXISTS (SELECT FROM transaction" in sql:
             self._one = self.connection.ledger_state
+        elif "a.account_number_hash" in sql:
+            self._one = self.connection.rows[0] if self.connection.rows else None
         elif "WHERE a.id =" in sql:
             self._one = self.connection.rows[0] if self.connection.rows else None
         else:
@@ -274,7 +329,200 @@ def test_a_full_account_number_is_never_accepted() -> None:
         with pytest.raises(ValidationError):
             accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": bad})
     assert accounts.AccountCreate.model_validate({**CREATE, "accountNumberMasked": "****1234"})
-    assert accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": "HDFC ··1234"})
+    assert accounts.AccountUpdate.model_validate(
+        {**UPDATE, "accountNumberMasked": "Provider ··1234"}
+    )
+
+
+def test_create_hashes_and_masks_the_account_number_without_exposing_it(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    full_number = "7234-5600-9812"
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    admin, _ = live_accounts
+    payload = {
+        **CREATE,
+        "institutionId": None,
+        "currency": "USD",
+        "country": "XA",
+        "accountNumber": full_number,
+    }
+
+    response = TestClient(app).post("/accounts", json=payload, headers=ORIGIN)
+
+    assert response.status_code == 201
+    account_id = UUID(response.json()["id"])
+    with admin.cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s AND household_id = %s""",
+            (account_id, live_accounts[1].household_id),
+        )
+        stored = cur.fetchone()
+    assert stored == (
+        "****9812",
+        "75c4febe3d619e74f50bbbed373c532d6663d9908e4f27b55a902cbf2364d46c",
+    )
+    assert response.json()["accountNumberMasked"] == "****9812"
+    assert "accountNumber" not in response.json()
+    assert full_number not in response.text
+    assert full_number not in caplog.text
+    assert full_number not in repr(accounts.AccountCreate.model_validate(payload))
+
+
+def test_same_account_number_is_rejected_twice_within_one_household(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    full_number = "7234-5600-9812"
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    payload = {
+        **CREATE,
+        "institutionId": None,
+        "currency": "USD",
+        "country": "XA",
+        "accountNumber": full_number,
+    }
+
+    first = TestClient(app).post("/accounts", json=payload, headers=ORIGIN)
+    duplicate = TestClient(app).post(
+        "/accounts", json={**payload, "name": "Account B"}, headers=ORIGIN
+    )
+
+    assert first.status_code == 201
+    assert duplicate.status_code == 422
+    assert "idx_account_number_hash" in duplicate.json()["detail"]
+    assert full_number not in duplicate.text
+
+
+def test_account_number_write_refuses_an_empty_hash_salt_without_exposing_the_input(
+    monkeypatch: MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    full_number = "7234-5600-9812"
+    connection = AccountsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(accounts, "connect", lambda: connection, raising=False)
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "  ")
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/accounts", json={**CREATE, "accountNumber": full_number}, headers=ORIGIN
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "ACCOUNT_HASH_SALT is not configured"
+    assert not connection.statements
+    assert full_number not in response.text
+    assert full_number not in caplog.text
+
+
+def test_patch_with_an_account_number_replaces_the_stored_identity(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    admin, request_owner = live_accounts
+    created = TestClient(app).post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": "7234-5600-9812",
+        },
+        headers=ORIGIN,
+    )
+    account_id = UUID(created.json()["id"])
+
+    response = TestClient(app).patch(
+        f"/accounts/{account_id}",
+        json={
+            **UPDATE,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": "1111 2222 3333",
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200
+    with admin.cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s AND household_id = %s""",
+            (account_id, request_owner.household_id),
+        )
+        stored = cur.fetchone()
+    assert stored == (
+        "****3333",
+        "600dc8cd930957977c7cfc782ce6e1aef6b0cb1fc160ead55d77445cc2de296a",
+    )
+
+
+def test_patch_omitting_account_number_preserves_the_stored_identity(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    admin, request_owner = live_accounts
+    created = TestClient(app).post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": "7234-5600-9812",
+        },
+        headers=ORIGIN,
+    )
+    account_id = UUID(created.json()["id"])
+
+    response = TestClient(app).patch(
+        f"/accounts/{account_id}",
+        json={**UPDATE, "currency": "USD", "country": "XA"},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200
+    with admin.cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s AND household_id = %s""",
+            (account_id, request_owner.household_id),
+        )
+        stored = cur.fetchone()
+    assert stored == (
+        "****9812",
+        "75c4febe3d619e74f50bbbed373c532d6663d9908e4f27b55a902cbf2364d46c",
+    )
+
+
+def test_account_hash_resolution_is_parameterized_and_never_guesses() -> None:
+    account_hash = "75c4febe3d619e74f50bbbed373c532d6663d9908e4f27b55a902cbf2364d46c"
+    matching = AccountsConnection(rows=[FETCHED_ROW])
+    with matching.cursor() as cur:
+        resolved = accounts.resolve_account_by_hash(
+            cast(psycopg.Cursor[Any], cur), account_hash, HOUSEHOLD_ID
+        )
+
+    assert resolved is not None and resolved.id == ACCOUNT_ID
+    assert "a.account_number_hash = %s" in matching.statements[0]
+    assert "a.household_id = %s" in matching.statements[0]
+    assert matching.parameters[0] == (account_hash, HOUSEHOLD_ID)
+
+    missing = AccountsConnection()
+    with missing.cursor() as cur:
+        assert (
+            accounts.resolve_account_by_hash(
+                cast(psycopg.Cursor[Any], cur), account_hash, HOUSEHOLD_ID
+            )
+            is None
+        )
 
 
 def test_creating_an_account_refuses_ambiguous_self_person(monkeypatch: MonkeyPatch) -> None:

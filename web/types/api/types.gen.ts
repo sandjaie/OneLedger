@@ -37,6 +37,10 @@ export type AccountCreate = {
      */
     accountNumberMasked?: string | null;
     /**
+     * Accountnumber
+     */
+    accountNumber?: string | null;
+    /**
      * Openedon
      */
     openedOn?: string | null;
@@ -221,6 +225,10 @@ export type AccountUpdate = {
      * Accountnumbermasked
      */
     accountNumberMasked?: string | null;
+    /**
+     * Accountnumber
+     */
+    accountNumber?: string | null;
     /**
      * Openedon
      */

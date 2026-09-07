@@ -4,6 +4,8 @@ rate and a coverage label, which is M9a's contract (multi-currency-and-fx.html s
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -55,6 +57,17 @@ def _masked(value: str | None) -> str | None:
             "at most four digits may be visible"
         )
     return value
+
+
+def _account_number_identity(value: str) -> tuple[str, str]:
+    digits = "".join(character for character in value if character in "0123456789")
+    salt = os.environ.get("ACCOUNT_HASH_SALT", "").strip()
+    if not salt:
+        raise HTTPException(status_code=503, detail="ACCOUNT_HASH_SALT is not configured")
+    masked = _masked(f"****{digits[-4:]}")
+    assert masked is not None
+    digest = hashlib.sha256(f"{salt}{digits}".encode()).hexdigest()
+    return masked, digest
 
 
 def _out(value: Decimal | None) -> str | None:
@@ -128,9 +141,10 @@ class AccountCreate(BaseModel):
     accountSubtype: str | None = Field(default=None, max_length=40)
     currency: str = Field(min_length=3, max_length=3)
     country: str = Field(min_length=2, max_length=2)
-    # Masked only. The full number is never accepted, transmitted or logged
-    # (security-and-privacy.html section 1); account_number_hash arrives with M2's matching flow.
+    # The display mask remains accepted for existing clients. accountNumber is transient:
+    # create/update derive the only two values that may cross into storage.
     accountNumberMasked: str | None = Field(default=None, max_length=32)
+    accountNumber: str | None = Field(default=None, repr=False)
     openedOn: date | None = None
     includeInNetWorth: bool = True
     isLiquid: bool = True
@@ -168,6 +182,7 @@ class AccountUpdate(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
     country: str = Field(min_length=2, max_length=2)
     accountNumberMasked: str | None = Field(default=None, max_length=32)
+    accountNumber: str | None = Field(default=None, repr=False)
     openedOn: date | None = None
     closedOn: date | None = None
     includeInNetWorth: bool
@@ -282,6 +297,18 @@ def _one(cur: psycopg.Cursor[Any], account_id: UUID, household_id: UUID) -> Acco
     return account_row(row)
 
 
+def resolve_account_by_hash(
+    cur: psycopg.Cursor[Any], account_number_hash: str, household_id: UUID
+) -> AccountRow | None:
+    cur.execute(
+        f"""SELECT {COLUMNS} {FROM}
+              WHERE a.account_number_hash = %s AND a.household_id = %s""",
+        (account_number_hash, household_id),
+    )
+    row = cur.fetchone()
+    return None if row is None else account_row(row)
+
+
 @router.get("/accounts")
 def list_accounts(owner: Annotated[OwnerSession, Depends(require_owner)]) -> AccountsResponse:
     with connect() as conn, conn.cursor() as cur:
@@ -314,6 +341,10 @@ def list_accounts(owner: Annotated[OwnerSession, Depends(require_owner)]) -> Acc
 def create_account(
     body: AccountCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> AccountRow:
+    account_number_masked = body.accountNumberMasked
+    account_number_hash = None
+    if body.accountNumber is not None:
+        account_number_masked, account_number_hash = _account_number_identity(body.accountNumber)
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
@@ -331,11 +362,12 @@ def create_account(
             cur.execute(
                 """INSERT INTO account (
                        household_id, owner_person_id, institution_id, name, account_type,
-                       account_subtype, currency, country, account_number_masked, opened_on,
+                       account_subtype, currency, country, account_number_masked,
+                       account_number_hash, opened_on,
                        include_in_net_worth, is_liquid, opening_balance, opening_balance_date,
                        opening_balance_note, credit_limit)
                    VALUES (%s, %s, %s, %s, %s::account_type, %s, %s, %s, %s, %s, %s, %s,
-                           %s, %s, %s, %s)
+                           %s, %s, %s, %s, %s)
                    RETURNING id""",
                 (
                     owner.household_id,
@@ -346,7 +378,8 @@ def create_account(
                     body.accountSubtype,
                     body.currency,
                     body.country,
-                    body.accountNumberMasked,
+                    account_number_masked,
+                    account_number_hash,
                     body.openedOn,
                     body.includeInNetWorth,
                     body.isLiquid,
@@ -375,6 +408,11 @@ def update_account(
     body: AccountUpdate,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
+    replace_account_identity = "accountNumber" in body.model_fields_set
+    account_number_masked: str | None = None
+    account_number_hash: str | None = None
+    if body.accountNumber is not None:
+        account_number_masked, account_number_hash = _account_number_identity(body.accountNumber)
     # Changing the opening anchor recomputes the materialised balance from the ledger:
     # opening_balance + the sum of the account's posting rows (split children move nothing).
     # Postgres does the arithmetic; before M1b's ledger existed the sum was empty and this
@@ -456,7 +494,11 @@ def update_account(
                 """UPDATE account
                       SET name = %s, institution_id = %s, account_type = %s::account_type,
                           account_subtype = %s, currency = %s, country = %s,
-                          account_number_masked = %s, opened_on = %s, closed_on = %s,
+                          account_number_masked = CASE WHEN %s THEN %s
+                                                       ELSE account_number_masked END,
+                          account_number_hash = CASE WHEN %s THEN %s
+                                                     ELSE account_number_hash END,
+                          opened_on = %s, closed_on = %s,
                           is_active = (%s::date IS NULL),
                           include_in_net_worth = %s, is_liquid = %s,
                           opening_balance = %s, opening_balance_date = %s,
@@ -493,7 +535,10 @@ def update_account(
                     body.accountSubtype,
                     body.currency,
                     body.country,
-                    body.accountNumberMasked,
+                    replace_account_identity,
+                    account_number_masked,
+                    replace_account_identity,
+                    account_number_hash,
                     body.openedOn,
                     body.closedOn,
                     body.closedOn,
@@ -524,6 +569,7 @@ def update_account(
         psycopg.errors.CheckViolation,
         psycopg.errors.ForeignKeyViolation,
         psycopg.errors.NumericValueOutOfRange,
+        psycopg.errors.UniqueViolation,
     ) as exc:
         raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
 
