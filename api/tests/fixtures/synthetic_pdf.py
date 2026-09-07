@@ -4,11 +4,9 @@ No new dependency: this writes raw PDF syntax (a Catalog, a Pages tree, one shar
 Helvetica font, and one content stream per page placing text with an absolute text matrix).
 Never write a tracked .pdf from this -- callers get bytes, or write to tmp_path themselves.
 
-Text is encoded latin-1 (Helvetica/WinAnsi territory). Arabic-range codepoints do not survive
-that encoding -- there is no Arabic glyph in base-14 Helvetica to round-trip through, so the
-`filter_script:arabic` engine tests build synthetic Word lists directly instead of routing
-through this generator (engine.py never imports pdfplumber, so that is first-class). See the
-spike test in test_synthetic_pdf.py for what does and does not survive the round trip.
+Non-Latin characters receive free single-byte codes and a ToUnicode map. Helvetica's A glyph
+supplies their geometry; the mapping supplies the actual Unicode extraction text. This tests
+PDF text extraction, not Arabic glyph shaping, and requires no embedded font or dependency.
 """
 
 from __future__ import annotations
@@ -25,8 +23,8 @@ class Placement:
     size: float = 10.0
 
 
-def _escape(text: str) -> bytes:
-    raw = text.encode("latin-1", errors="replace")
+def _escape(text: str, encoding: dict[str, int]) -> bytes:
+    raw = bytes(encoding[character] for character in text)
     return raw.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)")
 
 
@@ -49,9 +47,42 @@ def build_pdf(
 
     objects: dict[int, bytes] = {}
     font_obj = 3
-    objects[font_obj] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    characters = sorted({character for p in placements for character in p.text})
+    encoding = {character: ord(character) for character in characters if ord(character) < 128}
+    extended = [character for character in characters if character not in encoding]
+    if len(extended) > 128:
+        raise ValueError("synthetic PDF supports at most 128 distinct non-ASCII characters")
+    encoding.update({character: index + 128 for index, character in enumerate(extended)})
+    mappings = [
+        f"<{code:02X}> <{character.encode('utf-16-be').hex().upper()}>"
+        for character, code in encoding.items()
+    ]
+    cmap_lines = [
+        "/CIDInit /ProcSet findresource begin",
+        "12 dict begin",
+        "begincmap",
+        "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
+        "/CMapName /SyntheticUnicode def",
+        "/CMapType 2 def",
+        "1 begincodespacerange",
+        "<00> <FF>",
+        "endcodespacerange",
+    ]
+    for offset in range(0, len(mappings), 100):
+        group = mappings[offset : offset + 100]
+        cmap_lines.extend([f"{len(group)} beginbfchar", *group, "endbfchar"])
+    cmap_lines.extend(["endcmap", "CMapName currentdict /CMap defineresource pop", "end", "end"])
+    cmap = "\n".join(cmap_lines).encode("ascii")
+    objects[4] = f"<< /Length {len(cmap)} >>\nstream\n".encode() + cmap + b"\nendstream"
+    differences = "128 " + " ".join("/A" for _ in extended) if extended else ""
+    objects[font_obj] = (
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        "/Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding "
+        f"/Differences [{differences}] >> "
+        "/ToUnicode 4 0 R >>"
+    ).encode("ascii")
 
-    next_obj = 4
+    next_obj = 5
     kids: list[int] = []
     width, height = page_size
     for i in range(n_pages):
@@ -63,7 +94,7 @@ def build_pdf(
         for pl in by_page.get(i, []):
             ops.append(f"/F1 {pl.size} Tf".encode("latin-1"))
             ops.append(f"1 0 0 1 {pl.x} {pl.y} Tm".encode("latin-1"))
-            ops.append(b"(" + _escape(pl.text) + b") Tj")
+            ops.append(b"(" + _escape(pl.text, encoding) + b") Tj")
         ops.append(b"ET")
         stream = b"\n".join(ops)
         objects[content_obj] = (

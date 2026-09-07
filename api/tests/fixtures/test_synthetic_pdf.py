@@ -47,10 +47,7 @@ def test_zero_placement_page_has_zero_words(tmp_path: Path) -> None:
         assert pdf.pages[0].extract_words() == []
 
 
-def test_arabic_range_text_does_not_survive_latin1_round_trip(tmp_path: Path) -> None:
-    """Documents the known limitation (see module docstring): base-14 Helvetica has no
-    Arabic glyphs, so this generator cannot be used for the filter_script:arabic tests --
-    those build synthetic Word lists directly against engine.py instead."""
+def test_arabic_range_text_round_trips_through_unicode_mapping(tmp_path: Path) -> None:
     placements = [Placement(page=0, x=72, y=700, text="مرحبا", size=10)]
     pdf_path = tmp_path / "arabic.pdf"
     pdf_path.write_bytes(build_pdf(placements))
@@ -59,4 +56,4 @@ def test_arabic_range_text_does_not_survive_latin1_round_trip(tmp_path: Path) ->
         words = pdf.pages[0].extract_words()
 
     texts = [w["text"] for w in words]
-    assert texts != ["مرحبا"]
+    assert texts == ["مرحبا"]
