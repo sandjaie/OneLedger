@@ -169,6 +169,21 @@ BEGIN
     SELECT FROM v_transaction_reportable
      WHERE household_id = h AND dedupe_hash IN ('d5','d6','d7')),
     'transfer legs, excluded rows and adjustments never report (I3 groundwork)';
+  -- Investment income is an investment flow, not consumption; probed and rolled back so the
+  -- balance arithmetic below stays untouched.
+  BEGIN
+    INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                             currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                             amount_base, amount_secondary, txn_type, source, dedupe_hash)
+      VALUES (h, a_sav, '2024-02-05', 'DIVIDEND', 12.0000, base,
+              '2024-02-05', 1, 20, 12.0000, 240.0000, 'investment_income', 'manual', 'd9');
+    ASSERT NOT EXISTS (
+      SELECT FROM v_transaction_reportable WHERE household_id = h AND dedupe_hash = 'd9'),
+      'investment income never reports as consumption';
+    RAISE EXCEPTION 'rollback probe';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'rollback probe' THEN RAISE; END IF;
+  END;
   ASSERT EXISTS (SELECT FROM v_transaction_posting WHERE household_id = h AND dedupe_hash = 'd5'),
     'a transfer leg is still a posting — the ledger shows it, reports do not';
 
