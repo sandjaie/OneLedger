@@ -5,6 +5,7 @@ requires-python = ">=3.14"
 dependencies = [
   "fastapi>=0.141", "uvicorn[standard]>=0.52", "pydantic>=2.13",
   "psycopg[binary]>=3.3", "httpx>=0.28", "pdfplumber>=0.11.10", "pyjwt[crypto]>=2.13",
+  "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]
