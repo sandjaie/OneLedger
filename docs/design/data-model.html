@@ -804,14 +804,14 @@ time, which is what makes &quot;interest saved by prepaying&quot; a computable n
 remembered one.</p>
 <hr>
 <h2 id="12-documents-and-import">12. Documents and import</h2>
-<p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
-<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
+<p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
+<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
 <h3 id="statement-layouts">Statement layouts</h3>
 <p><strong>No bank name appears anywhere in application code</strong>
 (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A statement layout is a row, created
 through the mapping UI on first import of an unrecognised format. One generic extraction engine
 reads any profile.</p>
-<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0008</code>.</p>
+<p><strong>No bank name appears anywhere in application code</strong> (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A layout is a row the user creates through the mapping UI, holding: detection fingerprints; the header-row pattern and column x-bands; date format, <code>sign_convention</code>, <code>inverts_sign</code> and chronological order; row-start and continuation rules; skip patterns for legend pages and footers; balance anchors; a small additive <code>quirks</code> vocabulary; and metadata patterns for card header blocks.</p><p>A <code>CHECK</code> requires either a closing-balance pattern or a running-balance column, so a layout that cannot be reconciled is rejected at creation rather than silently letting a mis-mapped column through.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
 <p><code>has_a_balance_anchor</code> is the constraint that keeps Invariant I8 enforceable: a layout must offer
 <em>some</em> way to verify the extracted rows, either a declared closing balance or a running balance
 column. A profile that offers neither cannot be reconciled, and would let a mis-mapped column
@@ -932,7 +932,7 @@ V8__account_inventory.sql             reserved — Phase 1 Task 8
 V9__categories_and_merchants.sql      + seed taxonomy (applied)
 V10__transaction_ledger.sql           + posting/reportable views (applied)
 V11__category_overrides.sql           household choices beside the seed (applied)
-V12__documents_and_import.sql         + statement_layout
+V12__documents_and_import.sql         + statement_layout (applied)
 V13__classification_rules.sql         + seed rules
 V14__transfers.sql
 V15__card_statements.sql
