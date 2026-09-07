@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from oneledger.ingest.words import extract_pages
 from tests.fixtures.synthetic_pdf import Placement, build_pdf
 
@@ -80,3 +82,34 @@ def test_multiple_pages_are_extracted_independently(tmp_path: Path) -> None:
     assert len(pages) == 2
     assert pages[0].lines[0].words[0].text == "PAGE1"
     assert pages[1].lines[0].words[0].text == "PAGE2"
+
+
+def test_line_tolerance_scales_with_modal_character_height(tmp_path: Path) -> None:
+    # 2pt baseline jitter is distinct at 4pt text size, but 4pt jitter belongs
+    # together at 20pt size. A fixed 3pt tolerance gets both cases wrong.
+    for size, jitter, expected in [(4, 2, 2), (20, 4, 1)]:
+        path = tmp_path / "scaled.pdf"
+        path.write_bytes(
+            build_pdf(
+                [
+                    Placement(page=0, x=20, y=700, text="FIRST", size=size),
+                    Placement(page=0, x=250, y=700 - jitter, text="SECOND", size=size),
+                ]
+            )
+        )
+        assert len(extract_pages(path)[0].lines) == expected
+
+
+def test_parser_programmer_errors_are_not_treated_as_upload_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import pdfplumber
+    from pdfplumber.utils.exceptions import PdfminerException
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise PdfminerException(TypeError("programmer error"))
+
+    monkeypatch.setattr(pdfplumber, "open", broken)
+    with pytest.raises(PdfminerException):
+        extract_pages(tmp_path / "unused.pdf")

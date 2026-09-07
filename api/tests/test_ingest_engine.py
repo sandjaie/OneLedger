@@ -69,6 +69,51 @@ def test_midpoint_assigns_an_overhanging_amount_to_the_amount_band() -> None:
     }
 
 
+def test_real_pdf_raw_lines_preserve_whitespace_and_filtered_arabic(tmp_path: Path) -> None:
+    path = tmp_path / "bilingual.pdf"
+    path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="01/02/2024  "),
+                Placement(page=0, x=130, y=700, text="ALPHA   مرحبا  BETA"),
+                Placement(page=0, x=445, y=700, text="17.25"),
+            ]
+        )
+    )
+    filtered = extract(profile(quirks=["filter_script:arabic"]), path, None)
+    unfiltered = extract(profile(), path, None)
+    assert filtered.words_filtered == 1
+    assert filtered.rows[0].raw_text == "01/02/2024  ALPHA   مرحبا  BETA17.25"
+    assert filtered.rows[0].raw_text == unfiltered.rows[0].raw_text
+    assert filtered.rows[0].fields["description"] == "ALPHA BETA"
+    assert "مرحبا" in unfiltered.rows[0].fields["description"]
+
+
+def test_spaceless_producer_crosses_pdf_boundary(tmp_path: Path) -> None:
+    path = tmp_path / "spaceless.pdf"
+    path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="01/02/2024"),
+                Placement(page=0, x=130, y=700, text="ALPHA"),
+                Placement(page=0, x=180, y=700, text="BETA"),
+                Placement(page=0, x=445, y=700, text="17.25"),
+            ]
+        )
+    )
+    result = extract(profile(), path, None)
+    assert result.rows[0].raw_text == "01/02/2024ALPHABETA17.25"
+    assert result.rows[0].fields["description"] == "ALPHA BETA"
+    shifted = profile(
+        columns=[
+            {"field": "booked_date", "xMin": 0, "xMax": 100},
+            {"field": "description", "xMin": 100, "xMax": 490},
+            {"field": "amount", "xMin": 490, "xMax": 600},
+        ]
+    )
+    assert extract(shifted, path, None).rows == []
+
+
 def test_spaceless_tokens_are_split_by_bands_and_shifted_bands_change_cells() -> None:
     statement_page = page(
         [
@@ -111,10 +156,18 @@ def test_arabic_filter_removes_only_matching_words_and_reports_the_count() -> No
     unfiltered = extract_pages(profile(), [mixed])
 
     assert filtered.words_filtered == 1
+    assert filtered.rows[0].raw_text == "01/02/2024 ALPHA مرحبا 17.25"
     assert filtered.rows[0].fields["description"] == "ALPHA"
     assert filtered.rows[0].fields["amount"] == "17.25"
     assert unfiltered.words_filtered == 0
     assert unfiltered.rows[0].fields["description"] == "ALPHA مرحبا"
+
+
+def test_real_pdf_capture_uses_original_whitespace(tmp_path: Path) -> None:
+    path = tmp_path / "capture.pdf"
+    path.write_bytes(build_pdf([Placement(page=0, x=20, y=700, text="Opening:   17.25  !")]))
+    result = extract(profile(openingBalancePattern=r"Opening:(   17.25  )!"), path, None)
+    assert result.declared_opening == "   17.25  "
 
 
 def test_continuation_joins_description_fragments_in_physical_order() -> None:
@@ -221,6 +274,56 @@ def test_propose_refuses_a_page_without_a_qualifying_header(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="header"):
         engine.propose(pdf_path, None)
+
+
+@pytest.mark.parametrize("different", [False, True])
+def test_repeated_headers_are_deduplicated_only_when_equivalent(
+    tmp_path: Path,
+    different: bool,
+) -> None:
+    placements = []
+    for index in range(2):
+        placements.extend(
+            [
+                Placement(page=index, x=20, y=700, text="Date"),
+                Placement(page=index, x=180, y=700, text="Description"),
+                Placement(
+                    page=index, x=500 if not different or index == 0 else 450, y=700, text="Amount"
+                ),
+                Placement(page=index, x=20, y=670, text=f"{13 + index}/02/2024"),
+                Placement(page=index, x=180, y=670, text="ITEM"),
+                Placement(page=index, x=500, y=670, text="17.25"),
+            ]
+        )
+    path = tmp_path / "multipage.pdf"
+    path.write_bytes(build_pdf(placements))
+    if different:
+        with pytest.raises(ValueError, match="ambiguous header"):
+            engine.propose(path, None)
+    else:
+        _, rows = engine.propose(path, None)
+        assert [row.page_number for row in rows] == [1, 2]
+
+
+def test_dash_dates_do_not_silently_choose_day_first(tmp_path: Path) -> None:
+    path = tmp_path / "ambiguous-dashes.pdf"
+    path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=180, y=700, text="Description"),
+                Placement(page=0, x=500, y=700, text="Amount"),
+                Placement(page=0, x=20, y=670, text="03-04-2024"),
+                Placement(page=0, x=180, y=670, text="FIRST"),
+                Placement(page=0, x=500, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="05-06-2024"),
+                Placement(page=0, x=180, y=640, text="SECOND"),
+                Placement(page=0, x=500, y=640, text="18.25"),
+            ]
+        )
+    )
+    with pytest.raises(ValueError, match="date format is ambiguous"):
+        engine.propose(path, None)
 
 
 def test_propose_builds_midpoint_bands_that_extract_the_statement(tmp_path: Path) -> None:

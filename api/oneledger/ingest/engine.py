@@ -13,7 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
 
-from .words import DEFAULT_LINE_TOLERANCE, Line, Page, Word, _group_lines
+from .words import ExtractionError, Line, Page, Word, _group_lines, with_raw_text
 from .words import extract_pages as read_pdf_pages
 
 
@@ -175,7 +175,9 @@ def _is_number(value: str) -> bool:
 
 def _page_text(pages: list[Page]) -> str:
     return "\n".join(
-        " ".join(word.text for word in line.words) for page in pages for line in page.lines
+        line.raw_text if line.raw_text is not None else " ".join(word.text for word in line.words)
+        for page in pages
+        for line in page.lines
     )
 
 
@@ -194,7 +196,7 @@ def _filtered_lines(page: Page, filter_arabic: bool) -> tuple[list[Line], int]:
     words = [word for line in page.lines for word in line.words]
     kept = [word for word in words if ARABIC.search(word.text) is None]
     # Regroup after filtering: a removed word must not determine the line anchor.
-    return _group_lines(kept, DEFAULT_LINE_TOLERANCE), len(words) - len(kept)
+    return with_raw_text(_group_lines(kept, page.line_tolerance), page), len(words) - len(kept)
 
 
 def _cells(columns: Sequence[ColumnLike], words: list[Word]) -> dict[str, str]:
@@ -259,8 +261,11 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
         for line in lines:
             if not line.words:
                 continue
-            raw_text = " ".join(word.text for word in sorted(line.words, key=lambda item: item.x0))
-            if any(re.search(pattern, raw_text) for pattern in profile.skipLinePatterns):
+            assembled_text = " ".join(
+                word.text for word in sorted(line.words, key=lambda item: item.x0)
+            )
+            raw_text = line.raw_text if line.raw_text is not None else assembled_text
+            if any(re.search(pattern, assembled_text) for pattern in profile.skipLinePatterns):
                 continue
             fields = _cells(profile.columns, line.words)
             if _starts_row(profile, fields):
@@ -309,7 +314,7 @@ def extract(profile: ProfileLike, pdf_path: Path, password: str | None) -> Extra
     pages = read_pdf_pages(pdf_path, password=password)
     result = extract_pages(profile, pages)
     if not result.has_text:
-        raise ValueError("scanned PDFs are unsupported")
+        raise ExtractionError("scanned PDFs are unsupported")
     return result
 
 
@@ -361,11 +366,15 @@ def _find_header(pages: list[Page]) -> tuple[int, int, list[_HeaderMatch]]:
             if "booked_date" in fields and fields & amount_fields:
                 candidates.append((page_index, line_index, matches))
     if not candidates:
-        raise ValueError("no qualifying header found")
+        raise ExtractionError("no qualifying header found")
     best_score = max(len(matches) for _, _, matches in candidates)
     best = [candidate for candidate in candidates if len(candidate[2]) == best_score]
-    if len(best) != 1:
-        raise ValueError("ambiguous header rows")
+    signatures = {
+        tuple((match.field, match.x0, match.x1, _header_key(match.label)) for match in candidate[2])
+        for candidate in best
+    }
+    if len(signatures) != 1:
+        raise ExtractionError("ambiguous header rows")
     return best[0]
 
 
@@ -414,10 +423,11 @@ def _infer_date_format(date_samples: list[str]) -> str:
         if date_samples and all(_date(value, date_format) is not None for value in date_samples)
     ]
     if len(candidates) != 1:
-        raise ValueError("date format is ambiguous")
-    if candidates[0] in {"dd/MM/yyyy", "dd/MM/yy"}:
+        raise ExtractionError("date format is ambiguous")
+    if candidates[0] in {"dd/MM/yyyy", "dd/MM/yy", "dd-MM-yyyy"}:
         numeric_parts = [
-            re.fullmatch(r"(\d{1,2})/(\d{1,2})/\d{2,4}", value.strip()) for value in date_samples
+            re.fullmatch(r"(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}", value.strip())
+            for value in date_samples
         ]
         if all(
             match is not None and int(match.group(1)) <= 12 and int(match.group(2)) <= 12
@@ -425,7 +435,7 @@ def _infer_date_format(date_samples: list[str]) -> str:
         ):
             # Month-first is intentionally not an output format, but it is still a competing
             # interpretation. A proposal must not silently relabel those dates as day-first.
-            raise ValueError("date format is ambiguous")
+            raise ExtractionError("date format is ambiguous")
     return candidates[0]
 
 
@@ -433,11 +443,11 @@ def _infer_order(date_samples: list[str], date_format: str) -> str:
     dates = [_date(value, date_format) for value in date_samples]
     parsed = [value for value in dates if value is not None]
     if len(parsed) < 2 or len(set(parsed)) < 2:
-        raise ValueError("chronological order is ambiguous")
+        raise ExtractionError("chronological order is ambiguous")
     ascending = all(left <= right for left, right in zip(parsed, parsed[1:], strict=False))
     descending = all(left >= right for left, right in zip(parsed, parsed[1:], strict=False))
     if ascending == descending:
-        raise ValueError("chronological order is ambiguous")
+        raise ExtractionError("chronological order is ambiguous")
     return "ascending" if ascending else "descending"
 
 
@@ -462,7 +472,7 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
     """Propose a generic layout draft from an unrecognised statement."""
     pages = read_pdf_pages(pdf_path, password=password)
     if not pages or any(not page.has_text for page in pages):
-        raise ValueError("scanned PDFs are unsupported")
+        raise ExtractionError("scanned PDFs are unsupported")
     page_index, line_index, header_matches = _find_header(pages)
     header_line = pages[page_index].lines[line_index]
     header_text = " ".join(
