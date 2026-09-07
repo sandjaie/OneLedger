@@ -8,16 +8,20 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from pathlib import Path
+from shutil import copyfileobj
+from tempfile import NamedTemporaryFile
 from typing import Annotated, Any
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from psycopg.types.json import Json
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
+from ..ingest import engine
 
 router = APIRouter(tags=["layouts"])
 
@@ -235,6 +239,22 @@ class LayoutCreate(BaseModel):
         return self
 
 
+class ProposedRawRow(BaseModel):
+    """Public raw extraction row. Sensitive transient extraction fields are absent by design."""
+
+    pageNumber: int
+    rowNumber: int
+    rawText: str
+    fields: dict[str, str]
+
+
+class LayoutProposal(BaseModel):
+    """POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation."""
+
+    draft: LayoutCreate
+    rows: list[ProposedRawRow]
+
+
 COLUMNS = """id, name, version, institution_id, fingerprints, header_row_pattern, columns,
              date_format, sign_convention::text, inverts_sign, chronological_order,
              row_start_rule, continuation_rule, skip_line_patterns, opening_balance_pattern,
@@ -320,6 +340,74 @@ def _one(cur: psycopg.Cursor[Any], layout_id: UUID, household_id: UUID) -> Layou
     if row is None:
         raise HTTPException(status_code=404, detail="no such layout")
     return _row_to_profile(row)
+
+
+def _parse_draft(value: str) -> LayoutCreate:
+    try:
+        return LayoutCreate.model_validate_json(value)
+    except ValidationError as exc:
+        detail = [
+            {
+                "type": error["type"],
+                "loc": ["draft", *error["loc"]],
+                "msg": error["msg"],
+            }
+            for error in exc.errors(include_input=False, include_url=False)
+        ]
+        raise HTTPException(status_code=422, detail=detail) from exc
+
+
+def _public_rows(
+    rows: list[engine.RawRow], sensitive_account_capture: str | None = None
+) -> list[ProposedRawRow]:
+    def redact(value: str) -> str:
+        if not sensitive_account_capture:
+            return value
+        return value.replace(sensitive_account_capture, "[redacted]")
+
+    return [
+        ProposedRawRow(
+            pageNumber=row.page_number,
+            rowNumber=row.row_number,
+            rawText=redact(row.raw_text),
+            fields={key: redact(value) for key, value in row.fields.items()},
+        )
+        for row in rows[:20]
+    ]
+
+
+@router.post("/layouts/propose")
+def propose_layout(
+    file: Annotated[UploadFile, File()],
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    password: Annotated[str | None, Form()] = None,
+    draft: Annotated[str | None, Form()] = None,
+) -> LayoutProposal:
+    del owner
+    parsed_draft = _parse_draft(draft) if draft is not None else None
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(prefix="oneledger-layout-", suffix=".pdf", delete=False) as temp:
+            temporary_path = Path(temp.name)
+            copyfileobj(file.file, temp)
+        if parsed_draft is None:
+            proposed, rows = engine.propose(temporary_path, password)
+            response_draft = LayoutCreate.model_validate(proposed, from_attributes=True)
+            sensitive_account_capture = None
+        else:
+            response_draft = parsed_draft
+            extraction = engine.extract(parsed_draft, temporary_path, password)
+            rows = extraction.rows
+            sensitive_account_capture = extraction.account_number_raw
+        return LayoutProposal(
+            draft=response_draft,
+            rows=_public_rows(rows, sensitive_account_capture),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 @router.get("/layouts")

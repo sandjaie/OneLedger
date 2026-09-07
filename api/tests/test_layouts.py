@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from uuid import UUID, uuid4
 
 import psycopg
@@ -10,6 +11,8 @@ from pydantic import ValidationError
 from oneledger import auth
 from oneledger.main import app
 from oneledger.routes import layouts
+
+from .fixtures.synthetic_pdf import Placement, build_pdf
 
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 HOUSEHOLD_ID = UUID("22222222-2222-2222-2222-222222222222")
@@ -96,6 +99,38 @@ def owner() -> auth.OwnerSession:
     )
 
 
+def proposal_pdf() -> bytes:
+    return build_pdf(
+        [
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Details"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/2024"),
+            Placement(page=0, x=180, y=670, text="ALPHA"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/2024"),
+            Placement(page=0, x=180, y=640, text="BETA"),
+            Placement(page=0, x=500, y=640, text="20.00"),
+        ]
+    )
+
+
+def proposal_pdf_with_sensitive_capture() -> bytes:
+    return build_pdf(
+        [
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Details"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/2024"),
+            Placement(page=0, x=180, y=670, text="Ref 9999-8888-7777"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/2024"),
+            Placement(page=0, x=180, y=640, text="BETA"),
+            Placement(page=0, x=500, y=640, text="20.00"),
+        ]
+    )
+
+
 class LayoutsCursor:
     def __init__(self, connection: LayoutsConnection) -> None:
         self.connection = connection
@@ -163,6 +198,165 @@ def test_unauthenticated_requests_are_rejected() -> None:
     client = TestClient(app)
     assert client.get("/layouts").status_code == 401
     assert client.post("/layouts", json=CREATE_BODY, headers=ORIGIN).status_code == 401
+    assert (
+        client.post(
+            "/layouts/propose",
+            files={"file": ("private-document.pdf", proposal_pdf(), "application/pdf")},
+            headers=ORIGIN,
+        ).status_code
+        == 401
+    )
+
+
+def test_propose_returns_a_draft_and_raw_rows_without_persisting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        layouts,
+        "connect",
+        lambda: (_ for _ in ()).throw(AssertionError("proposal must not persist")),
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("private-document.pdf", proposal_pdf(), "application/pdf")},
+            data={"password": "not-for-output"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["draft"]["name"] == "Proposed layout"
+    assert [row["fields"] for row in body["rows"]] == [
+        {"booked_date": "13/02/2024", "description": "ALPHA", "amount": "17.25"},
+        {"booked_date": "14/02/2024", "description": "BETA", "amount": "20.00"},
+    ]
+    assert body["rows"][0]["pageNumber"] == 1
+    assert body["rows"][0]["rowNumber"] == 1
+    serialized = response.text
+    assert "account_number_raw" not in serialized
+    assert "accountNumberRaw" not in serialized
+    assert "private-document.pdf" not in serialized
+    assert "not-for-output" not in serialized
+
+
+def test_propose_with_an_edited_draft_extracts_with_that_draft() -> None:
+    app.dependency_overrides[auth.require_owner] = owner
+    client = TestClient(app)
+    try:
+        automatic = client.post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf(), "application/pdf")},
+            headers=ORIGIN,
+        ).json()
+        edited = automatic["draft"]
+        edited["columns"] = [
+            {"field": "booked_date", "xMin": 20.0, "xMax": 109.0, "label": None},
+            {"field": "description", "xMin": 109.0, "xMax": 150.0, "label": None},
+            {"field": "reference", "xMin": 150.0, "xMax": 400.0, "label": None},
+            {"field": "amount", "xMin": 400.0, "xMax": 540.0, "label": None},
+        ]
+        response = client.post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf(), "application/pdf")},
+            data={"draft": json.dumps(edited)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["draft"] == edited
+    assert [row["fields"] for row in body["rows"]] == [
+        {"booked_date": "13/02/2024", "reference": "ALPHA", "amount": "17.25"},
+        {"booked_date": "14/02/2024", "reference": "BETA", "amount": "20.00"},
+    ]
+
+
+def test_propose_never_serializes_the_sensitive_account_capture() -> None:
+    app.dependency_overrides[auth.require_owner] = owner
+    client = TestClient(app)
+    try:
+        automatic = client.post(
+            "/layouts/propose",
+            files={
+                "file": (
+                    "statement.pdf",
+                    proposal_pdf_with_sensitive_capture(),
+                    "application/pdf",
+                )
+            },
+            headers=ORIGIN,
+        ).json()
+        draft = automatic["draft"]
+        draft["metadataPatterns"] = {"account_number": r"Ref (\d{4}-\d{4}-\d{4})"}
+        response = client.post(
+            "/layouts/propose",
+            files={
+                "file": (
+                    "statement.pdf",
+                    proposal_pdf_with_sensitive_capture(),
+                    "application/pdf",
+                )
+            },
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert len(response.json()["rows"]) == 2
+    assert "9999-8888-7777" not in response.text
+
+
+def test_propose_rejects_malformed_draft_json_and_names_the_form_field() -> None:
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf(), "application/pdf")},
+            data={"draft": "{not-json"},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][0] == "draft"
+
+
+def test_propose_draft_uses_the_same_layout_validation_as_save() -> None:
+    invalid = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 60.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+        ],
+    }
+    app.dependency_overrides[auth.require_owner] = owner
+    client = TestClient(app)
+    try:
+        saved = client.post("/layouts", json=invalid, headers=ORIGIN)
+        proposed = client.post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf(), "application/pdf")},
+            data={"draft": json.dumps(invalid)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert saved.status_code == 422
+    assert proposed.status_code == 422
+    assert "overlap" in saved.text
+    assert "overlap" in proposed.text
+    assert proposed.json()["detail"][0]["loc"][0] == "draft"
 
 
 def test_a_session_for_another_household_sees_no_layouts(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -274,6 +274,24 @@ export type AccountsResponse = {
 };
 
 /**
+ * Body_propose_layout_layouts_propose_post
+ */
+export type BodyProposeLayoutLayoutsProposePost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Draft
+     */
+    draft?: string | null;
+};
+
+/**
  * CategoryCreate
  */
 export type CategoryCreate = {
@@ -751,6 +769,45 @@ export type LayoutProfile = {
      * Lastusedat
      */
     lastUsedAt: string | null;
+};
+
+/**
+ * LayoutProposal
+ *
+ * POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation.
+ */
+export type LayoutProposal = {
+    draft: LayoutCreate;
+    /**
+     * Rows
+     */
+    rows: Array<ProposedRawRow>;
+};
+
+/**
+ * ProposedRawRow
+ *
+ * Public raw extraction row. Sensitive transient extraction fields are absent by design.
+ */
+export type ProposedRawRow = {
+    /**
+     * Pagenumber
+     */
+    pageNumber: number;
+    /**
+     * Rownumber
+     */
+    rowNumber: number;
+    /**
+     * Rawtext
+     */
+    rawText: string;
+    /**
+     * Fields
+     */
+    fields: {
+        [key: string]: string;
+    };
 };
 
 /**
@@ -1557,6 +1614,31 @@ export type UpdateCategoryCategoriesCategoryIdPatchResponses = {
 };
 
 export type UpdateCategoryCategoriesCategoryIdPatchResponse = UpdateCategoryCategoriesCategoryIdPatchResponses[keyof UpdateCategoryCategoriesCategoryIdPatchResponses];
+
+export type ProposeLayoutLayoutsProposePostData = {
+    body: BodyProposeLayoutLayoutsProposePost;
+    path?: never;
+    query?: never;
+    url: '/layouts/propose';
+};
+
+export type ProposeLayoutLayoutsProposePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeLayoutLayoutsProposePostError = ProposeLayoutLayoutsProposePostErrors[keyof ProposeLayoutLayoutsProposePostErrors];
+
+export type ProposeLayoutLayoutsProposePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LayoutProposal;
+};
+
+export type ProposeLayoutLayoutsProposePostResponse = ProposeLayoutLayoutsProposePostResponses[keyof ProposeLayoutLayoutsProposePostResponses];
 
 export type ListLayoutsLayoutsGetData = {
     body?: never;
