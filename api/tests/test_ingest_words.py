@@ -113,3 +113,22 @@ def test_parser_programmer_errors_are_not_treated_as_upload_failures(
     monkeypatch.setattr(pdfplumber, "open", broken)
     with pytest.raises(PdfminerException):
         extract_pages(tmp_path / "unused.pdf")
+
+
+@pytest.mark.parametrize("space", [False, True])
+def test_raw_text_uses_the_same_first_anchor_membership_as_words(space: bool) -> None:
+    from oneledger.ingest.words import Page, Word, _group_lines, with_raw_text
+
+    a = Word(x0=0, x1=5, top=0, bottom=10, text="A")
+    b = Word(x0=20, x1=25, top=2.9, bottom=12.9, text="B")
+    c = Word(x0=5, x1=10, top=3.1, bottom=13.1, text="C")
+    characters = [a, b, c]
+    if space:
+        characters.append(Word(x0=10, x1=15, top=2.9, bottom=12.9, text=" "))
+    lines = _group_lines([a, b, c], tolerance=3)
+    result = with_raw_text(
+        lines, Page(lines=lines, has_text=True, characters=characters, line_tolerance=3)
+    )
+
+    assert [[word.text for word in line.words] for line in result] == [["A", "B"], ["C"]]
+    assert [line.raw_text for line in result] == ["A B" if space else "AB", "C"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import UUID, uuid4
@@ -515,6 +516,26 @@ def test_propose_never_serializes_the_sensitive_account_capture() -> None:
     assert response.status_code == 200
     assert len(response.json()["rows"]) == 2
     assert "9999-8888-7777" not in response.text
+
+
+def test_malformed_draft_redacts_sensitive_dictionary_keys_in_error_locations() -> None:
+    identifier = "9999 – 8888.7777"
+    malformed = {**VALID_CREATE, "metadataPatterns": {identifier: 123}}
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf())},
+            data={"draft": json.dumps(malformed)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    normalized = re.sub(r"[\s–./-]", "", json.dumps(response.json(), ensure_ascii=False))
+    assert "999988887777" not in normalized
+    assert response.json()["detail"][0]["loc"][:2] == ["draft", "metadataPatterns"]
 
 
 def test_propose_rejects_malformed_draft_json_and_names_the_form_field() -> None:
