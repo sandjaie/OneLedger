@@ -358,7 +358,7 @@ WHERE  transfer_id IS NULL             -- a transfer leg is never income or expe
   AND  is_excluded = false
   AND  txn_type NOT IN ('opening_balance','adjustment',
                         'transfer_in','transfer_out',
-                        'investment_buy','investment_sell',
+                        'investment_buy','investment_sell','investment_income',
                         'loan_disbursement','loan_repayment');
 
 ALTER TABLE transaction ENABLE ROW LEVEL SECURITY;
