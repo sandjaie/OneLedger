@@ -35,9 +35,13 @@ independent of `schema.md`), and V10 gaining the account-balance trigger before 
 | 14 — manual transaction API, B3.5 lock | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); `api/tests/test_transactions*.py` |
 | 15 — transactions screen, category management | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); component tests |
 
-Phase 1 remains active: M1a and M1b are merged; roadmap M1 is delivered and M2 (the importer)
-is next. Phase 0's live Google identity gates remain open below — synthetic checks do not
-substitute for them.
+Phase 1 remains active: M1a and M1b are merged; roadmap M1 is delivered. **M2 — the statement
+importer — is open, the current delivery**, shipped as nine task-sized PRs per
+[the M2 plan](plans/2026-09-07-m2-statement-importer.md). Its entry criterion (the FX backfill
+reaching the 01 Jan 2024 anchor, ADR-0011) is satisfied — verified 2026-09-07 against the live
+compose database: `fx_rate` spans `2024-01-01` to `2026-09-06`, 1,960 rows across 2 pairs = 980
+days per pair, complete daily coverage with no gaps. Phase 0's live Google identity gates remain
+open below — synthetic checks do not substitute for them.
 
 | Phase 1 task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
