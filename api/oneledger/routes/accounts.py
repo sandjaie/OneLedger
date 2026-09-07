@@ -523,6 +523,7 @@ def update_account(
         psycopg.errors.InvalidTextRepresentation,
         psycopg.errors.CheckViolation,
         psycopg.errors.ForeignKeyViolation,
+        psycopg.errors.NumericValueOutOfRange,
     ) as exc:
         raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
 
