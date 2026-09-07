@@ -357,3 +357,21 @@ it("shows the bank's original conversion when one exists", () => {
   const row = screen.getByText("COFFEE").closest("tr");
   expect(row!.textContent).toContain("originally");
 });
+
+
+it("sends the entry note and edits a row note in place", async () => {
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce(transaction({ notes: "row note" })) // PATCH
+    .mockResolvedValue({ transactions: [], total: 0 });
+  renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+  const noteField = screen.getByLabelText("Note for COFFEE");
+  fireEvent.change(noteField, { target: { value: "row note" } });
+  fireEvent.blur(noteField);
+  await waitFor(() => expect(request).toHaveBeenCalled());
+  const [url, init] = request.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("/transactions/txn-1");
+  const body = JSON.parse(String(init.body));
+  expect(body.notes).toBe("row note");
+  expect(body.categoryId).toBe("cat-food");
+});

@@ -189,13 +189,13 @@ export function TransactionsScreen({
     }
   }
 
-  async function recategorize(row: TransactionRow, categoryId: string) {
+  async function patchRow(row: TransactionRow, categoryId: string | null, notes: string | null) {
     setBusy(true);
     setProblem(undefined);
     try {
       const updated = await request<TransactionRow>(`/transactions/${row.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ categoryId: categoryId || null, notes: row.notes }),
+        body: JSON.stringify({ categoryId, notes }),
         headers: { "Content-Type": "application/json" },
       });
       if (applied.categoryId || applied.reviewState) {
@@ -207,10 +207,20 @@ export function TransactionsScreen({
         setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
       }
     } catch {
-      setProblem("The category change was not saved. Retry.");
+      setProblem("The change was not saved. Retry.");
     } finally {
       setBusy(false);
     }
+  }
+
+  function recategorize(row: TransactionRow, categoryId: string) {
+    return patchRow(row, categoryId || null, row.notes);
+  }
+
+  function saveNote(row: TransactionRow, note: string) {
+    const value = note.trim() ? note : null;
+    if (value === row.notes) return Promise.resolve();
+    return patchRow(row, row.categoryId, value);
   }
 
   async function record(event: React.FormEvent<HTMLFormElement>) {
@@ -323,6 +333,13 @@ export function TransactionsScreen({
               <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
             ))}
           </select>
+        </label>
+        <label className="text-field">
+          <span>Note</span>
+          <input
+            onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+            value={draft.notes}
+          />
         </label>
         <div className="account-form-actions">
           <button className="primary-action" disabled={busy} type="submit">
@@ -524,6 +541,15 @@ export function TransactionsScreen({
                   )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
+                  <label className="text-field">
+                    <span className="visually-hidden">Note for {row.descriptionRaw}</span>
+                    <input
+                      defaultValue={row.notes ?? ""}
+                      disabled={busy}
+                      onBlur={(event) => void saveNote(row, event.target.value)}
+                      placeholder="Add a note"
+                    />
+                  </label>
                 </td>
                 <td>
                   <label className="select-field">
