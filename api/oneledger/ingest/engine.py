@@ -18,26 +18,49 @@ from .words import extract_pages as read_pdf_pages
 
 
 class ColumnLike(Protocol):
-    field: str
-    xMin: float
-    xMax: float
+    @property
+    def field(self) -> str: ...
+
+    @property
+    def xMin(self) -> float: ...
+
+    @property
+    def xMax(self) -> float: ...
 
 
 class ProfileLike(Protocol):
-    fingerprints: list[str]
+    @property
+    def fingerprints(self) -> Sequence[str]: ...
 
     @property
     def columns(self) -> Sequence[ColumnLike]: ...
 
-    dateFormat: str
-    signConvention: str
-    rowStartRule: str
-    continuationRule: str | None
-    skipLinePatterns: list[str]
-    openingBalancePattern: str | None
-    closingBalancePattern: str | None
-    quirks: list[str]
-    metadataPatterns: dict[str, str] | None
+    @property
+    def dateFormat(self) -> str: ...
+
+    @property
+    def signConvention(self) -> str: ...
+
+    @property
+    def rowStartRule(self) -> str: ...
+
+    @property
+    def continuationRule(self) -> str | None: ...
+
+    @property
+    def skipLinePatterns(self) -> Sequence[str]: ...
+
+    @property
+    def openingBalancePattern(self) -> str | None: ...
+
+    @property
+    def closingBalancePattern(self) -> str | None: ...
+
+    @property
+    def quirks(self) -> Sequence[str]: ...
+
+    @property
+    def metadataPatterns(self) -> dict[str, str] | None: ...
 
 
 DATE_FORMATS = {
@@ -46,6 +69,24 @@ DATE_FORMATS = {
     "dd MMM yyyy": "%d %b %Y",
     "dd/MM/yy": "%d/%m/%y",
     "yyyy-MM-dd": "%Y-%m-%d",
+}
+# Generic statement vocabulary only. Institution-specific names belong in saved profile data,
+# never in the engine (ADR-0012).
+HEADER_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "booked_date": (
+        "date",
+        "tran date",
+        "transaction date",
+        "txn date",
+        "value date",
+        "posting date",
+    ),
+    "description": ("description", "narration", "particulars", "details", "remarks"),
+    "reference": ("ref", "ref no", "reference", "chq no", "cheque no", "chq./ref.no."),
+    "amount": ("amount",),
+    "debit": ("debit", "withdrawal", "withdrawal amt", "dr", "debits"),
+    "credit": ("credit", "deposit", "deposit amt", "cr", "credits"),
+    "running_balance": ("balance", "closing balance", "running balance"),
 }
 ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]")
 NUMBER_BODY = r"\d+(?:,\d+)*(?:\.\d+)?"
@@ -61,6 +102,37 @@ class RawRow:
     row_number: int
     raw_text: str
     fields: dict[str, str]
+
+
+@dataclass(frozen=True)
+class LayoutColumnDraft:
+    field: str
+    xMin: float
+    xMax: float
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class LayoutDraft:
+    """Unsaved layout proposal using the public layout API's field names."""
+
+    name: str
+    institutionId: None
+    fingerprints: list[str]
+    headerRowPattern: str
+    columns: list[LayoutColumnDraft]
+    dateFormat: str
+    signConvention: str
+    invertsSign: bool
+    chronologicalOrder: str
+    rowStartRule: str
+    continuationRule: str | None
+    skipLinePatterns: list[str]
+    openingBalancePattern: None
+    closingBalancePattern: None
+    hasRunningBalance: bool
+    quirks: list[str]
+    metadataPatterns: None
 
 
 @dataclass(frozen=True)
@@ -239,3 +311,195 @@ def extract(profile: ProfileLike, pdf_path: Path, password: str | None) -> Extra
     if not result.has_text:
         raise ValueError("scanned PDFs are unsupported")
     return result
+
+
+@dataclass(frozen=True)
+class _HeaderMatch:
+    field: str
+    x0: float
+    x1: float
+    label: str
+
+
+def _header_key(value: str) -> str:
+    return "".join(character.casefold() for character in value if character.isalnum())
+
+
+def _line_header_matches(line: Line) -> list[_HeaderMatch]:
+    words = sorted(line.words, key=lambda word: word.x0)
+    matches: list[_HeaderMatch] = []
+    for field_name, synonyms in HEADER_SYNONYMS.items():
+        candidates: list[tuple[int, int, int, str]] = []
+        normalized_synonyms = {_header_key(synonym): synonym for synonym in synonyms}
+        for start in range(len(words)):
+            for end in range(start + 1, min(len(words), start + 3) + 1):
+                key = _header_key(" ".join(word.text for word in words[start:end]))
+                synonym = normalized_synonyms.get(key)
+                if synonym is not None:
+                    candidates.append((end - start, start, end, synonym))
+        if not candidates:
+            continue
+        _, start, end, synonym = max(candidates, key=lambda item: (item[0], len(item[3]), -item[1]))
+        matches.append(
+            _HeaderMatch(
+                field=field_name,
+                x0=words[start].x0,
+                x1=words[end - 1].x1,
+                label=" ".join(word.text for word in words[start:end]),
+            )
+        )
+    return sorted(matches, key=lambda match: match.x0)
+
+
+def _find_header(pages: list[Page]) -> tuple[int, int, list[_HeaderMatch]]:
+    candidates: list[tuple[int, int, list[_HeaderMatch]]] = []
+    amount_fields = {"amount", "debit", "credit"}
+    for page_index, page in enumerate(pages):
+        for line_index, line in enumerate(page.lines):
+            matches = _line_header_matches(line)
+            fields = {match.field for match in matches}
+            if "booked_date" in fields and fields & amount_fields:
+                candidates.append((page_index, line_index, matches))
+    if not candidates:
+        raise ValueError("no qualifying header found")
+    best_score = max(len(matches) for _, _, matches in candidates)
+    best = [candidate for candidate in candidates if len(candidate[2]) == best_score]
+    if len(best) != 1:
+        raise ValueError("ambiguous header rows")
+    return best[0]
+
+
+def _draft_columns(page: Page, matches: list[_HeaderMatch]) -> list[LayoutColumnDraft]:
+    page_words = [word for line in page.lines for word in line.words]
+    left_margin = min(word.x0 for word in page_words)
+    right_margin = max(word.x1 for word in page_words)
+    columns: list[LayoutColumnDraft] = []
+    for index, match in enumerate(matches):
+        x_min = left_margin if index == 0 else (match.x0 + matches[index - 1].x1) / 2
+        x_max = (
+            right_margin if index == len(matches) - 1 else (match.x1 + matches[index + 1].x0) / 2
+        )
+        columns.append(
+            LayoutColumnDraft(field=match.field, xMin=x_min, xMax=x_max, label=match.label)
+        )
+    return columns
+
+
+def _sample_cells(
+    pages: list[Page],
+    header_page: int,
+    header_line: int,
+    columns: list[LayoutColumnDraft],
+    header_text: str,
+) -> list[dict[str, str]]:
+    sampled: list[dict[str, str]] = []
+    header_key = _header_key(header_text)
+    for page_index, page in enumerate(pages):
+        for line_index, line in enumerate(page.lines):
+            if page_index < header_page or (
+                page_index == header_page and line_index <= header_line
+            ):
+                continue
+            line_text = " ".join(word.text for word in sorted(line.words, key=lambda word: word.x0))
+            if _header_key(line_text) == header_key:
+                continue
+            sampled.append(_cells(columns, line.words))
+    return sampled
+
+
+def _infer_date_format(date_samples: list[str]) -> str:
+    candidates = [
+        date_format
+        for date_format in DATE_FORMATS
+        if date_samples and all(_date(value, date_format) is not None for value in date_samples)
+    ]
+    if len(candidates) != 1:
+        raise ValueError("date format is ambiguous")
+    if candidates[0] in {"dd/MM/yyyy", "dd/MM/yy"}:
+        numeric_parts = [
+            re.fullmatch(r"(\d{1,2})/(\d{1,2})/\d{2,4}", value.strip()) for value in date_samples
+        ]
+        if all(
+            match is not None and int(match.group(1)) <= 12 and int(match.group(2)) <= 12
+            for match in numeric_parts
+        ):
+            # Month-first is intentionally not an output format, but it is still a competing
+            # interpretation. A proposal must not silently relabel those dates as day-first.
+            raise ValueError("date format is ambiguous")
+    return candidates[0]
+
+
+def _infer_order(date_samples: list[str], date_format: str) -> str:
+    dates = [_date(value, date_format) for value in date_samples]
+    parsed = [value for value in dates if value is not None]
+    if len(parsed) < 2 or len(set(parsed)) < 2:
+        raise ValueError("chronological order is ambiguous")
+    ascending = all(left <= right for left, right in zip(parsed, parsed[1:], strict=False))
+    descending = all(left >= right for left, right in zip(parsed, parsed[1:], strict=False))
+    if ascending == descending:
+        raise ValueError("chronological order is ambiguous")
+    return "ascending" if ascending else "descending"
+
+
+def _safe_fingerprints(page: Page, header_line: int) -> list[str]:
+    fingerprints: list[str] = []
+    for line_index, line in enumerate(page.lines):
+        if line_index == header_line:
+            continue
+        text = " ".join(word.text for word in sorted(line.words, key=lambda word: word.x0)).strip()
+        normalized = re.sub(r"(?<=\d)[\s\-–./]+(?=\d)", "", text)
+        if not text or re.search(r"\d{4,}", normalized) or not any(c.isalpha() for c in text):
+            continue
+        fingerprint = re.escape(text)
+        if fingerprint not in fingerprints:
+            fingerprints.append(fingerprint)
+        if len(fingerprints) == 3:
+            break
+    return fingerprints
+
+
+def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[RawRow]]:
+    """Propose a generic layout draft from an unrecognised statement."""
+    pages = read_pdf_pages(pdf_path, password=password)
+    if not pages or any(not page.has_text for page in pages):
+        raise ValueError("scanned PDFs are unsupported")
+    page_index, line_index, header_matches = _find_header(pages)
+    header_line = pages[page_index].lines[line_index]
+    header_text = " ".join(
+        word.text for word in sorted(header_line.words, key=lambda word: word.x0)
+    )
+    columns = _draft_columns(pages[page_index], header_matches)
+    cells = _sample_cells(pages, page_index, line_index, columns, header_text)
+    date_samples = [cell["booked_date"] for cell in cells if "booked_date" in cell]
+    date_format = _infer_date_format(date_samples)
+    fields = {column.field for column in columns}
+    if {"debit", "credit"} <= fields:
+        sign_convention = "debit_credit_columns"
+    else:
+        amount_samples = [cell.get("amount", "") for cell in cells]
+        sign_convention = (
+            "cr_suffix"
+            if any(re.search(r"(?:CR|DR)\s*$", value, re.IGNORECASE) for value in amount_samples)
+            else "signed"
+        )
+    header_pattern = rf"^{re.escape(header_text)}$"
+    draft = LayoutDraft(
+        name="Proposed layout",
+        institutionId=None,
+        fingerprints=_safe_fingerprints(pages[0], line_index if page_index == 0 else -1),
+        headerRowPattern=header_pattern,
+        columns=columns,
+        dateFormat=date_format,
+        signConvention=sign_convention,
+        invertsSign=False,
+        chronologicalOrder=_infer_order(date_samples, date_format),
+        rowStartRule="has_date_and_amount",
+        continuationRule=None,
+        skipLinePatterns=[header_pattern],
+        openingBalancePattern=None,
+        closingBalancePattern=None,
+        hasRunningBalance="running_balance" in fields,
+        quirks=[],
+        metadataPatterns=None,
+    )
+    return draft, extract_pages(draft, pages).rows[:20]
