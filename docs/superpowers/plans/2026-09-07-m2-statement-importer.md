@@ -323,6 +323,16 @@ that the vocabulary, not the layout, is what grew.
 The quirk vocabulary is **exactly these two** in M2. A third is a considered addition with the
 owner's agreement, not a reflex (ADR-0012).
 
+**Reserved metadata keys.** `metadata_patterns` is a generic capture map, with three reserved
+keys the pipeline understands: `account_number` (sensitive and transient — Task 3),
+`period_start` and `period_end` (the statement period, parsed under the profile's
+`date_format`). When the period keys are captured they are authoritative: they gate row dates
+(a parsed date outside the period fails its row) and window two-digit years. When absent, the
+period is **derived** from the parsed row dates and labelled derived (I7) in the parse summary
+and on `import_batch`. Because windowing two-digit years against a derived period is circular,
+**a profile whose `date_format` has a two-digit year must capture both period keys — enforced
+at save (422)**. Every reserved capture takes exactly one capture group, enforced at save.
+
 **Scanned detection.** A page whose `extract_words()` returns zero words is a scanned page.
 `extract()` reports `has_text=false` and the parse is refused with a message saying scanned PDFs
 are not supported, never garbage rows. The full M3 refusal UX is out of scope here.
@@ -366,7 +376,12 @@ Given the pages of an unrecognised PDF:
 
 `reconcile.py` returns exactly one verdict, computed on **native signed ledger amounts** —
 after `inverts_sign` has been applied to both the rows *and* the declared balances, so the
-identity holds in one frame:
+identity holds in one frame. All balance arithmetic runs in **chronological order**: when the
+profile's `chronological_order` is `descending`, the rows are reversed first, because the
+running-balance identity `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological*
+row, and applying it in display order on a descending statement flags every valid row as a
+break. Reported row numbers always reference document row numbers regardless of the
+evaluation order:
 
 ```
 opening_ledger + Σ(amount_ledger) == closing_ledger
@@ -381,6 +396,11 @@ stated here rather than left to the implementer.
 Verdicts:
 
 - `matched` — the identity holds exactly (both sides are `Decimal`; there is no tolerance).
+  For a running-balance-only layout (no closing pattern), the **chronologically last row's
+  stated running balance is the terminal balance**: every row-to-row step must hold, and that
+  terminal value plays the declared-closing role everywhere downstream — it is what staging
+  records on `import_batch` and what the commit verifies against (§4.9), so the verification
+  never receives a null.
 - `mismatched` — it does not. Carries `declared_closing`, `computed_closing`, `delta`,
   `first_divergent_row` and `candidate_rows`. `first_divergent_row` is the first row at which
   the running total departs from the stated running balance — it exists **only when the layout
@@ -430,7 +450,14 @@ Three layers, per `statement-ingestion.html` §6.
   the document either — an ordinal differs between two statements covering the same day even when
   the day's identical rows are the same.
   A row whose hash already exists in `transaction` is staged with `status='duplicate'` and
-  `duplicate_of_transaction_id` set, and is excluded from import by default.
+  `duplicate_of_transaction_id` set, and is excluded from import by default. **Accepting a
+  duplicate is a confirmed-distinct override**: V10's unique
+  `(household_id, account_id, dedupe_hash)` index means the colliding hash cannot commit
+  unchanged, so the accept endpoint recomputes and stores the row's hash with the occurrence
+  index advanced to the next free index among committed collisions — deterministic, stable, and
+  it keeps future overlap detection intact (a later statement carrying both occurrences hashes
+  them 0 and 1 and recognises both as duplicates). The unique index remains the final guard;
+  a commit-time collision still fails loudly rather than silently skipping.
 - **Layer 3 — near-duplicate warning.** Same account, same amount, `booked_date` within ±3 days,
   description token-set similarity ≥ 0.85 (a pure-Python token-set ratio over the normalised
   descriptions; no new dependency). Staged as `status='near_duplicate'`. **Warns, never blocks** —
@@ -480,9 +507,13 @@ The function, in order:
    staged row's `proposed_txn_type` — non-null on every accepted row by V13's CHECK (§5.2).
 5. Calls `assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` — also
    created in V14, also `SECURITY DEFINER`, also calling `assert_is_owner()` first — which
-   computes the account's balance **as of the statement close** in Postgres (the account's
-   opening balance plus the sum of its posted transactions with `booked_date <= p_period_end`)
-   and `RAISE`s on any difference from the declared closing. Not the maintained
+   **`RAISE`s immediately when either argument is null** (a null comparison must never silently
+   pass as verified), then computes the account's balance **as of the statement close** in
+   Postgres (the account's opening balance plus the sum of its posted transactions with
+   `booked_date <= p_period_end`) and `RAISE`s on any difference from the declared closing.
+   `p_declared_closing` is the batch's recorded closing target: the closing-pattern capture
+   when the layout declares one, else the terminal running balance §4.6 defines — staged on
+   `import_batch`, so the value always exists for a batch that reached staging. Not the maintained
    `current_balance`: the multi-file screen imposes no chronological commit order, and a valid
    older statement committed after a newer one would compare its closing against a balance that
    already contains the newer postings and wrongly roll back. This is the post-commit
@@ -844,10 +875,17 @@ class LayoutCreate(BaseModel):           # POST /layouts body — LayoutProfile 
   pointing at the version that produced them"). `GET /layouts` returns the highest version per
   name by default and every version when `?allVersions=true`.
 - Validation the database cannot express, refused with 422: every `xMin < xMax`; bands
-  non-overlapping and ordered; exactly one `booked_date` column; at least one of `amount`, or both
-  `debit` and `credit`; `signConvention='debit_credit_columns'` implies debit and credit columns
+  non-overlapping and ordered; exactly one `booked_date` column;
+  `signConvention='balance_delta'` requires a `running_balance` column and forbids `amount`,
+  `debit` and `credit` (its amounts derive from consecutive balances); every other convention
+  requires at least one of `amount`, or both `debit` and `credit`;
+  `signConvention='debit_credit_columns'` implies debit and credit columns
   and no `amount` column; `quirks` ⊆ `{filter_script:arabic, continuation:no_date_and_no_amount}`;
-  every regex in `fingerprints`, `skipLinePatterns` and the balance patterns compiles.
+  every regex in `fingerprints`, `skipLinePatterns`, the balance patterns **and every
+  `metadataPatterns` value** compiles — a profile is executed as regexes at parse time, so an
+  uncompilable pattern must die at save, not at extraction; each reserved metadata key
+  (`account_number`, `period_start`, `period_end` — §4.4) has exactly one capture group; a
+  `dateFormat` with a two-digit year requires both period captures (§4.4's windowing rule).
 - The `has_a_balance_anchor` CHECK is the database's floor: a profile with neither a closing
   pattern nor a running balance is rejected at insert, not warned about.
 - Institution picks must be shared seeds (`household_id IS NULL`) or this household's — the
@@ -1062,9 +1100,12 @@ class Verdict:
 ```
 
 **Contracts.**
-- **Dates.** The profile's `date_format` is used explicitly; no inference at parse time. A parsed
-  date outside the extracted statement period fails the row. Two-digit years are windowed against
-  the statement period, never a fixed pivot.
+- **Dates.** The profile's `date_format` is used explicitly; no inference at parse time. The
+  statement period comes from the reserved `period_start`/`period_end` captures when the profile
+  maps them (authoritative — a parsed date outside the period fails the row, and two-digit years
+  window against it, never a fixed pivot); otherwise the period derives from the parsed row
+  dates and is labelled derived (§4.4 — and a two-digit `date_format` cannot reach this branch,
+  save-time validation requires the captures).
 - **Signs (I2).** All four conventions per `statement-ingestion.html` §5, then `inverts_sign`
   applied last. A card purchase presented as a positive debit stores **negative**; a card payment
   stores positive. Assert this explicitly in tests — a sign error is internally consistent and
@@ -1122,6 +1163,10 @@ worked around (§5.2).
   while a corrupted amount yields empty candidates and a message saying row-level evidence is
   unavailable (§4.6 — never an invented row); a running-balance layout with a
   broken row yields `running_balance_break` naming that row, the expected and the stated balance;
+  a **descending** statement's running balances reconcile only under chronological-order
+  evaluation — the same fixture mis-evaluated in display order flags breaks (§4.6's order rule,
+  asserted directly); a running-balance-only layout's verdict carries the chronologically-last
+  stated balance as its terminal declared closing;
   a draft or layout whose configured evidence produced no values yields `unavailable` — a
   blocking verdict in M2 (§4.6), non-blocking only in the mapper's draft preview; an
   `inverts_sign` statement
@@ -1279,6 +1324,10 @@ never-store rules of §5.6, tested.
 - The draft-mode propose response carries the normalized preview and the draft's own
   reconciliation verdict: a correct draft yields `matched`, a deliberately shifted amount band
   yields a blocking verdict, and nothing is written in either case.
+- A profile capturing `period_start`/`period_end` reports that period; one without reports the
+  derived period labelled derived (§4.4), on the parse summary and on the staged batch.
+- An `unavailable` verdict (configured evidence failing to extract) blocks staging and writes
+  nothing (§4.6).
 
 **Validation.** The API gate, the DB gate, the web gate for regenerated types.
 
@@ -1381,6 +1430,11 @@ class RowDecisions(BaseModel):      # PATCH /import/{id}/rows
   `routes/transactions.py::_assert_category_allowed`; do not write a second predicate).
   `txnType` must be a `txn_type` enum member M2 can produce or the owner can reasonably assign
   (422 otherwise); an omitted `txnType` leaves the sign-derived proposal in place.
+- **Accepting a `duplicate` row is the confirmed-distinct override** (§4.7): the endpoint
+  recomputes the row's `dedupe_hash` with the occurrence index advanced to the next free index
+  among committed collisions, stores it on the staged row, then sets `accepted` — otherwise
+  V10's unique `(household_id, account_id, dedupe_hash)` index makes the commit fail. The index
+  stays the final guard.
 - `GET /import/{id}` computes its totals **in Postgres**, not by summing in Python.
 
 **Invariants / security.** I1/I5 (committed money is immutable — the V10 trigger already enforces
@@ -1395,14 +1449,19 @@ Household predicate on every statement, including inside the functions.
   4 dp; **a valid older statement committed after a newer one succeeds** — the as-of-close
   comparison, not `current_balance`, is what `assert_account_reconciles` reads; **an induced
   failure mid-commit (a declared closing deliberately off by one unit) leaves zero `transaction`
-  rows and the batch not completed**; a second commit of a completed batch is refused.
+  rows and the batch not completed**; a second commit of a completed batch is refused;
+  `assert_account_reconciles` raises on a null declared closing or null period end rather than
+  passing vacuously; a **running-balance-only** batch commits with its terminal stated balance
+  as the verification target (§4.6/§4.9).
 - *API*: an unticked (`new`) row never imports; only `accepted` rows import; commit is 409 while
   blocked; the review payload groups rows most-attention-first with the counts the UI renders;
   bulk accept of 200 ids is one statement; a category not available to the household is 422;
   `clearCategory` clears while an omitted `categoryId` does not; every committed row's
   `source_document_id`, page and row trace back to the staged row it came from; every committed
   row's `txn_type` equals its staged row's final `proposed_txn_type`, and a review override of
-  the type is what commits.
+  the type is what commits; accepting a `duplicate` row recomputes its hash and both rows commit
+  side by side, after which re-parsing a statement carrying both occurrences stages both as
+  duplicates (the §4.7 override preserves future overlap detection).
 
 **Validation.** The DB gate (12 tests passed), the API gate, the web gate for regenerated types.
 
