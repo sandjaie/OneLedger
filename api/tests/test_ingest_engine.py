@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
+from oneledger.ingest import engine
 from oneledger.ingest.engine import extract, extract_pages, matches
 from oneledger.ingest.words import Line, Page, Word
 from oneledger.routes.layouts import LayoutCreate
@@ -204,6 +206,143 @@ def test_extract_reads_a_generated_pdf_without_parser_coupling(tmp_path: Path) -
     assert result.page_count == 1
     assert result.has_text is True
     assert result.rows[0].fields["description"] == "ALPHA BETA"
+
+
+def test_propose_refuses_a_page_without_a_qualifying_header(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "unknown-layout.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=720, text="ACCOUNT SUMMARY"),
+                Placement(page=0, x=20, y=690, text="Description"),
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match="header"):
+        engine.propose(pdf_path, None)
+
+
+def test_propose_builds_midpoint_bands_that_extract_the_statement(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "unseen-layout.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=10, y=750, text="ACCOUNT SUMMARY"),
+                Placement(page=0, x=10, y=730, text="ACTIVITY"),
+                Placement(page=0, x=20, y=700, text="Transaction Date"),
+                Placement(page=0, x=180, y=700, text="Details"),
+                Placement(page=0, x=410, y=700, text="Debit"),
+                Placement(page=0, x=500, y=700, text="Credit"),
+                Placement(page=0, x=20, y=670, text="13/02/2024"),
+                Placement(page=0, x=180, y=670, text="ALPHA"),
+                Placement(page=0, x=425, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="14/02/2024"),
+                Placement(page=0, x=180, y=640, text="BETA"),
+                Placement(page=0, x=525, y=640, text="20.00"),
+            ]
+        )
+    )
+
+    draft, rows = engine.propose(pdf_path, None)
+
+    assert [column.field for column in draft.columns] == [
+        "booked_date",
+        "description",
+        "debit",
+        "credit",
+    ]
+    assert draft.columns[0].xMin == 10
+    assert draft.columns[-1].xMax > 550
+    assert [row.fields for row in rows] == [
+        {"booked_date": "13/02/2024", "description": "ALPHA", "debit": "17.25"},
+        {"booked_date": "14/02/2024", "description": "BETA", "credit": "20.00"},
+    ]
+
+
+def test_propose_infers_suffix_dates_and_descending_order(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "suffix-layout.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=180, y=700, text="Narration"),
+                Placement(page=0, x=500, y=700, text="Amount"),
+                Placement(page=0, x=20, y=670, text="14-02-2024"),
+                Placement(page=0, x=180, y=670, text="ALPHA"),
+                Placement(page=0, x=500, y=670, text="17.25 CR"),
+                Placement(page=0, x=20, y=640, text="13-02-2024"),
+                Placement(page=0, x=180, y=640, text="BETA"),
+                Placement(page=0, x=500, y=640, text="20.00 DR"),
+            ]
+        )
+    )
+
+    draft, rows = engine.propose(pdf_path, None)
+
+    assert draft.dateFormat == "dd-MM-yyyy"
+    assert draft.signConvention == "cr_suffix"
+    assert draft.chronologicalOrder == "descending"
+    assert [row.fields["amount"] for row in rows] == ["17.25 CR", "20.00 DR"]
+
+
+def test_propose_screens_normalized_identifiers_and_returns_only_twenty_rows(
+    tmp_path: Path,
+) -> None:
+    placements = [
+        Placement(page=0, x=10, y=770, text="ACCOUNT SUMMARY"),
+        Placement(page=0, x=10, y=750, text="Customer reference 123-456-789"),
+        Placement(page=0, x=10, y=730, text="ACTIVITY"),
+        Placement(page=0, x=20, y=700, text="Date"),
+        Placement(page=0, x=180, y=700, text="Description"),
+        Placement(page=0, x=500, y=700, text="Amount"),
+    ]
+    for day in range(1, 22):
+        y = 700 - day * 20
+        placements.extend(
+            [
+                Placement(page=0, x=20, y=y, text=f"{day:02d}/01/2024"),
+                Placement(page=0, x=180, y=y, text=f"ITEM {day:02d}"),
+                Placement(page=0, x=500, y=y, text=f"{day}.00"),
+            ]
+        )
+    pdf_path = tmp_path / "fingerprint-layout.pdf"
+    pdf_path.write_bytes(build_pdf(placements))
+
+    draft, rows = engine.propose(pdf_path, None)
+
+    assert len(rows) == 20
+    assert rows[-1].fields["booked_date"] == "20/01/2024"
+    assert all("123" not in fingerprint for fingerprint in draft.fingerprints)
+    for fingerprint in draft.fingerprints:
+        unescaped = fingerprint.replace("\\", "")
+        normalized = re.sub(r"(?<=\d)[\s\-–./]+(?=\d)", "", unescaped)
+        assert re.search(r"\d{4,}", normalized) is None
+    assert draft.openingBalancePattern is None
+    assert draft.closingBalancePattern is None
+    assert draft.metadataPatterns is None
+
+
+def test_propose_refuses_when_numeric_date_order_is_ambiguous(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "ambiguous-dates.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=180, y=700, text="Details"),
+                Placement(page=0, x=500, y=700, text="Amount"),
+                Placement(page=0, x=20, y=670, text="01/02/2024"),
+                Placement(page=0, x=180, y=670, text="ALPHA"),
+                Placement(page=0, x=500, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="02/03/2024"),
+                Placement(page=0, x=180, y=640, text="BETA"),
+                Placement(page=0, x=500, y=640, text="20.00"),
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match="date format is ambiguous"):
+        engine.propose(pdf_path, None)
 
 
 def test_filtering_precedes_grouping_so_removed_words_cannot_anchor_a_line() -> None:
