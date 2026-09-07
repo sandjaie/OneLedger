@@ -465,6 +465,35 @@ BEGIN
       END IF;
     END;
 
+    -- Nor a pre-anchor posting: the opening balance already holds those movements.
+    BEGIN
+      INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                               currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                               amount_base, amount_secondary, txn_type, source, dedupe_hash)
+        VALUES (h, a_sav, '2023-12-15', 'PRE ANCHOR', -5.0000, base,
+                '2023-12-15', 1, 20, -5.0000, -100.0000, 'expense', 'manual', 'pa1');
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'a pre-anchor posting must be rejected';
+      END IF;
+    END;
+
+    -- Nor another household's merchant.
+    DECLARE foreign_merchant UUID;
+    BEGIN
+      INSERT INTO merchant (household_id, canonical_name) VALUES (h2, 'Their Shop')
+        RETURNING id INTO foreign_merchant;
+      BEGIN
+        UPDATE transaction SET merchant_id = foreign_merchant WHERE id = t_lone;
+        RAISE EXCEPTION 'unreachable';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM = 'unreachable' THEN
+          RAISE EXCEPTION 'a cross-household merchant must be rejected';
+        END IF;
+      END;
+    END;
+
     -- Nor may a row wear another household's category.
     DECLARE foreign_cat UUID;
     BEGIN

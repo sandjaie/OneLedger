@@ -140,6 +140,24 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
 
+  -- A cross-tenant parent is refused.
+  DECLARE h3 UUID; their_root UUID;
+  BEGIN
+    INSERT INTO household (name, base_currency, secondary_currency)
+    VALUES ('parent fixture', base, secondary) RETURNING id INTO h3;
+    INSERT INTO category (household_id, name, slug, kind, bucket)
+      VALUES (h3, 'Their Root', 'their-root', 'expense', 'want') RETURNING id INTO their_root;
+    BEGIN
+      INSERT INTO category (household_id, name, slug, kind, bucket, parent_id)
+        VALUES (h, 'My Child', 'my-child', 'expense', 'want', their_root);
+      RAISE EXCEPTION 'unreachable';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM = 'unreachable' THEN
+        RAISE EXCEPTION 'a cross-household parent must be rejected';
+      END IF;
+    END;
+  END;
+
   RAISE NOTICE 'PASS 0008 overrides';
   RAISE EXCEPTION 'rollback test data';
 EXCEPTION WHEN OTHERS THEN
