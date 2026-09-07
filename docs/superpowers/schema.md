@@ -408,7 +408,16 @@ CREATE TABLE transaction (
     transfer_id IS NULL OR txn_type IN ('transfer_in','transfer_out')),
   -- I6: nothing claims to come from a statement without naming the statement.
   CONSTRAINT import_has_document  CHECK (
-    source <> 'statement_import' OR source_document_id IS NOT NULL)
+    source <> 'statement_import' OR source_document_id IS NOT NULL),
+  -- The frozen facts reproduce each other on every row: stored amounts derive from stored
+  -- rates within one allocated cent, whoever the writer is.
+  CONSTRAINT frozen_amounts_derive CHECK (
+    abs(amount_base - round(amount * fx_rate_to_base, 4)) <= 0.0001
+    AND abs(amount_secondary - round(amount * fx_rate_to_secondary, 4)) <= 0.0001),
+  -- I7 as a shape: no rate from the future, and carried means exactly "from an earlier date".
+  CONSTRAINT carried_rate_dates CHECK (
+    fx_rate_date <= booked_date
+    AND (fx_rate_is_carried = (fx_rate_date < booked_date)))
 );
 
 CREATE UNIQUE INDEX idx_txn_dedupe   ON transaction (household_id, account_id, dedupe_hash);
