@@ -494,6 +494,27 @@ BEGIN
       END;
     END;
 
+    -- Nor a posting outside the account's lifetime.
+    DECLARE a_late UUID;
+    BEGIN
+      INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                           country, opening_balance, opening_balance_date, opened_on)
+        VALUES (h,p,'Late Opener','savings',base,'XB',0,'2024-01-01','2024-02-01')
+        RETURNING id INTO a_late;
+      BEGIN
+        INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                                 currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                                 amount_base, amount_secondary, txn_type, source, dedupe_hash)
+          VALUES (h, a_late, '2024-01-15', 'BEFORE OPENING', -5.0000, base,
+                  '2024-01-15', 1, 20, -5.0000, -100.0000, 'expense', 'manual', 'lo1');
+        RAISE EXCEPTION 'unreachable';
+      EXCEPTION WHEN raise_exception THEN
+        IF SQLERRM = 'unreachable' THEN
+          RAISE EXCEPTION 'a posting before opened_on must be rejected';
+        END IF;
+      END;
+    END;
+
     -- Nor may a row wear another household's category.
     DECLARE foreign_cat UUID;
     BEGIN

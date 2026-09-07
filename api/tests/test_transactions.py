@@ -40,6 +40,8 @@ FETCHED_ROW = (
     None,
     Decimal("-310.5000"),
     "XAE",
+    None,
+    None,
     Decimal("-6210.0000"),
     Decimal("-310.5000"),
     date(2024, 2, 2),

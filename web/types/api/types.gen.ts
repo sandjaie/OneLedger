@@ -637,6 +637,14 @@ export type TransactionRow = {
      */
     currency: string;
     /**
+     * Originalamount
+     */
+    originalAmount: string | null;
+    /**
+     * Originalcurrency
+     */
+    originalCurrency: string | null;
+    /**
      * Amountbase
      */
     amountBase: string;

@@ -94,6 +94,8 @@ function transaction(overrides: Partial<TransactionRow>): TransactionRow {
     descriptionClean: null,
     amount: "-310.5000",
     currency: "XAE",
+    originalAmount: null,
+    originalCurrency: null,
     amountBase: "-6210.0000",
     amountSecondary: "-310.5000",
     fxRateDate: "2024-02-02",
@@ -344,4 +346,14 @@ it("marks every row with its provenance", () => {
   renderScreen([transaction({})], 1);
   const row = screen.getByText("COFFEE").closest("tr");
   expect(row!.textContent).toContain("· manual");
+});
+
+
+it("shows the bank's original conversion when one exists", () => {
+  renderScreen(
+    [transaction({ originalAmount: "-84.5000", originalCurrency: "XIN" })],
+    1,
+  );
+  const row = screen.getByText("COFFEE").closest("tr");
+  expect(row!.textContent).toContain("originally");
 });

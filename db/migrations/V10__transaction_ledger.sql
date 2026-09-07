@@ -372,9 +372,10 @@ CREATE POLICY household_isolation ON transaction
 CREATE FUNCTION assert_transaction_currency_matches_account() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 DECLARE account_currency CHAR(3); account_household UUID; account_anchor DATE;
+        account_opened DATE; account_closed DATE;
 BEGIN
-  SELECT currency, household_id, opening_balance_date
-    INTO account_currency, account_household, account_anchor
+  SELECT currency, household_id, opening_balance_date, opened_on, closed_on
+    INTO account_currency, account_household, account_anchor, account_opened, account_closed
     FROM account WHERE id = NEW.account_id;
   IF account_household IS NOT NULL AND account_household <> NEW.household_id THEN
     RAISE EXCEPTION 'transaction household % does not own account %', NEW.household_id, NEW.account_id;
@@ -384,6 +385,16 @@ BEGIN
   IF TG_OP = 'INSERT' AND account_anchor IS NOT NULL AND NEW.booked_date < account_anchor THEN
     RAISE EXCEPTION 'transaction on % predates the balance anchor % of account %',
       NEW.booked_date, account_anchor, NEW.account_id;
+  END IF;
+  -- And within the account's lifetime, whoever the writer is — the manual route and the
+  -- account-edit path enforce the same boundary.
+  IF TG_OP = 'INSERT' AND account_opened IS NOT NULL AND NEW.booked_date < account_opened THEN
+    RAISE EXCEPTION 'transaction on % predates account % opening on %',
+      NEW.booked_date, NEW.account_id, account_opened;
+  END IF;
+  IF TG_OP = 'INSERT' AND account_closed IS NOT NULL AND NEW.booked_date > account_closed THEN
+    RAISE EXCEPTION 'transaction on % postdates account % closing on %',
+      NEW.booked_date, NEW.account_id, account_closed;
   END IF;
   IF account_currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(account_currency) THEN
     RAISE EXCEPTION 'transaction currency % must match the account''s %; the bank''s conversion belongs in original_amount',
