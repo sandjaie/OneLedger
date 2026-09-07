@@ -300,9 +300,11 @@ CREATE TABLE merchant_alias (
 Applied with one widening of the `0018` deferred-foreign-key pattern: besides `transfer_id` and
 its siblings, the references to `document` (`source_document_id`, `receipt_document_id`),
 `import_batch`, `statement_layout` and `classification_rule` are bare `UUID` columns in V10,
-because those tables arrive with M2 and M4; the M4 migration that completes the target set adds
-their foreign keys. The `REFERENCES` clauses below on those columns are the target shape, not
-yet constraints.
+because those tables arrive with M2 and M4. The `0018` rule is per target, not per milestone: V12
+adds the four foreign keys whose targets it creates (`document`, `import_batch`,
+`statement_layout`); `classification_rule_id` stays bare until M4 creates that table and adds
+its foreign key. The `REFERENCES` clauses below on those columns are the target shape, not yet
+constraints.
 
 ```sql
 CREATE TYPE txn_type AS ENUM (
@@ -455,7 +457,12 @@ CREATE TABLE category_override (
 
 ---
 
-## `0008`
+## `V12` (applied)
+
+Applied as `db/migrations/V12__documents_and_import.sql`, physically creating `statement_layout`
+first — `document.statement_layout_id` and `import_batch.statement_layout_id` both reference it,
+so the DDL order below differs from the reading order (documents, then batches, then layouts is
+the target shape, matching the order transaction's V10 comment lists them in).
 
 ### Documents
 
@@ -503,7 +510,15 @@ CREATE TABLE document (
 -- Invariant: the same file cannot be imported twice
 CREATE UNIQUE INDEX idx_document_checksum ON document (household_id, sha256);
 CREATE INDEX idx_document_period ON document (household_id, document_type, period_end DESC);
+
+ALTER TABLE document ENABLE ROW LEVEL SECURITY;
+CREATE POLICY household_isolation ON document
+  USING (household_id = current_household_id());
 ```
+
+`original_filename` is written **masked**: statement filenames carry card numbers
+(`security-and-privacy.html` §1), and the unmasked value exists only as a local variable for the
+duration of one request (M2 Task 5).
 
 ### Import batches
 
@@ -534,7 +549,9 @@ CREATE TABLE import_batch (
   declared_opening_balance  NUMERIC(20,4),
   declared_closing_balance  NUMERIC(20,4),
   computed_closing_balance  NUMERIC(20,4),
-  reconciliation_status     TEXT,           -- matched|mismatched|unavailable
+  reconciliation_status     TEXT
+                            CHECK (reconciliation_status IN
+                              ('matched','mismatched','running_balance_break','unavailable')),
   reconciliation_delta      NUMERIC(20,4),
 
   period_start              DATE,
@@ -544,7 +561,15 @@ CREATE TABLE import_batch (
   error                     TEXT,
   created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE import_batch ENABLE ROW LEVEL SECURITY;
+CREATE POLICY household_isolation ON import_batch
+  USING (household_id = current_household_id());
 ```
+
+`reconciliation_status`'s value set is `matched|mismatched|running_balance_break|unavailable`.
+`statement-ingestion.html`'s TypeScript sketch returns `reconciled`; this column's documented
+value set wins, extended with `running_balance_break` (M2 plan §7.3).
 
 ### Statement layouts
 
@@ -609,6 +634,22 @@ ALTER TABLE statement_layout ENABLE ROW LEVEL SECURITY;
 CREATE POLICY household_isolation ON statement_layout
   USING (household_id = current_household_id());
 ```
+
+### The deferred foreign keys this migration completes
+
+V12 creates `document`, `import_batch` and `statement_layout`, so it also adds the `0018`-pattern
+foreign keys whose targets are now real. All four columns are entirely NULL on every existing
+row, so the `ALTER TABLE` is a pure schema change:
+
+```sql
+ALTER TABLE transaction
+  ADD CONSTRAINT fk_txn_source_document  FOREIGN KEY (source_document_id)  REFERENCES document(id),
+  ADD CONSTRAINT fk_txn_receipt_document FOREIGN KEY (receipt_document_id) REFERENCES document(id),
+  ADD CONSTRAINT fk_txn_import_batch     FOREIGN KEY (import_batch_id)     REFERENCES import_batch(id),
+  ADD CONSTRAINT fk_txn_statement_layout FOREIGN KEY (statement_layout_id) REFERENCES statement_layout(id);
+```
+
+`classification_rule_id` stays a bare `UUID`; its target table and its foreign key arrive with M4.
 
 ---
 
