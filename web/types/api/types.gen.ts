@@ -559,6 +559,201 @@ export type InstitutionRow = {
 };
 
 /**
+ * LayoutColumn
+ */
+export type LayoutColumn = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Xmin
+     */
+    xMin: number;
+    /**
+     * Xmax
+     */
+    xMax: number;
+    /**
+     * Label
+     */
+    label?: string | null;
+};
+
+/**
+ * LayoutCreate
+ *
+ * POST /layouts body. Validation the database cannot express — everything the has_a_balance
+ * anchor CHECK and the sign_convention/chronological_order enums leave uncovered.
+ */
+export type LayoutCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId?: string | null;
+    /**
+     * Fingerprints
+     */
+    fingerprints: Array<string>;
+    /**
+     * Headerrowpattern
+     */
+    headerRowPattern?: string | null;
+    /**
+     * Columns
+     */
+    columns: Array<LayoutColumn>;
+    /**
+     * Dateformat
+     */
+    dateFormat: string;
+    /**
+     * Signconvention
+     */
+    signConvention: string;
+    /**
+     * Invertssign
+     */
+    invertsSign?: boolean;
+    /**
+     * Chronologicalorder
+     */
+    chronologicalOrder?: string;
+    /**
+     * Rowstartrule
+     */
+    rowStartRule?: string;
+    /**
+     * Continuationrule
+     */
+    continuationRule?: string | null;
+    /**
+     * Skiplinepatterns
+     */
+    skipLinePatterns?: Array<string>;
+    /**
+     * Openingbalancepattern
+     */
+    openingBalancePattern?: string | null;
+    /**
+     * Closingbalancepattern
+     */
+    closingBalancePattern?: string | null;
+    /**
+     * Hasrunningbalance
+     */
+    hasRunningBalance?: boolean;
+    /**
+     * Quirks
+     */
+    quirks?: Array<string>;
+    /**
+     * Metadatapatterns
+     */
+    metadataPatterns?: {
+        [key: string]: string;
+    } | null;
+};
+
+/**
+ * LayoutProfile
+ *
+ * GET /layouts item, POST /layouts response.
+ */
+export type LayoutProfile = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Institutionid
+     */
+    institutionId: string | null;
+    /**
+     * Fingerprints
+     */
+    fingerprints: Array<string>;
+    /**
+     * Headerrowpattern
+     */
+    headerRowPattern: string | null;
+    /**
+     * Columns
+     */
+    columns: Array<LayoutColumn>;
+    /**
+     * Dateformat
+     */
+    dateFormat: string;
+    /**
+     * Signconvention
+     */
+    signConvention: string;
+    /**
+     * Invertssign
+     */
+    invertsSign: boolean;
+    /**
+     * Chronologicalorder
+     */
+    chronologicalOrder: string;
+    /**
+     * Rowstartrule
+     */
+    rowStartRule: string;
+    /**
+     * Continuationrule
+     */
+    continuationRule: string | null;
+    /**
+     * Skiplinepatterns
+     */
+    skipLinePatterns: Array<string>;
+    /**
+     * Openingbalancepattern
+     */
+    openingBalancePattern: string | null;
+    /**
+     * Closingbalancepattern
+     */
+    closingBalancePattern: string | null;
+    /**
+     * Hasrunningbalance
+     */
+    hasRunningBalance: boolean;
+    /**
+     * Quirks
+     */
+    quirks: Array<string>;
+    /**
+     * Metadatapatterns
+     */
+    metadataPatterns: {
+        [key: string]: string;
+    } | null;
+    /**
+     * Timesused
+     */
+    timesUsed: number;
+    /**
+     * Lastusedat
+     */
+    lastUsedAt: string | null;
+};
+
+/**
  * TransactionCreate
  */
 export type TransactionCreate = {
@@ -1362,6 +1557,63 @@ export type UpdateCategoryCategoriesCategoryIdPatchResponses = {
 };
 
 export type UpdateCategoryCategoriesCategoryIdPatchResponse = UpdateCategoryCategoriesCategoryIdPatchResponses[keyof UpdateCategoryCategoriesCategoryIdPatchResponses];
+
+export type ListLayoutsLayoutsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Allversions
+         */
+        allVersions?: boolean;
+    };
+    url: '/layouts';
+};
+
+export type ListLayoutsLayoutsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListLayoutsLayoutsGetError = ListLayoutsLayoutsGetErrors[keyof ListLayoutsLayoutsGetErrors];
+
+export type ListLayoutsLayoutsGetResponses = {
+    /**
+     * Response List Layouts Layouts Get
+     *
+     * Successful Response
+     */
+    200: Array<LayoutProfile>;
+};
+
+export type ListLayoutsLayoutsGetResponse = ListLayoutsLayoutsGetResponses[keyof ListLayoutsLayoutsGetResponses];
+
+export type CreateLayoutLayoutsPostData = {
+    body: LayoutCreate;
+    path?: never;
+    query?: never;
+    url: '/layouts';
+};
+
+export type CreateLayoutLayoutsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateLayoutLayoutsPostError = CreateLayoutLayoutsPostErrors[keyof CreateLayoutLayoutsPostErrors];
+
+export type CreateLayoutLayoutsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: LayoutProfile;
+};
+
+export type CreateLayoutLayoutsPostResponse = CreateLayoutLayoutsPostResponses[keyof CreateLayoutLayoutsPostResponses];
 
 export type HealthHealthGetData = {
     body?: never;

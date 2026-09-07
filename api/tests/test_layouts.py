@@ -1,0 +1,464 @@
+from __future__ import annotations
+
+from uuid import UUID, uuid4
+
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from oneledger import auth
+from oneledger.main import app
+from oneledger.routes import layouts
+
+USER_ID = UUID("11111111-1111-1111-1111-111111111111")
+HOUSEHOLD_ID = UUID("22222222-2222-2222-2222-222222222222")
+SESSION_ID = UUID("33333333-3333-3333-3333-333333333333")
+LAYOUT_ID = UUID("44444444-4444-4444-4444-444444444444")
+INSTITUTION_ID = UUID("55555555-5555-5555-5555-555555555555")
+EMAIL = "owner@example.com"
+ORIGIN = {"Origin": "http://localhost:3000"}
+
+VALID_COLUMNS = [
+    {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+    {"field": "description", "xMin": 50.0, "xMax": 200.0},
+    {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+]
+
+VALID_CREATE = {
+    "name": "Layout A",
+    "fingerprints": ["FOO BANK"],
+    "columns": VALID_COLUMNS,
+    "dateFormat": "dd/MM/yyyy",
+    "signConvention": "signed",
+}
+
+# The full write body, used for round-trip and end-to-end tests. Every field is set to a
+# non-default value so a byte-identical round trip actually proves something.
+CREATE_BODY = {
+    "name": "Axis savings",
+    "institutionId": str(INSTITUTION_ID),
+    "fingerprints": ["AXIS BANK", "Statement of Account"],
+    "headerRowPattern": "Date\\s+Description\\s+Amount",
+    "columns": [
+        {"field": "booked_date", "xMin": 40.0, "xMax": 110.0, "label": "Date"},
+        {"field": "description", "xMin": 110.0, "xMax": 430.0, "label": "Description"},
+        {"field": "amount", "xMin": 430.0, "xMax": 560.0, "label": "Amount"},
+    ],
+    "dateFormat": "dd/MM/yyyy",
+    "signConvention": "signed",
+    "invertsSign": False,
+    "chronologicalOrder": "ascending",
+    "rowStartRule": "has_date_and_amount",
+    "continuationRule": None,
+    "skipLinePatterns": ["Page \\d+ of \\d+"],
+    "openingBalancePattern": None,
+    "closingBalancePattern": "Closing Balance ([\\d,.]+)",
+    "hasRunningBalance": False,
+    "quirks": [],
+    "metadataPatterns": None,
+}
+
+# The row the database would hand back for CREATE_BODY, in layouts.COLUMNS order — snake_case
+# JSONB keys, matching what the migration and the live smoke test store.
+FETCHED_ROW: tuple[object, ...] = (
+    LAYOUT_ID,
+    "Axis savings",
+    1,
+    INSTITUTION_ID,
+    ["AXIS BANK", "Statement of Account"],
+    "Date\\s+Description\\s+Amount",
+    [
+        {"field": "booked_date", "x_min": 40.0, "x_max": 110.0, "label": "Date"},
+        {"field": "description", "x_min": 110.0, "x_max": 430.0, "label": "Description"},
+        {"field": "amount", "x_min": 430.0, "x_max": 560.0, "label": "Amount"},
+    ],
+    "dd/MM/yyyy",
+    "signed",
+    False,
+    "ascending",
+    "has_date_and_amount",
+    None,
+    ["Page \\d+ of \\d+"],
+    None,
+    "Closing Balance ([\\d,.]+)",
+    False,
+    [],
+    None,
+    0,
+    None,
+)
+
+
+def owner() -> auth.OwnerSession:
+    return auth.OwnerSession(
+        user_id=USER_ID, household_id=HOUSEHOLD_ID, session_id=SESSION_ID, email=EMAIL
+    )
+
+
+class LayoutsCursor:
+    def __init__(self, connection: LayoutsConnection) -> None:
+        self.connection = connection
+        self._one: tuple[object, ...] | None = None
+        self._many: list[tuple[object, ...]] = []
+
+    def __enter__(self) -> LayoutsCursor:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+    def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
+        self.connection.statements.append(sql)
+        self.connection.params.append(params or ())
+        if "SELECT 1 FROM institution" in sql:
+            self._one = None if self.connection.fail_institution else (1,)
+        elif "INSERT INTO statement_layout" in sql:
+            self._one = (self.connection.inserted_id,)
+        elif "WHERE id = %s AND household_id = %s" in sql:
+            self._one = self.connection.rows[0] if self.connection.rows else None
+        else:
+            self._many = list(self.connection.rows)
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return self._one
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return self._many
+
+
+class LayoutsConnection:
+    def __init__(
+        self,
+        *,
+        fail_institution: bool = False,
+        rows: list[tuple[object, ...]] | None = None,
+        inserted_id: UUID = LAYOUT_ID,
+    ) -> None:
+        self.fail_institution = fail_institution
+        self.rows = rows if rows is not None else [FETCHED_ROW]
+        self.inserted_id = inserted_id
+        self.statements: list[str] = []
+        self.params: list[tuple[object, ...]] = []
+
+    def __enter__(self) -> LayoutsConnection:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+    def cursor(self) -> LayoutsCursor:
+        return LayoutsCursor(self)
+
+
+def test_unauthenticated_requests_are_rejected() -> None:
+    client = TestClient(app)
+    assert client.get("/layouts").status_code == 401
+    assert client.post("/layouts", json=CREATE_BODY, headers=ORIGIN).status_code == 401
+
+
+def test_a_session_for_another_household_sees_no_layouts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The service connects privileged and bypasses RLS; the household_id predicate is the
+    boundary, exactly as routes/accounts.py's own scoping test proves."""
+    connection = LayoutsConnection(rows=[])
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        body = TestClient(app).get("/layouts").json()
+    finally:
+        app.dependency_overrides.clear()
+    assert body == []
+    assert "household_id = %s" in connection.statements[0]
+    assert HOUSEHOLD_ID in connection.params[0]
+
+
+def test_a_profile_round_trips_every_field_through_save_and_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = LayoutsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        saved = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN).json()
+        listed = TestClient(app).get("/layouts").json()
+    finally:
+        app.dependency_overrides.clear()
+    assert saved["id"] == str(LAYOUT_ID)
+    assert saved["version"] == 1
+    for key, value in CREATE_BODY.items():
+        assert saved[key] == value, key
+    assert listed == [saved]
+
+
+def test_saving_the_same_name_twice_yields_versions_one_and_two_and_never_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_connection = LayoutsConnection(rows=[FETCHED_ROW], inserted_id=LAYOUT_ID)
+    monkeypatch.setattr(layouts, "connect", lambda: first_connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        first = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN).json()
+    finally:
+        app.dependency_overrides.clear()
+    assert first["version"] == 1
+    assert not any("UPDATE" in s for s in first_connection.statements)
+
+    v2_id = uuid4()
+    v2_row = (v2_id, *FETCHED_ROW[1:2], 2, *FETCHED_ROW[3:])
+    second_connection = LayoutsConnection(rows=[v2_row], inserted_id=v2_id)
+    monkeypatch.setattr(layouts, "connect", lambda: second_connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        second = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN).json()
+    finally:
+        app.dependency_overrides.clear()
+    assert second["version"] == 2
+    assert second["id"] != first["id"]
+    assert not any("UPDATE" in s for s in second_connection.statements)
+    # version is never a bound parameter: it is computed by the same INSERT ... SELECT that
+    # reads the prior rows, so an earlier version is never touched, let alone rewritten.
+    insert_statement = next(
+        s for s in second_connection.statements if "INSERT INTO statement_layout" in s
+    )
+    assert "COALESCE(MAX(version), 0) + 1" in insert_statement
+
+
+def test_institution_must_be_a_shared_seed_or_this_households(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = LayoutsConnection(fail_institution=True)
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert "institution" in response.json()["detail"].lower()
+    assert not any("INSERT INTO statement_layout" in s for s in connection.statements)
+
+
+def test_a_database_check_violation_is_a_422_not_a_500(monkeypatch: pytest.MonkeyPatch) -> None:
+    """has_a_balance_anchor and chronological_order are enforced by the database; the route
+    must translate a CheckViolation, not let it become an unhandled 500."""
+
+    class FailingCursor(LayoutsCursor):
+        def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
+            if "INSERT INTO statement_layout" in sql:
+                raise psycopg.errors.CheckViolation("has_a_balance_anchor")
+            super().execute(sql, params)
+
+    class FailingConnection(LayoutsConnection):
+        def cursor(self) -> FailingCursor:
+            return FailingCursor(self)
+
+    connection = FailingConnection()
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+
+
+def test_a_column_band_must_have_xmin_less_than_xmax() -> None:
+    bad = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 50.0, "xMax": 50.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+        ],
+    }
+    with pytest.raises(ValidationError, match="xMin"):
+        layouts.LayoutCreate.model_validate(bad)
+
+
+def test_column_bands_must_be_ordered_and_non_overlapping() -> None:
+    bad = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 60.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+        ],
+    }
+    with pytest.raises(ValidationError, match="overlap"):
+        layouts.LayoutCreate.model_validate(bad)
+
+
+def test_exactly_one_booked_date_column_is_required() -> None:
+    no_date = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "description", "xMin": 0.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+        ],
+    }
+    with pytest.raises(ValidationError, match="booked_date"):
+        layouts.LayoutCreate.model_validate(no_date)
+
+    two_dates = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "value_date", "xMin": 50.0, "xMax": 100.0},
+            {"field": "booked_date", "xMin": 100.0, "xMax": 150.0},
+            {"field": "amount", "xMin": 150.0, "xMax": 210.0},
+        ],
+    }
+    with pytest.raises(ValidationError, match="booked_date"):
+        layouts.LayoutCreate.model_validate(two_dates)
+
+
+def test_balance_delta_requires_running_balance_and_forbids_amount_debit_credit() -> None:
+    with pytest.raises(ValidationError, match="running_balance"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "signConvention": "balance_delta"})
+
+    with pytest.raises(ValidationError, match="forbids"):
+        layouts.LayoutCreate.model_validate(
+            {
+                **VALID_CREATE,
+                "signConvention": "balance_delta",
+                "columns": [
+                    {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+                    {"field": "running_balance", "xMin": 50.0, "xMax": 110.0},
+                    {"field": "amount", "xMin": 110.0, "xMax": 170.0},
+                ],
+            }
+        )
+
+    assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "signConvention": "balance_delta",
+            "columns": [
+                {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+                {"field": "description", "xMin": 50.0, "xMax": 150.0},
+                {"field": "running_balance", "xMin": 150.0, "xMax": 210.0},
+            ],
+        }
+    )
+
+
+def test_other_conventions_require_an_amount_column_or_debit_and_credit() -> None:
+    columns_no_amount = [
+        {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+        {"field": "description", "xMin": 50.0, "xMax": 200.0},
+    ]
+    with pytest.raises(ValidationError, match="requires an amount column"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "signConvention": "signed", "columns": columns_no_amount}
+        )
+    assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "signConvention": "signed",
+            "columns": [
+                *columns_no_amount,
+                {"field": "debit", "xMin": 200.0, "xMax": 260.0},
+                {"field": "credit", "xMin": 260.0, "xMax": 320.0},
+            ],
+        }
+    )
+
+
+def test_debit_credit_columns_requires_both_and_forbids_amount() -> None:
+    with pytest.raises(ValidationError, match="requires debit and credit"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "signConvention": "debit_credit_columns"}
+        )
+
+    with pytest.raises(ValidationError, match="forbids an amount column"):
+        layouts.LayoutCreate.model_validate(
+            {
+                **VALID_CREATE,
+                "signConvention": "debit_credit_columns",
+                "columns": [
+                    {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+                    {"field": "debit", "xMin": 50.0, "xMax": 110.0},
+                    {"field": "credit", "xMin": 110.0, "xMax": 170.0},
+                    {"field": "amount", "xMin": 170.0, "xMax": 230.0},
+                ],
+            }
+        )
+
+
+def test_quirks_are_restricted_to_the_small_vocabulary() -> None:
+    with pytest.raises(ValidationError, match="unknown quirks"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "quirks": ["made_up_quirk"]})
+    assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "quirks": ["filter_script:arabic", "continuation:no_date_and_no_amount"],
+        }
+    )
+
+
+def test_every_regex_must_compile() -> None:
+    for field, value in [
+        ("fingerprints", ["("]),
+        ("skipLinePatterns", ["("]),
+        ("openingBalancePattern", "("),
+        ("closingBalancePattern", "("),
+    ]:
+        with pytest.raises(ValidationError, match="not a valid regular expression"):
+            layouts.LayoutCreate.model_validate({**VALID_CREATE, field: value})
+    with pytest.raises(ValidationError, match="not a valid regular expression"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "metadataPatterns": {"note": "("}})
+
+
+def test_an_uncompilable_regex_is_a_422_not_a_500() -> None:
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts", json={**CREATE_BODY, "fingerprints": ["("]}, headers=ORIGIN
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+
+
+def test_reserved_metadata_keys_need_exactly_one_capture_group() -> None:
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {"account_number": "no group here"}}
+        )
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {"period_start": r"(\d+)-(\d+)"}}
+        )
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {"account_number": r"Account (\d+)"}}
+    )
+    # A non-reserved key may carry any pattern, capture group or not — only the three reserved
+    # keys are constrained.
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {"credit_limit": r"Limit [\d,.]+"}}
+    )
+
+
+def test_two_digit_year_date_format_requires_both_period_captures() -> None:
+    with pytest.raises(ValidationError, match="period_start and period_end"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "dateFormat": "dd/MM/yy"})
+    with pytest.raises(ValidationError, match="period_start and period_end"):
+        layouts.LayoutCreate.model_validate(
+            {
+                **VALID_CREATE,
+                "dateFormat": "dd/MM/yy",
+                "metadataPatterns": {"period_start": r"From (\d{2}/\d{2}/\d{2})"},
+            }
+        )
+    assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "dateFormat": "dd/MM/yy",
+            "metadataPatterns": {
+                "period_start": r"From (\d{2}/\d{2}/\d{2})",
+                "period_end": r"To (\d{2}/\d{2}/\d{2})",
+            },
+        }
+    )
+    # A four-digit year needs no period captures.
+    assert layouts.LayoutCreate.model_validate({**VALID_CREATE, "dateFormat": "yyyy-MM-dd"})
