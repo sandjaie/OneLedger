@@ -52,6 +52,11 @@ class Page:
     line_tolerance: float = DEFAULT_LINE_TOLERANCE
 
 
+def _anchor_index(top: float, anchors: list[float], tolerance: float) -> int | None:
+    """First matching anchor, shared by word grouping and raw-character attachment."""
+    return next((i for i, anchor in enumerate(anchors) if abs(top - anchor) <= tolerance), None)
+
+
 def _group_lines(words: list[Word], tolerance: float) -> list[Line]:
     """Group words sharing a baseline into physical lines. Each line is anchored to the
     `top` of the first (topmost) word assigned to it; a later word joins that line when its
@@ -62,13 +67,12 @@ def _group_lines(words: list[Word], tolerance: float) -> list[Line]:
     groups: list[list[Word]] = []
     anchors: list[float] = []
     for w in ordered:
-        for i, anchor in enumerate(anchors):
-            if abs(w.top - anchor) <= tolerance:
-                groups[i].append(w)
-                break
-        else:
+        index = _anchor_index(w.top, anchors, tolerance)
+        if index is None:
             groups.append([w])
             anchors.append(w.top)
+        else:
+            groups[index].append(w)
     return [
         Line(top=anchors[i], words=sorted(group, key=lambda w: w.x0))
         for i, group in enumerate(groups)
@@ -146,11 +150,10 @@ def with_raw_text(lines: list[Line], page: Page) -> list[Line]:
     """Attach original characters independently of the words retained for cell assembly."""
     source = page.characters or [word for line in page.lines for word in line.words]
     grouped: list[list[Word]] = [[] for _ in lines]
+    anchors = [line.top for line in lines]
     for character in source:
-        if not lines:
-            break
-        index = min(range(len(lines)), key=lambda i: abs(character.top - lines[i].top))
-        if abs(character.top - lines[index].top) <= page.line_tolerance:
+        index = _anchor_index(character.top, anchors, page.line_tolerance)
+        if index is not None:
             grouped[index].append(character)
     return [
         Line(

@@ -353,7 +353,13 @@ def _parse_draft(value: str) -> LayoutCreate:
         detail = [
             {
                 "type": error["type"],
-                "loc": ["draft", *error["loc"]],
+                "loc": [
+                    "draft",
+                    *[
+                        redact(segment) if isinstance(segment, str) else segment
+                        for segment in error["loc"]
+                    ],
+                ],
                 "msg": redact(error["msg"]),
             }
             for error in exc.errors(include_input=False, include_url=False)
