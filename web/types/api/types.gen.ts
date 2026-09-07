@@ -607,6 +607,28 @@ export type LayoutColumn = {
 };
 
 /**
+ * LayoutColumnDraft
+ */
+export type LayoutColumnDraft = {
+    /**
+     * Field
+     */
+    field: string;
+    /**
+     * Xmin
+     */
+    xMin: number;
+    /**
+     * Xmax
+     */
+    xMax: number;
+    /**
+     * Label
+     */
+    label?: string | null;
+};
+
+/**
  * LayoutCreate
  *
  * POST /layouts body. Validation the database cannot express — everything the has_a_balance
@@ -683,6 +705,82 @@ export type LayoutCreate = {
     metadataPatterns?: {
         [key: string]: string;
     } | null;
+};
+
+/**
+ * LayoutDraft
+ *
+ * Unsaved layout proposal using the public layout API's field names.
+ */
+export type LayoutDraft = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId: null;
+    /**
+     * Fingerprints
+     */
+    fingerprints: Array<string>;
+    /**
+     * Headerrowpattern
+     */
+    headerRowPattern: string;
+    /**
+     * Columns
+     */
+    columns: Array<LayoutColumnDraft>;
+    /**
+     * Dateformat
+     */
+    dateFormat: string;
+    /**
+     * Signconvention
+     */
+    signConvention: string;
+    /**
+     * Invertssign
+     */
+    invertsSign: boolean;
+    /**
+     * Chronologicalorder
+     */
+    chronologicalOrder: string;
+    /**
+     * Rowstartrule
+     */
+    rowStartRule: string;
+    /**
+     * Continuationrule
+     */
+    continuationRule: string | null;
+    /**
+     * Skiplinepatterns
+     */
+    skipLinePatterns: Array<string>;
+    /**
+     * Openingbalancepattern
+     */
+    openingBalancePattern: null;
+    /**
+     * Closingbalancepattern
+     */
+    closingBalancePattern: null;
+    /**
+     * Hasrunningbalance
+     */
+    hasRunningBalance: boolean;
+    /**
+     * Quirks
+     */
+    quirks: Array<string>;
+    /**
+     * Metadatapatterns
+     */
+    metadataPatterns: null;
 };
 
 /**
@@ -785,7 +883,10 @@ export type LayoutProfile = {
  * POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation.
  */
 export type LayoutProposal = {
-    draft: LayoutCreate;
+    /**
+     * Draft
+     */
+    draft: LayoutDraft | LayoutCreate;
     /**
      * Rows
      */

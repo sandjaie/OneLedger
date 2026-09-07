@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from uuid import UUID, uuid4
 
 import psycopg
@@ -208,6 +210,123 @@ def test_unauthenticated_requests_are_rejected() -> None:
     )
 
 
+def test_two_digit_year_auto_draft_previews_before_period_mapping() -> None:
+    pdf = build_pdf(
+        [
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Description"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/24"),
+            Placement(page=0, x=180, y=670, text="FIRST"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/24"),
+            Placement(page=0, x=180, y=640, text="SECOND"),
+            Placement(page=0, x=500, y=640, text="18.25"),
+        ]
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    client = TestClient(app)
+    try:
+        response = client.post(
+            "/layouts/propose", files={"file": ("draft.pdf", pdf)}, headers=ORIGIN
+        )
+        assert response.status_code == 200
+        draft = response.json()["draft"]
+        assert draft["dateFormat"] == "dd/MM/yy"
+        assert draft["metadataPatterns"] is None
+        assert len(response.json()["rows"]) == 2
+        assert client.post("/layouts", json=draft, headers=ORIGIN).status_code == 422
+        assert (
+            client.post(
+                "/layouts/propose",
+                files={"file": ("draft.pdf", pdf)},
+                data={"draft": json.dumps(draft)},
+                headers=ORIGIN,
+            ).status_code
+            == 422
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("draft_mode", [False, True])
+def test_malformed_pdf_is_sanitized_and_temporary_file_removed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    draft_mode: bool,
+) -> None:
+    monkeypatch.setattr(
+        layouts, "NamedTemporaryFile", lambda **kwargs: NamedTemporaryFile(dir=tmp_path, **kwargs)
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/layouts/propose",
+            files={"file": ("secret-123456.pdf", b"invalid 123456")},
+            data={
+                "password": "secret-password",
+                **({"draft": json.dumps(VALID_CREATE)} if draft_mode else {}),
+            },
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert "123456" not in response.text
+    assert "secret-password" not in response.text
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("draft_mode", [False, True])
+def test_encryption_error_is_sanitized_and_cleaned(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    draft_mode: bool,
+) -> None:
+    import pdfplumber
+    from pdfminer.pdfdocument import PDFPasswordIncorrect
+    from pdfplumber.utils.exceptions import PdfminerException
+
+    def encrypted(*args: object, **kwargs: object) -> None:
+        raise PdfminerException(PDFPasswordIncorrect("private password 999988887777"))
+
+    monkeypatch.setattr(pdfplumber, "open", encrypted)
+    monkeypatch.setattr(
+        layouts, "NamedTemporaryFile", lambda **kwargs: NamedTemporaryFile(dir=tmp_path, **kwargs)
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app, raise_server_exceptions=False).post(
+            "/layouts/propose",
+            files={"file": ("secret.pdf", proposal_pdf())},
+            data={"draft": json.dumps(VALID_CREATE)} if draft_mode else {},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert "password" in response.json()["detail"]
+    assert "999988887777" not in response.text
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("invalid", [False, True])
+def test_sensitive_literal_in_echoed_draft_or_validation_error_is_redacted(invalid: bool) -> None:
+    draft = {**VALID_CREATE, "fingerprints": ["Account 9999-8888-7777" + ("(" if invalid else "")]}
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("test.pdf", proposal_pdf())},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == (422 if invalid else 200)
+    assert "9999-8888-7777" not in response.text
+
+
 def test_propose_returns_a_draft_and_raw_rows_without_persisting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -275,6 +394,90 @@ def test_propose_with_an_edited_draft_extracts_with_that_draft() -> None:
         {"booked_date": "13/02/2024", "reference": "ALPHA", "amount": "17.25"},
         {"booked_date": "14/02/2024", "reference": "BETA", "amount": "20.00"},
     ]
+
+
+@pytest.mark.parametrize("draft_mode", [False, True])
+def test_proposal_privacy_covers_both_modes_and_identifier_spellings(draft_mode: bool) -> None:
+    identifiers = ["9999-8888-7777", "999988887777", "9999 8888 7777", "9999/8888/7777"]
+    placements = [
+        Placement(page=0, x=20, y=700, text="Date"),
+        Placement(page=0, x=180, y=700, text="Details"),
+        Placement(page=0, x=500, y=700, text="Amount"),
+    ]
+    for index, identifier in enumerate(identifiers):
+        y = 670 - index * 30
+        placements.extend(
+            [
+                Placement(page=0, x=20, y=y, text=f"{13 + index}/02/2024"),
+                Placement(page=0, x=180, y=y, text=f"Ref {identifier} "),
+                Placement(page=0, x=500, y=y, text="12345.67"),
+            ]
+        )
+    pdf = build_pdf(placements)
+    app.dependency_overrides[auth.require_owner] = owner
+    client = TestClient(app)
+    try:
+        automatic = client.post(
+            "/layouts/propose", files={"file": ("statement.pdf", pdf)}, headers=ORIGIN
+        )
+        assert automatic.status_code == 200
+        if draft_mode:
+            draft = automatic.json()["draft"]
+            draft["metadataPatterns"] = {"account_number": r"Ref ([0-9-]+)"}
+            response = client.post(
+                "/layouts/propose",
+                files={"file": ("statement.pdf", pdf)},
+                data={"draft": json.dumps(draft)},
+                headers=ORIGIN,
+            )
+        else:
+            response = automatic
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    for identifier in identifiers:
+        assert identifier not in response.text
+    assert [row["fields"]["booked_date"] for row in response.json()["rows"]] == [
+        "13/02/2024",
+        "14/02/2024",
+        "15/02/2024",
+        "16/02/2024",
+    ]
+    assert all(row["fields"]["amount"] == "12345.67" for row in response.json()["rows"])
+
+
+def test_only_validated_financial_fields_are_exempt_from_preview_redaction() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    # Controller ruling: raw/untyped text is screened unconditionally. Mapping
+    # utility is retained only in validated date and amount cells.
+    rows = [
+        RawRow(
+            1,
+            1,
+            "13/02/2024 REF 14/02/2024 12345.67",
+            {
+                "booked_date": "13/02/2024",
+                "reference": "14/02/2024 12345.67",
+                "amount": "12345.67",
+                "value_date": "invalid 999988887777",
+            },
+        )
+    ]
+    public = layouts._public_rows(rows)
+    assert public[0].fields["booked_date"] == "13/02/2024"
+    assert public[0].fields["amount"] == "12345.67"
+    assert "14/02/2024" not in public[0].fields["reference"]
+    assert "999988887777" not in public[0].fields["value_date"]
+    assert "13/02/2024" not in public[0].rawText
+    assert "12345.67" not in public[0].rawText
+
+
+def test_reserved_capture_overrides_typed_field_protection() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    public = layouts._public_rows([RawRow(1, 1, "12345.67", {"amount": "12345.67"})], "12345-67")
+    assert public[0].fields["amount"] == "[redacted]"
 
 
 def test_propose_never_serializes_the_sensitive_account_capture() -> None:
