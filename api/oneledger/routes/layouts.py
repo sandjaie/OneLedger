@@ -38,6 +38,11 @@ COLUMN_FIELDS = frozenset(
 QUIRKS_VOCABULARY = frozenset({"filter_script:arabic", "continuation:no_date_and_no_amount"})
 # metadata_patterns keys the pipeline understands itself (plan section 4.4).
 RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_end"})
+
+# The extraction contract's complete row-assembly vocabulary (plan section 4.4): the columns are
+# unconstrained TEXT in the database, so the service is what keeps garbage out of them.
+ROW_START_RULES = frozenset({"has_date_and_amount", "has_date"})
+CONTINUATION_RULES = frozenset({"no_date_and_no_amount"})
 # A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.
 TWO_DIGIT_YEAR = re.compile(r"(?<!y)yy(?!y)")
 
@@ -191,6 +196,33 @@ class LayoutCreate(BaseModel):
             )
         return self
 
+    @field_validator("rowStartRule")
+    @classmethod
+    def row_start_rule_is_supported(cls, value: str) -> str:
+        if value not in ROW_START_RULES:
+            raise ValueError("rowStartRule must be one of: " + ", ".join(sorted(ROW_START_RULES)))
+        return value
+
+    @field_validator("continuationRule")
+    @classmethod
+    def continuation_rule_is_supported(cls, value: str | None) -> str | None:
+        if value is not None and value not in CONTINUATION_RULES:
+            supported = ", ".join(sorted(CONTINUATION_RULES))
+            raise ValueError("continuationRule must be omitted or one of: " + supported)
+        return value
+
+    @model_validator(mode="after")
+    def running_balance_flag_matches_its_column(self) -> LayoutCreate:
+        # The has_a_balance_anchor CHECK trusts this boolean, so a flag that disagrees with the
+        # mapped columns could save a profile with no usable anchor (or hide one it has).
+        has_column = any(c.field == "running_balance" for c in self.columns)
+        if self.hasRunningBalance != has_column:
+            raise ValueError(
+                "hasRunningBalance must agree with the columns: "
+                "true exactly when a running_balance column is mapped"
+            )
+        return self
+
     @model_validator(mode="after")
     def two_digit_year_needs_both_period_captures(self) -> LayoutCreate:
         if TWO_DIGIT_YEAR.search(self.dateFormat):
@@ -320,6 +352,23 @@ def create_layout(
     columns_payload = [
         {"field": c.field, "x_min": c.xMin, "x_max": c.xMax, "label": c.label} for c in body.columns
     ]
+    # Two concurrent saves of one name can read the same MAX(version); the
+    # UNIQUE(household_id, name, version) index rejects the loser, which retries against the
+    # fresh MAX in a new transaction instead of surfacing a 500.
+    for attempts_left in (2, 1, 0):
+        try:
+            return _create_layout_once(body, owner, columns_payload)
+        except psycopg.errors.UniqueViolation as exc:
+            if attempts_left == 0:
+                raise HTTPException(
+                    status_code=409, detail="the layout version could not be allocated; retry"
+                ) from exc
+    raise AssertionError("unreachable")  # ponytail: the loop always returns or raises
+
+
+def _create_layout_once(
+    body: LayoutCreate, owner: OwnerSession, columns_payload: list[dict[str, Any]]
+) -> LayoutProfile:
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)

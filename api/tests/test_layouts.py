@@ -36,9 +36,9 @@ VALID_CREATE = {
 # The full write body, used for round-trip and end-to-end tests. Every field is set to a
 # non-default value so a byte-identical round trip actually proves something.
 CREATE_BODY = {
-    "name": "Axis savings",
+    "name": "Layout A savings",
     "institutionId": str(INSTITUTION_ID),
-    "fingerprints": ["AXIS BANK", "Statement of Account"],
+    "fingerprints": ["EXAMPLE BANK", "Statement of Account"],
     "headerRowPattern": "Date\\s+Description\\s+Amount",
     "columns": [
         {"field": "booked_date", "xMin": 40.0, "xMax": 110.0, "label": "Date"},
@@ -63,10 +63,10 @@ CREATE_BODY = {
 # JSONB keys, matching what the migration and the live smoke test store.
 FETCHED_ROW: tuple[object, ...] = (
     LAYOUT_ID,
-    "Axis savings",
+    "Layout A savings",
     1,
     INSTITUTION_ID,
-    ["AXIS BANK", "Statement of Account"],
+    ["EXAMPLE BANK", "Statement of Account"],
     "Date\\s+Description\\s+Amount",
     [
         {"field": "booked_date", "x_min": 40.0, "x_max": 110.0, "label": "Date"},
@@ -114,6 +114,12 @@ class LayoutsCursor:
         if "SELECT 1 FROM institution" in sql:
             self._one = None if self.connection.fail_institution else (1,)
         elif "INSERT INTO statement_layout" in sql:
+            if self.connection.fail_unique_inserts > 0:
+                self.connection.fail_unique_inserts -= 1
+                raise psycopg.errors.UniqueViolation(
+                    "duplicate key value violates unique constraint "
+                    '"statement_layout_household_id_name_version_key"'
+                )
             self._one = (self.connection.inserted_id,)
         elif "WHERE id = %s AND household_id = %s" in sql:
             self._one = self.connection.rows[0] if self.connection.rows else None
@@ -134,10 +140,12 @@ class LayoutsConnection:
         fail_institution: bool = False,
         rows: list[tuple[object, ...]] | None = None,
         inserted_id: UUID = LAYOUT_ID,
+        fail_unique_inserts: int = 0,
     ) -> None:
         self.fail_institution = fail_institution
         self.rows = rows if rows is not None else [FETCHED_ROW]
         self.inserted_id = inserted_id
+        self.fail_unique_inserts = fail_unique_inserts
         self.statements: list[str] = []
         self.params: list[tuple[object, ...]] = []
 
@@ -333,6 +341,7 @@ def test_balance_delta_requires_running_balance_and_forbids_amount_debit_credit(
         {
             **VALID_CREATE,
             "signConvention": "balance_delta",
+            "hasRunningBalance": True,
             "columns": [
                 {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
                 {"field": "description", "xMin": 50.0, "xMax": 150.0},
@@ -462,3 +471,64 @@ def test_two_digit_year_date_format_requires_both_period_captures() -> None:
     )
     # A four-digit year needs no period captures.
     assert layouts.LayoutCreate.model_validate({**VALID_CREATE, "dateFormat": "yyyy-MM-dd"})
+
+
+def test_row_assembly_rules_outside_the_vocabulary_are_rejected() -> None:
+    with pytest.raises(ValidationError, match="rowStartRule"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "rowStartRule": "always"})
+    with pytest.raises(ValidationError, match="continuationRule"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "continuationRule": "join_everything"})
+    # The documented vocabulary still passes.
+    assert layouts.LayoutCreate.model_validate({**VALID_CREATE, "rowStartRule": "has_date"})
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "continuationRule": "no_date_and_no_amount"}
+    )
+
+
+def test_the_running_balance_flag_must_agree_with_the_mapped_columns() -> None:
+    # Flag set with no running_balance column: the has_a_balance_anchor CHECK would trust it.
+    with pytest.raises(ValidationError, match="hasRunningBalance"):
+        layouts.LayoutCreate.model_validate({**VALID_CREATE, "hasRunningBalance": True})
+    # Column mapped with the flag unset: an anchor the profile denies having.
+    with pytest.raises(ValidationError, match="hasRunningBalance"):
+        layouts.LayoutCreate.model_validate(
+            {
+                **VALID_CREATE,
+                "columns": VALID_COLUMNS
+                + [{"field": "running_balance", "xMin": 260.0, "xMax": 320.0}],
+            }
+        )
+    # Agreement in both directions passes.
+    assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "hasRunningBalance": True,
+            "columns": VALID_COLUMNS + [{"field": "running_balance", "xMin": 260.0, "xMax": 320.0}],
+        }
+    )
+
+
+def test_a_concurrent_version_race_retries_and_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two saves of one name can read the same MAX(version); the loser's UniqueViolation is
+    retried against the fresh MAX rather than surfacing a 500."""
+    connection = LayoutsConnection(rows=[FETCHED_ROW], fail_unique_inserts=1)
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 201
+    inserts = [s for s in connection.statements if "INSERT INTO statement_layout" in s]
+    assert len(inserts) == 2
+
+
+def test_a_version_race_that_never_resolves_returns_409(monkeypatch: pytest.MonkeyPatch) -> None:
+    connection = LayoutsConnection(rows=[FETCHED_ROW], fail_unique_inserts=99)
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post("/layouts", json=CREATE_BODY, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
