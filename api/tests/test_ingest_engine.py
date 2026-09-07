@@ -1,0 +1,418 @@
+"""M2 Task 3: profile-driven extraction and proposal behavior."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from oneledger.ingest.engine import extract, extract_pages, matches
+from oneledger.ingest.words import Line, Page, Word
+from oneledger.routes.layouts import LayoutCreate
+from tests.fixtures.synthetic_pdf import Placement, build_pdf
+
+
+def profile(**changes: object) -> LayoutCreate:
+    values: dict[str, object] = {
+        "name": "layout A",
+        "fingerprints": [r"ACCOUNT SUMMARY", r"ACTIVITY"],
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+        "dateFormat": "dd/MM/yyyy",
+        "signConvention": "signed",
+        "chronologicalOrder": "ascending",
+        "rowStartRule": "has_date_and_amount",
+        "skipLinePatterns": [r"^Date Description Amount$"],
+        "openingBalancePattern": r"Opening balance:\s*([0-9,.]+)",
+        "closingBalancePattern": None,
+        "hasRunningBalance": False,
+    }
+    values.update(changes)
+    return LayoutCreate.model_validate(values)
+
+
+def word(x0: float, x1: float, text: str, top: float = 10.0) -> Word:
+    return Word(x0=x0, x1=x1, top=top, bottom=top + 10.0, text=text)
+
+
+def page(*lines: list[Word]) -> Page:
+    return Page(
+        lines=[Line(top=line[0].top, words=line) for line in lines],
+        has_text=bool(lines),
+    )
+
+
+def test_midpoint_assigns_an_overhanging_amount_to_the_amount_band() -> None:
+    result = extract_pages(
+        profile(),
+        [
+            page(
+                [
+                    word(20, 70, "01/02/2024"),
+                    word(120, 180, "Purchase"),
+                    # x0 overhangs the band; its midpoint is inside it.
+                    word(390, 450, "-12.50"),
+                ]
+            )
+        ],
+    )
+
+    assert result.rows[0].fields == {
+        "booked_date": "01/02/2024",
+        "description": "Purchase",
+        "amount": "-12.50",
+    }
+
+
+def test_spaceless_tokens_are_split_by_bands_and_shifted_bands_change_cells() -> None:
+    statement_page = page(
+        [
+            word(20, 76, "01/02/2024"),
+            word(130, 174, "ALPHA"),
+            word(176, 210, "BETA"),
+            word(445, 482, "17.25"),
+        ]
+    )
+
+    correct = extract_pages(profile(), [statement_page])
+    shifted = extract_pages(
+        profile(
+            columns=[
+                {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+                {"field": "description", "xMin": 100.0, "xMax": 470.0},
+                {"field": "amount", "xMin": 470.0, "xMax": 600.0},
+            ]
+        ),
+        [statement_page],
+    )
+
+    assert correct.rows[0].fields["description"] == "ALPHA BETA"
+    assert correct.rows[0].fields["amount"] == "17.25"
+    assert shifted.rows == []
+    assert shifted.lines_unparsed == 1
+
+
+def test_arabic_filter_removes_only_matching_words_and_reports_the_count() -> None:
+    mixed = page(
+        [
+            word(20, 76, "01/02/2024"),
+            word(130, 174, "ALPHA"),
+            word(180, 225, "مرحبا"),
+            word(445, 482, "17.25"),
+        ]
+    )
+
+    filtered = extract_pages(profile(quirks=["filter_script:arabic"]), [mixed])
+    unfiltered = extract_pages(profile(), [mixed])
+
+    assert filtered.words_filtered == 1
+    assert filtered.rows[0].fields["description"] == "ALPHA"
+    assert filtered.rows[0].fields["amount"] == "17.25"
+    assert unfiltered.words_filtered == 0
+    assert unfiltered.rows[0].fields["description"] == "ALPHA مرحبا"
+
+
+def test_continuation_joins_description_fragments_in_physical_order() -> None:
+    wrapped = page(
+        [word(20, 76, "01/02/2024"), word(130, 170, "FIRST"), word(445, 482, "17.25")],
+        [word(130, 185, "SECOND", top=30.0)],
+        [word(130, 180, "THIRD", top=50.0)],
+    )
+
+    joined = extract_pages(
+        profile(
+            rowStartRule="has_date",
+            continuationRule="no_date_and_no_amount",
+            quirks=["continuation:no_date_and_no_amount"],
+        ),
+        [wrapped],
+    )
+    dropped = extract_pages(profile(rowStartRule="has_date"), [wrapped])
+
+    assert len(joined.rows) == 1
+    assert joined.rows[0].fields == {
+        "booked_date": "01/02/2024",
+        "description": "FIRST SECOND THIRD",
+        "amount": "17.25",
+    }
+    assert joined.rows[0].raw_text == "01/02/2024 FIRST 17.25\nSECOND\nTHIRD"
+    assert joined.lines_unparsed == 0
+    assert len(dropped.rows) == 1
+    assert dropped.rows[0].fields["description"] == "FIRST"
+    assert dropped.lines_unparsed == 2
+
+
+def test_matches_uses_fingerprints_as_evidence_and_never_the_filename_alone() -> None:
+    candidate = profile()
+
+    assert matches(candidate, "ACCOUNT SUMMARY\nACTIVITY", "unrelated.pdf") == 1.0
+    assert matches(candidate, "something else", "layout-A-account-summary.pdf") == 0.0
+    assert matches(candidate, "ACCOUNT SUMMARY", "unrelated.pdf") == 0.5
+
+
+def test_reserved_account_capture_is_transient_and_other_metadata_is_returned() -> None:
+    result = extract_pages(
+        profile(
+            metadataPatterns={
+                "account_number": r"Account:\s*([0-9 -]+)",
+                "owner_label": r"Owner:\s*([A-Z ]+)",
+            }
+        ),
+        [
+            page(
+                [word(10, 70, "Account:"), word(80, 170, "1234-5678")],
+                [word(10, 60, "Owner:", top=30), word(80, 140, "PRIMARY", top=30)],
+                [
+                    word(20, 76, "01/02/2024", top=50),
+                    word(130, 174, "ALPHA", top=50),
+                    word(445, 482, "17.25", top=50),
+                ],
+            )
+        ],
+    )
+
+    assert result.account_number_raw == "1234-5678"
+    assert result.metadata == {"owner_label": "PRIMARY"}
+    assert "account_number" not in result.metadata
+
+
+def test_extract_refuses_a_pdf_with_zero_text_objects(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "empty.pdf"
+    pdf_path.write_bytes(build_pdf([], page_count=1))
+
+    with pytest.raises(ValueError, match="scanned PDFs are unsupported"):
+        extract(profile(), pdf_path, None)
+
+
+def test_extract_reads_a_generated_pdf_without_parser_coupling(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "layout-a.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="01/02/2024"),
+                Placement(page=0, x=130, y=700, text="ALPHA BETA"),
+                Placement(page=0, x=445, y=700, text="17.25"),
+            ]
+        )
+    )
+
+    result = extract(profile(), pdf_path, None)
+
+    assert result.page_count == 1
+    assert result.has_text is True
+    assert result.rows[0].fields["description"] == "ALPHA BETA"
+
+
+def test_filtering_precedes_grouping_so_removed_words_cannot_anchor_a_line() -> None:
+    # The early Arabic word anchored the date at top=10, splitting it from the
+    # amount at top=14. Removing it before regrouping must reunite the transaction.
+    source = page(
+        [word(180, 225, "مرحبا", top=10), word(20, 76, "01/02/2024", top=12)],
+        [word(130, 174, "ALPHA", top=14), word(445, 482, "17.25", top=14)],
+    )
+    result = extract_pages(profile(quirks=["filter_script:arabic"]), [source])
+    assert result.words_filtered == 1
+    assert len(result.rows) == 1
+    assert result.rows[0].fields["amount"] == "17.25"
+    assert result.rows[0].fields["booked_date"] == "01/02/2024"
+
+
+def test_capture_groups_preserve_whitespace_verbatim() -> None:
+    result = extract_pages(
+        profile(
+            openingBalancePattern=r"Opening:( 17.25 )!",
+            closingBalancePattern=r"Closing:( 20.00 )!",
+            metadataPatterns={
+                "account_number": r"Account:( 1234-5678 )!",
+                "owner_label": r"Owner:( PRIMARY )!",
+            },
+        ),
+        [
+            page(
+                [
+                    word(
+                        10,
+                        500,
+                        "Opening: 17.25 ! Closing: 20.00 ! Account: 1234-5678 ! Owner: PRIMARY !",
+                    )
+                ]
+            )
+        ],
+    )
+    assert result.declared_opening == " 17.25 "
+    assert result.declared_closing == " 20.00 "
+    assert result.account_number_raw == " 1234-5678 "
+    assert result.metadata == {"owner_label": " PRIMARY "}
+
+
+@pytest.mark.parametrize("convention", ["signed", "cr_suffix", "debit_credit_columns"])
+def test_balance_alone_does_not_start_an_ordinary_amount_row(convention: str) -> None:
+    amount_columns = (
+        [
+            {"field": "debit", "xMin": 300, "xMax": 400},
+            {"field": "credit", "xMin": 400, "xMax": 500},
+        ]
+        if convention == "debit_credit_columns"
+        else [{"field": "amount", "xMin": 300, "xMax": 500}]
+    )
+    candidate = profile(
+        signConvention=convention,
+        hasRunningBalance=True,
+        columns=[
+            {"field": "booked_date", "xMin": 0, "xMax": 100},
+            {"field": "description", "xMin": 100, "xMax": 300},
+            *amount_columns,
+            {"field": "running_balance", "xMin": 500, "xMax": 600},
+        ],
+    )
+    result = extract_pages(
+        candidate,
+        [page([word(20, 76, "01/02/2024"), word(130, 170, "BALANCE"), word(520, 570, "17.25")])],
+    )
+    assert result.rows == []
+    assert result.lines_unparsed == 1
+
+
+def test_out_of_period_rows_are_retained_for_normalization_to_reject() -> None:
+    candidate = profile(
+        metadataPatterns={
+            "period_start": r"From: (01/02/2024)",
+            "period_end": r"To: (29/02/2024)",
+        }
+    )
+    result = extract_pages(
+        candidate,
+        [
+            page(
+                [word(10, 300, "From: 01/02/2024 To: 29/02/2024")],
+                [
+                    word(20, 76, "01/03/2024", top=30),
+                    word(130, 180, "LATE", top=30),
+                    word(445, 482, "17.25", top=30),
+                ],
+            )
+        ],
+    )
+    assert len(result.rows) == 1
+    assert result.rows[0].fields["booked_date"] == "01/03/2024"
+
+
+@pytest.mark.parametrize("amount", ["1,,2", "12,", "(12.00", "12.00)"])
+def test_malformed_amount_does_not_start_a_row(amount: str) -> None:
+    result = extract_pages(
+        profile(),
+        [page([word(20, 76, "01/02/2024"), word(130, 170, "INVALID"), word(445, 482, amount)])],
+    )
+    assert result.rows == []
+    assert result.lines_unparsed == 1
+
+
+@pytest.mark.parametrize(
+    "convention,field,amount",
+    [
+        ("signed", "amount", "(1,234.50)"),
+        ("cr_suffix", "amount", "17.25 CR"),
+        ("debit_credit_columns", "debit", "17.25"),
+        ("debit_credit_columns", "credit", "17.25"),
+        ("balance_delta", "running_balance", "1,234.50"),
+    ],
+)
+def test_sign_conventions_use_their_amount_columns(
+    convention: str, field: str, amount: str
+) -> None:
+    candidate = profile(
+        signConvention=convention,
+        hasRunningBalance=convention == "balance_delta",
+        columns=[
+            {"field": "booked_date", "xMin": 0, "xMax": 100},
+            {"field": "description", "xMin": 100, "xMax": 400},
+            *(
+                [
+                    {"field": "debit", "xMin": 400, "xMax": 500},
+                    {"field": "credit", "xMin": 500, "xMax": 600},
+                ]
+                if convention == "debit_credit_columns"
+                else [{"field": field, "xMin": 400, "xMax": 600}]
+            ),
+        ],
+    )
+    x0 = 520 if field == "credit" else 445
+    result = extract_pages(
+        candidate,
+        [page([word(20, 76, "01/02/2024"), word(130, 170, "VALID"), word(x0, x0 + 35, amount)])],
+    )
+    assert result.rows[0].fields[field] == amount
+
+
+def test_account_capture_is_not_exposed_in_result_repr() -> None:
+    result = extract_pages(
+        profile(metadataPatterns={"account_number": r"Account: (1234-5678)"}),
+        [page([word(10, 300, "Account: 1234-5678")])],
+    )
+    assert result.account_number_raw == "1234-5678"
+    assert "1234-5678" not in repr(result)
+
+
+def test_cells_sort_by_x0_keep_out_of_band_raw_text_and_number_across_pages() -> None:
+    source = [
+        page(
+            [
+                word(445, 482, "17.25"),
+                word(180, 225, "SECOND"),
+                word(130, 174, "FIRST"),
+                word(20, 76, "01/02/2024"),
+                word(610, 640, "OUTSIDE"),
+            ]
+        ),
+        page(
+            [word(10, 300, "Date Description Amount")],
+            [
+                word(20, 76, "02/02/2024", top=30),
+                word(130, 174, "NEXT", top=30),
+                word(445, 482, "20.00", top=30),
+            ],
+        ),
+    ]
+    result = extract_pages(profile(), source)
+    assert result.rows[0].fields == {
+        "booked_date": "01/02/2024",
+        "description": "FIRST SECOND",
+        "amount": "17.25",
+    }
+    assert result.rows[0].raw_text == "01/02/2024 FIRST SECOND 17.25 OUTSIDE"
+    assert [(row.page_number, row.row_number) for row in result.rows] == [(1, 1), (2, 2)]
+    assert result.lines_unparsed == 0
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"continuationRule": "no_date_and_no_amount"},
+        {"quirks": ["continuation:no_date_and_no_amount"]},
+    ],
+)
+def test_continuation_accepts_each_flag_but_never_a_date_or_amount(
+    settings: dict[str, object],
+) -> None:
+    result = extract_pages(
+        profile(**settings),
+        [
+            page(
+                [word(130, 174, "ORPHAN")],
+                [
+                    word(20, 76, "01/02/2024", top=30),
+                    word(130, 174, "FIRST", top=30),
+                    word(445, 482, "17.25", top=30),
+                ],
+                [word(130, 174, "SECOND", top=50)],
+                [word(130, 174, "AMOUNT", top=70), word(445, 482, "19.00", top=70)],
+                [word(20, 76, "02/02/2024", top=90), word(130, 174, "DATE", top=90)],
+            )
+        ],
+    )
+    assert len(result.rows) == 1
+    assert result.rows[0].fields["description"] == "FIRST SECOND"
+    assert result.lines_unparsed == 3
