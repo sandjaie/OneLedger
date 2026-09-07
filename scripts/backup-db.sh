@@ -23,15 +23,16 @@ if [ -e "$out" ]; then
   exit 1
 fi
 
-# Write to a temporary name and rename only after the whole pipeline succeeds: a pg_dump
-# that fails mid-stream must not leave a plausible-looking partial backup at the final path
-# for a retention or copy job to preserve as if it were valid.
-tmp="$out.partial"
+# Write to a uniquely named temporary file and publish only after the whole pipeline
+# succeeds: a pg_dump that fails mid-stream must not leave a plausible-looking partial
+# backup at the final path for a retention or copy job to preserve as if it were valid.
+# mktemp keeps two same-second invocations off each other's temp file, and ln claims the
+# final name atomically — it fails outright if a concurrent run published first.
+tmp="$(mktemp "backups/.oneledger-tmp.XXXXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 pg_dump -Fc "$DATABASE_URL" \
   | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp"
-mv "$tmp" "$out"
-trap - EXIT
+ln "$tmp" "$out"
 
 bytes="$(wc -c < "$out" | tr -d ' ')"
 echo "$out ($bytes bytes)"
