@@ -4,19 +4,21 @@ This is the single maintained implementation-status file. The orchestrator updat
 executing Superpowers plans. Plans define the work; the roadmap defines scope and sequence;
 dated reports retain verification evidence. Do not copy this status into other documentation.
 
-Updated: 6 September 2026.
+Updated: 7 September 2026.
 
 ## Current phase
 
 **Phase 1 — trusted financial position.**
 M1a (the Phase 1 plan's Tasks 1–11) is on `develop` by owner request; the former phase branch
-is deleted. `develop` is the standing integration branch: one milestone per branch and PR,
-carrying its plan and implementation together, merging on Codex's thumbs-up
-([docs/git-workflow.md](../git-workflow.md)). Any path to `main` still needs a separate owner
-request.
+is deleted. `develop` is the standing integration branch, merging on Codex's thumbs-up
+([docs/git-workflow.md](../git-workflow.md)). From M2 onward, by owner request, a milestone is
+delivered as several task-shaped branches and PRs — not one PR per milestone — each carrying
+its slice of plan and implementation through the same review cycle. Any path to `main` still
+needs a separate owner request.
 
-**M1b — manual transactions and taxonomy — is implemented on
-`feature/m1b-manual-transactions` and in review.**
+**M1b — manual transactions and taxonomy — is complete.**
+Merged to `develop` as [PR #31](https://github.com/sandjaie/OneLedger/pull/31)
+(merge commit `2e2f35f`) by the owner after thirty Codex review rounds; the branch is deleted.
 Plan: [M1b manual transactions](plans/2026-09-06-m1b-manual-transactions.md), on the same
 branch. Delivered there: V9 (category taxonomy, merchants, two-level trigger, seeded tree),
 V10 (the transaction ledger, immutability and split-sum triggers, the posting and reportable
@@ -28,13 +30,13 @@ independent of `schema.md`), and V10 gaining the account-balance trigger before 
 
 | M1b task | Status | Evidence |
 | --- | --- | --- |
-| 12 — categories, merchants, seed taxonomy (V9) | Implemented | `1e7e229`; `db/tests/0008_categories.sql` |
-| 13 — transaction ledger and reporting views (V10) | Implemented | `028f554`; `db/tests/0009_transactions.sql` |
-| 14 — manual transaction API, B3.5 lock | Implemented | `7967aba`; `api/tests/test_transactions*.py` |
-| 15 — transactions screen, category management | Implemented | `3885d86`; component tests |
+| 12 — categories, merchants, seed taxonomy (V9) | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); `db/tests/0008_categories.sql` |
+| 13 — transaction ledger and reporting views (V10) | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); `db/tests/0009_transactions.sql` |
+| 14 — manual transaction API, B3.5 lock | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); `api/tests/test_transactions*.py` |
+| 15 — transactions screen, category management | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); component tests |
 
-Phase 1 remains active: M1a is merged and M1b is the delivery in review; neither is Phase 1
-completion. Phase 0's live Google identity gates remain open below — synthetic checks do not
+Phase 1 remains active: M1a and M1b are merged; roadmap M1 is delivered and M2 (the importer)
+is next. Phase 0's live Google identity gates remain open below — synthetic checks do not
 substitute for them.
 
 | Phase 1 task | Branch | Status | Evidence |

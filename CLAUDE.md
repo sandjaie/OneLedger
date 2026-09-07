@@ -127,9 +127,10 @@ test anything. Every step states its expected output — run the command and com
 
 **Branches and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the single
 branching and release reference; do not restate its model elsewhere. In short: `develop` is the
-standing integration branch; one milestone or feature per branch `<type>/<name>` (types
-`feature/`, `fix/`, `docs/`, `chore/`) created from `develop`, carrying its plan **and** its
-implementation, delivered as one PR into `develop`. The delivery cycle is: plan and implement →
+standing integration branch; a milestone is planned once and delivered as several task-sized
+branches `<type>/<name>` (types `feature/`, `fix/`, `docs/`, `chore/`) created from `develop`,
+each its own PR into `develop`; the plan lands with the first. The delivery cycle per PR is:
+plan and implement →
 Codex review → patch the findings → Codex thumbs-up → merge. A `release/*` branch carries
 changelog, release notes and the tag into `main`; release and any integration toward `main`
 need a separate owner request.
@@ -166,8 +167,8 @@ Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest an
 `--no-verify`; fix it and push again.
 
 **Every PR waits for Codex review on GitHub** and merges only on Codex's thumbs-up. A PR carries
-one milestone's plan and implementation together; there is no per-PR line cap — keep commits
-small and task-shaped inside it, because the commits are what a reviewer walks.
+one task-sized slice of a milestone (the milestone's plan rides with its first PR); there is no
+hard line cap — keep each PR reviewable at one sitting, because a large PR converges slowly.
 
 **Commits**: `type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci
 chore refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —

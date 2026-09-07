@@ -3,9 +3,10 @@
 Read [CLAUDE.md](CLAUDE.md) for the shared repository rules and current planning references.
 They apply to Codex and all implementation/review agents.
 Branching, integration and releases follow [docs/git-workflow.md](docs/git-workflow.md);
-no other document defines the branch model. `develop` is the integration branch; one milestone
-per branch and PR, carrying its plan and implementation together. The delivery cycle: plan and
-implement → Codex review → patch the findings → Codex thumbs-up → merge.
+no other document defines the branch model. `develop` is the integration branch; a milestone is
+planned once and delivered as several task-sized branches, each its own PR, the plan landing
+with the first. The delivery cycle per PR: plan and implement → Codex review → patch the
+findings → Codex thumbs-up → merge.
 
 Use the active repository checkout for sequential development. Resolve its root with
 `git rev-parse --show-toplevel`; do not substitute a path from another machine or create Git worktrees.
