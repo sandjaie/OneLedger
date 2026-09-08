@@ -30,6 +30,12 @@ A branch past the hard stop is not reviewed — it is **split**. Reviewing it wa
 the diff is about to change shape. Report which slices it splits into, name a branch per slice,
 and stop there.
 
+The exception is the one the budget itself allows. Where the owner has invoked
+`ONELEDGER_SIZE_OVERRIDE` for a change that genuinely cannot be divided — an indivisible
+migration — review it as it stands and record in the report that it ships oversized on that
+reason. Without this, an approved indivisible migration has no path through the cycle: the gate
+refuses to review it, and nothing may be pushed until the gate reports clean.
+
 A red tree is not reviewed either: a failing test is a finding that already found itself. If
 `/verify` has not been run on this tree, or was run and came back red, report that as the finding
 and stop.

@@ -23,10 +23,22 @@ SOFT_TOTAL=${ONELEDGER_SOFT_TOTAL:-800}
 HARD_PROD=${ONELEDGER_HARD_PROD:-500}
 HARD_TOTAL=${ONELEDGER_HARD_TOTAL:-1000}
 
-branch=$(git rev-parse --abbrev-ref HEAD)
+# Git's pre-push contract puts each pushed ref on stdin; pre-commit consumes that and
+# re-exposes it. Measure what is actually being pushed, not what happens to be checked out —
+# `git push origin feature/large` from a small branch would otherwise measure the small one.
+branch=${PRE_COMMIT_LOCAL_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}
+branch=${branch#refs/heads/}
+tip=${PRE_COMMIT_TO_REF:-HEAD}
+
+case "$tip" in
+  # A deletion pushes the null object id; there is nothing to measure.
+  *[!0]*) ;;
+  ????????*) echo "branch deletion — nothing to measure; skipping"; exit 0 ;;
+esac
+
 case "$branch" in
-  develop|main|release/*|HEAD)
-    echo "on $branch — the budget applies to task branches; skipping"
+  develop|main|release/*|HEAD|"")
+    echo "on ${branch:-a detached head} — the budget applies to task branches; skipping"
     exit 0
     ;;
 esac
@@ -41,37 +53,42 @@ if ! git rev-parse --verify --quiet "$base_ref" >/dev/null; then
     exit 0
   }
 fi
-base=$(git merge-base "$base_ref" HEAD) || {
+base=$(git merge-base "$base_ref" "$tip") || {
   echo "no merge base with $base_ref (shallow clone?) — skipping"
   exit 0
 }
 
-report=$(git diff --numstat --no-renames "$base" HEAD | awk -F'\t' '
+report=$(git diff --numstat --no-renames "$base" "$tip" | awk -F'\t' '
   # $1 added, $2 deleted, $3 path, tab-separated. Binary files report "-" and are not code.
   $1 == "-" { next }
   {
     path = $3
     kind = "prod"
 
-    # Documentation, configuration and anything generated: outside the budget.
+    # Documentation and anything generated: outside the budget, wherever it sits.
     if (path ~ /(^|\/)docs\// ||
         path ~ /\.(md|html)$/ ||
         path ~ /(^|\/)\.claude\// ||
         path ~ /(^|\/)\.github\// ||
         path ~ /^web\/types\/api\// ||
         path ~ /\.gen\.(ts|tsx)$/ ||
-        path ~ /(package-lock\.json|uv\.lock|\.lock)$/ ||
-        path ~ /\.(ya?ml|json|toml|cfg|ini)$/ ||
-        path ~ /(^|\/)(Dockerfile|\.env\.example|\.gitignore|\.dockerignore)$/)
+        path ~ /(package-lock\.json|uv\.lock|\.lock)$/)
       kind = "skip"
 
     # Tests and their fixtures count, but against the wider budget only: TDD earns its lines.
+    # Checked before configuration, because an expected-output fixture is JSON or YAML far more
+    # often than not, and a 1,500-line one is a review to read however it is spelled.
     else if (path ~ /(^|\/)tests?\// ||
              path ~ /(^|\/)__tests__\// ||
              path ~ /\.(test|spec)\.(ts|tsx|js|jsx|py)$/ ||
              path ~ /(^|\/)conftest\.py$/ ||
              path ~ /(^|\/)fixtures\//)
       kind = "test"
+
+    # Configuration: outside the budget, once it is known not to be a fixture.
+    else if (path ~ /\.(ya?ml|json|toml|cfg|ini)$/ ||
+             path ~ /(^|\/)(Dockerfile|\.env\.example|\.gitignore|\.dockerignore)$/)
+      kind = "skip"
 
     added[kind] += $1
     deleted[kind] += $2

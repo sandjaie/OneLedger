@@ -88,7 +88,9 @@ why `--no-verify` is not an option.
 One PR per branch, from `.github/PULL_REQUEST_TEMPLATE.md`, carrying this cycle's evidence
 honestly — including checks that did not run, and why.
 
-Codex findings are verified against the tree, then triaged exactly as in step 5: blocking findings
+Codex reviews every PR that carries code; a documentation-only one merges on owner review
+alone (step 8). Its findings are verified against the tree, then triaged exactly as in step
+5: blocking findings
 are patched on the branch (and step 5 runs again before that patch is pushed); non-blocking ones
 are answered and recorded. A Codex round that finds only what `/oneledger-code-review` already
 raised means the gate worked; a Codex round finding something the gate missed is a bug in the

@@ -11,8 +11,10 @@ with the first.
 [docs/development-cycle.md](docs/development-cycle.md). Read it before working, and run its gates
 without being asked:** `/oneledger-plan-review` before a task is dispatched from a plan,
 `/verify` and `/oneledger-code-review` before every push or PR — including a patch answering a
-review finding — and `/oneledger-code-hygiene` at a milestone boundary. Then Codex reviews on
-GitHub, blocking findings are patched on the branch, and the PR merges on the thumbs-up.
+review finding — and `/oneledger-code-hygiene` at a milestone boundary. Then Codex reviews every PR
+that carries code, blocking findings are patched on the branch, and the PR merges on the
+thumbs-up; a documentation-only PR — a plan, a spec, an ADR, `progress.md` — merges on owner
+review alone.
 
 **Those three skills produce findings another agent can patch; they do not modify code** unless
 the owner explicitly commands fix mode. The report goes back to the agent that produced the work,
