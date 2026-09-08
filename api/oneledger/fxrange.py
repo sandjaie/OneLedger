@@ -207,24 +207,36 @@ def ensure_rates(
             "rates must be fetched before a transaction opens — this one is already in "
             "progress, and storing a rate would commit it"
         )
-    gaps = missing_dates(conn, wanted)
-    if not gaps:
-        return 0
-
+    # Reading opens a transaction of its own, and leaving it open would arm the guard above
+    # against this function's own next call — and against a pipeline that reads a layout
+    # before it asks for rates. The guard proved the caller was idle on entry, so whatever is
+    # open at exit is ours: the reads, and nothing of the caller's to lose.
     try:
-        written = fill_range(conn, min(gaps), max(gaps), source=source)
-    except (httpx.HTTPError, OSError, ValueError) as exc:
-        # The caller asked for dates, so the refusal answers in dates. A bare transport error
-        # names a URL and leaves the importer unable to say which rows it could not price.
-        raise FxCoverageError(f"{_named(gaps)} could not be priced: {exc}") from exc
+        gaps = missing_dates(conn, wanted)
+        if not gaps:
+            return 0
 
-    still = missing_dates(conn, wanted)
-    if still:
-        # A range can return successfully and still leave a day unpriced — a feed that has
-        # not published yet. Refusing is the only honest answer: never 1.0, never today's
-        # rate, never an interpolation (multi-currency-and-fx.html §3).
-        raise FxCoverageError(f"{_named(still)} have no exchange rate and none could be fetched")
-    return written
+        try:
+            written = fill_range(conn, min(gaps), max(gaps), source=source)
+        except (httpx.HTTPError, OSError, ValueError) as exc:
+            # The caller asked for dates, so the refusal answers in dates. A bare transport
+            # error names a URL and leaves the importer unable to say which rows it could
+            # not price.
+            raise FxCoverageError(f"{_named(gaps)} could not be priced: {exc}") from exc
+
+        still = missing_dates(conn, wanted)
+        if still:
+            # A range can return successfully and still leave a day unpriced — a feed that
+            # has not published yet, or a base currency that arrived while the range was in
+            # flight. Refusing is the only honest answer: never 1.0, never today's rate,
+            # never an interpolation (multi-currency-and-fx.html §3).
+            raise FxCoverageError(
+                f"{_named(still)} have no exchange rate and none could be fetched"
+            )
+        return written
+    finally:
+        # The upsert has already committed; this discards only the reads that followed it.
+        conn.rollback()
 
 
 def _named(dates: list[date]) -> str:

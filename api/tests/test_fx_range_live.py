@@ -17,13 +17,14 @@ from typing import Any
 import psycopg
 import pytest
 
-from oneledger.fxrange import missing_dates, reporting_config
+from oneledger.fxrange import missing_dates, reporting_config, upsert_rates
 
 # Far enough out that no backfill has reached them, so the rows below are the whole story.
 COVERED = date(2099, 1, 1)
 PARTIAL = date(2099, 1, 2)
 OTHER_QUOTE = date(2099, 1, 3)
 UNTOUCHED = date(2099, 1, 4)
+OBSERVED = date(2099, 1, 5)
 
 
 def _connect() -> psycopg.Connection:
@@ -73,11 +74,73 @@ def test_coverage_is_every_base_for_the_households_own_quote() -> None:
         conn.close()
 
 
-def test_the_query_runs_and_returns_nothing_for_an_empty_ask() -> None:
-    """A batch whose dates are all priced must not reach the database with an empty array."""
+def test_an_empty_ask_returns_nothing_rather_than_raising() -> None:
+    """A batch whose dates are all priced asks for none, and that must be an ordinary empty
+    answer — not an exception the pipeline has to know to catch."""
     conn = _connect()
     try:
         assert missing_dates(conn, []) == []
     finally:
         conn.rollback()
         conn.close()
+
+
+def test_an_observed_rate_outranks_a_reference_rate() -> None:
+    """`multi-currency-and-fx.html` §5: a rate a person typed or a statement observed beats a
+    reference feed. The ON CONFLICT clause is the only thing enforcing it, and this is the
+    only place the INSERT is ever executed — a mis-ordered column list would ship green
+    otherwise, because no stub cursor reads the statement.
+
+    `upsert_rates` commits, so this cannot ride inside a rolled-back transaction; the rows
+    are dated far past any backfill and removed explicitly.
+    """
+    conn = _connect()
+    try:
+        quote, bases, _ = reporting_config(conn)
+        observed, fresh = bases[0], bases[-1]
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
+                   VALUES (%s, %s, %s, %s, 'manual')""",
+                (OBSERVED, observed, quote, Decimal("7.7777")),
+            )
+        conn.commit()
+
+        written = upsert_rates(
+            conn,
+            [
+                _row(OBSERVED, observed, quote, Decimal("1.1111")),
+                _row(OBSERVED, fresh, quote, Decimal("2.2222")),
+            ],
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT base_currency, rate, source FROM fx_rate"
+                " WHERE rate_date = %s ORDER BY base_currency",
+                (OBSERVED,),
+            )
+            stored = {b: (r, s) for b, r, s in cur.fetchall()}
+
+        if observed != fresh:
+            assert written == 1, "the declined row is not a row written"
+        assert stored[observed] == (Decimal("7.7777"), "manual"), "the observation stands"
+        if observed != fresh:
+            assert stored[fresh] == (Decimal("2.2222"), "ecb"), "the new pair landed"
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM fx_rate WHERE rate_date >= %s", (COVERED,))
+        conn.commit()
+        conn.close()
+
+
+def _row(on: date, base: str, quote: str, rate: Decimal) -> dict[str, Any]:
+    return {
+        "rate_date": on,
+        "base_currency": base,
+        "quote_currency": quote,
+        "rate": rate,
+        "source": "ecb",
+        "is_carried_forward": False,
+        "carried_from": None,
+    }

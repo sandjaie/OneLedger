@@ -39,6 +39,9 @@ class FakeCursor:
 
     def execute(self, sql: str, params: tuple[object, ...] | None = None) -> None:
         self.conn.executed.append((" ".join(sql.split()), params))
+        # psycopg3 opens a transaction on the first statement and holds it until the caller
+        # commits or rolls back. Without this the fake cannot see a function leave one open.
+        self.conn.transaction_status = TransactionStatus.INTRANS
         if "FROM household" in sql:
             self.result = [HOUSEHOLD]
         elif "FROM currency" in sql:
@@ -93,6 +96,7 @@ class FakeConn:
         self.executed: list[tuple[str, tuple[object, ...] | None]] = []
         self.written: list[dict[str, Any]] = []
         self.commits = 0
+        self.rollbacks = 0
 
     def stored(self) -> set[date]:
         """The dates the writes below actually cover — every base, as the real query counts."""
@@ -113,6 +117,11 @@ class FakeConn:
 
     def commit(self) -> None:
         self.commits += 1
+        self.transaction_status = TransactionStatus.IDLE
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+        self.transaction_status = TransactionStatus.IDLE
 
     @property
     def info(self) -> FakeInfo:
@@ -367,3 +376,23 @@ def test_the_backfill_route_passes_its_range_through_in_order(monkeypatch: Monke
     assert response.status_code == 200
     assert response.json() == {"written": 7}
     assert called == [(date(2026, 3, 2), date(2026, 3, 6))], "start first, end second"
+
+
+def test_the_same_connection_can_be_asked_twice() -> None:
+    """Reading opens a transaction, so a function that guards on IDLE and leaves one open
+    refuses its own next call — and refuses a pipeline that read a layout profile first."""
+    conn = FakeConn(covered={MONDAY})
+    source = FakeSource(_published([MONDAY]))
+    for _ in range(2):
+        assert ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=source) == 0
+    assert conn.transaction_status == TransactionStatus.IDLE, "it leaves the state it demanded"
+
+
+def test_a_refusal_still_closes_the_reads_it_opened() -> None:
+    """The rollback is in a finally: a caller that catches the refusal and retries — or that
+    goes on to open the staging transaction — must not inherit this function's open reads."""
+    conn = FakeConn()
+    with pytest.raises(FxCoverageError):
+        ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=FailingSource())
+    assert conn.transaction_status == TransactionStatus.IDLE
+    assert conn.rollbacks >= 1
