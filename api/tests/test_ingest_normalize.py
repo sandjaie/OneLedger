@@ -536,3 +536,93 @@ def test_a_zero_amount_takes_the_only_type_the_ledger_lets_it_commit_under() -> 
 
     assert batch.rows[0].amount == Decimal("0.0000")
     assert batch.rows[0].proposed_txn_type == "adjustment"
+
+
+@pytest.mark.parametrize("convention", ["cr_suffix", "debit_credit_columns"])
+def test_inversion_never_reverses_a_convention_that_already_states_direction(
+    convention: str,
+) -> None:
+    # A Dr/Cr suffix and a debit/credit column pair each state the direction themselves, and
+    # the generic rule already lands a card purchase on the ledger's negative side. Inverting
+    # on top of that stores every purchase as income and every payment as expense — reversing
+    # the whole card while staying internally consistent.
+    fields_purchase = {"amount": "310.00"}
+    fields_payment = {"amount": "500.00 CR"}
+    changes: dict[str, object] = {"signConvention": convention}
+    if convention == "debit_credit_columns":
+        fields_purchase = {"debit": "310.00"}
+        fields_payment = {"credit": "500.00"}
+        changes["columns"] = [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "debit", "xMin": 300.0, "xMax": 450.0},
+            {"field": "credit", "xMin": 450.0, "xMax": 600.0},
+        ]
+    rows = [
+        row(1, booked_date="15/07/2024", description="PURCHASE", **fields_purchase),
+        row(2, booked_date="16/07/2024", description="PAYMENT", **fields_payment),
+    ]
+    # model_copy bypasses validation on purpose: LayoutCreate now refuses this combination, and
+    # this proves the engine does not depend on that refusal to stay in the ledger frame.
+    layout = profile(**changes).model_copy(update={"invertsSign": True})
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+    assert [line.proposed_txn_type for line in batch.rows] == ["expense", "income"]
+
+
+def test_inversion_applies_to_a_card_running_balance() -> None:
+    # A card balance rising from 4,500 to 4,810 means 310 more is owed, so the delta is a
+    # purchase: negative in the ledger. Here the statement's frame really is the issuer's, and
+    # inversion is what carries it into the ledger's.
+    rows = [
+        row(1, booked_date="15/07/2024", description="PURCHASE", running_balance="4,810.00"),
+        row(2, booked_date="16/07/2024", description="PAYMENT", running_balance="4,310.00"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        invertsSign=True,
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout, extraction(rows, declared_opening="4,500.00"), account_currency=ACCOUNT_CURRENCY
+    )
+
+    assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+
+
+def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None:
+    # Both halves absent looks exactly like a statement that stated no foreign amount, so the
+    # bank's own conversion would be discarded without a word.
+    layout = profile(
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "amount", "xMin": 300.0, "xMax": 450.0},
+            {"field": "original_amount", "xMin": 450.0, "xMax": 520.0},
+            {"field": "original_currency", "xMin": 520.0, "xMax": 600.0},
+        ]
+    )
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            description="FOREIGN",
+            amount="-310.00",
+            original_amount="7S.OO",
+        ),
+        row(2, booked_date="16/07/2024", description="PLAIN", amount="-20.00"),
+    ]
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.description_raw for line in batch.rows] == ["PLAIN"]
+    assert batch.failures[0].reason == "original_amount '7S.OO' is not a number"
