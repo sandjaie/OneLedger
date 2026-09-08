@@ -39,7 +39,8 @@ New plans and specifications live under `docs/superpowers/`.
 
 ## Global Constraints
 
-Inherited verbatim from [implementation-plan.md](plans/implementation-plan.md#global-constraints). The
+Inherited verbatim from [implementation-plan.md](plans/implementation-plan.md#global-constraints).
+The
 ones this plan touches directly:
 
 - Money is `NUMERIC(20,4)`; FX rates are `NUMERIC(20,10)`; percentages `NUMERIC(9,4)` stored
@@ -74,14 +75,16 @@ ones this plan touches directly:
 
 **Files:**
 - Create: `.env.example`, `docker-compose.yml`
-- Create: `db/migrations/.gitkeep`, `db/seeds/.gitkeep`, `db/functions/.gitkeep`, `db/tests/.gitkeep`
+- Create: `db/migrations/.gitkeep`, `db/seeds/.gitkeep`, `db/functions/.gitkeep`,
+  `db/tests/.gitkeep`
 - Modify: `.gitignore` (already exists)
 - Test: `scripts/check-no-real-data.sh`
 
 **Interfaces:**
 - Consumes: nothing.
 - Produces: the compose stack, with Postgres at
-  `postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger`. Every later task connects to that URL.
+  `postgresql://oneledger:oneledger@127.0.0.1:5432/oneledger`. Every later task connects to that
+  URL.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -405,7 +408,8 @@ CREATE INDEX idx_institution_country ON institution (country, name);
 
 **Suggestions, not a supported list.** `institution` is a table; any institution can be added from
 the account form at any time, and nothing structural depends on these rows
-([ADR-0012](../adr/0012-statement-layouts-as-data.html)). Seed only what is actually evidenced in the
+([ADR-0012](../adr/0012-statement-layouts-as-data.html)). Seed only what is actually evidenced in
+the
 gathered statements plus the remittance providers from Q11 — speculative seeds are noise in a
 picker, and the user can delete every row here without consequence.
 
@@ -633,7 +637,6 @@ is silently discarded.
 The script reads `.env` and derives its DSN from `scripts/dsn.sh`, so the password is not
 restated. It is deliberately not idempotent — running it twice creates a second household,
 which the app has no concept of. Run it once per database.
-
 
 The seed reads `.env` rather than naming anyone. Nothing about the person who runs this is
 written into a document that gets committed.
@@ -970,7 +973,6 @@ import pytest
 
 from oneledger.auth import NotAuthorized, resolve_owner
 
-
 def test_rejects_a_token_with_no_matching_app_user() -> None:
     """Google authenticates any Google account. Authentication is not authorization."""
     with pytest.raises(NotAuthorized):
@@ -980,13 +982,11 @@ def test_rejects_a_token_with_no_matching_app_user() -> None:
             allowed_email="owner@example.com",
         )
 
-
 def test_rejects_a_missing_subject_rather_than_defaulting_open() -> None:
     with pytest.raises(NotAuthorized):
         resolve_owner(
             claims={}, lookup=lambda uid: "household-1", allowed_email="owner@example.com"
         )
-
 
 def test_accepts_a_token_that_resolves_to_an_app_user() -> None:
     household = resolve_owner(
@@ -1013,13 +1013,11 @@ from oneledger.main import app
 
 client = TestClient(app)
 
-
 def test_health_needs_no_session() -> None:
     """The one route that is deliberately open. There is no second."""
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-
 
 def test_no_session_is_401_not_403() -> None:
     """Absent credentials and rejected credentials are different answers.
@@ -1029,13 +1027,11 @@ def test_no_session_is_401_not_403() -> None:
     """
     assert client.get("/whoami").status_code == 401
 
-
 def test_a_forged_session_is_403() -> None:
     """Google authenticates any Google account. Authentication is not authorization."""
     forged = TestClient(app)
     forged.cookies.set("session", "not-a-real-token")
     assert forged.get("/whoami").status_code == 403
-
 
 @pytest.mark.parametrize("route", ["/whoami"])
 def test_every_route_but_health_requires_the_owner(route: str) -> None:
@@ -1137,10 +1133,8 @@ from fastapi import Cookie, HTTPException
 
 from .db import connect
 
-
 class NotAuthorized(Exception):
     pass
-
 
 def resolve_owner(
     claims: dict[str, Any],
@@ -1165,13 +1159,11 @@ def resolve_owner(
         raise NotAuthorized("no app_user for this subject")
     return household_id
 
-
 def _lookup(subject: str) -> str | None:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT household_id FROM app_user WHERE id = %s", (subject,))
         row = cur.fetchone()
     return str(row[0]) if row else None
-
 
 def session_secret() -> str:
     """The key that signs session cookies. Absent is a configuration failure, not a request one.
@@ -1188,7 +1180,6 @@ def session_secret() -> str:
             "Copy .env.example to .env and generate one with `openssl rand -hex 32`."
         )
     return secret
-
 
 def require_owner(session: str = Cookie(default="")) -> str:
     """FastAPI dependency. Every route depends on this — there is no unauthenticated route.
@@ -1215,17 +1206,14 @@ from urllib.parse import quote
 
 import psycopg
 
-
 def _user() -> str:
     return os.environ.get("POSTGRES_USER", "oneledger")
-
 
 def _password() -> str:
     try:
         return os.environ["POSTGRES_PASSWORD"]
     except KeyError:
         raise SystemExit("POSTGRES_PASSWORD is not set. Copy .env.example to .env.") from None
-
 
 def dsn() -> str:
     """The connection as a URI, for anything that needs a string.
@@ -1240,7 +1228,6 @@ def dsn() -> str:
         f":{os.environ.get('POSTGRES_PORT', '5432')}"
         f"/{os.environ.get('POSTGRES_DB', 'oneledger')}"
     )
-
 
 def connect() -> psycopg.Connection:
     """Connect with keyword parameters rather than a URI.
@@ -1295,15 +1282,12 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-
 app.include_router(fx.router)
-
 
 @app.get("/health")
 def health() -> dict[str, str]:
     """The only route that does not require authorization."""
     return {"status": "ok"}
-
 
 @app.get("/whoami")
 def whoami(household_id: str = Depends(require_owner)) -> dict[str, str]:
@@ -1408,13 +1392,11 @@ from oneledger.fx import Peg, carry_forward, cross_rate, terminal_anchor
 # What the `currency` table holds for the first household: one peg, held since 1997.
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 
-
 def test_cross_rate_matches_published_ecb_values() -> None:
     """ECB 2024-01-02: EUR/INR 91.285, EUR/USD 1.0956. Verified against the live API."""
     published = {"INR": Decimal("91.285"), "USD": Decimal("1.0956")}
     usd_inr = cross_rate(published, "USD", "INR", PEGS)
     assert usd_inr.quantize(Decimal("0.0001")) == Decimal("83.3196")
-
 
 def test_a_pegged_currency_needs_no_published_rate() -> None:
     """The ECB publishes no AED, which is exactly why the peg derivation exists."""
@@ -1426,11 +1408,9 @@ def test_a_pegged_currency_needs_no_published_rate() -> None:
         Decimal("0.00000001")
     ) == usd_inr.quantize(Decimal("0.00000001"))
 
-
 def test_an_unpublished_unpegged_currency_is_an_error_not_a_guess() -> None:
     with pytest.raises(ValueError, match="neither published nor pegged"):
         cross_rate({"INR": Decimal("91.285")}, "BRL", "INR", PEGS)
-
 
 def test_carry_forward_fills_gaps_and_never_interpolates() -> None:
     """A Sunday uses Friday's rate, flagged — not the average of Friday and Monday."""
@@ -1443,11 +1423,9 @@ def test_carry_forward_fills_gaps_and_never_interpolates() -> None:
         ("2024-01-08", "84.00", None),
     ]
 
-
 def test_carry_forward_refuses_to_start_on_a_gap() -> None:
     with pytest.raises(ValueError, match="no published rate at or before"):
         carry_forward({date(2024, 1, 8): Decimal("84.00")}, date(2024, 1, 5), date(2024, 1, 8))
-
 
 def test_eur_is_present_even_though_it_is_never_a_quoted_symbol() -> None:
     """Frankfurter quotes against EUR, so EUR is absent from its own rates map.
@@ -1457,7 +1435,6 @@ def test_eur_is_present_even_though_it_is_never_a_quoted_symbol() -> None:
     """
     published = {"EUR": Decimal(1), "INR": Decimal("91.285")}
     assert cross_rate(published, "EUR", "INR", {}) == Decimal("91.285")
-
 
 def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
     """Provenance follows either side of the cross, not just the base.
@@ -1472,7 +1449,6 @@ def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
     )
     assert {r["source"] for r in rows} == {"derived_peg"}
 
-
 def test_a_peg_chain_resolves_to_the_currency_the_feed_publishes() -> None:
     """A peg can point at another peg. Only the end of the chain is ever quoted."""
     chain = {
@@ -1481,7 +1457,6 @@ def test_a_peg_chain_resolves_to_the_currency_the_feed_publishes() -> None:
     }
     assert terminal_anchor("XAA", chain) == "USD"
     assert terminal_anchor("USD", chain) == "USD"
-
 
 def test_a_peg_cycle_raises_rather_than_looping() -> None:
     cycle = {
@@ -1523,14 +1498,12 @@ import httpx
 # The FX doc names api.frankfurter.app; that host now 301s to nothing. Verified live 2026-09-05.
 FRANKFURTER = "https://api.frankfurter.dev/v1"
 
-
 @dataclass(frozen=True)
 class Peg:
     """`units_per_anchor` of this currency buy 1 `anchor`. From currency.pegged_to/peg_rate."""
 
     anchor: str
     units_per_anchor: Decimal
-
 
 def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str, Peg]) -> Decimal:
     """How many units of `code` buy 1 EUR, following pegs for currencies the ECB skips."""
@@ -1546,7 +1519,6 @@ def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str
         factor *= peg.units_per_anchor
         code = peg.anchor
     return published[code] * factor
-
 
 def anchor_chain(code: str, pegs: Mapping[str, Peg]) -> list[str]:
     """`code` and every currency its peg passes through, ending at one a feed publishes.
@@ -1564,18 +1536,15 @@ def anchor_chain(code: str, pegs: Mapping[str, Peg]) -> list[str]:
         chain.append(code)
     return chain
 
-
 def terminal_anchor(code: str, pegs: Mapping[str, Peg]) -> str:
     """The currency a feed will actually quote for `code`."""
     return anchor_chain(code, pegs)[-1]
-
 
 def cross_rate(
     published: Mapping[str, Decimal], base: str, quote: str, pegs: Mapping[str, Peg]
 ) -> Decimal:
     """1 `base` = <returned> `quote`. Rates derived through a peg are stored as 'derived_peg'."""
     return units_per_eur(published, quote, pegs) / units_per_eur(published, base, pegs)
-
 
 def carry_forward[T](
     published: dict[date, T], start: date, end: date
@@ -1603,7 +1572,6 @@ def carry_forward[T](
             out.append((day, value, source_date))
         day += timedelta(days=1)
     return out
-
 
 class EcbFrankfurterSource:
     """ECB daily reference rates. No key, no account, no rate limit."""
@@ -1683,7 +1651,6 @@ from oneledger.routes.fx import reporting_config, to_rows
 
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 
-
 def test_rows_carry_provenance() -> None:
     """Every stored rate declares whether it was published or carried, and from where."""
     published = {
@@ -1702,7 +1669,6 @@ def test_rows_carry_provenance() -> None:
     assert all(not r["is_carried_forward"] or r["carried_from"] for r in rows)
     # a pegged currency is always derived, never fetched
     assert {r["source"] for r in rows if r["base_currency"] == "AED"} == {"derived_peg"}
-
 
 class _Cursor:
     """Answers `reporting_config`'s three queries in order. No database, no fixtures."""
@@ -1725,14 +1691,12 @@ class _Cursor:
 
     def __exit__(self, *_: object) -> None: ...
 
-
 def _conn(household: tuple[str, str], pegs: list[object], accounts: list[object]) -> object:
     class _Conn:
         def cursor(self) -> _Cursor:
             return _Cursor(household, pegs, accounts)
 
     return _Conn()
-
 
 def test_the_reporting_currency_is_never_its_own_base() -> None:
     """Adding peg anchors can put the quote currency back into the bases.
@@ -1745,7 +1709,6 @@ def test_the_reporting_currency_is_never_its_own_base() -> None:
     )
     assert quote == "USD"
     assert "USD" not in bases, "the reporting currency must never appear as a base"
-
 
 def test_every_currency_in_a_peg_chain_is_stored_not_only_its_ends() -> None:
     """A->B->USD must store B as well, or the B->USD peg identity has nothing to check.
@@ -1761,7 +1724,6 @@ def test_every_currency_in_a_peg_chain_is_stored_not_only_its_ends() -> None:
         )  # type: ignore[arg-type]
     )
     assert bases == ["USD", "XAA", "XBB"]
-
 
 def test_a_pegged_reporting_currency_stores_its_own_anchor() -> None:
     """Reporting in a pegged currency writes INR->AED and nothing that exposes the peg.
@@ -1810,7 +1772,6 @@ from ..fx import (
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
-
 def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str, Peg]]:
     """What this deployment needs quoted: (base currency, the others, the pegs).
 
@@ -1847,7 +1808,6 @@ def reporting_config(conn: psycopg.Connection) -> tuple[str, list[str], dict[str
     bases.discard(quote)
     return quote, sorted(bases), pegs
 
-
 def to_rows(
     published: dict[date, dict[str, Decimal]],
     start: date,
@@ -1877,7 +1837,6 @@ def to_rows(
                 }
             )
     return rows
-
 
 def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
     """Idempotent: re-running a backfill overwrites with the same values rather than failing.
@@ -1909,7 +1868,6 @@ def upsert_rates(conn: psycopg.Connection, rows: list[dict[str, Any]]) -> int:
     conn.commit()
     return written
 
-
 @router.post("/backfill")
 def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[str, int]:
     # carry_forward fills every calendar day in the range, so an end date in the future
@@ -1934,7 +1892,6 @@ def backfill(start: date, end: date, _: str = Depends(require_owner)) -> dict[st
         published = EcbFrankfurterSource().fetch_range(start - timedelta(days=10), end, fetch)
         written = upsert_rates(conn, to_rows(published, start, end, quote, bases, pegs))
     return {"written": written}
-
 
 @router.get("/{on}")
 def rate_on(on: date, _: str = Depends(require_owner)) -> list[dict[str, Any]]:
@@ -1994,7 +1951,8 @@ Once accounts exist in other currencies the count rises by one row per day per c
 compute it rather than matching a number written months earlier.
 
 A Sunday carries from the preceding Friday and says so; the anchor itself carries from
-2023-12-29, the last publication day of the previous year. `2026-09-03` shows `[ecb]`/`[derived_peg]` with no carry
+2023-12-29, the last publication day of the previous year. `2026-09-03` shows
+`[ecb]`/`[derived_peg]` with no carry
 note; `2026-09-06` names `2026-09-04` as its origin; `2024-01-01` returns a rate.
 
 - [ ] **Step 6: Verify the peg identity holds across the whole table**
@@ -2203,28 +2161,23 @@ import pytest
 from oneledger.routes.auth import claims_from_id_token
 from oneledger.auth import NotAuthorized
 
-
 def _token(email: str, verified: bool = True) -> dict[str, object]:
     return {"sub": "google-subject-1", "email": email, "email_verified": verified,
             "aud": "test-client", "iss": "https://accounts.google.com"}
 
-
 def test_accepts_the_pinned_address():
     assert claims_from_id_token(_token("owner@example.com"), allowed="owner@example.com")
-
 
 def test_rejects_any_other_google_account():
     """Google authenticating an account is necessary but not sufficient."""
     with pytest.raises(NotAuthorized):
         claims_from_id_token(_token("someone.else@example.com"), allowed="owner@example.com")
 
-
 def test_rejects_an_unverified_address():
     """email_verified false means Google has not confirmed the address belongs to the account."""
     with pytest.raises(NotAuthorized):
         claims_from_id_token(_token("owner@example.com", verified=False),
                              allowed="owner@example.com")
-
 
 def test_rejects_when_no_allowed_address_is_configured():
     with pytest.raises(NotAuthorized):
@@ -2273,13 +2226,11 @@ GOOGLE_JWKS = "https://www.googleapis.com/oauth2/v3/certs"
 def _pinned() -> str:
     return os.environ.get("ALLOWED_USER_EMAIL", "")
 
-
 # The redirect targets are web routes, and the service is not the web origin. Sending the
 # browser to a bare "/" lands it on the API's own port, which serves no such page.
 WEB_ORIGIN = os.environ.get("WEB_ORIGIN", "http://localhost:3000").rstrip("/")
 
 SESSION_TTL_SECONDS = 60 * 60 * 12
-
 
 def claims_from_id_token(claims: dict[str, Any], allowed: str | None) -> dict[str, Any]:
     """Fails closed. A verified address that is not the pinned one is still a rejection."""
@@ -2292,7 +2243,6 @@ def claims_from_id_token(claims: dict[str, Any], allowed: str | None) -> dict[st
     if not claims.get("sub"):
         raise NotAuthorized("no subject in token")
     return claims
-
 
 @router.get("/login")
 def login() -> RedirectResponse:
@@ -2309,7 +2259,6 @@ def login() -> RedirectResponse:
     # CSRF: the callback must see the same state it issued.
     response.set_cookie("oidc_state", state, httponly=True, samesite="lax", max_age=600)
     return response
-
 
 @router.get("/callback")
 def callback(
@@ -2360,7 +2309,6 @@ def callback(
     redirect.delete_cookie("oidc_state")
     return redirect
 
-
 @router.post("/logout")
 def logout() -> Response:
     response = Response(status_code=204)
@@ -2394,7 +2342,7 @@ Expected: 4 passed.
 In the Google Cloud console, create an OAuth client (Web application) and add **both** redirect
 URIs now, so deploying later needs no console visit:
 
-```
+```text
 http://localhost:8000/auth/callback
 https://<your-hostname>/auth/callback
 ```
@@ -2676,7 +2624,7 @@ git commit -m "feat(web): money formatting, currency toggle and navigation shell
 
 Every one is a command with a checkable result, so "done" is verifiable rather than felt.
 
-```
+```text
 ☐  docker compose up gives the whole stack — web, api, db — with no network dependency
 ☐  GET /health returns ok; GET /whoami returns 401 with no cookie, 403 with a bad one
 ☐  Google sign-in works locally; a non-permitted account reaches /unauthorized

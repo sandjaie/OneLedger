@@ -17,10 +17,12 @@
 | Decisions in force | `docs/adr/index.html` — 16, plus four replaced ones kept apart in `superseded.html` |
 
 **When documents disagree**, and they do: ADRs decide, `docs/design/` and `docs/operations/`
-specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of them —
+specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of
+them —
 say which, in the PR, and fix it there rather than working around it.
 
-`docs/superpowers/schema.md` is the table reference. It carries no trigger, function, view or RLS policy,
+`docs/superpowers/schema.md` is the table reference. It carries no trigger, function, view or RLS
+policy,
 so a migration having *more* than it shows is expected; a migration *disagreeing* with it is not.
 
 ## Planning location and progress ownership
@@ -44,7 +46,8 @@ commands; acceptance criteria; and `Workspace`, `Branch`, `Base and PR target`.
 **A task block runs to about 40 lines, and a plan's non-task sections to about 400.** The budget is
 per block, not per document: a milestone sliced into twenty task-sized branches needs twenty
 blocks, and capping the total would only push the slicing back the way it came. Past those limits
-the plan is carrying something that belongs elsewhere: architecture decisions and table semantics go to
+the plan is carrying something that belongs elsewhere: architecture decisions and table semantics go
+to
 `docs/superpowers/specs/`, `docs/design/` or an ADR, which are reviewed once rather than on every
 task. **Each task must also fit the diff budget** (400 production / 800 total added lines) — a
 task that cannot is split before dispatch, not discovered mid-implementation.
@@ -149,7 +152,8 @@ need a separate owner request.
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before
 dispatch. Never substitute a path from another machine. Do not create Git worktrees; this owner
-preference overrides skill defaults that request one. Do not remove existing worktrees as part of this preference change.
+preference overrides skill defaults that request one. Do not remove existing worktrees as part of
+this preference change.
 Only one implementation agent may work at a time. Wait for any reviewer using this checkout to
 finish before changing its branch or files; do not run builds and type checks concurrently against
 the same generated output.

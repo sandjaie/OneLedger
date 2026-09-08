@@ -62,7 +62,8 @@ master plan's global constraints.
   instructions. Resolve conflicting specifications explicitly before implementing.
 - At most **500 lines of implementation and test code per PR** (documentation, configuration and
   generated files excluded); split a task into sequential coherent PRs if required.
-- Every PR is created from [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md)
+- Every PR is created from
+  [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md)
   with the actual change, implementation detail and honest check results — record failures,
   skipped checks and reasons; never pre-check success. Every PR waits for Codex review on GitHub
   and merges only on approval. Findings go to the same implementer on the same branch.
@@ -134,7 +135,8 @@ work in this plan. Later tasks then fill their reserved slots without renumberin
 
 ## Pre-dispatch (before Task 1)
 
-1. Confirm the workspace root with `git rev-parse --show-toplevel` — every step below uses that root.
+1. Confirm the workspace root with `git rev-parse --show-toplevel` — every step below uses that
+   root.
 2. Update [`docs/superpowers/progress.md`](../progress.md) so **Current phase** is Phase 1 on
    `feature/phase-1-trusted-financial-position`, with this plan and its spec linked, and with an
    eleven-row task table (all pending). Record Phase 0 live Google identity gates honestly: closed
@@ -201,7 +203,9 @@ nothing else.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
+Run:
+<!-- markdownlint-disable-next-line MD013 -->
+`cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
 Expected: ruff and mypy clean; pytest collects the whole suite and reports **63 passed**
 (59 previously reported plus the 4 added here). A run collecting 0 tests is a failure.
 
@@ -621,7 +625,9 @@ correct and must not regress.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
+Run:
+<!-- markdownlint-disable-next-line MD013 -->
+`cd "$(git rev-parse --show-toplevel)/api" && uv run ruff check . && uv run mypy . && uv run pytest -q`
 Expected: ruff and mypy clean; **65 passed** (63 after Task 1, plus 2 here).
 
 - [ ] **Step 5: Commit**
@@ -769,9 +775,15 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Produces:
   - `scope_to_owner(conn: psycopg.Connection, user_id: UUID) -> None`
   - SQL `reporting_pair_is_locked() RETURNS BOOLEAN`
-  - SQL `update_household_configuration(p_name TEXT, p_display_name TEXT, p_tax_residency CHAR(2), p_base_currency CHAR(3), p_secondary_currency CHAR(3)) RETURNS VOID`
-  - `GET /household` → `HouseholdResponse { id, name, ownerDisplayName, ownerTaxResidency, baseCurrency, secondaryCurrency, reportingPairLocked, currencies: HouseholdCurrency[] }`
-  - `PATCH /household` ← `HouseholdUpdate { name, ownerDisplayName, ownerTaxResidency, baseCurrency, secondaryCurrency }` → 204
+  - SQL
+    <!-- markdownlint-disable-next-line MD013 -->
+    `update_household_configuration(p_name TEXT, p_display_name TEXT, p_tax_residency CHAR(2), p_base_currency CHAR(3), p_secondary_currency CHAR(3)) RETURNS VOID`
+  - `GET /household` →
+    <!-- markdownlint-disable-next-line MD013 -->
+    `HouseholdResponse { id, name, ownerDisplayName, ownerTaxResidency, baseCurrency, secondaryCurrency, reportingPairLocked, currencies: HouseholdCurrency[] }`
+  - `PATCH /household` ←
+    `HouseholdUpdate { name, ownerDisplayName, ownerTaxResidency, baseCurrency, secondaryCurrency }`
+    → 204
   - `GET /currencies` → `CurrencyRow[] { code, name, symbol, decimals, numberFormat }`
 
 - [ ] **Step 1: Write the failing database test**
@@ -1466,7 +1478,8 @@ it("refreshes the reporting-currency toggle after the pair changes", async () =>
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd "$(git rev-parse --show-toplevel)/web" && npx vitest run app/settings app/__tests__/workspace.test.tsx`
+Run:
+`cd "$(git rev-parse --show-toplevel)/web" && npx vitest run app/settings app/__tests__/workspace.test.tsx`
 Expected: FAIL — `Failed to resolve import "@/app/settings/household-form"`.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -1593,6 +1606,7 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
 
 In `web/app/workspace.tsx`: load `/currencies` alongside `/household` in the existing effect,
 hold it in state, render `<HouseholdForm>` above the FX inspector in the settings section, pass
+<!-- markdownlint-disable-next-line MD013 -->
 `save={(body) => request<void>("/household", { method: "PATCH", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } })`
 and `onSaved={() => setAttempt((value) => value + 1)}` so the household effect refetches and the
 toggle updates. Add the matching styles to `web/app/globals.css` in the existing visual language.
@@ -2532,7 +2546,8 @@ Expected: FAIL — `Failed to resolve import "@/app/accounts/accounts-screen"`.
 - The empty state explains what an account is here and offers the first one.
 - Skeleton rows while loading, never a spinner where a number belongs.
 
-`web/app/accounts/page.tsx` is `export default function AccountsPage() { return <Workspace section="accounts" />; }`.
+`web/app/accounts/page.tsx` is
+`export default function AccountsPage() { return <Workspace section="accounts" />; }`.
 In `web/app/workspace.tsx`, add `"accounts"` to the section union, add the `/accounts` case to
 `sectionFromPath()`, replace the disabled "Activity" nav button with a real `Accounts` link, and
 fetch `/accounts` and `/institutions` when that section is active.

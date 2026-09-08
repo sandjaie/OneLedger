@@ -16,10 +16,12 @@ history; a forecast, reservation or action never silently becomes a ledger posti
 **Tech Stack:** Existing Postgres 18, Python 3.14/FastAPI and Next.js/TypeScript stack. No new
 infrastructure or dependency is selected by this documentation update.
 
-**Spec:** [PRD](../../product/prd.html), [finance OS requirements F01–F12](../../product/finance-os.html),
+**Spec:** [PRD](../../product/prd.html),
+[finance OS requirements F01–F12](../../product/finance-os.html),
 [roadmap](../../product/roadmap.html),
 [UI requirements](../../product/ui-information-architecture.html),
-[data model](../../design/data-model.html), [FX and attribution](../../design/multi-currency-and-fx.html),
+[data model](../../design/data-model.html),
+[FX and attribution](../../design/multi-currency-and-fx.html),
 [transfers](../../design/transfers-and-reconciliation.html),
 [security](../../operations/security-and-privacy.html),
 [testing](../../operations/testing-and-data-quality.html).
@@ -45,8 +47,10 @@ infrastructure or dependency is selected by this documentation update.
 - Every household-scoped table has household identity and RLS. The API owner check remains the
   authorization boundary. No financial data, passwords or secrets enter the repository or logs.
 - Migrations are forward-only and applied by Flyway. Never rewrite applied
-  migrations. Design future schema changes with their feature and update the schema reference concurrently.
-- No institution, country or currency becomes a hardcoded domain identifier. Reuse existing patterns.
+  migrations. Design future schema changes with their feature and update the schema reference
+  concurrently.
+- No institution, country or currency becomes a hardcoded domain identifier. Reuse existing
+  patterns.
 - No LLM calls in Phase 1 or Phase 2. No automatic payments, trades or new shared access.
 - Read ADRs as decisions, design/operations as specifications and plans as execution instructions.
   Resolve conflicting specifications explicitly before implementing the affected feature.
@@ -58,9 +62,11 @@ infrastructure or dependency is selected by this documentation update.
   dispatch; split deliveries declare a branch each. Use `feature/`, `fix/`, `docs/` or `chore/`.
 - Work sequentially in the active checkout, resolving its root with `git rev-parse --show-toplevel`
   and recording that path in the task plan/spec; do not create Git worktrees or use another host's
-  path. The orchestrator preserves local changes and owns branch switches. Finish any agent/reviewer using
+  path. The orchestrator preserves local changes and owns branch switches. Finish any agent/reviewer
+  using
   the checkout before switching it to another task.
-- Create every PR from [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md),
+- Create every PR from
+  [.github/PULL_REQUEST_TEMPLATE.md](../../../.github/PULL_REQUEST_TEMPLATE.md),
   recording what changed, implementation details, actual checks/results and any remaining limits.
   Address Cloud findings through the same implementer and merge before starting the next task.
 
@@ -90,24 +96,31 @@ M8 is conditional on an actual loan; it does not block unrelated work.
 ### Task group A: Accounts, imports and classification — M1–M4
 
 **Read:** PRD §5.1–5.5, ingestion, classification, finance OS F01/F05/F06.
-**Plan outputs:** M1a is [2026-09-06-phase-1-trusted-financial-position.md](2026-09-06-phase-1-trusted-financial-position.md). M1b, M2, M3 and M4 each still get their own dated plan in this directory.
+**Plan outputs:** M1a is
+<!-- markdownlint-disable-next-line MD013 -->
+[2026-09-06-phase-1-trusted-financial-position.md](2026-09-06-phase-1-trusted-financial-position.md). M1b, M2, M3 and M4 each still get their own dated plan in this directory.
 **Files owned by those plans:** `api/oneledger/routes/`, extraction/normalization/classification
-modules when created, relevant `web/` screens, forward migrations and existing schema/test references.
+modules when created, relevant `web/` screens, forward migrations and existing schema/test
+references.
 Choose exact new filenames and API contracts from the working tree when each plan is written.
 
 - Plan and implement account inventory, opening-balance evidence and closed-account history.
 - Deliver one PDF layout end-to-end, then the remaining three, with statement reconciliation.
-- Deliver classification with the economic meaning of refunds, external support and investment funding.
+- Deliver classification with the economic meaning of refunds, external support and investment
+  funding.
 - Test one complete recent month, explicitly listing missing accounts/periods. Keep the long-history
   collection task open; do not misrepresent this usability checkpoint as Phase 1 completion.
 
 ### Task group B: Transfers and household outflows — M5
 
 **Read:** transfers specification, finance OS F01–F04 and P02/P04.
-**Plan output:** a dated M5 plan, including reporting-view definitions and pending/settled semantics.
+**Plan output:** a dated M5 plan, including reporting-view definitions and pending/settled
+semantics.
 
-- Specify the household boundary and internal/external transfer confirmation before matching implementation.
-- Implement both-leg and pending-transfer review; settlement clears in-transit presentation without income.
+- Specify the household boundary and internal/external transfer confirmation before matching
+  implementation.
+- Implement both-leg and pending-transfer review; settlement clears in-transit presentation without
+  income.
 - Add the external-outflow reporting contract while preserving I3's consumption exclusion.
 - Prove P02: income 10,000 minus consumption 3,000 minus family support 2,000 retains 5,000 (50%).
   A separate internal transfer changes neither figure. Prove P04 for different posting dates.
@@ -117,11 +130,13 @@ Choose exact new filenames and API contracts from the working tree when each pla
 **Read:** UI overview, finance OS F02/F05 and P03/P04. Depends on M5.
 **Plan output:** a dated M9a plan with dated-position and coverage contracts.
 
-- Deliver balances for included accounts, spending, external outflows, retained income and review links.
+- Deliver balances for included accounts, spending, external outflows, retained income and review
+  links.
 - Show statement, price and FX dates; label partial coverage and estimates individually.
 - Allow dated manual valuations without double counting assets when detailed holdings arrive.
 - Verify P03: refreshing September prices leaves August cash evidence visibly dated August.
-- Demonstrate a recent-month review without requiring the full investment module or document library.
+- Demonstrate a recent-month review without requiring the full investment module or document
+  library.
 
 ### Task group D: Cards, investments and owner documents — M6/M7/M10
 
@@ -130,7 +145,8 @@ Choose exact new filenames and API contracts from the working tree when each pla
 
 - M6: deliver dues and payment status with purchase spending separated from bill settlement.
 - M7: preserve investment history through dividends, reinvestment, partial sales, charges, security
-  splits and platform transfers for the holdings owned. Define unsupported-event review before showing returns.
+  splits and platform transfers for the holdings owned. Define unsupported-event review before
+  showing returns.
 - M10: deliver document retrieval and owner export with open tabular records, selected originals,
   provenance and coverage manifest. Enforce owner-only access and temporary-file cleanup.
 - Verify lifecycle continuity (P12) and independently interpretable, authorized export (P11).
@@ -139,15 +155,22 @@ Choose exact new filenames and API contracts from the working tree when each pla
 
 **Read:** FX §7, data-model §14, finance OS F03 and P01/P12. Depends on M7 and valuation inputs;
 card/debt results are included only when their evidence is available.
-**Plan output:** a dated M9b plan with the complete attribution formula and independent worked examples.
+**Plan output:** a dated M9b plan with the complete attribution formula and independent worked
+examples.
 
 - Reconcile the unapplied `0014` reference shape with the corrected consolidated attribution before
-  writing a migration; update `docs/superpowers/schema.md` and `docs/design/data-model.html` together.
-- Define cancellation of internal funding, investment-income treatment, and FX on intra-period flows.
-- Deliver consolidated history and the explanatory waterfall, with other external changes and residuals visible.
-- Prove P01: funding an investment or repaying principal from existing cash changes net worth by zero
-  before costs. Add dated FX and dividend examples that cannot pass by hiding the difference in residuals.
-- Reconcile every included native balance and surface real discrepancies separately from valuation uncertainty.
+  writing a migration; update `docs/superpowers/schema.md` and `docs/design/data-model.html`
+  together.
+- Define cancellation of internal funding, investment-income treatment, and FX on intra-period
+  flows.
+- Deliver consolidated history and the explanatory waterfall, with other external changes and
+  residuals visible.
+- Prove P01: funding an investment or repaying principal from existing cash changes net worth by
+  zero
+  before costs. Add dated FX and dividend examples that cannot pass by hiding the difference in
+  residuals.
+- Reconcile every included native balance and surface real discrepancies separately from valuation
+  uncertainty.
 - Complete the history back to 01 Jan 2024 and the remaining Phase 1 roadmap exit gates.
 
 ## 3. Phase 2 — operate and plan
@@ -168,26 +191,33 @@ planning primitives first.
   depend on recurring detection or payslip parsing.
 - Write and execute 2A.2 with visible assumptions and cancellation/matching behavior.
 - Design the shared reservation rules in 2B.1 before separate goal and emergency presentations.
-  A reservation earmarks funds; paying the associated obligation consumes/releases the reservation so
+  A reservation earmarks funds; paying the associated obligation consumes/releases the reservation
+  so
   forecast obligations and earmarking never subtract the same purpose twice.
 - Execute 2B.2 using the established actions/documents rather than separate notification systems.
-- Write 2C plans only for the next needed analysis module. Loan simulation depends on M8 if a loan exists.
+- Write 2C plans only for the next needed analysis module. Loan simulation depends on M8 if a loan
+  exists.
 
 ## 4. Deferred decisions and prerequisites
 
 - Gather missing calendar-2024 statements; request CAS history back to 01 Jan 2024.
-- Resolve the existing questions about retirement accounts, property and loans when their milestones need them.
-- Choose actual goal targets, essential-spend assumptions, emergency resources and policy records during
+- Resolve the existing questions about retirement accounts, property and loans when their milestones
+  need them.
+- Choose actual goal targets, essential-spend assumptions, emergency resources and policy records
+  during
   product use; never commit personal balances, identity numbers or passwords into a plan.
 - Retirement/inflation scenarios require explicit assumptions. Tax calculations stay in V2;
   record organisation and owner exports do not wait for AI.
-- Emergency handover is a recorded gap, not approved shared access. A separate product/privacy decision
-  is required before offering a trusted person access. Advisor sharing and collaboration stay excluded.
+- Emergency handover is a recorded gap, not approved shared access. A separate product/privacy
+  decision
+  is required before offering a trusted person access. Advisor sharing and collaboration stay
+  excluded.
 - Bank integrations, AI, trading and automated payments are not introduced by this revision.
 
 ## 5. Detailed-plan contract and verification
 
-Before implementation, each dated feature plan must identify exact files, data/API contracts, dependencies,
+Before implementation, each dated feature plan must identify exact files, data/API contracts,
+dependencies,
 code-level steps and runnable checks against the current tree. Write the smallest failing scenario,
 implement the behavior, run the check, then run the relevant existing suite and review the diff.
 Do not invent all later subsystem interfaces while Phase 0 is unfinished.
@@ -205,4 +235,5 @@ git diff --check
 
 Expected: no broken links, mismatched ADR labels, malformed HTML or tracked real statements;
 no whitespace errors. This does not prove the financial scenarios: add their runnable checks in the
-feature that implements them, and record phase/milestone state only in the progress file after verification.
+feature that implements them, and record phase/milestone state only in the progress file after
+verification.
