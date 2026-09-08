@@ -47,8 +47,9 @@ open below — synthetic checks do not substitute for them.
 | --- | --- | --- | --- |
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
-| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Review fixes implemented; re-review pending | [PR #34](https://github.com/sandjaie/OneLedger/pull/34); focused regression and gate evidence below |
-| 4 — staged rows, normalization, dedupe, reconciliation (V13) | `feature/m2-staged-rows-and-normalization` | Not started | — |
+| 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
+| 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | In review | `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
+| 4b — dedupe and reconciliation | `feature/m2-dedupe-and-reconcile` | Not started | — |
 | 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
 | 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
 | 7 — `/import` screen | `feature/m2-import-screen` | Not started | — |
@@ -62,10 +63,9 @@ rule Task 2's contract names (band ordering, sign-convention/column agreement, t
 vocabulary, regex compilation, reserved metadata capture groups, the two-digit-year period-
 capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
 
-Task 3 is on `feature/m2-extraction-engine`; its second local re-review found no remaining
-findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open. Across eight GitHub Codex
-review rounds, all 17 privacy, proposal, header, grammar and validation findings are fixed; the
-ninth review is pending, and no merge is claimed yet. The seven-round closeout gates passed on
+Task 3 is merged. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) landed on `develop` as
+`30e6783` after eight GitHub Codex review rounds fixing 17 privacy, proposal, header, grammar and
+validation findings; the branch is deleted. The seven-round closeout gates passed on
 2026-09-08: API `266 passed, 2 warnings` against the live Compose database with no skips;
 web `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types were unchanged;
 and the documentation/whitespace checks passed. The eighth round was fixed in an environment with
@@ -84,6 +84,33 @@ Automatic proposals may be incomplete unsaved drafts (including two-digit dates 
 mapping); submitted drafts and saved profiles still enforce period captures. Raw diagnostics
 retain original PDF characters, including whitespace and filtered script text. Public previews
 redact identifiers in both modes, and account validation responses omit sensitive request input.
+
+**Task 4 is split into two deliveries**, each its own branch and PR: 4a
+(`feature/m2-staged-rows-and-normalization`) carries V13, `db/tests/0011`, the schema and
+data-model corrections, `schemas/staging.py` and `ingest/normalize.py`; 4b
+(`feature/m2-dedupe-and-reconcile`) carries `ingest/dedupe.py` and `ingest/reconcile.py`. The
+plan's branch table names one branch for Task 4; the split is the recorded deviation, taken
+because reconciliation and dedupe are the subtlest logic in M2 and PR #34 showed how slowly a
+large surface converges. 4b depends on 4a's normalized row and on nothing else.
+
+Task 4a deviations, recorded rather than worked around. The plan's date test pairs `dd/MM/yyyy`
+with `MM/dd/yyyy`; Task 3's save-time validation has since restricted `dateFormat` to the
+engine's supported set, so month-first cannot be declared at all and the no-inference rule is
+proved in that stronger form. `original_amount` and `original_currency` join the mappable column
+vocabulary, without which the currency contract's foreign amount could never be captured.
+`api/tests/test_schemas_staging.py` is an added test file the plan does not list, because
+`schemas/staging.py` is a new module. A statement whose dates never parse is refused whole rather
+than row by row: without one parsed date there is no period to place the others in. And a Dr/Cr
+suffix appearing under a convention that does not read one fails its row, because dropping it
+silently is exactly the invisible sign error Invariant I2 exists to prevent.
+
+Task 4a gate evidence, 2026-09-08, in an environment with no Docker and therefore no Flyway: the
+migrations were applied from empty in version order with `psql` against a scratch PostgreSQL 16
+cluster — 13 migrations, then the seeds, then `db/tests/*.sql`, 11 passed. Flyway's own checksum
+and versioning path was not exercised and is not claimed. API `309 passed, 2 skipped` against
+that live database, the two skips being the Phase 0 live-identity gates that remain open; Ruff,
+Ruff format and strict mypy clean over 40 files; web `97 passed` across 8 Vitest files with
+typecheck clean and generated API types unchanged; documentation and whitespace checks passed.
 
 Header recognition claims each word once, across all fields at once, longest label first: a
 directional label such as `Withdrawal Amount` is one debit column, never a debit column beside an
