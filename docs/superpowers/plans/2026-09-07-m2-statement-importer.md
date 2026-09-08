@@ -777,7 +777,10 @@ inverted again, flips a sign in silence. The flag travels with the value so noth
   time; an unsuffixed one still is. Each direction fails without its half.
 - A chain mixing suffixed and bare balances frames each **before** subtracting: a difference taken
   between two frames belongs to neither.
-- `-100.00 Cr` states its direction twice and disagrees, and is refused rather than resolved.
+- `-100.00 Cr` states its direction twice and disagrees. It **stops the statement**, naming the
+  cell and pointing at the layout — not the row, because dropping a row takes with it the
+  evidence reconciliation blocks on, and a statement missing its last line reconciles `matched`
+  against the line before it.
 
 **Validation.** The API gate.
 

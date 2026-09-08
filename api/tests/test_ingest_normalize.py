@@ -718,10 +718,11 @@ def test_a_delta_between_two_suffixed_balances_is_not_inverted_again() -> None:
 
 
 def test_a_chain_mixing_suffixed_and_bare_balances_is_framed_before_it_is_subtracted() -> None:
-    # The layouts' own example anchor patterns capture the number without its suffix, so a
-    # declared opening read bare beside `Dr` column cells is the ordinary shape rather than an
-    # exotic one. Subtracting first and framing the difference takes it between two frames and
-    # leaves it in neither: the first amount comes out as -9,310 where the card was charged 310.
+    # An owner's anchor pattern capturing `([0-9,.-]+)` takes the number without its suffix
+    # while the running-balance column keeps it, and nothing prevents that — so a bare declared
+    # opening beside `Dr` column cells needs no exotic layout. Subtracting first and framing the
+    # difference takes it between two frames and leaves it in neither: the first amount comes
+    # out as -9,310 where the card was charged 310.
     rows = [
         row(1, booked_date="15/07/2024", description="PURCHASE", running_balance="4,810.00 Dr"),
         row(2, booked_date="16/07/2024", description="PAYMENT", running_balance="4,310.00 Dr"),
@@ -759,25 +760,28 @@ def test_a_balance_that_states_its_direction_twice_and_disagrees_is_refused() ->
     )
 
 
-def test_a_contradicting_running_balance_fails_its_row_by_name() -> None:
-    # Refusing the cell is right; calling it "not a number" is not. `-20.00 Cr` is plainly a
-    # number, and an owner told otherwise goes looking for the wrong thing in a cell they can
-    # read. The likeliest cause is a band wide enough to have taken the sign from its neighbour.
+@pytest.mark.parametrize("contradicting_row", [1, 2])
+def test_a_contradicting_running_balance_stops_the_statement(contradicting_row: int) -> None:
+    """Refusing the cell is right, and refusing it by dropping the row is not.
+
+    `reconcile` is handed the surviving rows and cannot tell that one was dropped, so a
+    statement whose *last* line was dropped reconciled `matched` against the line before it —
+    I8 reporting satisfaction over a truncated statement. Both positions are asserted because
+    only the last one produced that verdict, and a rule that holds for one row of two is not a
+    rule. The message names the cell and the remedy: `-20.00 Cr` is plainly a number, and an
+    owner told it is not goes looking for the wrong thing in a cell they can read.
+    """
+    balances = ["100.00 Cr", "80.00 Cr"]
+    balances[contradicting_row - 1] = "-20.00 Cr"
     rows = [
         row(
-            1,
-            booked_date="15/07/2024",
+            number,
+            booked_date=f"1{number}/07/2024",
             description="ALPHA",
             amount="-10.00",
-            running_balance="-20.00 Cr",
-        ),
-        row(
-            2,
-            booked_date="16/07/2024",
-            description="BETA",
-            amount="-20.00",
-            running_balance="100.00 Cr",
-        ),
+            running_balance=balance,
+        )
+        for number, balance in enumerate(balances, start=1)
     ]
     layout = profile(
         hasRunningBalance=True,
@@ -789,22 +793,30 @@ def test_a_contradicting_running_balance_fails_its_row_by_name() -> None:
         ],
     )
 
-    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+    with pytest.raises(normalize.NormalizationError) as refusal:
+        normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
 
-    assert [line.description_raw for line in batch.rows] == ["BETA"]
-    assert batch.failures[0].source_row_number == 1
-    assert batch.failures[0].reason == (
-        "running_balance states a sign and a Dr/Cr suffix that disagree"
-    )
-    assert "not a number" not in batch.failures[0].reason
+    assert f"row {contradicting_row}'s running_balance" in str(refusal.value)
+    assert "states a sign and a Dr/Cr suffix that disagree" in str(refusal.value)
+    assert "remap the layout" in str(refusal.value)
+    assert "not a number" not in str(refusal.value)
 
 
-def test_a_contradicting_balance_names_itself_in_the_balance_delta_chain() -> None:
-    # Same rule where the balance *is* the amount: the chain breaks, and the row that broke it
-    # says why rather than inheriting the generic "is not a number".
+@pytest.mark.parametrize(
+    ("opening", "second_balance", "named"),
+    [
+        ("100.00 Cr", "-20.00 Cr", "row 2's running_balance"),
+        ("-100.00 Cr", "20.00 Cr", "the statement's opening balance"),
+    ],
+)
+def test_a_contradicting_balance_stops_a_balance_delta_statement(
+    opening: str, second_balance: str, named: str
+) -> None:
+    # Same rule where the balance *is* the amount, and the declared opening is a balance too:
+    # deriving amounts from a chain that contradicts itself puts wrong figures in the ledger.
     rows = [
         row(1, booked_date="15/07/2024", description="ALPHA", running_balance="50.00 Cr"),
-        row(2, booked_date="16/07/2024", description="BETA", running_balance="-20.00 Cr"),
+        row(2, booked_date="16/07/2024", description="BETA", running_balance=second_balance),
     ]
     layout = profile(
         signConvention="balance_delta",
@@ -817,14 +829,13 @@ def test_a_contradicting_balance_names_itself_in_the_balance_delta_chain() -> No
         ],
     )
 
-    batch = normalize.normalize(
-        layout, extraction(rows, declared_opening="100.00 Cr"), account_currency=ACCOUNT_CURRENCY
-    )
+    with pytest.raises(normalize.NormalizationError) as refusal:
+        normalize.normalize(
+            layout, extraction(rows, declared_opening=opening), account_currency=ACCOUNT_CURRENCY
+        )
 
-    assert [line.description_raw for line in batch.rows] == ["ALPHA"]
-    assert batch.failures[0].reason == (
-        "running_balance states a sign and a Dr/Cr suffix that disagree"
-    )
+    assert named in str(refusal.value)
+    assert "states a sign and a Dr/Cr suffix that disagree" in str(refusal.value)
 
 
 @pytest.mark.parametrize("invert", [False, True])
@@ -842,6 +853,10 @@ def test_normalization_and_reconciliation_read_every_balance_in_the_same_frame(
     is the assertion that the two agree about the frame. They did not: framing the *difference*
     instead of each balance was right only while every balance in a chain agreed about stating
     its direction, and a mixed chain then belonged to neither frame.
+
+    What this cannot catch is an error both modules make identically — they read one
+    `frame_balance`, so breaking it breaks both sides and all sixteen still match. The amounts
+    themselves are pinned by the mixed-chain test above.
     """
 
     def render(value: str, is_suffixed: bool) -> str:
