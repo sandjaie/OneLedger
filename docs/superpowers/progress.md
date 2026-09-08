@@ -6,21 +6,38 @@ while building a task belongs to the milestone's spec, dated run evidence to `re
 scope and sequence to the roadmap and the plans. Keeping this file to status is what lets it be
 read at a glance and updated at a task boundary without an argument about what to write.
 
-Updated: 8 September 2026.
+Updated: 9 September 2026.
 
 ## Where the work stands
 
-| Phase / milestone | Status | Plan |
-| --- | --- | --- |
-| Phase 0 — foundations | Delivered to `main`; live identity gates open | [phase-0-completion](plans/2026-09-06-phase-0-completion.md) |
-| Phase 1 · M1a — trusted financial position | Complete, merged to `develop` | [phase-1](plans/2026-09-06-phase-1-trusted-financial-position.md) |
-| Phase 1 · M1b — manual transactions and taxonomy | Complete, [PR #31](https://github.com/sandjaie/OneLedger/pull/31) | [m1b](plans/2026-09-06-m1b-manual-transactions.md) |
-| Phase 1 · M2 — the statement importer | **Active** — the current delivery | [m2](plans/2026-09-07-m2-statement-importer.md) · [spec](specs/2026-09-07-m2-statement-importer.md) |
-| Phase 2A · 2B · 2C · V2 | Not started | [master plan](plans/implementation-plan.md) |
+Delivery follows the [phase delivery plan](plans/2026-09-09-phase-delivery-plan.md) — six
+phases, one term; the plan maps the old phase/milestone names. Sections further down record
+delivered work under its old numbering and are not renamed.
 
-Roadmap M1 is delivered as M1a and M1b together; its *Done when* list is complete only when both
-are. Every milestone from M2 on ships as task-sized branches and PRs into `develop`, one review
-cycle each ([git-workflow](../git-workflow.md)); any path to `main` needs a separate owner request.
+| Phase | Status | Plan |
+| --- | --- | --- |
+| 0 — foundations and manual ledger (old Phase 0, M1a, M1b, M2 tasks 1–5c) | Delivered; live Google identity gates still open | [phase plan](plans/2026-09-09-phase-delivery-plan.md) |
+| 1 — the complete application | **Active** — the current delivery | [phase plan](plans/2026-09-09-phase-delivery-plan.md) |
+| 2 — trust and depth | Not started | planned when it starts |
+| 3 — planning and resilience | Not started | planned when it starts |
+| 4 — analysis | Not started | planned when it starts |
+| 5 — intelligence | Not started | planned when it starts |
+
+Each phase ships as branches and PRs into `develop` under the cycle plan → implement → local
+review → merge ([git-workflow](../git-workflow.md)); any path to `main` needs a separate owner
+request.
+
+## Phase 1 — the complete application
+
+| Slice | Branches | Status | Evidence |
+| --- | --- | --- | --- |
+| 1.1 — statements land in the ledger | `feature/p1-1a-parse-pipeline` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-review-ui` | Not started | — |
+| 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
+| 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
+| 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
+| 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
+| 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
+| 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
 
 ## Where the rest is written down
 
@@ -47,23 +64,13 @@ Entry criterion satisfied: the FX backfill reaches the 01 Jan 2024 anchor (ADR-0
 | 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Complete | [PR #38](https://github.com/sandjaie/OneLedger/pull/38), merged after one Codex round; `api/tests/test_ingest_dedupe.py` (37 tests); branch deleted |
 | 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Complete | [PR #42](https://github.com/sandjaie/OneLedger/pull/42), merged after one Codex round and five local review rounds; `api/tests/test_ingest_reconcile.py` (36 tests); branch deleted |
 | 4d — a balance states its own direction | `fix/m2-balance-direction` | Complete | [PR #45](https://github.com/sandjaie/OneLedger/pull/45), merged after one Codex round and five local rounds; split out of 4c on the hard stop; branch deleted |
-| 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Not started | — |
-| 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Not started | — |
-| 5c — document storage | `feature/m2-t5c-document-storage` | Not started | — |
-| 5d — the parse pipeline | `feature/m2-t5d-parse-pipeline` | Not started | — |
-| 5e — `POST /parse` | `feature/m2-t5e-parse-route` | Not started | — |
-| 5f — layout draft preview | `feature/m2-t5f-layout-draft-preview` | Not started | — |
-| 6a — V14: commit and verification functions | `feature/m2-t6a-import-commit-migration` | Not started | — |
-| 6b — review payload | `feature/m2-t6b-review-payload` | Not started | — |
-| 6c — row decisions | `feature/m2-t6c-row-decisions` | Not started | — |
-| 6d — atomic commit | `feature/m2-t6d-atomic-commit-route` | Not started | — |
-| 7a — `/import` shell | `feature/m2-t7a-import-screen-shell` | Not started | — |
-| 7b — per-file status, Stage batch | `feature/m2-t7b-import-file-status` | Not started | — |
-| 8a — mapper: bands and live preview | `feature/m2-t8a-layout-mapper-preview` | Not started | — |
-| 8b — mapper: drag, re-post, save | `feature/m2-t8b-layout-mapper-editing` | Not started | — |
-| 9a — review screen | `feature/m2-t9a-review-screen` | Not started | — |
-| 9b — diagnostics panel | `feature/m2-t9b-diagnostics-panel` | Not started | — |
-| 9c — end-to-end gate and M2 acceptance | `feature/m2-t9c-import-acceptance` | Not started | — |
+| 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Complete | [PR #47](https://github.com/sandjaie/OneLedger/pull/47), merged as `28ff07d`; branch deleted |
+| 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Complete | [PR #48](https://github.com/sandjaie/OneLedger/pull/48), merged as `1f1aa18`; `api/tests/test_fx_range.py`; branch deleted |
+| 5c — document storage | `feature/m2-t5c-document-storage` | Complete | [PR #49](https://github.com/sandjaie/OneLedger/pull/49), merged as `953faf6`; branch deleted |
+
+Tasks 5d–9c were re-planned before dispatch into Phase 1 slices 1.1–1.7 of the
+[phase delivery plan](plans/2026-09-09-phase-delivery-plan.md) (9 September 2026); their scope
+ships there, none of it dropped.
 
 ## Phase 1 · M1b — manual transactions and taxonomy
 

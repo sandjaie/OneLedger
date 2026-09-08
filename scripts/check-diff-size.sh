@@ -8,8 +8,12 @@
 # (docs/superpowers/phase-0-pull-requests.md), so a milestone plan or a regenerated API type
 # file never pushes a branch over.
 #
-#   soft budget   400 production lines added, 800 production + test lines added
-#   hard stop     500 / 1000 — refuses the push
+#   soft budget   800 production lines added, 1600 production + test lines added
+#   hard stop     1200 / 2400 — refuses the push
+#
+# Loosened 2026-09-09 with the move to the local-review delivery cycle: without per-PR external
+# review rounds, a coherent slice beats a minimal one. The hard stop still exists because a
+# reviewer still reads the whole diff.
 #
 # Over the hard stop, an owner override takes a reason and records it:
 #
@@ -18,10 +22,10 @@
 # The reason belongs in the PR's Notes section, not only in a shell.
 set -euo pipefail
 
-SOFT_PROD=${ONELEDGER_SOFT_PROD:-400}
-SOFT_TOTAL=${ONELEDGER_SOFT_TOTAL:-800}
-HARD_PROD=${ONELEDGER_HARD_PROD:-500}
-HARD_TOTAL=${ONELEDGER_HARD_TOTAL:-1000}
+SOFT_PROD=${ONELEDGER_SOFT_PROD:-800}
+SOFT_TOTAL=${ONELEDGER_SOFT_TOTAL:-1600}
+HARD_PROD=${ONELEDGER_HARD_PROD:-1200}
+HARD_TOTAL=${ONELEDGER_HARD_TOTAL:-2400}
 
 # Git's pre-push contract puts each pushed ref on stdin; pre-commit consumes that and
 # re-exposes it. Measure what is actually being pushed, not what happens to be checked out —

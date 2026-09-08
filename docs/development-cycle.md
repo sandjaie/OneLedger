@@ -5,9 +5,10 @@ stands at each step. [docs/git-workflow.md](git-workflow.md) owns branches, inte
 releases; this file owns **when a gate runs, who runs it, and what it produces**. When the two
 disagree about a branch, git-workflow.md wins; when they disagree about a gate, this file wins.
 
-Every agent working in this repository — planning, implementing, reviewing or orchestrating —
-runs the gates below **without being asked**. A gate is not a favour to the owner; it is the step
-that stops a finding from costing a review round.
+The cycle is deliberately light — owner decision, 8 September 2026: **plan → implement → local
+review → merge.** External (Codex) review is disabled. What remains is the part that catches a
+defect while it is still cheap: the suite, one local review of the diff, and hooks that cannot
+be skipped.
 
 ## The review skills report
 
@@ -16,169 +17,90 @@ findings another agent can patch. They do not modify code** unless the owner exp
 fix mode. A reviewer that fixes what it finds hides the finding from whoever needed to learn it,
 and reports on a tree that no longer matches the one it reviewed.
 
-**The report goes back to the agent that produced the work** — the planning agent for a plan, the
-implementing agent for a diff — which applies the changes on the branch and re-runs the gate. The
-orchestrator carries the report between them and records any deviation in
-`docs/superpowers/progress.md`.
-
 | Skill | Reads | Produces | Never |
 |---|---|---|---|
-| `/oneledger-plan-review` | a plan or spec, the ADRs and design documents, the current tree | findings, a size forecast per task, a revised task and branch table | edits the plan, dispatches a task |
+| `/oneledger-plan-review` | a plan or spec, the ADRs and design documents, the current tree | findings, a size forecast per slice, a revised slice and branch table | edits the plan, dispatches a task |
 | `/oneledger-code-review` | the branch diff against `develop`, the tree around it | findings triaged blocking / non-blocking, with file and line | edits code, fixes a finding, pushes, opens a PR |
-| `/oneledger-code-hygiene` | the whole tree at a milestone boundary | findings grouped mechanical / judgement, and a proposed `chore/` branch | deletes anything, edits a migration, touches a test |
+| `/oneledger-code-hygiene` | the whole tree at a phase boundary | findings grouped mechanical / judgement, and a proposed `chore/` branch | deletes anything, edits a migration, touches a test |
 
 `/verify` is the other kind of gate: it runs the suite and reports green or red. It also changes
 nothing.
 
 ## The cycle
 
-### 1. Plan the milestone
+### 1. Plan the phase
 
-Superpowers writes the plan into `docs/superpowers/plans/`, execution-map shaped per `CLAUDE.md`.
-The Superpowers skill is not modified; the gate reads what it produces.
+The phase's dated execution-map plan goes in `docs/superpowers/plans/`, shaped per `CLAUDE.md`.
+The master sequence is the current phase delivery plan; each later phase gets its own dated plan
+written immediately before its implementation, against the tree at that time.
 
-### 2. Gate — `/oneledger-plan-review`, before any task is dispatched
+### 2. Gate — `/oneledger-plan-review`, once per new plan
 
-**Trigger, and it is an obligation, not a suggestion: a plan or spec under `docs/superpowers/` has
-just been written or changed, and a task is about to be dispatched from it.** Do not dispatch
-first and review later — after dispatch, a split costs an implementation.
+**Trigger: a phase plan or spec has just been written, or materially changed, and nothing has
+been dispatched from it yet.** One pass: apply the findings, then dispatch. It does not re-run
+per slice, and it does not run at all for work an existing reviewed plan already covers.
 
-It returns findings, a per-task forecast against the diff budget, and a revised task and branch
-table. The **planning agent or orchestrator** applies them to the plan. Re-run the gate on the
-revised plan. Dispatch begins when no blocking finding is open.
+### 3. Implement the slice
 
-### 3. Implement the task
-
-The orchestrator switches to the task's declared branch; one implementation agent works at a
-time; TDD in the plan's order. A deviation from the plan is legitimate where repository reality
-requires it, and is recorded in the PR and `progress.md` — never by editing the plan after
-dispatch.
+One implementation agent at a time, on the slice's declared branch, TDD in the plan's order. A
+deviation from the plan is legitimate where repository reality requires it, and is recorded in
+the PR and `progress.md` — never by editing the plan after dispatch.
 
 ### 4. Gate — `/verify`, on a tree the implementer believes is finished
 
 Red is not reviewed. A failing test is a finding that already found itself.
 
-### 5. Gate — `/oneledger-code-review`, before the branch is pushed at all
+### 5. Gate — `/oneledger-code-review`, one round before the first push
 
-**Trigger: implementation is finished and `/verify` is green.** Not "before some push" —
-**before the first one**. The order is fixed and it has no variants:
+**Trigger: implementation is finished and `/verify` is green.** The order is:
 
-> implement → `/verify` → **review** → fix every finding → `/verify` → re-review → **first push** →
-> PR
+> implement → `/verify` → review → fix the blocking findings → `/verify` → **first push** → PR
 
-`/verify` comes first and again after every fix, because a red tree is not worth reviewing: a
-failing test is a finding that already found itself. What this rule fixes is the *other* end — the
-review, and the fixes it produces, all happen before the branch reaches `origin`.
+The reviewer reads the diff against this repository's own rules: identifier leakage, money
+handling, the authorization boundary, reporting views, migrations, invariants, TDD evidence.
+**Blocking findings** — correctness, security, an invariant or contract breach, missing test
+evidence — are fixed on the branch before the push. **Non-blocking findings** — hardening,
+style, scope-widening suggestions — are recorded in the PR's Notes and become their own later
+task if they are worth one. One round is the default; re-review only what the fixes themselves
+changed. If the fixes keep producing new findings, stop and raise it with the owner — that is a
+design problem, not a patch problem.
 
-There is no path to `origin` that skips this gate — not a small fix, not a one-line follow-up, not
-a patch answering a Codex finding, and not a checkpoint commit "to be reviewed after".
+Nothing reaches `origin` unreviewed. A documentation-only branch carries no code for this gate
+to read: `scripts/check-docs.py` and the commit hooks are its gate, and the PR says so.
 
-**Pushing unreviewed work and reviewing it afterwards is the failure this rule exists to prevent**,
-and it is the easiest one to rationalise: the branch feels safer once it is on the remote, and the
-review then reads as a formality on work already published. It is not. A finding raised after the
-push has already cost what the gate was meant to save, and on a branch with a PR it costs a Codex
-round as well.
-
-**A PR is opened only from a head this gate has passed.** The PR's Verification table names the
-commit the review ran against; if the head moved after that review, the gate runs again before the
-PR is opened.
-
-A **documentation-only** branch carries no code for this gate to read. `scripts/check-docs.py` and
-the commit hooks are its gate, and the reviewer says so in the PR rather than leaving a skipped
-step to be inferred.
-
-It returns findings ranked CRITICAL to LOW, with file and line. The **implementing agent** fixes
-**every one of them** on the branch, re-runs `/verify`, and re-runs this gate on the new diff — a
-fix has its own surface. If a second pass finds new problems inside the first pass's fixes, stop
-and raise it with the owner: that is a design problem, not a patch problem.
-
-Everything is fixed here because here it is free. A finding left open does not stay quiet — Codex
-raises it once the PR exists, and then the same fix costs a push, a re-review and a round. The
-one exception is **scope, not severity**: a finding in code this task does not touch is recorded
-in the PR's Notes and raised as its own task, because patching it widens the branch past the task
-it carries.
-
-### 6. First push — the hooks are the enforcement
+### 6. Push — the hooks are the enforcement
 
 `pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and
-`scripts/check-diff-size.sh`. The size budget is 400 added production lines and 800 added
-production + test lines, refusing at 500 / 1000. A branch past the hard stop is **split**, not
-reviewed and not argued with; the `ONELEDGER_SIZE_OVERRIDE` reason exists for a migration that
-cannot be divided, and it goes in the PR.
+`scripts/check-diff-size.sh` (soft 800 / 1,600, hard stop 1,200 / 2,400; the
+`ONELEDGER_SIZE_OVERRIDE` reason exists for what genuinely cannot be split, and it goes in the
+PR). A skill can be skipped by an agent in a hurry; a hook cannot. `--no-verify` is not an
+option.
 
-A skill can be skipped by an agent in a hurry; a hook cannot. That is why the budget is a hook and
-why `--no-verify` is not an option.
-
-### 7. Open the PR, then triage the Codex findings
+### 7. Open the PR, then merge
 
 One PR per branch, from `.github/PULL_REQUEST_TEMPLATE.md`, carrying this cycle's evidence
-honestly — including checks that did not run, and why.
+honestly — including checks that did not run, and why. **The orchestrator merges** once the
+local gates are green and the template is honest, then deletes the branch. The tracker entry in
+`docs/superpowers/progress.md` rides on the task branch, in the head that gets merged, written
+to read correctly after the merge.
 
-Codex reviews every PR that carries code; a documentation-only one merges on owner review alone
-(step 8). **The first review is automatic — every one after it must be asked for.** That
-asymmetry is the whole reason this step is a loop:
+Two cases stay the owner's, and an agent that reaches one says so and stops:
 
-1. **Open the PR. Codex reviews it on its own**, with no request. This is the only review that
-   arrives unasked, and it is why the local gate in step 5 has to have run already: whatever it
-   missed, Codex is about to find in public.
-2. **Read the review. If it is a thumbs-up with nothing open, the loop is finished** — go to
-   step 8. Do not ask for another; a review of a head that has not moved answers a question
-   nobody asked, and leaves an approved PR waiting on it.
-3. **Otherwise verify each finding against the tree**, then triage. Here, unlike step 5, triage
-   is real, because every patch costs another round: blocking findings are patched on the branch
-   — and **step 5 runs again before that patch is pushed** — while non-blocking ones are
-   answered and recorded in the PR's Notes.
-4. **Reply on the PR** with what was fixed and what was not, and resolve the threads addressed.
-5. **Ask for the next review: a comment of `@codex review`,** naming the commit it should look
-   at. This is required whenever the head moved or a finding was answered, and nothing else
-   triggers it — not the push carrying the fix, not the reply explaining it, not resolving the
-   threads. Skip it and the PR keeps a thumbs-up earned by an older head, and the commit that
-   most needs reviewing is the one nobody reviewed: the patch answering the finding.
-6. **Back to 2.**
+- **A PR whose Verification table records a required check as `Not run`.** Merging it would
+  cover a gap nothing looked at.
+- **Anything targeting `main`.** That moves only through `release/*` on a separate owner
+  request ([docs/git-workflow.md](git-workflow.md)).
 
-**The thumbs-up must be on the head being merged.** A PR whose approval names an earlier commit
-is not approved: check the reviewed sha against the head before merging, and ask again if they
-differ.
+### 8. Sweep at the phase boundary
 
-A Codex round that finds only what `/oneledger-code-review` already raised means the gate worked;
-a Codex round finding something the gate missed is a bug in the gate — add the check to the skill
-in the same PR that fixes the code.
-
-### 8. Merge, then sweep at the milestone boundary
-
-**The orchestrator merges** once Codex has given its thumbs-up on **the head being merged** and
-no blocking finding is open, then deletes the branch. Waiting for the owner to press the button
-adds a hand-off to a decision Codex has already made, and the owner asked for it not to. The
-actor is named because the roles differ: an implementation agent hands its branch back after
-review and does not take over the PR's lifecycle (`AGENTS.md`).
-
-**The tracker entry rides on the task branch**, in the same reviewed head that gets merged — so
-the merge lands `docs/superpowers/progress.md` together with the code it describes. Write the row
-to read correctly *after* the merge, naming the PR rather than a merge commit that does not exist
-yet, and it needs no second edit. Recording it afterwards would mean either committing straight
-to `develop`, which the branch model forbids, or opening an undeclared second PR — and until one
-of those happened the tracker would be stale at exactly the boundary where the next task is
-dispatched from it.
-
-Three cases stay the owner's, and an agent that reaches one says so and stops:
-
-- **A documentation-only PR.** There is no Codex review to approve it — the docs check and the
-  hooks were its gate (step 5) — so nothing has passed judgement but a person.
-- **A PR whose Verification table records a required check as `Not run`.** A thumbs-up is a
-  reading of the diff, not a run of the suite; merging on it while the tests, the DB gate or the
-  web gate never ran would use the approval to cover a gap it never looked at.
-- **Anything targeting `main`.** That moves only through `release/*` on a separate owner request
-  (`docs/git-workflow.md`), and no thumbs-up changes it.
-
-At the end of a milestone, run `/oneledger-code-hygiene`. Its findings ship as their own `chore/`
-branch, sized to the same budget, and go through this cycle from step 5. They are never folded
-into a feature PR.
+At the end of a phase, run `/oneledger-code-hygiene`. Its findings ship as their own `chore/`
+branch, sized to the same budget, through this cycle from step 3. They are never folded into a
+feature PR.
 
 ## What a gate never does
 
 - Reports. It does not fix, commit, push or merge unless the owner commands fix mode.
-- Never approves. Approval is the owner's, and Codex's.
 - Never silences its own finding to reach a clean report. A gate exists to say the inconvenient
   thing early, while it is still cheap.
-- Never weakens a test, an assertion or an invariant to make a finding go away. If an invariant is
-  genuinely wrong, that is a superseding ADR.
+- Never weakens a test, an assertion or an invariant to make a finding go away. If an invariant
+  is genuinely wrong, that is a superseding ADR.
