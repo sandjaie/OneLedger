@@ -6,6 +6,7 @@ the plan's Task 4 states the traps, and every one of them is asserted here rathe
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal
 
@@ -98,7 +99,7 @@ def test_the_declared_date_format_is_used_and_never_inferred() -> None:
     )
     assert windowed.rows == []
     assert [failure.reason for failure in windowed.failures] == [
-        "booked_date '03/09/2026' is not a dd-MM-yyyy date"
+        "booked_date is not a dd-MM-yyyy date"
     ]
 
 
@@ -382,7 +383,7 @@ def test_an_unparseable_amount_fails_its_row_rather_than_staging_a_zero() -> Non
     batch = normalize.normalize(profile(), extraction(rows), account_currency=ACCOUNT_CURRENCY)
 
     assert [line.description_raw for line in batch.rows] == ["BETA"]
-    assert batch.failures[0].reason == "amount '1O.OO' is not a number"
+    assert batch.failures[0].reason == "amount is not a number"
 
 
 @pytest.mark.parametrize(
@@ -489,7 +490,7 @@ def test_a_populated_value_date_that_does_not_parse_fails_its_row() -> None:
     batch = normalize.normalize(profile(), extraction(rows), account_currency=ACCOUNT_CURRENCY)
 
     assert [line.description_raw for line in batch.rows] == ["B"]
-    assert batch.failures[0].reason == "value_date 'not-a-date' is not a dd/MM/yyyy date"
+    assert batch.failures[0].reason == "value_date is not a dd/MM/yyyy date"
 
 
 def test_a_value_date_after_the_period_is_normal_and_stages() -> None:
@@ -625,7 +626,7 @@ def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None
     batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
 
     assert [line.description_raw for line in batch.rows] == ["PLAIN"]
-    assert batch.failures[0].reason == "original_amount '7S.OO' is not a number"
+    assert batch.failures[0].reason == "original_amount is not a number"
 
 
 def test_an_amount_that_only_crosses_the_ledger_limit_when_rounded_fails_its_row() -> None:
@@ -791,3 +792,45 @@ def test_a_broken_running_balance_chain_derives_nothing_after_the_break() -> Non
     assert [failure.source_row_number for failure in batch.failures] == [2, 3]
     assert "is not a number" in batch.failures[0].reason
     assert "chain" in batch.failures[1].reason
+
+
+def test_no_failure_reason_carries_a_digit_sequence_from_the_statement() -> None:
+    # Plan section 5.6: no error message may contain a digit sequence of seven or more digits
+    # from the document, contiguous or separator-formatted. These reasons are parse diagnostics
+    # and reach an HTTP response, and a date alone trips the rule before any card number does.
+    layout = profile(
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 300.0},
+            {"field": "amount", "xMin": 300.0, "xMax": 450.0},
+            {"field": "original_amount", "xMin": 450.0, "xMax": 520.0},
+            {"field": "original_currency", "xMin": 520.0, "xMax": 600.0},
+        ]
+    )
+    rows = [
+        row(1, booked_date="4111-1111-1111-1111", description="A", amount="-1.00"),
+        row(2, booked_date="15/07/2024", description="B", amount="4111111111111111X"),
+        row(
+            3,
+            booked_date="16/07/2024",
+            value_date="4111 1111 1111 1111",
+            description="C",
+            amount="-1.00",
+        ),
+        row(
+            4,
+            booked_date="17/07/2024",
+            description="D",
+            amount="-1.00",
+            original_amount="4111.1111.1111.1111",
+        ),
+    ]
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert len(batch.failures) == 4
+    for failure in batch.failures:
+        normalized = re.sub(r"(?<=\d)[\W_]+(?=\d)", "", failure.reason)
+        assert re.search(r"\d{7,}", normalized) is None, failure.reason
+        assert "4111" not in failure.reason
