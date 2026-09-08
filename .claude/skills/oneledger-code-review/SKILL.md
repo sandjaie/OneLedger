@@ -1,6 +1,6 @@
 ---
 name: oneledger-code-review
-description: Read-only review of implemented OneLedger work against this repository's own rules — money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, TDD evidence and diff size. It reports and never edits; the implementing agent applies the findings. Run it unprompted once implementation is finished and before every push or pull request, including a patch answering a review finding, and whenever asked to review a branch, a task, or work about to ship.
+description: Review of implemented OneLedger work against this repository's own rules — money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, TDD evidence and diff size. It produces findings for the implementing agent to patch and does not modify code. Run it unprompted once implementation is finished and before every push or pull request, including a patch answering a review finding, and whenever asked to review a branch, a task, or work about to ship.
 ---
 
 # oneledger-code-review
@@ -10,22 +10,13 @@ here. M2 task 3 took eight Codex rounds and fifteen fix commits, and every one o
 findable locally: identifier leakage into responses, logs and error text, and extraction
 ambiguity. This skill is where those get found.
 
-**Nothing is pushed until this reports no blocking findings.** This is gate 5 of
+**Produce findings another agent can patch. Do not modify code** unless the user explicitly
+commands fix mode.
+
+**Nothing is pushed until this reports no blocking findings.** It is gate 5 of
 [docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is implementation
 being finished, a push about to happen, or a PR about to be opened — including a patch answering
 a Codex finding.
-
-## This skill reports. It does not edit.
-
-Read the tree, the diff and the documents; run read-only commands; produce a report. **Do not
-edit a file, fix a finding, stage, commit, push, open a PR, resolve a comment or update
-`progress.md`** — not even an obvious one-line fix, and not even when fixing looks faster than
-describing.
-
-The report goes back to the **implementing agent**, which applies it on the branch and re-runs
-this gate. A reviewer that fixes what it finds hides the finding from whoever needed to learn it,
-destroys the evidence that the fix was needed, and ends up reporting on a tree it never
-reviewed.
 
 ## 1. Establish the ground
 

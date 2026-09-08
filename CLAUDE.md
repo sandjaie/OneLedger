@@ -10,7 +10,7 @@
 | How Phase 0 was decomposed | `docs/superpowers/phase-0-pull-requests.md` — its PR breakdown, kept as the record |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
-| **When to run which gate, and what it may do** | `docs/development-cycle.md` — the ordered cycle; the review skills report and never edit |
+| **When to run which gate, and what it may do** | `docs/development-cycle.md` — the ordered cycle; the gates report and do not modify code |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
@@ -191,10 +191,10 @@ trigger, and the trigger is an obligation:
 - `/oneledger-code-hygiene` — **a milestone has just closed.** Its findings ship as their own
   `chore/` branch, never folded into a feature PR.
 
-**The gates are read-only. They report; they never edit.** No skill fixes what it finds, commits,
-pushes, opens a PR or edits a plan — the report goes back to the agent that produced the work,
-which applies it and re-runs the gate. A reviewer that fixes its own findings hides them from
-whoever needed to learn them and reports on a tree it no longer reviewed.
+**The gates produce findings another agent can patch. They do not modify code** unless you
+explicitly command fix mode — the report goes back to the agent that produced the work, which
+applies it and re-runs the gate. A reviewer that fixes its own findings hides them from whoever
+needed to learn them and reports on a tree it no longer reviewed.
 
 **The diff budget**: **400 added production lines, 800 added production + test lines**, hard stop
 500 / 1000, measured against `develop` by `scripts/check-diff-size.sh` on push. Documentation,

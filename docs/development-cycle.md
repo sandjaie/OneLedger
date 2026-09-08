@@ -9,19 +9,12 @@ Every agent working in this repository — planning, implementing, reviewing or 
 runs the gates below **without being asked**. A gate is not a favour to the owner; it is the step
 that stops a finding from costing a review round.
 
-## The review skills are read-only
+## The review skills report
 
-`/oneledger-plan-review`, `/oneledger-code-review` and `/oneledger-code-hygiene` **read, and
-report. They never edit.**
-
-They do not edit a file, write a plan, fix a finding, stage, commit, push, open a PR, resolve a
-comment or update `progress.md`. They read the tree, the diff or the plan, run read-only
-commands, and produce a report. That is the whole output.
-
-This is deliberate. A reviewer that fixes what it finds hides the finding from whoever needed to
-learn it, destroys the evidence that the fix was needed, and reports on a tree that no longer
-matches the one it reviewed. Separating the two also keeps the reviewer honest: it has nothing to
-protect.
+`/oneledger-plan-review`, `/oneledger-code-review` and `/oneledger-code-hygiene` **produce
+findings another agent can patch. They do not modify code** unless the owner explicitly commands
+fix mode. A reviewer that fixes what it finds hides the finding from whoever needed to learn it,
+and reports on a tree that no longer matches the one it reviewed.
 
 **The report goes back to the agent that produced the work** — the planning agent for a plan, the
 implementing agent for a diff — which applies the changes on the branch and re-runs the gate. The
@@ -112,7 +105,7 @@ into a feature PR.
 
 ## What a gate never does
 
-- Never edits, fixes, commits, pushes or merges. It reports.
+- Reports. It does not fix, commit, push or merge unless the owner commands fix mode.
 - Never approves. Approval is the owner's, and Codex's.
 - Never silences its own finding to reach a clean report. A gate exists to say the inconvenient
   thing early, while it is still cheap.

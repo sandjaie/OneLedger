@@ -14,9 +14,9 @@ without being asked:** `/oneledger-plan-review` before a task is dispatched from
 review finding — and `/oneledger-code-hygiene` at a milestone boundary. Then Codex reviews on
 GitHub, blocking findings are patched on the branch, and the PR merges on the thumbs-up.
 
-**Those three skills are read-only.** They read and report; they never edit a file, fix a finding,
-commit, push, open a PR or update the tracker. The report goes back to the agent that produced the
-work, which applies it and re-runs the gate. A branch also has a size budget — 400 added
+**Those three skills produce findings another agent can patch; they do not modify code** unless
+the owner explicitly commands fix mode. The report goes back to the agent that produced the work,
+which applies it and re-runs the gate. A branch also has a size budget — 400 added
 production lines, 800 with tests, refused at 500 / 1000 by a push hook — so a task too large is
 split before it is built, not after.
 
