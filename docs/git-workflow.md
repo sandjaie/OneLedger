@@ -74,7 +74,7 @@ file says only where the branches go:
 A milestone runs to twenty PRs, so the title carries the phase, the milestone and the task, in a
 bracketed prefix that scans down a list without opening anything:
 
-```
+```text
 [P1/M2/T4c] feat(api): a statement's rows and balances produce one reconciliation verdict
 ```
 

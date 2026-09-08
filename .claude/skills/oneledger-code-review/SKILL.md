@@ -1,6 +1,12 @@
 ---
 name: oneledger-code-review
-description: Senior-level review of OneLedger work before it is pushed or merged into develop — correctness, edge cases, money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, test sufficiency and diff size. It produces findings for the implementing agent to patch and does not modify code. Run it unprompted the moment implementation is finished — before the branch is pushed at all, not after — and again before any later push, including a patch answering a review finding; also whenever asked to review a branch, a task, or work about to ship.
+description: Senior-level review of OneLedger work before it is pushed or merged into develop —
+correctness, edge cases, money handling, the never-store list and identifier leakage, the
+authorization boundary, reporting views, migrations, invariants, test sufficiency and diff size. It
+produces findings for the implementing agent to patch and does not modify code. Run it unprompted
+the moment implementation is finished — before the branch is pushed at all, not after — and again
+before any later push, including a patch answering a review finding; also whenever asked to review a
+branch, a task, or work about to ship.
 ---
 
 # OneLedger Code Review
@@ -100,7 +106,7 @@ being written inherits the reasoning that produced the bug.
 
 ---
 
-# Review passes
+## Review passes
 
 ## 1. Money and the eight invariants
 
@@ -225,7 +231,7 @@ Do not raise style a linter or formatter already owns.
 
 ---
 
-# Validation
+## Validation
 
 Run the repository's own checks — `/verify`, or the individual commands it lists. Do not introduce
 a new dependency to review.
@@ -236,7 +242,7 @@ the reason. A gate that reports checks it did not run is worse than no gate.
 
 ---
 
-# Finding quality
+## Finding quality
 
 Every finding must be specific, actionable, demonstrable, related to this change, and backed by
 code evidence you can point at.
@@ -249,7 +255,7 @@ code evidence you can point at.
 
 ---
 
-# Severity
+## Severity
 
 **CRITICAL** — a security or never-store violation, identifier leakage, a broken authorization
 boundary, destructive or data-losing behaviour, corrupted money.
@@ -277,11 +283,11 @@ and past its diff budget. Say that explicitly in the report; do not leave it imp
 
 ---
 
-# Output format
+## Output format
 
 Produce exactly this structure.
 
-```
+```markdown
 # OneLedger Code Review
 
 ## Review scope
@@ -337,7 +343,7 @@ A review that finds nothing on a 700-line diff is a review that did not happen.
 
 ---
 
-# Constraints
+## Constraints
 
 Do not:
 
@@ -348,5 +354,6 @@ Do not:
 - report a hypothetical finding with no evidence
 
 The implementing agent fixes every in-scope finding, re-runs `/verify`, and re-runs this gate on
-the new diff — a fix has its own surface. If that second pass finds new blocking problems inside the first
+the new diff — a fix has its own surface. If that second pass finds new blocking problems inside the
+first
 pass's fixes, it stops and raises it with the owner: that is a design problem, not a patch problem.

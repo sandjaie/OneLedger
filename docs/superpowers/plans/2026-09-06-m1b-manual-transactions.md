@@ -108,8 +108,8 @@ stamps, plus `v_transaction_reportable` — the only surface reports may read.
 **Files:** create `db/migrations/V10__transaction_ledger.sql` (implements `schema.md` `0007`
 including the posting layer and `v_transaction_reportable`); create
 `db/tests/0009_transactions.sql`; update `schema.md`/`data-model.html` same commit.
-**Contracts:** `0007` DDL is the shape: frozen `amount_base`/`amount_secondary`, `classified_by`
-+ `classification_rule_id`, `source` with provenance (`source = 'statement_import'` requires
+**Contracts:** `0007` DDL is the shape: frozen `amount_base`/`amount_secondary`, `classified_by` +
+`classification_rule_id`, `source` with provenance (`source = 'statement_import'` requires
 `source_document_id`, I6), `dedupe_hash` unique on `(household_id, account_id, dedupe_hash)`,
 `fx_rate_is_carried`/`fx_rate_date` labels (I7). The split-safe posting layer ships with the
 view: split children are one level deep, inheriting account, date, provenance and frozen FX

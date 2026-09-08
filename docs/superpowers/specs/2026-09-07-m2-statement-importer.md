@@ -19,7 +19,7 @@ Grounded in the current tree, which the implementer should read before starting 
 
 ### 4.1 New module layout
 
-```
+```text
 api/oneledger/
   money.py                    # Task 5: freeze helpers extracted from routes/transactions.py
   ingest/
@@ -46,7 +46,7 @@ are pure functions over values, unit-testable with no database (`testing-and-dat
 
 Web:
 
-```
+```text
 web/app/import/
   page.tsx                    # Task 7
   import-screen.tsx           # Task 7
@@ -187,7 +187,7 @@ row, and applying it in display order on a descending statement flags every vali
 break. Reported row numbers always reference document row numbers regardless of the
 evaluation order:
 
-```
+```text
 opening_ledger + Σ(amount_ledger) == closing_ledger
 ```
 
@@ -230,7 +230,8 @@ Verdicts:
 **Reconciliation runs immediately after normalization, before FX enrichment.** Running the cheap,
 purely local, blocking check first means a doomed batch costs no network round trip and no rate
 rows, and the verdict recorded on `import_batch` is identical either way — the identity is
-evaluated on native signed ledger amounts, which enrichment does not touch. `statement-ingestion.html`
+evaluated on native signed ledger amounts, which enrichment does not touch.
+`statement-ingestion.html`
 §1 and `architecture.html` §5 now both document this order, so it is no longer a deviation and
 needs no note in a PR.
 
@@ -242,6 +243,7 @@ Three layers, per `statement-ingestion.html` §6.
   `(household_id, sha256)`. Checked before parsing; an identical file is rejected with the date
   of the earlier import and its batch id named. Free, and catches the common case.
 - **Layer 2 — transaction fingerprint.**
+<!-- markdownlint-disable-next-line MD013 -->
   `sha256("|".join([account_id, booked_date.isoformat(), f"{amount:.4f}", normalise_for_hash(description_raw), disambiguator]))`
   where `normalise_for_hash` uppercases, collapses whitespace and strips punctuation, and
   `disambiguator` is `reference_raw` when the profile maps a reference column and the value is
@@ -458,7 +460,8 @@ worked around.
    `pdfplumber>=0.11.10` and `api/uv.lock` pins `0.11.10`; nothing imports it yet. M2 adds no
    dependency at all. Any planning note describing pdfplumber as a new addition is out of date.
 3. **`reconciled` versus `matched`.** `statement-ingestion.html` §8's TypeScript sketch returns
-   `reconciled`; `schema.md` `0008` documents the column's values as `matched|mismatched|unavailable`.
+   `reconciled`; `schema.md` `0008` documents the column's values as
+   `matched|mismatched|unavailable`.
    Resolved in §5.1: the column value set wins, extended with `running_balance_break`, which §8
    describes but the column comment omits.
 4. **A blocked import's durability.** `api-contracts.html` §4 says the database is unchanged;
@@ -523,3 +526,141 @@ worked around.
     in this form**, advancing the `occ:` index to the next free one among committed collisions.
 
 ---
+
+---
+
+## 8. Decisions and deviations recorded during delivery
+
+Each of these was taken while building a task and would otherwise be invisible: a refinement §4.6
+does not cover, a deviation from the plan, or a document this work found to be wrong. They live
+here rather than in the tracker because they are contract, not status — the tracker says what is
+done, this says what was decided. Ordered by the task that raised them.
+
+Task 4b records three deviations. **A repeated reference no longer collapses distinct rows**: §4.7
+makes `reference_raw` the disambiguator, which separates identical-looking transactions only while
+it is unique, and a bank that fills the column with a constant would have staged three distinct
+rows under one fingerprint for V10's unique index to reject wholesale at commit — the occurrence
+index is appended when a reference repeats. **The occurrence counter advances for every row**,
+including one a reference disambiguated, so a reference present in one statement and blank in the
+next no longer shifts every later index and marks each row a duplicate of the wrong transaction.
+**`normalise_for_hash` normalises, uppercases and normalises again**, because extraction yields
+precomposed or decomposed text depending on the font, and uppercasing expands some letters into a
+base plus a combining mark — either way the two forms otherwise hash differently and score 0.0
+against each other. **The disambiguator is namespaced** `occ:<n>` or `ref:<reference>#<seen>`
+(spec §7 item 12), because a bank reference of `1` and an occurrence index of `1` otherwise share
+a fingerprint; Task 6c's override recomputes in that form. Spec §7 gains item 11: the pipeline's
+"staged and committed rows" against
+V13's foreign keys, which reference `transaction(id)` alone — the verdict columns win, and the
+cross-batch gap is Task 5d's to close in the pipeline.
+
+Task 2 delivers V12 (`document`, `import_batch`, `statement_layout`, RLS on all three, and the
+four foreign keys V12 completes on `transaction` per schema.md's per-target `0018` rule) and the
+layouts API (`GET /layouts`, `POST /layouts`) behind `require_owner`, with every 422 validation
+rule Task 2's contract names (band ordering, sign-convention/column agreement, the quirks
+vocabulary, regex compilation, reserved metadata capture groups, the two-digit-year period-
+capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
+
+Task 3 review clarifications: ambiguous numeric day/month dates are refused for both slash and
+dash separators. Since the profile contract has no line-tolerance field, the PDF boundary infers
+tolerance from modal character height for both automatic proposal and saved-profile extraction;
+the fixed default is only a fallback when no reliable mode exists. Turning continuation off with
+`has_date` leaves the transaction count unchanged and instead drops description fragments while
+increasing `lines_unparsed`; this corrects the plan test's wording, not the binding row predicate.
+Automatic proposals may be incomplete unsaved drafts (including two-digit dates before period
+mapping); submitted drafts and saved profiles still enforce period captures. Raw diagnostics
+retain original PDF characters, including whitespace and filtered script text. Public previews
+redact identifiers in both modes, and account validation responses omit sensitive request input.
+
+**Task 4 is split into two deliveries**, each its own branch and PR: 4a
+(`feature/m2-staged-rows-and-normalization`) carries V13, `db/tests/0011`, the schema and
+data-model corrections, `schemas/staging.py` and `ingest/normalize.py`. Dedupe and reconciliation
+are now **4b (`feature/m2-t4b-dedupe`) and 4c (`feature/m2-t4c-reconcile`)**, separated by the
+plan re-split because they are the subtlest logic in M2 and PR #34 showed how slowly a large
+surface converges. Both depend on 4a's normalized row and on nothing else, and are independent of
+each other. The combined `feature/m2-dedupe-and-reconcile` branch is superseded and must not be
+used.
+
+Task 4c records two decisions beyond §4.6 and one budget exception. **A running-balance divergence
+blocks even where the totals agree**, because two amounts misread in opposite directions sum to
+the right closing balance while putting both wrong figures in the ledger, and the walk departing
+is the only evidence of it; §4.6 does not cover the case. **A configured running-balance column
+with a gap in it is `unavailable`**, not a column to walk past: §4.6 asks every row-to-row step to
+hold, `engine.extract_pages` merges a physical continuation line into the row above rather than
+emitting one of its own, and a walk that checks only where a balance was stated reports `matched`
+for a pair of amounts misread in opposite directions that cancel before the next anchor. The
+branch is **982 counted lines against the 800 budget**, under the 1000 hard stop: the production
+code is 363 of 400, the excess is test lines five review rounds added, and a reconciliation
+returning three of four verdicts is a wrong slice rather than a smaller one. On a
+`running_balance_break` the verdict's three closing fields carry row-level figures, per §4.6's own
+wording — Task 9b's panel must read the status before the fields.
+
+Two corrections ride with the task. **`statement-ingestion.html` §8 said `unavailable` warns and
+proceeds**, and its switch still named the verdict `reconciled`; §4.6 says `unavailable` blocks in
+M2 and V12 already recorded that `matched` won the name. The design document is the one that was
+wrong, so it was corrected there rather than worked around, and its illustrative field names now
+match the `Verdict` this task delivers. **The verdict carries the divergent row's `amount`**,
+which §4.6 names among the five figures a break carries and which no consumer can derive:
+TypeScript formats money and does no arithmetic on it.
+
+Task 4a deviations, recorded rather than worked around. The plan's date test pairs `dd/MM/yyyy`
+with `MM/dd/yyyy`; Task 3's save-time validation has since restricted `dateFormat` to the
+engine's supported set, so month-first cannot be declared at all and the no-inference rule is
+proved in that stronger form. `original_amount` and `original_currency` join the mappable column
+vocabulary, without which the currency contract's foreign amount could never be captured.
+`api/tests/test_schemas_staging.py` is an added test file the plan does not list, because
+`schemas/staging.py` is a new module. A statement whose dates never parse is refused whole rather
+than row by row: without one parsed date there is no period to place the others in. And a Dr/Cr
+suffix appearing under a convention that does not read one fails its row, because dropping it
+silently is exactly the invisible sign error Invariant I2 exists to prevent.
+
+Two review findings about the statement period were answered differently from the way they were
+raised. A `dateFormat` carrying a two-digit year with no period capture now refuses the whole
+statement: `LayoutCreate` already refuses to save that shape, but normalization is a pure
+function over a profile-shaped value and does not lean on a route-layer validator, and a derived
+period is made of the very dates it would have to correct — Python reads `99` as 1999 and the
+derived period then agrees, so a century-early preview looks internally consistent. The second
+finding asked that a captured period be read only in the profile's declared `dateFormat`; that
+is **partially declined**, because a statement's header commonly writes its period differently
+from its transaction lines and the rule would reject those layouts outright. Both bounds must
+instead parse under one shared four-digit-year format, which blocks the mis-captured fragment
+pairing with a genuine date — the risk the finding names — without the product cost.
+
+**Owner decision, 2026-09-08 — statement text is stored as the statement wrote it.** Codex's
+fifth review round found that a full account or card number appearing inside a transaction
+description is kept verbatim in `description_raw` and `raw_row`, which Task 5 will insert into
+`staged_transaction`. The owner ruled that this is correct for this product: the number is the
+owner's own data, in a single-user system, and the ledger is where they read it, so it is stored
+and shown rather than masked. Normalization therefore applies no identifier mask, and Task 5's
+insert does not need one for these two fields.
+
+This decision **contradicts `security-and-privacy.html` §1**, which introduces the never-store
+list with "Absolute. No feature justifies an exception, and no future integration changes it"
+and lists full card and bank account numbers. Nothing in the tree or the documents reconciles
+that yet, and the repository's own rule is that an invariant which is genuinely wrong changes by
+a superseding ADR rather than by an edit or by code quietly diverging. **An ADR is owed before
+the documents and the code agree**, and until it exists this paragraph is the only record.
+
+The ruling is read narrowly, pending that ADR. It covers identifiers the *statement itself*
+prints in a transaction line. It does not touch: the account number the owner enters for an
+account, which Task 3 stores as a mask plus a salted hash and never whole; the §5.6 rule keeping
+document-derived digit sequences out of log lines, error messages and responses, which Task 4a
+implements; the layout preview's redaction, delivered and reviewed in Task 3; or credentials —
+CVV, PIN, OTP and passwords — which no part of this decision admits into storage.
+
+Header recognition claims each word once, across all fields at once, longest label first: a
+directional label such as `Withdrawal Amount` is one debit column, never a debit column beside an
+amount column. The plan's synonym table is extended with those directional compounds (`withdrawal
+amount`, `debit amount`, `deposit amount`, `credit amount`, their `amt` spellings, and
+`transaction amount`) so the compound outranks the generic word it contains; the plan is not
+edited after dispatch. An automatic proposal that would still hold an amount column beside debit
+and credit is refused, because no saved layout may hold all three. Identifier screening treats any
+non-alphanumeric run as a grouping separator in previews, captures and fingerprints, so a
+non-breaking hyphen or an Arabic thousands separator groups an identifier exactly as a plain
+hyphen does.
+
+The preview privacy boundary preserves a validated date or monetary value only in its known
+typed field. Raw diagnostics and description/reference text redact every identifier-length digit
+run, including separator variants, even when it resembles a date or amount. A deliberately
+captured account identifier overrides all field protections. This reduces detail in raw previews
+and incorrectly mapped fields; header/band semantics are the accepted boundary for auto-proposed
+financial cells. Internal extraction still retains the verbatim source text for transient parsing.

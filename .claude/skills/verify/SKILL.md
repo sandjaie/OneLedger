@@ -1,6 +1,8 @@
 ---
 name: verify
-description: Run the OneLedger gate — docs and real-data checks, secrets, api lint/types/tests, migrations from empty plus the SQL invariant tests, web types/tests/bundle scan. Use before opening a PR, as the stop condition for /goal and /loop, and whenever asked whether the tree is green.
+description: Run the OneLedger gate — docs and real-data checks, secrets, api lint/types/tests,
+migrations from empty plus the SQL invariant tests, web types/tests/bundle scan. Use before opening
+a PR, as the stop condition for /goal and /loop, and whenever asked whether the tree is green.
 ---
 
 # verify
@@ -43,9 +45,14 @@ with **the number of checks that actually ran**, then one verdict line.
 
    (`flyway clean` is not the reset to reach for either: it has been disabled by default since
    Flyway 10, and a dropped scratch volume is a truer "from empty" anyway.)
-5. `cd web && npm run api:types:check && npm run typecheck && npm run typecheck:compat && npx vitest run && npm run build`,
-   then grep `.next/static/` for
-   `SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://`
+5. The web gate, then a scan of the bundle it produced:
+
+   ```bash
+   cd web
+   npm run api:types:check && npm run typecheck && npm run typecheck:compat
+   npx vitest run && npm run build
+   grep -rE 'SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://' .next/static/
+   ```
 
 ## What green means
 

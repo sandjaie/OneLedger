@@ -8,12 +8,14 @@ same implementer and sequential merges. Product-expansion features remain outsid
 
 This specification covers original Task 9 web scaffold/client, Task 10 Google OIDC, Task 11 exact
 money display and configured currency navigation, plus full-stack and scratch-database exit
-verification. Consult [implementation progress](../progress.md) for execution state before starting work.
+verification. Consult [implementation progress](../progress.md) for execution state before starting
+work.
 
 The previous executable snippets are historical guidance. This spec resolves identified gaps:
 the environment-only client test does not exercise a client; `Number()` loses money precision;
 login/callback cannot require a session that they exist to create; and a cookie-only logout does
-not implement the documented server-side revocation. Do not copy those defects into application code.
+not implement the documented server-side revocation. Do not copy those defects into application
+code.
 
 ## Delivery 1 — web foundation
 
@@ -25,7 +27,8 @@ status and links to sign-in only once sign-in exists. No unimplemented feature c
 `apiFetch<T>(path, init?)`. Read the public API base from `NEXT_PUBLIC_API_URL`, defaulting to
 `http://localhost:8000`. Send `credentials: "include"`, preserve caller method/body/headers,
 parse successful JSON, return undefined for a 204 response, and throw ApiError for non-2xx.
-This is the browser client; server-side requests must not silently assume localhost or a browser cookie.
+This is the browser client; server-side requests must not silently assume localhost or a browser
+cookie.
 
 Include meaningful client tests (credentials, header preservation, JSON, 204, error), npm lint,
 typecheck, test and build scripts, lockfile, Dockerfile and Docker context exclusions. The web
@@ -35,7 +38,8 @@ Do not add business pages or a second auth library in this delivery.
 The 6 September 2026 dependency audit verifies every direct package against the current stable npm
 release and its peer ranges. Pin the Node 24 LTS development and container runtime and use matching
 Node 24 declarations. Do not retain broad scaffold ranges without verifying them. When a current
-tool cannot yet consume a newer compiler API, keep the smallest compatible package beside the current
+tool cannot yet consume a newer compiler API, keep the smallest compatible package beside the
+current
 compiler, document why it remains, and continue to run both checks without suppressing failures.
 
 ## Delivery 2 — Google authentication and revocable owner sessions
@@ -63,7 +67,8 @@ Store a server-side session record, with expiry and owner reference, in a forwar
 require the active record on every authenticated request. Logout removes/revokes it so replay of
 the old cookie is rejected. No silent refresh mechanism: after expiry the user signs in again.
 This resolves the mismatch between the existing 12-hour plan and security prose promising rotating
-refresh; update the current specification explicitly. Validate origin on mutating cookie-authenticated
+refresh; update the current specification explicitly. Validate origin on mutating
+cookie-authenticated
 requests using WEB_ORIGIN; do not treat CORS alone as CSRF enforcement. Do not weaken existing
 wrong-account checks or leave legacy JWTs without expiry accepted by the completed boundary.
 
@@ -103,12 +108,15 @@ Use semantic navigation, visible focus and accessible toggle state; no external 
 
 Every implementation task leaves passing targeted tests, lint/types and relevant existing suites.
 Run meaningful red-green checks before implementation. Use a scratch Compose project for fresh
-migrations, seeds, SQL tests and RLS permissive-policy failure proof; never remove production volumes.
+migrations, seeds, SQL tests and RLS permissive-policy failure proof; never remove production
+volumes.
 After image build, the stack should start from cached images without contacting Google or fetching
 fonts. Google sign-in and FX fetching naturally require network access when invoked.
 
-Verify protected route behavior through HTTP, cookie flags, logout replay, owner-scoped configuration,
-FX range endpoints and full-stack web navigation. Browser checks cover the login flow, toggle persistence,
+Verify protected route behavior through HTTP, cookie flags, logout replay, owner-scoped
+configuration,
+FX range endpoints and full-stack web navigation. Browser checks cover the login flow, toggle
+persistence,
 keyboard focus and the Settings FX inspector. Test mocked Google flows separately from real Google
 sign-in; do not describe mocked evidence as a successful live Google login.
 

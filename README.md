@@ -15,7 +15,7 @@ from it. **Nothing in the design does.** The reporting currency pair, the countr
 institutions, the categories and the statement layouts are all configuration or rows — see
 [what you choose at setup](#what-you-choose-at-setup).
 
-```
+```text
 Every financial event
   → normalized into one ledger
   → categorized
@@ -27,7 +27,7 @@ Every financial event
 
 ## The screen this is being built for
 
-```
+```bash
 Net Worth        base / secondary  X
 Liquid Net Worth                   X
 Investments                        X
@@ -58,7 +58,7 @@ financial data does not enter this repository, and test fixtures are redacted �
 
 ## The shape of it
 
-```
+```text
                  ┌─────────────────────────────────────┐
                  │  caddy      TLS                     │   (hosted only)
                  ├─────────────────────────────────────┤
@@ -91,11 +91,11 @@ Rationale in [ADR-0013](docs/adr/0013-python-backend-service.html) and
 
 ---
 
-## Documentation
+## Reading and publishing it
 
 Start here → **[docs/index.html](docs/index.html)** (index and suggested reading order)
 
-Published at **https://sandjaie.github.io/OneLedger/** — `docs/` is deployed by
+Published at **<https://sandjaie.github.io/OneLedger/>** — `docs/` is deployed by
 [`.github/workflows/docs.yml`](.github/workflows/docs.yml) on every push to the default branch.
 [`scripts/check-docs.py`](scripts/check-docs.py) — no broken links, no malformed HTML, no
 statement tracked by git — runs in the pre-commit hook rather than in CI, over the whole tree

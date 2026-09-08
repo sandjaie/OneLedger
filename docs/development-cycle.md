@@ -63,7 +63,8 @@ Red is not reviewed. A failing test is a finding that already found itself.
 **Trigger: implementation is finished and `/verify` is green.** Not "before some push" —
 **before the first one**. The order is fixed and it has no variants:
 
-> implement → `/verify` → **review** → fix every finding → `/verify` → re-review → **first push** → PR
+> implement → `/verify` → **review** → fix every finding → `/verify` → re-review → **first push** →
+> PR
 
 `/verify` comes first and again after every fix, because a red tree is not worth reviewing: a
 failing test is a finding that already found itself. What this rule fixes is the *other* end — the

@@ -1,7 +1,8 @@
 # Documentation progress ownership
 
 **Workspace:** resolve the active checkout with `git rev-parse --show-toplevel` before dispatch.
-For this local task it resolves to `/Users/sandjaieravi/dev/OneLedger`; do not use that path on another host.
+For this local task it resolves to `/Users/sandjaieravi/dev/OneLedger`; do not use that path on
+another host.
 **Branch:** `docs/centralize-implementation-progress`.
 **Base and PR target:** `feature/phase-0-foundations`.
 

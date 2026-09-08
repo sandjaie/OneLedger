@@ -8,7 +8,8 @@
 > `docs/superpowers/progress.md` — never by editing this plan mid-task. Task state lives only in
 > `docs/superpowers/progress.md`.
 >
-> **M2 ships as task-sized PRs**, not one — §2's table is the current decomposition. Each task below declares its own `Workspace`,
+> **M2 ships as task-sized PRs**, not one — §2's table is the current decomposition. Each task below
+> declares its own `Workspace`,
 > `Branch` and `Base and PR target`. This plan document lands with **Task 1's** PR. The delivery
 > cycle per PR is: TDD implement → local gates green → push → Codex review on GitHub → patch the
 > findings on the same branch → merge on Codex's thumbs-up → delete the branch → next task.
@@ -243,7 +244,6 @@ Moved to [the M2 spec](../specs/2026-09-07-m2-statement-importer.md) §5: V12 an
 the staging transaction, what a blocked batch leaves behind, and the filename and never-store
 rules.
 
-
 ## 6. Migration ownership
 
 | Migration | Task | Contents |
@@ -272,14 +272,12 @@ the stage order. `statement-ingestion.html` §1 and `architecture.html` §5 now 
 reconciliation **before** FX enrichment, which is what the importer does — the deviation is no
 longer a deviation and no longer needs recording in a PR.
 
-
 ## 8. Tasks
 
 **A bare "Task N" elsewhere in this plan, in the spec and in earlier PRs means the whole group** —
 Task 4 is 4a–4c, Task 5 is 5a–5f, Task 6 is 6a–6d, Task 7 is 7a–7b, Task 8 is 8a–8b and Task 9 is
 9a–9c. References written before the split were not rewritten to name a slice they could not have
 known about; where one slice is specifically meant, it is named.
-
 
 Each task: implement TDD in the stated order, run its gates, push, wait for Codex, patch findings
 on the same branch, merge on the thumbs-up, delete the branch, update
@@ -1078,7 +1076,8 @@ imported, and the same transaction twice still cannot.
 **Depends on:** Task 6a.
 **Forecast:** ~180 production, ~340 test.
 
-**Outcome.** `POST /import/{batch_id}/commit` turns accepted staged rows into ledger rows, or changes
+**Outcome.** `POST /import/{batch_id}/commit` turns accepted staged rows into ledger rows, or
+changes
 nothing at all.
 
 **Files.**
