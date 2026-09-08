@@ -1,6 +1,6 @@
 ---
 name: oneledger-code-hygiene
-description: Read-only audit of OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. It reports and deletes nothing; the cleanup ships as its own chore branch. Use at milestone boundaries, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
+description: Audit of OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. It produces findings for another agent to patch and does not modify code; the cleanup ships as its own chore branch. Use at milestone boundaries, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
 ---
 
 # oneledger-code-hygiene
@@ -10,11 +10,10 @@ request** — never as part of a feature branch. Hygiene findings that ride alon
 widen the diff, spend the size budget, and buy exactly the extra review rounds the budget exists
 to prevent.
 
-**This skill reports. It does not edit.** It reads the tree and runs read-only commands, and
-deletes nothing — not an unused import, not a stale marker, not an orphaned file. The report goes
-back to the owner or the implementing agent, and the cleanup ships as its own `chore/<name>`
-branch through the normal cycle. A sweep that removes what it finds gives nobody the chance to
-say "that one is load-bearing".
+**Produce findings another agent can patch. Do not modify code** unless the user explicitly
+commands fix mode. A sweep that removes what it finds gives nobody the chance to
+say "that one is load-bearing"; the cleanup ships as its own `chore/<name>` branch through the
+normal cycle.
 
 It is gate 8 of [docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is a
 milestone closing, or an explicit request.
