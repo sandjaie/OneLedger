@@ -60,10 +60,14 @@ Red is not reviewed. A failing test is a finding that already found itself.
 
 ### 5. Gate — `/oneledger-code-review`, before the branch is pushed at all
 
-**Trigger: implementation is finished.** Not "before some push" — **before the first one**. The
-order is fixed and it has no variants:
+**Trigger: implementation is finished and `/verify` is green.** Not "before some push" —
+**before the first one**. The order is fixed and it has no variants:
 
-> implement → **review** → fix every finding → re-review → `/verify` → **first push** → PR
+> implement → `/verify` → **review** → fix every finding → `/verify` → re-review → **first push** → PR
+
+`/verify` comes first and again after every fix, because a red tree is not worth reviewing: a
+failing test is a finding that already found itself. What this rule fixes is the *other* end — the
+review, and the fixes it produces, all happen before the branch reaches `origin`.
 
 There is no path to `origin` that skips this gate — not a small fix, not a one-line follow-up, not
 a patch answering a Codex finding, and not a checkpoint commit "to be reviewed after".

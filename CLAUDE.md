@@ -185,10 +185,10 @@ trigger, and the trigger is an obligation:
 - `/oneledger-plan-review` — **a plan or spec has just been written or changed and a task is about
   to be dispatched from it.** It forecasts each task against the diff budget and says what to
   split. Splitting on paper costs a paragraph; splitting after implementation costs a day.
-- `/oneledger-code-review` — **implementation is finished.** The order is
-  implement → review → fix → re-review → `/verify` → **first push** → PR, and it has no
-  variants: the branch reaches `origin` already reviewed, and the PR is opened only from a head
-  the gate has passed. Fresh-context reviewers read the diff against this repository's own
+- `/oneledger-code-review` — **implementation is finished and `/verify` is green.** The order is
+  implement → `/verify` → review → fix → `/verify` → re-review → **first push** → PR, and it has
+  no variants: the branch reaches `origin` already reviewed, and the PR is opened only from a
+  head the gate has passed. Fresh-context reviewers read the diff against this repository's own
   rules: identifier leakage, money handling, the authorization boundary, reporting views,
   migrations, invariants,
   TDD evidence. There is no path to `origin` that skips it — not a checkpoint commit, not a
