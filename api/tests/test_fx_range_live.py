@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import psycopg
 import pytest
@@ -85,53 +85,21 @@ def test_an_empty_ask_returns_nothing_rather_than_raising() -> None:
         conn.close()
 
 
-def test_an_observed_rate_outranks_a_reference_rate() -> None:
-    """`multi-currency-and-fx.html` §5: a rate a person typed or a statement observed beats a
-    reference feed. The ON CONFLICT clause is the only thing enforcing it, and this is the
-    only place the INSERT is ever executed — a mis-ordered column list would ship green
-    otherwise, because no stub cursor reads the statement.
+class NoCommit:
+    """`upsert_rates` commits, and a test must not: a committed row outlives the failure that
+    prevented its cleanup, and the next run then fails on its own leftover — the setup INSERT
+    hits the primary key, the transaction aborts, and the cleanup that would have fixed it
+    cannot run either. Wrapping the connection with a no-op `commit` keeps the INSERT running
+    against real Postgres, which is the whole point, while leaving every row inside the one
+    transaction this test rolls back."""
 
-    `upsert_rates` commits, so this cannot ride inside a rolled-back transaction; the rows
-    are dated far past any backfill and removed explicitly.
-    """
-    conn = _connect()
-    try:
-        quote, bases, _ = reporting_config(conn)
-        observed, fresh = bases[0], bases[-1]
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
-                   VALUES (%s, %s, %s, %s, 'manual')""",
-                (OBSERVED, observed, quote, Decimal("7.7777")),
-            )
-        conn.commit()
+    def __init__(self, conn: psycopg.Connection) -> None:
+        self._conn = conn
 
-        written = upsert_rates(
-            conn,
-            [
-                _row(OBSERVED, observed, quote, Decimal("1.1111")),
-                _row(OBSERVED, fresh, quote, Decimal("2.2222")),
-            ],
-        )
+    def cursor(self) -> psycopg.Cursor[Any]:
+        return self._conn.cursor()
 
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT base_currency, rate, source FROM fx_rate"
-                " WHERE rate_date = %s ORDER BY base_currency",
-                (OBSERVED,),
-            )
-            stored = {b: (r, s) for b, r, s in cur.fetchall()}
-
-        if observed != fresh:
-            assert written == 1, "the declined row is not a row written"
-        assert stored[observed] == (Decimal("7.7777"), "manual"), "the observation stands"
-        if observed != fresh:
-            assert stored[fresh] == (Decimal("2.2222"), "ecb"), "the new pair landed"
-    finally:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM fx_rate WHERE rate_date >= %s", (COVERED,))
-        conn.commit()
-        conn.close()
+    def commit(self) -> None: ...
 
 
 def _row(on: date, base: str, quote: str, rate: Decimal) -> dict[str, Any]:
@@ -144,3 +112,58 @@ def _row(on: date, base: str, quote: str, rate: Decimal) -> dict[str, Any]:
         "is_carried_forward": False,
         "carried_from": None,
     }
+
+
+def _stored(cur: psycopg.Cursor[Any]) -> dict[str, tuple[Decimal, str]]:
+    cur.execute(
+        "SELECT base_currency, rate, source FROM fx_rate WHERE rate_date = %s",
+        (OBSERVED,),
+    )
+    return {base: (rate, source) for base, rate, source in cur.fetchall()}
+
+
+def test_an_observed_rate_outranks_a_reference_rate_and_a_reference_rate_refreshes() -> None:
+    """`multi-currency-and-fx.html` §5: a rate a person typed or a statement observed beats a
+    reference feed. The ON CONFLICT clause is the only thing enforcing that, and this is the
+    only place the INSERT is ever executed — a mis-ordered column list or a clause deleted
+    outright would ship green otherwise, because no stub cursor reads SQL.
+
+    Both halves of `DO UPDATE` are asserted. The decline alone does not distinguish it from
+    `DO NOTHING`, which would leave the docstring's idempotency claim — "re-running a backfill
+    overwrites with the same values" — quietly false, and a corrected rate would never land.
+    """
+    conn = _connect()
+    try:
+        quote, bases, _ = reporting_config(conn)
+        if len(bases) < 2:
+            pytest.skip("this household reports against a single base; the decline needs two")
+        observed, reference = bases[0], bases[1]
+        writer = cast("psycopg.Connection", NoCommit(conn))
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
+                   VALUES (%s, %s, %s, %s, 'manual')""",
+                (OBSERVED, observed, quote, Decimal("7.7777")),
+            )
+
+            written = upsert_rates(
+                writer,
+                [
+                    _row(OBSERVED, observed, quote, Decimal("1.1111")),
+                    _row(OBSERVED, reference, quote, Decimal("2.2222")),
+                ],
+            )
+            assert written == 1, "the declined row is offered, not written"
+            stored = _stored(cur)
+            assert stored[observed] == (Decimal("7.7777"), "manual"), "the observation stands"
+            assert stored[reference] == (Decimal("2.2222"), "ecb"), "the new pair landed"
+
+            # The refresh half: a reference row the feed corrects must actually change.
+            again = upsert_rates(writer, [_row(OBSERVED, reference, quote, Decimal("3.3333"))])
+            assert again == 1
+            assert _stored(cur)[reference] == (Decimal("3.3333"), "ecb"), "a correction lands"
+            assert _stored(cur)[observed] == (Decimal("7.7777"), "manual"), "still untouched"
+    finally:
+        conn.rollback()
+        conn.close()

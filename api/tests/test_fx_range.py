@@ -340,6 +340,12 @@ def test_rates_are_never_fetched_inside_an_open_transaction() -> None:
         ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=source)
     assert conn.written == [] and conn.commits == 0, "nothing written, nothing committed"
     assert source.calls == [], "and nothing fetched"
+    # The guard raises outside the try, deliberately: the refusal must leave the caller's
+    # transaction alone for the caller to unwind. Moving it inside would let the closing
+    # rollback discard work the pipeline had already done — the same defect as leaving the
+    # transaction open, inverted.
+    assert conn.rollbacks == 0, "a refusal is not a rollback of someone else's work"
+    assert conn.transaction_status == TransactionStatus.INTRANS, "the caller's is the caller's"
 
 
 def test_the_backfill_route_refuses_a_future_end_and_a_reversed_range(
