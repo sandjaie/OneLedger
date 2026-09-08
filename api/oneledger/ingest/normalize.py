@@ -144,7 +144,16 @@ def is_credit_suffixed(text: str) -> bool:
     return match is not None and match.group(1).upper() == "CR"
 
 
-def _contradicts_itself(subject: str, refusal: str) -> NormalizationError:
+_REMAP_THE_BAND = (
+    "the band has most likely taken the sign from the column beside it, so remap the layout"
+)
+_REMAP_THE_PATTERN = (
+    "the opening balance pattern has most likely captured a sign from the text around it, so "
+    "remap that pattern — under balance_delta every amount is derived from this figure"
+)
+
+
+def _contradicts_itself(subject: str, refusal: str, remedy: str) -> NormalizationError:
     """A balance that contradicts itself stops the statement, not one row of it.
 
     Failing the row instead removes the very evidence reconciliation blocks on. `reconcile` is
@@ -156,8 +165,7 @@ def _contradicts_itself(subject: str, refusal: str) -> NormalizationError:
     """
     return NormalizationError(
         f"{subject} {refusal}; a statement cannot be reconciled against balances that "
-        "contradict themselves, and the band has most likely taken the sign from the column "
-        "beside it — remap the layout"
+        f"contradict themselves — {remedy}"
     )
 
 
@@ -198,7 +206,11 @@ def parse_balance(text: str) -> tuple[SignedAmount | None, str | None]:
         return SignedAmount(value, False), None
     credit = match.group(1).upper() == "CR"
     signed = value.copy_abs() if credit else -value.copy_abs()
-    if value < 0 and signed != value:
+    body = CREDIT_DEBIT_SUFFIX.sub("", text.strip()).strip()
+    states_its_own_sign = body.startswith(("-", "+")) or (
+        body.startswith("(") and body.endswith(")")
+    )
+    if states_its_own_sign and signed != value:
         # `-100.00 Cr` and `(100.00) Cr` state a direction twice and disagree. Every sibling
         # here refuses that rather than picking one — `_from_columns` and `_signed_amount` both
         # fail the row — because resolving it silently is the invisible sign error I2 exists to
@@ -455,6 +467,24 @@ def _signed_amount(
     return SignedAmount(value, False), None
 
 
+def _refuse_contradicting_balances(result: ExtractionResult) -> None:
+    """A balance column that contradicts itself stops the statement before any row is read.
+
+    Ahead of every row-level check, because a row that also fails one of those would be dropped
+    by it and take the contradiction with it — and `reconcile` cannot tell that a row was
+    dropped, so the statement would reconcile against whatever survived and report `matched`.
+    Document order, so the row named is the one a reader finds first.
+    """
+    for row in result.rows:
+        _, refusal = parse_balance(_cell(row, "running_balance"))
+        if refusal is not None:
+            raise _contradicts_itself(
+                f"row {row.row_number}'s running_balance",
+                refusal,
+                _REMAP_THE_BAND,
+            )
+
+
 def _balance_deltas(
     profile: NormalizableProfile, result: ExtractionResult, reasons: dict[int, str]
 ) -> dict[int, SignedAmount | None]:
@@ -476,7 +506,11 @@ def _balance_deltas(
     invert = profile.invertsSign
     opening, refusal = parse_balance(result.declared_opening or "")
     if refusal is not None:
-        raise _contradicts_itself("the statement's opening balance", refusal)
+        raise _contradicts_itself(
+            "the statement's opening balance",
+            refusal,
+            _REMAP_THE_PATTERN,
+        )
     if opening is None:
         raise NormalizationError(
             "balance_delta needs the statement's opening balance, and this statement did not "
@@ -499,9 +533,7 @@ def _balance_deltas(
                 "amount cannot be derived"
             )
             continue
-        balance, refusal = parse_balance(_cell(row, "running_balance"))
-        if refusal is not None:
-            raise _contradicts_itself(f"row {row.row_number}'s running_balance", refusal)
+        balance, _ = parse_balance(_cell(row, "running_balance"))
         if balance is None:
             deltas[row.row_number] = None
             broken_at = row.row_number
@@ -541,6 +573,7 @@ def normalize(
     # Filled by the balance walk for rows it cannot derive because an earlier balance broke
     # the chain; the generic refusal does not know why they are underivable.
     chain_reasons: dict[int, str] = {}
+    _refuse_contradicting_balances(result)
     deltas = _balance_deltas(profile, result, chain_reasons)
     rows: list[NormalizedRow] = []
     failures: list[RowFailure] = []
@@ -637,9 +670,7 @@ def normalize(
             # itself permanently, whichever convention or inversion produced the sign.
             original_amount = -abs(original_amount) if amount < 0 else abs(original_amount)
         clean, applied = clean_description(description_raw)
-        balance, balance_refusal = parse_balance(_cell(row, "running_balance"))
-        if balance_refusal is not None:
-            raise _contradicts_itself(f"row {row.row_number}'s running_balance", balance_refusal)
+        balance, _ = parse_balance(_cell(row, "running_balance"))
         rows.append(
             NormalizedRow(
                 source_page_number=row.page_number,

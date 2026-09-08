@@ -777,10 +777,13 @@ inverted again, flips a sign in silence. The flag travels with the value so noth
   time; an unsuffixed one still is. Each direction fails without its half.
 - A chain mixing suffixed and bare balances frames each **before** subtracting: a difference taken
   between two frames belongs to neither.
-- `-100.00 Cr` states its direction twice and disagrees. It **stops the statement**, naming the
-  cell and pointing at the layout — not the row, because dropping a row takes with it the
-  evidence reconciliation blocks on, and a statement missing its last line reconciles `matched`
-  against the line before it.
+- `-100.00 Cr` and `+100.00 Dr` state a direction twice and disagree. Each **stops the
+  statement**, from a pass that runs ahead of the row loop — not the row, because dropping one
+  takes with it the evidence reconciliation blocks on, and a statement missing a line reconciles
+  `matched` against what survived. A row that fails another check too must still stop it.
+- A contradicting *declared opening* names the opening balance pattern rather than a band: that
+  anchor is a regex over the document text, and under `balance_delta` every amount derives from
+  it.
 
 **Validation.** The API gate.
 
