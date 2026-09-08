@@ -487,7 +487,12 @@ class StagedTransaction(BaseModel):
 
     @model_validator(mode=&quot;after&quot;)
     def translations_agree_with_the_stated_rate(self) -&gt; Self:
-        if abs(self.amount * self.fx_rate_to_base - self.amount_base) &gt; Decimal(&quot;0.01&quot;):
+        # The ledger&#39;s own precision: transaction.frozen_amounts_derive permits 0.0001 against
+        # round(amount * rate, 4), and Postgres rounds half away from zero. A looser tolerance
+        # here stages a row an owner can accept and the all-or-nothing commit must then reject.
+        expected = (self.amount * self.fx_rate_to_base).quantize(
+            Decimal(&quot;0.0001&quot;), rounding=ROUND_HALF_UP)
+        if abs(self.amount_base - expected) &gt; Decimal(&quot;0.0001&quot;):
             raise ValueError(&quot;amount_base is inconsistent with the stated rate&quot;)
         return self
 
