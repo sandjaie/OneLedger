@@ -126,9 +126,7 @@ def test_a_date_outside_the_captured_period_fails_the_row_and_names_the_period()
     assert batch.period.is_derived is False
     assert [line.description_raw for line in batch.rows] == ["INSIDE"]
     assert batch.failures[0].source_row_number == 2
-    assert batch.failures[0].reason == (
-        "booked_date 2024-09-15 is outside the statement period 2024-07-01 to 2024-07-31"
-    )
+    assert batch.failures[0].reason == "booked_date is outside the statement period"
 
 
 def test_a_period_derived_from_row_dates_is_labelled_derived_and_excludes_nothing() -> None:
@@ -371,6 +369,7 @@ def test_the_raw_row_and_its_coordinates_survive_normalization() -> None:
         "booked_date": "15/07/2024",
         "description": "ALPHA",
         "amount": "-10.00",
+        "raw_text": "15/07/2024 ALPHA -10.00",
     }
 
 
@@ -799,6 +798,10 @@ def test_no_failure_reason_carries_a_digit_sequence_from_the_statement() -> None
     # from the document, contiguous or separator-formatted. These reasons are parse diagnostics
     # and reach an HTTP response, and a date alone trips the rule before any card number does.
     layout = profile(
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
         columns=[
             {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
             {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
@@ -806,7 +809,7 @@ def test_no_failure_reason_carries_a_digit_sequence_from_the_statement() -> None
             {"field": "amount", "xMin": 300.0, "xMax": 450.0},
             {"field": "original_amount", "xMin": 450.0, "xMax": 520.0},
             {"field": "original_currency", "xMin": 520.0, "xMax": 600.0},
-        ]
+        ],
     )
     rows = [
         row(1, booked_date="4111-1111-1111-1111", description="A", amount="-1.00"),
@@ -825,12 +828,68 @@ def test_no_failure_reason_carries_a_digit_sequence_from_the_statement() -> None
             amount="-1.00",
             original_amount="4111.1111.1111.1111",
         ),
+        # Out of period: the reason must not carry the row's date or the period's endpoints
+        # either — an ISO date is eight digits once its separators are ignored.
+        row(5, booked_date="15/09/2024", description="E", amount="-1.00"),
     ]
 
-    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+    batch = normalize.normalize(
+        layout,
+        extraction(
+            rows,
+            metadata={"period_start": "01/07/2024", "period_end": "31/07/2024"},
+        ),
+        account_currency=ACCOUNT_CURRENCY,
+    )
 
-    assert len(batch.failures) == 4
+    assert len(batch.failures) == 5
     for failure in batch.failures:
         normalized = re.sub(r"(?<=\d)[\W_]+(?=\d)", "", failure.reason)
         assert re.search(r"\d{7,}", normalized) is None, failure.reason
         assert "4111" not in failure.reason
+
+
+def test_the_audit_row_keeps_the_whole_physical_line() -> None:
+    # `fields` holds only what fell inside a band; the physical line holds everything. Keeping
+    # the split alone would drop whatever sat outside every column before Task 5 stores it,
+    # and "what did the statement actually say?" is the question raw_row exists to answer.
+    extracted = RawRow(
+        page_number=1,
+        row_number=1,
+        raw_text="15/07/2024  ALPHA   UNBANDED NOTE   -10.00",
+        fields={"booked_date": "15/07/2024", "description": "ALPHA", "amount": "-10.00"},
+    )
+
+    batch = normalize.normalize(
+        profile(), extraction([extracted]), account_currency=ACCOUNT_CURRENCY
+    )
+
+    assert batch.rows[0].raw_row["raw_text"] == "15/07/2024  ALPHA   UNBANDED NOTE   -10.00"
+    assert batch.rows[0].raw_row["description"] == "ALPHA"
+
+
+def test_a_balance_delta_beyond_the_ledgers_range_fails_its_row() -> None:
+    # Both balances parse, and their difference still cannot be stored: the subtraction is its
+    # own arithmetic and needs its own check.
+    rows = [
+        row(1, booked_date="15/07/2024", description="HUGE", running_balance="9999999999999999"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, declared_opening="-9999999999999999"),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.rows == []
+    assert "range" in batch.failures[0].reason

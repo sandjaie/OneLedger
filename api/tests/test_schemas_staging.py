@@ -172,3 +172,12 @@ def test_a_rate_date_that_agrees_with_its_carried_flag_validates(
     rate_date: date, carried: bool
 ) -> None:
     assert staged(fx_rate_date=rate_date, fx_rate_is_carried=carried).fx_rate_date == rate_date
+
+
+@pytest.mark.parametrize("value", [1, True])
+def test_a_json_number_is_refused_at_the_money_boundary(value: object) -> None:
+    # Money is a fixed-point string on the wire, never a JSON number. An integer loses no
+    # precision on the way in, but accepting it makes the wire contract untrue and invites the
+    # float that does.
+    with pytest.raises(ValidationError, match="fixed-point"):
+        staged(amount=value)

@@ -211,9 +211,7 @@ def _period(profile: NormalizableProfile, result: ExtractionResult) -> Statement
     start = _period_date(start_text, "period_start")
     end = _period_date(end_text, "period_end")
     if end < start:
-        raise NormalizationError(
-            f"the captured statement period ends before it starts ({start} to {end})"
-        )
+        raise NormalizationError("the captured statement period ends before it starts")
     return StatementPeriod(start=start, end=end, is_derived=False)
 
 
@@ -393,7 +391,15 @@ def _balance_deltas(
             deltas[row.row_number] = None
             broken_at = row.row_number
             continue
-        deltas[row.row_number] = balance - previous
+        delta = balance - previous
+        if delta.copy_abs() >= LEDGER_LIMIT:
+            # Both balances fit the column; their difference need not. Nothing downstream
+            # re-checks an amount the parser did not produce.
+            deltas[row.row_number] = None
+            reasons[row.row_number] = "the derived amount is outside the ledger's range"
+            broken_at = row.row_number
+            continue
+        deltas[row.row_number] = delta
         previous = balance
     return deltas
 
@@ -439,8 +445,7 @@ def normalize(
                 RowFailure(
                     row.page_number,
                     row.row_number,
-                    f"booked_date {booked_date} is outside the statement period "
-                    f"{effective.start} to {effective.end}",
+                    "booked_date is outside the statement period",
                 )
             )
             continue
@@ -510,7 +515,11 @@ def normalize(
             NormalizedRow(
                 source_page_number=row.page_number,
                 source_row_number=row.row_number,
-                raw_row=dict(row.fields),
+                # The banded cells plus the physical line they came from: whatever fell
+                # outside every column exists only in the line, and "what did the statement
+                # actually say?" is the question this field exists to answer. `raw_text` is
+                # not a mappable column field, so it cannot collide with a cell.
+                raw_row={**row.fields, "raw_text": row.raw_text},
                 booked_date=booked_date,
                 value_date=value_date,
                 description_raw=description_raw,

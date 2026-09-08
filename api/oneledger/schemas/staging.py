@@ -15,23 +15,29 @@ from uuid import UUID
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
 
 
-def _not_a_float(value: object) -> object:
-    """Refuse a float before pydantic coerces one into a Decimal.
+def _not_a_json_number(value: object) -> object:
+    """Refuse a JSON number before pydantic coerces one into a Decimal.
 
     Pydantic's Decimal validation is lax by default and would accept a float here — after the
     binary-precision loss has already happened, where nothing downstream can detect it. This
     boundary is the whole reason the repository's money rule can be enforced at all.
+
+    An integer loses no precision on the way in, but money is a fixed-point string on the wire
+    and accepting `1` makes that contract untrue at the only place it is checked — which is how
+    the float that does lose precision arrives next. A `Decimal` built in the service passes.
     """
-    if isinstance(value, float):
-        raise ValueError("money is a Decimal or a fixed-point string, never a float")
+    if isinstance(value, float | int) and not isinstance(value, Decimal):
+        raise ValueError("money is a Decimal or a fixed-point string, never a JSON number")
     return value
 
 
 # Money is a Decimal all the way from the parser to the database, and a fixed-point string on
 # the wire. A float here would already have lost precision before anyone could check.
-Money = Annotated[Decimal, BeforeValidator(_not_a_float), Field(max_digits=20, decimal_places=4)]
+Money = Annotated[
+    Decimal, BeforeValidator(_not_a_json_number), Field(max_digits=20, decimal_places=4)
+]
 Rate = Annotated[
-    Decimal, BeforeValidator(_not_a_float), Field(gt=0, max_digits=20, decimal_places=10)
+    Decimal, BeforeValidator(_not_a_json_number), Field(gt=0, max_digits=20, decimal_places=10)
 ]
 
 # The ledger's own precision, not a looser one: transaction.frozen_amounts_derive permits
