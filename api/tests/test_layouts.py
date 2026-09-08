@@ -281,6 +281,39 @@ def test_auto_propose_redacts_short_secrets_before_escaping_fingerprints() -> No
     assert "1234" not in response.text
 
 
+def test_auto_propose_never_returns_an_identifier_grouped_by_unlisted_separators() -> None:
+    identifier = "4111\u20111111\u20111111\u20111111"
+    pdf = build_pdf(
+        [
+            Placement(page=0, x=20, y=760, text=f"Card {identifier}"),
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Description"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/2024"),
+            Placement(page=0, x=180, y=670, text=f"FIRST {identifier}"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/2024"),
+            Placement(page=0, x=180, y=640, text="SECOND"),
+            Placement(page=0, x=500, y=640, text="18.25"),
+        ]
+    )
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("draft.pdf", pdf)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert identifier not in response.text
+    # The escaped fingerprint spelling of the same line must not survive either.
+    assert "1111" not in response.text
+    assert [row["fields"]["amount"] for row in response.json()["rows"]] == ["17.25", "18.25"]
+
+
 @pytest.mark.parametrize("draft_mode", [False, True])
 def test_malformed_pdf_is_sanitized_and_temporary_file_removed(
     monkeypatch: pytest.MonkeyPatch,
@@ -555,6 +588,24 @@ def test_unicode_digit_identifiers_are_redacted_from_untyped_preview_text() -> N
 
     assert identifier not in public[0].rawText
     assert identifier not in public[0].fields["reference"]
+
+
+def test_identifiers_grouped_by_any_separator_are_redacted() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    # Grouping punctuation is not an enumerable set: a non-breaking hyphen or an
+    # Arabic thousands separator groups an identifier just as a plain hyphen does.
+    identifiers = (
+        "4111\u20111111\u20111111\u20111111",  # non-breaking hyphens
+        "\u0664\u0661\u0661\u0661\u066c\u0661\u0661\u0661\u0661",  # Arabic thousands separator
+    )
+    for identifier in identifiers:
+        public = layouts._public_rows(
+            [RawRow(1, 1, f"Card {identifier} paid", {"reference": identifier})]
+        )
+
+        assert identifier not in public[0].rawText
+        assert identifier not in public[0].fields["reference"]
 
 
 def test_contextual_and_pan_shaped_secrets_are_redacted_from_preview_text() -> None:

@@ -830,3 +830,89 @@ def test_continuation_accepts_each_flag_but_never_a_date_or_amount(
     assert len(result.rows) == 1
     assert result.rows[0].fields["description"] == "FIRST SECOND"
     assert result.lines_unparsed == 3
+
+
+@pytest.mark.parametrize(
+    ("debit_header", "credit_header"),
+    [("Withdrawal Amount", "Deposit Amount"), ("Debit Amount", "Credit Amount")],
+)
+def test_propose_never_reads_a_directional_header_as_a_generic_amount(
+    tmp_path: Path,
+    debit_header: str,
+    credit_header: str,
+) -> None:
+    pdf_path = tmp_path / "directional-amount-layout.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=100, y=700, text="Description"),
+                Placement(page=0, x=300, y=700, text=debit_header),
+                Placement(page=0, x=400, y=700, text=credit_header),
+                Placement(page=0, x=500, y=700, text="Balance"),
+                Placement(page=0, x=20, y=670, text="13/02/2024"),
+                Placement(page=0, x=100, y=670, text="ALPHA"),
+                Placement(page=0, x=300, y=670, text="17.25"),
+                Placement(page=0, x=500, y=670, text="82.75"),
+                Placement(page=0, x=20, y=640, text="14/02/2024"),
+                Placement(page=0, x=100, y=640, text="BETA"),
+                Placement(page=0, x=400, y=640, text="20.00"),
+                Placement(page=0, x=500, y=640, text="102.75"),
+            ]
+        )
+    )
+
+    draft, rows = engine.propose(pdf_path, None)
+
+    assert [column.field for column in draft.columns] == [
+        "booked_date",
+        "description",
+        "debit",
+        "credit",
+        "running_balance",
+    ]
+    assert draft.signConvention == "debit_credit_columns"
+    assert [row.fields for row in rows] == [
+        {
+            "booked_date": "13/02/2024",
+            "description": "ALPHA",
+            "debit": "17.25",
+            "running_balance": "82.75",
+        },
+        {
+            "booked_date": "14/02/2024",
+            "description": "BETA",
+            "credit": "20.00",
+            "running_balance": "102.75",
+        },
+    ]
+    # A proposal the mapping UI cannot save is not a proposal.
+    LayoutCreate.model_validate(
+        {
+            **{key: value for key, value in vars(draft).items() if key != "columns"},
+            "columns": [vars(column) for column in draft.columns],
+        }
+    )
+
+
+def test_propose_refuses_an_amount_column_beside_debit_and_credit(tmp_path: Path) -> None:
+    pdf_path = tmp_path / "three-amount-columns.pdf"
+    pdf_path.write_bytes(
+        build_pdf(
+            [
+                Placement(page=0, x=20, y=700, text="Date"),
+                Placement(page=0, x=120, y=700, text="Amount"),
+                Placement(page=0, x=300, y=700, text="Debit"),
+                Placement(page=0, x=420, y=700, text="Credit"),
+                Placement(page=0, x=20, y=670, text="13/02/2024"),
+                Placement(page=0, x=120, y=670, text="17.25"),
+                Placement(page=0, x=300, y=670, text="17.25"),
+                Placement(page=0, x=20, y=640, text="14/02/2024"),
+                Placement(page=0, x=120, y=640, text="20.00"),
+                Placement(page=0, x=420, y=640, text="20.00"),
+            ]
+        )
+    )
+
+    with pytest.raises(ValueError, match="amount column beside debit and credit"):
+        engine.propose(pdf_path, None)

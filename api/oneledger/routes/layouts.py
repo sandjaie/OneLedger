@@ -394,7 +394,11 @@ def _parse_draft(value: str) -> LayoutCreate:
         raise HTTPException(status_code=422, detail=detail) from exc
 
 
-IDENTIFIER_RUN = re.compile(r"\d(?:[\d\s–./-]*\d)?")
+# Grouping punctuation is not an enumerable set: a hyphen, a non-breaking hyphen, an Arabic
+# thousands separator and a space all group one identifier. Anything that is neither a letter
+# nor a digit may therefore join two digit runs, and only a letter ends one.
+IDENTIFIER_SEPARATOR = r"[\W_]"
+IDENTIFIER_RUN = re.compile(rf"\d(?:(?:\d|{IDENTIFIER_SEPARATOR})*\d)?")
 PAN_SHAPED_IDENTIFIER = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b", re.IGNORECASE)
 FINANCIAL_FIELDS = frozenset(
     {"booked_date", "value_date", "amount", "debit", "credit", "running_balance"}
@@ -402,8 +406,9 @@ FINANCIAL_FIELDS = frozenset(
 
 
 def _capture_redactor(capture: str | None) -> Callable[[str], str]:
-    normalized = re.sub(r"[\s–./-]", "", capture) if capture else ""
-    pattern = re.compile(r"[\s–./-]*".join(map(re.escape, normalized))) if normalized else None
+    normalized = re.sub(IDENTIFIER_SEPARATOR, "", capture) if capture else ""
+    separator = f"{IDENTIFIER_SEPARATOR}*"
+    pattern = re.compile(separator.join(map(re.escape, normalized))) if normalized else None
     return lambda value: pattern.sub("[redacted]", value) if pattern else value
 
 

@@ -83,11 +83,31 @@ HEADER_SYNONYMS: dict[str, tuple[str, ...]] = {
     ),
     "description": ("description", "narration", "particulars", "details", "remarks"),
     "reference": ("ref", "ref no", "reference", "chq no", "cheque no", "chq./ref.no."),
-    "amount": ("amount",),
-    "debit": ("debit", "withdrawal", "withdrawal amt", "dr", "debits"),
-    "credit": ("credit", "deposit", "deposit amt", "cr", "credits"),
+    "amount": ("amount", "transaction amount"),
+    "debit": (
+        "debit",
+        "debit amount",
+        "debit amt",
+        "withdrawal",
+        "withdrawal amount",
+        "withdrawal amt",
+        "dr",
+        "debits",
+    ),
+    "credit": (
+        "credit",
+        "credit amount",
+        "credit amt",
+        "deposit",
+        "deposit amount",
+        "deposit amt",
+        "cr",
+        "credits",
+    ),
     "running_balance": ("balance", "closing balance", "running balance"),
 }
+# Only a date labels two columns of one statement: a booked date and a value date.
+HEADER_FIELD_QUOTA = {"booked_date": 2}
 ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff\ufb50-\ufdff\ufe70-\ufeff]")
 NUMBER_BODY = r"(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})+,\d{3})(?:\.\d+)?"
 NUMBER = re.compile(
@@ -333,6 +353,14 @@ class _HeaderMatch:
     label: str
 
 
+@dataclass(frozen=True)
+class _HeaderCandidate:
+    field: str
+    start: int  # inclusive word index
+    end: int  # exclusive word index
+    synonym: str
+
+
 def _header_key(value: str) -> str:
     return "".join(character.casefold() for character in value if character.isalnum())
 
@@ -343,55 +371,50 @@ def _equivalent_header_pattern(value: str) -> str:
 
 
 def _line_header_matches(line: Line) -> list[_HeaderMatch]:
+    """Recognize each column label once, longest label first.
+
+    A directional label contains the generic one: `Withdrawal Amount` is a debit column, not a
+    debit column beside an amount column. Words are therefore claimed across every field at
+    once, so a word already spoken for by a longer label cannot also stand for a second column.
+    """
     words = sorted(line.words, key=lambda word: word.x0)
-    matches: list[_HeaderMatch] = []
+    candidates: list[_HeaderCandidate] = []
     for field_name, synonyms in HEADER_SYNONYMS.items():
-        candidates: list[tuple[int, int, int, str]] = []
         normalized_synonyms = {_header_key(synonym): synonym for synonym in synonyms}
         for start in range(len(words)):
             for end in range(start + 1, min(len(words), start + 3) + 1):
                 key = _header_key(" ".join(word.text for word in words[start:end]))
                 synonym = normalized_synonyms.get(key)
                 if synonym is not None:
-                    candidates.append((end - start, start, end, synonym))
-        if not candidates:
+                    candidates.append(_HeaderCandidate(field_name, start, end, synonym))
+    # Longest label first, then the longest synonym it spells, then leftmost.
+    ordered = sorted(
+        candidates,
+        key=lambda item: (item.start - item.end, -len(item.synonym), item.start),
+    )
+    claimed: list[_HeaderCandidate] = []
+    for candidate in ordered:
+        quota = HEADER_FIELD_QUOTA.get(candidate.field, 1)
+        if sum(1 for chosen in claimed if chosen.field == candidate.field) >= quota:
             continue
-        if field_name == "booked_date":
-            selected: list[tuple[int, int, int, str]] = []
-            ordered = sorted(
-                candidates,
-                key=lambda item: (item[1], -item[0], -len(item[3])),
-            )
-            for candidate in ordered:
-                _, start, end, _ = candidate
-                overlaps = any(
-                    start < chosen_end and end > chosen_start
-                    for _, chosen_start, chosen_end, _ in selected
-                )
-                if overlaps:
-                    continue
-                selected.append(candidate)
-                if len(selected) == 2:
-                    break
-            for index, (_, start, end, _) in enumerate(selected):
-                matches.append(
-                    _HeaderMatch(
-                        field="booked_date" if index == 0 else "value_date",
-                        x0=words[start].x0,
-                        x1=words[end - 1].x1,
-                        label=" ".join(word.text for word in words[start:end]),
-                    )
-                )
+        if any(candidate.start < chosen.end and candidate.end > chosen.start for chosen in claimed):
             continue
-        _, start, end, synonym = max(candidates, key=lambda item: (item[0], len(item[3]), -item[1]))
-        matches.append(
-            _HeaderMatch(
-                field=field_name,
-                x0=words[start].x0,
-                x1=words[end - 1].x1,
-                label=" ".join(word.text for word in words[start:end]),
-            )
+        claimed.append(candidate)
+    dates = sorted(
+        (chosen for chosen in claimed if chosen.field == "booked_date"),
+        key=lambda chosen: chosen.start,
+    )
+    # The leftmost date is the booked date; a second one is the value date.
+    value_date = dates[1] if len(dates) > 1 else None
+    matches = [
+        _HeaderMatch(
+            field="value_date" if candidate is value_date else candidate.field,
+            x0=words[candidate.start].x0,
+            x1=words[candidate.end - 1].x1,
+            label=" ".join(word.text for word in words[candidate.start : candidate.end]),
         )
+        for candidate in claimed
+    ]
     return sorted(matches, key=lambda match: match.x0)
 
 
@@ -515,7 +538,8 @@ def _safe_fingerprints(page: Page, header_line: int) -> list[str]:
         if line_index == header_line:
             continue
         text = " ".join(word.text for word in sorted(line.words, key=lambda word: word.x0)).strip()
-        normalized = re.sub(r"(?<=\d)[\s\-–./]+(?=\d)", "", text)
+        # Any non-alphanumeric run may be an identifier's grouping separator, whatever its script.
+        normalized = re.sub(r"(?<=\d)[\W_]+(?=\d)", "", text)
         if (
             not text
             or CONTEXTUAL_SECRET.search(text)
@@ -548,6 +572,9 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
     fields = {column.field for column in columns}
     if len(fields & {"debit", "credit"}) == 1:
         raise ExtractionError("cannot infer signs from a lone debit or credit column")
+    if {"debit", "credit"} <= fields and "amount" in fields:
+        # A saved layout may not hold all three, so a draft holding all three is not a proposal.
+        raise ExtractionError("cannot infer signs from an amount column beside debit and credit")
     if {"debit", "credit"} <= fields:
         sign_convention = "debit_credit_columns"
     else:
