@@ -39,7 +39,7 @@ Phase 1 remains active: M1a and M1b are merged; roadmap M1 is delivered. **M2 �
 importer — is open, the current delivery**, shipped as task-sized PRs per
 [the M2 plan](plans/2026-09-07-m2-statement-importer.md). Its contracts and table semantics moved
 to [the M2 spec](specs/2026-09-07-m2-statement-importer.md) on 8 September, and tasks 4b–9 were
-re-split from six branches into seventeen against the diff budget — Task 3 had reached +3,380
+re-split from six branches into nineteen against the diff budget — Task 3 had reached +3,380
 lines and eight review rounds, Task 4a +2,094. Its entry criterion (the FX backfill
 reaching the 01 Jan 2024 anchor, ADR-0011) is satisfied — verified 2026-09-07 against the live
 compose database: `fx_rate` spans `2024-01-01` to `2026-09-06`, 1,960 rows across 2 pairs = 980
@@ -103,11 +103,12 @@ redact identifiers in both modes, and account validation responses omit sensitiv
 
 **Task 4 is split into two deliveries**, each its own branch and PR: 4a
 (`feature/m2-staged-rows-and-normalization`) carries V13, `db/tests/0011`, the schema and
-data-model corrections, `schemas/staging.py` and `ingest/normalize.py`; 4b
-(`feature/m2-dedupe-and-reconcile`) carries `ingest/dedupe.py` and `ingest/reconcile.py`. The
-plan's branch table names one branch for Task 4; the split is the recorded deviation, taken
-because reconciliation and dedupe are the subtlest logic in M2 and PR #34 showed how slowly a
-large surface converges. 4b depends on 4a's normalized row and on nothing else.
+data-model corrections, `schemas/staging.py` and `ingest/normalize.py`. Dedupe and reconciliation
+are now **4b (`feature/m2-t4b-dedupe`) and 4c (`feature/m2-t4c-reconcile`)**, separated by the
+plan re-split because they are the subtlest logic in M2 and PR #34 showed how slowly a large
+surface converges. Both depend on 4a's normalized row and on nothing else, and are independent of
+each other. The combined `feature/m2-dedupe-and-reconcile` branch is superseded and must not be
+used.
 
 Task 4a deviations, recorded rather than worked around. The plan's date test pairs `dd/MM/yyyy`
 with `MM/dd/yyyy`; Task 3's save-time validation has since restricted `dateFormat` to the

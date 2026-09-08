@@ -8,7 +8,7 @@
 > `docs/superpowers/progress.md` — never by editing this plan mid-task. Task state lives only in
 > `docs/superpowers/progress.md`.
 >
-> **M2 ships as nine task-sized PRs**, not one. Each task below declares its own `Workspace`,
+> **M2 ships as task-sized PRs**, not one — §2's table is the current decomposition. Each task below declares its own `Workspace`,
 > `Branch` and `Base and PR target`. This plan document lands with **Task 1's** PR. The delivery
 > cycle per PR is: TDD implement → local gates green → push → Codex review on GitHub → patch the
 > findings on the same branch → merge on Codex's thumbs-up → delete the branch → next task.
@@ -143,9 +143,9 @@ Every branch carries its task number, so the branch in a checkout says which tas
 | 5e | `feature/m2-t5e-parse-route` | `routes/ingest.py` — `POST /parse` | — |
 | 5f | `feature/m2-t5f-layout-draft-preview` | Draft mode gains the normalized preview and verdict | — |
 | 6a | `feature/m2-t6a-import-commit-migration` | The commit and verification functions | **V14** |
-| 6b | `feature/m2-t6b-review-payload` | `GET /imports/{id}/review` | — |
+| 6b | `feature/m2-t6b-review-payload` | `GET /import/{batch_id}` | — |
 | 6c | `feature/m2-t6c-row-decisions` | Row decisions, including the confirmed-distinct override | — |
-| 6d | `feature/m2-t6d-atomic-commit-route` | `POST /imports/{id}/commit` | — |
+| 6d | `feature/m2-t6d-atomic-commit-route` | `POST /import/{batch_id}/commit` | — |
 | 7a | `feature/m2-t7a-import-screen-shell` | `/import`: the page, the nav entry, multi-file drop | — |
 | 7b | `feature/m2-t7b-import-file-status` | Per-file status and Stage batch | — |
 | 8a | `feature/m2-t8a-layout-mapper-preview` | The mapper: header row, bands, live preview | — |
@@ -1003,7 +1003,7 @@ in the same commit.
 **Depends on:** Task 6a.
 **Forecast:** ~150 production, ~270 test.
 
-**Outcome.** `GET /imports/{id}/review` returns everything the review screen renders: the staged
+**Outcome.** `GET /import/{batch_id}` returns everything the review screen renders: the staged
 rows, their statuses, the verdict and the diagnostics.
 
 **Files.**
@@ -1019,8 +1019,10 @@ readable. No raw account number or original filename in the payload.
 
 **Required test behaviours (failing first).**
 - Unauthenticated 401; another household's batch 404, not 403 — existence is not disclosed.
-- A blocked batch returns its verdict and evidence.
 - `words_filtered` and `lines_unparsed` are reported, not hidden (I7).
+- **A blocked parse leaves no batch for this route to return** (spec §5.5): the id from a blocked
+  `POST /parse` response 404s here. The blocked verdict lives in the parse response and is
+  rendered by Task 7b and Task 9b — this route serves only batches that actually staged.
 
 **Validation.** The API gate, the web gate for regenerated types.
 
@@ -1038,8 +1040,8 @@ route change.
 **Depends on:** Task 6a. Independent of 6b and 6d.
 **Forecast:** ~170 production, ~300 test.
 
-**Outcome.** A staged row can be accepted, corrected or excluded before the commit, including the
-override that accepts a row marked duplicate.
+**Outcome.** `PATCH /import/{batch_id}/rows` accepts, corrects or excludes staged rows before the
+commit, including the override that accepts a row marked duplicate.
 
 **Files.**
 - Modify `api/oneledger/routes/ingest.py`, `api/tests/test_row_decisions.py` (new).
@@ -1076,7 +1078,7 @@ imported, and the same transaction twice still cannot.
 **Depends on:** Task 6a.
 **Forecast:** ~180 production, ~340 test.
 
-**Outcome.** `POST /imports/{id}/commit` turns accepted staged rows into ledger rows, or changes
+**Outcome.** `POST /import/{batch_id}/commit` turns accepted staged rows into ledger rows, or changes
 nothing at all.
 
 **Files.**
@@ -1161,7 +1163,8 @@ a generic error.
 
 **Required test behaviours (failing first).**
 - One file failing leaves the others' statuses intact.
-- A file needing a password prompts for that file alone.
+- An encrypted file reports that it needs a password and is skipped; **M2 offers no prompt and no
+  retry** (§10 — M3 owns the prompt, and M2 must not create a place to put one).
 - Nothing is posted until Stage batch is clicked.
 - A blocked file's verdict text reaches the screen.
 
@@ -1265,7 +1268,8 @@ default and accepting it is a deliberate act with its consequence stated.
 **Required test behaviours (failing first).**
 - No row is accepted by default; committing with nothing accepted imports nothing.
 - A duplicate row is visibly marked and excluded until overridden.
-- A blocked batch cannot be committed from the screen.
+- A batch with no accepted rows commits nothing. (A *blocked* batch never reaches this screen —
+  it never staged; §5.5.)
 - Amounts render as formatted strings; no arithmetic in the component.
 
 **Validation.** The web gate.
@@ -1280,15 +1284,17 @@ default and accepting it is a deliberate act with its consequence stated.
 **Branch:** `feature/m2-t9b-diagnostics-panel`
 **Base and PR target:** `develop`
 **Migration:** none.
-**Depends on:** Task 9a.
+**Depends on:** Task 7b. Independent of Task 9a.
 **Forecast:** ~200 production, ~200 test.
 
-**Outcome.** When a batch blocks, the owner can see why, in the statement's own numbers.
+**Outcome.** When a parse blocks, the owner can see why, in the statement's own numbers — on the
+import screen, because a blocked batch never staged and has no review screen (§5.5).
 
 **Files.**
 - Create `web/app/import/diagnostics-panel.tsx`,
   `web/app/import/__tests__/diagnostics-panel.test.tsx`.
-- Modify `web/app/import/review-screen.tsx` (the panel's placement) and its test.
+- Modify `web/app/import/import-screen.tsx` (the panel renders the `POST /parse` response for a
+  blocked file) and its test.
 
 **Contracts.** `statement-ingestion.html` §12: extracted rows beside the computed totals, the
 declared and computed closing balances, the delta, the divergent row or the candidate rows, and
