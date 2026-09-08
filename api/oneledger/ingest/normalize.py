@@ -25,6 +25,12 @@ LEDGER_LIMIT = Decimal(10) ** 16
 # applies. Anchoring a century on a guess is the error this whole section exists to prevent.
 PERIOD_FORMATS = tuple(key for key in DATE_FORMATS if "yyyy" in key)
 CREDIT_DEBIT_SUFFIX = re.compile(r"(CR|DR)\s*$", re.IGNORECASE)
+# inverts_sign carries a statement written in the issuer's frame into the ledger's, and only
+# these two conventions are written in that frame. A Dr/Cr suffix and a debit/credit column
+# pair state the direction themselves, and the generic rule already lands a card purchase on
+# the ledger's negative side — inverting on top of either reverses every row on the card.
+# LayoutCreate refuses that combination; this set is why the engine does not depend on it.
+INVERTIBLE_CONVENTIONS = frozenset({"signed", "balance_delta"})
 GROUPING = re.compile(r",")
 
 
@@ -389,7 +395,7 @@ def normalize(
         if amount is None:
             failures.append(RowFailure(row.page_number, row.row_number, refusal or "no amount"))
             continue
-        if profile.invertsSign:
+        if profile.invertsSign and profile.signConvention in INVERTIBLE_CONVENTIONS:
             # Applied last, to the ledger amount, never to the statement's own cells: a card
             # purchase presented as a positive debit is negative in the ledger (Invariant I2).
             amount = -amount
@@ -414,8 +420,20 @@ def normalize(
                 )
             )
             continue
-        original_amount = parse_amount(_cell(row, "original_amount"))
+        original_amount_cell = _cell(row, "original_amount")
+        original_amount = parse_amount(original_amount_cell) if original_amount_cell else None
         original_currency = _cell(row, "original_currency").upper() or None
+        if original_amount_cell and original_amount is None:
+            # With both halves absent the row would look exactly like one whose statement
+            # stated no foreign amount, discarding the bank's own conversion without a word.
+            failures.append(
+                RowFailure(
+                    row.page_number,
+                    row.row_number,
+                    f"original_amount {original_amount_cell!r} is not a number",
+                )
+            )
+            continue
         if (original_amount is None) != (original_currency is None):
             failures.append(
                 RowFailure(

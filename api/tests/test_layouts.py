@@ -906,6 +906,41 @@ def test_an_unknown_column_field_is_still_refused() -> None:
         layouts.LayoutCreate.model_validate(bad)
 
 
+@pytest.mark.parametrize("convention", ["cr_suffix", "debit_credit_columns"])
+def test_inversion_is_refused_where_the_convention_already_states_direction(
+    convention: str,
+) -> None:
+    # inverts_sign carries a statement written in the issuer's frame into the ledger's. A
+    # Dr/Cr suffix and a debit/credit pair already state direction, so inverting them reverses
+    # every row on the card — internally consistent and entirely wrong.
+    body = {**VALID_CREATE, "signConvention": convention, "invertsSign": True}
+    if convention == "debit_credit_columns":
+        body["columns"] = [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "debit", "xMin": 200.0, "xMax": 260.0},
+            {"field": "credit", "xMin": 260.0, "xMax": 320.0},
+        ]
+    with pytest.raises(ValidationError, match="invertsSign"):
+        layouts.LayoutCreate.model_validate(body)
+
+
+@pytest.mark.parametrize("convention", ["signed", "balance_delta"])
+def test_inversion_is_accepted_where_the_amount_carries_the_issuers_frame(
+    convention: str,
+) -> None:
+    body = {**VALID_CREATE, "signConvention": convention, "invertsSign": True}
+    if convention == "balance_delta":
+        body["columns"] = [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "running_balance", "xMin": 200.0, "xMax": 260.0},
+        ]
+        body["hasRunningBalance"] = True
+
+    assert layouts.LayoutCreate.model_validate(body).invertsSign is True
+
+
 def test_a_column_band_must_have_xmin_less_than_xmax() -> None:
     bad = {
         **VALID_CREATE,

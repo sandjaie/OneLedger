@@ -56,6 +56,9 @@ RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_en
 ROW_START_RULES = frozenset({"has_date_and_amount", "has_date"})
 CONTINUATION_RULES = frozenset({"no_date_and_no_amount"})
 SIGN_CONVENTIONS = frozenset({"debit_credit_columns", "signed", "cr_suffix", "balance_delta"})
+# The two whose numbers carry no direction of their own, and so are written in whichever frame
+# the issuer chose. Only these can be inverted into the ledger's frame (M2 Task 4).
+DIRECTIONLESS_CONVENTIONS = frozenset({"signed", "balance_delta"})
 CHRONOLOGICAL_ORDERS = frozenset({"ascending", "descending"})
 # A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.
 TWO_DIGIT_YEAR = re.compile(r"(?<!y)yy(?!y)")
@@ -249,6 +252,24 @@ class LayoutCreate(BaseModel):
             supported = ", ".join(sorted(CONTINUATION_RULES))
             raise ValueError("continuationRule must be omitted or one of: " + supported)
         return value
+
+    @model_validator(mode="after")
+    def inversion_matches_its_convention(self) -> LayoutCreate:
+        """`inverts_sign` carries the issuer's frame into the ledger's, so it needs that frame.
+
+        A Dr/Cr suffix and a debit/credit column pair state the direction themselves: the
+        generic rule already lands a card purchase on the ledger's negative side, and inverting
+        on top of it stores every purchase as income and every payment as expense — a card
+        reversed end to end while staying internally consistent, which is the sign error
+        Invariant I2 exists to catch.
+        """
+        if self.invertsSign and self.signConvention not in DIRECTIONLESS_CONVENTIONS:
+            raise ValueError(
+                f"invertsSign cannot be set with signConvention {self.signConvention!r}: that "
+                "convention already states each row's direction. It applies to: "
+                + ", ".join(sorted(DIRECTIONLESS_CONVENTIONS))
+            )
+        return self
 
     @model_validator(mode="after")
     def running_balance_flag_matches_its_column(self) -> LayoutCreate:
