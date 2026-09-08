@@ -20,28 +20,61 @@ tests, and violations of this repository's own rules.
 **Produce findings another agent can patch. Do not modify code** unless the user explicitly
 commands fix mode.
 
-The Codex round is not the review — it is the audit of a review that should already have happened
-here. M2 task 3 took eight Codex rounds and fifteen fix commits, every one on a theme this skill
-now names: a raw identifier reaching a response, a log line or an error message.
+**This is the only review.** Cloud review was removed on 8 September 2026, so nothing downstream
+catches what this pass misses. That raises the stakes and lowers the tolerance for ceremony in
+equal measure: spend the time on the diff and on hostile inputs, not on re-running gates the
+implementer already ran. M2 task 3's eight rounds and fifteen fix commits were every one on a
+theme this skill names — a raw identifier reaching a response, a log line or an error message —
+and that is the kind of thing only reading finds.
 
 ## Repository workflow
 
 `develop` is the integration branch. Work arrives on `feature/*`, `fix/*`, `chore/*` or `docs/*`
 branches, one task-sized slice each. The flow is:
 
-implement → `/verify` → **this review** → fix every finding → `/verify` → re-review →
-**first push** → PR → Codex → `develop`
+implement → `/verify` → **this review** → fix every finding → re-review → **first push** →
+PR → `develop`
 
 This is gate 5 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
 **implementation being finished on a green tree** — not "before some push", but before the
 branch reaches `origin` at all. Pushing unreviewed work and reviewing it afterwards is the
 failure this gate exists to prevent: a finding raised after the push has already cost what the
-gate was meant to save, and on
-a branch with a PR it costs a Codex round as well. A PR is opened only from a head this gate has
-passed. There is no path to `origin` that skips it — not a checkpoint commit, not a one-line
-follow-up, not a patch answering a Codex finding.
+gate was meant to save. A PR is opened only from a head this gate has passed. There is no path to
+`origin` that skips it — not a checkpoint commit, not a one-line follow-up.
 
 **Never review `develop` as though it were a feature branch.**
+
+## Budget the review
+
+**A first pass aims at five minutes; a re-review of fixes aims at three.** Past that the gate
+stops paying for itself. The slow parts are almost never the thinking, and a reviewer that spends
+nine minutes re-running what the implementer already ran has bought nothing and delayed the fix.
+
+Two shapes, and the dispatching prompt says which:
+
+- **First pass** — a module or route this gate has not seen. Read the diff and its neighbours,
+  run the applicable gates once, and spend everything left on hostile inputs and the passes
+  below. This is where findings come from.
+- **Confirmation pass** — the same branch after fixes. Confirm each earlier finding is closed,
+  review the fix commits as their own surface, and stop. Do not re-derive the branch.
+
+In practice, all of this measured on M2 task 5, where rounds ran to fifteen minutes and the two
+tightest rounds found as much as the longest:
+
+- **Run only the gates the diff can affect.** An API-only branch needs no `npm run build`, no
+  vitest and no TypeScript compiler; a branch with no migration needs no SQL suites. Skipping a
+  gate the diff cannot reach is correct — name it skipped and why. A skipped gate is honest; an
+  unrun gate reported as passing is not.
+- **Run each gate once, at the end.** Not between passes.
+- **Do not re-derive the mutation battery.** The implementer runs it and reports it. Verify a
+  sample of three to five — the ones guarding money, an invariant or the authorization boundary
+  — and spend the rest of the budget hunting for guards the battery never covered. That hunt is
+  the value; re-running someone else's twenty mutants is not.
+- **Read the sections the prompt names**, not whole documents. The M2 spec alone runs to seven
+  hundred lines.
+
+A diff that genuinely needs longer — a migration, a new authorization path, a module handling
+identifiers — takes longer. Say in the report why the budget did not fit.
 
 ## Determine review scope
 
@@ -195,6 +228,11 @@ Ingestion, staging and commit should be idempotent wherever it is reasonable.
 
 Do not ask whether tests exist. Determine whether they prove the changed behaviour.
 
+**The implementer's mutation battery is evidence, not a substitute for this pass.** Verify a
+sample, then hunt for what it missed — a guard nobody thought to mutate is the finding. An
+"equivalent mutant" claim deserves one check before it is accepted, and a mutant that dies of a
+syntax error or an aborted transaction proves nothing about the semantics it was aimed at.
+
 For each meaningful behaviour change, identify the happy path, the failure path, the boundary, the
 malformed input, the external-dependency failure, the idempotency case and the regression that
 would catch this bug returning.
@@ -233,12 +271,28 @@ Do not raise style a linter or formatter already owns.
 
 ## Validation
 
-Run the repository's own checks — `/verify`, or the individual commands it lists. Do not introduce
-a new dependency to review.
+Run the gates **this diff can affect**, once each, and report real numbers. Do not introduce a new
+dependency to review.
+
+| The diff touches | Run |
+| --- | --- |
+| `api/` | `ruff check .`, `mypy .`, `pytest -q` |
+| a migration or `db/tests/` | `scripts/hooks/db-tests.sh`; migrations from empty only when a migration is added |
+| `web/` | `api:types:check`, `typecheck`, `vitest run`; `npm run build` only when the bundle could change |
+| `docs/` or any `.md` | `python3 scripts/check-docs.py` |
+| anything | `scripts/check-diff-size.sh` |
 
 **Never claim a command passed unless you actually ran it and it succeeded.** If something cannot
 be run here — no database, no browser, no network — say so explicitly and mark it `NOT RUN` with
 the reason. A gate that reports checks it did not run is worse than no gate.
+
+**Pytest's exit code is not a mutation-kill signal here.** With `POSTGRES_PASSWORD` exported, six
+tests in `api/tests/test_auth.py` and `api/tests/test_oidc.py` fail on `develop` itself. Judge
+mutants against a subset asserted green first, and put that baseline in the report. Two M2 rounds
+reported kills that were only the pre-existing failures.
+
+**Purge `__pycache__` and set `PYTHONDONTWRITEBYTECODE=1` before any mutation run.** A stale
+`.pyc` has produced a false result in this repository before.
 
 ---
 
