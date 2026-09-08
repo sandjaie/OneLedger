@@ -79,6 +79,16 @@ def test_the_kept_filename_is_masked_before_it_leaves_the_request(tmp_path: Path
         # Deliberate over-masking: a dotted date totals eight digits, and §5.6 counts
         # digits across separators rather than guessing which runs are identifiers.
         ("2026.01.15-statement.pdf", "…0115-statement.pdf"),
+        # Every separator §5.6 names, each pinned by a case that needs it.
+        ("1234–5678–9012.pdf", "…9012.pdf"),
+        ("1234_5678_9012.pdf", "…9012.pdf"),
+        ("1234/5678/9012.pdf", "…9012.pdf"),
+        # And the ones it does not name. An enumerated class leaves all sixteen digits.
+        ("card 4111\u20111111\u20111111\u20111111.pdf", "card …1111.pdf"),
+        ("card 4111\u20141111\u20141111\u20141111.pdf", "card …1111.pdf"),
+        ("card 4111\u22121111\u22121111\u22121111.pdf", "card …1111.pdf"),
+        ("card 4111\u200b1111\u200b1111\u200b1111.pdf", "card …1111.pdf"),
+        ("card 4111\u00a01111\u00a01111\u00a01111.pdf", "card …1111.pdf"),
     ],
 )
 def test_the_mask_replaces_a_formatted_identifier_and_leaves_a_date(raw: str, masked: str) -> None:
@@ -90,7 +100,7 @@ def test_the_mask_replaces_a_formatted_identifier_and_leaves_a_date(raw: str, ma
 def test_a_name_that_is_a_path_is_refused(tmp_path: Path) -> None:
     """The name never reaches a path — but a name that *tries* to is refused rather than
     quietly masked, because the attempt is the signal."""
-    for hostile in ["../escape.pdf", "/etc/passwd", "a/b.pdf", "..", "sub\\dir.pdf"]:
+    for hostile in ["../escape.pdf", "/etc/passwd", "a/b.pdf", "..", "sub\\dir.pdf", ""]:
         with pytest.raises(StorageError):
             store(STATEMENT, HOUSEHOLD, hostile, root=tmp_path)
 
@@ -125,6 +135,22 @@ def test_a_missing_documents_dir_refuses_naming_the_variable(
     monkeypatch.delenv("DOCUMENTS_DIR", raising=False)
     with pytest.raises(StorageError, match="DOCUMENTS_DIR"):
         store(STATEMENT, HOUSEHOLD, CARD_FILENAME)
+
+
+def test_an_empty_documents_dir_refuses_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unset and empty are the same mistake. `Path("")` is the working directory, so tolerating
+    it writes the household's statements wherever the service happens to be running."""
+    monkeypatch.setenv("DOCUMENTS_DIR", "")
+    with pytest.raises(StorageError, match="DOCUMENTS_DIR"):
+        store(STATEMENT, HOUSEHOLD, CARD_FILENAME)
+
+
+def test_a_name_carrying_control_characters_is_refused(tmp_path: Path) -> None:
+    """A NUL cannot reach a Postgres text column, and a newline forges log lines in the very
+    messages §5.6 requires to carry the masked name."""
+    for hostile in ["a\x00b.pdf", "a\nb.pdf", "a\rb.pdf", "a\x1bb.pdf", "a\x85b.pdf"]:
+        with pytest.raises(StorageError):
+            store(STATEMENT, HOUSEHOLD, hostile, root=tmp_path)
 
 
 def test_storing_the_same_bytes_twice_is_the_same_file(tmp_path: Path) -> None:
@@ -199,3 +225,24 @@ def test_a_failed_write_leaves_nothing_under_the_promised_name(
 def test_a_successful_write_leaves_no_scratch_file(tmp_path: Path) -> None:
     stored = store(STATEMENT, HOUSEHOLD, CARD_FILENAME, root=tmp_path)
     assert [p.name for p in stored.path.parent.iterdir()] == [f"{checksum(STATEMENT)}.pdf"]
+
+
+def test_the_blob_is_moved_into_place_under_a_scratch_name_of_its_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rename is the atomicity, and a direct write satisfies both the other write tests —
+    so the property the module argues for needs its own assertion. The scratch name differs
+    per write because two uploads of the same statement would otherwise share it."""
+    moves: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "oneledger.ingest.storage.os.replace",
+        lambda source, target: moves.append((str(source), str(target))),
+    )
+    store(STATEMENT, HOUSEHOLD, CARD_FILENAME, root=tmp_path)
+    store(STATEMENT, HOUSEHOLD, CARD_FILENAME, root=tmp_path)
+
+    assert len(moves) == 2, "the no-op rename leaves no target, so the second write happens too"
+    for source, target in moves:
+        assert source != target, "written beside the target, never onto it"
+        assert source.endswith(".part") and target.endswith(".pdf")
+    assert moves[0][0] != moves[1][0], "and under a name no concurrent write can share"

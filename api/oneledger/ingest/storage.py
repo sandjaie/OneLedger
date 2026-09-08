@@ -25,9 +25,12 @@ from uuid import UUID
 
 import psycopg
 
-# What formats an identifier rather than separating two numbers: whitespace, hyphen, en dash,
-# dot, underscore, slash. `security-and-privacy.html` §1 and spec §5.6.
-_SEPARATOR = r"[\s\-–._/]"
+# Anything that is neither a letter nor a digit formats an identifier rather than ending one.
+# Stated as a closed rule rather than a list: spec §5.6 enumerates six separators, and an
+# allowlist is exactly the guess this mask exists to avoid — a non-breaking hyphen, an em dash
+# or a zero-width space between the groups of a card number defeats an enumerated class and
+# leaves all sixteen digits stored. `routes/layouts.py` already screens identifiers this way.
+_SEPARATOR = r"[\W_]"
 # A run of digits, possibly formatted by those separators, starting and ending with a digit.
 _RUN = re.compile(rf"\d(?:(?:\d|{_SEPARATOR})*\d)?")
 # Seven digits is the threshold: a four-digit year, a day and a short reference survive.
@@ -83,6 +86,11 @@ def _validated_name(name: str) -> str:
     """
     if not name or name in {".", ".."}:
         raise StorageError("the uploaded file has no usable name")
+    if any(ord(character) < 0x20 or 0x7F <= ord(character) <= 0x9F for character in name):
+        # A NUL cannot reach a Postgres text column at all, and a newline forges log lines the
+        # moment anything writes the masked name — which §5.6 requires parse errors to do. The
+        # refusal belongs beside the other hostile-name handling, not in the driver.
+        raise StorageError("the uploaded file name contains control characters")
     if name != Path(name).name or "\\" in name or Path(name).is_absolute():
         raise StorageError("the uploaded file name may not contain a path")
     return name
@@ -138,11 +146,17 @@ def refuse_if_already_imported(cur: psycopg.Cursor[Any], household_id: UUID, sha
     Layer 1 of the three (spec §4.7): free, and it catches the common case before a page is
     parsed. The blob write above is idempotent, so this — not the filesystem — is where a
     re-upload is stopped.
+
+    The join carries its own household predicate. Nothing in the schema ties a batch to its
+    document's household, and the service connects privileged and bypasses RLS (ADR-0013,
+    ADR-0016), so this query is the boundary for what it returns rather than a convenience
+    over one.
     """
     cur.execute(
         """SELECT d.uploaded_at::date, b.id
              FROM document d
-             LEFT JOIN import_batch b ON b.document_id = d.id
+             LEFT JOIN import_batch b
+                    ON b.document_id = d.id AND b.household_id = d.household_id
             WHERE d.household_id = %s AND d.sha256 = %s
             ORDER BY b.created_at NULLS LAST
             LIMIT 1""",
