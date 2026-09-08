@@ -388,6 +388,9 @@ it becomes decoration.</p>
    Detect duplicates              against staged and committed rows
      │
      ▼
+   Reconcile                      opening + Σ rows = declared closing?   ← blocks
+     │
+     ▼
    Enrich FX                      fetch rates, freeze amount_base / amount_secondary
      │
      ▼
@@ -395,9 +398,6 @@ it becomes decoration.</p>
      │
      ▼
    Match transfers                scored candidates
-     │
-     ▼
-   Reconcile                      opening + Σ rows = declared closing?   ← blocks
      │
      ▼
    Stage                          write document, import_batch, staged_transaction
@@ -408,6 +408,13 @@ it becomes decoration.</p>
      ▼
    Import                         one database transaction; balances recomputed
 </code></pre>
+<p><strong>Reconciliation runs before FX enrichment, not after it.</strong> The check is local,
+exact and blocking: it needs only the parsed rows and the statement's own declared balances, so
+running it first means a batch that cannot reconcile costs no network round trip and no stored
+rate rows. The verdict recorded on <code>import_batch</code> is identical in either order — the
+identity is evaluated on native signed ledger amounts, which FX enrichment does not touch. The
+earlier ordering, with reconciliation after transfer matching, was written before the importer
+had a blocking verdict to compute.</p>
 <p>Every stage runs in the <strong>Python service on <code>localhost</code></strong>
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>). The web app posts the file and renders the
 result; it performs no parsing and no arithmetic. Statements are processed on your own machine and reach no

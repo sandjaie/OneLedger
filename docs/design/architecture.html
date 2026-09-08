@@ -387,8 +387,8 @@ reasons set out in §2.</p>
    │  FastAPI · Python 3.14                                    │
    │  runs on localhost:8000                                   │
    │                                                            │
-   │  parse (pdfplumber) → normalize → dedupe → FX freeze      │
-   │       → reconcile → stage                                  │
+   │  parse (pdfplumber) → normalize → dedupe → reconcile      │
+   │       → FX freeze → stage                                  │
    │  classify · match transfers · XIRR · amortisation          │
    │                                                            │
    │  Statements are parsed on your machine and never           │
@@ -524,10 +524,10 @@ arithmetic on it — enforced by lint.</p>
 6.  API      pdfplumber → words → apply the layout profile → raw rows
 7.  API      normalize: dates, signs, currency, description cleanup
 8.  API      compute dedupe_hash → mark duplicates against existing rows
-9.  API      fetch missing FX rates → freeze amount_base / amount_secondary
-10. API      classify through the deterministic cascade
-11. API      propose transfer matches, scored
-12. API      reconcile: opening + Σ rows = declared closing?   ← blocks on mismatch
+9.  API      reconcile: opening + Σ rows = declared closing?   ← blocks on mismatch
+10. API      fetch missing FX rates → freeze amount_base / amount_secondary
+11. API      classify through the deterministic cascade
+12. API      propose transfer matches, scored
 13. API      write the original to the documents volume; write document, import_batch,
              staged_transaction — one database transaction
 14. You      review: confirm categories, confirm transfers, fix anything wrong
@@ -535,8 +535,10 @@ arithmetic on it — enforced by lint.</p>
 16. API      balances, net worth snapshot, holdings recomputed
 </code></pre>
 <p>Steps 3–13 are one HTTP call per file. The file bytes reach the service and the documents volume, and nowhere else.</p>
-<p><strong>Nothing is written until the batch reconciles.</strong> A failure at step 12 returns the divergent
-row and leaves the database untouched — no orphaned <code>document</code> row to clean up.</p>
+<p><strong>Nothing is written until the batch reconciles.</strong> A failure at step 9 returns the divergent
+row and leaves the database untouched — no orphaned <code>document</code> row to clean up. Reconciliation
+runs before FX enrichment so that a doomed batch costs no network round trip and no stored rate rows;
+the identity is evaluated on native signed ledger amounts, which enrichment does not touch.</p>
 <h2 id="data-flow-a-morning-dashboard-load">6. Data flow: a morning dashboard load</h2>
 <pre><code>Browser → Next.js → GET /dashboard on the Python service
                   → 4 queries against pre-computed tables:

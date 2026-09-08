@@ -126,22 +126,44 @@ preference, overriding skill defaults). Do not remove existing worktrees.
 
 **Base and PR target for every task:** `develop`.
 
+Every branch carries its task number, so the branch in a checkout says which task is running.
+
 | # | Branch | Carries | Migration |
 |---|---|---|---|
 | 1 | `chore/m2-ci-and-backup` | This plan; CI workflow; `scripts/backup-db.sh`; stale-cap doc fix | — |
 | 2 | `feature/m2-documents-and-layouts` | `document`, `import_batch`, `statement_layout`; layouts API | **V12** |
 | 3 | `feature/m2-extraction-engine` | Word/band extraction, quirks, `propose`; account hashing | — |
-| 4 | `feature/m2-staged-rows-and-normalization` | `staged_transaction`; normalize, dedupe, reconcile | **V13** |
-| 5 | `feature/m2-parse-and-stage` | FX fetch-on-missing, storage, `POST /parse` | — |
-| 6 | `feature/m2-review-and-commit-api` | Review payload, row decisions, atomic commit | **V14** |
-| 7 | `feature/m2-import-screen` | `/import`: multi-file drop, per-file status, Stage batch | — |
-| 8 | `feature/m2-layout-mapping-ui` | The mapping UI: bands, drag, live preview, save | — |
-| 9 | `feature/m2-review-screen-and-acceptance` | Review screen, diagnostics panel, end-to-end gate | — |
+| 4a | `feature/m2-staged-rows-and-normalization` | `staged_transaction`; `StagedTransaction`; normalization | **V13** |
+| 4b | `feature/m2-t4b-dedupe` | `ingest/dedupe.py` — fingerprint, occurrence index, near-duplicate | — |
+| 4c | `feature/m2-t4c-reconcile` | `ingest/reconcile.py` — the four verdicts | — |
+| 5a | `refactor/m2-t5a-money-helpers` | `money.py`, extracted from `routes/transactions.py` | — |
+| 5b | `feature/m2-t5b-fx-fetch-on-missing` | The backfill body as a callable; fetch-on-missing | — |
+| 5c | `feature/m2-t5c-document-storage` | `ingest/storage.py` — blob, sha256, filename rules | — |
+| 5d | `feature/m2-t5d-parse-pipeline` | `ingest/pipeline.py` — the only module holding a connection | — |
+| 5e | `feature/m2-t5e-parse-route` | `routes/ingest.py` — `POST /parse` | — |
+| 5f | `feature/m2-t5f-layout-draft-preview` | Draft mode gains the normalized preview and verdict | — |
+| 6a | `feature/m2-t6a-import-commit-migration` | The commit and verification functions | **V14** |
+| 6b | `feature/m2-t6b-review-payload` | `GET /imports/{id}/review` | — |
+| 6c | `feature/m2-t6c-row-decisions` | Row decisions, including the confirmed-distinct override | — |
+| 6d | `feature/m2-t6d-atomic-commit-route` | `POST /imports/{id}/commit` | — |
+| 7a | `feature/m2-t7a-import-screen-shell` | `/import`: the page, the nav entry, multi-file drop | — |
+| 7b | `feature/m2-t7b-import-file-status` | Per-file status and Stage batch | — |
+| 8a | `feature/m2-t8a-layout-mapper-preview` | The mapper: header row, bands, live preview | — |
+| 8b | `feature/m2-t8b-layout-mapper-editing` | The mapper: drag, re-post, save | — |
+| 9a | `feature/m2-t9a-review-screen` | The review screen | — |
+| 9b | `feature/m2-t9b-diagnostics-panel` | The diagnostics panel | — |
+| 9c | `feature/m2-t9c-import-acceptance` | The end-to-end gate and M2 acceptance | — |
 
-Tasks are strictly ordered: 2 → 3 → 4 → 5 → 6 → {7, 8} → 9. Task 1 goes first so the operational
-pieces (the proven CI workflow, kept manual-only by owner decision — §3.1 — and the restorable
-backup) exist before any importer table does; the enforced per-PR gate is the local hook suite. Tasks 7 and 8 are independent of each other and may be delivered in either order,
-but both after 5 (they consume `POST /parse` and `POST /layouts/propose`).
+Order: 2 → 3 → 4a → {4b, 4c} → 5a → 5b → 5c → 5d → {5e, 5f} → 6a → {6b, 6c, 6d} → 7a → 7b →
+{8a → 8b} → 9a → 9b → 9c. Braces mark slices independent of each other. 7a and 8a both need 5e or
+5f and may land in either order.
+
+**Nineteen branches replace the six this plan originally named for tasks 4–9.** Tasks 3 and 4a
+were each three to four times the diff budget — Task 3 reached +3,380 lines and took eight review
+rounds; Task 4a, already half of a split task, reached +2,094. A branch is re-read in full on
+every review round, so review cost grows faster than the diff. Each slice below is forecast
+against this tree's own measured sizes, and no slice exceeds 400 added production lines or 800
+added production and test lines.
 
 ---
 
@@ -209,431 +231,18 @@ A red or partial owner-run result is recorded as red. Do not mark M2 complete on
 
 ---
 
-## 4. Architecture decisions
+## 4. Architecture decisions — see the spec
 
-Grounded in the current tree, which the implementer should read before starting each task.
+Moved to [the M2 spec](../specs/2026-09-07-m2-statement-importer.md), which keeps the same section
+numbers: §4.1 module layout, §4.2 route surface, §4.3 the parse contract, §4.4 the extraction
+engine, §4.5 `propose()`, §4.6 reconciliation, §4.7 dedupe, §4.8 FX enrichment, §4.9 the commit.
 
-### 4.1 New module layout
+## 5. Table and storage contracts — see the spec
 
-```
-api/oneledger/
-  money.py                    # Task 5: freeze helpers extracted from routes/transactions.py
-  ingest/
-    __init__.py
-    words.py                  # Task 3: pdfplumber words -> banded rows; scanned detection
-    engine.py                 # Task 3: matches() / extract() / propose(); quirk handlers
-    normalize.py              # Task 4: dates, signs, currency, description cleanup
-    dedupe.py                 # Task 4: fingerprint + near-duplicate
-    reconcile.py              # Task 4: the four verdicts
-    storage.py                # Task 5: blob write, filename masking
-    pipeline.py               # Task 5: orchestration + the staging transaction
-  schemas/
-    __init__.py
-    staging.py                # Task 4: StagedTransaction (api-contracts.html §4 names this path)
-  routes/
-    layouts.py                # Tasks 2 and 3
-    ingest.py                 # Tasks 5 and 6
-```
+Moved to [the M2 spec](../specs/2026-09-07-m2-statement-importer.md) §5: V12 and V13 DDL, statuses,
+the staging transaction, what a blocked batch leaves behind, and the filename and never-store
+rules.
 
-`api/oneledger/ingest/` **may not import from `api/oneledger/routes/`** and may not open a
-database connection except in `pipeline.py`. Extraction, normalization, dedupe and reconciliation
-are pure functions over values, unit-testable with no database (`testing-and-data-quality.html`
-§2, "Parsers may not import from lib/queries").
-
-Web:
-
-```
-web/app/import/
-  page.tsx                    # Task 7
-  import-screen.tsx           # Task 7
-  layout-mapper.tsx           # Task 8
-  review-screen.tsx           # Task 9
-  diagnostics-panel.tsx       # Task 9
-  __tests__/*.test.tsx
-```
-
-`web/app/workspace.tsx` gains an `"import"` section: the `Props["section"]` union,
-`sectionFromPath()` and the nav — a `next/link` entry labelled **Import** pointing at the
-`/import` route, placed between Accounts and Transactions, following the existing `Link` entries
-exactly. The disabled "Plans" nav button stays as it is.
-
-### 4.2 Route surface added by M2
-
-All under `require_owner()`, all money as decimal strings, all field names **camelCase** on the
-wire (matching `routes/transactions.py` and `routes/accounts.py`).
-
-| Route | Task | Does |
-|---|---|---|
-| `GET /layouts` | 2 | The household's saved layout profiles, newest version per name |
-| `POST /layouts` | 2 | Saves a profile. Re-saving an existing `name` creates `version + 1` |
-| `POST /layouts/propose` | 3 | Multipart PDF → a draft profile: header row, column bands, sample rows. With an optional `draft` field, previews that edited draft against the file instead of auto-proposing. Persists nothing in either mode |
-| `POST /parse` | 5 | Multipart PDF + `stage` flag. Identify, extract, normalize, dedupe, reconcile; stage only when `stage=true` and the verdict allows it |
-| `GET /import/{batch_id}` | 6 | The batch, its verdict and its staged rows grouped for review |
-| `PATCH /import/{batch_id}/rows` | 6 | Bulk row decisions: accept, reject, categorize |
-| `POST /import/{batch_id}/commit` | 6 | One database transaction: staged accepted rows become `transaction` rows, then the batch re-verifies and rolls back whole on mismatch |
-
-`GET /documents/{id}/original` is **out of scope** — the document library is M10. The review
-screen shows `description_raw`, page and row number, which is what M2's traceability gate needs.
-
-### 4.3 The parse contract: dry run then stage
-
-`POST /parse` takes the file, an optional `layoutId`, an optional `accountId`, and a boolean
-`stage` (default **false**).
-
-- `stage=false` writes **nothing** and returns the full summary: identification result,
-  reconciliation verdict, row counts by proposed status, and the first 50 normalized rows for
-  preview. This is the roadmap's "nothing written until Stage batch".
-- `stage=true` performs the staging transaction described in §5.4 and returns the same summary
-  plus `batchId`.
-
-The file crosses localhost twice. That is acceptable at statement sizes and avoids a
-server-side scratch store with its own lifetime, ownership and cleanup problems; revisit only if
-measured latency makes it unacceptable.
-
-### 4.4 The extraction engine
-
-One engine, driven entirely by a profile row. `matches()`, `extract()`, `propose()` per
-`statement-ingestion.html` §4. Extraction rules:
-
-1. `page.extract_words()` gives words with `x0`, `x1`, `top`, `bottom`, `text`. Group words into
-   **physical lines** by `top` within a tolerance (the profile's default; propose from the modal
-   line height). Never sort by reading order across columns.
-2. Assign each word to the column whose `[x_min, x_max)` band contains the word's **horizontal
-   midpoint** `(x0 + x1) / 2`. Midpoint, not `x0`: a right-aligned amount that overhangs its band
-   on the left otherwise lands in the description column. A word whose midpoint falls in no band
-   is dropped from `fields` but stays in `raw_text`.
-3. Within a column, join words by ascending `x0` with a single space. **This is what makes the
-   space-less producer work** (M3's layout D) and it costs nothing here.
-4. A line matching any `skip_line_patterns` entry is dropped before row assembly.
-5. Row assembly follows `row_start_rule`. `has_date_and_amount`: a line starts a row when its
-   date column parses under `date_format` **and** its amount column parses as a number.
-   `has_date`: the date alone starts a row. Any other line, when `continuation_rule` is
-   `no_date_and_no_amount`, appends its description column to the previous row's description
-   with a single space; with no continuation rule it is dropped and counted as unparsed.
-6. `raw_text` is the whole physical line, kept verbatim, for the diagnostics panel.
-
-**Quirk `filter_script:arabic`.** Before line grouping, drop any word whose text contains a
-character in `U+0600–U+06FF`, `U+0750–U+077F`, `U+08A0–U+08FF`, `U+FB50–U+FDFF` or
-`U+FE70–U+FEFF`. Dropped words are counted and the count is reported in the parse summary
-(Invariant 7 — a filter that silently removes content is indistinguishable from a parser bug).
-
-**Quirk `continuation:no_date_and_no_amount`.** As rule 5 above. Recorded as a profile flag so
-that the vocabulary, not the layout, is what grew.
-
-The quirk vocabulary is **exactly these two** in M2. A third is a considered addition with the
-owner's agreement, not a reflex (ADR-0012).
-
-**Reserved metadata keys.** `metadata_patterns` is a generic capture map, with three reserved
-keys the pipeline understands: `account_number` (sensitive and transient — Task 3),
-`period_start` and `period_end` (the statement period, parsed under the profile's
-`date_format`). When the period keys are captured they are authoritative: they gate row dates
-(a parsed date outside the period fails its row) and window two-digit years. When absent, the
-period is **derived** from the parsed row dates and labelled derived (I7) in the parse summary
-and on `import_batch`. Because windowing two-digit years against a derived period is circular,
-**a profile whose `date_format` has a two-digit year must capture both period keys — enforced
-at save (422)**. Every reserved capture takes exactly one capture group, enforced at save.
-
-**Scanned detection.** A page whose `extract_words()` returns zero words is a scanned page.
-`extract()` reports `has_text=false` and the parse is refused with a message saying scanned PDFs
-are not supported, never garbage rows. The full M3 refusal UX is out of scope here.
-
-### 4.5 `propose()` — auto-proposal
-
-Given the pages of an unrecognised PDF:
-
-1. Find the **header row**: the physical line whose words match the most entries in a synonym
-   table, requiring at least a date synonym and one amount synonym. The synonym table is
-   **module-level data in `engine.py`**, grouped by field, case-insensitive, whitespace- and
-   punctuation-insensitive: `booked_date` ← date, tran date, transaction date, txn date, value
-   date, posting date; `description` ← description, narration, particulars, details, remarks;
-   `reference` ← ref, ref no, reference, chq no, cheque no, chq./ref.no.; `amount` ← amount;
-   `debit` ← debit, withdrawal, withdrawal amt, dr, debits; `credit` ← credit, deposit, deposit
-   amt, cr, credits; `running_balance` ← balance, closing balance, running balance. **No entry
-   in this table is a bank name.**
-2. Propose a band per matched header word: `x_min` is the midpoint between this word's `x0` and
-   the previous word's `x1`; `x_max` the midpoint between this word's `x1` and the next word's
-   `x0`. The first band extends to the page's left text margin, the last to the right margin.
-3. Infer `sign_convention`: `debit_credit_columns` when both a debit and a credit header matched;
-   otherwise `cr_suffix` when any sampled amount cell ends in `CR`/`DR` (case-insensitive);
-   otherwise `signed`.
-4. Infer `date_format` by trying `dd/MM/yyyy`, `dd-MM-yyyy`, `dd MMM yyyy`, `dd/MM/yy`,
-   `yyyy-MM-dd` against the sampled date cells and keeping the one that parses every sample
-   unambiguously; propose nothing rather than guess when two formats both parse every sample.
-5. Infer `chronological_order` from the sampled dates.
-6. Propose `fingerprints` as up to three distinctive lines from page 1 that are not the header
-   row. The digit screen runs on a **normalized** copy of the line — every separator that
-   formats an identifier (whitespace, `-`, `–`, `.`, `/`) removed between digits first — and
-   rejects any line whose normalized form contains a digit run of length ≥ 4. `123-456-789`
-   normalizes to a 9-digit run and is rejected; checking each raw 3-digit group independently
-   would wave it through, and a formatted full account number must never become a stored
-   fingerprint (the never-store list is absolute).
-7. Return the draft **plus the first 20 rows extracted with it**, so the UI can show the parse
-   live. `propose()` persists nothing and never invents a balance anchor: the draft's balance
-   patterns are empty and the owner supplies them, which the `has_a_balance_anchor` CHECK then
-   enforces at save.
-
-### 4.6 Reconciliation (Invariant I8)
-
-`reconcile.py` returns exactly one verdict, computed on **native signed ledger amounts** —
-after `inverts_sign` has been applied to both the rows *and* the declared balances, so the
-identity holds in one frame. All balance arithmetic runs in **chronological order**: when the
-profile's `chronological_order` is `descending`, the rows are reversed first, because the
-running-balance identity `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological*
-row, and applying it in display order on a descending statement flags every valid row as a
-break. Reported row numbers always reference document row numbers regardless of the
-evaluation order:
-
-```
-opening_ledger + Σ(amount_ledger) == closing_ledger
-```
-
-For a card layout with `inverts_sign = true`: a declared "previous balance 4,500.00" (owed) is
-`-4500.0000` in the ledger, a purchase presented as `310.00` is `-310.0000`, a declared "new
-balance 4,810.00" is `-4810.0000`, and `-4500 + -310 = -4810` reconciles. Getting this frame
-wrong produces a batch that is internally consistent and entirely wrong, which is why it is
-stated here rather than left to the implementer.
-
-Verdicts:
-
-- `matched` — the identity holds exactly (both sides are `Decimal`; there is no tolerance).
-  For a running-balance-only layout (no closing pattern), the **chronologically last row's
-  stated running balance is the terminal balance**: every row-to-row step must hold, and that
-  terminal value plays the declared-closing role everywhere downstream — it is what staging
-  records on `import_batch` and what the commit verifies against (§4.9), so the verification
-  never receives a null.
-- `mismatched` — it does not. Carries `declared_closing`, `computed_closing`, `delta`,
-  `first_divergent_row` and `candidate_rows`. `first_divergent_row` is the first row at which
-  the running total departs from the stated running balance — it exists **only when the layout
-  has a running-balance column**; with a closing anchor alone no algorithm can honestly name
-  *the* divergent row, because any single row could absorb the delta (I7 forbids inventing one).
-  In that case `first_divergent_row` is `None` and `candidate_rows` lists the rows whose amount
-  equals the delta exactly (the dropped-row case; empty for a corrupted amount), and the
-  message says row-level evidence is unavailable. **Blocks either way.**
-- `running_balance_break` — the layout has `has_running_balance` and no declared closing;
-  `balanceₙ = balanceₙ₋₁ + amountₙ` fails at a row. Carries that row number, the previous
-  balance, the amount and both the expected and stated balances. **Blocks.**
-- `unavailable` — the layout's configured balance evidence did not extract. **Blocks in M2.**
-  The `has_a_balance_anchor` CHECK means every saved layout declares a closing pattern or a
-  running-balance column, so `unavailable` at parse time is never "this statement has no
-  balances" — it is a shifted band, a changed label or a parse regression, and letting it
-  through would commit rows that bypassed reconciliation entirely. The message says the
-  configured evidence failed to extract and points at remapping the layout. A genuinely
-  anchorless statement source, if one ever exists, is a separate explicit case for the
-  milestone that meets it — not this value. (The **draft-preview** in the mapper is the one
-  place `unavailable` renders without blocking anything: an auto-proposed draft has no anchors
-  yet, and nothing is being staged.)
-
-**Reconciliation runs immediately after normalization, before FX enrichment.** The documented
-stage order in `statement-ingestion.html` §1 puts it after FX; running the cheap, purely local,
-blocking check first means a doomed batch costs no network round trip and no rate rows. The
-staged verdict recorded on `import_batch` is identical either way. Record this ordering in the
-Task 4/5 PRs.
-
-### 4.7 Dedupe
-
-Three layers, per `statement-ingestion.html` §6.
-
-- **Layer 1 — document checksum.** `sha256` of the file bytes, uniquely indexed on
-  `(household_id, sha256)`. Checked before parsing; an identical file is rejected with the date
-  of the earlier import and its batch id named. Free, and catches the common case.
-- **Layer 2 — transaction fingerprint.**
-  `sha256("|".join([account_id, booked_date.isoformat(), f"{amount:.4f}", normalise_for_hash(description_raw), disambiguator]))`
-  where `normalise_for_hash` uppercases, collapses whitespace and strips punctuation, and
-  `disambiguator` is `reference_raw` when the profile maps a reference column and the value is
-  non-empty, **otherwise the occurrence index within the day, within this document** — the nth
-  identical `(date, amount, normalised description)` among this statement's own rows, counted
-  from 0 in statement order. Never counted against rows already committed: a statement is a
-  stable, self-contained ordering of its day, so the same transaction carries the same index in a
-  Jul–Aug and an Aug–Sep statement and the hashes collide — which is exactly how the overlap is
-  recognised. An offset by committed rows would hand the overlapping row index 1 while the
-  committed copy holds index 0, and August would import twice. And never a raw row ordinal within
-  the document either — an ordinal differs between two statements covering the same day even when
-  the day's identical rows are the same.
-  A row whose hash already exists in `transaction` is staged with `status='duplicate'` and
-  `duplicate_of_transaction_id` set, and is excluded from import by default. **Accepting a
-  duplicate is a confirmed-distinct override**: V10's unique
-  `(household_id, account_id, dedupe_hash)` index means the colliding hash cannot commit
-  unchanged, so the accept endpoint recomputes and stores the row's hash with the occurrence
-  index advanced to the next free index among committed collisions — deterministic, stable, and
-  it keeps future overlap detection intact (a later statement carrying both occurrences hashes
-  them 0 and 1 and recognises both as duplicates). The unique index remains the final guard;
-  a commit-time collision still fails loudly rather than silently skipping.
-- **Layer 3 — near-duplicate warning.** Same account, same amount, `booked_date` within ±3 days,
-  description token-set similarity ≥ 0.85 (a pure-Python token-set ratio over the normalised
-  descriptions; no new dependency). Staged as `status='near_duplicate'`. **Warns, never blocks** —
-  it catches a genuinely double-charged subscription as readily as a re-import, and only the owner
-  can tell those apart.
-
-Manual rows created by M1b use their own occurrence-index formula and are not expected to collide
-with imported rows; layer 3 is what surfaces that overlap. Do not change the M1b formula.
-
-### 4.8 FX enrichment with fetch-on-missing
-
-Today `routes/transactions.py::_rate_leg` refuses a save when a rate is missing, and
-`POST /fx/backfill` is the only writer of `fx_rate`. M2 adds fetch-on-missing without a second
-implementation of either:
-
-1. Extract `POST /fx/backfill`'s body — `reporting_config` → `terminal_anchor` → `fetch_range` →
-   `to_rows` → `upsert_rates` — into a plain function in `api/oneledger/routes/fx.py` (or a new
-   `api/oneledger/fxrange.py` if the import graph reads better), called by both the route and the
-   pipeline. The route's future-date and ordering guards stay on the route.
-2. **Only on the `stage=true` path.** A dry run (`stage=false`) skips the FX step entirely — no
-   fetch, no upsert, no `fx_rate` row: the preview shows native amounts only, and "a dry run
-   writes nothing" includes reference data. When staging, the pipeline computes the batch's
-   distinct booked dates, checks which lack a stored rate for the pair it needs, and fetches
-   **one contiguous range** covering the gaps before the staging transaction opens.
-3. If the fetch fails or leaves a date uncovered, **the import is refused** with the uncovered
-   dates named. Never a fallback to `1.0`, never today's rate, never an interpolation
-   (`multi-currency-and-fx.html` §3).
-4. A carried-forward rate stamps `fx_rate_is_carried = true` and the earlier `fx_rate_date`
-   (Invariant I7 — and the `carried_rate_dates` CHECK on `transaction` enforces it at commit).
-
-### 4.9 The commit
-
-`POST /import/{batch}/commit` calls a single `SECURITY DEFINER` Postgres function
-`commit_import_batch(p_batch_id UUID)` created in **V14** (api-contracts.html §3: "if a failure
-halfway through would leave the ledger inconsistent, it belongs in one function in the database").
-The function, in order:
-
-1. `PERFORM assert_is_owner();`
-2. Locks the household row `FOR UPDATE` — it is a writer of frozen amounts (spec B3.5).
-3. Refuses unless the batch belongs to the current household and its `reconciliation_status` is
-   `matched` — the only status a staged batch can carry in M2, since every other verdict blocks
-   staging (§4.6, §5.5); the function still checks rather than assumes.
-4. `INSERT INTO transaction (...) SELECT ... FROM staged_transaction WHERE import_batch_id = $1
-   AND status = 'accepted'`, carrying `source='statement_import'`, `source_document_id`,
-   `source_page_number`, `source_row_number`, `import_batch_id`, `statement_layout_id`,
-   `layout_version` and `dedupe_hash` through unchanged (Invariant I6), and `txn_type` from the
-   staged row's `proposed_txn_type` — non-null on every accepted row by V13's CHECK (§5.2).
-5. Calls `assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` — also
-   created in V14, also `SECURITY DEFINER`, also calling `assert_is_owner()` first — which
-   **`RAISE`s immediately when either argument is null** (a null comparison must never silently
-   pass as verified), then computes the account's balance **as of the statement close** in
-   Postgres (the account's opening balance plus the sum of its posted transactions with
-   `booked_date <= p_period_end`) and `RAISE`s on any difference from the declared closing.
-   `p_declared_closing` is the batch's recorded closing target: the closing-pattern capture
-   when the layout declares one, else the terminal running balance §4.6 defines — staged on
-   `import_batch`, so the value always exists for a batch that reached staging. Not the maintained
-   `current_balance`: the multi-file screen imposes no chronological commit order, and a valid
-   older statement committed after a newer one would compare its closing against a balance that
-   already contains the newer postings and wrongly roll back. This is the post-commit
-   verification, inside the same transaction, so a raise rolls the whole batch back.
-6. Updates `import_batch` to `status='completed'` with `rows_imported` and `completed_at`.
-
-M2's commit inserts `transaction` rows only. `transfer` (M5) and `card_statement` (M6) inserts
-named in `statement-ingestion.html` §11 belong to those milestones.
-
----
-
-## 5. Table and storage contracts
-
-### 5.1 V12 — `document`, `import_batch`, `statement_layout`
-
-`schema.md` `0008` is the shape, verbatim, with these M2 additions and one correction:
-
-- All three tables get `ENABLE ROW LEVEL SECURITY` and a `household_isolation` policy
-  (`schema.md` `0008` shows the policy for `statement_layout` only; `document` and `import_batch`
-  need it too — `schema.md` carries no policies by design, so this is an addition, not a
-  disagreement).
-- `document.storage_bucket` is the constant `'documents'` and `storage_path` is relative to
-  `DOCUMENTS_DIR` (already in `.env.example`, already a compose volume).
-- `import_batch.reconciliation_status` stays `TEXT` with a `CHECK` restricting it to
-  `matched | mismatched | running_balance_break | unavailable`. The design doc's `switch` uses
-  `reconciled`; the column comment in `schema.md` uses `matched`. **`matched` wins** — it is the
-  column's documented value set. Task 4 records the alignment.
-- `statement_layout` keeps `has_a_balance_anchor`. `UNIQUE (household_id, name, version)` makes
-  version bumping a plain insert.
-- `document.original_filename` is written **masked** — see §5.6.
-- **V12 completes the deferred foreign keys whose targets it creates** (the `0018` rule: an FK
-  clause lands with its target table, not earlier and not later): `ALTER TABLE transaction` adds
-  the constraints for `source_document_id → document`, `receipt_document_id → document`,
-  `import_batch_id → import_batch` and `statement_layout_id → statement_layout`. All four columns
-  are entirely NULL today, so validation is trivial. `classification_rule_id` stays a bare UUID —
-  its target arrives with M4, which adds only that FK. `schema.md`'s V10 note currently says "the
-  M4 migration that completes the target set adds their foreign keys"; Task 2 corrects that
-  sentence to the per-target rule in the same commit (§7.8).
-
-### 5.2 V13 — `staged_transaction`
-
-`statement-ingestion.html` §9 is the shape. It is not currently in `schema.md`, so Task 4 adds it
-as a new subsection under the `V13 (applied)` heading in the same commit. M2 deltas:
-
-- `proposed_transfer_peer_txn_id`, `duplicate_of_transaction_id` and `near_duplicate_of_id`
-  reference `transaction(id)`, which exists — declare them as real foreign keys.
-- `proposed_transfer_kind` is created as `TEXT` with a `CHECK` (the `transfer_kind` enum arrives
-  with M5) and `classification_rule_id` as a bare `UUID` (the table arrives with M4) — the same
-  deferred-reference pattern V10 already uses and documents.
-- A `CHECK`: `status <> 'accepted' OR proposed_txn_type IS NOT NULL` — an accepted row always
-  carries a committable type, because `transaction.txn_type` is `NOT NULL` and a row that can be
-  accepted but never committed is a dead end the database refuses to represent.
-- `ENABLE ROW LEVEL SECURITY` + `household_isolation`.
-- **Consequence to test, not to work around:** `reporting_pair_is_locked()` (V7) discovers every
-  table carrying both `amount_base` and `household_id`. Creating `staged_transaction` therefore
-  makes a *staged, uncommitted* batch lock the household's reporting pair. That is correct — those
-  rows are already frozen against the current pair — and Task 4's DB test asserts it, so nobody
-  later reads it as an accident.
-
-### 5.3 Statuses
-
-`staged_transaction.status ∈ {new, duplicate, near_duplicate, needs_review, accepted, rejected}`.
-M2 stages `new` (clean), `duplicate` (layer 2 hit) or `near_duplicate` (layer 3 hit); `needs_review`
-is set by M4's classifier. Review moves rows to `accepted` or `rejected`. Only `accepted` commits.
-Every staged row carries a `proposed_txn_type` (sign-derived at normalization, overridable in
-review — Task 4's Type contract), so acceptance always leaves a row that can commit into
-`transaction.txn_type NOT NULL`.
-
-### 5.4 The staging transaction
-
-Per api-contracts.html §4: the service writes the original into the documents volume **first**,
-then writes `document`, `import_batch` and every staged row **inside one database transaction**.
-Original first, because a staged batch referencing a blob that failed to write is worse than an
-orphaned file. The blob is written to a **uniquely named temporary file** in the same directory
-and atomically renamed to its final `<sha256>.pdf` path before the transaction opens, so a
-partial write never sits at the final name (two identical concurrent uploads renaming to the
-same path is harmless — the bytes are identical by construction of the name). On any failure the
-database transaction rolls back and cleanup removes **only the request's own uniquely named
-temporary file — never the final-path blob**. A committed-rows ownership check cannot close the
-race: a concurrent identical upload's `document` row may be inserted but not yet committed, so
-under MVCC the failing request would see no owner and delete a blob the winner is about to
-reference. A final-path orphan is the safe residue instead — it is inert, content-addressed
-(identical bytes by construction), and self-healing: the next identical upload renames over it,
-and `GET /doctor` may report unreferenced blobs when the document library arrives (M10).
-
-### 5.5 What a blocked batch leaves behind
-
-**Nothing.** A reconciliation mismatch, a running-balance break, an `unavailable` verdict
-(configured evidence that failed to extract — §4.6), an unidentified layout, an
-unresolved account, a missing FX rate or a parse failure leaves the database **unchanged** —
-no `document`, no `import_batch`, no staged row (api-contracts.html §4's error table; Invariant
-I8's "stages zero rows"). The verdict travels in the `POST /parse` response body so the
-diagnostics panel can render it.
-
-This deviates from `data-model.html` §12's sentence "a blocked import records why it blocked".
-The reason is functional: `document.sha256` is uniquely indexed per household, so a persisted
-blocked document would make its own checksum reject the retry after the owner re-maps the layout —
-the exact recovery path ADR-0012 exists to provide. **Task 4 corrects that sentence in
-`data-model.html`** to say the batch records its verdict for batches that stage, and records the
-correction in its PR. Do not work around it in code.
-
-### 5.6 Filenames, logs and the never-store list
-
-`pdf-statements/` holds real statements **with card numbers in the filenames**. Two consequences:
-
-1. `document.original_filename` is stored **masked**: the mask detects identifier-length digit
-   sequences on a **normalized** view — separators that format an identifier (whitespace, `-`,
-   `–`, `.`, `_`, `/`) are ignored between digit groups — and replaces each whole formatted
-   sequence totalling 7 or more digits with `…` plus its last four digits, before the value
-   reaches the database. `statement-1234-5678-9012-3456.pdf` masks to `statement-…3456.pdf`;
-   checking only contiguous runs would store that full card number. The unmasked filename exists
-   only as a local variable during the request.
-2. **No log line, error message, exception detail or HTTP response may contain the raw filename,
-   the file bytes, a password, or any digit sequence of 7 or more digits — contiguous or
-   separator-formatted — from the document.** Parse errors name page and row numbers and the
-   *masked* filename.
-
-Task 5 owns both, and Task 5's tests assert them.
-
----
 
 ## 6. Migration ownership
 
@@ -643,7 +252,7 @@ Task 5 owns both, and Task 5's tests assert them.
 | `db/migrations/V13__staged_transactions.sql` | 4 | `staged_transaction` + indexes + RLS |
 | `db/migrations/V14__import_commit.sql` | 6 | `assert_account_reconciles()`, `commit_import_batch()` |
 
-`db/tests/` ordinals: **0010** (Task 2), **0011** (Task 4), **0012** (Task 6). The `db/tests`
+`db/tests/` ordinals: **0010** (Task 2), **0011** (Task 4a), **0012** (Task 6a). The `db/tests`
 sequence is independent of `schema.md` section numbers — 0008 and 0009 are already taken by
 categories and transactions.
 
@@ -656,73 +265,21 @@ fixes it forward.
 
 ---
 
-## 7. Contradictions between the documents and the tree
+## 7. Contradictions between the documents and the tree — see the spec
 
-Named here because CLAUDE.md requires the disagreement to be stated and fixed at its source, not
-worked around.
+Moved to [the M2 spec](../specs/2026-09-07-m2-statement-importer.md) §7, with one resolved since:
+the stage order. `statement-ingestion.html` §1 and `architecture.html` §5 now both place
+reconciliation **before** FX enrichment, which is what the importer does — the deviation is no
+longer a deviation and no longer needs recording in a PR.
 
-1. **The PR line cap.** `docs/git-workflow.md` and `CLAUDE.md` say "no hard line cap — keep each
-   PR reviewable at one sitting". `docs/superpowers/plans/implementation-plan.md` line 53 still
-   says "at most 500 lines of implementation and test code per PR", and
-   `docs/superpowers/phase-0-pull-requests.md` §"The 500-line cap" still states the cap.
-   **`docs/git-workflow.md` is the authority.** Task 1 fixes `implementation-plan.md` line 53 to
-   point at the git-workflow rule. `phase-0-pull-requests.md` is a Phase 0 historical document
-   and is left alone; **CLAUDE.md's index row still describes it as "branch/review workflow and
-   the 500-line cap" — that is the owner's file, so Task 1 flags it in the PR rather than
-   editing it.**
-2. **`pdfplumber` is not a new dependency.** `api/pyproject.toml` already declares
-   `pdfplumber>=0.11.10` and `api/uv.lock` pins `0.11.10`; nothing imports it yet. M2 adds no
-   dependency at all. Any planning note describing pdfplumber as a new addition is out of date.
-3. **`reconciled` versus `matched`.** `statement-ingestion.html` §8's TypeScript sketch returns
-   `reconciled`; `schema.md` `0008` documents the column's values as `matched|mismatched|unavailable`.
-   Resolved in §5.1: the column value set wins, extended with `running_balance_break`, which §8
-   describes but the column comment omits.
-4. **A blocked import's durability.** `api-contracts.html` §4 says the database is unchanged;
-   `data-model.html` §12 says a blocked import records why it blocked. Resolved in §5.5 in favour
-   of api-contracts, with `data-model.html` corrected by Task 4.
-5. **The error envelope.** `api-contracts.html` §6 specifies
-   `{"error": {"code": ..., "message": ..., "detail": {...}}}`; every implemented route returns
-   FastAPI's `{"detail": "..."}`. M2 does **not** introduce a second error shape for a handful of
-   routes. Blocking conditions are not HTTP errors at all — `POST /parse` returns **200** with a
-   `reconciliation` object carrying `status`, `declaredClosing`, `computedClosing`, `delta` and
-   `firstDivergentRow`, which is what the diagnostics panel needs and what a `detail` string could
-   never carry. Genuine client errors keep the established `detail` string. Task 5 records this;
-   converging the whole surface on §6's envelope is a separate, repo-wide change and is out of
-   M2's scope.
-6. **The static checks do not exist.** `testing-and-data-quality.html` §2 and CLAUDE.md describe
-   build-failing static checks (reports never read the base table; no `amount × rate`; no
-   `parseFloat`/`Number()` on money; no currency/institution/country identifier). None is in the
-   tree — there is no such script and no such ESLint rule. Roadmap **M5** owns the reporting
-   check; M2 does not build any of them. Recorded here so the gap is known rather than assumed
-   covered. M2's own compliance is enforced by review and by the tests each task declares.
-7. **`FxRateResponse` uses snake_case** (`carried_from`) while every later route uses camelCase.
-   M2's new models use camelCase; the existing response is not renamed here (it would break the
-   Settings FX inspector for no M2 benefit).
-8. **Who adds V10's deferred foreign keys.** `schema.md`'s V10 note says "the M4 migration that
-   completes the target set adds their foreign keys" — all five at once, in M4. The `0018` rule
-   is per target: an FK clause lands with its target table. Resolved per target (§5.1): V12 adds
-   the four FKs whose targets it creates, M4 adds `classification_rule`'s. Waiting for M4 would
-   leave M2's own commit path writing `import_batch_id`, `statement_layout_id` and
-   `source_document_id` into `transaction` for two milestones with no referential check. Task 2
-   corrects the `schema.md` sentence in the migration's commit.
-9. **The dedupe index in `statement-ingestion.html` §6.** The specification's own worked example
-   establishes that any statement covering a day carries the same set for that day — the
-   within-document property — yet one sentence then said the index is computed against the union
-   of committed rows and earlier batch rows. Under the union rule a committed overlap shifts
-   every incoming index and the recognition defeats itself. Corrected at source in Task 1's PR:
-   the index counts within the current document only; the split-boundary edge stages as a
-   visible `duplicate` for review instead of silently doubling a month.
-10. **The roadmap's "names the divergent row" gate.** With a closing-anchor-only layout (no
-    running-balance column) there is no per-row balance evidence, so no algorithm can honestly
-    name *the* divergent row — any single row could absorb the delta. §4.6 defines the honest
-    diagnostic: the row is named when running-balance evidence exists; otherwise the verdict
-    carries the exact delta and the candidate rows whose amount equals it (the dropped-row
-    case), and says that row-level evidence is unavailable. The roadmap gate is met in that
-    form; inventing a row number would violate I7.
-
----
 
 ## 8. Tasks
+
+**A bare "Task N" elsewhere in this plan, in the spec and in earlier PRs means the whole group** —
+Task 4 is 4a–4c, Task 5 is 5a–5f, Task 6 is 6a–6d, Task 7 is 7a–7b, Task 8 is 8a–8b and Task 9 is
+9a–9c. References written before the split were not rewritten to name a slice they could not have
+known about; where one slice is specifically meant, it is named.
+
 
 Each task: implement TDD in the stated order, run its gates, push, wait for Codex, patch findings
 on the same branch, merge on the thumbs-up, delete the branch, update
@@ -942,7 +499,7 @@ PDF generator so all of it is testable without a real statement.
   hashing on write).
 - Modify `docs/design/api-contracts.html` §2 (one route row). Regenerate `web/types/api/`.
 
-**Interfaces produced** (consumed by Tasks 4, 5, 8):
+**Interfaces produced** (consumed by Tasks 4b, 4c, 5d, 8a):
 
 ```python
 # api/oneledger/ingest/engine.py
@@ -988,9 +545,9 @@ def propose(pdf_path: Path, password: str | None) -> tuple[LayoutDraft, list[Raw
   `POST /layouts` and returns it echoed alongside the rows `extract()` produces under it. This is
   the mapper's re-post path (Task 8): an edited band previews as the parse it will actually
   produce, rather than regenerating the original proposal. Persists nothing in either mode.
-  In this task the draft mode returns the draft and the raw extracted rows; **Task 5 extends it**
+  In this task the draft mode returns the draft and the raw extracted rows; **Task 5f extends it**
   with the normalized preview and the reconciliation verdict once `normalize`/`reconcile` exist —
-  that extended response is what Task 8's mapper renders.
+  that extended response is what Task 8a's mapper renders.
 - **Account resolution.** `POST /accounts` and `PATCH /accounts/{id}` gain an optional
   `accountNumber` field: the service derives `account_number_masked` (last four, the existing
   `_masked` helper's shape) and `account_number_hash =
@@ -1058,602 +615,734 @@ the engine level here and again through the UI in Task 8.
 
 ---
 
-### Task 4 — Staged rows, normalization, dedupe and reconciliation
+### Task 4a — Staged rows and normalization
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
 **Branch:** `feature/m2-staged-rows-and-normalization`
 **Base and PR target:** `develop`
 **Migration:** **V13** — `db/migrations/V13__staged_transactions.sql`
 **Depends on:** Tasks 2, 3.
+**Delivered:** +779 production, +1,315 test.
 
-**Outcome.** The staging table exists, and `RawRow`s become validated, signed, deduplicated,
-reconciled `StagedTransaction` values — all as pure functions, no database, no network.
+**Outcome.** The staging table exists, and `RawRow`s become validated, signed `StagedTransaction`
+values — dates, signs, proposed type, description cleanup and currency — as pure functions, with
+no database and no network.
 
-**Files.**
-- Create `db/migrations/V13__staged_transactions.sql`, `db/tests/0011_staged_transactions.sql`.
-- Create `api/oneledger/schemas/__init__.py`, `api/oneledger/schemas/staging.py`.
-- Create `api/oneledger/ingest/normalize.py`, `dedupe.py`, `reconcile.py`.
-- Create `api/tests/test_ingest_normalize.py`, `test_ingest_dedupe.py`, `test_ingest_reconcile.py`.
-- Modify `docs/superpowers/schema.md` (a `## V13 (applied)` section) and
-  `docs/design/data-model.html` (§12's blocked-import sentence per §5.5, §17's migration list) —
-  **same commit as the migration**.
+**Files.** `db/migrations/V13__staged_transactions.sql`, `db/tests/0011_staged_transactions.sql`,
+`api/oneledger/schemas/staging.py`, `api/oneledger/ingest/normalize.py`, and their tests.
 
-**Interfaces produced** (consumed by Tasks 5, 6):
+**Contracts.** The spec's §5.2 (DDL), §5.3 (statuses) and the dates, signs, type, description and
+currency contracts. `StagedTransaction` per `api-contracts.html` §4.
 
-```python
-# api/oneledger/schemas/staging.py — api-contracts.html §4 is the shape; keep its two
-# model_validators (translations agree with the stated rate; original amount and currency
-# travel together) and add the M2 fields the staging insert needs.
-class StagedTransaction(BaseModel): ...          # per api-contracts.html §4
+**Invariants / security.** I2 (signs), I7, RLS on `staged_transaction`, and the reporting-pair
+lock's new reach asserted rather than worked around.
 
-# api/oneledger/ingest/reconcile.py
-@dataclass(frozen=True)
-class Verdict:
-    status: Literal["matched", "mismatched", "running_balance_break", "unavailable"]
-    declared_opening: Decimal | None
-    declared_closing: Decimal | None
-    computed_closing: Decimal | None
-    delta: Decimal | None
-    first_divergent_row: int | None   # only with running-balance evidence (§4.6)
-    candidate_rows: list[int]         # rows whose amount equals the delta, else empty
-    message: str            # owner-facing, names the numbers and the row or the delta
-```
-
-**Contracts.**
-- **Dates.** The profile's `date_format` is used explicitly; no inference at parse time. The
-  statement period comes from the reserved `period_start`/`period_end` captures when the profile
-  maps them (authoritative — a parsed date outside the period fails the row, and two-digit years
-  window against it, never a fixed pivot); otherwise the period derives from the parsed row
-  dates and is labelled derived (§4.4 — and a two-digit `date_format` cannot reach this branch,
-  save-time validation requires the captures).
-- **Signs (I2).** All four conventions per `statement-ingestion.html` §5, then `inverts_sign`
-  applied last. A card purchase presented as a positive debit stores **negative**; a card payment
-  stores positive. Assert this explicitly in tests — a sign error is internally consistent and
-  therefore invisible.
-- **Type.** `proposed_txn_type` is set deterministically at normalization: `expense` for a
-  negative ledger amount, `income` for a positive one. `transaction.txn_type` is `NOT NULL`, so
-  a row with no type could be accepted but never committed. The sign-derived default is a
-  labelled mechanical rule shown in review and overridable there before acceptance — I7 bars
-  silent invention, and this is neither silent nor invented. Refund, transfer and settlement
-  types are M4/M5/M6 refinements.
-- **Description.** `description_raw` is **never modified** — it is the audit record.
-  `description_clean` is derived by an ordered, inspectable list of removals (terminal and
-  reference numbers, trailing dates, POS/ATM prefixes, repeated whitespace, trailing country and
-  currency codes), preserving case. No cleverness; the owner must be able to see exactly what was
-  stripped, so the applied rules are returned alongside the value.
-- **Currency.** The account's currency, unless the layout maps a foreign amount, in which case
-  `original_amount`/`original_currency` carry it and `amount` stays the account's. The bank's own
-  conversion is authoritative; the ledger never second-guesses it with a market rate.
-- **Dedupe** exactly per §4.7, including the **within-document** occurrence-index disambiguator —
-  the index is counted among this statement's own rows only, never offset by committed rows.
-- **Reconciliation** exactly per §4.6, including the single-frame rule for `inverts_sign`.
-- `staged_transaction` DDL per §5.2.
-
-**Invariants / security.** I2 (signs), I7 (`fx_rate_is_carried` and the near-duplicate flag are
-stored facts, not inferences at read time), I8 (the verdict is computed here and blocks in
-Task 5). RLS on `staged_transaction`. `reporting_pair_is_locked()`'s new reach is asserted, not
-worked around (§5.2).
-
-**Required test behaviours (failing first).**
-- *DB (`0011`)*: RLS enabled and isolating; the status CHECK rejects an unknown status; setting
-  `status='accepted'` with a null `proposed_txn_type` is rejected by the V13 CHECK; a staged
-  row cascades away with its `import_batch`; **with one staged row present,
-  `reporting_pair_is_locked()` returns true and `update_household_configuration` refuses a pair
-  change** — and with none it returns false.
-- *Dates*: `03/09/2026` under `dd/MM/yyyy` is 3 September; the same string under `MM/dd/yyyy` is 9
-  March; a date outside the statement period fails the row with the period named; a two-digit year
-  windows into the statement's period.
-- *Signs*: each of the four conventions produces the documented sign; `inverts_sign=true` flips a
-  card purchase to negative and a payment to positive; a `CR` suffix is credit and a bare amount
-  debit.
-- *Description*: `description_raw` is byte-identical to the extracted cell; a `POS 4821 … AE 030926
-  REF 887262819` sample cleans to the merchant name with the applied rules listed.
-- *Dedupe*: the same transaction appearing in a Jul–Aug and an Aug–Sep statement hashes
-  identically (the within-document occurrence index, not the ordinal — construct the case with
-  different ordinals and assert equality, including with the Jul–Aug copy already committed);
-  two genuinely distinct same-day identical transactions in one statement hash differently
-  (indexes 0 and 1); a second same-day identical transaction appearing only in the later
-  overlapping statement takes index 1, collides with nothing committed, and imports;
-  a row with a reference uses the reference; a near-duplicate at ±3 days and 0.86 similarity is
-  flagged and **not** blocked.
-- *Reconciliation*: a correct card statement reconciles exactly; on a **running-balance layout**
-  a corrupted amount yields `mismatched` naming `first_divergent_row`; on a
-  **closing-anchor-only layout** one dropped row yields `mismatched` with the delta equal to the
-  dropped amount, `first_divergent_row=None` and the twin amount's rows in `candidate_rows`,
-  while a corrupted amount yields empty candidates and a message saying row-level evidence is
-  unavailable (§4.6 — never an invented row); a running-balance layout with a
-  broken row yields `running_balance_break` naming that row, the expected and the stated balance;
-  a **descending** statement's running balances reconcile only under chronological-order
-  evaluation — the same fixture mis-evaluated in display order flags breaks (§4.6's order rule,
-  asserted directly); a running-balance-only layout's verdict carries the chronologically-last
-  stated balance as its terminal declared closing;
-  a draft or layout whose configured evidence produced no values yields `unavailable` — a
-  blocking verdict in M2 (§4.6), non-blocking only in the mapper's draft preview; an
-  `inverts_sign` statement
-  reconciles in the ledger frame and **fails** if the declared balances are not inverted with the
-  rows.
-- *Property (hypothesis)*: for any generated row set, `opening + Σ(amounts) == computed_closing`
-  exactly; and `StagedTransaction`'s validator rejects any `amount_base` inconsistent with its
-  stated rate.
-
-**Validation.** The DB gate (11 tests passed). The API gate.
-
-**Acceptance.** V13 applies from empty; `schema.md` and `data-model.html` updated in the same
-commit including the §5.5 correction; every normalization, dedupe and reconciliation behaviour
-above is proven without a database and without the network.
+**Acceptance.** Delivered. Dedupe and reconciliation, which this task originally also carried,
+are Tasks 4b and 4c.
 
 ---
 
-### Task 5 — FX fetch-on-missing, storage, and `POST /parse`
+### Task 4b — Dedupe: fingerprint, occurrence index, near-duplicate
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
-**Branch:** `feature/m2-parse-and-stage`
+**Branch:** `feature/m2-t4b-dedupe`
 **Base and PR target:** `develop`
 **Migration:** none.
-**Depends on:** Tasks 2, 3, 4.
+**Depends on:** Task 4a.
+**Forecast:** ~180 production, ~320 test.
 
-**Outcome.** A PDF posted to the service is identified, extracted, normalized, deduplicated,
-reconciled and — only if the owner asked to stage and the verdict allows — written as a document,
-a batch and staged rows, in one database transaction, with FX frozen and any missing rate fetched.
+**Outcome.** A normalized row carries a stable transaction fingerprint, and a row whose
+fingerprint already exists in `transaction` is marked a duplicate rather than silently imported
+twice. Pure functions: no database, no network.
 
 **Files.**
-- Create `api/oneledger/money.py` (the freeze helpers, **moved** from
-  `api/oneledger/routes/transactions.py`: `_money`, `_out`, `_rate_leg`, `_frozen`, `CENT`,
-  `RATE`, `MONEY`), `api/oneledger/ingest/storage.py`, `api/oneledger/ingest/pipeline.py`,
-  `api/oneledger/routes/ingest.py`.
-- Create `api/tests/test_ingest_storage.py`, `api/tests/test_parse.py`.
-- Modify `api/oneledger/routes/transactions.py` (import from `money.py`; behaviour unchanged),
-  `api/oneledger/routes/fx.py` (extract the backfill body into a callable both the route and the
-  pipeline use), `api/oneledger/routes/layouts.py` and `api/tests/test_layouts.py` (the draft
-  mode gains its normalized preview and reconciliation verdict — see Contracts),
-  `api/oneledger/main.py`, `api/tests/test_transactions.py`,
-  `api/tests/test_fx*.py` as the refactor requires.
-- Modify `docs/design/api-contracts.html` §2/§4. Regenerate `web/types/api/`.
+- Create `api/oneledger/ingest/dedupe.py`, `api/tests/test_ingest_dedupe.py`.
 
-**Interfaces produced** (consumed by Tasks 6, 7, 8, 9):
+**Contracts.** Layer 2 and layer 3 of the spec's §4.7, exactly. Layer 1 — the document checksum —
+belongs to Task 5c, which owns the blob. The occurrence-index disambiguator is counted **among
+this statement's own rows only**, never offset by committed rows and never a raw row ordinal:
+that is what lets an overlapping month's rows collide with their committed copies instead of
+importing twice.
 
-```python
-# POST /parse response — 200 whether or not the batch is blocked
-class ParseSummary(BaseModel):
-    batchId: UUID | None              # null on a dry run or a blocked batch
-    documentId: UUID | None
-    layoutId: UUID | None
-    layoutVersion: int | None
-    layoutCandidates: list[LayoutCandidate]   # id, name, score — when identification is ambiguous
-    accountId: UUID | None
-    periodStart: date | None
-    periodEnd: date | None
-    pageCount: int
-    rowsExtracted: int
-    rowsNew: int
-    rowsDuplicate: int
-    rowsNearDuplicate: int
-    wordsFiltered: int
-    linesUnparsed: int
-    reconciliation: ReconciliationResult
-    preview: list[PreviewRow]         # first 50: page, row, bookedDate, descriptionRaw,
-                                      # amount, runningBalance, computedBalance, isDivergent
-    blockedReason: str | None         # owner-facing; null when stageable
-
-class ReconciliationResult(BaseModel):
-    status: str                       # matched | mismatched | running_balance_break | unavailable
-    declaredOpening: str | None
-    declaredClosing: str | None
-    computedClosing: str | None
-    delta: str | None
-    firstDivergentRow: int | None     # only with running-balance evidence (§4.6)
-    candidateRows: list[int]
-    message: str
-```
-
-**Contracts.**
-- `POST /parse` is `multipart/form-data`: `file`, optional `layoutId`, optional `accountId`,
-  optional `password`, boolean `stage` (default false). Per §4.3.
-- **Identification order**: content fingerprint (`matches()`), then filename hint as a tiebreaker
-  only, then ask. When no profile scores above the threshold, the response carries
-  `layoutCandidates` with scores and `blockedReason` explaining that the layout must be chosen or
-  mapped; nothing is written.
-- **Account resolution**: by `account_number_hash` from the profile's reserved `account_number`
-  metadata capture (Task 3's transient contract — normalized, hashed, discarded). When the
-  profile captures nothing or the hash matches no account, the response says so and the caller
-  must supply `accountId`; the service never guesses.
-- **FX** per §4.8. Fetching happens **after** reconciliation passes and **before** the staging
-  transaction opens, so no network call happens inside an open transaction. The prefetch reads
-  the reporting pair **optimistically**; the staging transaction, after acquiring the household
-  lock, **re-reads the pair and revalidates**. If the pair changed since the prefetch (possible
-  only before the first frozen write pins it), the transaction aborts cleanly, the pipeline
-  refetches for the new pair, and retries once — a second change refuses the import naming the
-  cause. Frozen amounts are always derived under the pair read inside the lock, never the
-  prefetch's.
-- **Staging** per §5.4 and §5.5: blob first, then `document` + `import_batch` + rows in one
-  transaction, taking the household row lock **before** reading the reporting pair (spec B3.5).
-  A blocked verdict writes nothing at all.
-- **Storage** per §5.6: path `<DOCUMENTS_DIR>/<household_id>/<sha256>.pdf`, `storage_bucket =
-  'documents'`, `storage_path` relative, `original_filename` masked, mode `0600`, written to a
-  temporary name and renamed so a partial file is never mistaken for a stored original.
-- `password` is a local variable for the duration of the parse. It is never written to disk, the
-  database, a log or a response, and never returned to the client.
-- The `money.py` move is a **pure move**: no behaviour change, and `test_transactions.py` must
-  pass unchanged apart from import paths. Two implementations of the freeze would drift, and a
-  drifted freeze is a wrong number that looks right.
-- **The draft preview completes here.** `POST /layouts/propose`'s draft mode (Task 3) now also
-  returns the normalized preview rows and a `reconciliation: ReconciliationResult` computed
-  under the draft's sign convention, `inverts_sign` and balance patterns. Reconciliation is a
-  within-statement identity on native amounts — no account, no FX — so an unsaved mapping
-  previews its true verdict. Auto-propose mode reports `unavailable` (a fresh draft proposes no
-  balance anchor). Still persists nothing in either mode.
-
-**Invariants / security.** I5 (frozen once, derived from the quantized rate), I6 (every staged row
-carries document, page and row), I7 (carried rates labelled; `wordsFiltered` and `linesUnparsed`
-reported), I8 (a blocking verdict stages zero rows). `require_owner()`. B3.5 household lock. The
-never-store rules of §5.6, tested.
+**Invariants / security.** I6 (the fingerprint travels with the row unchanged). `description_raw`
+is never modified; `normalise_for_hash` reads it without writing it back. No identifier reaches a
+log, an error or a fingerprint input beyond what §4.7 names.
 
 **Required test behaviours (failing first).**
-- A synthetic statement parses dry-run and writes **nothing** — assert zero rows in `document`,
-  `import_batch` and `staged_transaction` afterwards, and the `fx_rate` row count unchanged even
-  when the statement's dates have no stored rate (the dry run fetches nothing).
-- The same file with `stage=true` writes exactly one document, one batch and N staged rows, and
-  the blob is byte-identical to the upload.
-- Re-posting the identical file is rejected before parsing, naming the earlier import's date and
-  batch id, and writes nothing.
-- An overlapping statement stages only the non-overlapping rows; the overlapping ones stage as
-  `duplicate` and are excluded from import by default.
-- A deliberately corrupted amount yields `mismatched` and **stages zero rows** (Invariant I8) —
-  assert the three tables are empty afterwards. It names `firstDivergentRow` when the layout
-  carries a running balance; on a closing-anchor-only layout it reports the exact delta with
-  row-level evidence unavailable (§4.6).
-- A booked date with no stored FX rate triggers exactly one fetch covering the gap (the source is
-  stubbed; **no test reaches the network**), then stages successfully; when the stub fails, the
-  import is refused with the uncovered dates named and nothing is written, and no row falls back
-  to `1.0` or today's rate.
-- A weekend booked date stages with `fx_rate_is_carried = true` and an earlier `fx_rate_date`
-  (I7).
-- A reporting-pair change racing a staging batch serializes correctly in both interleavings
-  (B3.5), matching the shape of the existing `test_transactions_live.py` proof — and the
-  assertions cover the outcome, not just the contention: after a pair change that lands between
-  the FX prefetch and the household lock, the staged rows' frozen `amount_base` /
-  `amount_secondary` are derived under the **final** pair with rates that cover it (the
-  locked-revalidation retry), never under the stale prefetch pair.
-- An unidentified layout returns candidates and scores and writes nothing.
-- An unresolved account returns the account-picker state and writes nothing.
-- A filename containing a 16-digit run is stored masked, and so is one carrying the same number
-  formatted in hyphenated groups of four (`…-1234-5678-9012-3456.pdf` → `…3456`); a parse
-  failure's message contains neither the raw filename nor any 7-or-more-digit sequence,
-  contiguous or formatted; the password never appears in any response, log record or stored row.
-- A scanned PDF is refused with the unsupported message and writes nothing.
-- The draft-mode propose response carries the normalized preview and the draft's own
-  reconciliation verdict: a correct draft yields `matched`, a deliberately shifted amount band
-  yields a blocking verdict, and nothing is written in either case.
-- A profile capturing `period_start`/`period_end` reports that period; one without reports the
-  derived period labelled derived (§4.4), on the parse summary and on the staged batch.
-- An `unavailable` verdict (configured evidence failing to extract) blocks staging and writes
-  nothing (§4.6).
+- The same `(date, amount, normalised description)` twice in one statement gets occurrence indices
+  0 and 1; the same pair in a later overlapping statement gets 0 and 1 again, so the hashes
+  collide with the committed copies. Offsetting by committed rows must fail this test.
+- A mapped, non-empty reference column is used as the disambiguator instead of the index; an empty
+  one falls back to the index.
+- `normalise_for_hash` is case-, whitespace- and punctuation-insensitive, and two descriptions
+  differing only in those respects hash identically.
+- A row matching a committed fingerprint is marked `duplicate` and carries
+  `duplicate_of_transaction_id`; a near-duplicate is flagged as a stored fact, not inferred at
+  read time (I7).
 
-**Validation.** The API gate, the DB gate, the web gate for regenerated types.
+**Validation.** The API gate.
 
-**Acceptance.** Roadmap M2's dedupe, overlap, corruption and FX gates are provable end to end at
-the API level, on synthetic statements, offline.
+**Acceptance.** Re-importing an overlapping month marks exactly the overlapping rows as
+duplicates, proven on synthetic rows without a database.
 
 ---
 
-### Task 6 — Review payload, row decisions, and the atomic commit
+### Task 4c — Reconciliation: the four verdicts
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
-**Branch:** `feature/m2-review-and-commit-api`
+**Branch:** `feature/m2-t4c-reconcile`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 4a. Independent of Task 4b.
+**Forecast:** ~260 production, ~470 test.
+
+**Outcome.** A statement's rows and its declared balances produce exactly one verdict —
+`matched`, `mismatched`, `running_balance_break` or `unavailable` — with the evidence a reviewer
+needs to act on it. Pure functions: no database, no network.
+
+**Files.**
+- Create `api/oneledger/ingest/reconcile.py`, `api/tests/test_ingest_reconcile.py`.
+
+**Contracts.** The spec's §4.6, exactly — including the **single frame** rule (`inverts_sign`
+applied to both the rows and the declared balances before the identity is evaluated), the
+**chronological** reversal for a descending statement, the terminal-balance-as-declared-closing
+rule for a running-balance-only layout, and `first_divergent_row` existing **only** where the
+layout has a running-balance column.
+
+**Invariants / security.** I8 (the verdict blocks). **I7**: with a closing anchor alone, no
+algorithm may name *the* divergent row — `first_divergent_row` is `None` and `candidate_rows`
+lists rows whose amount equals the delta exactly, with the message saying row-level evidence is
+unavailable. Inventing a divergent row here is the invariant breach this task exists to avoid.
+
+**Required test behaviours (failing first).**
+- A card layout with `inverts_sign`: declared previous 4,500.00 owed and a 310.00 purchase
+  reconcile to a declared new balance of 4,810.00 in one frame. The test must fail if either side
+  is inverted alone — a half-inverted frame is internally consistent and entirely wrong.
+- A descending statement reconciles; the same rows walked in display order flag every row as a
+  break. The regression fails without the reversal.
+- Running-balance layout: `first_divergent_row` names the first departing row, in **document** row
+  numbers regardless of evaluation order.
+- Closing-anchor-only layout with a dropped row: `first_divergent_row` is `None`, `candidate_rows`
+  names the rows whose amount equals the delta; with a corrupted amount, `candidate_rows` is empty.
+- Running-balance-only layout: the chronologically last row's stated balance becomes the declared
+  closing, so nothing downstream receives a null.
+- No tolerance: two `Decimal`s that differ by 0.0001 do not match.
+
+**Validation.** The API gate.
+
+**Acceptance.** The roadmap's corruption gate is provable on synthetic rows: a statement missing
+one row reports the delta and the candidate rows, and blocks.
+
+---
+
+### Task 5a — Money helpers extracted to `money.py`
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `refactor/m2-t5a-money-helpers`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** nothing. May land at any time.
+**Forecast:** ~130 production, ~40 test.
+
+**Outcome.** The freeze helpers live in one module both the transactions route and the import
+pipeline can import, with behaviour unchanged.
+
+**Files.**
+- Create `api/oneledger/money.py` — `_money`, `_out`, `_rate_leg`, `_frozen`, `CENT`, `RATE`,
+  `MONEY`, **moved** from `api/oneledger/routes/transactions.py`.
+- Create `api/tests/test_money.py`.
+- Modify `api/oneledger/routes/transactions.py` — import from `money.py`, nothing else.
+
+**Contracts.** A pure move. No signature, rounding, quantization or error message changes. If a
+change looks necessary, it is a separate task.
+
+**Invariants / security.** I5 (frozen amounts derive from the quantized rate) is unchanged, and
+the existing `api/tests/test_transactions.py` is the proof of that — it must pass untouched.
+
+**Required test behaviours (failing first).**
+- `test_transactions.py` passes with no edit. An edit to it is the signal that this stopped being
+  a move.
+- Direct tests for the moved helpers: quantization to `NUMERIC(20,4)`, half-away-from-zero
+  rounding matching Postgres, and the rate-leg selection.
+
+**Validation.** The API gate.
+
+**Acceptance.** `git diff` shows the helpers deleted from `transactions.py` and added to
+`money.py` with identical bodies; no behavioural test changed.
+
+---
+
+### Task 5b — FX fetch-on-missing
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t5b-fx-fetch-on-missing`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 5a.
+**Forecast:** ~150 production, ~260 test.
+
+**Outcome.** The rate a staged row needs can be fetched when it is missing, by the same code path
+the backfill route already uses.
+
+**Files.**
+- Modify `api/oneledger/routes/fx.py` — extract the backfill body into a callable the route and
+  the pipeline both use; the route's behaviour is unchanged.
+- Modify `api/tests/test_fx*.py` as the extraction requires — name the files in the PR.
+
+**Contracts.** The spec's §4.8. A rate is fetched for a date only when no row exists for it. A
+carried-forward rate is stored **as a labelled fact**, never as though it were observed.
+
+**Invariants / security.** **I7**: `fx_rate_is_carried` is a stored column, set at write time, not
+a comparison made at read time. I5: the frozen amounts derive from the quantized stored rate.
+
+**Required test behaviours (failing first).**
+- The backfill route behaves identically after the extraction — its existing tests pass unedited.
+- A missing date fetches; a present date does not.
+- A weekend or holiday with no published rate carries the previous rate forward and marks it
+  carried; the test asserts the flag, not just the value.
+- A fetch failure surfaces as a stated error, not a silently skipped row.
+
+**Validation.** The API gate.
+
+**Acceptance.** The pipeline can obtain a rate for any date in a statement's period without the
+owner running a backfill first.
+
+---
+
+### Task 5c — Document storage
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t5c-document-storage`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 4a.
+**Forecast:** ~160 production, ~290 test.
+
+**Outcome.** An uploaded statement is checksummed, stored under a name that leaks nothing, and
+recognised on a second upload.
+
+**Files.**
+- Create `api/oneledger/ingest/storage.py`, `api/tests/test_ingest_storage.py`.
+
+**Contracts.** The spec's §5.6 and layer 1 of §4.7: `sha256` of the file bytes; the path
+`<DOCUMENTS_DIR>/<household_id>/<sha256>.pdf`; an identical file rejected with the earlier
+import's date and batch id named.
+
+**Invariants / security.** **The uploaded filename is never the stored filename.** Real statement
+filenames carry card numbers — the stored name is the checksum, and the original name never
+reaches a path, a log line or an error message. Path traversal, absolute paths and symlinks in the
+supplied name are refused. `DOCUMENTS_DIR` missing refuses the write naming the variable.
+
+**Required test behaviours (failing first).**
+- A filename containing a card number is stored as `<sha256>.pdf` and the original never appears
+  in the path, the response, the log or the raised error.
+- `../`, an absolute path and a symlinked target are each refused.
+- The same bytes uploaded twice are recognised on checksum, with the earlier batch named.
+- The same bytes for a different household are a different document.
+
+**Validation.** The API gate.
+
+**Acceptance.** The roadmap's dedupe gate at the document layer: the same file twice imports once.
+
+---
+
+### Task 5d — The parse pipeline
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t5d-parse-pipeline`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Tasks 4b, 4c, 5b, 5c.
+**Forecast:** ~260 production, ~470 test.
+
+**Outcome.** One module runs identify → extract → normalize → dedupe → reconcile → FX → stage, and
+it is the only module in `ingest/` that holds a database connection.
+
+**Files.**
+- Create `api/oneledger/ingest/pipeline.py`, `api/tests/test_ingest_pipeline.py`.
+
+**Contracts.** The spec's §4.1 (only `pipeline.py` touches the database), §4.3 (dry run then
+stage), §5.4 (the staging transaction: blob first, then `document` + `import_batch` + rows in one
+transaction) and §5.5 (what a blocked batch leaves behind — nothing persisted). **Reconciliation
+runs before FX enrichment**, as `statement-ingestion.html` §1 and `architecture.html` §5 now both
+document. Identification order: content fingerprint, then filename hint as a tiebreaker only.
+
+**Invariants / security.** I8 (a blocked batch stages nothing), I5, I6. Account resolution is by
+`account_number_hash`; the raw number is transient and never stored, logged or returned.
+
+**Required test behaviours (failing first).**
+- A blocked batch persists **nothing** — no blob, no `document` row, no `import_batch`. Assert the
+  tables are empty afterwards, not merely that an error was raised.
+- Staging is one transaction: an induced failure after the blob write leaves no database row.
+- The order is observable: with FX unreachable, a batch that cannot reconcile still blocks, and no
+  rate row is written.
+- A filename hint alone never selects a profile; a fingerprint match does.
+
+**Validation.** The API gate, the DB gate.
+
+**Acceptance.** A synthetic PDF parses end to end into staged rows with a verdict, through one
+function call, with no route involved.
+
+---
+
+### Task 5e — `POST /parse`
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t5e-parse-route`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 5d.
+**Forecast:** ~200 production, ~380 test.
+
+**Outcome.** The web app can post a PDF and receive either a staged batch or a blocked verdict it
+can render.
+
+**Files.**
+- Create `api/oneledger/routes/ingest.py`, `api/tests/test_parse.py`.
+- Modify `api/oneledger/main.py` (register the router).
+- Modify `docs/design/api-contracts.html` §2 and §4. Regenerate `web/types/api/`.
+
+**Contracts.** The spec's §4.2 and §4.3: multipart PDF plus a `stage` flag; **200 whether or not
+the batch is blocked** — a blocked batch is a result, not an error; `409` with
+`password_required` for an encrypted file.
+
+**Invariants / security.** `require_owner()` on the route. Money is a string on the wire.
+No identifier, no original filename and no raw account number in any response or error body.
+
+**Required test behaviours (failing first).**
+- Unauthenticated returns 401; another household's batch is not visible.
+- A blocked batch returns 200 with the verdict, and stages nothing.
+- An encrypted PDF returns 409 `password_required`; a scanned PDF with no text layer refuses with
+  a stated reason rather than returning zero rows as success.
+- Amounts are strings in the response; no JSON number appears on a money field.
+
+**Validation.** The API gate, the web gate for regenerated types.
+
+**Acceptance.** Roadmap M2's dedupe, overlap, corruption and FX gates are provable through the
+route.
+
+---
+
+### Task 5f — The layout draft preview completes
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t5f-layout-draft-preview`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 5d. Independent of Task 5e.
+**Forecast:** ~110 production, ~220 test.
+
+**Outcome.** `POST /layouts/propose`'s draft mode returns the normalized preview and the
+reconciliation verdict the mapper needs, not just raw rows.
+
+**Files.**
+- Modify `api/oneledger/routes/layouts.py`, `api/tests/test_layouts.py`.
+- Modify `docs/design/api-contracts.html` §2. Regenerate `web/types/api/`.
+
+**Contracts.** The spec's §4.3 and §4.5. Draft mode still **persists nothing**. An edited band
+previews as the parse it would actually produce, rather than regenerating the original proposal.
+
+**Invariants / security.** `require_owner()`. Persists nothing. No identifier in the preview
+payload — the rule Task 3's review rounds established.
+
+**Required test behaviours (failing first).**
+- A draft returns normalized rows and a verdict; the original proposal is not regenerated.
+- Nothing is persisted in either mode — assert the tables afterwards.
+- A draft that cannot reconcile still returns 200 with the verdict.
+
+**Validation.** The API gate, the web gate for regenerated types.
+
+**Acceptance.** The mapper (Task 8a) has the exact payload it renders.
+
+---
+
+### Task 6a — V14: the commit and verification functions
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t6a-import-commit-migration`
 **Base and PR target:** `develop`
 **Migration:** **V14** — `db/migrations/V14__import_commit.sql`
-**Depends on:** Task 5.
+**Depends on:** Task 5e.
+**Forecast:** ~180 production, ~280 test.
 
-**Outcome.** A staged batch can be reviewed, decided and committed — as one all-or-nothing
-database transaction that verifies the resulting balance and rolls back whole on any mismatch.
+**Outcome.** The database can turn a staged batch into ledger rows in one all-or-nothing
+statement, and can refuse to do so when the batch does not reconcile.
 
 **Files.**
 - Create `db/migrations/V14__import_commit.sql`, `db/tests/0012_import_commit.sql`.
-- Modify `api/oneledger/routes/ingest.py` (three routes), `api/tests/test_import_commit.py` (new).
-- Modify `docs/superpowers/schema.md` (note V14 carries functions only — `schema.md` carries no
-  functions by design, so this is a one-line note, not a DDL section) and
-  `docs/design/data-model.html` §17's migration list.
-- Modify `docs/design/api-contracts.html` §2. Regenerate `web/types/api/`.
+- Modify `docs/superpowers/schema.md` (a one-line note: V14 carries functions only) and
+  `docs/design/data-model.html` §17's migration list — **same commit as the migration**.
 
-**Interfaces produced** (consumed by Tasks 7, 9):
+**Contracts.** The spec's §4.9. `assert_account_reconciles(p_account_id, p_declared_closing,
+p_period_end)` is called by the commit, and `layout_version` and `dedupe_hash` pass through
+unchanged (I6).
 
-```python
-class StagedRow(BaseModel):
-    id: UUID
-    pageNumber: int | None
-    rowNumber: int | None
-    bookedDate: date
-    valueDate: date | None
-    descriptionRaw: str
-    descriptionClean: str | None
-    referenceRaw: str | None
-    amount: str
-    currency: str
-    amountBase: str
-    amountSecondary: str
-    fxRateDate: date
-    fxRateIsCarried: bool
-    status: str
-    proposedTxnType: str
-    categoryId: UUID | None
-    duplicateOfTransactionId: UUID | None
-    nearDuplicateOfId: UUID | None
-    rawRow: dict[str, str]
-    userNote: str | None
-
-class ReviewGroups(BaseModel):
-    blocked: list[StagedRow]        # empty in M2 — a blocked batch never stages
-    transfers: list[StagedRow]      # empty in M2 — transfer matching is M5
-    unclassified: list[StagedRow]
-    lowConfidence: list[StagedRow]  # empty in M2 — classification is M4
-    ready: list[StagedRow]
-    duplicates: list[StagedRow]
-
-class BatchReview(BaseModel):
-    batchId: UUID
-    accountId: UUID
-    accountName: str
-    periodStart: date | None
-    periodEnd: date | None
-    status: str
-    reconciliation: ReconciliationResult
-    groups: ReviewGroups
-    totals: BatchTotals             # rowsExtracted/new/duplicate/accepted/rejected, sum of
-                                    # accepted amounts as a decimal string, computed in Postgres
-
-class RowDecisions(BaseModel):      # PATCH /import/{id}/rows
-    ids: list[UUID]
-    status: str | None              # accepted | rejected
-    txnType: str | None             # overrides the sign-derived proposed type
-    categoryId: UUID | None
-    clearCategory: bool = False     # explicit, so "omitted" never means "clear"
-```
-
-**Contracts.**
-- `commit_import_batch()` and `assert_account_reconciles()` per §4.9, both `SECURITY DEFINER`,
-  both calling `assert_is_owner()` first, both `SET search_path = public`, reached only after
-  `scope_to_owner(conn, owner.user_id)`.
-- Commit inserts **only** `status='accepted'` rows. Nothing is accepted implicitly: staging sets
-  `new`/`duplicate`/`near_duplicate`, and only an explicit decision moves a row to `accepted`.
-  "Nothing imports without a click" is a property of the data, not of the UI.
-- Commit is refused (409) for any `reconciliation_status` other than `matched` — in M2 a staged
-  batch can only be `matched` (every other verdict blocks staging), and the check holds anyway.
-- Committing an already-completed batch is refused (409), not silently repeated.
-- A commit that raises leaves **zero** `transaction` rows and the batch not `completed` — the
-  induced-failure gate.
-- Every committed row carries `source='statement_import'`, its `source_document_id`,
-  `source_page_number`, `source_row_number`, `import_batch_id`, `statement_layout_id`,
-  `layout_version` and its `dedupe_hash` (I6), and the `import_has_document` CHECK on
-  `transaction` is what makes forgetting impossible.
-- `PATCH /import/{id}/rows` applies one decision to a set of ids in one statement — the review
-  screen is bulk-first. A category must be available to the household (reuse
-  `routes/transactions.py::_assert_category_allowed`; do not write a second predicate).
-  `txnType` must be a `txn_type` enum member M2 can produce or the owner can reasonably assign
-  (422 otherwise); an omitted `txnType` leaves the sign-derived proposal in place.
-- **Accepting a `duplicate` row is the confirmed-distinct override** (§4.7): the endpoint
-  recomputes the row's `dedupe_hash` with the occurrence index advanced to the next free index
-  among committed collisions, stores it on the staged row, then sets `accepted` — otherwise
-  V10's unique `(household_id, account_id, dedupe_hash)` index makes the commit fail. The index
-  stays the final guard.
-- `GET /import/{id}` computes its totals **in Postgres**, not by summing in Python.
-
-**Invariants / security.** I1/I5 (committed money is immutable — the V10 trigger already enforces
-it and the commit must not attempt an update path around it), I6 (provenance), I8 (commit
-re-verifies and rolls back), B3.5 (the household lock). `require_owner()` on all three routes.
-Household predicate on every statement, including inside the functions.
+**Invariants / security.** Every `SECURITY DEFINER` function calls `assert_is_owner()` **first**.
+I1/I5: committed money is immutable, enforced by V10's existing trigger. Forward-only: V14 is
+never edited once applied.
 
 **Required test behaviours (failing first).**
-- *DB (`0012`)*: `commit_import_batch` raises when `app.user_id` is unset (`assert_is_owner`
-  first); a batch belonging to another household is refused; committing a `mismatched` batch is
-  refused; a clean batch commits and `account.current_balance` equals `opening + Σ(amount)` to
-  4 dp; **a valid older statement committed after a newer one succeeds** — the as-of-close
-  comparison, not `current_balance`, is what `assert_account_reconciles` reads; **an induced
-  failure mid-commit (a declared closing deliberately off by one unit) leaves zero `transaction`
-  rows and the batch not completed**; a second commit of a completed batch is refused;
-  `assert_account_reconciles` raises on a null declared closing or null period end rather than
-  passing vacuously; a **running-balance-only** batch commits with its terminal stated balance
-  as the verification target (§4.6/§4.9).
-- *API*: an unticked (`new`) row never imports; only `accepted` rows import; commit is 409 while
-  blocked; the review payload groups rows most-attention-first with the counts the UI renders;
-  bulk accept of 200 ids is one statement; a category not available to the household is 422;
-  `clearCategory` clears while an omitted `categoryId` does not; every committed row's
-  `source_document_id`, page and row trace back to the staged row it came from; every committed
-  row's `txn_type` equals its staged row's final `proposed_txn_type`, and a review override of
-  the type is what commits; accepting a `duplicate` row recomputes its hash and both rows commit
-  side by side, after which re-parsing a statement carrying both occurrences stages both as
-  duplicates (the §4.7 override preserves future overlap detection).
+- `assert_is_owner()` is called first: a non-owner session is refused before any row is read.
+- A batch that does not reconcile is refused by `assert_account_reconciles`.
+- A failure part-way through commits nothing — count `transaction` rows afterwards.
+- `dedupe_hash` and `layout_version` on the committed row equal the staged row's.
 
-**Validation.** The DB gate (12 tests passed), the API gate, the web gate for regenerated types.
+**Validation.** The DB gate (12 tests passed).
 
-**Acceptance.** The roadmap's "the commit is atomic — an induced failure mid-import leaves zero
-rows" gate is proven in `db/tests/0012` and at the API level.
+**Acceptance.** `flyway migrate` applies V14 from empty; `schema.md` and `data-model.html` carry it
+in the same commit.
 
 ---
 
-### Task 7 — The `/import` screen
+### Task 6b — The review payload
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
-**Branch:** `feature/m2-import-screen`
+**Branch:** `feature/m2-t6b-review-payload`
 **Base and PR target:** `develop`
 **Migration:** none.
-**Depends on:** Task 5.
+**Depends on:** Task 6a.
+**Forecast:** ~150 production, ~270 test.
 
-**Outcome.** Multi-file drop with independent per-file status, a visible summary before anything
-is written, and a Stage batch action that writes.
+**Outcome.** `GET /imports/{id}/review` returns everything the review screen renders: the staged
+rows, their statuses, the verdict and the diagnostics.
+
+**Files.**
+- Modify `api/oneledger/routes/ingest.py`, `api/tests/test_import_review.py` (new).
+- Modify `docs/design/api-contracts.html` §2. Regenerate `web/types/api/`.
+
+**Contracts.** The spec's §4.2 and §5.3 (the status vocabulary). Diagnostics per
+`statement-ingestion.html` §12: extracted rows beside the computed totals, and the counts of what
+was filtered or left unparsed (I7).
+
+**Invariants / security.** `require_owner()`. Money as strings. Another household's batch is not
+readable. No raw account number or original filename in the payload.
+
+**Required test behaviours (failing first).**
+- Unauthenticated 401; another household's batch 404, not 403 — existence is not disclosed.
+- A blocked batch returns its verdict and evidence.
+- `words_filtered` and `lines_unparsed` are reported, not hidden (I7).
+
+**Validation.** The API gate, the web gate for regenerated types.
+
+**Acceptance.** The review screen (Task 9a) can be built against this payload with no further
+route change.
+
+---
+
+### Task 6c — Row decisions
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t6c-row-decisions`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 6a. Independent of 6b and 6d.
+**Forecast:** ~170 production, ~300 test.
+
+**Outcome.** A staged row can be accepted, corrected or excluded before the commit, including the
+override that accepts a row marked duplicate.
+
+**Files.**
+- Modify `api/oneledger/routes/ingest.py`, `api/tests/test_row_decisions.py` (new).
+- Modify `docs/design/api-contracts.html` §2. Regenerate `web/types/api/`.
+
+**Contracts.** The spec's §4.7: **accepting a `duplicate` row is a confirmed-distinct override.**
+V10's unique `(household_id, account_id, dedupe_hash)` index means the colliding hash cannot commit
+unchanged, so the endpoint recomputes the row's hash with the occurrence index advanced to the next
+free index among committed collisions — deterministic and stable, not a random suffix.
+
+**Invariants / security.** `require_owner()`. V13's `accepted_row_is_committable` check: an
+accepted row always carries a `proposed_txn_type`. A correction never edits `description_raw`.
+
+**Required test behaviours (failing first).**
+- Accepting a duplicate recomputes the hash to the next free index; two overrides in a row produce
+  distinct, deterministic hashes, and a repeat of the same override is idempotent.
+- Accepting a row with no `proposed_txn_type` is refused by the database check, not by the route
+  only.
+- An excluded row is not committed; a corrected row keeps its `description_raw`.
+
+**Validation.** The API gate, the DB gate.
+
+**Acceptance.** A genuinely distinct transaction that collides with a committed one can be
+imported, and the same transaction twice still cannot.
+
+---
+
+### Task 6d — The atomic commit
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t6d-atomic-commit-route`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 6a.
+**Forecast:** ~180 production, ~340 test.
+
+**Outcome.** `POST /imports/{id}/commit` turns accepted staged rows into ledger rows, or changes
+nothing at all.
+
+**Files.**
+- Modify `api/oneledger/routes/ingest.py`, `api/tests/test_import_commit.py` (new).
+- Modify `docs/design/api-contracts.html` §2. Regenerate `web/types/api/`.
+
+**Contracts.** The spec's §4.9. The route calls V14's function; the atomicity lives in the
+database, not in Python.
+
+**Invariants / security.** `require_owner()`. I1/I5: committed money is immutable. I8: a batch
+that does not reconcile cannot commit, even with every row accepted.
+
+**Required test behaviours (failing first).**
+- **An induced failure mid-import leaves zero rows** — the roadmap's own gate. Count `transaction`
+  rows before and after.
+- Committing twice is refused the second time; the batch's status prevents it.
+- A batch with an unreconciled verdict is refused.
+- Balances are recomputed after the commit.
+
+**Validation.** The API gate, the DB gate.
+
+**Acceptance.** The roadmap's atomicity gate passes: an induced failure mid-import leaves zero
+rows.
+
+---
+
+### Task 7a — The `/import` shell
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t7a-import-screen-shell`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 5e.
+**Forecast:** ~240 production, ~240 test.
+
+**Outcome.** `/import` exists, is reachable from the nav, and accepts multiple dropped files.
 
 **Files.**
 - Create `web/app/import/page.tsx`, `web/app/import/import-screen.tsx`,
   `web/app/import/__tests__/import-screen.test.tsx`.
-- Modify `web/app/workspace.tsx` (the `"import"` section and nav) and
-  `web/app/__tests__/workspace.test.tsx`.
+- Modify `web/app/workspace.tsx` and `web/app/__tests__/workspace.test.tsx` (the `"import"`
+  section and nav entry).
 - Modify `web/app/globals.css` as the screen needs.
 
-**Mockups.** `docs/product/mockups/OneLedger.dc.html` (statement-import artboard);
-`docs/product/ui-information-architecture.html` §2 wins on disagreement.
+**Contracts.** `ui-information-architecture.html` §2 wins over the mockup on disagreement.
+TypeScript formats money and performs no arithmetic on it.
 
-**Contracts.**
-- Multi-file drop and file picker. **Each file is parsed independently** — one bad statement
-  blocks only itself (`statement-ingestion.html` §12). Per-file status: pending, parsing,
-  reconciled, blocked, duplicate, needs-layout, needs-account, staged, with the file's own message.
-- Every file is first parsed with `stage=false`. Nothing is written until the owner presses
-  **Stage batch** on that file, which re-posts it with `stage=true`. Blocked files have no Stage
-  action at all.
-- A file with no matching layout offers the candidate list and a **Map a new layout** action that
-  hands off to Task 8's mapper. A file with an unresolved account offers an account picker built
-  from `/accounts`.
-- Money is rendered with `formatMoney(value, currencyRow)` from the decimal string. **No
-  arithmetic, no `Number()`, no `parseFloat` on any money field** — totals come from the API.
-- Consume **generated types only** from `@/types/api`; no hand-written response type.
-- 401 → `/login` and 403 → `/unauthorized`, using the existing `authDestination` pattern rather
-  than a second one.
-- Fully keyboard-operable, AA contrast, `aria-live` on per-file status (WCAG AA is a stated PRD §6
-  requirement, not a nicety).
+**Invariants / security.** No money arithmetic in TypeScript. No secret behind `NEXT_PUBLIC_`.
+The screen renders what the API returns; it is never the authorization boundary.
 
 **Required test behaviours (failing first).**
-- Dropping three files issues three independent parse requests and renders three status rows.
-- A blocked file renders its reconciliation message and offers **no** Stage action, while its
-  siblings still stage.
-- Nothing is posted with `stage=true` until Stage batch is pressed — assert on the request bodies.
-- A duplicate file renders the earlier import's date.
-- A file needing a layout renders the candidate list and the map action.
-- Money renders exactly the string the API sent, formatted by the currency row.
-- The empty state teaches the first action.
-- Keyboard-only: every control is reachable and operable by Tab/Enter/Space.
+- Dropping several files lists them all, each independently.
+- A non-PDF is rejected in the UI with a stated reason.
+- The nav entry appears and routes; `workspace.test.tsx` covers the new section.
 
 **Validation.** The web gate.
 
-**Acceptance.** The roadmap's `/import` requirement — multi-file drop, per-file status, nothing
-written until Stage batch — demonstrable against a live stack.
+**Acceptance.** Multi-file drop works and nothing is uploaded until the owner acts.
 
 ---
 
-### Task 8 — The layout mapping UI
+### Task 7b — Per-file status and Stage batch
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
-**Branch:** `feature/m2-layout-mapping-ui`
+**Branch:** `feature/m2-t7b-import-file-status`
 **Base and PR target:** `develop`
 **Migration:** none.
-**Depends on:** Task 5 (Task 7 may land before or after).
+**Depends on:** Task 7a.
+**Forecast:** ~200 production, ~220 test.
 
-**Outcome.** An unrecognised statement can be mapped and saved through the UI, with the parse
-shown live and the reconciliation line proving the mapping is right before it is saved.
+**Outcome.** Each dropped file reports its own outcome, and the batch is staged only when the
+owner says so.
+
+**Files.**
+- Modify `web/app/import/import-screen.tsx` and its test.
+
+**Contracts.** One `POST /parse` per file. A per-file failure never fails the others. A visible
+summary precedes staging; nothing is uploaded without a click.
+
+**Invariants / security.** Money formatted, never computed. A blocked file shows its verdict, not
+a generic error.
+
+**Required test behaviours (failing first).**
+- One file failing leaves the others' statuses intact.
+- A file needing a password prompts for that file alone.
+- Nothing is posted until Stage batch is clicked.
+- A blocked file's verdict text reaches the screen.
+
+**Validation.** The web gate.
+
+**Acceptance.** The roadmap's `/import` requirement: multi-file drop, per-file status, nothing
+staged without an explicit action.
+
+---
+
+### Task 8a — The mapper: header row, bands, live preview
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t8a-layout-mapper-preview`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Tasks 5f and 7a.
+**Forecast:** ~260 production, ~260 test.
+
+**Outcome.** An unrecognised statement's proposed layout is visible: the matched header row, the
+proposed column bands, and a live preview of the rows they produce.
 
 **Files.**
 - Create `web/app/import/layout-mapper.tsx`,
   `web/app/import/__tests__/layout-mapper.test.tsx`.
-- Modify `web/app/import/import-screen.tsx` (the handoff) and its test.
 
-**Mockup.** `docs/product/mockups/LayoutMapping.dc.html` — the artboard is the contract:
-"HEADER ROW FOUND" with the matched header words; "PROPOSED COLUMNS" listing each field with its
-`x` range and a drag hint; "PREVIEW · N ROWS" with date, description, amount and balance; and the
-reconciliation line beneath it. `ui-information-architecture.html` wins on disagreement.
+**Contracts.** `docs/product/mockups/LayoutMapping.dc.html` is the artboard contract — "HEADER ROW
+FOUND" with the matched words, "PROPOSED COLUMNS" with each field's `x` range, "PREVIEW · N ROWS"
+with date, description, amount and balance, and the reconciliation line beneath it.
+`ui-information-architecture.html` wins on disagreement.
 
-**Contracts.**
-- On **Map a new layout**, the file is posted to `POST /layouts/propose`; the response's draft and
-  sample rows populate the mapper.
-- Band edges are draggable and each column is relabellable from the field list. **Every edit
-  re-posts the file with the edited `draft` field to `POST /layouts/propose`** (Task 3's second
-  mode) for a fresh preview, so the parse shown is always the parse that will happen — the
-  preview is never computed in TypeScript.
-- The reconciliation line is rendered from the draft-mode propose response's verdict (Task 5's
-  extended contract), never recomputed in the browser.
-  Saving is permitted with a failing verdict (the owner may be mapping a period with no anchors),
-  but the line states the verdict plainly; staging still refuses a blocking verdict.
-- The owner supplies the profile name, the balance patterns and the quirks; **the UI offers
-  exactly the two quirks in the vocabulary** and no free-text quirk field.
-- Save posts `POST /layouts`; a name that already exists is presented as "this saves version N+1",
-  not as an error.
-- No bank name is prefilled, suggested or defaulted anywhere in this UI.
+**Invariants / security.** Money formatted from strings, never parsed into a number. The preview
+renders the API's normalized rows; it does not re-derive them.
 
 **Required test behaviours (failing first).**
-- The proposal renders the header row, one band per proposed column with its x range, and the
-  sample rows.
-- Dragging a band edge re-posts and re-renders the preview from the **new** response, not a
-  locally recomputed one — assert on the request and on the rendered values.
-- Relabelling a column changes the field sent on save.
-- The reconciliation line renders `matched` and `mismatched` distinctly, and shows the delta and
-  the divergent row for a mismatch.
-- Saving posts every profile field and, on success, the newly saved layout is selectable for the
-  file that triggered the mapping.
-- Only the two vocabulary quirks are offered.
-- Keyboard-only band adjustment works (arrow keys on a focused edge), because drag alone is not
-  an accessible control.
+- The proposal renders its bands, its header row and its preview rows.
+- The reconciliation verdict is shown, including the blocked case.
+- No `parseFloat`/`Number()` on an amount — the static check must cover the new file.
 
 **Validation.** The web gate.
 
-**Acceptance.** Roadmap M2's first two gates: a layout can be mapped through the UI, saved and
-reused **with no code change**; auto-proposal identifies the header row and proposes usable bands
-without hand-editing.
+**Acceptance.** A proposed layout can be read and understood before anything is saved.
 
 ---
 
-### Task 9 — The review screen, the diagnostics panel, and M2 acceptance
+### Task 8b — The mapper: drag, re-post, save
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`
-**Branch:** `feature/m2-review-screen-and-acceptance`
+**Branch:** `feature/m2-t8b-layout-mapper-editing`
 **Base and PR target:** `develop`
 **Migration:** none.
-**Depends on:** Tasks 6, 7, 8.
+**Depends on:** Task 8a.
+**Forecast:** ~240 production, ~250 test.
 
-**Outcome.** The staged batch is reviewed and committed from the app, a blocked batch is
-diagnosable at a glance, and the whole milestone is proven end to end on synthetic statements.
+**Outcome.** A band can be adjusted, the effect seen, and the corrected profile saved.
 
 **Files.**
-- Create `web/app/import/review-screen.tsx`, `web/app/import/diagnostics-panel.tsx`,
-  `web/app/import/__tests__/review-screen.test.tsx`,
-  `web/app/import/__tests__/diagnostics-panel.test.tsx`.
-- Create `api/tests/test_import_e2e.py`.
-- Modify `web/app/import/import-screen.tsx` (route to review after staging) and its test.
-- Modify `docs/superpowers/progress.md` (M2 complete, with the owner-run results).
+- Modify `web/app/import/layout-mapper.tsx` and its test.
+- Modify `web/app/import/import-screen.tsx` (the handoff) and its test.
 
-**Mockups.** `docs/product/mockups/Review.dc.html`;
-`docs/product/ui-information-architecture.html` §3 wins on disagreement.
+**Contracts.** An edited band re-posts as a **draft** (Task 5f) and previews the parse it would
+actually produce. Saving calls `POST /layouts`; the saved profile is what a later import matches.
 
-**Contracts.**
-- Groups **most-attention-first**, exactly as IA §3: Blocked, Transfers, Unclassified, Low
-  confidence, Ready (collapsed, with a count), Duplicates (collapsed, with a count). In M2 the
-  Transfers and Low-confidence groups are empty and are **not rendered** rather than shown as
-  empty shells; the review screen is built so M4 and M5 fill them without restructuring it.
-- The **reconciliation banner sits at the top**: green states the identity with its three numbers;
-  red blocks import entirely and opens the diagnostics panel.
-- Bulk actions over per-row clicks: select-all-ready, bulk categorize, bulk accept, bulk reject.
-  Running totals update from the API's totals, live, so the shape of the month is visible before
-  committing. Target: 200 rows reviewed in under 10 minutes.
-- **Nothing imports without a click.** No row is pre-accepted in M2.
-- Each row shows `description_raw` and its page and row number (the M2 form of traceability; the
-  document link is M10).
-- **Diagnostics panel** (`statement-ingestion.html` §12): extracted rows beside the computed
-  running balance, rendered from the parse response's preview — the divergent row highlighted
-  when `firstDivergentRow` exists, and otherwise the delta stated with any `candidateRows`
-  called out and a plain line that row-level evidence is unavailable (§4.6). It is the first
-  thing to open when a layout changes.
-- Fully keyboard-operable via Tab, Enter and Space. **No vim-style bindings** — IA §3 is explicit
-  that keyboard operability here is an accessibility requirement, not a power-user feature.
+**Invariants / security.** Nothing is persisted until save. No identifier from the statement is
+rendered into a label, a title attribute or a saved profile name.
 
 **Required test behaviours (failing first).**
-- *Web*: groups render most-attention-first with correct counts, Ready and Duplicates collapsed;
-  a blocked batch renders the red banner, opens diagnostics and offers no Import action; bulk
-  accept sends one PATCH with every selected id; an unticked row is never sent as accepted;
-  running totals render exactly the API's strings; the diagnostics panel highlights the divergent
-  row; every control is reachable by keyboard.
-- *API end-to-end (`test_import_e2e.py`)*, on a synthetic statement, offline: propose a layout →
-  save it → parse dry-run → stage → review → accept → commit → assert the committed
-  `transaction` rows match the statement's dates and amounts exactly, that
-  `account.current_balance` equals the declared closing, and that every row traces to document,
-  page and row. Then re-run the same file and assert zero new rows with the earlier import named.
-  **This test fails if the engine or a saved profile regresses** — it is the golden-fixture role,
-  played by a generated fixture because no PDF may be committed.
+- Dragging a band re-posts the draft and re-renders the preview from the response, not locally.
+- Save persists; cancel persists nothing.
+- A draft that cannot reconcile can still be saved, with the verdict shown — the owner decides.
 
-**Validation.** The web gate, the API gate, the DB gate — the full local hook suite, which is
-the enforced gate (§3.1); a manual CI dispatch is optional corroboration.
+**Validation.** The web gate.
 
-**Owner-run acceptance** (recorded in `docs/superpowers/progress.md`, not automated — §3.1):
-all 38 real card statements import end to end with reconciliation passing on each; a re-import
-imports zero rows and names the earlier import; an overlapping statement imports only new rows;
-a backup restored into a scratch database.
+**Acceptance.** Roadmap M2's first two gates: a layout can be mapped through the UI, saved, and
+matched on the next import.
 
-**Acceptance.** Every item in §9 checked, with CI-run items evidenced by a green run and
-owner-run items evidenced by dated entries in the progress file.
+---
+
+### Task 9a — The review screen
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t9a-review-screen`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Tasks 6b, 6c, 6d.
+**Forecast:** ~300 production, ~300 test.
+
+**Outcome.** A staged batch is reviewed row by row and committed from the app.
+
+**Files.**
+- Create `web/app/import/review-screen.tsx`,
+  `web/app/import/__tests__/review-screen.test.tsx`.
+- Modify `web/app/import/import-screen.tsx` (route to review after staging) and its test.
+
+**Contracts.** `Review.dc.html` and `ui-information-architecture.html` §3, the latter winning on
+disagreement. **Nothing imports without a click** — no row is pre-accepted in M2.
+
+**Invariants / security.** Money formatted, never computed. A duplicate row is excluded by
+default and accepting it is a deliberate act with its consequence stated.
+
+**Required test behaviours (failing first).**
+- No row is accepted by default; committing with nothing accepted imports nothing.
+- A duplicate row is visibly marked and excluded until overridden.
+- A blocked batch cannot be committed from the screen.
+- Amounts render as formatted strings; no arithmetic in the component.
+
+**Validation.** The web gate.
+
+**Acceptance.** A batch can be reviewed and committed end to end from the app.
+
+---
+
+### Task 9b — The diagnostics panel
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t9b-diagnostics-panel`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Task 9a.
+**Forecast:** ~200 production, ~200 test.
+
+**Outcome.** When a batch blocks, the owner can see why, in the statement's own numbers.
+
+**Files.**
+- Create `web/app/import/diagnostics-panel.tsx`,
+  `web/app/import/__tests__/diagnostics-panel.test.tsx`.
+- Modify `web/app/import/review-screen.tsx` (the panel's placement) and its test.
+
+**Contracts.** `statement-ingestion.html` §12: extracted rows beside the computed totals, the
+declared and computed closing balances, the delta, the divergent row or the candidate rows, and
+the counts of what was filtered or left unparsed.
+
+**Invariants / security.** **I7 rendered honestly**: where no divergent row can be named, the
+panel says row-level evidence is unavailable and lists the candidates. It never presents a guess
+as a finding. Carried-forward rates are labelled as such.
+
+**Required test behaviours (failing first).**
+- A running-balance layout shows the divergent row; a closing-anchor-only layout shows the
+  candidates and the "evidence unavailable" wording instead.
+- `words_filtered` and `lines_unparsed` are shown, not hidden.
+- A carried-forward rate is labelled where it affects a displayed amount.
+
+**Validation.** The web gate.
+
+**Acceptance.** A blocked batch is explicable from the screen without reading a log.
+
+---
+
+### Task 9c — The end-to-end gate and M2 acceptance
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/m2-t9c-import-acceptance`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Tasks 9a, 9b.
+**Forecast:** ~60 production, ~280 test.
+
+**Outcome.** The whole importer is proven in one automated run, and M2's acceptance is recorded.
+
+**Files.**
+- Create `api/tests/test_import_e2e.py`.
+- Modify `docs/superpowers/progress.md` (M2 complete, with the owner-run results).
+
+**Contracts.** Synthetic statements only — no real statement enters this repository, on any
+branch, ever.
+
+**Invariants / security.** The run exercises I2, I5, I6, I7 and I8 together. The owner-run
+acceptance against real statements happens outside the repository and is recorded as a result,
+never as a fixture.
+
+**Required test behaviours (failing first).**
+- A synthetic statement parses, stages, reviews and commits, and the ledger holds exactly the
+  accepted rows.
+- An overlapping second statement imports only the new rows.
+- A corrupted statement blocks and commits nothing.
+- A second commit of the same batch is refused.
+
+**Validation.** The full local hook suite — the web gate, the API gate and the DB gate.
+
+**Acceptance.** Every item in §9 checked, with the owner-run result against real statements
+recorded in `progress.md`.
 
 ---
 
