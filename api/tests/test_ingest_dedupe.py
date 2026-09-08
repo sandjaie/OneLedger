@@ -45,6 +45,7 @@ def nrow(
         original_currency=None,
         proposed_txn_type="expense",
         running_balance=None,
+        balance_direction_is_stated=False,
     )
 
 

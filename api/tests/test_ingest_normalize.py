@@ -680,8 +680,41 @@ def test_a_balance_delta_crosses_into_overdraft_without_losing_forty() -> None:
 
 def test_a_delta_between_two_suffixed_balances_is_not_inverted_again() -> None:
     # The balances said which way they go, so the movement between them is already in the
-    # ledger's frame: a card balance deepening from 4,500 Dr to 4,810 Dr is 310 more owed, and
-    # a purchase is negative. Inverting it on top of the suffix would make it a refund.
+    # ledger's frame and `inverts_sign` has nothing left to reframe. The chain has to *cross*
+    # from Dr to Cr for the two readings to differ: a same-suffix chain gives the same two
+    # numbers whether the suffix is read or stripped, so it would pass on a revert and prove
+    # nothing. Here the account clears 4,810 owed and ends 50 in credit — a movement of 4,860.
+    # Stripped and then inverted it reads 4,760, short by twice the credit balance.
+    rows = [
+        row(1, booked_date="15/07/2024", description="SETTLEMENT", running_balance="50.00 Cr"),
+        row(2, booked_date="16/07/2024", description="PURCHASE", running_balance="310.00 Dr"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        invertsSign=True,
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, declared_opening="4,810.00 Dr"),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert [line.amount for line in batch.rows] == [Decimal("4860.0000"), Decimal("-360.0000")]
+
+
+def test_a_chain_mixing_suffixed_and_bare_balances_is_framed_before_it_is_subtracted() -> None:
+    # The layouts' own example anchor patterns capture the number without its suffix, so a
+    # declared opening read bare beside `Dr` column cells is the ordinary shape rather than an
+    # exotic one. Subtracting first and framing the difference takes it between two frames and
+    # leaves it in neither: the first amount comes out as -9,310 where the card was charged 310.
     rows = [
         row(1, booked_date="15/07/2024", description="PURCHASE", running_balance="4,810.00 Dr"),
         row(2, booked_date="16/07/2024", description="PAYMENT", running_balance="4,310.00 Dr"),
@@ -699,12 +732,21 @@ def test_a_delta_between_two_suffixed_balances_is_not_inverted_again() -> None:
     )
 
     batch = normalize.normalize(
-        layout,
-        extraction(rows, declared_opening="4,500.00 Dr"),
-        account_currency=ACCOUNT_CURRENCY,
+        layout, extraction(rows, declared_opening="4,500.00"), account_currency=ACCOUNT_CURRENCY
     )
 
     assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+
+
+def test_a_balance_that_states_its_direction_twice_and_disagrees_is_refused() -> None:
+    # `-100.00 Cr` says debit with its sign and credit with its suffix. Every sibling path here
+    # fails the row rather than picking one, because resolving it silently is the invisible sign
+    # error Invariant I2 exists to prevent. Where the two agree there is nothing to resolve.
+    assert normalize.parse_balance("-100.00 Cr") is None
+    assert normalize.parse_balance("(100.00) Cr") is None
+    assert normalize.parse_balance("-100.00 Dr") == normalize.SignedAmount(
+        Decimal("-100.0000"), True
+    )
 
 
 def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None:
