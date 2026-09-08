@@ -137,13 +137,13 @@ def reconcile(
     # check a running-balance statement offers, and every batch then reconciles vacuously.
     if profile.closingBalancePattern is not None and closing is None:
         return _unavailable(
-            "the layout declares a closing balance pattern and it did not extract a number; "
-            "remap the layout rather than importing rows that bypassed reconciliation"
+            "the layout declares a closing balance pattern and no usable balance came out of "
+            "it; remap the layout rather than importing rows that bypassed reconciliation"
         )
     if profile.openingBalancePattern is not None and opening is None:
         return _unavailable(
-            "the layout declares an opening balance pattern and it did not extract a number; "
-            "remap the layout rather than reconciling against a balance derived from the rows"
+            "the layout declares an opening balance pattern and no usable balance came out of "
+            "it; remap the layout rather than reconciling against a balance derived from the rows"
         )
 
     # Section 4.6 requires *every* row-to-row step to hold, so a row carrying no balance under a
@@ -332,7 +332,7 @@ def _framed(text: str | None, invert: bool) -> Decimal | None:
     inversion is then withheld — applying both would reverse the statement rather than reframe
     it, which is the rule `normalize.py` already applies to a row that stated its direction.
     """
-    balance = parse_balance(text) if text else None
+    balance = parse_balance(text)[0] if text else None
     return None if balance is None else frame_balance(balance, invert)
 
 

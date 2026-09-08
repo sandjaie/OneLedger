@@ -155,8 +155,8 @@ def frame_balance(balance: SignedAmount, invert: bool) -> Decimal:
     return -balance.value if invert and not balance.direction_is_stated else balance.value
 
 
-def parse_balance(text: str) -> SignedAmount | None:
-    """A balance figure signed by its own `Dr`/`Cr` suffix, or None when the cell is not a number.
+def parse_balance(text: str) -> tuple[SignedAmount | None, str | None]:
+    """A balance signed by its own `Dr`/`Cr` suffix, or the reason there is no balance.
 
     A balance is a position rather than a movement, so the suffix means one thing wherever it
     appears: `100.00 Dr` is an overdraft and `100.00 Cr` a credit balance, whatever convention
@@ -167,22 +167,28 @@ def parse_balance(text: str) -> SignedAmount | None:
 
     `direction_is_stated` travels with the value for the reason it does on a row's amount: a
     figure that said which way it goes has nothing left for `inverts_sign` to reframe.
+
+    The refusal names itself. A cell that is not a number at all returns `(None, None)`, which
+    every caller already has a word for; a cell that *is* a number and contradicts itself
+    returns the reason, because telling an owner that `-100.00 Cr` "is not a number" sends them
+    looking for the wrong thing in a cell they can read.
     """
     value = parse_amount(text)
     if value is None:
-        return None
+        return None, None
     match = CREDIT_DEBIT_SUFFIX.search(text.strip())
     if match is None:
-        return SignedAmount(value, False)
+        return SignedAmount(value, False), None
     credit = match.group(1).upper() == "CR"
     signed = value.copy_abs() if credit else -value.copy_abs()
     if value < 0 and signed != value:
-        # `-100.00 Cr` and `(100.00) Dr` state a direction twice and disagree. Every sibling
+        # `-100.00 Cr` and `(100.00) Cr` state a direction twice and disagree. Every sibling
         # here refuses that rather than picking one — `_from_columns` and `_signed_amount` both
         # fail the row — because resolving it silently is the invisible sign error I2 exists to
-        # prevent. None breaks the chain and names the row.
-        return None
-    return SignedAmount(signed, True)
+        # prevent. The likeliest cause is a band wide enough to have taken the sign from the
+        # column beside it, which is why the reason points at the cell rather than the number.
+        return None, "states a sign and a Dr/Cr suffix that disagree"
+    return SignedAmount(signed, True), None
 
 
 def _parse_date(value: str, date_format: str, period: StatementPeriod | None) -> date | None:
@@ -443,19 +449,22 @@ def _balance_deltas(
     Each balance is carried into the ledger's frame *before* the subtraction, by the same rule
     reconciliation applies to its anchors. Subtracting first and framing the difference works
     only while every balance in the chain agrees about stating its direction: a statement whose
-    opening anchor is captured bare — which the layouts\' own example patterns do, capturing the
+    opening anchor is captured bare — which an owner's anchor pattern may well do, capturing the
     number without its suffix — and whose column cells carry `Dr` would otherwise have its
     difference taken between two frames and belong to neither. Framed first, the delta is in
-    the ledger\'s frame whatever the mix, and it says so, so nothing reframes it again.
+    the ledger's frame whatever the mix, and it says so, so nothing reframes it again.
     """
     if profile.signConvention != "balance_delta":
         return {}
     invert = profile.invertsSign
-    opening = parse_balance(result.declared_opening or "")
+    opening, refusal = parse_balance(result.declared_opening or "")
     if opening is None:
+        because = (
+            f"its opening balance {refusal}" if refusal else "this statement did not yield one"
+        )
         raise NormalizationError(
-            "balance_delta needs the statement's opening balance, and this statement did not "
-            "yield one — a first amount cannot be derived without it"
+            f"balance_delta needs the statement's opening balance, and {because} — a first "
+            "amount cannot be derived without it"
         )
     ordered = list(result.rows)
     if profile.chronologicalOrder == "descending":
@@ -474,9 +483,13 @@ def _balance_deltas(
                 "amount cannot be derived"
             )
             continue
-        balance = parse_balance(_cell(row, "running_balance"))
+        balance, refusal = parse_balance(_cell(row, "running_balance"))
         if balance is None:
             deltas[row.row_number] = None
+            if refusal:
+                # The cell is a number; saying it is not would send the owner looking for the
+                # wrong thing in a cell they can read.
+                reasons[row.row_number] = f"running_balance {refusal}"
             broken_at = row.row_number
             continue
         framed = frame_balance(balance, invert)
@@ -610,7 +623,12 @@ def normalize(
             # itself permanently, whichever convention or inversion produced the sign.
             original_amount = -abs(original_amount) if amount < 0 else abs(original_amount)
         clean, applied = clean_description(description_raw)
-        balance = parse_balance(_cell(row, "running_balance"))
+        balance, balance_refusal = parse_balance(_cell(row, "running_balance"))
+        if balance_refusal is not None:
+            failures.append(
+                RowFailure(row.page_number, row.row_number, f"running_balance {balance_refusal}")
+            )
+            continue
         rows.append(
             NormalizedRow(
                 source_page_number=row.page_number,

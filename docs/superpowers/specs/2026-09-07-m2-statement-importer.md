@@ -680,13 +680,16 @@ reframing it. **This refines §4.6**, which says `inverts_sign` is applied to th
 flatly; the section above now states the narrower rule, and `statement-ingestion.html` carries it
 beside its sign table. Both modules read `frame_balance`, and `_balance_deltas` reads it *before*
 subtracting: the pre-push review found that subtracting first and framing the difference is wrong
-for any chain mixing suffixed and bare balances — which the layouts' own example anchor patterns
-produce, capturing a number without its suffix — and got 18 of 54 combinations wrong. Carrying
+for any chain mixing suffixed and bare balances, and got 18 of 54 combinations wrong. Such a chain
+needs no exotic layout — an owner's anchor pattern capturing `([0-9,.-]+)` takes the number without
+its suffix while the running-balance column keeps it, and nothing prevents that. Carrying
 both halves in 4c would have put that branch at 1,009 counted lines, past the hard stop.
 
-**One question 4d does not settle.** `layouts.py` forbids `inverts_sign` on
+**One question 4d does not settle**, and 4d narrows it. `layouts.py` forbids `inverts_sign` on
 `debit_credit_columns` and `cr_suffix`, while `statement-ingestion.html` names a card source
-pairing a `CR` suffix with `inverts_sign = True`. A card whose amounts state their own direction
-has no frame switch for its balances, and every such statement blocks with its rows accused for
-what is a frame error. One of those two documents is wrong; deciding which is the owner's, and
-the fix is its own task once decided.
+pairing a `CR` suffix with `inverts_sign = True`, so a card whose amounts state their own
+direction has no frame switch for its balances. Where those balances carry their own suffix it
+now needs none, and such a card reconciles. What still blocks is the card that prints its
+balances **bare**: nothing then says the figures are owed, and the walk accuses row 1 for what is
+a frame error. One of those two documents is wrong; deciding which is the owner's, and the fix is
+its own task once decided.
