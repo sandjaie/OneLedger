@@ -45,13 +45,16 @@ def _fixture(cur: psycopg.Cursor[Any]) -> tuple[UUID, UUID]:
     person = cur.fetchone()
     if person is None:
         pytest.skip("no seeded person")
+    # `account.country` is NOT NULL and `person.tax_residency` is not: V2 seeds it NULL and
+    # only V7's configuration call fills it, so deriving the country from the person breaks on
+    # a freshly migrated database. ZZ is ISO 3166-1 user-assigned — reserved for private use
+    # and not any country's code, which is also what ADR-0012 wants of a fixture.
     cur.execute(
         """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
                                 country, opening_balance_date, current_balance)
-           VALUES (%s, %s, 'storage test', 'savings', %s,
-                   (SELECT tax_residency FROM person WHERE id = %s), DATE '2026-01-01', 0)
+           VALUES (%s, %s, 'storage test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0)
            RETURNING id""",
-        (household[0], person[0], household[1], person[0]),
+        (household[0], person[0], household[1]),
     )
     return household[0], UUID(str(cur.fetchone()[0]))  # type: ignore[index]
 
