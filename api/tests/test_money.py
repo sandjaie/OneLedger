@@ -63,7 +63,13 @@ def test_money_accepts_the_wire_form_and_refuses_everything_else() -> None:
     assert _money("-310.0000") == "-310.0000"
     assert _money("12") == "12"
     assert _money(None) is None
-    for bad in ["1.00000", "", "1,000.00", "1e4", "abc"]:
+    # NUMERIC(20,4) leaves sixteen digits before the point. This is the only gate on that
+    # width — nothing between it and the INSERT counts digits again, so a seventeenth reaches
+    # Postgres and comes back as a numeric overflow. The route maps that to 422, so the caller
+    # is not handed a 500; they are handed the column's complaint instead of the field's, from
+    # a check that needed a database round trip to make.
+    assert _money("1" * 16 + ".0000") == "1" * 16 + ".0000"
+    for bad in ["1.00000", "", "1,000.00", "1e4", "abc", "1" * 17, "-" + "1" * 17]:
         with pytest.raises(ValueError):
             _money(bad)
     with pytest.raises(ValueError):
@@ -127,6 +133,26 @@ def test_the_transaction_currency_selects_the_legs() -> None:
         ON,
     )
     assert foreign.asked == [("XSG", "XIN"), ("XAE", "XIN")], "the cross reads both legs"
+
+
+def test_a_single_leg_reports_its_own_carry() -> None:
+    """The base and secondary branches take `carried` and the effective date from the one leg
+    they read. Nothing downstream re-derives either: V13's `staged_transaction` has no CHECK
+    tying `fx_rate_is_carried` to the dates the way V10's `carried_rate_dates` does on
+    `transaction`, so a rate labelled observed here is labelled observed on the review screen
+    (Invariant I7). A statement in the base or the secondary currency is the ordinary case."""
+    carried_leg: Rows = {(ON, "XAE", "XIN"): ("3.0000000000", True, date(2026, 2, 27))}
+
+    _, _, carried, effective = _frozen(_cursor(carried_leg), ON, "XIN", "XIN", "XAE")
+    assert (carried, effective) == (True, date(2026, 2, 27)), "the base leg carries the pair"
+
+    _, _, carried, effective = _frozen(_cursor(carried_leg), ON, "XAE", "XIN", "XAE")
+    assert (carried, effective) == (True, date(2026, 2, 27)), "so does the secondary leg"
+
+    observed: Rows = {(ON, "XAE", "XIN"): ("3.0000000000", False, None)}
+    for txn_currency in ("XIN", "XAE"):
+        _, _, carried, effective = _frozen(_cursor(observed), ON, txn_currency, "XIN", "XAE")
+        assert (carried, effective) == (False, ON), f"{txn_currency}: observed is not carried"
 
 
 def test_two_legs_from_different_dates_are_refused() -> None:
