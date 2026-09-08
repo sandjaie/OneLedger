@@ -52,8 +52,21 @@ open below — synthetic checks do not substitute for them.
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
 | 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
 | 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | Complete | [PR #35](https://github.com/sandjaie/OneLedger/pull/35), merged; `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
-| 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Not started | — |
+| 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | In review | [PR #38](https://github.com/sandjaie/OneLedger/pull/38); `api/tests/test_ingest_dedupe.py` (34 tests) |
 | 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Not started | — |
+
+Task 4b records three deviations. **A repeated reference no longer collapses distinct rows**: §4.7
+makes `reference_raw` the disambiguator, which separates identical-looking transactions only while
+it is unique, and a bank that fills the column with a constant would have staged three distinct
+rows under one fingerprint for V10's unique index to reject wholesale at commit — the occurrence
+index is appended when a reference repeats. **The occurrence counter advances for every row**,
+including one a reference disambiguated, so a reference present in one statement and blank in the
+next no longer shifts every later index and marks each row a duplicate of the wrong transaction.
+**`normalise_for_hash` applies NFKC** before reading, because extraction yields precomposed or
+decomposed text depending on the font and the two forms otherwise hash differently and score 0.0
+against each other. Spec §7 gains item 11: the pipeline's "staged and committed rows" against
+V13's foreign keys, which reference `transaction(id)` alone — the verdict columns win, and the
+cross-batch gap is Task 5d's to close in the pipeline.
 | 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Not started | — |
 | 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Not started | — |
 | 5c — document storage | `feature/m2-t5c-document-storage` | Not started | — |
