@@ -85,6 +85,38 @@ BEGIN
     VALUES (batch, h, a, '{}'::jsonb, '2024-02-02', 'WITH TYPE', -5.0000, base,
             '2024-02-02', 1, 20, -5.0000, -100.0000, 's3', 'accepted', 'expense');
 
+  -- V10's amount_not_zero permits a zero amount only for 'adjustment', and review may
+  -- override a proposed type. An accepted zero row typed anything else is a row the
+  -- all-or-nothing commit must reject, so the database refuses to hold it.
+  BEGIN
+    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+                                    booked_date, description_raw, amount, currency,
+                                    fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                                    amount_base, amount_secondary, dedupe_hash, status,
+                                    proposed_txn_type)
+      VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO EXPENSE', 0, base,
+              '2024-02-03', 1, 20, 0, 0, 's4', 'accepted', 'expense');
+    RAISE EXCEPTION 'unreachable';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+
+  -- The same zero row typed adjustment is accepted, and a zero row not yet accepted may
+  -- carry any type while review decides.
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+                                  booked_date, description_raw, amount, currency,
+                                  fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                                  amount_base, amount_secondary, dedupe_hash, status,
+                                  proposed_txn_type)
+    VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO ADJUSTMENT', 0, base,
+            '2024-02-03', 1, 20, 0, 0, 's5', 'accepted', 'adjustment');
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+                                  booked_date, description_raw, amount, currency,
+                                  fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                                  amount_base, amount_secondary, dedupe_hash,
+                                  proposed_txn_type)
+    VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO UNDER REVIEW', 0, base,
+            '2024-02-03', 1, 20, 0, 0, 's6', 'expense');
+
   -- A staged row is batch-scoped working state: deleting the batch takes its rows with it.
   DELETE FROM import_batch WHERE id = batch;
   ASSERT (SELECT count(*) FROM staged_transaction WHERE import_batch_id = batch) = 0,

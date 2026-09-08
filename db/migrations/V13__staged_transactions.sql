@@ -73,10 +73,15 @@ CREATE TABLE staged_transaction (
   user_note            TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- transaction.txn_type is NOT NULL, so a row that can be accepted but never committed is a
-  -- dead end. The database refuses to represent it rather than leaving it for the commit to find.
+  -- transaction.txn_type is NOT NULL and its amount_not_zero permits a zero amount only for
+  -- 'adjustment'. Review may override a proposed type, so an accepted row is held to both
+  -- rules here: a row that can be accepted but never committed is a dead end the database
+  -- refuses to represent, rather than one the all-or-nothing commit discovers.
   CONSTRAINT accepted_row_is_committable
-    CHECK (status <> 'accepted' OR proposed_txn_type IS NOT NULL),
+    CHECK (
+      status <> 'accepted'
+      OR (proposed_txn_type IS NOT NULL
+          AND (amount <> 0 OR proposed_txn_type = 'adjustment'))),
 
   -- The ledger's own original_pair rule (V10), enforced where the row is first written: an
   -- original amount without its currency is a number with no meaning, and staging must not
