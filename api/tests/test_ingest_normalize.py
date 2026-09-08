@@ -710,3 +710,84 @@ def test_a_two_digit_value_date_after_the_period_still_resolves_its_century() ->
     assert batch.failures == []
     assert batch.rows[0].booked_date == date(2099, 8, 31)
     assert batch.rows[0].value_date == date(2099, 9, 2)
+
+
+@pytest.mark.parametrize("convention", ["signed", "cr_suffix"])
+def test_a_debit_credit_pair_is_an_amount_under_every_convention_that_accepts_one(
+    convention: str,
+) -> None:
+    # LayoutCreate accepts these conventions with a debit/credit pair and no amount column,
+    # and the engine counts those cells as an amount when starting a row. Reading only the
+    # amount cell here failed every row of a layout the rest of the system had accepted.
+    layout = profile(
+        signConvention=convention,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "debit", "xMin": 300.0, "xMax": 450.0},
+            {"field": "credit", "xMin": 450.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(1, booked_date="15/07/2024", description="OUT", debit="310.00"),
+        row(2, booked_date="16/07/2024", description="IN", credit="500.00"),
+    ]
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert batch.failures == []
+    assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+
+
+def test_a_column_stated_direction_is_never_inverted_even_under_an_invertible_convention() -> None:
+    # `signed` may be declared with inverts_sign, but a row whose direction came from a debit
+    # or credit column has already stated it — inverting that reverses the row.
+    layout = profile(
+        signConvention="signed",
+        invertsSign=True,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "debit", "xMin": 300.0, "xMax": 450.0},
+            {"field": "credit", "xMin": 450.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(1, booked_date="15/07/2024", description="OUT", debit="310.00"),
+        row(2, booked_date="16/07/2024", description="IN", credit="500.00"),
+    ]
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+
+
+def test_a_broken_running_balance_chain_derives_nothing_after_the_break() -> None:
+    # Every balance_delta amount is a difference between consecutive balances. One unusable
+    # balance makes the next difference span two rows, so the surviving row would silently
+    # carry the failed row's money under its own description — and the batch could still
+    # reconcile, because the total is right and only the attribution is wrong.
+    rows = [
+        row(1, booked_date="15/07/2024", description="FIRST", running_balance="4,690.00"),
+        row(2, booked_date="16/07/2024", description="UNREADABLE", running_balance="4,89O.OO"),
+        row(3, booked_date="17/07/2024", description="THIRD", running_balance="5,000.00"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout, extraction(rows, declared_opening="5,000.00"), account_currency=ACCOUNT_CURRENCY
+    )
+
+    assert [line.description_raw for line in batch.rows] == ["FIRST"]
+    assert [failure.source_row_number for failure in batch.failures] == [2, 3]
+    assert "is not a number" in batch.failures[0].reason
+    assert "chain" in batch.failures[1].reason

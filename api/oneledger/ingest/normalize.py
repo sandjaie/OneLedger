@@ -25,12 +25,6 @@ LEDGER_LIMIT = Decimal(10) ** 16
 # applies. Anchoring a century on a guess is the error this whole section exists to prevent.
 PERIOD_FORMATS = tuple(key for key in DATE_FORMATS if "yyyy" in key)
 CREDIT_DEBIT_SUFFIX = re.compile(r"(CR|DR)\s*$", re.IGNORECASE)
-# inverts_sign carries a statement written in the issuer's frame into the ledger's, and only
-# these two conventions are written in that frame. A Dr/Cr suffix and a debit/credit column
-# pair state the direction themselves, and the generic rule already lands a card purchase on
-# the ledger's negative side — inverting on top of either reverses every row on the card.
-# LayoutCreate refuses that combination; this set is why the engine does not depend on it.
-INVERTIBLE_CONVENTIONS = frozenset({"signed", "balance_delta"})
 GROUPING = re.compile(r",")
 
 
@@ -53,6 +47,21 @@ class StatementPeriod:
     start: date
     end: date
     is_derived: bool  # True when no period capture existed and the row dates supplied it
+
+
+@dataclass(frozen=True)
+class SignedAmount:
+    """One row's ledger amount, and whether the row itself stated its direction.
+
+    A debit or credit column and a Dr/Cr suffix each state it; an amount's own sign and a
+    balance delta do not — they are written in whichever frame the issuer chose. That
+    distinction is what `inverts_sign` may act on, and it is a property of the row rather than
+    of the convention alone: `signed` and `cr_suffix` may both be declared with a debit/credit
+    pair, and then the columns have spoken.
+    """
+
+    value: Decimal
+    direction_is_stated: bool
 
 
 @dataclass(frozen=True)
@@ -291,46 +300,57 @@ def _cell(row: RawRow, field: str) -> str:
     return row.fields.get(field, "").strip()
 
 
+def _from_columns(convention: str, row: RawRow) -> tuple[SignedAmount | None, str | None]:
+    """Debit and credit columns, which state the direction whatever the convention is called."""
+    debit, credit = _cell(row, "debit"), _cell(row, "credit")
+    if debit and credit:
+        return None, f"the row states both a debit {debit!r} and a credit {credit!r}"
+    cell = debit or credit
+    if not cell:
+        return None, "the row states neither a debit nor a credit"
+    value = parse_amount(cell)
+    if value is None:
+        return None, f"{'debit' if debit else 'credit'} {cell!r} is not a number"
+    if CREDIT_DEBIT_SUFFIX.search(cell):
+        return None, f"{cell!r} carries a Dr/Cr suffix under the {convention} convention"
+    return SignedAmount(-abs(value) if debit else abs(value), True), None
+
+
 def _signed_amount(
     profile: NormalizableProfile, row: RawRow, delta: Decimal | None
-) -> tuple[Decimal | None, str | None]:
+) -> tuple[SignedAmount | None, str | None]:
     """The ledger's signed amount for one row, or the reason it has none (Invariant I2)."""
     convention = profile.signConvention
     if convention == "balance_delta":
         if delta is None:
             return None, "running_balance is not a number"
-        return delta, None
+        return SignedAmount(delta, False), None
     if convention == "debit_credit_columns":
-        debit, credit = _cell(row, "debit"), _cell(row, "credit")
-        if debit and credit:
-            return None, f"the row states both a debit {debit!r} and a credit {credit!r}"
-        cell = debit or credit
-        if not cell:
-            return None, "the row states neither a debit nor a credit"
-        value = parse_amount(cell)
-        if value is None:
-            return None, f"{'debit' if debit else 'credit'} {cell!r} is not a number"
-        if CREDIT_DEBIT_SUFFIX.search(cell):
-            return None, f"{cell!r} carries a Dr/Cr suffix under the {convention} convention"
-        return (-abs(value) if debit else abs(value)), None
+        return _from_columns(convention, row)
     cell = _cell(row, "amount")
     if not cell:
+        # LayoutCreate accepts signed and cr_suffix with a debit/credit pair instead of an
+        # amount column, and the engine counts those cells as an amount when starting a row.
+        # A layout the rest of the system accepts must normalize here too.
+        if _cell(row, "debit") or _cell(row, "credit"):
+            return _from_columns(convention, row)
         return None, "the row states no amount"
     value = parse_amount(cell)
     if value is None:
         return None, f"amount {cell!r} is not a number"
     if convention == "cr_suffix":
-        # The suffix marks the credit; a bare amount is a debit.
-        return (abs(value) if is_credit_suffixed(cell) else -abs(value)), None
+        # The suffix marks the credit; a bare amount is a debit. Either way the row has said
+        # which way it goes.
+        return SignedAmount(abs(value) if is_credit_suffixed(cell) else -abs(value), True), None
     if CREDIT_DEBIT_SUFFIX.search(cell):
         # Reading it would be guessing at the convention; ignoring it would flip a sign in
         # silence. The layout says signed, and this cell says otherwise.
         return None, f"amount {cell!r} carries a Dr/Cr suffix under the {convention} convention"
-    return value, None
+    return SignedAmount(value, False), None
 
 
 def _balance_deltas(
-    profile: NormalizableProfile, result: ExtractionResult
+    profile: NormalizableProfile, result: ExtractionResult, reasons: dict[int, str]
 ) -> dict[int, Decimal | None]:
     """Amounts derived from consecutive running balances, evaluated chronologically.
 
@@ -350,10 +370,22 @@ def _balance_deltas(
         ordered.reverse()
     deltas: dict[int, Decimal | None] = {}
     previous = opening
+    broken_at: int | None = None
     for row in ordered:
+        if broken_at is not None:
+            # Every later difference would span the unusable row as well as this one, handing
+            # this description money that belongs to another — and the batch could still
+            # reconcile, because the total stays right and only the attribution is wrong.
+            deltas[row.row_number] = None
+            reasons[row.row_number] = (
+                f"the running-balance chain is broken at row {broken_at}, so this row's "
+                "amount cannot be derived"
+            )
+            continue
         balance = parse_amount(_cell(row, "running_balance"))
         if balance is None:
             deltas[row.row_number] = None
+            broken_at = row.row_number
             continue
         deltas[row.row_number] = balance - previous
         previous = balance
@@ -368,7 +400,10 @@ def normalize(
 ) -> NormalizedBatch:
     """Extracted rows become dated, signed, typed values in the account's currency."""
     period = _period(profile, result)
-    deltas = _balance_deltas(profile, result)
+    # Filled by the balance walk for rows it cannot derive because an earlier balance broke
+    # the chain; the generic refusal does not know why they are underivable.
+    chain_reasons: dict[int, str] = {}
+    deltas = _balance_deltas(profile, result, chain_reasons)
     rows: list[NormalizedRow] = []
     failures: list[RowFailure] = []
     booked: dict[int, date] = {}
@@ -403,13 +438,17 @@ def normalize(
                 )
             )
             continue
-        amount, refusal = _signed_amount(profile, row, deltas.get(row.row_number))
-        if amount is None:
-            failures.append(RowFailure(row.page_number, row.row_number, refusal or "no amount"))
+        signed, refusal = _signed_amount(profile, row, deltas.get(row.row_number))
+        if signed is None:
+            reason = chain_reasons.get(row.row_number) or refusal or "no amount"
+            failures.append(RowFailure(row.page_number, row.row_number, reason))
             continue
-        if profile.invertsSign and profile.signConvention in INVERTIBLE_CONVENTIONS:
+        amount = signed.value
+        if profile.invertsSign and not signed.direction_is_stated:
             # Applied last, to the ledger amount, never to the statement's own cells: a card
-            # purchase presented as a positive debit is negative in the ledger (Invariant I2).
+            # purchase presented as a positive amount is negative in the ledger (Invariant I2).
+            # A row that stated its own direction has nothing left to invert, and inverting it
+            # would reverse the card instead of reframing it.
             amount = -amount
         description_raw = _cell(row, "description")
         if not description_raw:
