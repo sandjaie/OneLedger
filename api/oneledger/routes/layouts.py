@@ -427,7 +427,15 @@ IDENTIFIER_SEPARATOR = r"[\W_]"
 IDENTIFIER_RUN = re.compile(rf"\d(?:(?:\d|{IDENTIFIER_SEPARATOR})*\d)?")
 PAN_SHAPED_IDENTIFIER = re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b", re.IGNORECASE)
 FINANCIAL_FIELDS = frozenset(
-    {"booked_date", "value_date", "amount", "debit", "credit", "running_balance"}
+    {
+        "booked_date",
+        "value_date",
+        "amount",
+        "debit",
+        "credit",
+        "running_balance",
+        "original_amount",
+    }
 )
 
 
