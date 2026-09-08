@@ -60,7 +60,7 @@ def committed(
             booked_date=row.booked_date,
             amount=row.amount,
             description_raw=row.description_raw,
-            disambiguator=str(occurrence),
+            disambiguator=f"occ:{occurrence}",
         ),
         booked_date=row.booked_date,
         amount=row.amount,
@@ -95,14 +95,14 @@ def test_descriptions_differing_only_in_noise_fingerprint_identically() -> None:
         booked_date=date(2026, 3, 4),
         amount=Decimal("-310.0000"),
         description_raw="Coffee Shop",
-        disambiguator="0",
+        disambiguator="occ:0",
     )
     noisy = dedupe.fingerprint(
         account_id=ACCOUNT,
         booked_date=date(2026, 3, 4),
         amount=Decimal("-310.0000"),
         description_raw="  COFFEE,  SHOP.  ",
-        disambiguator="0",
+        disambiguator="occ:0",
     )
     assert quiet == noisy
 
@@ -114,7 +114,7 @@ def test_the_fingerprint_is_stable_and_is_sha256_hex() -> None:
             booked_date=date(2026, 3, 4),
             amount=Decimal("-310.0000"),
             description_raw="COFFEE SHOP",
-            disambiguator="0",
+            disambiguator="occ:0",
         )
 
     first = hashed()
@@ -130,7 +130,7 @@ def test_the_amount_is_hashed_at_four_decimal_places() -> None:
             booked_date=date(2026, 3, 4),
             amount=Decimal(amount),
             description_raw="COFFEE SHOP",
-            disambiguator="0",
+            disambiguator="occ:0",
         )
 
     # The ledger stores NUMERIC(20,4); "-310" and "-310.0000" are the same stored amount and
@@ -356,7 +356,7 @@ def test_the_hashed_amount_rounds_half_away_from_zero() -> None:
             booked_date=date(2026, 3, 4),
             amount=Decimal(amount),
             description_raw="COFFEE SHOP",
-            disambiguator="0",
+            disambiguator="occ:0",
         )
 
     assert hashed("310.00005") == hashed("310.0001")
@@ -378,9 +378,9 @@ def test_the_hash_is_pinned_to_a_known_vector() -> None:
             booked_date=date(2026, 3, 4),
             amount=Decimal("-310.0000"),
             description_raw="Coffee Shop, Ltd.",
-            disambiguator="0",
+            disambiguator="occ:0",
         )
-        == "5cf6f21ce133502fee0c41e761c14bf7f42d56ac815423cf069af5ef8c563767"
+        == "7b1289eca85ff88d157b06d93f26ef7e94b2b77dd3940c3fa4d4830706998bf8"
     )
 
 
@@ -391,7 +391,7 @@ def test_the_same_row_on_two_accounts_fingerprints_differently() -> None:
             booked_date=date(2026, 3, 4),
             amount=Decimal("-310.0000"),
             description_raw="COFFEE SHOP",
-            disambiguator="0",
+            disambiguator="occ:0",
         )
 
     assert hashed(ACCOUNT) != hashed(UUID("22222222-2222-4222-8222-222222222222"))
@@ -461,6 +461,37 @@ def test_token_set_ratio_handles_empty_descriptions() -> None:
     assert dedupe.normalise_for_hash("...") == ""
     assert dedupe.token_set_ratio("", "") == 1.0
     assert dedupe.token_set_ratio("", "COFFEE") == 0.0
+
+
+def test_a_reference_that_looks_like_an_index_does_not_collide() -> None:
+    """The two disambiguators come from different worlds and must not share a namespace.
+
+    A bank reference of "1" and an occurrence index of 1 are unrelated facts. Sharing one
+    namespace gave two distinct rows one fingerprint, which V10's unique index rejects at commit
+    — or, if one is already committed, marks the other a false duplicate and excludes it.
+    """
+    verdicts = classify([nrow(1, reference="1"), nrow(2)], maps_reference=True)
+    assert verdicts[0].dedupe_hash != verdicts[1].dedupe_hash
+
+
+def test_a_literal_reference_cannot_collide_with_a_generated_repeat() -> None:
+    """ "ABC" seen twice must not produce the hash of a literal reference "ABC#1"."""
+    verdicts = classify(
+        [nrow(1, reference="ABC"), nrow(2, reference="ABC"), nrow(3, reference="ABC#1")],
+        maps_reference=True,
+    )
+    assert len({v.dedupe_hash for v in verdicts}) == 3
+
+
+def test_case_only_variants_normalise_identically() -> None:
+    """Uppercasing expands some letters into a base plus a combining mark.
+
+    Greek "Μαΐου" is one: a mark introduced after the only NFKC pass would be deleted
+    uncomposed, so the lowercase and uppercase forms hashed differently and scored 0.0 against
+    each other — an overlapping transaction imported twice.
+    """
+    lower = "Μαΐου"
+    assert dedupe.normalise_for_hash(lower) == dedupe.normalise_for_hash(lower.upper())
 
 
 # --- the audit record ------------------------------------------------------
