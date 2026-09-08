@@ -972,3 +972,68 @@ def test_a_one_sided_period_mapping_is_refused_rather_than_derived(mapped: str) 
             extraction(rows, metadata={mapped: "01/07/2024"}),
             account_currency=ACCOUNT_CURRENCY,
         )
+
+
+def test_a_two_digit_year_without_a_captured_period_is_refused() -> None:
+    # An auto-proposed draft may carry dd/MM/yy before period mapping (recorded in the
+    # progress tracker), and with no period there is nothing to window against: Python's pivot
+    # reads 99 as 1999, and those dates then become the derived period that legitimizes them.
+    # A century-early preview is worse than a refusal that says what is missing.
+    #
+    # LayoutCreate refuses to *save* this shape; normalization is a pure function over a
+    # profile-shaped value and does not depend on that refusal, so the profile is built valid
+    # and then stripped past validation to reach the engine as a draft would.
+    layout = profile(
+        dateFormat="dd/MM/yy",
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+    ).model_copy(update={"metadataPatterns": None})
+    rows = [row(1, booked_date="15/07/99", description="ALPHA", amount="-10.00")]
+
+    with pytest.raises(normalize.NormalizationError, match="two-digit year"):
+        normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+
+def test_both_period_bounds_are_read_under_one_format() -> None:
+    # The bounds are one statement's own statement of its period. Reading each under whichever
+    # format happens to fit lets a mis-captured fragment pair with a real date and gate the
+    # statement; requiring one shared format makes that pairing impossible.
+    layout = profile(
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        }
+    )
+    rows = [row(1, booked_date="15/07/2024", description="ALPHA", amount="-10.00")]
+
+    with pytest.raises(normalize.NormalizationError, match="one date format"):
+        normalize.normalize(
+            layout,
+            extraction(rows, metadata={"period_start": "01/07/2024", "period_end": "31-07-2024"}),
+            account_currency=ACCOUNT_CURRENCY,
+        )
+
+
+def test_a_period_written_differently_from_the_rows_still_reads() -> None:
+    # A statement's header often writes its period differently from its transaction lines.
+    # Both bounds agree on one format, so the period is unambiguous and the layout is usable.
+    layout = profile(
+        dateFormat="dd-MM-yyyy",
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+    )
+    rows = [row(1, booked_date="15-07-2024", description="ALPHA", amount="-10.00")]
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01 Jul 2024", "period_end": "31 Jul 2024"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.period.start == date(2024, 7, 1)
+    assert batch.period.end == date(2024, 7, 31)
+    assert [line.booked_date for line in batch.rows] == [date(2024, 7, 15)]
