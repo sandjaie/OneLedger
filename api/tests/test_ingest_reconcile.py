@@ -229,20 +229,31 @@ def test_a_running_balance_is_inverted_with_the_rest_of_the_frame() -> None:
     assert result.declared_closing == Decimal("-4810.0000")
 
 
-def test_a_row_without_a_stated_balance_still_moves_the_running_total() -> None:
-    """A continuation row states no balance of its own.
+def test_a_gap_in_a_configured_running_balance_column_is_unavailable() -> None:
+    """Section 4.6 asks every row-to-row step to hold, and a gap is a step that cannot be checked.
 
-    Skipping its amount along with its check would leave the total short and break every row
-    after it, so the walk checks only where a balance was stated.
+    Rows 2 and 3 are misread by 20 in opposite directions and cancel before row 4's balance, so
+    every stated anchor holds and the total agrees while two rows are wrong. A walk that checked
+    only where a balance was stated would call this `matched`. Physical continuation lines never
+    reach here as rows of their own, so the gap is a shifted band, not a line to walk past.
     """
     rows = [
         row(1, "-50.0000", balance="120.0000", day=1),
-        row(2, "-20.0000", day=2),
-        row(3, "-30.0000", balance="70.0000", day=3),
+        row(2, "-40.0000", day=2),
+        row(3, "-10.0000", day=3),
+        row(4, "-30.0000", balance="40.0000", day=4),
     ]
     result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)
-    assert result.status == "matched"
-    assert result.declared_closing == Decimal("70.0000")
+    assert result.status == "unavailable"
+    assert "running-balance" in result.message
+    assert "2 rows" in result.message and "row 2" in result.message
+
+
+def test_a_running_balance_column_over_no_rows_at_all_is_unavailable() -> None:
+    """Extracting no rows under a configured column is a parse regression, not an empty month."""
+    result = verdict([], hasRunningBalance=True, closingBalancePattern=None)
+    assert result.status == "unavailable"
+    assert "no rows" in result.message
 
 
 # --- mismatched, and what evidence may be named ----------------------------
@@ -319,7 +330,7 @@ def test_a_configured_opening_that_did_not_extract_is_unavailable() -> None:
     assert "opening" in result.message
 
 
-def test_a_trailing_row_without_a_balance_is_not_reconciled_against_an_interior_one() -> None:
+def test_a_trailing_row_without_a_balance_blocks_instead_of_using_an_interior_anchor() -> None:
     """The last stated balance is not the closing balance when rows follow it.
 
     Comparing a whole-statement total against a mid-statement anchor blocks a valid statement,
@@ -336,11 +347,15 @@ def test_a_trailing_row_without_a_balance_is_not_reconciled_against_an_interior_
     assert result.declared_closing is None
     # The generic "no closing balance" fallback would also block, but it would not say why.
     # Naming the row is what tells the owner which band to remap.
-    assert "3" in result.message and "last row" in result.message
+    assert "1 row" in result.message and "row 3" in result.message
 
 
-def test_an_opening_cannot_be_derived_when_the_first_row_states_no_balance() -> None:
-    """Deriving from a later balance while ignoring the amounts before it skews the opening."""
+def test_a_first_row_without_a_balance_blocks_before_an_opening_is_derived() -> None:
+    """Deriving from a later balance while ignoring the amounts before it would skew the opening.
+
+    Under a configured running-balance column the missing anchor blocks first and names the row
+    that lost it, which is what tells the owner where to look.
+    """
     rows = [
         row(1, "-50.0000", day=1),
         row(2, "-20.0000", balance="100.0000", day=2),
@@ -348,6 +363,7 @@ def test_an_opening_cannot_be_derived_when_the_first_row_states_no_balance() -> 
     ]
     result = verdict(rows, hasRunningBalance=True, closingBalancePattern=None)
     assert result.status == "unavailable"
+    assert "row 1" in result.message
 
 
 # --- the layout with both anchors ------------------------------------------
@@ -384,11 +400,11 @@ def test_a_declared_closing_that_agrees_still_matches_with_a_running_balance() -
     assert result.status == "matched"
 
 
-def test_the_walk_keeps_checking_after_a_row_without_a_balance() -> None:
-    """Stopping at a continuation row would wave every later divergence through."""
+def test_the_walk_checks_every_step_and_not_only_the_first() -> None:
+    """Stopping after the opening step would wave every later divergence through."""
     rows = [
         row(1, "-50.0000", balance="120.0000", day=1),
-        row(2, "-20.0000", day=2),
+        row(2, "-20.0000", balance="100.0000", day=2),
         row(3, "-30.0000", balance="60.0000", day=3),
     ]
     result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)

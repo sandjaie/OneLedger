@@ -53,7 +53,7 @@ open below — synthetic checks do not substitute for them.
 | 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
 | 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | Complete | [PR #35](https://github.com/sandjaie/OneLedger/pull/35), merged; `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
 | 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Complete | [PR #38](https://github.com/sandjaie/OneLedger/pull/38), merged after one Codex round; `api/tests/test_ingest_dedupe.py` (37 tests); branch deleted |
-| 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Complete | [PR #42](https://github.com/sandjaie/OneLedger/pull/42); `api/tests/test_ingest_reconcile.py` (30 tests) |
+| 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Complete | [PR #42](https://github.com/sandjaie/OneLedger/pull/42), one Codex round patched; `api/tests/test_ingest_reconcile.py` (31 tests) |
 
 Task 4b records three deviations. **A repeated reference no longer collapses distinct rows**: §4.7
 makes `reference_raw` the disambiguator, which separates identical-looking transactions only while
@@ -126,15 +126,33 @@ surface converges. Both depend on 4a's normalized row and on nothing else, and a
 each other. The combined `feature/m2-dedupe-and-reconcile` branch is superseded and must not be
 used.
 
-Task 4c records one decision beyond §4.6 and one budget exception. **A running-balance divergence
+Task 4c records two decisions beyond §4.6 and one budget exception. **A running-balance divergence
 blocks even where the totals agree**, because two amounts misread in opposite directions sum to
 the right closing balance while putting both wrong figures in the ledger, and the walk departing
-is the only evidence of it; §4.6 does not cover the case. And the branch is **851 counted lines
-against the 800 budget**, under the 1000 hard stop: the production code is 342 of 400, the excess
-is test lines two review rounds added, and a reconciliation returning three of four verdicts is a
-wrong slice rather than a smaller one. On a `running_balance_break` the verdict's three closing
-fields carry row-level figures, per §4.6's own wording — Task 9b's panel must read the status
-before the fields.
+is the only evidence of it; §4.6 does not cover the case. **A configured running-balance column
+with a gap in it is `unavailable`**, not a column to walk past: §4.6 asks every row-to-row step to
+hold, `engine.extract_pages` merges a physical continuation line into the row above rather than
+emitting one of its own, and a walk that checks only where a balance was stated reports `matched`
+for a pair of amounts misread in opposite directions that cancel before the next anchor. The
+branch is **856 counted lines against the 800 budget**, under the 1000 hard stop: the production
+code is 331 of 400, the excess is test lines two review rounds added, and a reconciliation
+returning three of four verdicts is a wrong slice rather than a smaller one. On a
+`running_balance_break` the verdict's three closing fields carry row-level figures, per §4.6's own
+wording — Task 9b's panel must read the status before the fields.
+
+**Balances carrying a `Dr`/`Cr` suffix are a separate delivery**, `fix/m2-balance-direction`, off
+`develop` once 4c has merged. Codex raised it on PR #42: `parse_amount` strips the suffix without
+reading it — right for an amount, where it means something only under `cr_suffix`, and wrong for a
+balance, where `100.00 Dr` is an overdraft whatever the amount column does. The documented
+running-balance-only source suffixes its balances, so the verdict would be a false break there.
+The fix spans `normalize.py` (already merged as 4a: `parse_balance`, a signed `running_balance`
+and the flag saying the figure stated its own direction, which is then withheld from
+`invertsSign`) as well as 4c's own `_framed`, and carrying both halves here put the branch at
+1,009 counted lines — past the hard stop, which asks for a split rather than an argument. Nothing
+consumes a verdict until Task 5's pipeline, so no import can reach the defect before the fix
+lands. `_balance_deltas` reads balances the same way and needs the same treatment, plus a decision
+on whether a delta between two suffixed balances leaves anything for `invertsSign`; that belongs
+to the same branch.
 
 Task 4a deviations, recorded rather than worked around. The plan's date test pairs `dd/MM/yyyy`
 with `MM/dd/yyyy`; Task 3's save-time validation has since restricted `dateFormat` to the
