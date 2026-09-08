@@ -1,6 +1,6 @@
 ---
 name: oneledger-plan-review
-description: Audit a OneLedger implementation plan or spec before any task is dispatched — task size against the diff budget, execution-map shape, contracts and invariants stated, no embedded implementations, and agreement with the ADRs and design documents. Run it on every plan Superpowers produces, and whenever asked to review, size or split a plan before implementation starts.
+description: Read-only audit of a OneLedger implementation plan or spec before any task is dispatched — task size against the diff budget, execution-map shape, contracts and invariants stated, no embedded implementations, and agreement with the ADRs and design documents. It reports a revised task and branch table and never edits the plan. Run it unprompted whenever a plan or spec has been written or changed and a task is about to be dispatched from it, and whenever asked to review, size or split a plan.
 ---
 
 # oneledger-plan-review
@@ -9,8 +9,15 @@ Superpowers writes the plan; this reads it before anyone builds from it. Splitti
 costs a paragraph. Discovering at review time that the task was 3,380 lines costs eight review
 rounds and a day — which is what M2 task 3 cost.
 
-This skill does not edit the Superpowers skill and does not rewrite the plan by itself. It
-produces findings and a revised task table; the orchestrator applies them before dispatch.
+**This skill reports. It does not edit.** It does not touch the Superpowers skill, does not
+rewrite the plan, does not create branches and does not dispatch anything. It reads the plan, the
+documents in force and the current tree, and produces findings plus a revised task and branch
+table. The **planning agent or orchestrator** applies them to the plan and re-runs this gate; work
+begins when no blocking finding is open.
+
+It is gate 2 of [docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is a
+plan or spec having just been written or changed, with a task about to be dispatched from it.
+Reviewing after dispatch is too late — by then a split costs an implementation, not a paragraph.
 
 ## 1. Size every task against the budget
 

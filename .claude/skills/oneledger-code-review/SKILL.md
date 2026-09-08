@@ -1,6 +1,6 @@
 ---
 name: oneledger-code-review
-description: Review implemented OneLedger work against this repository's own rules before it is pushed — money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, TDD evidence and diff size. Run it after implementation and before every push and pull request; use it whenever asked to review a branch, a task, or work that is about to ship.
+description: Read-only review of implemented OneLedger work against this repository's own rules — money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, TDD evidence and diff size. It reports and never edits; the implementing agent applies the findings. Run it unprompted once implementation is finished and before every push or pull request, including a patch answering a review finding, and whenever asked to review a branch, a task, or work about to ship.
 ---
 
 # oneledger-code-review
@@ -10,7 +10,22 @@ here. M2 task 3 took eight Codex rounds and fifteen fix commits, and every one o
 findable locally: identifier leakage into responses, logs and error text, and extraction
 ambiguity. This skill is where those get found.
 
-**Nothing is pushed until this reports no blocking findings.**
+**Nothing is pushed until this reports no blocking findings.** This is gate 5 of
+[docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is implementation
+being finished, a push about to happen, or a PR about to be opened — including a patch answering
+a Codex finding.
+
+## This skill reports. It does not edit.
+
+Read the tree, the diff and the documents; run read-only commands; produce a report. **Do not
+edit a file, fix a finding, stage, commit, push, open a PR, resolve a comment or update
+`progress.md`** — not even an obvious one-line fix, and not even when fixing looks faster than
+describing.
+
+The report goes back to the **implementing agent**, which applies it on the branch and re-runs
+this gate. A reviewer that fixes what it finds hides the finding from whoever needed to learn it,
+destroys the evidence that the fix was needed, and ends up reporting on a tree it never
+reviewed.
 
 ## 1. Establish the ground
 
@@ -21,11 +36,12 @@ git diff --stat origin/develop...HEAD
 ```
 
 A branch past the hard stop is not reviewed — it is **split**. Reviewing it wastes the review;
-the diff is about to change shape. Say which slices it splits into, name a branch per slice, and
-stop.
+the diff is about to change shape. Report which slices it splits into, name a branch per slice,
+and stop there.
 
-Then run `/verify`. A red tree is not reviewed either: a failing test is a finding that already
-found itself.
+A red tree is not reviewed either: a failing test is a finding that already found itself. If
+`/verify` has not been run on this tree, or was run and came back red, report that as the finding
+and stop.
 
 ## 2. Dispatch four reviewers, in parallel, with fresh context
 
@@ -98,7 +114,7 @@ open the file, read the surrounding code, and confirm the failure is real. **Rep
 concretely** — the input, the path through the code, the wrong output. A finding you cannot state
 that way is dropped. Merge duplicates across reviewers.
 
-## 4. Triage, then fix
+## 4. Triage
 
 **Blocking** — correctness bug, security or never-store violation, invariant breach, contract or
 schema mismatch, missing or fraudulent test evidence, budget hard stop. These are fixed before
@@ -109,15 +125,15 @@ refactor of code the diff did not touch. These get a line in the PR's Notes and,
 a follow-up issue. **They are not fixed on this branch.** Fixing them is what widens a PR and
 buys another review round.
 
-Fix the blocking findings, re-run `/verify`, then re-run this skill on the new diff — a fix has
-its own surface. If a second pass produces new blocking findings in code the first pass's fixes
-introduced, stop and report: that is a design problem, not a patch problem, and it is a
-conversation with the owner.
+## 5. Report, and hand back
 
-## 5. Report
+State the diff size, what each reviewer covered, every blocking finding with its file and line and
+the concrete failure it causes, and every non-blocking finding in one list. Say plainly whether
+the branch is clear to push.
 
-State the diff size, what each reviewer covered, every blocking finding with its file and line,
-every non-blocking finding in one list, and what was fixed. Then, and only then, push and open the
-PR from `.github/PULL_REQUEST_TEMPLATE.md` with this review's evidence in the Verification table.
+The implementing agent takes it from there: it fixes every blocking finding, re-runs `/verify`,
+and **re-runs this gate on the new diff** — a fix has its own surface. If that second pass finds
+new blocking problems inside the first pass's fixes, it stops and raises it with the owner: that
+is a design problem, not a patch problem.
 
 Report honestly. A review that finds nothing on a 700-line diff is a review that did not happen.
