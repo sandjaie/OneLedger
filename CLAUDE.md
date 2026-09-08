@@ -10,7 +10,7 @@
 | How Phase 0 was decomposed | `docs/superpowers/phase-0-pull-requests.md` — its PR breakdown, kept as the record |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
-| The three review skills | `.claude/skills/oneledger-{plan-review,code-review,code-hygiene}/SKILL.md` |
+| **When to run which gate, and what it may do** | `docs/development-cycle.md` — the ordered cycle; the review skills report and never edit |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
@@ -176,17 +176,25 @@ Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest, e
 reach for `--no-verify`; fix it and push again.
 
 **Review here, not on GitHub.** A Codex round is the audit of a review that should already have
-happened locally. Three skills own that, and they run in this order:
+happened locally. Three gates own that, specified in
+[docs/development-cycle.md](docs/development-cycle.md). **Run them unprompted** — each has a
+trigger, and the trigger is an obligation:
 
-- `/oneledger-plan-review` — on every plan Superpowers produces, **before dispatching any task**.
-  It forecasts each task against the diff budget and splits what does not fit. Splitting on paper
-  costs a paragraph; splitting after implementation costs a day.
-- `/oneledger-code-review` — after implementation, **before every push**. Fresh-context subagents
-  read the diff against this repository's own rules: identifier leakage, money handling, the
-  authorization boundary, reporting views, migrations, invariants, TDD evidence. Nothing is pushed
-  with a blocking finding open.
-- `/oneledger-code-hygiene` — at milestone boundaries. Its findings ship as their own `chore/`
-  branch, never folded into a feature PR.
+- `/oneledger-plan-review` — **a plan or spec has just been written or changed and a task is about
+  to be dispatched from it.** It forecasts each task against the diff budget and says what to
+  split. Splitting on paper costs a paragraph; splitting after implementation costs a day.
+- `/oneledger-code-review` — **implementation is finished, or a push is about to happen, or a PR
+  is about to be opened.** Fresh-context reviewers read the diff against this repository's own
+  rules: identifier leakage, money handling, the authorization boundary, reporting views,
+  migrations, invariants, TDD evidence. There is no path to `origin` that skips it, including a
+  patch answering a Codex finding.
+- `/oneledger-code-hygiene` — **a milestone has just closed.** Its findings ship as their own
+  `chore/` branch, never folded into a feature PR.
+
+**The gates are read-only. They report; they never edit.** No skill fixes what it finds, commits,
+pushes, opens a PR or edits a plan — the report goes back to the agent that produced the work,
+which applies it and re-runs the gate. A reviewer that fixes its own findings hides them from
+whoever needed to learn them and reports on a tree it no longer reviewed.
 
 **The diff budget**: **400 added production lines, 800 added production + test lines**, hard stop
 500 / 1000, measured against `develop` by `scripts/check-diff-size.sh` on push. Documentation,

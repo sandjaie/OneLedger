@@ -1,6 +1,6 @@
 ---
 name: oneledger-code-hygiene
-description: Audit OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. Use at milestone boundaries, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
+description: Read-only audit of OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. It reports and deletes nothing; the cleanup ships as its own chore branch. Use at milestone boundaries, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
 ---
 
 # oneledger-code-hygiene
@@ -10,8 +10,14 @@ request** — never as part of a feature branch. Hygiene findings that ride alon
 widen the diff, spend the size budget, and buy exactly the extra review rounds the budget exists
 to prevent.
 
-**Findings land as their own `chore/<name>` branch and PR.** Report by default; apply only
-mechanical removals, and only when asked.
+**This skill reports. It does not edit.** It reads the tree and runs read-only commands, and
+deletes nothing — not an unused import, not a stale marker, not an orphaned file. The report goes
+back to the owner or the implementing agent, and the cleanup ships as its own `chore/<name>`
+branch through the normal cycle. A sweep that removes what it finds gives nobody the chance to
+say "that one is load-bearing".
+
+It is gate 8 of [docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is a
+milestone closing, or an explicit request.
 
 ## 1. Sweep
 
@@ -82,5 +88,6 @@ by mechanical (safe to remove: unused import, unreachable branch, stale marker) 
 (needs a decision: shared helper, dropped column, superseded fixture).
 
 Then propose one `chore/` branch, sized to the same budget every other branch obeys — if the
-cleanup is over 400 production lines, it ships as several. Run `/oneledger-code-review` on it
-before pushing, like anything else.
+cleanup is over 400 production lines, propose several, in the order they should ship. Whoever
+implements it goes through the same cycle as any other branch, `/oneledger-code-review` included:
+a deletion is a change like any other, and this report is not a licence to skip the gate.

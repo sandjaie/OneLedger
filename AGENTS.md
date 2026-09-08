@@ -5,8 +5,20 @@ They apply to Codex and all implementation/review agents.
 Branching, integration and releases follow [docs/git-workflow.md](docs/git-workflow.md);
 no other document defines the branch model. `develop` is the integration branch; a milestone is
 planned once and delivered as several task-sized branches, each its own PR, the plan landing
-with the first. The delivery cycle per PR: plan and implement → Codex review → patch the
-findings → Codex thumbs-up → merge.
+with the first.
+
+**The delivery cycle and its gates are specified in
+[docs/development-cycle.md](docs/development-cycle.md). Read it before working, and run its gates
+without being asked:** `/oneledger-plan-review` before a task is dispatched from a plan,
+`/verify` and `/oneledger-code-review` before every push or PR — including a patch answering a
+review finding — and `/oneledger-code-hygiene` at a milestone boundary. Then Codex reviews on
+GitHub, blocking findings are patched on the branch, and the PR merges on the thumbs-up.
+
+**Those three skills are read-only.** They read and report; they never edit a file, fix a finding,
+commit, push, open a PR or update the tracker. The report goes back to the agent that produced the
+work, which applies it and re-runs the gate. A branch also has a size budget — 400 added
+production lines, 800 with tests, refused at 500 / 1000 by a push hook — so a task too large is
+split before it is built, not after.
 
 Use the active repository checkout for sequential development. Resolve its root with
 `git rev-parse --show-toplevel`; do not substitute a path from another machine or create Git worktrees.

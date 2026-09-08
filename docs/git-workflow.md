@@ -2,8 +2,12 @@
 
 The single reference for branching, integration and release. `CLAUDE.md`, `AGENTS.md`, plans
 and specs point here instead of restating the model. When another document disagrees with this
-file, this file wins and the other document gets fixed — do not fork the model into a second
-place.
+file about a branch, a base, a merge or a release, this file wins and the other document gets
+fixed — do not fork the model into a second place.
+
+The one division: **the review gates belong to
+[docs/development-cycle.md](development-cycle.md)** — when each runs, who runs it, what it
+produces, and that it only ever reports. That file wins on a gate, this one on a branch.
 
 ## Branch model
 
@@ -24,36 +28,33 @@ Every delivery follows one cycle: **plan → review the plan → implement → r
 patch the blocking findings → merge.** The review that costs least is the earliest one; a finding
 that reaches GitHub has already cost a round trip.
 
-1. **Plan the milestone.** The dated execution-map plan (per the CLAUDE.md "plans are execution
-   maps" rule) goes in `docs/superpowers/plans/` and lands with the milestone's first branch.
-2. **Review the plan before dispatching any of it** with `/oneledger-plan-review`: every task
-   forecast against the diff budget below and split where it does not fit, contracts and
-   invariants stated, no embedded implementations, no contradiction with the ADRs and design
-   documents. Splitting a task on paper costs a paragraph; discovering the same thing after
-   implementation costs a day of review rounds.
-3. **Implement task by task.** Each task — or a small coherent group of tasks — gets its own
-   branch `<type>/<name>` from `develop`, implemented TDD in the plan's order. The plan declares
-   `Workspace`, `Branch` and `Base and PR target` per task before implementation starts.
-4. **Review locally, before the push.** `/verify` for the gate, then `/oneledger-code-review` for
-   the reading pass. Nothing is pushed with a blocking finding open. The push hooks enforce the
-   diff budget; a branch past the hard stop is split, not reviewed.
-5. **Open one PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
+**[docs/development-cycle.md](development-cycle.md) is where that cycle is specified** — each
+gate, when an agent must run it unprompted, and what it produces. It is not restated here. This
+file says only where the branches go:
+
+1. The milestone's dated execution-map plan goes in `docs/superpowers/plans/` and lands with the
+   milestone's first branch. It is reviewed — `/oneledger-plan-review` — before any task is
+   dispatched, because that is where a task too large for one branch gets split.
+2. Each task — or a small coherent group of tasks — gets its own branch `<type>/<name>` from
+   `develop`, implemented TDD in the plan's order. The plan declares `Workspace`, `Branch` and
+   `Base and PR target` per task before implementation starts.
+3. Before the push: `/verify`, then `/oneledger-code-review`. Nothing reaches `origin` with a
+   blocking finding open, and the push hooks enforce the diff budget below.
+4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
    verification evidence. A milestone is a sequence of such PRs, not one large one.
-6. **Review and patch, triaged.** Codex reviews on GitHub. Findings are verified against the tree
-   first, then split: **blocking** findings — a correctness bug, a security or never-store
-   violation, an invariant breach, a contract or schema mismatch, missing test evidence — are
-   patched on the same branch and pushed for re-review. **Non-blocking** findings — hardening
-   beyond the task, style, naming, a suggested extra case, a refactor of code the PR did not
-   touch — are answered in the thread and recorded in the PR's Notes, and become their own issue
-   if they matter. They are not patched here: each one widens the diff and buys another round.
-7. **Merge when no blocking finding is open** and Codex has given its thumbs-up; then the branch
+5. Codex reviews; findings are verified against the tree and triaged. **Blocking** — a correctness
+   bug, a security or never-store violation, an invariant breach, a contract or schema mismatch,
+   missing test evidence — is patched on the same branch and pushed for re-review. **Non-blocking**
+   — hardening beyond the task, style, naming, a suggested extra case, a refactor of code the PR
+   did not touch — is answered in the thread and recorded in the PR's Notes. It is not patched
+   here: each one widens the diff and buys another round.
+6. **Merge when no blocking finding is open** and Codex has given its thumbs-up; then the branch
    is deleted and the next task begins. A **documentation-only PR** — a plan, a spec, an ADR,
    `progress.md` — merges on owner review alone; prose review has no convergence criterion and
    the milestone plan is not worth a day of it.
-8. **At the milestone boundary, sweep.** `/oneledger-code-hygiene` finds what accumulated between
-   tasks — dead code, duplication, migration cruft, drifted documentation. Its findings ship as
-   their own `chore/` branch, never folded into a feature PR.
-9. **Release.** Branch `release/<version>` from `develop`. On that branch: write the changelog
+7. At the milestone boundary, `/oneledger-code-hygiene` sweeps what accumulated between tasks. Its
+   findings ship as their own `chore/` branch, never folded into a feature PR.
+8. **Release.** Branch `release/<version>` from `develop`. On that branch: write the changelog
    entry and the release notes for what shipped since the last release. On owner request, merge
    to `main`, tag the merge commit (`git tag -a v<version>`) and publish the GitHub release
    from that tag with those notes.
