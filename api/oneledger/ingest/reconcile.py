@@ -78,6 +78,13 @@ class Verdict:
 
     `previous_balance` is the balance the walk held before the divergent row, which section 4.6
     names among what a `running_balance_break` carries.
+
+    **On a `running_balance_break` the three closing fields are row-level, not statement-level**:
+    `declared_closing` is the divergent row's stated balance, `computed_closing` the balance its
+    amount implies, and `delta` their difference — section 4.6 says a break carries "the previous
+    balance, the amount and both the expected and stated balances", and a statement whose own
+    balance column contradicts its amounts has no trustworthy closing figure to report instead. A
+    consumer rendering these must read the status first.
     """
 
     status: str
@@ -146,7 +153,7 @@ def reconcile(
             )
         derived = True
 
-    divergent: tuple[NormalizedRow, Decimal, Decimal] | None = None
+    divergent: tuple[NormalizedRow, Decimal, Decimal, Decimal] | None = None
     if walkable:
         last_row, last_balance = stated[-1]
         if last_balance is None and closing is None:
@@ -168,15 +175,14 @@ def reconcile(
     # and the walk's row is the evidence — which is the only way `mismatched` can carry a
     # divergent row at all.
     if divergent is not None and profile.closingBalancePattern is None:
-        row, previous, running = divergent
-        stated_balance = _frame(row.running_balance, invert)
+        row, previous, running, stated_balance = divergent
         return _verdict(
             STATUS_RUNNING_BALANCE_BREAK,
             opening,
             derived,
             stated_balance,
             running,
-            (stated_balance - running) if stated_balance is not None else None,
+            stated_balance - running,
             row.source_row_number,
             previous,
             [],
@@ -195,7 +201,7 @@ def reconcile(
             None,
             None,
             [],
-            f"Opening {opening} plus {len(rows)} rows reconciles to {closing}.",
+            f"Opening {opening} plus {_rows(len(rows))} reconciles to {closing}.",
         )
 
     # A divergence blocks even when the totals agree. Two amounts misread in opposite
@@ -206,7 +212,14 @@ def reconcile(
     # Section 4.6's dropped-row case: extraction lost a row, so the shortfall *is* that row's
     # amount, and a surviving row carrying the same amount is the evidence of what went missing.
     # A corrupted amount leaves no such row, which is how the two are told apart.
-    candidates = list(dict.fromkeys(r.source_row_number for r in rows if r.amount == delta))
+    # Section 4.6 offers the divergent row *or* the candidates, never both: where the walk
+    # named a row, a candidate list is a second story about the same discrepancy. It would also
+    # name every zero-amount row whenever the delta is zero, which is a guess, not a finding.
+    candidates = (
+        []
+        if divergent is not None
+        else list(dict.fromkeys(r.source_row_number for r in rows if r.amount == delta))
+    )
     first_divergent_row = divergent[0].source_row_number if divergent is not None else None
     return _verdict(
         STATUS_MISMATCHED,
@@ -218,10 +231,14 @@ def reconcile(
         first_divergent_row,
         None,
         candidates,
-        f"Opening {opening} plus {len(rows)} rows computes {computed}, but the statement "
+        f"Opening {opening} plus {_rows(len(rows))} computes {computed}, but the statement "
         f"declares {closing}: a difference of {delta}. "
         + _evidence(candidates, first_divergent_row, walkable),
     )
+
+
+def _rows(count: int) -> str:
+    return "1 row" if count == 1 else f"{count} rows"
 
 
 def _evidence(candidates: list[int], divergent: int | None, walkable: bool) -> str:
@@ -232,10 +249,15 @@ def _evidence(candidates: list[int], divergent: int | None, walkable: bool) -> s
             "exactly that, so the rows are not trustworthy on the strength of the total alone."
         )
     if candidates:
-        return (
-            f"Rows {candidates} each carry exactly that amount; an identical row may have been "
-            "dropped in extraction."
+        named = ", ".join(str(number) for number in candidates)
+        carries = "carries" if len(candidates) == 1 else "each carry"
+        dropped = (
+            f"Row {named} {carries} exactly that amount; an identical row may have been dropped "
+            "in extraction."
         )
+        # Section 4.6 attaches both to this case: the candidates, and the statement that none of
+        # them can be named as *the* divergent row.
+        return dropped if walkable else f"{dropped} Otherwise, {_EVIDENCE_UNAVAILABLE}"
     if walkable:
         return "No row carries the difference and the running balance never departs."
     return _EVIDENCE_UNAVAILABLE
@@ -257,7 +279,7 @@ def _derived_opening(stated: list[tuple[NormalizedRow, Decimal | None]]) -> Deci
 
 def _walk(
     opening: Decimal, stated: list[tuple[NormalizedRow, Decimal | None]]
-) -> tuple[NormalizedRow, Decimal, Decimal] | None:
+) -> tuple[NormalizedRow, Decimal, Decimal, Decimal] | None:
     """Step the running balance chronologically; return the first divergence, or None.
 
     Returns the row, the balance held before it and the balance its amount implies — section
@@ -274,7 +296,7 @@ def _walk(
         if balance is None:
             continue
         if balance != running:
-            return row, previous, running
+            return row, previous, running, balance
     return None
 
 

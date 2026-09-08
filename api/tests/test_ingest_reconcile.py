@@ -104,6 +104,8 @@ def test_a_card_layout_reconciles_with_both_sides_inverted() -> None:
         invertsSign=True,
     )
     assert result.status == "matched"
+    assert result.opening_is_derived is False
+    assert result.delta == Decimal(0)
     assert result.declared_opening == Decimal("-4500.0000")
     assert result.declared_closing == Decimal("-4810.0000")
     assert result.computed_closing == Decimal("-4810.0000")
@@ -277,6 +279,8 @@ def test_a_dropped_row_names_its_surviving_twin_as_the_candidate() -> None:
     assert result.candidate_rows == [2]
     assert result.first_divergent_row is None
     assert "dropped" in result.message
+    # Named rows are candidates, not the culprit: 4.6 requires the caveat alongside them.
+    assert "unavailable" in result.message
 
 
 def test_a_corrupted_amount_leaves_no_candidates() -> None:
@@ -403,6 +407,40 @@ def test_a_break_carries_the_previous_balance_and_the_amount() -> None:
     assert "-20.0000" in result.message
 
 
+def test_a_named_divergent_row_leaves_no_candidates() -> None:
+    """The divergent row and the candidates are alternatives, never a pair.
+
+    With the totals agreeing the delta is zero, and a candidate rule keyed on the amount would
+    name every zero-amount row as a dropped row's twin — a guess presented as a finding.
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "0.0000", balance="120.0000", day=2),
+        row(3, "-20.0000", balance="95.0000", day=3),
+        row(4, "-30.0000", balance="70.0000", day=4),
+    ]
+    result = verdict(rows, opening="170.0000", closing="70.0000", hasRunningBalance=True)
+    assert result.status == "mismatched"
+    assert result.delta == Decimal(0)
+    assert result.first_divergent_row == 3
+    assert result.candidate_rows == []
+
+
+def test_a_walk_that_holds_still_mismatches_against_a_disagreeing_closing() -> None:
+    """A row lost after the last stated balance: nothing diverges and nothing can be named."""
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+    ]
+    result = verdict(rows, opening="170.0000", closing="70.0000", hasRunningBalance=True)
+    assert result.status == "mismatched"
+    assert result.delta == Decimal("-30.0000")
+    assert result.first_divergent_row is None
+    assert result.candidate_rows == []
+    assert result.previous_balance is None
+    assert "never departs" in result.message
+
+
 # --- unavailable -----------------------------------------------------------
 
 
@@ -413,9 +451,11 @@ def test_a_declared_closing_that_did_not_extract_is_unavailable() -> None:
 
 
 def test_a_running_balance_column_that_extracted_nothing_is_unavailable() -> None:
-    rows = [row(1, "-50.0000", day=1), row(2, "-20.0000", day=2)]
-    result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)
+    """Asserted with a closing anchor present, so the generic fallback cannot mask the guard."""
+    rows = [row(1, "-50.0000", day=1), row(2, "-50.0000", day=2)]
+    result = verdict(rows, opening="170.0000", closing="70.0000", hasRunningBalance=True)
     assert result.status == "unavailable"
+    assert "running-balance" in result.message
 
 
 def test_an_unparseable_declared_balance_is_unavailable_not_mismatched() -> None:
@@ -439,6 +479,7 @@ def test_a_missing_opening_is_derived_from_the_first_stated_balance() -> None:
     result = verdict(rows, hasRunningBalance=True, closingBalancePattern=None)
     assert result.status == "matched"
     assert result.declared_opening == Decimal("170.0000")
+    assert result.opening_is_derived is True
     assert "derived" in result.message
 
 
