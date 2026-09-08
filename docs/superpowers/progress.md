@@ -62,9 +62,12 @@ rows under one fingerprint for V10's unique index to reject wholesale at commit 
 index is appended when a reference repeats. **The occurrence counter advances for every row**,
 including one a reference disambiguated, so a reference present in one statement and blank in the
 next no longer shifts every later index and marks each row a duplicate of the wrong transaction.
-**`normalise_for_hash` applies NFKC** before reading, because extraction yields precomposed or
-decomposed text depending on the font and the two forms otherwise hash differently and score 0.0
-against each other. Spec §7 gains item 11: the pipeline's "staged and committed rows" against
+**`normalise_for_hash` normalises, uppercases and normalises again**, because extraction yields
+precomposed or decomposed text depending on the font, and uppercasing expands some letters into a
+base plus a combining mark — either way the two forms otherwise hash differently and score 0.0
+against each other. **The disambiguator is namespaced** `occ:<n>` or `ref:<reference>#<seen>`
+(spec §7 item 12), because a bank reference of `1` and an occurrence index of `1` otherwise share
+a fingerprint; Task 6c's override recomputes in that form. Spec §7 gains item 11: the pipeline's "staged and committed rows" against
 V13's foreign keys, which reference `transaction(id)` alone — the verdict columns win, and the
 cross-batch gap is Task 5d's to close in the pipeline.
 | 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Not started | — |

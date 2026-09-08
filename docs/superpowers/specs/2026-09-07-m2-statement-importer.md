@@ -512,5 +512,14 @@ worked around.
     both verdict `new` and collide at commit on V10's unique index. The pipeline is where that
     is caught — by refusing a second staging for an account and period that already has an
     unreviewed batch — not by a verdict column that cannot reference one.
+12. **§4.7's disambiguator is namespaced in the tree.** The formula gives the disambiguator as
+    `reference_raw`, otherwise the occurrence index — two values from different worlds sharing one
+    namespace. A bank reference of `1` and an occurrence index of `1` then produce one fingerprint
+    for two distinct rows, which V10's `idx_txn_dedupe` rejects at commit or which marks one row a
+    false duplicate of the other. The implementation emits **`occ:<n>`** or
+    **`ref:<reference>#<seen>`**, with the repeat counter appended to every referenced row so that
+    a literal reference `ABC#1` cannot collide with the `ABC` that repeated once — splitting on
+    the last `#` always separates the two. **Task 6c's confirmed-distinct override must recompute
+    in this form**, advancing the `occ:` index to the next free one among committed collisions.
 
 ---

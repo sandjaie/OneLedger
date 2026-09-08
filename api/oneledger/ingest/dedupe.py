@@ -37,6 +37,15 @@ _WHITESPACE = re.compile(r"\s+")
 # Combining marks and format characters carry no token boundary: deleted, never spaced.
 _INVISIBLE = frozenset({"Mn", "Mc", "Me", "Cf"})
 
+# The two disambiguators are drawn from different worlds — one is bank text, the other a counter —
+# so they carry distinct prefixes. Without them a reference of "1" and an occurrence index of 1
+# produce one fingerprint for two distinct rows, which V10's unique index then rejects at commit,
+# or which marks one row a false duplicate of the other. The repeat counter is appended to every
+# referenced row, not only a repeated one, so that a literal reference "ABC#1" cannot collide with
+# the "ABC" that repeated once: splitting on the last "#" always separates the two.
+_REFERENCE = "ref:"
+_OCCURRENCE = "occ:"
+
 
 @dataclass(frozen=True)
 class CommittedRow:
@@ -91,7 +100,11 @@ def normalise_for_hash(description: str) -> str:
     two — so layer 2 misses the overlap and layer 3 does not catch it either, and the overlapping
     month imports twice. A soft hyphen from line-break hyphenation does the same.
     """
-    composed = unicodedata.normalize("NFKC", description).upper()
+    # Normalised, uppercased, then normalised again: uppercasing expands some letters into a
+    # base plus a combining mark (Greek "Μαΐου" is one), and a mark introduced after the only
+    # NFKC pass would be deleted uncomposed — so a case-only variant would hash differently and
+    # score 0.0 against its own lowercase form.
+    composed = unicodedata.normalize("NFKC", unicodedata.normalize("NFKC", description).upper())
     kept = []
     for ch in composed:
         if unicodedata.category(ch) in _INVISIBLE:
@@ -186,9 +199,9 @@ def classify(
             # index at commit — after review, with nothing left behind to diagnose (spec 5.5).
             seen = repeats.get((*key, reference), 0)
             repeats[(*key, reference)] = seen + 1
-            disambiguator = reference if seen == 0 else f"{reference}#{seen}"
+            disambiguator = f"{_REFERENCE}{reference}#{seen}"
         else:
-            disambiguator = str(occurrence)
+            disambiguator = f"{_OCCURRENCE}{occurrence}"
 
         digest = fingerprint(
             account_id=account_id,
