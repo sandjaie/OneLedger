@@ -26,8 +26,8 @@ CENTS = Decimal("0.0001")
 # amount, and it must fail its own row rather than raise out of the parser.
 LEDGER_LIMIT = Decimal(10) ** 16
 # A two-digit year cannot be windowed against the period the period itself is written in, so a
-# period capture is read only in the four-digit formats, and only when exactly one of them
-# applies. Anchoring a century on a guess is the error this whole section exists to prevent.
+# period capture is read only in the four-digit formats. Anchoring a century on a guess is the
+# error this whole section exists to prevent.
 PERIOD_FORMATS = tuple(key for key in DATE_FORMATS if "yyyy" in key)
 CREDIT_DEBIT_SUFFIX = re.compile(r"(CR|DR)\s*$", re.IGNORECASE)
 GROUPING = re.compile(r",")
@@ -190,15 +190,33 @@ def _replace_year(value: date, year: int) -> date | None:
         return None
 
 
-def _period_date(text: str, label: str) -> date:
-    parsed = {
-        candidate
+def _period_bounds(start_text: str, end_text: str) -> tuple[date, date]:
+    """Both bounds, read together under one date format.
+
+    The header period is often written differently from the transaction lines, so the profile's
+    own `dateFormat` cannot be required of it. But the two bounds are one statement's single
+    statement of its own period: reading each under whichever format happens to fit lets a
+    mis-captured fragment that only resembles a date pair with a genuine one and gate every row
+    against a period the statement never claimed. Requiring one shared format makes that
+    pairing impossible while leaving a differently-written header readable.
+    """
+    readings = {
+        (start, end)
         for date_format in PERIOD_FORMATS
-        if (candidate := _parse_date(text, date_format, None)) is not None
+        if (start := _parse_date(start_text, date_format, None)) is not None
+        and (end := _parse_date(end_text, date_format, None)) is not None
     }
-    if len(parsed) != 1:
-        raise NormalizationError(f"the captured {label} is not an unambiguous four-digit-year date")
-    return parsed.pop()
+    if not readings:
+        raise NormalizationError(
+            "the captured statement period is not a pair of four-digit-year dates written in "
+            "one date format"
+        )
+    if len(readings) > 1:
+        raise NormalizationError(
+            "the captured statement period reads as a different pair of dates under more than "
+            "one date format"
+        )
+    return readings.pop()
 
 
 def _period(profile: NormalizableProfile, result: ExtractionResult) -> StatementPeriod | None:
@@ -219,11 +237,15 @@ def _period(profile: NormalizableProfile, result: ExtractionResult) -> Statement
         raise NormalizationError(
             "the layout captures the statement period but this statement did not yield it"
         )
-    start = _period_date(start_text, "period_start")
-    end = _period_date(end_text, "period_end")
+    start, end = _period_bounds(start_text, end_text)
     if end < start:
         raise NormalizationError("the captured statement period ends before it starts")
     return StatementPeriod(start=start, end=end, is_derived=False)
+
+
+def _reads_a_two_digit_year(date_format: str) -> bool:
+    pattern = DATE_FORMATS.get(date_format)
+    return pattern is not None and "%y" in pattern
 
 
 def _derived_period(dates: list[date], date_format: str) -> StatementPeriod:
@@ -423,6 +445,16 @@ def normalize(
 ) -> NormalizedBatch:
     """Extracted rows become dated, signed, typed values in the account's currency."""
     period = _period(profile, result)
+    if period is None and _reads_a_two_digit_year(profile.dateFormat):
+        # There is nothing left to window against. A derived period is made of these same
+        # dates, so it cannot correct them: Python reads 99 as 1999, and the derived period
+        # then agrees, making a century-early statement look internally consistent. A layout
+        # can reach this shape before its period capture is mapped, and a refusal naming what
+        # is missing is worth more than a preview that is quietly a hundred years out.
+        raise NormalizationError(
+            f"{profile.dateFormat} states a two-digit year and this layout captures no "
+            "statement period, so the century cannot be anchored"
+        )
     # Filled by the balance walk for rows it cannot derive because an earlier balance broke
     # the chain; the generic refusal does not know why they are underivable.
     chain_reasons: dict[int, str] = {}

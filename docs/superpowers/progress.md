@@ -104,6 +104,18 @@ than row by row: without one parsed date there is no period to place the others 
 suffix appearing under a convention that does not read one fails its row, because dropping it
 silently is exactly the invisible sign error Invariant I2 exists to prevent.
 
+Two review findings about the statement period were answered differently from the way they were
+raised. A `dateFormat` carrying a two-digit year with no period capture now refuses the whole
+statement: `LayoutCreate` already refuses to save that shape, but normalization is a pure
+function over a profile-shaped value and does not lean on a route-layer validator, and a derived
+period is made of the very dates it would have to correct — Python reads `99` as 1999 and the
+derived period then agrees, so a century-early preview looks internally consistent. The second
+finding asked that a captured period be read only in the profile's declared `dateFormat`; that
+is **partially declined**, because a statement's header commonly writes its period differently
+from its transaction lines and the rule would reject those layouts outright. Both bounds must
+instead parse under one shared four-digit-year format, which blocks the mis-captured fragment
+pairing with a genuine date — the risk the finding names — without the product cost.
+
 **Owner decision, 2026-09-08 — statement text is stored as the statement wrote it.** Codex's
 fifth review round found that a full account or card number appearing inside a transaction
 description is kept verbatim in `description_raw` and `raw_row`, which Task 5 will insert into
@@ -129,10 +141,11 @@ CVV, PIN, OTP and passwords — which no part of this decision admits into stora
 Task 4a gate evidence, 2026-09-08, in an environment with no Docker and therefore no Flyway: the
 migrations were applied from empty in version order with `psql` against a scratch PostgreSQL 16
 cluster — 13 migrations, then the seeds, then `db/tests/*.sql`, 11 passed. Flyway's own checksum
-and versioning path was not exercised and is not claimed. API `309 passed, 2 skipped` against
+and versioning path was not exercised and is not claimed. API `358 passed, 2 skipped` against
 that live database, the two skips being the Phase 0 live-identity gates that remain open; Ruff,
 Ruff format and strict mypy clean over 40 files; web `97 passed` across 8 Vitest files with
 typecheck clean and generated API types unchanged; documentation and whitespace checks passed.
+`gitleaks` is not installed in this environment and was not run.
 
 Header recognition claims each word once, across all fields at once, longest label first: a
 directional label such as `Withdrawal Amount` is one debit column, never a debit column beside an
