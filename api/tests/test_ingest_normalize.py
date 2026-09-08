@@ -753,6 +753,13 @@ def test_a_balance_that_states_its_direction_twice_and_disagrees_is_refused() ->
     reason = "states a sign and a Dr/Cr suffix that disagree"
     assert normalize.parse_balance("-100.00 Cr") == (None, reason)
     assert normalize.parse_balance("(100.00) Cr") == (None, reason)
+    # An explicit `+` disagrees with `Dr` exactly as `-` disagrees with `Cr`; a *bare* number is
+    # the common overdraft form and must keep parsing, so the test is the sign, not the value.
+    assert normalize.parse_balance("+100.00 Dr") == (None, reason)
+    assert normalize.parse_balance("100.00 Dr") == (
+        normalize.SignedAmount(Decimal("-100.0000"), True),
+        None,
+    )
     # Where the two agree there is nothing to resolve, and nothing to refuse.
     assert normalize.parse_balance("-100.00 Dr") == (
         normalize.SignedAmount(Decimal("-100.0000"), True),
@@ -761,27 +768,39 @@ def test_a_balance_that_states_its_direction_twice_and_disagrees_is_refused() ->
 
 
 @pytest.mark.parametrize("contradicting_row", [1, 2])
-def test_a_contradicting_running_balance_stops_the_statement(contradicting_row: int) -> None:
+@pytest.mark.parametrize("also_broken", [False, True])
+def test_a_contradicting_running_balance_stops_the_statement(
+    contradicting_row: int, also_broken: bool
+) -> None:
     """Refusing the cell is right, and refusing it by dropping the row is not.
 
     `reconcile` is handed the surviving rows and cannot tell that one was dropped, so a
     statement whose *last* line was dropped reconciled `matched` against the line before it —
-    I8 reporting satisfaction over a truncated statement. Both positions are asserted because
-    only the last one produced that verdict, and a rule that holds for one row of two is not a
-    rule. The message names the cell and the remedy: `-20.00 Cr` is plainly a number, and an
-    owner told it is not goes looking for the wrong thing in a cell they can read.
+    I8 reporting satisfaction over a truncated statement. Both positions produced that verdict
+    — the last through a derived closing, the first through a derived opening taken from the
+    row after it — so both are asserted. The third case is the one that reopened the breach
+    after it was closed: a contradicting row that *also* fails a row-level check was dropped by
+    that check first, taking the contradiction with it, until this refusal moved ahead of the
+    row loop. The message names the cell and the remedy: `-20.00 Cr` is plainly a number, and
+    an owner told it is not goes looking for the wrong thing in a cell they can read.
     """
     balances = ["100.00 Cr", "80.00 Cr"]
     balances[contradicting_row - 1] = "-20.00 Cr"
+    descriptions = ["ALPHA", "BETA"]
+    if also_broken:
+        # A row-level refusal on the same row: it used to `continue` past the balance check.
+        descriptions[contradicting_row - 1] = ""
     rows = [
         row(
             number,
             booked_date=f"1{number}/07/2024",
-            description="ALPHA",
+            description=description,
             amount="-10.00",
             running_balance=balance,
         )
-        for number, balance in enumerate(balances, start=1)
+        for number, (balance, description) in enumerate(
+            zip(balances, descriptions, strict=True), start=1
+        )
     ]
     layout = profile(
         hasRunningBalance=True,
@@ -836,6 +855,14 @@ def test_a_contradicting_balance_stops_a_balance_delta_statement(
 
     assert named in str(refusal.value)
     assert "states a sign and a Dr/Cr suffix that disagree" in str(refusal.value)
+    # The anchor is a regex over the document text, not a band: no column sits beside it, and
+    # under balance_delta it is what every amount is derived from rather than checked against.
+    if "opening" in named:
+        assert "opening balance pattern" in str(refusal.value)
+        assert "the band" not in str(refusal.value)
+        assert "every amount is derived from this figure" in str(refusal.value)
+    else:
+        assert "remap the layout" in str(refusal.value)
 
 
 @pytest.mark.parametrize("invert", [False, True])

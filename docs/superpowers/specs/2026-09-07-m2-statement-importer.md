@@ -691,7 +691,11 @@ convention machinery exists to prevent. Refusing it by *failing the row* is not,
 review caught that: `reconcile` receives the surviving rows and cannot tell one was dropped, so a
 statement whose last line was dropped reconciled `matched` against the line before it — I8
 reporting satisfaction over a truncated statement. The cause is a band and not a row, so the
-refusal is statement-level and the remedy is the one both balance guards already give.
+refusal is statement-level and the remedy is the one both balance guards already give. **It runs
+ahead of the row loop**, over every extracted row: evaluated inside that loop it was skipped
+whenever the same row failed an earlier check, and the check that dropped the row took the
+contradiction with it. A declared opening refuses the same way but names its own remedy — that
+anchor is a regex over the document text, so no band is at fault and no column sits beside it.
 
 **A wider hole this made visible, and did not open.** `reconcile` cannot tell that *any* row was
 dropped, whatever the reason — a row failing for "the row states no description" produces the
