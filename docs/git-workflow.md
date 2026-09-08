@@ -52,9 +52,10 @@ file says only where the branches go:
    — hardening beyond the task, style, naming, a suggested extra case, a refactor of code the PR
    did not touch — is answered in the thread and recorded in the PR's Notes. It is not patched
    here: each one widens the diff and buys another round.
-6. **The agent merges when no blocking finding is open** and Codex has given its thumbs-up **on
-   the head being merged** — an approval naming an earlier commit is not an approval of this
-   one; then the branch is deleted, `progress.md` is updated and the next task begins. The owner
+6. **The orchestrator merges when no blocking finding is open** and Codex has given its
+   thumbs-up **on the head being merged** — an approval naming an earlier commit is not an
+   approval of this one; then the branch is deleted and the next task begins. `progress.md` is
+   updated **on the task branch**, in the head that gets merged, not afterwards. The owner
    merges instead in three cases: a documentation-only PR, which no Codex review approved; a PR
    whose Verification table records a required check as `Not run`; and anything targeting
    `main`. A **documentation-only PR** — a plan, a spec, an ADR,
