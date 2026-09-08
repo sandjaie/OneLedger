@@ -65,7 +65,7 @@ def test_a_cross_through_a_pegged_quote_is_derived_not_published() -> None:
 
     Reporting in a pegged currency makes every rate derived, however the base was obtained.
     """
-    from oneledger.routes.fx import to_rows
+    from oneledger.fxrange import to_rows
 
     published = {date(2024, 1, 2): {"EUR": Decimal(1), "USD": Decimal("1.0956")}}
     rows = to_rows(
