@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -32,6 +33,9 @@ NEAR_DUPLICATE_DAYS = 3
 NEAR_DUPLICATE_SIMILARITY = 0.85
 
 _WHITESPACE = re.compile(r"\s+")
+
+# Combining marks and format characters carry no token boundary: deleted, never spaced.
+_INVISIBLE = frozenset({"Mn", "Mc", "Me", "Cf"})
 
 
 @dataclass(frozen=True)
@@ -57,16 +61,17 @@ class CommittedRow:
 class DedupeVerdict:
     """One verdict per normalized row, in the order the rows were given.
 
-    `occurrence_index` is `None` when a mapped reference disambiguated the row instead — it is
-    reported so the review screen and the confirmed-distinct override can see which rule applied
-    rather than re-deriving it.
+    `occurrence_index` is the row's position among identical `(date, amount, normalised
+    description)` rows in this document, counted from 0. It is reported for every row — including
+    one a reference disambiguated — because the confirmed-distinct override advances it, and
+    because a row that did not consume an index would shift every later one.
     """
 
     dedupe_hash: str
     status: str
     duplicate_of_transaction_id: UUID | None
     near_duplicate_of_id: UUID | None
-    occurrence_index: int | None
+    occurrence_index: int
 
 
 def normalise_for_hash(description: str) -> str:
@@ -78,9 +83,21 @@ def normalise_for_hash(description: str) -> str:
     normalise to the empty string, and two unrelated shops charging the same amount on the same day
     would fingerprint identically and the second would be marked a duplicate of the first. No rule
     here may be specific to one script (ADR-0012).
+
+    The text is put in canonical form first, and combining marks and zero-width formatters are
+    deleted rather than spaced. Extraction yields precomposed or decomposed text depending on the
+    font's ToUnicode map, so one merchant reaches this function both ways: without NFKC the two
+    forms hash differently *and* score 0.0 against each other, because the mark splits a word in
+    two — so layer 2 misses the overlap and layer 3 does not catch it either, and the overlapping
+    month imports twice. A soft hyphen from line-break hyphenation does the same.
     """
-    kept = "".join(ch if (ch.isalnum() or ch.isspace()) else " " for ch in description.upper())
-    return _WHITESPACE.sub(" ", kept).strip()
+    composed = unicodedata.normalize("NFKC", description).upper()
+    kept = []
+    for ch in composed:
+        if unicodedata.category(ch) in _INVISIBLE:
+            continue
+        kept.append(ch if (ch.isalnum() or ch.isspace()) else " ")
+    return _WHITESPACE.sub(" ", "".join(kept)).strip()
 
 
 def fingerprint(
@@ -140,23 +157,37 @@ def classify(
 ) -> list[DedupeVerdict]:
     """Fingerprint each row and classify it against the rows already committed."""
     by_hash = {row.dedupe_hash: row for row in committed}
+    candidates = [(other, normalise_for_hash(other.description_raw)) for other in committed]
     occurrences: dict[tuple[date, str, str], int] = {}
+    repeats: dict[tuple[date, str, str, str], int] = {}
     verdicts: list[DedupeVerdict] = []
 
     for row in rows:
         normalised = normalise_for_hash(row.description_raw)
         reference = (row.reference_raw or "").strip() if maps_reference else ""
 
+        # Counted among *identical* rows within this document only — never a row ordinal, and
+        # never offset by committed rows. A statement is a stable, self-contained ordering of its
+        # day, so an overlapping month reproduces these indices and the hashes collide, which is
+        # how the overlap is recognised. Offsetting would import August twice.
+        #
+        # The counter advances for **every** row, including one a reference disambiguates. If a
+        # referenced row did not consume its index, a reference present in one statement and blank
+        # in the next would shift every later index by one, and each row would then be marked a
+        # duplicate of the wrong transaction — a stored fact under I7, stored wrong.
+        key = (row.booked_date, _hashed_amount(row.amount), normalised)
+        occurrence = occurrences.get(key, 0)
+        occurrences[key] = occurrence + 1
+
         if reference:
-            disambiguator, occurrence = reference, None
+            # A reference separates two identical-looking transactions only while it is unique.
+            # Some banks fill the column with a constant, and three distinct coffees would then
+            # share one fingerprint, stage as clean, and be rejected wholesale by V10's unique
+            # index at commit — after review, with nothing left behind to diagnose (spec 5.5).
+            seen = repeats.get((*key, reference), 0)
+            repeats[(*key, reference)] = seen + 1
+            disambiguator = reference if seen == 0 else f"{reference}#{seen}"
         else:
-            # Counted among *identical* rows within this document only — never a row ordinal, and
-            # never offset by committed rows. A statement is a stable, self-contained ordering of
-            # its day, so an overlapping month reproduces these indices and the hashes collide,
-            # which is how the overlap is recognised. Offsetting would import August twice.
-            key = (row.booked_date, _hashed_amount(row.amount), normalised)
-            occurrence = occurrences.get(key, 0)
-            occurrences[key] = occurrence + 1
             disambiguator = str(occurrence)
 
         digest = fingerprint(
@@ -172,7 +203,7 @@ def classify(
             verdicts.append(DedupeVerdict(digest, STATUS_DUPLICATE, exact.id, None, occurrence))
             continue
 
-        near = _nearest(row, normalised, account_id, committed)
+        near = _nearest(row, normalised, account_id, candidates)
         if near is not None:
             verdicts.append(DedupeVerdict(digest, STATUS_NEAR_DUPLICATE, None, near.id, occurrence))
             continue
@@ -183,7 +214,10 @@ def classify(
 
 
 def _nearest(
-    row: NormalizedRow, normalised: str, account_id: UUID, committed: list[CommittedRow]
+    row: NormalizedRow,
+    normalised: str,
+    account_id: UUID,
+    candidates: list[tuple[CommittedRow, str]],
 ) -> CommittedRow | None:
     """Layer 3: the closest committed row within the window, or none.
 
@@ -191,15 +225,14 @@ def _nearest(
     the id, so the verdict does not depend on the order the caller happened to supply.
     """
     best: tuple[float, int, str, CommittedRow] | None = None
-    for other in committed:
-        if other.account_id != account_id:
-            continue
-        if other.amount != row.amount:
+    for other, other_normalised in candidates:
+        # Amount first: it rejects most candidates outright, and the comparison is free.
+        if other.amount != row.amount or other.account_id != account_id:
             continue
         gap = abs((other.booked_date - row.booked_date).days)
         if gap > NEAR_DUPLICATE_DAYS:
             continue
-        similarity = token_set_ratio(normalised, normalise_for_hash(other.description_raw))
+        similarity = token_set_ratio(normalised, other_normalised)
         if similarity < NEAR_DUPLICATE_SIMILARITY:
             continue
         candidate = (-similarity, gap, str(other.id), other)

@@ -9,7 +9,7 @@ overlapping month's rows collide with their committed copies instead of importin
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -183,15 +183,44 @@ def test_an_overlapping_statement_reproduces_the_committed_hashes() -> None:
 
 
 def test_a_mapped_reference_disambiguates_instead_of_the_index() -> None:
+    """Distinct references separate the rows; the index is reported but not used in the hash."""
     rows = [nrow(1, reference="REF-A"), nrow(2, reference="REF-B")]
     verdicts = classify(rows, maps_reference=True)
-    assert [v.occurrence_index for v in verdicts] == [None, None]
     assert verdicts[0].dedupe_hash != verdicts[1].dedupe_hash
 
-    # Two rows sharing a reference are the same transaction as far as the fingerprint is
-    # concerned; the index is not silently reintroduced to separate them.
-    same = classify([nrow(1, reference="REF-A"), nrow(2, reference="REF-A")], maps_reference=True)
-    assert same[0].dedupe_hash == same[1].dedupe_hash
+    # Both rows would have collided on the index alone, so the difference comes from the
+    # reference: dropping it must change both hashes.
+    unreferenced = classify(rows, maps_reference=False)
+    assert [v.dedupe_hash for v in unreferenced] != [v.dedupe_hash for v in verdicts]
+
+
+def test_a_repeated_reference_still_separates_distinct_rows() -> None:
+    """A reference separates identical-looking transactions only while it is unique.
+
+    Some banks fill the column with a constant. Three distinct coffees would then share one
+    fingerprint, stage as clean, and be rejected wholesale by V10's unique index at commit —
+    after the owner has reviewed the batch, with nothing left behind to diagnose it.
+    """
+    rows = [nrow(n, reference="NA") for n in (1, 2, 3)]
+    verdicts = classify(rows, maps_reference=True)
+    assert [v.status for v in verdicts] == ["new", "new", "new"]
+    assert len({v.dedupe_hash for v in verdicts}) == 3
+
+    # Stable across statements: the same rows in the same order reproduce the same hashes, so an
+    # overlapping month is still recognised.
+    assert [v.dedupe_hash for v in classify(rows, maps_reference=True)] == [
+        v.dedupe_hash for v in verdicts
+    ]
+
+
+def test_a_referenced_row_still_consumes_its_occurrence_index() -> None:
+    """Otherwise a reference present in one statement and blank in the next shifts every index.
+
+    Each row would then be marked a duplicate of the wrong transaction — and
+    `duplicate_of_transaction_id` is a stored fact under I7.
+    """
+    verdicts = classify([nrow(1, reference="REF-1"), nrow(2), nrow(3)], maps_reference=True)
+    assert [v.occurrence_index for v in verdicts] == [0, 1, 2]
 
 
 def test_an_empty_reference_falls_back_to_the_occurrence_index() -> None:
@@ -332,6 +361,106 @@ def test_the_hashed_amount_rounds_half_away_from_zero() -> None:
 
     assert hashed("310.00005") == hashed("310.0001")
     assert hashed("-310.00005") == hashed("-310.0001")
+
+
+# --- the boundaries the verdicts turn on -----------------------------------
+
+
+def test_the_hash_is_pinned_to_a_known_vector() -> None:
+    """A silent change to the hash construction means a ledger-wide re-import.
+
+    Every other test derives the expected hash from this same function, so only a literal pins
+    the bytes. If this fails, the construction changed and that is a migration, not a patch.
+    """
+    assert (
+        dedupe.fingerprint(
+            account_id=ACCOUNT,
+            booked_date=date(2026, 3, 4),
+            amount=Decimal("-310.0000"),
+            description_raw="Coffee Shop, Ltd.",
+            disambiguator="0",
+        )
+        == "5cf6f21ce133502fee0c41e761c14bf7f42d56ac815423cf069af5ef8c563767"
+    )
+
+
+def test_the_same_row_on_two_accounts_fingerprints_differently() -> None:
+    def hashed(account: UUID) -> str:
+        return dedupe.fingerprint(
+            account_id=account,
+            booked_date=date(2026, 3, 4),
+            amount=Decimal("-310.0000"),
+            description_raw="COFFEE SHOP",
+            disambiguator="0",
+        )
+
+    assert hashed(ACCOUNT) != hashed(UUID("22222222-2222-4222-8222-222222222222"))
+
+
+def test_punctuation_becomes_a_boundary_rather_than_closing_the_gap() -> None:
+    assert dedupe.normalise_for_hash("A.B") == "A B"
+    assert dedupe.normalise_for_hash("A.B") != dedupe.normalise_for_hash("AB")
+
+
+def test_the_occurrence_key_separates_dates_and_amounts() -> None:
+    """Identical descriptions on different days, or for different amounts, both start at 0."""
+    dates = classify([nrow(1), nrow(2, booked_date=date(2026, 3, 5))])
+    assert [v.occurrence_index for v in dates] == [0, 0]
+
+    amounts = classify([nrow(1), nrow(2, amount="-99.0000")])
+    assert [v.occurrence_index for v in amounts] == [0, 0]
+
+
+def test_the_near_duplicate_window_holds_at_three_days_and_not_at_four() -> None:
+    def at(gap: int) -> str:
+        # The date is part of the hash, so a shifted candidate can never be an exact duplicate
+        # and the verdict turns on the window alone.
+        earlier = committed(nrow(1, booked_date=date(2026, 3, 4) - timedelta(days=gap)))
+        [verdict] = classify([nrow(1)], prior=[earlier])
+        return verdict.status
+
+    assert at(3) == "near_duplicate"
+    assert at(4) == "new"
+
+
+def test_the_similarity_threshold_holds_at_the_boundary() -> None:
+    """0.8 is below and 0.857 above; neither is 0.0 or 1.0, so the constant is pinned."""
+    below = "STARBUCKS COFFEE"
+    above = "STARBUCKS COFFEE LONDON BRIDGE"
+    assert dedupe.token_set_ratio("STARBUCKS COFFEE LONDON", below) < 0.85
+    assert dedupe.token_set_ratio("STARBUCKS COFFEE LONDON", above) >= 0.85
+
+    def against(other: str) -> str:
+        earlier = committed(nrow(1, booked_date=date(2026, 3, 3), description=other))
+        row = nrow(1, description="STARBUCKS COFFEE LONDON")
+        [verdict] = classify([row], prior=[earlier])
+        return verdict.status
+
+    assert against(below) == "new"
+    assert against(above) == "near_duplicate"
+
+
+def test_the_closest_candidate_wins_rather_than_the_first_supplied() -> None:
+    # Both candidates sit on other dates, so neither can be an exact duplicate and the verdict
+    # turns on the match quality alone. The weaker one is supplied first.
+    weaker = committed(
+        nrow(1, booked_date=date(2026, 3, 1), description="STARBUCKS COFFEE LONDON BRIDGE"),
+        txn_id=UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+    )
+    closer = committed(
+        nrow(1, booked_date=date(2026, 3, 3), description="STARBUCKS COFFEE LONDON"),
+        txn_id=UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+    )
+    [verdict] = classify([nrow(1, description="STARBUCKS COFFEE LONDON")], prior=[weaker, closer])
+    assert verdict.status == "near_duplicate"
+    assert verdict.near_duplicate_of_id == closer.id
+
+
+def test_token_set_ratio_handles_empty_descriptions() -> None:
+    """A description of only punctuation normalises to nothing."""
+    assert dedupe.normalise_for_hash("...") == ""
+    assert dedupe.token_set_ratio("", "") == 1.0
+    assert dedupe.token_set_ratio("", "COFFEE") == 0.0
 
 
 # --- the audit record ------------------------------------------------------
