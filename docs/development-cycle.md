@@ -58,11 +58,29 @@ dispatch.
 
 Red is not reviewed. A failing test is a finding that already found itself.
 
-### 5. Gate — `/oneledger-code-review`, before the push
+### 5. Gate — `/oneledger-code-review`, before the branch is pushed at all
 
-**Trigger: implementation is finished, or a push is about to happen, or a PR is about to be
-opened. Any of the three.** There is no path to `origin` that skips this gate — not a small fix,
-not a one-line follow-up, not a patch answering a Codex finding.
+**Trigger: implementation is finished.** Not "before some push" — **before the first one**. The
+order is fixed and it has no variants:
+
+> implement → **review** → fix every finding → re-review → `/verify` → **first push** → PR
+
+There is no path to `origin` that skips this gate — not a small fix, not a one-line follow-up, not
+a patch answering a Codex finding, and not a checkpoint commit "to be reviewed after".
+
+**Pushing unreviewed work and reviewing it afterwards is the failure this rule exists to prevent**,
+and it is the easiest one to rationalise: the branch feels safer once it is on the remote, and the
+review then reads as a formality on work already published. It is not. A finding raised after the
+push has already cost what the gate was meant to save, and on a branch with a PR it costs a Codex
+round as well.
+
+**A PR is opened only from a head this gate has passed.** The PR's Verification table names the
+commit the review ran against; if the head moved after that review, the gate runs again before the
+PR is opened.
+
+A **documentation-only** branch carries no code for this gate to read. `scripts/check-docs.py` and
+the commit hooks are its gate, and the reviewer says so in the PR rather than leaving a skipped
+step to be inferred.
 
 It returns findings ranked CRITICAL to LOW, with file and line. The **implementing agent** fixes
 **every one of them** on the branch, re-runs `/verify`, and re-runs this gate on the new diff — a
@@ -75,7 +93,7 @@ one exception is **scope, not severity**: a finding in code this task does not t
 in the PR's Notes and raised as its own task, because patching it widens the branch past the task
 it carries.
 
-### 6. Push — the hooks are the enforcement
+### 6. First push — the hooks are the enforcement
 
 `pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and
 `scripts/check-diff-size.sh`. The size budget is 400 added production lines and 800 added

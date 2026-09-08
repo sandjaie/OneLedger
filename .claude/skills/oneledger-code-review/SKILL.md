@@ -1,6 +1,6 @@
 ---
 name: oneledger-code-review
-description: Senior-level review of OneLedger work before it is pushed or merged into develop — correctness, edge cases, money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, test sufficiency and diff size. It produces findings for the implementing agent to patch and does not modify code. Run it unprompted once implementation is finished and before every push or pull request, including a patch answering a review finding, and whenever asked to review a branch, a task, or work about to ship.
+description: Senior-level review of OneLedger work before it is pushed or merged into develop — correctness, edge cases, money handling, the never-store list and identifier leakage, the authorization boundary, reporting views, migrations, invariants, test sufficiency and diff size. It produces findings for the implementing agent to patch and does not modify code. Run it unprompted the moment implementation is finished — before the branch is pushed at all, not after — and again before any later push, including a patch answering a review finding; also whenever asked to review a branch, a task, or work about to ship.
 ---
 
 # OneLedger Code Review
@@ -23,11 +23,16 @@ now names: a raw identifier reaching a response, a log line or an error message.
 `develop` is the integration branch. Work arrives on `feature/*`, `fix/*`, `chore/*` or `docs/*`
 branches, one task-sized slice each. The flow is:
 
-`<type>/<name>` → **this review** → findings patched → `/verify` → push → PR → Codex → `develop`
+implement → **this review** → fix every finding → re-review → `/verify` → **first push** → PR →
+Codex → `develop`
 
 This is gate 5 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
-implementation being finished, a push about to happen, or a PR about to be opened — including a
-patch answering a Codex finding. There is no path to `origin` that skips it.
+**implementation being finished** — not "before some push", but before the branch reaches `origin`
+at all. Pushing unreviewed work and reviewing it afterwards is the failure this gate exists to
+prevent: a finding raised after the push has already cost what the gate was meant to save, and on
+a branch with a PR it costs a Codex round as well. A PR is opened only from a head this gate has
+passed. There is no path to `origin` that skips it — not a checkpoint commit, not a one-line
+follow-up, not a patch answering a Codex finding.
 
 **Never review `develop` as though it were a feature branch.**
 
