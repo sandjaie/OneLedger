@@ -805,7 +805,7 @@ remembered one.</p>
 <hr>
 <h2 id="12-documents-and-import">12. Documents and import</h2>
 <p>Every document carries its institution, type, period, currency, storage location, byte size, page count, and a <strong>SHA-256 checksum uniquely indexed per household</strong> — which is what makes a duplicate import impossible rather than merely unlikely. Parse status, the layout that produced it, and any parse error are recorded alongside.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
-<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — a blocked import records <em>why</em> it blocked.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
+<p>One batch per document. Tracks status through the pipeline, row counts (extracted, new, duplicate, needs-review, imported, rejected), and the reconciliation verdict: declared opening and closing balance, computed closing, <code>reconciliation_status</code> and the delta. That last group is Invariant I8 made durable — the verdict is recorded for the batches that stage.</p><p>A <strong>blocked</strong> import records nothing at all: a reconciliation mismatch, a running-balance break, an <code>unavailable</code> verdict, an unidentified layout, an unresolved account, a missing rate or a parse failure leaves the database unchanged — no document, no batch, no staged row (I8&#39;s &quot;stages zero rows&quot;). It cannot be otherwise: <code>document.sha256</code> is uniquely indexed per household, so a persisted blocked document would make its own checksum reject the retry after the owner re-maps the layout, which is the recovery path <a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a> exists to provide. The verdict travels in the <code>POST /parse</code> response body, where the diagnostics panel reads it.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V12</code> (applied).</p>
 <h3 id="statement-layouts">Statement layouts</h3>
 <p><strong>No bank name appears anywhere in application code</strong>
 (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). A statement layout is a row, created
@@ -816,9 +816,10 @@ reads any profile.</p>
 <em>some</em> way to verify the extracted rows, either a declared closing balance or a running balance
 column. A profile that offers neither cannot be reconciled, and would let a mis-mapped column
 through silently — so it is rejected at creation.</p>
-<p><code>staged_transaction</code> mirrors <code>transaction</code>&#39;s shape plus review metadata. Full definition in
-<a href="./statement-ingestion.html">statement-ingestion.html</a> §6 — it belongs with the pipeline it
-serves.</p>
+<p><code>staged_transaction</code> mirrors <code>transaction</code>&#39;s shape plus review metadata, and carries the
+parser&#39;s original view of each line in <code>raw_row</code> — so &quot;what did the statement actually say?&quot;
+stays answerable without reopening the PDF. The pipeline stage it serves is
+<a href="./statement-ingestion.html">statement-ingestion.html</a> §9.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V13</code> (applied).</p>
 <hr>
 <h2 id="13-classification-rules">13. Classification rules</h2>
 <p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
@@ -933,25 +934,30 @@ V9__categories_and_merchants.sql      + seed taxonomy (applied)
 V10__transaction_ledger.sql           + posting/reportable views (applied)
 V11__category_overrides.sql           household choices beside the seed (applied)
 V12__documents_and_import.sql         + statement_layout (applied)
-V13__classification_rules.sql         + seed rules
-V14__transfers.sql
-V15__card_statements.sql
-V16__investments.sql
-V17__loans.sql
-V18__valuations.sql
-V19__net_worth.sql
-V20__audit_log.sql
-V21__phase2_tables.sql                recurring, budget, payslip
-V22__deferred_foreign_keys.sql        the circular references, added last
+V13__staged_transactions.sql          the import's working copy (applied)
+V14__import_commit.sql                assert_account_reconciles(), commit_import_batch()
+V15__classification_rules.sql         + seed rules
+V16__transfers.sql
+V17__card_statements.sql
+V18__investments.sql
+V19__loans.sql
+V20__valuations.sql
+V21__net_worth.sql
+V22__audit_log.sql
+V23__phase2_tables.sql                recurring, budget, payslip
 </code></pre>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
-<code>transaction</code> (Flyway V14–V21), and <code>transfer</code> references <code>transaction</code> back. V10
+<code>transaction</code>, and <code>transfer</code> references <code>transaction</code> back. V10
 (<code>schema.md</code> section <code>0007</code>) therefore cannot declare those columns as foreign keys — the
 targets do not exist yet.</p>
-<p>The columns are created as bare <code>UUID</code> in V10; the constraints are added in V22
-(<code>schema.md</code> section <code>0018</code>), once every table exists:</p>
+<p>The columns are created as bare <code>UUID</code> in V10, and <strong>each constraint lands with the migration
+that creates its target</strong> — not earlier, and not all together in a trailing migration. V12 already
+did this for the four whose targets it creates (<code>source_document_id</code>, <code>receipt_document_id</code>,
+<code>import_batch_id</code>, <code>statement_layout_id</code>); <code>classification_rule_id</code> gains its foreign key with
+M4&#39;s migration. The clauses below are the remaining eventual set (<code>schema.md</code> section
+<code>0018</code>), each added by the migration that creates the table it points at:</p>
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
   ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
