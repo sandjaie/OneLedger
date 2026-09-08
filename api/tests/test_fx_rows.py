@@ -10,8 +10,8 @@ from pytest import MonkeyPatch
 
 from oneledger.auth import OwnerSession, require_owner
 from oneledger.fx import Peg
+from oneledger.fxrange import reporting_config, to_rows
 from oneledger.main import app
-from oneledger.routes.fx import reporting_config, to_rows
 
 PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
