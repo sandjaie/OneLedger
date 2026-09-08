@@ -503,5 +503,14 @@ worked around.
     carries the exact delta and the candidate rows whose amount equals it (the dropped-row
     case), and says that row-level evidence is unavailable. The roadmap gate is met in that
     form; inventing a row number would violate I7.
+11. **"Detect duplicates against staged and committed rows."** `statement-ingestion.html` §1
+    words the pipeline stage that way, but V13 gives both `duplicate_of_transaction_id` and
+    `near_duplicate_of_id` a foreign key to `transaction(id)`, so neither verdict can name a
+    staged row. **The verdict columns win**: layer 2 and layer 3 compare against committed rows,
+    which is what `dedupe.classify` takes. The gap this leaves is real and belongs to Task 5d:
+    two unreviewed batches of the same statement, differing by a byte so layer 1 misses them,
+    both verdict `new` and collide at commit on V10's unique index. The pipeline is where that
+    is caught — by refusing a second staging for an account and period that already has an
+    unreviewed batch — not by a verdict column that cannot reference one.
 
 ---
