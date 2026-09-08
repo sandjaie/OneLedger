@@ -73,6 +73,13 @@ convention unchanged: `type(scope): a lowercase sentence stating what is now tru
 
 Merged history under the old `[P1/M2/T4c]` scheme keeps its titles; the record is not renamed.
 
+## Commits
+
+`type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci chore
+refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —
+"the ADR folder now lists only decisions in force", not "update ADR folder". The body says what
+was wrong and why this is right. `git log` is the style guide.
+
 ## Rules
 
 - Nothing commits straight to `main`; it moves only through `release/*` on owner request.

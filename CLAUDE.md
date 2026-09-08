@@ -50,8 +50,8 @@ blocks, and capping the total would only push the slicing back the way it came. 
 the plan is carrying something that belongs elsewhere: architecture decisions and table semantics go
 to
 `docs/superpowers/specs/`, `docs/design/` or an ADR, which are reviewed once rather than on every
-task. **Each task must also fit the diff budget** (800 production / 1,600 total added lines) — a
-task that cannot is split before dispatch, or ships as more than one PR under the same slice
+task. **Each task must also fit the diff budget** ([docs/git-workflow.md](docs/git-workflow.md))
+— a task that cannot is split before dispatch, or ships as more than one PR under the same slice
 number. `/oneledger-plan-review` checks both and does the splitting.
 
 Use code snippets only when they define:
@@ -140,14 +140,12 @@ Settings › Data Quality. There is no `oneledger` command.
 reason*, implement, watch it pass, commit. A test that has never failed has never been shown to
 test anything. Every step states its expected output — run the command and compare.
 
-**Branches and releases follow [docs/git-workflow.md](docs/git-workflow.md)** — the single
-branching and release reference; do not restate its model elsewhere. In short: `develop` is the
-standing integration branch; a phase is planned once and delivered as several branches
-`<type>/<name>` (types `feature/`, `fix/`, `docs/`, `chore/`) created from `develop`, each its
-own PR into `develop`; the plan lands with the first. The delivery cycle per PR is: **plan →
-implement → local review → merge** — external (Codex) review is disabled for this repository,
-owner decision, 8 September 2026. A `release/*` branch carries changelog, release notes and the
-tag into `main`; release and any integration toward `main` need a separate owner request.
+**Process is not restated here.** Branches, the delivery cycle, releases, PR titles, commit
+style and the diff budget belong to [docs/git-workflow.md](docs/git-workflow.md); the gates —
+`/verify`, `/oneledger-plan-review`, `/oneledger-code-review`, `/oneledger-code-hygiene` — when
+each runs, and that they report findings without modifying code, belong to
+[docs/development-cycle.md](docs/development-cycle.md). Read both; run the gates unprompted at
+their triggers; nothing reaches `origin` unreviewed.
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before
@@ -158,18 +156,10 @@ Only one implementation agent may work at a time. Wait for any reviewer using th
 finish before changing its branch or files; do not run builds and type checks concurrently against
 the same generated output.
 
-**Put the branch in the plan or spec before dispatch.** Every task records `Workspace`, `Branch`
-and `Base and PR target`, using exact values and the prefixes above. Each split delivery has its
-own declared branch. Pass that file to the implementer; do not leave the branch name only in a
-chat message or let the agent invent another one. The orchestrator checks local changes, switches
-branches and dispatches the agent. Preserve unrelated changes; never reset or overwrite them.
-
-**Use the repository PR template.** After implementation and local review, the orchestrator creates
-the PR from `.github/PULL_REQUEST_TEMPLATE.md`, filled with the actual change, implementation and
-verification evidence. Record failures, skipped checks and reasons honestly; do not pre-check
-success. The orchestrator then merges it into `develop` and deletes the branch — except a PR
-recording a required check as `Not run`, or anything aimed at `main`, which stay the owner's.
-Integration-to-main still requires a separate owner request.
+**Put the branch in the plan or spec before dispatch.** Pass that file to the implementer; do
+not leave the branch name only in a chat message or let the agent invent another one. The
+orchestrator checks local changes, switches branches and dispatches the agent. Preserve
+unrelated changes; never reset or overwrite them.
 
 **The hooks are the gate, not the pull request.** Install once:
 
@@ -180,43 +170,3 @@ pre-commit install --install-hooks -t pre-commit -t pre-push
 Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest, every
 `db/tests/*.sql` against a live database, and the diff budget. A failing push is not a reason to
 reach for `--no-verify`; fix it and push again.
-
-**Review locally — it is the only review.** Three gates own it, specified in
-[docs/development-cycle.md](docs/development-cycle.md). **Run them unprompted** — each has a
-trigger:
-
-- `/oneledger-plan-review` — **a phase plan or spec has just been written, or materially
-  changed, and nothing has been dispatched from it yet.** One pass: apply the findings, then
-  dispatch. It does not re-run per slice.
-- `/oneledger-code-review` — **implementation is finished and `/verify` is green.** The order is
-  implement → `/verify` → review → fix the blocking findings → `/verify` → **first push** → PR.
-  One round is the default; re-review only what the fixes changed. Fresh-context reviewers read
-  the diff against this repository's own rules: identifier leakage, money handling, the
-  authorization boundary, reporting views, migrations, invariants, TDD evidence. Nothing
-  reaches `origin` unreviewed; non-blocking findings go in the PR's Notes, not the diff.
-- `/oneledger-code-hygiene` — **a phase has just closed.** Its findings ship as their own
-  `chore/` branch, never folded into a feature PR.
-
-**The gates produce findings another agent can patch. They do not modify code** unless you
-explicitly command fix mode — the report goes back to the agent that produced the work, which
-applies it and re-runs the gate. A reviewer that fixes its own findings hides them from whoever
-needed to learn them and reports on a tree it no longer reviewed.
-
-**The diff budget**: **800 added production lines, 1,600 added production + test lines**, hard
-stop 1,200 / 2,400, measured against `develop` by `scripts/check-diff-size.sh` on push.
-Documentation, configuration and generated files do not count. Tests in this repository run
-1.5–1.8× the production code they cover, so the total binds first. Past the hard stop a slice
-ships as more than one PR under the same `[P1.n]` prefix;
-`ONELEDGER_SIZE_OVERRIDE="reason"` exists for the indivisible migration and the reason goes in
-the PR.
-
-**PR titles**: `[P<phase>.<slice>] type(scope): …` — `[P1.3] feat(api): a remittance and its
-arrival link as one transfer`. The prefix is the phase plan's own numbering; a slice shipped as
-several PRs repeats it. Drop the slice for a PR scoped to a phase but no single slice, and the
-whole prefix for a repo-wide one ([docs/git-workflow.md](docs/git-workflow.md)). Merged history
-under the old `[P1/M2/T4c]` scheme keeps its titles.
-
-**Commits**: `type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci
-chore refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —
-"the ADR folder now lists only decisions in force", not "update ADR folder". The body says what
-was wrong and why this is right. `git log` is the style guide.
