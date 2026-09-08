@@ -676,26 +676,26 @@ correctly signed:</p>
 sign error, a misread amount. Any of these would otherwise enter the ledger silently and be
 discovered months later, if ever.</p>
 <pre><code class="language-typescript">const result = reconcile(extraction);
-switch (result.kind) {
-  case &quot;reconciled&quot;:
+switch (result.status) {
+  case &quot;matched&quot;:
     return proceed();
   case &quot;mismatched&quot;:
     throw new ImportBlocked(
-      `Reconciliation failed: declared closing ${result.declared}, ` +
-      `computed ${result.computed}, delta ${result.delta}. ` +
+      `Reconciliation failed: declared closing ${result.declaredClosing}, ` +
+      `computed ${result.computedClosing}, delta ${result.delta}. ` +
       `Likely a dropped or misparsed row. Import blocked.`,
     );
   case &quot;running_balance_break&quot;:
-    // The UAE current account declares no opening or closing balance, only a running
-    // column. A break localises the fault to one row rather than the whole batch.
+    // An account declaring no opening or closing balance, only a running column. A break
+    // localises the fault to one row rather than the whole batch.
     throw new ImportBlocked(
-      `Running balance breaks at row ${result.rowNumber}: ` +
-      `${result.previous} ${result.amount &gt;= 0 ? &quot;+&quot; : &quot;-&quot;} ${result.amount} ` +
-      `should be ${result.expected}, statement says ${result.actual}.`,
+      `Running balance breaks at row ${result.firstDivergentRow}: ` +
+      `${result.previousBalance} plus ${result.amount} ` +
+      `should be ${result.computedClosing}, statement says ${result.declaredClosing}.`,
     );
   case &quot;unavailable&quot;:
-    warn(&quot;Statement declares no balances; reconciliation skipped.&quot;);
-    return proceedWithFlag();
+    // The configured evidence did not extract. Blocks like the other two.
+    throw new ImportBlocked(`Reconciliation evidence unavailable: ${result.message}`);
 }
 </code></pre>
 <p><strong>A mismatch blocks the import.</strong> Not a warning — a block. Wrong financial data is worse than
@@ -703,9 +703,15 @@ absent financial data, because absent data announces itself and wrong data does 
 <p>When it blocks, the diagnostics panel shows the computed running balance beside each row so the
 divergence point is visible immediately. In practice this turns a parser bug from an afternoon of confusion
 into a two-minute fix.</p>
-<p>Where a statement genuinely declares no balances (some CSV exports), reconciliation is marked
-<code>unavailable</code> and the batch carries a flag. Rows imported without reconciliation are visually
-distinguished in the review queue.</p>
+<p><strong><code>unavailable</code> blocks too.</strong> The <code>has_a_balance_anchor</code> CHECK means every saved layout
+declares a closing balance pattern or a running-balance column, so the verdict never means &quot;this
+statement has no balances&quot;. It means the configured evidence did not extract — a shifted band, a
+changed label or a parse regression — and the message points at remapping the layout rather than
+at the rows. Letting it through would import rows that bypassed reconciliation entirely, which is
+the one thing this stage exists to prevent. A genuinely anchorless source, if one ever exists, is
+an explicit case for the milestone that meets it, not this value. (The draft preview in the layout
+mapper is the one place the verdict renders without blocking anything: an auto-proposed draft has
+no anchors yet, and nothing is being staged.)</p>
 <hr>
 <h2 id="9-stage-9--staging">9. Stage 9 — Staging</h2>
 <pre><code class="language-sql">CREATE TABLE staged_transaction (
