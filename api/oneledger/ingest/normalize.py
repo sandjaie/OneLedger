@@ -3,6 +3,11 @@
 `statement-ingestion.html` section 5 is the contract. Pure functions over values: no database,
 no network, no pdfplumber. Every refusal is a named row failure rather than a substituted
 value, because absent data announces itself and wrong data does not (Invariant I7).
+
+A failure names the field and the row and never echoes the cell. These reasons are parse
+diagnostics and reach an HTTP response, and the plan's section 5.6 forbids any digit sequence
+of seven or more digits from the document there — a rule a date alone already trips, before any
+card number does. The row number and `raw_row` are how the offending value is found.
 """
 
 from __future__ import annotations
@@ -188,9 +193,7 @@ def _period_date(text: str, label: str) -> date:
         if (candidate := _parse_date(text, date_format, None)) is not None
     }
     if len(parsed) != 1:
-        raise NormalizationError(
-            f"the captured {label} {text.strip()!r} is not an unambiguous four-digit-year date"
-        )
+        raise NormalizationError(f"the captured {label} is not an unambiguous four-digit-year date")
     return parsed.pop()
 
 
@@ -304,15 +307,18 @@ def _from_columns(convention: str, row: RawRow) -> tuple[SignedAmount | None, st
     """Debit and credit columns, which state the direction whatever the convention is called."""
     debit, credit = _cell(row, "debit"), _cell(row, "credit")
     if debit and credit:
-        return None, f"the row states both a debit {debit!r} and a credit {credit!r}"
+        return None, "the row states both a debit and a credit"
     cell = debit or credit
     if not cell:
         return None, "the row states neither a debit nor a credit"
     value = parse_amount(cell)
     if value is None:
-        return None, f"{'debit' if debit else 'credit'} {cell!r} is not a number"
+        return None, f"{'debit' if debit else 'credit'} is not a number"
     if CREDIT_DEBIT_SUFFIX.search(cell):
-        return None, f"{cell!r} carries a Dr/Cr suffix under the {convention} convention"
+        return None, (
+            f"{'debit' if debit else 'credit'} carries a Dr/Cr suffix under the "
+            f"{convention} convention"
+        )
     return SignedAmount(-abs(value) if debit else abs(value), True), None
 
 
@@ -337,7 +343,7 @@ def _signed_amount(
         return None, "the row states no amount"
     value = parse_amount(cell)
     if value is None:
-        return None, f"amount {cell!r} is not a number"
+        return None, "amount is not a number"
     if convention == "cr_suffix":
         # The suffix marks the credit; a bare amount is a debit. Either way the row has said
         # which way it goes.
@@ -345,7 +351,7 @@ def _signed_amount(
     if CREDIT_DEBIT_SUFFIX.search(cell):
         # Reading it would be guessing at the convention; ignoring it would flip a sign in
         # silence. The layout says signed, and this cell says otherwise.
-        return None, f"amount {cell!r} carries a Dr/Cr suffix under the {convention} convention"
+        return None, f"amount carries a Dr/Cr suffix under the {convention} convention"
     return SignedAmount(value, False), None
 
 
@@ -417,7 +423,7 @@ def normalize(
                 RowFailure(
                     row.page_number,
                     row.row_number,
-                    f"booked_date {_cell(row, 'booked_date')!r} is not a {profile.dateFormat} date",
+                    f"booked_date is not a {profile.dateFormat} date",
                 )
             )
             continue
@@ -467,7 +473,7 @@ def normalize(
                 RowFailure(
                     row.page_number,
                     row.row_number,
-                    f"value_date {value_date_cell!r} is not a {profile.dateFormat} date",
+                    f"value_date is not a {profile.dateFormat} date",
                 )
             )
             continue
@@ -481,7 +487,7 @@ def normalize(
                 RowFailure(
                     row.page_number,
                     row.row_number,
-                    f"original_amount {original_amount_cell!r} is not a number",
+                    "original_amount is not a number",
                 )
             )
             continue
