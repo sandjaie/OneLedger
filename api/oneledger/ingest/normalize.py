@@ -10,13 +10,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Protocol
 
 from .engine import DATE_FORMATS, NUMBER, ExtractionResult, ProfileLike, RawRow
 from .words import ExtractionError
 
 CENTS = Decimal("0.0001")
+# NUMERIC(20,4) holds sixteen integer digits. A longer run of digits is an OCR artefact, not an
+# amount, and it must fail its own row rather than raise out of the parser.
+LEDGER_LIMIT = Decimal(10) ** 16
 # A two-digit year cannot be windowed against the period the period itself is written in, so a
 # period capture is read only in the four-digit formats, and only when exactly one of them
 # applies. Anchoring a century on a guess is the error this whole section exists to prevent.
@@ -96,11 +99,13 @@ def parse_amount(text: str) -> Decimal | None:
     body = GROUPING.sub("", body.strip("()").strip())
     try:
         value = Decimal(body)
-    except InvalidOperation:  # pragma: no cover — NUMBER admits nothing Decimal refuses
+        if value.copy_abs() >= LEDGER_LIMIT:
+            return None
+        # The column is NUMERIC(20,4), and Postgres rounds half away from zero. Rounding here,
+        # where the row can be named, beats rounding silently inside Postgres.
+        value = value.quantize(CENTS, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
         return None
-    # The column is NUMERIC(20,4). Rounding here, where the row can be named, beats rounding
-    # silently inside Postgres.
-    value = value.quantize(CENTS)
     return -value if negative else value
 
 
@@ -256,6 +261,14 @@ def clean_description(raw: str) -> tuple[str, tuple[str, ...]]:
     return collapsed, tuple(applied)
 
 
+def _proposed_type(amount: Decimal) -> str:
+    if amount > 0:
+        return "income"
+    if amount < 0:
+        return "expense"
+    return "adjustment"
+
+
 def _cell(row: RawRow, field: str) -> str:
     return row.fields.get(field, "").strip()
 
@@ -386,11 +399,21 @@ def normalize(
                 RowFailure(row.page_number, row.row_number, "the row states no description")
             )
             continue
+        value_date_cell = _cell(row, "value_date")
         value_date = (
-            _parse_date(_cell(row, "value_date"), profile.dateFormat, effective)
-            if _cell(row, "value_date")
-            else None
+            _parse_date(value_date_cell, profile.dateFormat, effective) if value_date_cell else None
         )
+        if value_date_cell and value_date is None:
+            # Leaving it None would make the row indistinguishable from one whose value-date
+            # cell was empty, silently discarding what the statement said.
+            failures.append(
+                RowFailure(
+                    row.page_number,
+                    row.row_number,
+                    f"value_date {value_date_cell!r} is not a {profile.dateFormat} date",
+                )
+            )
+            continue
         original_amount = parse_amount(_cell(row, "original_amount"))
         original_currency = _cell(row, "original_currency").upper() or None
         if (original_amount is None) != (original_currency is None):
@@ -419,8 +442,10 @@ def normalize(
                 original_amount=original_amount,
                 original_currency=original_currency,
                 # A mechanical, labelled default shown in review and overridable there: the
-                # sign is the only evidence a statement line carries about direction.
-                proposed_txn_type="income" if amount > 0 else "expense",
+                # sign is the only evidence a statement line carries about direction. Zero is
+                # neither, and transaction.amount_not_zero permits it under exactly one type,
+                # so that is the only one a zero row could ever commit under.
+                proposed_txn_type=_proposed_type(amount),
                 running_balance=parse_amount(_cell(row, "running_balance")),
             )
         )

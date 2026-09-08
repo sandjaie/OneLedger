@@ -460,3 +460,79 @@ def test_a_descending_statement_derives_its_balance_deltas_chronologically() -> 
         (1, Decimal("200.0000")),
         (2, Decimal("-310.0000")),
     ]
+
+
+@pytest.mark.parametrize("amount", ["1" * 25, "99999999999999999.0000"])
+def test_an_amount_beyond_the_ledgers_precision_fails_its_row(amount: str) -> None:
+    # NUMERIC(20,4) holds sixteen integer digits. A longer OCR value must fail its own row,
+    # not abort the statement with a decimal error from inside the parser.
+    rows = [
+        row(1, booked_date="15/07/2024", description="HUGE", amount=amount),
+        row(2, booked_date="16/07/2024", description="BETA", amount="-20.00"),
+    ]
+
+    batch = normalize.normalize(profile(), extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.description_raw for line in batch.rows] == ["BETA"]
+    assert "is not a number" in batch.failures[0].reason
+    assert normalize.parse_amount(amount) is None
+
+
+def test_a_populated_value_date_that_does_not_parse_fails_its_row() -> None:
+    # Returning None would silently discard what the statement actually said, and the row
+    # would look exactly like one whose value-date cell was empty.
+    rows = [
+        row(1, booked_date="15/07/2024", value_date="not-a-date", description="A", amount="-1.00"),
+        row(2, booked_date="16/07/2024", description="B", amount="-2.00"),
+    ]
+
+    batch = normalize.normalize(profile(), extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.description_raw for line in batch.rows] == ["B"]
+    assert batch.failures[0].reason == "value_date 'not-a-date' is not a dd/MM/yyyy date"
+
+
+def test_a_value_date_after_the_period_is_normal_and_stages() -> None:
+    # The period rule belongs to booked_date. A value date days after the statement closes is
+    # ordinary — settlement follows booking — and failing it would reject sound rows.
+    layout = profile(
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(
+            1,
+            booked_date="31/07/2024",
+            value_date="02/08/2024",
+            description="A",
+            amount="-1.00",
+        )
+    ]
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/07/2024", "period_end": "31/07/2024"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.failures == []
+    assert batch.rows[0].value_date == date(2024, 8, 2)
+
+
+def test_a_zero_amount_takes_the_only_type_the_ledger_lets_it_commit_under() -> None:
+    # transaction.amount_not_zero permits a zero amount only for 'adjustment'. Typing it
+    # expense would stage a row an owner can accept and the commit must then reject.
+    rows = [row(1, booked_date="15/07/2024", description="FEE WAIVED", amount="0.00")]
+
+    batch = normalize.normalize(profile(), extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert batch.rows[0].amount == Decimal("0.0000")
+    assert batch.rows[0].proposed_txn_type == "adjustment"

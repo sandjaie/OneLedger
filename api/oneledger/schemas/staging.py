@@ -8,21 +8,38 @@ the offending row — rather than in Postgres, where it names a constraint.
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any, Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, model_validator
+
+
+def _not_a_float(value: object) -> object:
+    """Refuse a float before pydantic coerces one into a Decimal.
+
+    Pydantic's Decimal validation is lax by default and would accept a float here — after the
+    binary-precision loss has already happened, where nothing downstream can detect it. This
+    boundary is the whole reason the repository's money rule can be enforced at all.
+    """
+    if isinstance(value, float):
+        raise ValueError("money is a Decimal or a fixed-point string, never a float")
+    return value
+
 
 # Money is a Decimal all the way from the parser to the database, and a fixed-point string on
 # the wire. A float here would already have lost precision before anyone could check.
-Money = Annotated[Decimal, Field(max_digits=20, decimal_places=4)]
-Rate = Annotated[Decimal, Field(gt=0, max_digits=20, decimal_places=10)]
+Money = Annotated[Decimal, BeforeValidator(_not_a_float), Field(max_digits=20, decimal_places=4)]
+Rate = Annotated[
+    Decimal, BeforeValidator(_not_a_float), Field(gt=0, max_digits=20, decimal_places=10)
+]
 
-# The translation is checked against the rate the row itself carries, to the cent. Rounding a
-# rate to ten places and an amount to four cannot reproduce the product exactly, so the check
-# is for a wrong rate or a wrong amount, not for the last hundredth.
-TRANSLATION_TOLERANCE = Decimal("0.01")
+# The ledger's own precision, not a looser one: transaction.frozen_amounts_derive permits
+# 0.0001 against round(amount * rate, 4). api-contracts.html section 4's sketch says 0.01,
+# which would stage a row an owner could accept and the all-or-nothing commit would then have
+# to reject — the worst place to find out. The doc is corrected to match the constraint.
+TRANSLATION_TOLERANCE = Decimal("0.0001")
+CENTS = Decimal("0.0001")
 
 
 class StagedTransaction(BaseModel):
@@ -66,13 +83,15 @@ class StagedTransaction(BaseModel):
 
     @model_validator(mode="after")
     def translations_agree_with_the_stated_rate(self) -> Self:
-        if abs(self.amount * self.fx_rate_to_base - self.amount_base) > TRANSLATION_TOLERANCE:
-            raise ValueError("amount_base is inconsistent with the stated rate")
-        if (
-            abs(self.amount * self.fx_rate_to_secondary - self.amount_secondary)
-            > TRANSLATION_TOLERANCE
+        # Postgres rounds half away from zero, so the same rounding is used here: a row that
+        # passes this check is a row frozen_amounts_derive will also accept.
+        for name, rate, translated in (
+            ("amount_base", self.fx_rate_to_base, self.amount_base),
+            ("amount_secondary", self.fx_rate_to_secondary, self.amount_secondary),
         ):
-            raise ValueError("amount_secondary is inconsistent with the stated rate")
+            expected = (self.amount * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
+            if abs(translated - expected) > TRANSLATION_TOLERANCE:
+                raise ValueError(f"{name} is inconsistent with the stated rate")
         return self
 
     @model_validator(mode="after")

@@ -109,3 +109,37 @@ def test_the_stated_rate_decides_whether_a_translation_is_accepted(
             amount_base=consistent + Decimal("0.0200"),
             amount_secondary=consistent,
         )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["amount", "fx_rate_to_base", "fx_rate_to_secondary", "amount_base", "amount_secondary"],
+)
+def test_a_float_is_refused_at_the_money_boundary(field: str) -> None:
+    # A float has already lost precision by the time it arrives; this is the boundary that is
+    # supposed to catch it, and pydantic's default Decimal coercion would let it through.
+    with pytest.raises(ValidationError, match="fixed-point"):
+        staged(**{field: 1.5})
+
+
+def test_the_translation_check_matches_the_ledgers_own_precision() -> None:
+    # transaction.frozen_amounts_derive permits 0.0001 against the *rounded* product. A row
+    # staged inside a looser tolerance would be accepted in review and then fail the whole
+    # all-or-nothing commit, which is the worst place to discover it.
+    with pytest.raises(ValidationError, match="inconsistent with the stated rate"):
+        staged(amount_base=Decimal("-310.0099"))
+
+    assert staged(amount_base=Decimal("-310.0001")).amount_base == Decimal("-310.0001")
+
+
+def test_the_rounded_product_is_what_the_translation_is_measured_against() -> None:
+    # 100.005 * 1.5 is 150.0075; the ledger compares against round(amount * rate, 4), and
+    # Postgres rounds half away from zero.
+    row = staged(
+        amount=Decimal("100.0050"),
+        fx_rate_to_base=Decimal("1.5"),
+        fx_rate_to_secondary=Decimal("1.5"),
+        amount_base=Decimal("150.0075"),
+        amount_secondary=Decimal("150.0075"),
+    )
+    assert row.amount_base == Decimal("150.0075")
