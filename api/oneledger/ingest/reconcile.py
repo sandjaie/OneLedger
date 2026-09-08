@@ -7,9 +7,10 @@ Two rules carry the whole module, and each produces a batch that is internally c
 entirely wrong when half-applied:
 
 **One frame.** `normalize.py` applies `invertsSign` to a row's *amount* and leaves the statement's
-own balances verbatim — the declared anchors arrive as extracted text, and `running_balance` is
-the figure the statement printed. So this module inverts the balances and never the amounts, and
-the identity is evaluated with both sides in the ledger's frame.
+own balances in the statement's frame, signed by their own `Dr`/`Cr` suffix where they carry one.
+So this module frames the balances and never the amounts — and it reframes only a balance that
+stated no direction of its own, because a figure that said which way it goes has nothing left to
+invert. The identity is then evaluated with both sides in the ledger's frame.
 
 **Chronological order.** `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological* row.
 On a descending statement, walking in display order flags every valid row as a break. Reported row
@@ -22,7 +23,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
-from oneledger.ingest.normalize import NormalizedRow, parse_amount
+from oneledger.ingest.normalize import NormalizedRow, parse_balance
 
 STATUS_MATCHED = "matched"
 STATUS_MISMATCHED = "mismatched"
@@ -148,7 +149,7 @@ def reconcile(
     # balance and reports `matched` for rows that are wrong.
     walk: list[tuple[NormalizedRow, Decimal]] = []
     if profile.hasRunningBalance:
-        stated = [(r, _frame(r.running_balance, invert)) for r in chronological]
+        stated = [(r, _framed_balance(r, invert)) for r in chronological]
         unstated = [r.source_row_number for r, balance in stated if balance is None]
         if unstated:
             return _unavailable(
@@ -320,8 +321,21 @@ def _walk(
 
 
 def _framed(text: str | None, invert: bool) -> Decimal | None:
-    """Parse an extracted balance into the ledger's frame. Unparseable text is not a number."""
-    return _frame(parse_amount(text) if text else None, invert)
+    """Parse a declared anchor into the ledger's frame. Unparseable text is not a number.
+
+    A `Dr`/`Cr` suffix states the balance's own direction, so it is read here and the profile's
+    inversion is then withheld — applying both would reverse the statement rather than reframe
+    it, which is the rule `normalize.py` already applies to a row that stated its direction.
+    """
+    balance = parse_balance(text) if text else None
+    if balance is None:
+        return None
+    return _frame(balance.value, invert and not balance.direction_is_stated)
+
+
+def _framed_balance(row: NormalizedRow, invert: bool) -> Decimal | None:
+    """One row's stated balance in the ledger's frame, under the same rule as a declared anchor."""
+    return _frame(row.running_balance, invert and not row.balance_direction_is_stated)
 
 
 def _frame(value: Decimal | None, invert: bool) -> Decimal | None:

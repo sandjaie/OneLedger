@@ -137,6 +137,7 @@ Every branch carries its task number, so the branch in a checkout says which tas
 | 4a | `feature/m2-staged-rows-and-normalization` | `staged_transaction`; `StagedTransaction`; normalization | **V13** |
 | 4b | `feature/m2-t4b-dedupe` | `ingest/dedupe.py` — fingerprint, occurrence index, near-duplicate | — |
 | 4c | `feature/m2-t4c-reconcile` | `ingest/reconcile.py` — the four verdicts | — |
+| 4d | `fix/m2-balance-direction` | A balance signed by its own `Dr`/`Cr` suffix, in one frame | — |
 | 5a | `refactor/m2-t5a-money-helpers` | `money.py`, extracted from `routes/transactions.py` | — |
 | 5b | `feature/m2-t5b-fx-fetch-on-missing` | The backfill body as a callable; fetch-on-missing | — |
 | 5c | `feature/m2-t5c-document-storage` | `ingest/storage.py` — blob, sha256, filename rules | — |
@@ -732,6 +733,53 @@ unavailable. Inventing a divergent row here is the invariant breach this task ex
 one row reports the delta and the candidate rows, and blocks.
 
 ---
+
+### Task 4d — A balance states its own direction
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `fix/m2-balance-direction`
+**Base and PR target:** `develop`
+**Migration:** none.
+**Depends on:** Tasks 4a and 4c, both merged.
+**Forecast:** ~60 production, ~130 test — `normalize.py` +33, `reconcile.py` +27, their tests
++53 and +75. Measured, not estimated: the change was built and then split out of Task 4c.
+
+**Outcome.** A balance carrying a `Dr`/`Cr` suffix is read with its direction rather than
+stripped of it, everywhere a balance is parsed: a row's `running_balance`, the balances
+`balance_delta` derives amounts from, and reconciliation's declared anchors. Raised by Codex on
+[PR #42](https://github.com/sandjaie/OneLedger/pull/42) and split out of Task 4c, which the pair
+would have carried past the 1,000-line hard stop.
+
+**Files.**
+- `api/oneledger/ingest/normalize.py`, `api/tests/test_ingest_normalize.py`.
+- `api/oneledger/ingest/reconcile.py`, `api/tests/test_ingest_reconcile.py`.
+
+**Contracts.** `statement-ingestion.html`'s sign-convention table decides the reading: `Dr`
+negative, `Cr` positive. `parse_amount` keeps refusing the suffix, because on an *amount* it
+means something only under `cr_suffix`. A second parse reads it for balances and returns the
+value beside `direction_is_stated`, the pair `SignedAmount` already carries; `NormalizedRow`
+gains that flag next to `running_balance`. Reconciliation frames a balance only where its
+direction was **not** stated.
+
+**Invariants / security.** I2. A suffix read under the wrong convention, or honoured and then
+inverted again, flips a sign in silence — reversing the statement instead of reframing it. The
+flag travels with the value so no consumer has to infer it.
+
+**Required test behaviours (failing first).**
+- `parse_balance` reads `100.00 Dr` as `-100.0000` and `1,234.56 Cr` as `1234.5600`, both with
+  the direction stated; a bare `100.00` is positive and unstated; non-numeric text is `None`.
+- An account crossing into overdraft — `Cr` then `Dr` — reaches `NormalizedRow` signed and
+  labelled, and its `balance_delta` amounts are right across the crossing. Fails today by twice
+  the overdrawn balance.
+- Under `inverts_sign`, a suffixed declared anchor and a suffixed row balance are not inverted a
+  second time; an unsuffixed one still is. Each direction fails without its half.
+- A running-balance-only layout with `Cr`-suffixed balances reconciles `matched`; it reports a
+  false break without the fix.
+
+**Validation.** The API gate.
+
+**Acceptance.** The documented running-balance-only source — reverse-chronological, balance
+suffixed `Cr` — reconciles rather than blocking, and no card balance is inverted twice.
 
 ### Task 5a — Money helpers extracted to `money.py`
 
