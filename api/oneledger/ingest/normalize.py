@@ -159,14 +159,21 @@ def _windowed(parsed: date, period: StatementPeriod) -> date:
     Python reads `99` as 1999; a 2099 statement says otherwise, and the statement is the
     authority. The period anchors the century — it does not confine the date: a settlement
     date days after the statement closes is ordinary, and resolving by containment alone
-    would drop it back to Python's pivot. The nearest century to the period wins, and the
-    period check still governs `booked_date` separately.
+    would drop it back to Python's pivot. The nearest of the neighbouring centuries wins, and
+    the period check still governs `booked_date` separately.
     """
     two_digit = parsed.year % 100
+    # The neighbouring centuries are candidates too: a December 2099 statement settling on
+    # 2 January belongs to 2100, and the period's own century alone cannot reach it.
+    centuries = {
+        (base - base % 100) + offset
+        for base in (period.start.year, period.end.year)
+        for offset in (-100, 0, 100)
+    }
     candidates = [
         candidate
-        for base in (period.start.year, period.end.year)
-        if (candidate := _replace_year(parsed, (base - base % 100) + two_digit)) is not None
+        for century in centuries
+        if (candidate := _replace_year(parsed, century + two_digit)) is not None
     ]
     if not candidates:
         return parsed
