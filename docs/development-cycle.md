@@ -142,9 +142,20 @@ in the same PR that fixes the code.
 
 ### 8. Merge, then sweep at the milestone boundary
 
-Merge when no blocking finding is open and Codex has approved **the head being merged**; delete
-the branch. A
-documentation-only PR merges on owner review alone.
+**The agent merges** once Codex has given its thumbs-up on **the head being merged** and no
+blocking finding is open — then deletes the branch and records the task in
+`docs/superpowers/progress.md`. Waiting for the owner to press the button adds a hand-off to a
+decision Codex has already made, and the owner asked for it not to.
+
+Three cases stay the owner's, and an agent that reaches one says so and stops:
+
+- **A documentation-only PR.** There is no Codex review to approve it — the docs check and the
+  hooks were its gate (step 5) — so nothing has passed judgement but a person.
+- **A PR whose Verification table records a required check as `Not run`.** A thumbs-up is a
+  reading of the diff, not a run of the suite; merging on it while the tests, the DB gate or the
+  web gate never ran would use the approval to cover a gap it never looked at.
+- **Anything targeting `main`.** That moves only through `release/*` on a separate owner request
+  (`docs/git-workflow.md`), and no thumbs-up changes it.
 
 At the end of a milestone, run `/oneledger-code-hygiene`. Its findings ship as their own `chore/`
 branch, sized to the same budget, and go through this cycle from step 5. They are never folded
