@@ -215,7 +215,8 @@ production lines means roughly 1,100 counted and the 800 total binds long before
 number does. The two limits are not independent; the total is the one a reviewer actually reads.
 
 **Every PR that carries code waits for Codex review on GitHub** and merges when no blocking
-finding is open and the thumbs-up names **the head being merged** — and **the agent merges it**,
+finding is open and the thumbs-up names **the head being merged** — and **the orchestrator merges
+it**,
 except a documentation-only PR, one with a required check recorded `Not run`, or anything aimed
 at `main`, which stay the owner's. The first review is automatic
 when the PR is opened; **every one after it must be asked for** with a `@codex review` comment —

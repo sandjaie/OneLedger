@@ -52,7 +52,7 @@ open below — synthetic checks do not substitute for them.
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
 | 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
 | 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | Complete | [PR #35](https://github.com/sandjaie/OneLedger/pull/35), merged; `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
-| 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | In review | [PR #38](https://github.com/sandjaie/OneLedger/pull/38); `api/tests/test_ingest_dedupe.py` (34 tests) |
+| 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Complete | [PR #38](https://github.com/sandjaie/OneLedger/pull/38), merged after one Codex round; `api/tests/test_ingest_dedupe.py` (37 tests); branch deleted |
 | 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Not started | — |
 
 Task 4b records three deviations. **A repeated reference no longer collapses distinct rows**: §4.7

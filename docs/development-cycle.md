@@ -120,17 +120,20 @@ asymmetry is the whole reason this step is a loop:
 1. **Open the PR. Codex reviews it on its own**, with no request. This is the only review that
    arrives unasked, and it is why the local gate in step 5 has to have run already: whatever it
    missed, Codex is about to find in public.
-2. **Verify each finding against the tree**, then triage. Here, unlike step 5, triage is real,
-   because every patch costs another round: blocking findings are patched on the branch — and
-   **step 5 runs again before that patch is pushed** — while non-blocking ones are answered and
-   recorded in the PR's Notes.
-3. **Reply on the PR** with what was fixed and what was not, and resolve the threads addressed.
-4. **Ask for the next review: a comment of `@codex review`,** naming the commit it should look
-   at. Nothing else triggers one — not the push carrying the fix, not the reply explaining it,
-   not resolving the threads. Skip this and the PR keeps a thumbs-up earned by an older head,
-   and the commit that most needs reviewing is the one nobody reviewed: the patch answering the
-   finding.
-5. **Repeat from 2** until no blocking finding is open.
+2. **Read the review. If it is a thumbs-up with nothing open, the loop is finished** — go to
+   step 8. Do not ask for another; a review of a head that has not moved answers a question
+   nobody asked, and leaves an approved PR waiting on it.
+3. **Otherwise verify each finding against the tree**, then triage. Here, unlike step 5, triage
+   is real, because every patch costs another round: blocking findings are patched on the branch
+   — and **step 5 runs again before that patch is pushed** — while non-blocking ones are
+   answered and recorded in the PR's Notes.
+4. **Reply on the PR** with what was fixed and what was not, and resolve the threads addressed.
+5. **Ask for the next review: a comment of `@codex review`,** naming the commit it should look
+   at. This is required whenever the head moved or a finding was answered, and nothing else
+   triggers it — not the push carrying the fix, not the reply explaining it, not resolving the
+   threads. Skip it and the PR keeps a thumbs-up earned by an older head, and the commit that
+   most needs reviewing is the one nobody reviewed: the patch answering the finding.
+6. **Back to 2.**
 
 **The thumbs-up must be on the head being merged.** A PR whose approval names an earlier commit
 is not approved: check the reviewed sha against the head before merging, and ask again if they
@@ -142,10 +145,19 @@ in the same PR that fixes the code.
 
 ### 8. Merge, then sweep at the milestone boundary
 
-**The agent merges** once Codex has given its thumbs-up on **the head being merged** and no
-blocking finding is open — then deletes the branch and records the task in
-`docs/superpowers/progress.md`. Waiting for the owner to press the button adds a hand-off to a
-decision Codex has already made, and the owner asked for it not to.
+**The orchestrator merges** once Codex has given its thumbs-up on **the head being merged** and
+no blocking finding is open, then deletes the branch. Waiting for the owner to press the button
+adds a hand-off to a decision Codex has already made, and the owner asked for it not to. The
+actor is named because the roles differ: an implementation agent hands its branch back after
+review and does not take over the PR's lifecycle (`AGENTS.md`).
+
+**The tracker entry rides on the task branch**, in the same reviewed head that gets merged — so
+the merge lands `docs/superpowers/progress.md` together with the code it describes. Write the row
+to read correctly *after* the merge, naming the PR rather than a merge commit that does not exist
+yet, and it needs no second edit. Recording it afterwards would mean either committing straight
+to `develop`, which the branch model forbids, or opening an undeclared second PR — and until one
+of those happened the tracker would be stale at exactly the boundary where the next task is
+dispatched from it.
 
 Three cases stay the owner's, and an agent that reaches one says so and stops:
 
