@@ -159,9 +159,12 @@ def _contradicts_itself(subject: str, refusal: str, remedy: str) -> Normalizatio
     Failing the row instead removes the very evidence reconciliation blocks on. `reconcile` is
     given the surviving rows and cannot tell that one was dropped, so a statement missing its
     last line reconciled `matched` against the line before it — a batch that bypassed I8 while
-    reporting that it had satisfied it. The cause is a band and not a row, most likely one wide
-    enough to have taken the sign from the column beside it, so the whole column is suspect and
-    remapping is the remedy both balance guards already give.
+    reporting that it had satisfied it. The fault is never the row, so the refusal is never the
+    row's.
+
+    The caller supplies the remedy because the fault is not the same in both places: a row's
+    balance comes from a banded column, and the declared opening from a regex over the whole
+    document, where no band is involved and no column sits beside it.
     """
     return NormalizationError(
         f"{subject} {refusal}; a statement cannot be reconciled against balances that "
@@ -570,10 +573,10 @@ def normalize(
             f"{profile.dateFormat} states a two-digit year and this layout captures no "
             "statement period, so the century cannot be anchored"
         )
+    _refuse_contradicting_balances(result)
     # Filled by the balance walk for rows it cannot derive because an earlier balance broke
     # the chain; the generic refusal does not know why they are underivable.
     chain_reasons: dict[int, str] = {}
-    _refuse_contradicting_balances(result)
     deltas = _balance_deltas(profile, result, chain_reasons)
     rows: list[NormalizedRow] = []
     failures: list[RowFailure] = []

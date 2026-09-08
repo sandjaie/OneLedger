@@ -776,9 +776,10 @@ def test_a_contradicting_running_balance_stops_the_statement(
 
     `reconcile` is handed the surviving rows and cannot tell that one was dropped, so a
     statement whose *last* line was dropped reconciled `matched` against the line before it —
-    I8 reporting satisfaction over a truncated statement. Both positions produced that verdict
-    — the last through a derived closing, the first through a derived opening taken from the
-    row after it — so both are asserted. The third case is the one that reopened the breach
+    I8 reporting satisfaction over a truncated statement. The layout here is
+    running-balance-only, which is the shape that verdict arises in, and both positions produced
+    it — the last through a closing taken from the surviving row before it, the first through an
+    opening derived from the row after it. `also_broken` is the case that reopened the breach
     after it was closed: a contradicting row that *also* fails a row-level check was dropped by
     that check first, taking the contradiction with it, until this refusal moved ahead of the
     row loop. The message names the cell and the remedy: `-20.00 Cr` is plainly a number, and
@@ -804,6 +805,7 @@ def test_a_contradicting_running_balance_stops_the_statement(
     ]
     layout = profile(
         hasRunningBalance=True,
+        closingBalancePattern=None,
         columns=[
             {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
             {"field": "description", "xMin": 100.0, "xMax": 300.0},
