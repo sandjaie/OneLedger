@@ -741,45 +741,49 @@ one row reports the delta and the candidate rows, and blocks.
 **Base and PR target:** `develop`
 **Migration:** none.
 **Depends on:** Tasks 4a and 4c, both merged.
-**Forecast:** ~60 production, ~130 test — `normalize.py` +33, `reconcile.py` +27, their tests
-+53 and +75. Measured, not estimated: the change was built and then split out of Task 4c.
+**Forecast:** ~70 production, ~180 test. The change was built inside Task 4c and split out of it,
+so its shape is known; the line counts are an estimate like any other.
 
-**Outcome.** A balance carrying a `Dr`/`Cr` suffix is read with its direction rather than
-stripped of it, everywhere a balance is parsed: a row's `running_balance`, the balances
-`balance_delta` derives amounts from, and reconciliation's declared anchors. Raised by Codex on
-[PR #42](https://github.com/sandjaie/OneLedger/pull/42) and split out of Task 4c, which the pair
-would have carried past the 1,000-line hard stop.
+**Outcome.** A balance carrying a `Dr`/`Cr` suffix is read with its direction rather than stripped
+of it, everywhere a balance is parsed: a row's `running_balance`, the balances `balance_delta`
+derives amounts from, and reconciliation's declared anchors.
 
 **Files.**
 - `api/oneledger/ingest/normalize.py`, `api/tests/test_ingest_normalize.py`.
 - `api/oneledger/ingest/reconcile.py`, `api/tests/test_ingest_reconcile.py`.
+- `docs/design/statement-ingestion.html` and the spec's §4.6, which state the flat rule this
+  narrows; §8 of the spec records the decision.
 
-**Contracts.** `statement-ingestion.html`'s sign-convention table decides the reading: `Dr`
-negative, `Cr` positive. `parse_amount` keeps refusing the suffix, because on an *amount* it
-means something only under `cr_suffix`. A second parse reads it for balances and returns the
-value beside `direction_is_stated`, the pair `SignedAmount` already carries; `NormalizedRow`
-gains that flag next to `running_balance`. Reconciliation frames a balance only where its
-direction was **not** stated.
+**Contracts.** `statement-ingestion.html`'s "Signs (Invariant I2)" table decides the reading: `Dr`
+negative, `Cr` positive. `parse_amount` keeps refusing the suffix, because on an *amount* it means
+something only under `cr_suffix`. `parse_balance` reads it for balances and returns the value
+beside `direction_is_stated`; `NormalizedRow` gains that flag next to `running_balance`. One
+`frame_balance` carries a balance into the ledger's frame, reframing only one whose direction was
+**not** stated, and reconciliation and `_balance_deltas` both read it — the latter *before*
+subtracting.
 
 **Invariants / security.** I2. A suffix read under the wrong convention, or honoured and then
-inverted again, flips a sign in silence — reversing the statement instead of reframing it. The
-flag travels with the value so no consumer has to infer it.
+inverted again, flips a sign in silence. The flag travels with the value so nothing infers it.
 
 **Required test behaviours (failing first).**
-- `parse_balance` reads `100.00 Dr` as `-100.0000` and `1,234.56 Cr` as `1234.5600`, both with
-  the direction stated; a bare `100.00` is positive and unstated; non-numeric text is `None`.
-- An account crossing into overdraft — `Cr` then `Dr` — reaches `NormalizedRow` signed and
-  labelled, and its `balance_delta` amounts are right across the crossing. Fails today by twice
-  the overdrawn balance.
-- Under `inverts_sign`, a suffixed declared anchor and a suffixed row balance are not inverted a
-  second time; an unsuffixed one still is. Each direction fails without its half.
-- A running-balance-only layout with `Cr`-suffixed balances reconciles `matched`; it reports a
-  false break without the fix.
+- `parse_balance` reads `100.00 Dr` as `-100.0000` and `1,234.56 Cr` as `1234.5600`, both with the
+  direction stated; a bare `100.00` is positive and unstated; non-numeric text is `None`.
+- An overdrawn declared closing — `110.00 Dr` — reconciles `matched`; it is `mismatched` without
+  the fix. A `Cr` balance on a non-card layout is **not** a case that changes: stripping the
+  suffix already gave a positive number. The suffix being lost is `Dr`.
+- An account crossing between `Cr` and `Dr` derives its `balance_delta` amounts across the
+  crossing correctly. Fails today by twice the crossed balance.
+- Under `inverts_sign`, a suffixed anchor and a suffixed row balance are not inverted a second
+  time; an unsuffixed one still is. Each direction fails without its half.
+- A chain mixing suffixed and bare balances frames each **before** subtracting: a difference taken
+  between two frames belongs to neither.
+- `-100.00 Cr` states its direction twice and disagrees, and is refused rather than resolved.
 
 **Validation.** The API gate.
 
-**Acceptance.** The documented running-balance-only source — reverse-chronological, balance
-suffixed `Cr` — reconciles rather than blocking, and no card balance is inverted twice.
+**Acceptance.** An overdrawn balance reconciles instead of reporting a false break; no balance is
+framed twice; and every combination of suffixed and bare balances across a declared opening and a
+running-balance column derives the amounts reconciliation would compute from them.
 
 ### Task 5a — Money helpers extracted to `money.py`
 
