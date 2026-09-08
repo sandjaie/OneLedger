@@ -39,6 +39,12 @@ _EVIDENCE_UNAVAILABLE = (
     "absorb the difference, so none can be named"
 )
 
+_EVIDENCE_WALK_HELD = (
+    "row-level evidence is unavailable: the running balance never departs, so every row listed "
+    "agrees with the statement's own balance column and the difference is against the declared "
+    "closing alone — none of them can be named as its cause"
+)
+
 
 class ReconcilableProfile(Protocol):
     """Exactly the five profile semantics this module reads, and nothing else.
@@ -76,8 +82,10 @@ class Verdict:
     computed must not arrive in the field a declared number arrives in without saying so (I7) —
     the same reason `StatementPeriod` carries `is_derived`.
 
-    `previous_balance` is the balance the walk held before the divergent row, which section 4.6
-    names among what a `running_balance_break` carries.
+    `previous_balance` is the balance the walk held before the divergent row and `amount` is that
+    row's own amount; section 4.6 names both among what a `running_balance_break` carries, and a
+    consumer cannot derive the amount from the other fields because TypeScript does no arithmetic
+    on money.
 
     **On a `running_balance_break` the three closing fields are row-level, not statement-level**:
     `declared_closing` is the divergent row's stated balance, `computed_closing` the balance its
@@ -95,6 +103,7 @@ class Verdict:
     delta: Decimal | None
     first_divergent_row: int | None
     previous_balance: Decimal | None
+    amount: Decimal | None
     candidate_rows: list[int]
     message: str
 
@@ -147,7 +156,12 @@ def reconcile(
                 f"carried no balance, the first of them row {unstated[0]} in chronological "
                 "order; remap the layout rather than importing rows that bypassed reconciliation"
             )
-        if not stated:
+        if not stated and profile.closingBalancePattern is None:
+            # Only where the column is the whole of the closing evidence. Where a closing anchor
+            # extracted too, a month with no transactions has already proved itself against two
+            # independent figures, and an extraction that lost every row leaves them disagreeing
+            # — so the identity says more here than a refusal that sends the owner to remap a
+            # layout that mapped correctly.
             return _unavailable(
                 "the layout declares a running-balance column and the statement has no rows to "
                 "walk; remap the layout rather than importing rows that bypassed reconciliation"
@@ -174,6 +188,11 @@ def reconcile(
             closing = walk[-1][1]
 
     if closing is None:
+        # No saved layout reaches this: V12's `has_a_balance_anchor` CHECK means every one
+        # declares a closing pattern or a running-balance column, and a draft preview with
+        # neither is stopped by the opening guard above. It stays because this is a pure
+        # function over values — a caller may hand it a profile Postgres never saw — not
+        # because there is an input that produces it.
         return _unavailable("no closing balance to reconcile against")
 
     computed = opening + sum((r.amount for r in rows), Decimal(0))
@@ -193,6 +212,7 @@ def reconcile(
             stated_balance - running,
             row.source_row_number,
             previous,
+            row.amount,
             [],
             f"Row {row.source_row_number} states a balance of {stated_balance}, but the previous "
             f"balance of {previous} plus its amount of {row.amount} gives {running}.",
@@ -205,7 +225,10 @@ def reconcile(
             derived,
             closing,
             computed,
-            Decimal(0),
+            # Exactly zero, computed the way every other verdict computes it: a literal would
+            # carry no decimal places, and `delta` reaches the wire as `str(value)`.
+            closing - computed,
+            None,
             None,
             None,
             [],
@@ -224,9 +247,7 @@ def reconcile(
     # named a row, a candidate list is a second story about the same discrepancy. It would also
     # name every zero-amount row whenever the delta is zero, which is a guess, not a finding.
     candidates = (
-        []
-        if divergent is not None
-        else list(dict.fromkeys(r.source_row_number for r in rows if r.amount == delta))
+        [] if divergent is not None else [r.source_row_number for r in rows if r.amount == delta]
     )
     first_divergent_row = divergent[0].source_row_number if divergent is not None else None
     return _verdict(
@@ -237,6 +258,7 @@ def reconcile(
         computed,
         delta,
         first_divergent_row,
+        None,
         None,
         candidates,
         f"Opening {opening} plus {_rows(len(rows))} computes {computed}, but the statement "
@@ -264,8 +286,11 @@ def _evidence(candidates: list[int], divergent: int | None, walkable: bool) -> s
             "in extraction."
         )
         # Section 4.6 attaches both to this case: the candidates, and the statement that none of
-        # them can be named as *the* divergent row.
-        return dropped if walkable else f"{dropped} Otherwise, {_EVIDENCE_UNAVAILABLE}"
+        # them can be named as *the* divergent row. Which reason applies depends on the evidence
+        # the layout carries, so the caveat says which — but it is always attached, because a
+        # candidate presented without it reads as a finding.
+        caveat = _EVIDENCE_WALK_HELD if walkable else _EVIDENCE_UNAVAILABLE
+        return f"{dropped} Otherwise, {caveat}"
     if walkable:
         return "No row carries the difference and the running balance never departs."
     return _EVIDENCE_UNAVAILABLE
@@ -309,6 +334,7 @@ def _verdict(
     delta: Decimal | None,
     divergent_row: int | None,
     previous: Decimal | None,
+    amount: Decimal | None,
     candidates: list[int],
     message: str,
 ) -> Verdict:
@@ -322,10 +348,11 @@ def _verdict(
         delta,
         divergent_row,
         previous,
+        amount,
         candidates,
         message + (_DERIVED if derived else ""),
     )
 
 
 def _unavailable(message: str) -> Verdict:
-    return Verdict(STATUS_UNAVAILABLE, None, False, None, None, None, None, None, [], message)
+    return Verdict(STATUS_UNAVAILABLE, None, False, None, None, None, None, None, None, [], message)

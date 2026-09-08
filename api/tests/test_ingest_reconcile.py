@@ -105,7 +105,9 @@ def test_a_card_layout_reconciles_with_both_sides_inverted() -> None:
     )
     assert result.status == "matched"
     assert result.opening_is_derived is False
-    assert result.delta == Decimal(0)
+    # The string form, not just the value: money reaches the wire as `str(value)`, and a
+    # literal zero here would send `"0"` where every other verdict sends four decimal places.
+    assert str(result.delta) == "0.0000"
     assert result.declared_opening == Decimal("-4500.0000")
     assert result.declared_closing == Decimal("-4810.0000")
     assert result.computed_closing == Decimal("-4810.0000")
@@ -141,7 +143,13 @@ def test_a_descending_statement_reconciles_when_walked_chronologically() -> None
         row(2, "-20.0000", balance="100.0000", day=2),
         row(3, "-50.0000", balance="120.0000", day=1),
     ]
-    result = verdict(rows, opening="170.0000", closing="70.0000", chronologicalOrder="descending")
+    result = verdict(
+        rows,
+        opening="170.0000",
+        closing="70.0000",
+        hasRunningBalance=True,
+        chronologicalOrder="descending",
+    )
     assert result.status == "matched"
 
 
@@ -181,6 +189,11 @@ def test_a_running_balance_break_names_the_row_and_both_balances() -> None:
     assert result.first_divergent_row == 2
     assert result.computed_closing == Decimal("100.0000")
     assert result.declared_closing == Decimal("95.0000")
+    assert result.previous_balance == Decimal("120.0000")
+    # Section 4.6 names five figures on a break, and these are the two a sign error would
+    # silently invert. Nothing downstream recomputes them: money is formatted, never arithmetic.
+    assert result.amount == Decimal("-20.0000")
+    assert result.delta == Decimal("-5.0000")
     assert "2" in result.message
 
 
@@ -249,11 +262,42 @@ def test_a_gap_in_a_configured_running_balance_column_is_unavailable() -> None:
     assert "2 rows" in result.message and "row 2" in result.message
 
 
+def test_the_gap_is_named_by_document_row_number_on_a_descending_statement() -> None:
+    """The walk may reverse the rows; the row it names never follows the reversal."""
+    rows = [
+        row(9, "-30.0000", day=3),
+        row(8, "-20.0000", balance="95.0000", day=2),
+        row(7, "-50.0000", balance="120.0000", day=1),
+    ]
+    result = verdict(
+        rows,
+        opening="170.0000",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        chronologicalOrder="descending",
+    )
+    assert result.status == "unavailable"
+    assert "row 9" in result.message
+
+
 def test_a_running_balance_column_over_no_rows_at_all_is_unavailable() -> None:
-    """Extracting no rows under a configured column is a parse regression, not an empty month."""
+    """With the column as the only closing evidence, no rows leaves nothing to reconcile against."""
     result = verdict([], hasRunningBalance=True, closingBalancePattern=None)
     assert result.status == "unavailable"
     assert "no rows" in result.message
+
+
+def test_an_empty_month_still_reconciles_against_two_anchors_that_agree() -> None:
+    """A mapped balance column must not change the verdict on a statement that has no rows.
+
+    Both anchors extracted and agree, so the statement has proved itself; refusing it would
+    send the owner to remap a layout that mapped correctly. An extraction that lost every row
+    leaves the two anchors disagreeing instead, which blocks as a mismatch.
+    """
+    agreeing = verdict([], opening="1,250.00", closing="1,250.00", hasRunningBalance=True)
+    assert agreeing.status == "matched"
+    disagreeing = verdict([], opening="1,250.00", closing="900.00", hasRunningBalance=True)
+    assert disagreeing.status == "mismatched"
 
 
 # --- mismatched, and what evidence may be named ----------------------------
@@ -291,6 +335,24 @@ def test_a_dropped_row_names_its_surviving_twin_as_the_candidate() -> None:
     assert result.first_divergent_row is None
     assert "dropped" in result.message
     # Named rows are candidates, not the culprit: 4.6 requires the caveat alongside them.
+    assert "unavailable" in result.message
+
+
+def test_a_candidate_is_never_named_without_the_caveat_that_it_is_only_a_candidate() -> None:
+    """The walk held, so the rows agree with the balance column and the closing anchor does not.
+
+    Row 2 carries the difference, but the walk corroborated it — the missing row is one the
+    statement never printed a balance beside. Naming row 2 without saying it is a candidate
+    presents a guess as a finding, which is what `candidate_rows` exists to avoid (I7).
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+    ]
+    result = verdict(rows, opening="170.0000", closing="80.0000", hasRunningBalance=True)
+    assert result.status == "mismatched"
+    assert result.candidate_rows == [2]
+    assert result.first_divergent_row is None
     assert "unavailable" in result.message
 
 
@@ -464,6 +526,33 @@ def test_a_declared_closing_that_did_not_extract_is_unavailable() -> None:
     result = verdict([row(1, "-50.0000")], opening="170.0000", closing=None)
     assert result.status == "unavailable"
     assert "closing" in result.message
+
+
+def test_a_configured_closing_that_did_not_extract_blocks_a_walkable_statement() -> None:
+    """The guard the running-balance case needs, and the only case that proves it is there.
+
+    Every row states a balance and the walk holds, so without the guard the terminal balance
+    would stand in for the closing anchor and the batch would import `matched` — with the
+    statement's own declared closing never once consulted (§4.6).
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+    ]
+    result = verdict(rows, opening="170.0000", closing=None, hasRunningBalance=True)
+    assert result.status == "unavailable"
+    assert "closing balance pattern" in result.message
+
+
+def test_a_layout_declaring_no_anchor_at_all_has_nothing_to_reconcile_against() -> None:
+    """`has_a_balance_anchor` forbids this layout, and reconcile is a pure function all the same.
+
+    It never receives one from the database; it may receive one from a caller, and it must say
+    so rather than reconcile against a closing balance it does not have.
+    """
+    result = verdict([row(1, "-50.0000")], opening="170.0000", closingBalancePattern=None)
+    assert result.status == "unavailable"
+    assert "no closing balance" in result.message
 
 
 def test_a_running_balance_column_that_extracted_nothing_is_unavailable() -> None:
