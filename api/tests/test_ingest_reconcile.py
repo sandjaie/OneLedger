@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from oneledger.ingest import reconcile
 from oneledger.ingest.normalize import NormalizedRow
@@ -23,8 +24,9 @@ class Profile:
     """A stub of `ReconcilableProfile` — the five semantics reconciliation reads.
 
     The module declares a structural protocol rather than importing the layout model, so the
-    tests can too. `LayoutCreate` carries all five fields under these names, and the binding
-    between them is type-checked where the pipeline passes a real profile.
+    tests can too — which is also what lets them run where importing the model cannot. The
+    binding to the real model is asserted below, under `TYPE_CHECKING`, so a rename in either
+    place fails the type check without the runtime import.
     """
 
     invertsSign: bool = False
@@ -36,6 +38,16 @@ class Profile:
 
 def profile(**changes: object) -> Profile:
     return replace(Profile(), **changes)  # type: ignore[arg-type]
+
+
+if TYPE_CHECKING:  # pragma: no cover - a type-level assertion, never executed
+    from oneledger.routes.layouts import LayoutCreate
+
+    def _the_layout_model_satisfies_the_protocol(
+        model: LayoutCreate,
+    ) -> reconcile.ReconcilableProfile:
+        """A rename on either side fails `mypy` here rather than at the first call site."""
+        return model
 
 
 def row(number: int, amount: str, *, balance: str | None = None, day: int = 1) -> NormalizedRow:
@@ -250,15 +262,21 @@ def test_a_closing_anchor_alone_never_names_a_divergent_row() -> None:
     assert "unavailable" in result.message
 
 
-def test_an_extra_row_is_named_as_a_candidate() -> None:
-    """The one case a closing anchor can point at: a row that, removed, closes the gap exactly."""
+def test_a_dropped_row_names_its_surviving_twin_as_the_candidate() -> None:
+    """Section 4.6's dropped-row case, and the reason `candidate_rows` exists.
+
+    The statement charged two identical 20s and extraction kept one. The shortfall *is* the
+    missing row's amount, so a surviving row carrying the same amount is the evidence of what
+    went missing — and a corrupted amount leaves no such row, which is how the two are told
+    apart.
+    """
     rows = [row(1, "-50.0000", day=1), row(2, "-20.0000", day=2), row(3, "-30.0000", day=3)]
-    # The rows total -100 against a statement declaring 170 → 90: the -20 row is one too many.
-    result = verdict(rows, opening="170.0000", closing="90.0000")
+    result = verdict(rows, opening="170.0000", closing="50.0000")
     assert result.status == "mismatched"
-    assert result.delta == Decimal("20.0000")
+    assert result.delta == Decimal("-20.0000")
     assert result.candidate_rows == [2]
     assert result.first_divergent_row is None
+    assert "dropped" in result.message
 
 
 def test_a_corrupted_amount_leaves_no_candidates() -> None:
@@ -274,6 +292,115 @@ def test_there_is_no_tolerance() -> None:
     result = verdict(rows, opening="170.0000", closing="70.0000")
     assert result.status == "mismatched"
     assert result.delta == Decimal("0.0001")
+
+
+def test_a_configured_opening_that_did_not_extract_is_unavailable() -> None:
+    """The check that stops every batch reconciling vacuously.
+
+    Deriving the opening from the first stated balance makes the walk's first step hold by
+    construction, so a shifted opening band would silently delete the one independent check a
+    running-balance statement offers and report `matched`.
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+    ]
+    result = verdict(
+        rows,
+        openingBalancePattern=r"Opening:\s*([0-9,.-]+)",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+    )
+    assert result.status == "unavailable"
+    assert "opening" in result.message
+
+
+def test_a_trailing_row_without_a_balance_is_not_reconciled_against_an_interior_one() -> None:
+    """The last stated balance is not the closing balance when rows follow it.
+
+    Comparing a whole-statement total against a mid-statement anchor blocks a valid statement,
+    accuses an innocent row, and would record a figure the statement never declared on
+    `import_batch`.
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+        row(3, "-30.0000", day=3),
+    ]
+    result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)
+    assert result.status == "unavailable"
+    assert result.declared_closing is None
+    # The generic "no closing balance" fallback would also block, but it would not say why.
+    # Naming the row is what tells the owner which band to remap.
+    assert "3" in result.message and "last row" in result.message
+
+
+def test_an_opening_cannot_be_derived_when_the_first_row_states_no_balance() -> None:
+    """Deriving from a later balance while ignoring the amounts before it skews the opening."""
+    rows = [
+        row(1, "-50.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+        row(3, "-30.0000", balance="70.0000", day=3),
+    ]
+    result = verdict(rows, hasRunningBalance=True, closingBalancePattern=None)
+    assert result.status == "unavailable"
+
+
+# --- the layout with both anchors ------------------------------------------
+
+
+def test_a_divergence_blocks_even_when_the_totals_agree() -> None:
+    """The totals reconcile and the batch still blocks, which is the point.
+
+    Two amounts misread in opposite directions sum to the right closing balance while putting
+    both wrong figures in the ledger. The walk departing is the only evidence of it. Section 4.6
+    scopes `running_balance_break` to a layout with no declared closing, so with one declared the
+    statement-level figures are the verdict and the walk's row is the evidence — which is also
+    the only way a `mismatched` can carry a divergent row at all.
+    """
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="95.0000", day=2),
+        row(3, "-30.0000", balance="70.0000", day=3),
+    ]
+    result = verdict(rows, opening="170.0000", closing="70.0000", hasRunningBalance=True)
+    assert result.status == "mismatched"
+    assert result.first_divergent_row == 2
+    assert result.declared_closing == Decimal("70.0000")
+    assert result.computed_closing == Decimal("70.0000")
+
+
+def test_a_declared_closing_that_agrees_still_matches_with_a_running_balance() -> None:
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="100.0000", day=2),
+        row(3, "-30.0000", balance="70.0000", day=3),
+    ]
+    result = verdict(rows, opening="170.0000", closing="70.0000", hasRunningBalance=True)
+    assert result.status == "matched"
+
+
+def test_the_walk_keeps_checking_after_a_row_without_a_balance() -> None:
+    """Stopping at a continuation row would wave every later divergence through."""
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", day=2),
+        row(3, "-30.0000", balance="60.0000", day=3),
+    ]
+    result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)
+    assert result.status == "running_balance_break"
+    assert result.first_divergent_row == 3
+
+
+def test_a_break_carries_the_previous_balance_and_the_amount() -> None:
+    rows = [
+        row(1, "-50.0000", balance="120.0000", day=1),
+        row(2, "-20.0000", balance="95.0000", day=2),
+    ]
+    result = verdict(rows, opening="170.0000", hasRunningBalance=True, closingBalancePattern=None)
+    assert result.status == "running_balance_break"
+    assert result.previous_balance == Decimal("120.0000")
+    assert "-20.0000" in result.message
 
 
 # --- unavailable -----------------------------------------------------------
