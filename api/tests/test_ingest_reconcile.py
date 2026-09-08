@@ -583,6 +583,18 @@ def test_an_unparseable_declared_balance_is_unavailable_not_mismatched() -> None
     assert result.status == "unavailable"
 
 
+def test_a_declared_balance_that_contradicts_itself_is_unavailable_too() -> None:
+    """`-100.00 Cr` states a direction twice and disagrees, so it yields no usable balance.
+
+    The verdict must not claim the anchor failed to extract a number — one is plainly there —
+    but it blocks either way, and remapping is the remedy for both causes.
+    """
+    result = verdict([row(1, "-50.0000")], opening="170.0000", closing="-100.00 Cr")
+    assert result.status == "unavailable"
+    assert "no usable balance" in result.message
+    assert "did not extract a number" not in result.message
+
+
 def test_a_missing_opening_with_no_running_balance_is_unavailable() -> None:
     result = verdict([row(1, "-50.0000")], closing="70.0000")
     assert result.status == "unavailable"

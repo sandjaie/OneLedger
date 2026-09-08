@@ -144,6 +144,23 @@ def is_credit_suffixed(text: str) -> bool:
     return match is not None and match.group(1).upper() == "CR"
 
 
+def _contradicts_itself(subject: str, refusal: str) -> NormalizationError:
+    """A balance that contradicts itself stops the statement, not one row of it.
+
+    Failing the row instead removes the very evidence reconciliation blocks on. `reconcile` is
+    given the surviving rows and cannot tell that one was dropped, so a statement missing its
+    last line reconciled `matched` against the line before it — a batch that bypassed I8 while
+    reporting that it had satisfied it. The cause is a band and not a row, most likely one wide
+    enough to have taken the sign from the column beside it, so the whole column is suspect and
+    remapping is the remedy both balance guards already give.
+    """
+    return NormalizationError(
+        f"{subject} {refusal}; a statement cannot be reconciled against balances that "
+        "contradict themselves, and the band has most likely taken the sign from the column "
+        "beside it — remap the layout"
+    )
+
+
 def frame_balance(balance: SignedAmount, invert: bool) -> Decimal:
     """A balance in the ledger's frame.
 
@@ -458,13 +475,12 @@ def _balance_deltas(
         return {}
     invert = profile.invertsSign
     opening, refusal = parse_balance(result.declared_opening or "")
+    if refusal is not None:
+        raise _contradicts_itself("the statement's opening balance", refusal)
     if opening is None:
-        because = (
-            f"its opening balance {refusal}" if refusal else "this statement did not yield one"
-        )
         raise NormalizationError(
-            f"balance_delta needs the statement's opening balance, and {because} — a first "
-            "amount cannot be derived without it"
+            "balance_delta needs the statement's opening balance, and this statement did not "
+            "yield one — a first amount cannot be derived without it"
         )
     ordered = list(result.rows)
     if profile.chronologicalOrder == "descending":
@@ -484,12 +500,10 @@ def _balance_deltas(
             )
             continue
         balance, refusal = parse_balance(_cell(row, "running_balance"))
+        if refusal is not None:
+            raise _contradicts_itself(f"row {row.row_number}'s running_balance", refusal)
         if balance is None:
             deltas[row.row_number] = None
-            if refusal:
-                # The cell is a number; saying it is not would send the owner looking for the
-                # wrong thing in a cell they can read.
-                reasons[row.row_number] = f"running_balance {refusal}"
             broken_at = row.row_number
             continue
         framed = frame_balance(balance, invert)
@@ -625,10 +639,7 @@ def normalize(
         clean, applied = clean_description(description_raw)
         balance, balance_refusal = parse_balance(_cell(row, "running_balance"))
         if balance_refusal is not None:
-            failures.append(
-                RowFailure(row.page_number, row.row_number, f"running_balance {balance_refusal}")
-            )
-            continue
+            raise _contradicts_itself(f"row {row.row_number}'s running_balance", balance_refusal)
         rows.append(
             NormalizedRow(
                 source_page_number=row.page_number,

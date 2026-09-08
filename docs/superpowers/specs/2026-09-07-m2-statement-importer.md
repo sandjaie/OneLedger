@@ -685,6 +685,20 @@ needs no exotic layout — an owner's anchor pattern capturing `([0-9,.-]+)` tak
 its suffix while the running-balance column keeps it, and nothing prevents that. Carrying
 both halves in 4c would have put that branch at 1,009 counted lines, past the hard stop.
 
+**A balance that contradicts itself — `-100.00 Cr` — stops the statement.** Refusing the cell is
+required by I2: resolving a sign and a suffix that disagree is the invisible sign error the
+convention machinery exists to prevent. Refusing it by *failing the row* is not, and the pre-push
+review caught that: `reconcile` receives the surviving rows and cannot tell one was dropped, so a
+statement whose last line was dropped reconciled `matched` against the line before it — I8
+reporting satisfaction over a truncated statement. The cause is a band and not a row, so the
+refusal is statement-level and the remedy is the one both balance guards already give.
+
+**A wider hole this made visible, and did not open.** `reconcile` cannot tell that *any* row was
+dropped, whatever the reason — a row failing for "the row states no description" produces the
+same false `matched` on `develop` today. Task 4d only stopped routing the contradicting-balance
+case into it. Closing it properly needs the row count, or the failures, to reach the verdict; that
+is its own task.
+
 **One question 4d does not settle**, and 4d narrows it. `layouts.py` forbids `inverts_sign` on
 `debit_credit_columns` and `cr_suffix`, while `statement-ingestion.html` names a card source
 pairing a `CR` suffix with `inverts_sign = True`, so a card whose amounts state their own
