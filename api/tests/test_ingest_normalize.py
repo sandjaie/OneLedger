@@ -626,3 +626,87 @@ def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None
 
     assert [line.description_raw for line in batch.rows] == ["PLAIN"]
     assert batch.failures[0].reason == "original_amount '7S.OO' is not a number"
+
+
+def test_an_amount_that_only_crosses_the_ledger_limit_when_rounded_fails_its_row() -> None:
+    # Below the ceiling before rounding, above it after: the row would be normalized and then
+    # rejected by Postgres, which is precisely the failure the limit check exists to prevent.
+    assert normalize.parse_amount("9999999999999999.99999") is None
+    assert normalize.parse_amount("9999999999999999.9999") == Decimal("9999999999999999.9999")
+
+
+def test_a_foreign_amount_takes_the_direction_of_the_row_it_belongs_to() -> None:
+    # The two representations describe one movement. Storing 310 out of the account beside a
+    # positive 75 in its original currency would contradict itself permanently.
+    layout = profile(
+        signConvention="cr_suffix",
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "amount", "xMin": 300.0, "xMax": 450.0},
+            {"field": "original_amount", "xMin": 450.0, "xMax": 520.0},
+            {"field": "original_currency", "xMin": 520.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            description="PURCHASE",
+            amount="310.00",
+            original_amount="75.00",
+            original_currency="XBB",
+        ),
+        row(
+            2,
+            booked_date="16/07/2024",
+            description="REFUND",
+            amount="310.00 CR",
+            original_amount="75.00",
+            original_currency="XBB",
+        ),
+    ]
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [(line.amount, line.original_amount) for line in batch.rows] == [
+        (Decimal("-310.0000"), Decimal("-75.0000")),
+        (Decimal("310.0000"), Decimal("75.0000")),
+    ]
+
+
+def test_a_two_digit_value_date_after_the_period_still_resolves_its_century() -> None:
+    # The period anchors the century; it does not confine the value date. Resolving by
+    # containment alone would drop a September settlement back to Python's 1999 pivot.
+    layout = profile(
+        dateFormat="dd/MM/yy",
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(
+            1,
+            booked_date="31/08/99",
+            value_date="02/09/99",
+            description="LATE SETTLEMENT",
+            amount="-10.00",
+        )
+    ]
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/07/2099", "period_end": "31/08/2099"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.failures == []
+    assert batch.rows[0].booked_date == date(2099, 8, 31)
+    assert batch.rows[0].value_date == date(2099, 9, 2)

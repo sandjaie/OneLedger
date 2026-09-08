@@ -110,6 +110,10 @@ def parse_amount(text: str) -> Decimal | None:
         # The column is NUMERIC(20,4), and Postgres rounds half away from zero. Rounding here,
         # where the row can be named, beats rounding silently inside Postgres.
         value = value.quantize(CENTS, rounding=ROUND_HALF_UP)
+        if value.copy_abs() >= LEDGER_LIMIT:
+            # Rounding can cross the ceiling the check above just cleared, and a value the
+            # column cannot hold must fail its row rather than reach Postgres.
+            return None
     except InvalidOperation:
         return None
     return -value if negative else value
@@ -135,22 +139,30 @@ def _parse_date(value: str, date_format: str, period: StatementPeriod | None) ->
     return _windowed(parsed, period)
 
 
-def _windowed(parsed: date, period: StatementPeriod) -> date | None:
+def _windowed(parsed: date, period: StatementPeriod) -> date:
     """Two-digit years are windowed against the statement period, not a fixed pivot.
 
     Python reads `99` as 1999; a 2099 statement says otherwise, and the statement is the
-    authority. A year that no century places inside the period is left where it parsed — the
-    period check then fails the row and names both dates, rather than this inventing a year.
+    authority. The period anchors the century — it does not confine the date: a settlement
+    date days after the statement closes is ordinary, and resolving by containment alone
+    would drop it back to Python's pivot. The nearest century to the period wins, and the
+    period check still governs `booked_date` separately.
     """
     two_digit = parsed.year % 100
-    candidates = {(base - base % 100) + two_digit for base in (period.start.year, period.end.year)}
-    inside = sorted(
+    candidates = [
         candidate
-        for century_year in candidates
-        if (candidate := _replace_year(parsed, century_year)) is not None
-        and period.start <= candidate <= period.end
-    )
-    return inside[0] if len(inside) == 1 else parsed
+        for base in (period.start.year, period.end.year)
+        if (candidate := _replace_year(parsed, (base - base % 100) + two_digit)) is not None
+    ]
+    if not candidates:
+        return parsed
+    return min(candidates, key=lambda candidate: (_distance(candidate, period), candidate))
+
+
+def _distance(value: date, period: StatementPeriod) -> int:
+    if period.start <= value <= period.end:
+        return 0
+    return min(abs((value - period.start).days), abs((value - period.end).days))
 
 
 def _replace_year(value: date, year: int) -> date | None:
@@ -443,6 +455,11 @@ def normalize(
                 )
             )
             continue
+        if original_amount is not None:
+            # Magnitude from the statement, direction from the row it belongs to: 310 leaving
+            # the account beside a positive 75 in its original currency would contradict
+            # itself permanently, whichever convention or inversion produced the sign.
+            original_amount = -abs(original_amount) if amount < 0 else abs(original_amount)
         clean, applied = clean_description(description_raw)
         rows.append(
             NormalizedRow(

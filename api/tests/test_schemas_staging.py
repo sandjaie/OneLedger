@@ -143,3 +143,32 @@ def test_the_rounded_product_is_what_the_translation_is_measured_against() -> No
         amount_secondary=Decimal("150.0075"),
     )
     assert row.amount_base == Decimal("150.0075")
+
+
+@pytest.mark.parametrize(
+    ("rate_date", "carried"),
+    [
+        # V10's carried_rate_dates: fx_rate_date <= booked_date, and carried is true exactly
+        # when the rate is older. A rate from the future, an unflagged earlier rate and a
+        # flagged same-day one all mislabel the conversion (Invariant I7).
+        (date(2024, 7, 16), False),
+        (date(2024, 7, 16), True),
+        (date(2024, 7, 15), True),
+        (date(2024, 7, 14), False),
+    ],
+)
+def test_a_rate_date_that_contradicts_its_carried_flag_is_refused(
+    rate_date: date, carried: bool
+) -> None:
+    with pytest.raises(ValidationError, match="fx_rate_date"):
+        staged(fx_rate_date=rate_date, fx_rate_is_carried=carried)
+
+
+@pytest.mark.parametrize(
+    ("rate_date", "carried"),
+    [(date(2024, 7, 15), False), (date(2024, 7, 14), True)],
+)
+def test_a_rate_date_that_agrees_with_its_carried_flag_validates(
+    rate_date: date, carried: bool
+) -> None:
+    assert staged(fx_rate_date=rate_date, fx_rate_is_carried=carried).fx_rate_date == rate_date

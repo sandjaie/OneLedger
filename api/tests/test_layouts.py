@@ -511,6 +511,26 @@ def test_proposal_privacy_covers_both_modes_and_identifier_spellings(draft_mode:
     assert all(row["fields"]["amount"] == "12345.67" for row in response.json()["rows"])
 
 
+def test_a_mapped_foreign_amount_survives_the_preview_redactor() -> None:
+    from oneledger.ingest.engine import RawRow
+
+    # The mapping preview is where the owner checks a newly mapped band. A legitimate foreign
+    # amount replaced with [redacted] there makes the new column impossible to verify.
+    public = layouts._public_rows(
+        [
+            RawRow(
+                1,
+                1,
+                "money",
+                {"amount": "12345.67", "original_amount": "12,345.67", "original_currency": "XBB"},
+            )
+        ]
+    )
+
+    assert public[0].fields["original_amount"] == "12,345.67"
+    assert public[0].fields["original_currency"] == "XBB"
+
+
 def test_only_validated_financial_fields_are_exempt_from_preview_redaction() -> None:
     from oneledger.ingest.engine import RawRow
 

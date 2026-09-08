@@ -95,6 +95,24 @@ class StagedTransaction(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def the_rate_date_agrees_with_the_carried_flag(self) -> Self:
+        """V10's `carried_rate_dates`, enforced where the offending row can still be named.
+
+        A rate never comes from the future, and carried means exactly "from an earlier date":
+        an unflagged earlier rate and a flagged same-day one both mislabel the conversion
+        (Invariant I7). Staging a row that breaks this lets review accept it and leaves the
+        all-or-nothing commit to discover it.
+        """
+        if self.fx_rate_date > self.booked_date:
+            raise ValueError("fx_rate_date cannot be later than booked_date")
+        if self.fx_rate_is_carried != (self.fx_rate_date < self.booked_date):
+            raise ValueError(
+                "fx_rate_is_carried must be true exactly when fx_rate_date is earlier than "
+                "booked_date"
+            )
+        return self
+
+    @model_validator(mode="after")
     def original_amount_and_currency_travel_together(self) -> Self:
         if (self.original_amount is None) != (self.original_currency is None):
             raise ValueError("original_amount and original_currency must be set together")
