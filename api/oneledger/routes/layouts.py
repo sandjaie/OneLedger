@@ -28,7 +28,10 @@ from ..ingest.words import ExtractionError
 
 router = APIRouter(tags=["layouts"])
 
-# statement-ingestion.html section 4: the fields a column band may claim.
+# statement-ingestion.html section 4: the fields a column band may claim. The two original_*
+# bands are section 5's currency rule made mappable — a statement that states a foreign amount
+# beside the account's own puts it in its own column, and without a band for it the bank's
+# authoritative conversion could never be captured (M2 Task 4).
 COLUMN_FIELDS = frozenset(
     {
         "booked_date",
@@ -39,6 +42,8 @@ COLUMN_FIELDS = frozenset(
         "debit",
         "credit",
         "running_balance",
+        "original_amount",
+        "original_currency",
     }
 )
 # The small, additive vocabulary (ADR-0012). A third entry is a considered addition, not a reflex.
