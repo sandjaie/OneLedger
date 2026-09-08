@@ -131,39 +131,47 @@ def reconcile(
             "remap the layout rather than reconciling against a balance derived from the rows"
         )
 
-    stated = [(r, _frame(r.running_balance, invert)) for r in chronological]
-    walkable = profile.hasRunningBalance and any(balance is not None for _, balance in stated)
-    if profile.hasRunningBalance and not walkable:
-        return _unavailable(
-            "the layout declares a running-balance column and no row carried one; remap the "
-            "layout rather than importing rows that bypassed reconciliation"
-        )
+    # Section 4.6 requires *every* row-to-row step to hold, so a row carrying no balance under a
+    # configured running-balance column is evidence that failed to extract, not a row to walk
+    # past. A physical continuation line never arrives here as a row of its own — `extract_pages`
+    # merges it into the row above — so a gap is a shifted band or a parse regression. Walking
+    # past one lets two amounts misread in opposite directions cancel before the next stated
+    # balance and reports `matched` for rows that are wrong.
+    walk: list[tuple[NormalizedRow, Decimal]] = []
+    if profile.hasRunningBalance:
+        stated = [(r, _frame(r.running_balance, invert)) for r in chronological]
+        unstated = [r.source_row_number for r, balance in stated if balance is None]
+        if unstated:
+            return _unavailable(
+                f"the layout declares a running-balance column and {_rows(len(unstated))} "
+                f"carried no balance, the first of them row {unstated[0]} in chronological "
+                "order; remap the layout rather than importing rows that bypassed reconciliation"
+            )
+        if not stated:
+            return _unavailable(
+                "the layout declares a running-balance column and the statement has no rows to "
+                "walk; remap the layout rather than importing rows that bypassed reconciliation"
+            )
+        walk = [(r, balance) for r, balance in stated if balance is not None]
 
     derived = False
     if opening is None:
-        if not walkable:
+        if not walk:
             return _unavailable(
                 "no opening balance extracted and no running-balance column to derive one from"
             )
-        opening = _derived_opening(stated)
-        if opening is None:
-            return _unavailable(
-                "no opening balance extracted, and the first row states no balance to derive "
-                "one from without guessing at the amounts before it"
-            )
+        # The first chronological row's stated balance less its own amount. Only that row
+        # implies the opening directly: a balance further down implies it only after
+        # subtracting every amount before it, and ignoring those skews it by their sum.
+        first_row, first_balance = walk[0]
+        opening = first_balance - first_row.amount
         derived = True
 
     divergent: tuple[NormalizedRow, Decimal, Decimal, Decimal] | None = None
-    if walkable:
-        last_row, last_balance = stated[-1]
-        if last_balance is None and closing is None:
-            return _unavailable(
-                f"the chronologically last row ({last_row.source_row_number}) states no balance "
-                "and no closing balance extracted, so the statement declares no closing figure"
-            )
-        divergent = _walk(opening, stated)
+    if walk:
+        divergent = _walk(opening, walk)
         if closing is None:
-            closing = last_balance
+            closing = walk[-1][1]
 
     if closing is None:
         return _unavailable("no closing balance to reconcile against")
@@ -233,7 +241,7 @@ def reconcile(
         candidates,
         f"Opening {opening} plus {_rows(len(rows))} computes {computed}, but the statement "
         f"declares {closing}: a difference of {delta}. "
-        + _evidence(candidates, first_divergent_row, walkable),
+        + _evidence(candidates, first_divergent_row, bool(walk)),
     )
 
 
@@ -263,38 +271,19 @@ def _evidence(candidates: list[int], divergent: int | None, walkable: bool) -> s
     return _EVIDENCE_UNAVAILABLE
 
 
-def _derived_opening(stated: list[tuple[NormalizedRow, Decimal | None]]) -> Decimal | None:
-    """The opening implied by the first stated balance, or None if it cannot be had honestly.
-
-    Only the *first chronological* row's balance implies the opening directly. A balance further
-    down implies it only after subtracting every amount before it — and if any of those rows is
-    itself a continuation with no balance, the subtraction is arithmetic on stated values, not a
-    guess. What cannot be done is ignoring them, which skews the opening by their sum.
-    """
-    row, balance = stated[0]
-    if balance is None:
-        return None
-    return balance - row.amount
-
-
 def _walk(
-    opening: Decimal, stated: list[tuple[NormalizedRow, Decimal | None]]
+    opening: Decimal, stated: list[tuple[NormalizedRow, Decimal]]
 ) -> tuple[NormalizedRow, Decimal, Decimal, Decimal] | None:
     """Step the running balance chronologically; return the first divergence, or None.
 
     Returns the row, the balance held before it and the balance its amount implies — section
-    4.6 names all three among what a break carries.
-
-    A row that carried no balance still moves the running total, and the walk keeps checking
-    after it: a continuation row states no balance of its own, and either skipping its amount or
-    stopping at it would hide every divergence downstream.
+    4.6 names all three among what a break carries. Every row here states a balance, so every
+    step is checked, which is what section 4.6 asks for.
     """
     running = opening
     for row, balance in stated:
         previous = running
         running += row.amount
-        if balance is None:
-            continue
         if balance != running:
             return row, previous, running, balance
     return None
