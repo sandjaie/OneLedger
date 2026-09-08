@@ -203,7 +203,8 @@ with; `ONELEDGER_SIZE_OVERRIDE="reason"` exists for the indivisible migration an
 in the PR. One module plus its tests already spends the whole budget in this tree — slice below
 the module.
 
-**Every PR waits for Codex review on GitHub** and merges when no blocking finding is open. A PR
+**Every PR that carries code waits for Codex review on GitHub** and merges when no blocking
+finding is open. A PR
 carries one task-sized slice of a milestone. Codex findings are triaged: correctness, security,
 invariant and contract findings are patched on the branch; hardening, style and out-of-scope
 suggestions are answered and recorded in the PR's Notes, not patched — each one widens the diff
