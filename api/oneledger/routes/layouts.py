@@ -284,6 +284,21 @@ class LayoutCreate(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def period_captures_come_as_a_pair(self) -> LayoutCreate:
+        """A captured bound is authoritative, and half a period cannot be.
+
+        With one bound captured and the other derived from the row dates, a date outside the
+        captured bound widens the derived period and survives — the opposite of what capturing
+        it is for (M2 Task 4).
+        """
+        captured = set(self.metadataPatterns or {}) & {"period_start", "period_end"}
+        if len(captured) == 1:
+            raise ValueError(
+                "metadataPatterns must capture both period_start and period_end, or neither"
+            )
+        return self
+
+    @model_validator(mode="after")
     def two_digit_year_needs_both_period_captures(self) -> LayoutCreate:
         if TWO_DIGIT_YEAR.search(self.dateFormat):
             captured = set(self.metadataPatterns or {})

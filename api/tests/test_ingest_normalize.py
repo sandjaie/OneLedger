@@ -931,3 +931,44 @@ def test_century_windowing_crosses_the_rollover() -> None:
     assert batch.failures == []
     assert batch.rows[0].booked_date == date(2099, 12, 31)
     assert batch.rows[0].value_date == date(2100, 1, 2)
+
+
+def test_a_date_the_anchored_century_cannot_hold_fails_rather_than_moving_century() -> None:
+    # 2100 is not a leap year and 2000 was. Choosing the nearest *valid* candidate would file a
+    # 29 February a century away from the statement that printed it; the century is anchored
+    # first, and a date that century cannot represent is simply not a date.
+    layout = profile(
+        dateFormat="dd/MM/yy",
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+    )
+    rows = [row(1, booked_date="29/02/00", description="LEAP", amount="-10.00")]
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/02/2100", "period_end": "28/02/2100"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.rows == []
+    assert batch.failures[0].reason == "booked_date is not a dd/MM/yy date"
+
+
+@pytest.mark.parametrize("mapped", ["period_start", "period_end"])
+def test_a_one_sided_period_mapping_is_refused_rather_than_derived(mapped: str) -> None:
+    # Deriving both bounds from the row dates would let an OCR date outside the captured bound
+    # widen the period and survive — the captured bound is authoritative precisely so that
+    # cannot happen, and half a period cannot be authoritative.
+    # model_copy bypasses validation on purpose: LayoutCreate refuses this shape at save, and
+    # this proves the engine does not depend on that refusal.
+    layout = profile().model_copy(update={"metadataPatterns": {mapped: r"From (.+)$"}})
+    rows = [row(1, booked_date="15/07/2024", description="ALPHA", amount="-10.00")]
+
+    with pytest.raises(normalize.NormalizationError, match="period"):
+        normalize.normalize(
+            layout,
+            extraction(rows, metadata={mapped: "01/07/2024"}),
+            account_currency=ACCOUNT_CURRENCY,
+        )

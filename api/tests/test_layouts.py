@@ -961,6 +961,15 @@ def test_inversion_is_accepted_where_the_amount_carries_the_issuers_frame(
     assert layouts.LayoutCreate.model_validate(body).invertsSign is True
 
 
+@pytest.mark.parametrize("mapped", ["period_start", "period_end"])
+def test_the_statement_period_captures_come_as_a_pair(mapped: str) -> None:
+    # Half a period cannot be authoritative: with one bound captured and the other derived
+    # from the row dates, a date outside the captured bound widens the period and survives.
+    body = {**VALID_CREATE, "metadataPatterns": {mapped: r"From (.+)$"}}
+    with pytest.raises(ValidationError, match="period_start and period_end"):
+        layouts.LayoutCreate.model_validate(body)
+
+
 def test_a_column_band_must_have_xmin_less_than_xmax() -> None:
     bad = {
         **VALID_CREATE,

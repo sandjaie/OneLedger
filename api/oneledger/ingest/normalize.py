@@ -153,37 +153,34 @@ def _parse_date(value: str, date_format: str, period: StatementPeriod | None) ->
     return _windowed(parsed, period)
 
 
-def _windowed(parsed: date, period: StatementPeriod) -> date:
+def _windowed(parsed: date, period: StatementPeriod) -> date | None:
     """Two-digit years are windowed against the statement period, not a fixed pivot.
 
     Python reads `99` as 1999; a 2099 statement says otherwise, and the statement is the
     authority. The period anchors the century — it does not confine the date: a settlement
     date days after the statement closes is ordinary, and resolving by containment alone
-    would drop it back to Python's pivot. The nearest of the neighbouring centuries wins, and
-    the period check still governs `booked_date` separately.
+    would drop it back to Python's pivot. The neighbouring centuries are candidates too, since
+    a December 2099 statement settling on 2 January belongs to 2100.
+
+    The year is chosen first and the date built second, so a date the anchored century cannot
+    represent — 29 February in a 2100 statement — is refused rather than filed a century away
+    in the one year that happens to be a leap year. The period check still governs
+    `booked_date` separately.
     """
     two_digit = parsed.year % 100
-    # The neighbouring centuries are candidates too: a December 2099 statement settling on
-    # 2 January belongs to 2100, and the period's own century alone cannot reach it.
-    centuries = {
-        (base - base % 100) + offset
+    years = {
+        (base - base % 100) + offset + two_digit
         for base in (period.start.year, period.end.year)
         for offset in (-100, 0, 100)
     }
-    candidates = [
-        candidate
-        for century in centuries
-        if (candidate := _replace_year(parsed, century + two_digit)) is not None
-    ]
-    if not candidates:
-        return parsed
-    return min(candidates, key=lambda candidate: (_distance(candidate, period), candidate))
+    anchored = min(years, key=lambda year: (_year_distance(year, period), year))
+    return _replace_year(parsed, anchored)
 
 
-def _distance(value: date, period: StatementPeriod) -> int:
-    if period.start <= value <= period.end:
+def _year_distance(year: int, period: StatementPeriod) -> int:
+    if period.start.year <= year <= period.end.year:
         return 0
-    return min(abs((value - period.start).days), abs((value - period.end).days))
+    return min(abs(year - period.start.year), abs(year - period.end.year))
 
 
 def _replace_year(value: date, year: int) -> date | None:
@@ -206,9 +203,16 @@ def _period_date(text: str, label: str) -> date:
 
 def _period(profile: NormalizableProfile, result: ExtractionResult) -> StatementPeriod | None:
     """The captured period is authoritative; it is what the statement itself states."""
-    mapped = set(profile.metadataPatterns or {})
-    if not {"period_start", "period_end"} <= mapped:
+    mapped = set(profile.metadataPatterns or {}) & {"period_start", "period_end"}
+    if not mapped:
         return None
+    if len(mapped) == 1:
+        # Deriving the other bound from the row dates would let a date outside the captured
+        # one widen the period and survive — which is the opposite of what capturing it means.
+        # LayoutCreate refuses this shape too; the engine does not depend on that refusal.
+        raise NormalizationError(
+            "the layout captures only one statement period bound; capture both or neither"
+        )
     start_text = result.metadata.get("period_start")
     end_text = result.metadata.get("period_end")
     if start_text is None or end_text is None:
