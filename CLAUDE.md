@@ -226,6 +226,12 @@ invariant and contract findings are patched on the branch; hardening, style and 
 suggestions are answered and recorded in the PR's Notes, not patched — each one widens the diff
 and buys another round. A documentation-only PR merges on owner review alone.
 
+**PR titles**: `[P<phase>/M<milestone>/T<task>] type(scope): …` — `[P1/M2/T4c] feat(api): a
+statement's rows and balances produce one reconciliation verdict`. The prefix is the plan's own
+numbering and makes a twenty-PR milestone readable as a list; drop the task segment for a PR
+scoped to a milestone but not a task, and the whole prefix for a repo-wide one
+([docs/git-workflow.md](docs/git-workflow.md)).
+
 **Commits**: `type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci
 chore refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —
 "the ADR folder now lists only decisions in force", not "update ADR folder". The body says what

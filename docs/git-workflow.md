@@ -42,7 +42,8 @@ file says only where the branches go:
    for. Nothing reaches `origin` unreviewed or with a finding open, and the push hooks enforce
    the diff budget below.
 4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
-   verification evidence. A milestone is a sequence of such PRs, not one large one.
+   verification evidence, and **titled so the list says which task it is** (below). A milestone
+   is a sequence of such PRs, not one large one.
 5. Codex reviews every PR that carries code — **automatically when the PR is opened, and only
    on request after that.** Findings are verified against the tree and triaged. **Blocking** — a
    correctness bug, a security or never-store violation, an invariant breach, a contract or
@@ -67,6 +68,23 @@ file says only where the branches go:
    entry and the release notes for what shipped since the last release. On owner request, merge
    to `main`, tag the merge commit (`git tag -a v<version>`) and publish the GitHub release
    from that tag with those notes.
+
+## Pull request titles
+
+A milestone runs to twenty PRs, so the title carries the phase, the milestone and the task, in a
+bracketed prefix that scans down a list without opening anything:
+
+```
+[P1/M2/T4c] feat(api): a statement's rows and balances produce one reconciliation verdict
+```
+
+The prefix is the plan's own numbering — phase, milestone, task — and the rest is the commit
+convention unchanged: `type(scope): a lowercase sentence stating what is now true`.
+
+- A PR delivering a numbered plan task takes all three: `[P1/M2/T4c]`.
+- One scoped to a milestone but not a numbered task takes two: `[P1/M2]`.
+- One that is repo-wide — the workflow, the gates, tooling — takes no prefix, because it belongs
+  to no task and a prefix would claim otherwise.
 
 ## Rules
 
