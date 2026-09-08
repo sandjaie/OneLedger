@@ -11,7 +11,8 @@ with the first.
 [docs/development-cycle.md](docs/development-cycle.md). Read it before working, and run its gates
 without being asked:** `/oneledger-plan-review` before a task is dispatched from a plan,
 `/verify` then `/oneledger-code-review` **before the branch is pushed at all** — the order is
-implement, verify, review, fix, verify, re-review, first push, PR, and a patch answering a
+implement, verify, review, fix, verify, re-review, first push, PR, and a patch answering
+a
 review finding takes the same route — and `/oneledger-code-hygiene` at a milestone boundary. Then Codex
 reviews every PR
 that carries code, blocking findings are patched on the branch, and the PR merges on the
