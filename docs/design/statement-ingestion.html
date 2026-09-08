@@ -584,6 +584,14 @@ it fails the row.</li>
 <td>Derived from consecutive balances</td>
 </tr>
 </tbody></table>
+<p><strong>A balance is not an amount.</strong> The <code>Dr</code>/<code>Cr</code> suffix above means one thing on an amount
+only under the <code>cr_suffix</code> convention, but a balance is a position rather than a movement, so on a
+balance it always reads the same way: <code>Dr</code> negative, <code>Cr</code> positive. A balance that carries one has
+stated its own direction, and <code>inverts_sign</code> is then withheld from it — reading the suffix and
+inverting as well reverses the statement instead of reframing it. This governs a row&#39;s running
+balance, the balances <code>balance_delta</code> derives amounts from, and reconciliation&#39;s declared anchors
+alike, and each balance is framed <em>before</em> any subtraction: a difference taken between two
+frames belongs to neither.</p>
 <p><strong>For credit cards, the convention inverts</strong> relative to the statement&#39;s presentation. A card
 statement shows a purchase as a positive &quot;debit&quot; because it increases what you owe. In the ledger
 a purchase is <strong>negative</strong> (Invariant I2). Each card parser declares <code>inverts_sign = True</code> and

@@ -179,8 +179,12 @@ Given the pages of an unrecognised PDF:
 ### 4.6 Reconciliation (Invariant I8)
 
 `reconcile.py` returns exactly one verdict, computed on **native signed ledger amounts** —
-after `inverts_sign` has been applied to both the rows *and* the declared balances, so the
-identity holds in one frame. All balance arithmetic runs in **chronological order**: when the
+after `inverts_sign` has been applied to the rows *and* to the declared balances, so the identity
+holds in one frame. A balance that stated its own direction is the one exception, added by Task
+4d: `100.00 Dr` is an overdraft whatever the amount column does, so the suffix is read and
+`inverts_sign` is then withheld from that figure. Applying both would reverse the statement rather
+than reframe it — the same reason `normalize.py` leaves a row alone whose amount stated its
+direction. All balance arithmetic runs in **chronological order**: when the
 profile's `chronological_order` is `descending`, the rows are reversed first, because the
 running-balance identity `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological*
 row, and applying it in display order on a descending statement flags every valid row as a
@@ -686,4 +690,3 @@ pairing a `CR` suffix with `inverts_sign = True`. A card whose amounts state the
 has no frame switch for its balances, and every such statement blocks with its rows accused for
 what is a frame error. One of those two documents is wrong; deciding which is the owner's, and
 the fix is its own task once decided.
-
