@@ -15,91 +15,79 @@ produces, and that it only ever reports. That file wins on a gate, this one on a
 |---|---|---|---|
 | `main` | — | — | Released code only. Receives merges from `release/*`, nothing else. |
 | `develop` | `main` | `main`, via `release/*` | The standing integration branch. Every feature PR targets it. |
-| `<type>/<name>` | `develop` | `develop` | One task-sized slice of a milestone (or a standalone fix), delivered as one PR. A milestone spans several such branches; its plan lands with the first. |
+| `<type>/<name>` | `develop` | `develop` | One slice of a phase (or a standalone fix), delivered as one PR. A phase spans several such branches; its plan lands with the first. |
 | `release/<version>` | `develop` | `main` | Cut for a release; carries the changelog and release notes; produces the tag. |
 
 `<type>` is one of `feature/`, `fix/`, `chore/`, `docs/` — the complete set of branch-name
-prefixes. `<name>` names the work the branch carries: `feature/m1b-manual-transactions`,
+prefixes. `<name>` names the work the branch carries: `feature/p1-1a-parse-pipeline`,
 `fix/auth-database-errors`.
 
 ## Flow — the delivery cycle
 
-Every delivery follows one cycle: **plan → review the plan → implement → review locally → PR →
-patch the blocking findings → merge.** The review that costs least is the earliest one; a finding
-that reaches GitHub has already cost a round trip.
+Every delivery follows one cycle: **plan → implement → review locally → merge.** External
+(Codex) review is disabled for this repository — owner decision, 8 September 2026. The review
+happens here, before the push, and the PR is the record of it, not a second audit.
 
-**[docs/development-cycle.md](development-cycle.md) is where that cycle is specified** — each
-gate, when an agent must run it unprompted, and what it produces. It is not restated here. This
-file says only where the branches go:
+**[docs/development-cycle.md](development-cycle.md) specifies the gates** — when each runs and
+what it produces. This file says only where the branches go:
 
-1. The milestone's dated execution-map plan goes in `docs/superpowers/plans/` and lands with the
-   milestone's first branch. It is reviewed — `/oneledger-plan-review` — before any task is
-   dispatched, because that is where a task too large for one branch gets split.
-2. Each task — or a small coherent group of tasks — gets its own branch `<type>/<name>` from
-   `develop`, implemented TDD in the plan's order. The plan declares `Workspace`, `Branch` and
-   `Base and PR target` per task before implementation starts.
-3. Before the **first** push: `/verify`, then `/oneledger-code-review`, then the fixes it asks
-   for. Nothing reaches `origin` unreviewed or with a finding open, and the push hooks enforce
-   the diff budget below.
+1. The phase's dated execution-map plan goes in `docs/superpowers/plans/` and lands with the
+   phase's first branch. `/oneledger-plan-review` runs once on a newly written or materially
+   changed plan, before its first dispatch — that is where an oversized slice gets split.
+2. Each slice — or a coherent part of one — gets its own branch `<type>/<name>` from `develop`,
+   implemented TDD in the plan's order. The plan declares `Workspace`, `Branch` and `Base and
+   PR target` per slice before implementation starts.
+3. Before the **first** push: `/verify`, then one `/oneledger-code-review` round, then the fixes
+   it asks for and `/verify` again. Nothing reaches `origin` unreviewed, and the push hooks
+   enforce the suite and the diff budget below.
 4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
-   verification evidence, and **titled so the list says which task it is** (below). A milestone
-   is a sequence of such PRs, not one large one.
-5. Codex reviews every PR that carries code — **automatically when the PR is opened, and only
-   on request after that.** Findings are verified against the tree and triaged. **Blocking** — a
-   correctness bug, a security or never-store violation, an invariant breach, a contract or
-   schema mismatch, missing test evidence — is patched on the same branch, pushed, and
-   re-reviewed **on request** (`@codex review`), because a push alone does not trigger one.
-   **Non-blocking**
-   — hardening beyond the task, style, naming, a suggested extra case, a refactor of code the PR
-   did not touch — is answered in the thread and recorded in the PR's Notes. It is not patched
-   here: each one widens the diff and buys another round.
-6. **The orchestrator merges when no blocking finding is open** and Codex has given its
-   thumbs-up **on the head being merged** — an approval naming an earlier commit is not an
-   approval of this one; then the branch is deleted and the next task begins. `progress.md` is
-   updated **on the task branch**, in the head that gets merged, not afterwards. The owner
-   merges instead in three cases: a documentation-only PR, which no Codex review approved; a PR
-   whose Verification table records a required check as `Not run`; and anything targeting
-   `main`. A **documentation-only PR** — a plan, a spec, an ADR,
-   `progress.md` — merges on owner review alone; prose review has no convergence criterion and
-   the milestone plan is not worth a day of it.
-7. At the milestone boundary, `/oneledger-code-hygiene` sweeps what accumulated between tasks. Its
-   findings ship as their own `chore/` branch, never folded into a feature PR.
-8. **Release.** Branch `release/<version>` from `develop`. On that branch: write the changelog
+   verification evidence, and **titled so the list says which slice it is** (below).
+5. **The orchestrator merges** once the local gates are green and the PR's evidence is honestly
+   recorded, then deletes the branch and starts the next slice. Two cases stay the owner's: a PR
+   whose Verification table records a required check as `Not run`, and anything targeting
+   `main`.
+6. At a phase boundary, `/oneledger-code-hygiene` sweeps what accumulated. Its findings ship as
+   their own `chore/` branch, never folded into a feature PR.
+7. **Release.** Branch `release/<version>` from `develop`. On that branch: write the changelog
    entry and the release notes for what shipped since the last release. On owner request, merge
    to `main`, tag the merge commit (`git tag -a v<version>`) and publish the GitHub release
    from that tag with those notes.
 
 ## Pull request titles
 
-A milestone runs to twenty PRs, so the title carries the phase, the milestone and the task, in a
-bracketed prefix that scans down a list without opening anything:
+A phase runs to many PRs, so the title carries the phase and the slice in a bracketed prefix
+that scans down a list without opening anything:
 
 ```text
-[P1/M2/T4c] feat(api): a statement's rows and balances produce one reconciliation verdict
+[P1.3] feat(api): a remittance and its arrival link as one transfer
 ```
 
-The prefix is the plan's own numbering — phase, milestone, task — and the rest is the commit
+The prefix is the phase plan's own numbering — phase, then slice — and the rest is the commit
 convention unchanged: `type(scope): a lowercase sentence stating what is now true`.
 
-- A PR delivering a numbered plan task takes all three: `[P1/M2/T4c]`.
-- One scoped to a milestone but not a numbered task takes two: `[P1/M2]`.
+- A PR delivering part of a numbered slice takes the pair: `[P1.3]`. A slice shipped as several
+  PRs repeats the same prefix; the sentence tells them apart.
+- One scoped to a phase but no single slice takes the phase alone: `[P1]`.
 - One that is repo-wide — the workflow, the gates, tooling — takes no prefix, because it belongs
-  to no task and a prefix would claim otherwise.
+  to no slice and a prefix would claim otherwise.
+
+Merged history under the old `[P1/M2/T4c]` scheme keeps its titles; the record is not renamed.
 
 ## Rules
 
 - Nothing commits straight to `main`; it moves only through `release/*` on owner request.
-  `develop` moves by reviewed PR (owner-directed integrations excepted).
-- One task-sized slice (or one coherent fix) per branch and PR, inside the **diff budget**:
-  **400 lines of added production code, 800 added production + test lines**, with a hard stop at
-  500 / 1000 that refuses the push. Documentation, configuration and generated files do not count.
-  `scripts/check-diff-size.sh` measures the branch against `develop` and runs on push; it prints
-  the largest files so the split is obvious. Past the hard stop, `ONELEDGER_SIZE_OVERRIDE="reason"`
-  allows the push and the same reason goes in the PR's Notes — an indivisible migration is the
-  case it exists for.
-- The budget is not bureaucracy. A branch is re-read in full on every review round, so review
-  effort grows faster than the diff: M2 task 3 reached +3,380 lines and took eight Codex rounds
-  and fifteen fix commits. Four branches of 800 would have converged in a fraction of that.
+  `develop` moves by PR (owner-directed integrations excepted).
+- One coherent slice (or one fix) per branch and PR, inside the **diff budget**:
+  **800 lines of added production code, 1,600 added production + test lines**, with a hard stop
+  at 1,200 / 2,400 that refuses the push. Documentation, configuration and generated files do
+  not count. `scripts/check-diff-size.sh` measures the branch against `develop` and runs on
+  push; it prints the largest files so a split is obvious. Past the hard stop,
+  `ONELEDGER_SIZE_OVERRIDE="reason"` allows the push and the same reason goes in the PR's Notes
+  — an indivisible migration is the case it exists for.
+- The budget is looser than it was when every PR bought external review rounds, but it is not
+  gone: a branch is still read in full by its local review, and tests in this tree run 1.5–1.8×
+  their production code, so the total is the limit that binds first. A slice that outgrows the
+  hard stop ships as more than one PR under the same `[P1.n]` prefix.
 - Every plan declares its exact `Workspace`, `Branch` and `Base and PR target` before
   implementation starts, using values consistent with this file.
 - Delete branches after merge; the PR record is the history.

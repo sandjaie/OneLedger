@@ -1,5 +1,11 @@
 # OneLedger Implementation Plan
 
+**Superseded as the master sequence, 9 September 2026:** delivery now follows
+[2026-09-09-phase-delivery-plan.md](2026-09-09-phase-delivery-plan.md) — six phases, one term.
+This file remains the record of the original decomposition, and its **global constraints stand**
+except where the phase plan or [git-workflow.md](../../git-workflow.md) restates them (the
+review process and the diff budget are theirs now).
+
 > **For agentic workers:** Use `superpowers:executing-plans` to execute a scoped task plan.
 > Use `superpowers:subagent-driven-development` for authorized sequential agent implementation
 > in the current repository checkout. The owner's no-worktree preference overrides skill defaults.
@@ -54,9 +60,9 @@ infrastructure or dependency is selected by this documentation update.
 - No LLM calls in Phase 1 or Phase 2. No automatic payments, trades or new shared access.
 - Read ADRs as decisions, design/operations as specifications and plans as execution instructions.
   Resolve conflicting specifications explicitly before implementing the affected feature.
-- Preserve the current repository review process: scoped branches, required checks and Codex review
-  before merge. There is no hard line cap on a PR; [docs/git-workflow.md](../../git-workflow.md) is
-  the authority — keep each PR reviewable at one sitting.
+- Follow the repository delivery cycle — plan → implement → local review → merge;
+  [docs/git-workflow.md](../../git-workflow.md) is the authority — and keep each PR reviewable
+  at one sitting.
 - New implementation plans go in `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`.
 - Each task plan or spec declares its exact `Workspace`, `Branch` and `Base and PR target` before
   dispatch; split deliveries declare a branch each. Use `feature/`, `fix/`, `docs/` or `chore/`.
