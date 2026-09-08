@@ -64,13 +64,16 @@ Red is not reviewed. A failing test is a finding that already found itself.
 opened. Any of the three.** There is no path to `origin` that skips this gate — not a small fix,
 not a one-line follow-up, not a patch answering a Codex finding.
 
-It returns blocking and non-blocking findings with file and line. The **implementing agent**
-fixes every blocking one on the branch, re-runs `/verify`, and re-runs this gate on the new diff —
-a fix has its own surface. If a second pass finds new blocking problems inside the first pass's
-fixes, stop and raise it with the owner: that is a design problem, not a patch problem.
+It returns findings ranked CRITICAL to LOW, with file and line. The **implementing agent** fixes
+**every one of them** on the branch, re-runs `/verify`, and re-runs this gate on the new diff — a
+fix has its own surface. If a second pass finds new problems inside the first pass's fixes, stop
+and raise it with the owner: that is a design problem, not a patch problem.
 
-Non-blocking findings are **not** fixed here. They go in the PR's Notes, and become an issue if
-they matter. Patching them is what widens the diff and buys the next review round.
+Everything is fixed here because here it is free. A finding left open does not stay quiet — Codex
+raises it once the PR exists, and then the same fix costs a push, a re-review and a round. The
+one exception is **scope, not severity**: a finding in code this task does not touch is recorded
+in the PR's Notes and raised as its own task, because patching it widens the branch past the task
+it carries.
 
 ### 6. Push — the hooks are the enforcement
 
@@ -89,8 +92,8 @@ One PR per branch, from `.github/PULL_REQUEST_TEMPLATE.md`, carrying this cycle'
 honestly — including checks that did not run, and why.
 
 Codex reviews every PR that carries code; a documentation-only one merges on owner review
-alone (step 8). Its findings are verified against the tree, then triaged exactly as in step
-5: blocking findings
+alone (step 8). Its findings are verified against the tree, then triaged — and here, unlike
+step 5, triage is real, because every patch costs another round: blocking findings
 are patched on the branch (and step 5 runs again before that patch is pushed); non-blocking ones
 are answered and recorded. A Codex round that finds only what `/oneledger-code-review` already
 raised means the gate worked; a Codex round finding something the gate missed is a bug in the

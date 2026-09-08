@@ -256,11 +256,18 @@ behaviour change with no regression protection.
 
 **LOW** — a minor engineering issue worth fixing, not required to merge safely.
 
-Do not inflate severity.
+Do not inflate severity. Severity ranks the work and orders the report; it does not decide what
+gets fixed.
 
-**CRITICAL, HIGH and MEDIUM block the push** and are patched on this branch. **LOW does not** — it
-is recorded in the PR's Notes and becomes an issue if it matters. Patching low-value findings is
-what widens a diff and buys another review round.
+**Every finding is fixed before the push, LOW included.** This gate exists so that nothing reaches
+Codex that could have been found here. Fixing a finding now costs no round trip; leaving it costs
+a Codex round, a push and a re-review — so a LOW left open is the most expensive kind of finding
+there is.
+
+The one exception is **scope, not severity**: a finding in code this task does not touch — an
+adjacent refactor, a pre-existing defect the change merely made visible — is recorded in the PR's
+Notes and raised as its own task, because patching it widens the branch past the task it carries
+and past its diff budget. Say that explicitly in the report; do not leave it implied.
 
 ---
 
@@ -314,8 +321,8 @@ Scenarios not covered by a finding above, or `No significant test coverage gaps 
 
 ## Final verdict
 
-CHANGES REQUIRED if any CRITICAL, HIGH or MEDIUM finding is open; otherwise READY TO PUSH, with
-LOW findings listed for the PR's Notes.
+CHANGES REQUIRED while any in-scope finding is open, at any severity. READY TO PUSH only when
+none is, with any out-of-scope findings listed for the PR's Notes.
 ```
 
 Order findings CRITICAL → HIGH → MEDIUM → LOW.
@@ -334,6 +341,6 @@ Do not:
 - expand the review into unrelated cleanup
 - report a hypothetical finding with no evidence
 
-The implementing agent applies the report, re-runs `/verify`, and re-runs this gate on the new
-diff — a fix has its own surface. If that second pass finds new blocking problems inside the first
+The implementing agent fixes every in-scope finding, re-runs `/verify`, and re-runs this gate on
+the new diff — a fix has its own surface. If that second pass finds new blocking problems inside the first
 pass's fixes, it stops and raises it with the owner: that is a design problem, not a patch problem.
