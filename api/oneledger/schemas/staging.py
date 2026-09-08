@@ -8,7 +8,7 @@ the offending row — rather than in Postgres, where it names a constraint.
 from __future__ import annotations
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Any, Self
 from uuid import UUID
 
@@ -95,7 +95,13 @@ class StagedTransaction(BaseModel):
             ("amount_base", self.fx_rate_to_base, self.amount_base),
             ("amount_secondary", self.fx_rate_to_secondary, self.amount_secondary),
         ):
-            expected = (self.amount * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
+            try:
+                expected = (self.amount * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
+            except InvalidOperation as exc:
+                # Each operand fits its column and the product does not fit the Decimal
+                # context. That is still a translation this row cannot support, and it must
+                # name the row like every other refusal rather than escape as a raw exception.
+                raise ValueError(f"{name} is inconsistent with the stated rate") from exc
             if abs(translated - expected) > TRANSLATION_TOLERANCE:
                 raise ValueError(f"{name} is inconsistent with the stated rate")
         return self

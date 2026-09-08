@@ -181,3 +181,16 @@ def test_a_json_number_is_refused_at_the_money_boundary(value: object) -> None:
     # float that does.
     with pytest.raises(ValidationError, match="fixed-point"):
         staged(amount=value)
+
+
+def test_a_translation_too_large_to_compute_is_a_validation_error() -> None:
+    # Each operand fits its column, and their product does not fit the Decimal context. The
+    # validator must name the row like any other refusal rather than raising out of pydantic.
+    with pytest.raises(ValidationError, match="inconsistent with the stated rate"):
+        staged(
+            amount=Decimal("9999999999999999.9999"),
+            fx_rate_to_base=Decimal("9999999999.9999999999"),
+            fx_rate_to_secondary=Decimal("1"),
+            amount_base=Decimal("1.0000"),
+            amount_secondary=Decimal("9999999999999999.9999"),
+        )
