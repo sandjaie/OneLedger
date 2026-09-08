@@ -42,6 +42,13 @@
     "**/node_modules/**",
     "web/.next/**",
     "api/.venv/**",
-    ".git/**"
+    ".git/**",
+
+    // Private Superpowers working notes. Git does not track them (`git ls-files .superpowers`
+    // is empty), so nobody reads them as documents and nobody can fix them in a commit. The
+    // comment above is optimistic: cli2 unions its own globs with the file list a caller
+    // passes, so staging any `.md` at all made the hook lint these 52 files and fail — which
+    // is what blocked the commit that added this line.
+    ".superpowers/**"
   ]
 }
