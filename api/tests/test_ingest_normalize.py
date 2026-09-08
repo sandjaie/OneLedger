@@ -893,3 +893,41 @@ def test_a_balance_delta_beyond_the_ledgers_range_fails_its_row() -> None:
 
     assert batch.rows == []
     assert "range" in batch.failures[0].reason
+
+
+def test_century_windowing_crosses_the_rollover() -> None:
+    # A December 2099 statement settling on 2 January: the period's own century yields only
+    # year 2000, a hundred years early. The neighbouring centuries have to be candidates too,
+    # or the nearest-century rule cannot reach across the rollover it exists to handle.
+    layout = profile(
+        dateFormat="dd/MM/yy",
+        metadataPatterns={
+            "period_start": r"From (.+?) to",
+            "period_end": r"to (.+)$",
+        },
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+    rows = [
+        row(
+            1,
+            booked_date="31/12/99",
+            value_date="02/01/00",
+            description="ROLLOVER",
+            amount="-10.00",
+        )
+    ]
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/12/2099", "period_end": "31/12/2099"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.failures == []
+    assert batch.rows[0].booked_date == date(2099, 12, 31)
+    assert batch.rows[0].value_date == date(2100, 1, 2)
