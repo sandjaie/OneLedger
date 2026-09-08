@@ -121,9 +121,20 @@ are answered and recorded. A Codex round that finds only what `/oneledger-code-r
 raised means the gate worked; a Codex round finding something the gate missed is a bug in the
 gate — add the check to the skill in the same PR that fixes the code.
 
+**Codex reviews when a PR is opened or when it is asked; a push does not trigger one.** So after
+patching a finding, request the re-review explicitly — a comment of `@codex review` on the PR —
+and say which commit it should look at. Without that the PR keeps a thumbs-up earned by an older
+head, and the commit that most needs reviewing is the one nobody reviewed: the patch answering
+the finding.
+
+**The thumbs-up must be on the head being merged.** A PR whose approval names an earlier commit
+is not approved; check the reviewed sha against the head before merging, and ask again if they
+differ.
+
 ### 8. Merge, then sweep at the milestone boundary
 
-Merge when no blocking finding is open and Codex has approved; delete the branch. A
+Merge when no blocking finding is open and Codex has approved **the head being merged**; delete
+the branch. A
 documentation-only PR merges on owner review alone.
 
 At the end of a milestone, run `/oneledger-code-hygiene`. Its findings ship as their own `chore/`
