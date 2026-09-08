@@ -45,13 +45,15 @@ file says only where the branches go:
    verification evidence. A milestone is a sequence of such PRs, not one large one.
 5. Codex reviews every PR that carries code; findings are verified against the tree and
    triaged. **Blocking** — a correctness bug, a security or never-store violation, an invariant
-   breach, a contract or schema mismatch, missing test evidence — is patched on the same branch
-   and pushed for re-review. **Non-blocking**
+   breach, a contract or schema mismatch, missing test evidence — is patched on the same branch,
+   pushed, and re-reviewed **on request** — `@codex review` — because a push alone does not
+   trigger one. **Non-blocking**
    — hardening beyond the task, style, naming, a suggested extra case, a refactor of code the PR
    did not touch — is answered in the thread and recorded in the PR's Notes. It is not patched
    here: each one widens the diff and buys another round.
-6. **Merge when no blocking finding is open** and Codex has given its thumbs-up; then the branch
-   is deleted and the next task begins. A **documentation-only PR** — a plan, a spec, an ADR,
+6. **Merge when no blocking finding is open** and Codex has given its thumbs-up **on the head
+   being merged** — an approval naming an earlier commit is not an approval of this one; then the
+   branch is deleted and the next task begins. A **documentation-only PR** — a plan, a spec, an ADR,
    `progress.md` — merges on owner review alone; prose review has no convergence criterion and
    the milestone plan is not worth a day of it.
 7. At the milestone boundary, `/oneledger-code-hygiene` sweeps what accumulated between tasks. Its
