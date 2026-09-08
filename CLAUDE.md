@@ -186,8 +186,8 @@ trigger, and the trigger is an obligation:
   to be dispatched from it.** It forecasts each task against the diff budget and says what to
   split. Splitting on paper costs a paragraph; splitting after implementation costs a day.
 - `/oneledger-code-review` — **implementation is finished and `/verify` is green.** The order is
-  implement → `/verify` → review → fix → `/verify` → re-review → **first push** → PR, and it has
-  no variants: the branch reaches `origin` already reviewed, and the PR is opened only from a
+  implement → `/verify` → review → fix → `/verify` → re-review → **first push** → PR, and it
+  has no variants: the branch reaches `origin` already reviewed, and the PR is opened only from a
   head the gate has passed. Fresh-context reviewers read the diff against this repository's own
   rules: identifier leakage, money handling, the authorization boundary, reporting views,
   migrations, invariants,

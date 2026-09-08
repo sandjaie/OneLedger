@@ -27,8 +27,8 @@ implement → `/verify` → **this review** → fix every finding → `/verify` 
 **first push** → PR → Codex → `develop`
 
 This is gate 5 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
-**implementation being finished on a green tree** — not "before some push", but before the branch
-reaches `origin` at all. Pushing unreviewed work and reviewing it afterwards is the failure this gate exists to
+**implementation being finished on a green tree** — not "before some push", but before the
+branch reaches `origin` at all. Pushing unreviewed work and reviewing it afterwards is the failure this gate exists to
 prevent: a finding raised after the push has already cost what the gate was meant to save, and on
 a branch with a PR it costs a Codex round as well. A PR is opened only from a head this gate has
 passed. There is no path to `origin` that skips it — not a checkpoint commit, not a one-line
