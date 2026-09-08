@@ -38,8 +38,9 @@ file says only where the branches go:
 2. Each task — or a small coherent group of tasks — gets its own branch `<type>/<name>` from
    `develop`, implemented TDD in the plan's order. The plan declares `Workspace`, `Branch` and
    `Base and PR target` per task before implementation starts.
-3. Before the push: `/verify`, then `/oneledger-code-review`. Nothing reaches `origin` with a
-   blocking finding open, and the push hooks enforce the diff budget below.
+3. Before the **first** push: `/verify`, then `/oneledger-code-review`, then the fixes it asks
+   for. Nothing reaches `origin` unreviewed or with a finding open, and the push hooks enforce
+   the diff budget below.
 4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
    verification evidence. A milestone is a sequence of such PRs, not one large one.
 5. Codex reviews every PR that carries code; findings are verified against the tree and
