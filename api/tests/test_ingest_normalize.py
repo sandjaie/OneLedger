@@ -9,10 +9,11 @@ from __future__ import annotations
 import re
 from datetime import date
 from decimal import Decimal
+from itertools import product
 
 import pytest
 
-from oneledger.ingest import normalize
+from oneledger.ingest import normalize, reconcile
 from oneledger.ingest.engine import ExtractionResult, RawRow
 from oneledger.routes.layouts import LayoutCreate
 
@@ -603,14 +604,20 @@ def test_a_balance_is_signed_by_its_own_dr_cr_suffix() -> None:
     # A balance is a position rather than a movement, so the suffix means one thing wherever it
     # appears — unlike an amount's, which means something only under `cr_suffix`. `parse_amount`
     # is right to strip it and this is the place that is wrong to.
-    assert normalize.parse_balance("1,234.56 Cr") == normalize.SignedAmount(
-        Decimal("1234.5600"), True
+    assert normalize.parse_balance("1,234.56 Cr") == (
+        normalize.SignedAmount(Decimal("1234.5600"), True),
+        None,
     )
-    assert normalize.parse_balance("100.00 Dr") == normalize.SignedAmount(
-        Decimal("-100.0000"), True
+    assert normalize.parse_balance("100.00 Dr") == (
+        normalize.SignedAmount(Decimal("-100.0000"), True),
+        None,
     )
-    assert normalize.parse_balance("100.00") == normalize.SignedAmount(Decimal("100.0000"), False)
-    assert normalize.parse_balance("Closing balance") is None
+    assert normalize.parse_balance("100.00") == (
+        normalize.SignedAmount(Decimal("100.0000"), False),
+        None,
+    )
+    # Not a number at all carries no reason: every caller already has a word for that.
+    assert normalize.parse_balance("Closing balance") == (None, None)
 
 
 def test_a_suffixed_running_balance_reaches_the_row_signed_and_labelled() -> None:
@@ -742,11 +749,135 @@ def test_a_balance_that_states_its_direction_twice_and_disagrees_is_refused() ->
     # `-100.00 Cr` says debit with its sign and credit with its suffix. Every sibling path here
     # fails the row rather than picking one, because resolving it silently is the invisible sign
     # error Invariant I2 exists to prevent. Where the two agree there is nothing to resolve.
-    assert normalize.parse_balance("-100.00 Cr") is None
-    assert normalize.parse_balance("(100.00) Cr") is None
-    assert normalize.parse_balance("-100.00 Dr") == normalize.SignedAmount(
-        Decimal("-100.0000"), True
+    reason = "states a sign and a Dr/Cr suffix that disagree"
+    assert normalize.parse_balance("-100.00 Cr") == (None, reason)
+    assert normalize.parse_balance("(100.00) Cr") == (None, reason)
+    # Where the two agree there is nothing to resolve, and nothing to refuse.
+    assert normalize.parse_balance("-100.00 Dr") == (
+        normalize.SignedAmount(Decimal("-100.0000"), True),
+        None,
     )
+
+
+def test_a_contradicting_running_balance_fails_its_row_by_name() -> None:
+    # Refusing the cell is right; calling it "not a number" is not. `-20.00 Cr` is plainly a
+    # number, and an owner told otherwise goes looking for the wrong thing in a cell they can
+    # read. The likeliest cause is a band wide enough to have taken the sign from its neighbour.
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            description="ALPHA",
+            amount="-10.00",
+            running_balance="-20.00 Cr",
+        ),
+        row(
+            2,
+            booked_date="16/07/2024",
+            description="BETA",
+            amount="-20.00",
+            running_balance="100.00 Cr",
+        ),
+    ]
+    layout = profile(
+        hasRunningBalance=True,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "amount", "xMin": 300.0, "xMax": 450.0},
+            {"field": "running_balance", "xMin": 450.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.description_raw for line in batch.rows] == ["BETA"]
+    assert batch.failures[0].source_row_number == 1
+    assert batch.failures[0].reason == (
+        "running_balance states a sign and a Dr/Cr suffix that disagree"
+    )
+    assert "not a number" not in batch.failures[0].reason
+
+
+def test_a_contradicting_balance_names_itself_in_the_balance_delta_chain() -> None:
+    # Same rule where the balance *is* the amount: the chain breaks, and the row that broke it
+    # says why rather than inheriting the generic "is not a number".
+    rows = [
+        row(1, booked_date="15/07/2024", description="ALPHA", running_balance="50.00 Cr"),
+        row(2, booked_date="16/07/2024", description="BETA", running_balance="-20.00 Cr"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout, extraction(rows, declared_opening="100.00 Cr"), account_currency=ACCOUNT_CURRENCY
+    )
+
+    assert [line.description_raw for line in batch.rows] == ["ALPHA"]
+    assert batch.failures[0].reason == (
+        "running_balance states a sign and a Dr/Cr suffix that disagree"
+    )
+
+
+@pytest.mark.parametrize("invert", [False, True])
+@pytest.mark.parametrize("suffixed", list(product([False, True], repeat=3)))
+def test_normalization_and_reconciliation_read_every_balance_in_the_same_frame(
+    suffixed: tuple[bool, bool, bool], invert: bool
+) -> None:
+    """The task's acceptance criterion, swept rather than sampled.
+
+    An account falls from 100 to 60 and then into an overdraft of 30. Each of the three balances
+    is rendered either bare or with its own `Dr`/`Cr` suffix, under both inversions — sixteen
+    statements, each internally consistent and read differently.
+
+    `_balance_deltas` derives the amounts and `reconcile` walks the same balances, so `matched`
+    is the assertion that the two agree about the frame. They did not: framing the *difference*
+    instead of each balance was right only while every balance in a chain agreed about stating
+    its direction, and a mixed chain then belonged to neither frame.
+    """
+
+    def render(value: str, is_suffixed: bool) -> str:
+        if not is_suffixed:
+            return value
+        number = Decimal(value)
+        return f"{-number if number < 0 else number} {'Dr' if number < 0 else 'Cr'}"
+
+    opening, first, second = (
+        render(v, flag) for v, flag in zip(["100.00", "60.00", "-30.00"], suffixed, strict=True)
+    )
+    rows = [
+        row(1, booked_date="15/07/2024", description="ALPHA", running_balance=first),
+        row(2, booked_date="16/07/2024", description="BETA", running_balance=second),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        invertsSign=invert,
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout, extraction(rows, declared_opening=opening), account_currency=ACCOUNT_CURRENCY
+    )
+    assert not batch.failures
+
+    verdict = reconcile.reconcile(
+        layout, batch.rows, declared_opening=opening, declared_closing=None
+    )
+    assert verdict.status == "matched", verdict.message
 
 
 def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None:
