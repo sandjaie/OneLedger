@@ -872,6 +872,40 @@ def test_a_database_check_violation_is_a_422_not_a_500(monkeypatch: pytest.Monke
     assert response.status_code == 422
 
 
+def test_a_foreign_amount_can_be_mapped_beside_the_accounts_own() -> None:
+    # statement-ingestion.html section 5's currency rule needs somewhere to put the bank's own
+    # conversion: the amount that left the account, and the original beside it (M2 Task 4).
+    mapped = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "description", "xMin": 50.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+            {"field": "original_amount", "xMin": 260.0, "xMax": 320.0},
+            {"field": "original_currency", "xMin": 320.0, "xMax": 360.0},
+        ],
+    }
+    layout = layouts.LayoutCreate.model_validate(mapped)
+
+    assert [column.field for column in layout.columns][-2:] == [
+        "original_amount",
+        "original_currency",
+    ]
+
+
+def test_an_unknown_column_field_is_still_refused() -> None:
+    bad = {
+        **VALID_CREATE,
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "merchant", "xMin": 50.0, "xMax": 200.0},
+            {"field": "amount", "xMin": 200.0, "xMax": 260.0},
+        ],
+    }
+    with pytest.raises(ValidationError, match="column field must be one of"):
+        layouts.LayoutCreate.model_validate(bad)
+
+
 def test_a_column_band_must_have_xmin_less_than_xmax() -> None:
     bad = {
         **VALID_CREATE,
