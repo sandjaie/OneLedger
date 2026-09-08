@@ -46,7 +46,7 @@ Entry criterion satisfied: the FX backfill reaches the 01 Jan 2024 anchor (ADR-0
 | 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | Complete | [PR #35](https://github.com/sandjaie/OneLedger/pull/35), merged; `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
 | 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Complete | [PR #38](https://github.com/sandjaie/OneLedger/pull/38), merged after one Codex round; `api/tests/test_ingest_dedupe.py` (37 tests); branch deleted |
 | 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Complete | [PR #42](https://github.com/sandjaie/OneLedger/pull/42), merged after one Codex round and five local review rounds; `api/tests/test_ingest_reconcile.py` (36 tests); branch deleted |
-| 4d — a balance states its own direction | `fix/m2-balance-direction` | In progress | Split out of 4c on the hard stop; the plan carries its task block |
+| 4d — a balance states its own direction | `fix/m2-balance-direction` | Complete | [PR #45](https://github.com/sandjaie/OneLedger/pull/45), merged after one Codex round and five local rounds; split out of 4c on the hard stop; branch deleted |
 | 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Not started | — |
 | 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Not started | — |
 | 5c — document storage | `feature/m2-t5c-document-storage` | Not started | — |
