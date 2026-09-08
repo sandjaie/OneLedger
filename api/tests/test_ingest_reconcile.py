@@ -266,7 +266,7 @@ def test_the_gap_is_named_by_document_row_number_on_a_descending_statement() -> 
     """The walk may reverse the rows; the row it names never follows the reversal."""
     rows = [
         row(9, "-30.0000", day=3),
-        row(8, "-20.0000", balance="95.0000", day=2),
+        row(8, "-20.0000", day=2),
         row(7, "-50.0000", balance="120.0000", day=1),
     ]
     result = verdict(
@@ -277,7 +277,7 @@ def test_the_gap_is_named_by_document_row_number_on_a_descending_statement() -> 
         chronologicalOrder="descending",
     )
     assert result.status == "unavailable"
-    assert "row 9" in result.message
+    assert "row 8" in result.message
 
 
 def test_a_running_balance_column_over_no_rows_at_all_is_unavailable() -> None:
@@ -294,10 +294,14 @@ def test_an_empty_month_still_reconciles_against_two_anchors_that_agree() -> Non
     send the owner to remap a layout that mapped correctly. An extraction that lost every row
     leaves the two anchors disagreeing instead, which blocks as a mismatch.
     """
-    agreeing = verdict([], opening="1,250.00", closing="1,250.00", hasRunningBalance=True)
-    assert agreeing.status == "matched"
-    disagreeing = verdict([], opening="1,250.00", closing="900.00", hasRunningBalance=True)
-    assert disagreeing.status == "mismatched"
+    both = {"hasRunningBalance": True, "openingBalancePattern": r"Opening:\s*([0-9,.-]+)"}
+    assert verdict([], opening="1,250.00", closing="1,250.00", **both).status == "matched"
+    assert verdict([], opening="1,250.00", closing="900.00", **both).status == "mismatched"
+    # And with no opening pattern there is nothing to derive one from — but the column is
+    # mapped, so the refusal must not say the layout has none.
+    bare = verdict([], closing="1,250.00", hasRunningBalance=True)
+    assert bare.status == "unavailable"
+    assert "carried no rows" in bare.message
 
 
 # --- mismatched, and what evidence may be named ----------------------------
@@ -334,6 +338,7 @@ def test_a_dropped_row_names_its_surviving_twin_as_the_candidate() -> None:
     assert result.candidate_rows == [2]
     assert result.first_divergent_row is None
     assert "dropped" in result.message
+    assert "with a closing balance alone" in result.message
     # Named rows are candidates, not the culprit: 4.6 requires the caveat alongside them.
     assert "unavailable" in result.message
 
@@ -353,7 +358,7 @@ def test_a_candidate_is_never_named_without_the_caveat_that_it_is_only_a_candida
     assert result.status == "mismatched"
     assert result.candidate_rows == [2]
     assert result.first_divergent_row is None
-    assert "unavailable" in result.message
+    assert "never departs" in result.message
 
 
 def test_a_corrupted_amount_leaves_no_candidates() -> None:

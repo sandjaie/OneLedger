@@ -134,8 +134,8 @@ with a gap in it is `unavailable`**, not a column to walk past: §4.6 asks every
 hold, `engine.extract_pages` merges a physical continuation line into the row above rather than
 emitting one of its own, and a walk that checks only where a balance was stated reports `matched`
 for a pair of amounts misread in opposite directions that cancel before the next anchor. The
-branch is **972 counted lines against the 800 budget**, under the 1000 hard stop: the production
-code is 358 of 400, the excess is test lines four review rounds added, and a reconciliation
+branch is **982 counted lines against the 800 budget**, under the 1000 hard stop: the production
+code is 363 of 400, the excess is test lines five review rounds added, and a reconciliation
 returning three of four verdicts is a wrong slice rather than a smaller one. On a
 `running_balance_break` the verdict's three closing fields carry row-level figures, per §4.6's own
 wording — Task 9b's panel must read the status before the fields.
