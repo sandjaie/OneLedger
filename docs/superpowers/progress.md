@@ -104,6 +104,28 @@ than row by row: without one parsed date there is no period to place the others 
 suffix appearing under a convention that does not read one fails its row, because dropping it
 silently is exactly the invisible sign error Invariant I2 exists to prevent.
 
+**Owner decision, 2026-09-08 — statement text is stored as the statement wrote it.** Codex's
+fifth review round found that a full account or card number appearing inside a transaction
+description is kept verbatim in `description_raw` and `raw_row`, which Task 5 will insert into
+`staged_transaction`. The owner ruled that this is correct for this product: the number is the
+owner's own data, in a single-user system, and the ledger is where they read it, so it is stored
+and shown rather than masked. Normalization therefore applies no identifier mask, and Task 5's
+insert does not need one for these two fields.
+
+This decision **contradicts `security-and-privacy.html` §1**, which introduces the never-store
+list with "Absolute. No feature justifies an exception, and no future integration changes it"
+and lists full card and bank account numbers. Nothing in the tree or the documents reconciles
+that yet, and the repository's own rule is that an invariant which is genuinely wrong changes by
+a superseding ADR rather than by an edit or by code quietly diverging. **An ADR is owed before
+the documents and the code agree**, and until it exists this paragraph is the only record.
+
+The ruling is read narrowly, pending that ADR. It covers identifiers the *statement itself*
+prints in a transaction line. It does not touch: the account number the owner enters for an
+account, which Task 3 stores as a mask plus a salted hash and never whole; the §5.6 rule keeping
+document-derived digit sequences out of log lines, error messages and responses, which Task 4a
+implements; the layout preview's redaction, delivered and reviewed in Task 3; or credentials —
+CVV, PIN, OTP and passwords — which no part of this decision admits into storage.
+
 Task 4a gate evidence, 2026-09-08, in an environment with no Docker and therefore no Flyway: the
 migrations were applied from empty in version order with `psql` against a scratch PostgreSQL 16
 cluster — 13 migrations, then the seeds, then `db/tests/*.sql`, 11 passed. Flyway's own checksum
