@@ -99,7 +99,7 @@ class NormalizedRow:
     # Whether `running_balance` was signed by its own Dr/Cr suffix. It travels with the
     # value because reconciliation reframes the statement's balances, and a figure that
     # stated its direction has nothing left for `inverts_sign` to reframe.
-    balance_direction_is_stated: bool = False
+    balance_direction_is_stated: bool
 
 
 @dataclass(frozen=True)
@@ -144,12 +144,23 @@ def is_credit_suffixed(text: str) -> bool:
     return match is not None and match.group(1).upper() == "CR"
 
 
+def frame_balance(balance: SignedAmount, invert: bool) -> Decimal:
+    """A balance in the ledger's frame.
+
+    `inverts_sign` reframes a balance that stated no direction of its own; one that did has
+    nothing left to reframe, and applying both would reverse the statement rather than reframe
+    it. Reconciliation reads this for its anchors and its rows, and `_balance_deltas` reads it
+    before subtracting: a difference taken between two frames belongs to neither.
+    """
+    return -balance.value if invert and not balance.direction_is_stated else balance.value
+
+
 def parse_balance(text: str) -> SignedAmount | None:
     """A balance figure signed by its own `Dr`/`Cr` suffix, or None when the cell is not a number.
 
     A balance is a position rather than a movement, so the suffix means one thing wherever it
     appears: `100.00 Dr` is an overdraft and `100.00 Cr` a credit balance, whatever convention
-    the amount column follows (`statement-ingestion.html`, "Sign conventions": Dr negative, Cr
+    the amount column follows (`statement-ingestion.html`, "Signs (Invariant I2)": Dr negative, Cr
     positive). `parse_amount` refuses to read the suffix because on an *amount* it means
     something only under `cr_suffix`; that refusal is right there and wrong here, and a running
     balance read a suffix short reports a false break on every overdrawn statement.
@@ -164,7 +175,14 @@ def parse_balance(text: str) -> SignedAmount | None:
     if match is None:
         return SignedAmount(value, False)
     credit = match.group(1).upper() == "CR"
-    return SignedAmount(value.copy_abs() if credit else -value.copy_abs(), True)
+    signed = value.copy_abs() if credit else -value.copy_abs()
+    if value < 0 and signed != value:
+        # `-100.00 Cr` and `(100.00) Dr` state a direction twice and disagree. Every sibling
+        # here refuses that rather than picking one — `_from_columns` and `_signed_amount` both
+        # fail the row — because resolving it silently is the invisible sign error I2 exists to
+        # prevent. None breaks the chain and names the row.
+        return None
+    return SignedAmount(signed, True)
 
 
 def _parse_date(value: str, date_format: str, period: StatementPeriod | None) -> date | None:
@@ -422,13 +440,17 @@ def _balance_deltas(
     `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological* row, so a descending
     statement is walked in reverse; the deltas are then returned against document row numbers.
 
-    A delta inherits the direction its balances stated. Two figures that said which way they go
-    describe the movement between them in the statement's true frame, and `inverts_sign` would
-    reverse it rather than reframe it; two bare balances state nothing, and the profile still
-    speaks for them.
+    Each balance is carried into the ledger's frame *before* the subtraction, by the same rule
+    reconciliation applies to its anchors. Subtracting first and framing the difference works
+    only while every balance in the chain agrees about stating its direction: a statement whose
+    opening anchor is captured bare — which the layouts\' own example patterns do, capturing the
+    number without its suffix — and whose column cells carry `Dr` would otherwise have its
+    difference taken between two frames and belong to neither. Framed first, the delta is in
+    the ledger\'s frame whatever the mix, and it says so, so nothing reframes it again.
     """
     if profile.signConvention != "balance_delta":
         return {}
+    invert = profile.invertsSign
     opening = parse_balance(result.declared_opening or "")
     if opening is None:
         raise NormalizationError(
@@ -439,7 +461,7 @@ def _balance_deltas(
     if profile.chronologicalOrder == "descending":
         ordered.reverse()
     deltas: dict[int, SignedAmount | None] = {}
-    previous = opening.value
+    previous = frame_balance(opening, invert)
     broken_at: int | None = None
     for row in ordered:
         if broken_at is not None:
@@ -457,7 +479,8 @@ def _balance_deltas(
             deltas[row.row_number] = None
             broken_at = row.row_number
             continue
-        delta = balance.value - previous
+        framed = frame_balance(balance, invert)
+        delta = framed - previous
         if delta.copy_abs() >= LEDGER_LIMIT:
             # Both balances fit the column; their difference need not. Nothing downstream
             # re-checks an amount the parser did not produce.
@@ -465,8 +488,8 @@ def _balance_deltas(
             reasons[row.row_number] = "the derived amount is outside the ledger's range"
             broken_at = row.row_number
             continue
-        deltas[row.row_number] = SignedAmount(delta, balance.direction_is_stated)
-        previous = balance.value
+        deltas[row.row_number] = SignedAmount(delta, True)
+        previous = framed
     return deltas
 
 

@@ -23,7 +23,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Protocol
 
-from oneledger.ingest.normalize import NormalizedRow, parse_balance
+from oneledger.ingest.normalize import (
+    NormalizedRow,
+    SignedAmount,
+    frame_balance,
+    parse_balance,
+)
 
 STATUS_MATCHED = "matched"
 STATUS_MISMATCHED = "mismatched"
@@ -328,20 +333,14 @@ def _framed(text: str | None, invert: bool) -> Decimal | None:
     it, which is the rule `normalize.py` already applies to a row that stated its direction.
     """
     balance = parse_balance(text) if text else None
-    if balance is None:
-        return None
-    return _frame(balance.value, invert and not balance.direction_is_stated)
+    return None if balance is None else frame_balance(balance, invert)
 
 
 def _framed_balance(row: NormalizedRow, invert: bool) -> Decimal | None:
     """One row's stated balance in the ledger's frame, under the same rule as a declared anchor."""
-    return _frame(row.running_balance, invert and not row.balance_direction_is_stated)
-
-
-def _frame(value: Decimal | None, invert: bool) -> Decimal | None:
-    if value is None:
+    if row.running_balance is None:
         return None
-    return -value if invert else value
+    return frame_balance(SignedAmount(row.running_balance, row.balance_direction_is_stated), invert)
 
 
 def _verdict(
