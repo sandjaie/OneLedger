@@ -215,8 +215,9 @@ production lines means roughly 1,100 counted and the 800 total binds long before
 number does. The two limits are not independent; the total is the one a reviewer actually reads.
 
 **Every PR that carries code waits for Codex review on GitHub** and merges when no blocking
-finding is open and the thumbs-up names **the head being merged** — Codex reviews on PR-open or
-on request, never on a push, so a patched finding needs an explicit `@codex review`. A PR
+finding is open and the thumbs-up names **the head being merged**. The first review is automatic
+when the PR is opened; **every one after it must be asked for** with a `@codex review` comment —
+a push does not trigger one, so a patched finding stays unreviewed until you ask. A PR
 carries one task-sized slice of a milestone. Codex findings are triaged: correctness, security,
 invariant and contract findings are patched on the branch; hardening, style and out-of-scope
 suggestions are answered and recorded in the PR's Notes, not patched — each one widens the diff

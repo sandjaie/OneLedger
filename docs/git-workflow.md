@@ -43,11 +43,12 @@ file says only where the branches go:
    the diff budget below.
 4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
    verification evidence. A milestone is a sequence of such PRs, not one large one.
-5. Codex reviews every PR that carries code; findings are verified against the tree and
-   triaged. **Blocking** — a correctness bug, a security or never-store violation, an invariant
-   breach, a contract or schema mismatch, missing test evidence — is patched on the same branch,
-   pushed, and re-reviewed **on request** — `@codex review` — because a push alone does not
-   trigger one. **Non-blocking**
+5. Codex reviews every PR that carries code — **automatically when the PR is opened, and only
+   on request after that.** Findings are verified against the tree and triaged. **Blocking** — a
+   correctness bug, a security or never-store violation, an invariant breach, a contract or
+   schema mismatch, missing test evidence — is patched on the same branch, pushed, and
+   re-reviewed **on request** (`@codex review`), because a push alone does not trigger one.
+   **Non-blocking**
    — hardening beyond the task, style, naming, a suggested extra case, a refactor of code the PR
    did not touch — is answered in the thread and recorded in the PR's Notes. It is not patched
    here: each one widens the diff and buys another round.

@@ -113,23 +113,32 @@ why `--no-verify` is not an option.
 One PR per branch, from `.github/PULL_REQUEST_TEMPLATE.md`, carrying this cycle's evidence
 honestly — including checks that did not run, and why.
 
-Codex reviews every PR that carries code; a documentation-only one merges on owner review
-alone (step 8). Its findings are verified against the tree, then triaged — and here, unlike
-step 5, triage is real, because every patch costs another round: blocking findings
-are patched on the branch (and step 5 runs again before that patch is pushed); non-blocking ones
-are answered and recorded. A Codex round that finds only what `/oneledger-code-review` already
-raised means the gate worked; a Codex round finding something the gate missed is a bug in the
-gate — add the check to the skill in the same PR that fixes the code.
+Codex reviews every PR that carries code; a documentation-only one merges on owner review alone
+(step 8). **The first review is automatic — every one after it must be asked for.** That
+asymmetry is the whole reason this step is a loop:
 
-**Codex reviews when a PR is opened or when it is asked; a push does not trigger one.** So after
-patching a finding, request the re-review explicitly — a comment of `@codex review` on the PR —
-and say which commit it should look at. Without that the PR keeps a thumbs-up earned by an older
-head, and the commit that most needs reviewing is the one nobody reviewed: the patch answering
-the finding.
+1. **Open the PR. Codex reviews it on its own**, with no request. This is the only review that
+   arrives unasked, and it is why the local gate in step 5 has to have run already: whatever it
+   missed, Codex is about to find in public.
+2. **Verify each finding against the tree**, then triage. Here, unlike step 5, triage is real,
+   because every patch costs another round: blocking findings are patched on the branch — and
+   **step 5 runs again before that patch is pushed** — while non-blocking ones are answered and
+   recorded in the PR's Notes.
+3. **Reply on the PR** with what was fixed and what was not, and resolve the threads addressed.
+4. **Ask for the next review: a comment of `@codex review`,** naming the commit it should look
+   at. Nothing else triggers one — not the push carrying the fix, not the reply explaining it,
+   not resolving the threads. Skip this and the PR keeps a thumbs-up earned by an older head,
+   and the commit that most needs reviewing is the one nobody reviewed: the patch answering the
+   finding.
+5. **Repeat from 2** until no blocking finding is open.
 
 **The thumbs-up must be on the head being merged.** A PR whose approval names an earlier commit
-is not approved; check the reviewed sha against the head before merging, and ask again if they
+is not approved: check the reviewed sha against the head before merging, and ask again if they
 differ.
+
+A Codex round that finds only what `/oneledger-code-review` already raised means the gate worked;
+a Codex round finding something the gate missed is a bug in the gate — add the check to the skill
+in the same PR that fixes the code.
 
 ### 8. Merge, then sweep at the milestone boundary
 
