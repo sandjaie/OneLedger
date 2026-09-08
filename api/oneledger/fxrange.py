@@ -158,22 +158,42 @@ def fill_range(
     return upsert_rates(conn, to_rows(published, start, end, quote, bases, pegs))
 
 
-def missing_dates(conn: psycopg.Connection, dates: Iterable[date]) -> list[date]:
-    """Which of `dates` lack a stored rate for **every** base `reporting_config` returns.
+def required_bases(
+    conn: psycopg.Connection, currencies: Iterable[str] | None
+) -> tuple[str, list[str]]:
+    """The reporting currency, and the bases a caller actually needs quoted against it.
 
-    That is deliberately stricter than freezing one row needs: `money._frozen` reads only the
-    account's currency and the secondary, while `bases` also carries every other account
-    currency and every peg-chain intermediate. The strictness is what makes this function and
-    `fill_range` symmetric — `to_rows` writes exactly `bases` — and that symmetry is what
-    makes `ensure_rates` terminate instead of asking for the same range forever. Do not
-    loosen it to match `_frozen` without giving `ensure_rates` another way to stop.
+    `currencies` names every currency whose leg will be read — for a statement that is the
+    account's currency and the household's secondary, which is what `money._frozen` crosses
+    through. Omit it and every configured base is required, which is what a backfill wants.
 
-    Partial coverage is still not coverage: a date holding one leg prices nothing on its own.
+    The distinction matters because it decides what a *failure* blocks. Requiring every base
+    means a feed outage on a currency some other account holds refuses a statement that could
+    have been priced perfectly well, and spec §4.8 asks for "the pair it needs".
+
+    Whatever is required stays a subset of what `fill_range` writes (`to_rows` writes every
+    base), so `ensure_rates` still terminates: one fetch covers the requirement or nothing will.
+    """
+    quote, bases, _ = reporting_config(conn)
+    if currencies is None:
+        return quote, bases
+    return quote, sorted({c for c in currencies if c != quote})
+
+
+def missing_dates(
+    conn: psycopg.Connection, dates: Iterable[date], *, currencies: Iterable[str] | None = None
+) -> list[date]:
+    """Which of `dates` lack a stored rate for every base the caller needs.
+
+    Partial coverage is not coverage: a date holding one leg prices nothing on its own.
     """
     wanted = sorted(set(dates))
     if not wanted:
         return []
-    quote, bases, _ = reporting_config(conn)
+    quote, bases = required_bases(conn, currencies)
+    if not bases:
+        # The caller reads only the reporting currency, which needs no rate at all.
+        return []
     with conn.cursor() as cur:
         cur.execute(
             """SELECT rate_date FROM fx_rate
@@ -187,12 +207,21 @@ def missing_dates(conn: psycopg.Connection, dates: Iterable[date]) -> list[date]
 
 
 def ensure_rates(
-    conn: psycopg.Connection, dates: Iterable[date], *, source: RateSource | None = None
+    conn: psycopg.Connection,
+    dates: Iterable[date],
+    *,
+    currencies: Iterable[str] | None = None,
+    source: RateSource | None = None,
 ) -> int:
     """Price every one of `dates`, fetching only what is missing. Returns rows written.
 
-    One contiguous range covers the gaps rather than one request per date (spec §4.8): the
-    feed publishes ranges, and a statement's gaps are almost always consecutive anyway.
+    `currencies` names the legs this caller will read, so that a feed outage on a currency the
+    statement never touches cannot block it (spec §4.8, "the pair it needs"). The fetch still
+    stores every configured base — one range costs the same either way — but only the named
+    legs decide whether the import may proceed.
+
+    One contiguous range covers the gaps rather than one request per date: the feed publishes
+    ranges, and a statement's gaps are almost always consecutive anyway.
 
     Called **before** the staging transaction opens, because `upsert_rates` commits.
     """
@@ -212,7 +241,7 @@ def ensure_rates(
     # before it asks for rates. The guard proved the caller was idle on entry, so whatever is
     # open at exit is ours: the reads, and nothing of the caller's to lose.
     try:
-        gaps = missing_dates(conn, wanted)
+        gaps = missing_dates(conn, wanted, currencies=currencies)
         if not gaps:
             return 0
 
@@ -224,7 +253,7 @@ def ensure_rates(
             # not price.
             raise FxCoverageError(f"{_named(gaps)} could not be priced: {exc}") from exc
 
-        still = missing_dates(conn, wanted)
+        still = missing_dates(conn, wanted, currencies=currencies)
         if still:
             # A range can return successfully and still leave a day unpriced — a feed that
             # has not published yet, or a base currency that arrived while the range was in

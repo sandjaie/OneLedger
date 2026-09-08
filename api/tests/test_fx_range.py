@@ -49,7 +49,10 @@ class FakeCursor:
         elif "FROM account" in sql:
             self.result = list(self.conn.accounts)
         elif "FROM fx_rate" in sql:
-            self.result = [(d,) for d in sorted(self.conn.covered | self.conn.stored())]
+            # The real statement counts distinct bases per date against the number the caller
+            # required, so the fake reads its own parameters rather than assuming a set.
+            required = set(cast("list[str]", params[1])) if params else set[str]()
+            self.result = [(d,) for d in sorted(self.conn.covered | self.conn.stored(required))]
         else:
             raise AssertionError(f"unexpected query: {sql}")
 
@@ -98,14 +101,14 @@ class FakeConn:
         self.commits = 0
         self.rollbacks = 0
 
-    def stored(self) -> set[date]:
-        """The dates the writes below actually cover — every base, as the real query counts."""
+    def stored(self, required: set[str]) -> set[date]:
+        """The dates whose writes cover every base the query asked about."""
         seen: dict[date, set[str]] = {}
         for row in self.written:
             # A declined row still covers its pair: the store kept the observation that
             # displaced the write.
             seen.setdefault(row["rate_date"], set()).add(row["base_currency"])
-        return {d for d, bases in seen.items() if bases >= set(self.bases())}
+        return {d for d, bases in seen.items() if bases >= required}
 
     def bases(self) -> list[str]:
         """What `reporting_config` derives from `accounts` — recomputed, so a test can widen
@@ -402,3 +405,67 @@ def test_a_refusal_still_closes_the_reads_it_opened() -> None:
         ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=FailingSource())
     assert conn.transaction_status == TransactionStatus.IDLE
     assert conn.rollbacks >= 1
+
+
+def test_only_the_legs_the_caller_reads_decide_whether_it_may_proceed() -> None:
+    """A household holding a third-currency account has that currency among its bases. A feed
+    outage there must not refuse a statement denominated in the base currency, which needs
+    only the secondary leg — spec §4.8 asks for the pair the import needs."""
+    conn = FakeConn()
+    conn.accounts = [("XAE",), ("XBR",)]
+    # Priced for the secondary leg alone; the unrelated account currency is missing.
+    conn.written = [
+        {"rate_date": MONDAY, "base_currency": "XAE", "quote_currency": "XIN"},
+    ]
+    assert missing_dates(cast("psycopg.Connection", conn), [MONDAY], currencies=["XAE"]) == []
+    assert missing_dates(cast("psycopg.Connection", conn), [MONDAY]) == [MONDAY], (
+        "a backfill still wants every base"
+    )
+
+
+def test_the_reporting_currency_needs_no_leg_of_its_own() -> None:
+    """`_frozen` returns unity for the base currency without a lookup, so a caller that reads
+    only the base has nothing to fetch and must not be sent to the feed."""
+    conn = FakeConn()
+    source = FakeSource(_published([MONDAY]))
+    assert (
+        ensure_rates(cast("psycopg.Connection", conn), [MONDAY], currencies=["XIN"], source=source)
+        == 0
+    )
+    assert source.calls == [], "nothing needed, nothing asked for"
+
+
+def test_a_named_leg_that_is_still_missing_after_the_fetch_is_refused() -> None:
+    """Narrowing what is required must not narrow what is checked: a leg the caller named and
+    the fetch did not deliver still blocks."""
+    conn = FakeConn()
+    conn.on_write = lambda: conn.written.clear()
+    source = FakeSource(_published([MONDAY]))
+    with pytest.raises(FxCoverageError, match=MONDAY.isoformat()):
+        ensure_rates(cast("psycopg.Connection", conn), [MONDAY], currencies=["XAE"], source=source)
+
+
+def test_the_recheck_is_narrowed_too_or_the_narrowing_buys_nothing() -> None:
+    """Checking the caller's legs before the fetch and every base after it would refuse the
+    import anyway — one line later, with a message naming dates the statement can be priced
+    for. The leg the caller named is covered; another base the feed could not price is not."""
+    conn = FakeConn()
+    conn.accounts = [("XAE",), ("XBR",)]
+    # The feed publishes every base — `fill_range` writes all of them regardless of what the
+    # caller needs, and a base it cannot price fails the whole fetch. That is `to_rows`'
+    # existing behaviour and a separate question from which legs decide coverage.
+    published = {MONDAY: {"XIN": Decimal("91.28"), "XUS": Decimal("1.0956"), "XBR": Decimal("6.0")}}
+    source = FakeSource(published)
+    # ...but the store keeps only the secondary leg.
+    conn.on_write = lambda: conn.written.__setitem__(
+        slice(None), [r for r in conn.written if r["base_currency"] == "XAE"]
+    )
+
+    assert (
+        ensure_rates(cast("psycopg.Connection", conn), [MONDAY], currencies=["XAE"], source=source)
+        > 0
+    )
+    with pytest.raises(FxCoverageError):
+        ensure_rates(
+            cast("psycopg.Connection", conn), [MONDAY], source=FakeSource(_published([MONDAY]))
+        )
