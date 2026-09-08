@@ -4,7 +4,7 @@ This is the single maintained implementation-status file. The orchestrator updat
 executing Superpowers plans. Plans define the work; the roadmap defines scope and sequence;
 dated reports retain verification evidence. Do not copy this status into other documentation.
 
-Updated: 7 September 2026.
+Updated: 8 September 2026.
 
 ## Current phase
 
@@ -36,8 +36,11 @@ independent of `schema.md`), and V10 gaining the account-balance trigger before 
 | 15 — transactions screen, category management | Complete | [PR #31](https://github.com/sandjaie/OneLedger/pull/31); component tests |
 
 Phase 1 remains active: M1a and M1b are merged; roadmap M1 is delivered. **M2 — the statement
-importer — is open, the current delivery**, shipped as nine task-sized PRs per
-[the M2 plan](plans/2026-09-07-m2-statement-importer.md). Its entry criterion (the FX backfill
+importer — is open, the current delivery**, shipped as task-sized PRs per
+[the M2 plan](plans/2026-09-07-m2-statement-importer.md). Its contracts and table semantics moved
+to [the M2 spec](specs/2026-09-07-m2-statement-importer.md) on 8 September, and tasks 4b–9 were
+re-split from six branches into seventeen against the diff budget — Task 3 had reached +3,380
+lines and eight review rounds, Task 4a +2,094. Its entry criterion (the FX backfill
 reaching the 01 Jan 2024 anchor, ADR-0011) is satisfied — verified 2026-09-07 against the live
 compose database: `fx_rate` spans `2024-01-01` to `2026-09-06`, 1,960 rows across 2 pairs = 980
 days per pair, complete daily coverage with no gaps. Phase 0's live Google identity gates remain
@@ -48,13 +51,26 @@ open below — synthetic checks do not substitute for them.
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
 | 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
-| 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | In review | [PR #35](https://github.com/sandjaie/OneLedger/pull/35); `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
-| 4b — dedupe and reconciliation | `feature/m2-dedupe-and-reconcile` | Not started | — |
-| 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
-| 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
-| 7 — `/import` screen | `feature/m2-import-screen` | Not started | — |
-| 8 — layout mapping UI | `feature/m2-layout-mapping-ui` | Not started | — |
-| 9 — review screen, diagnostics, end-to-end gate | `feature/m2-review-screen-and-acceptance` | Not started | — |
+| 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | Complete | [PR #35](https://github.com/sandjaie/OneLedger/pull/35), merged; `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
+| 4b — dedupe: fingerprint, occurrence index | `feature/m2-t4b-dedupe` | Not started | — |
+| 4c — reconciliation: the four verdicts | `feature/m2-t4c-reconcile` | Not started | — |
+| 5a — money helpers extracted to `money.py` | `refactor/m2-t5a-money-helpers` | Not started | — |
+| 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Not started | — |
+| 5c — document storage | `feature/m2-t5c-document-storage` | Not started | — |
+| 5d — the parse pipeline | `feature/m2-t5d-parse-pipeline` | Not started | — |
+| 5e — `POST /parse` | `feature/m2-t5e-parse-route` | Not started | — |
+| 5f — layout draft preview | `feature/m2-t5f-layout-draft-preview` | Not started | — |
+| 6a — V14: commit and verification functions | `feature/m2-t6a-import-commit-migration` | Not started | — |
+| 6b — review payload | `feature/m2-t6b-review-payload` | Not started | — |
+| 6c — row decisions | `feature/m2-t6c-row-decisions` | Not started | — |
+| 6d — atomic commit | `feature/m2-t6d-atomic-commit-route` | Not started | — |
+| 7a — `/import` shell | `feature/m2-t7a-import-screen-shell` | Not started | — |
+| 7b — per-file status, Stage batch | `feature/m2-t7b-import-file-status` | Not started | — |
+| 8a — mapper: bands and live preview | `feature/m2-t8a-layout-mapper-preview` | Not started | — |
+| 8b — mapper: drag, re-post, save | `feature/m2-t8b-layout-mapper-editing` | Not started | — |
+| 9a — review screen | `feature/m2-t9a-review-screen` | Not started | — |
+| 9b — diagnostics panel | `feature/m2-t9b-diagnostics-panel` | Not started | — |
+| 9c — end-to-end gate and M2 acceptance | `feature/m2-t9c-import-acceptance` | Not started | — |
 
 Task 2 delivers V12 (`document`, `import_batch`, `statement_layout`, RLS on all three, and the
 four foreign keys V12 completes on `transaction` per schema.md's per-target `0018` rule) and the

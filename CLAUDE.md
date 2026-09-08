@@ -41,8 +41,10 @@ For feature work, a task specifies: outcome; affected files/modules; dependencie
 interfaces/contracts; invariants; security requirements; required test behaviours; validation
 commands; acceptance criteria; and `Workspace`, `Branch`, `Base and PR target`.
 
-**A task block runs to about 40 lines and a milestone plan to about 400.** Past that, the plan is
-carrying something that belongs elsewhere: architecture decisions and table semantics go to
+**A task block runs to about 40 lines, and a plan's non-task sections to about 400.** The budget is
+per block, not per document: a milestone sliced into twenty task-sized branches needs twenty
+blocks, and capping the total would only push the slicing back the way it came. Past those limits
+the plan is carrying something that belongs elsewhere: architecture decisions and table semantics go to
 `docs/superpowers/specs/`, `docs/design/` or an ADR, which are reviewed once rather than on every
 task. **Each task must also fit the diff budget** (400 production / 800 total added lines) — a
 task that cannot is split before dispatch, not discovered mid-implementation.
@@ -202,6 +204,12 @@ configuration and generated files do not count. Past the hard stop a branch is s
 with; `ONELEDGER_SIZE_OVERRIDE="reason"` exists for the indivisible migration and the reason goes
 in the PR. One module plus its tests already spends the whole budget in this tree — slice below
 the module.
+
+**Aim at ~280 added production lines, not 400.** Tests in this repository run **1.5–1.8× the
+production code** they cover (`normalize.py` 584/1,039 · `engine.py` 607/918 · `staging.py`
+131/196) and a migration's SQL test runs higher still (`V13` 96/248). At that ratio, 400
+production lines means roughly 1,100 counted and the 800 total binds long before the production
+number does. The two limits are not independent; the total is the one a reviewer actually reads.
 
 **Every PR that carries code waits for Codex review on GitHub** and merges when no blocking
 finding is open. A PR
