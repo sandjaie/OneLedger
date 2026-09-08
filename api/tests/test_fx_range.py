@@ -7,14 +7,22 @@ pipeline share lives in `oneledger.fxrange` rather than in `routes/fx.py`.
 
 from __future__ import annotations
 
-from datetime import date
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, cast
+from uuid import UUID
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
+from psycopg.pq import TransactionStatus
+from pytest import MonkeyPatch
 
+from oneledger.auth import OwnerSession, require_owner
 from oneledger.fxrange import FxCoverageError, ensure_rates, fill_range, missing_dates
+from oneledger.main import app
 
 HOUSEHOLD = ("XIN", "XAE")
 PEGS = [("XAE", "XUS", Decimal("3.6725"))]
@@ -44,9 +52,11 @@ class FakeCursor:
 
     def executemany(self, sql: str, rows: list[dict[str, Any]]) -> None:
         self.conn.written.extend(rows)
-        # The real ON CONFLICT clause declines to overwrite an observed rate, so rowcount is
-        # rows actually written and not rows offered.
-        self.rowcount = len(rows)
+        declined = sum((r["rate_date"], r["base_currency"]) in self.conn.declines for r in rows)
+        # `INSERT 0 1` for two offered rows when one conflicts and the WHERE declines it.
+        self.rowcount = len(rows) - declined
+        if self.conn.on_write is not None:
+            self.conn.on_write()
 
     def fetchone(self) -> tuple[Any, ...] | None:
         return self.result[0] if self.result else None
@@ -60,16 +70,26 @@ class FakeCursor:
     def __exit__(self, *_: object) -> None: ...
 
 
+@dataclass(frozen=True)
+class FakeInfo:
+    transaction_status: TransactionStatus
+
+
 class FakeConn:
     def __init__(self, covered: set[date] | None = None) -> None:
+        self.transaction_status = TransactionStatus.IDLE
         self.pegs = PEGS
-        self.accounts = ACCOUNTS
+        self.accounts = list(ACCOUNTS)
         self.covered = covered or set()
-        # Dates whose writes the store declines. `upsert_rates`' ON CONFLICT clause does
-        # exactly this for a rate a person entered or a statement observed: a reference feed
-        # does not overwrite an observation. A write that returns without storing is the one
-        # thing the post-fetch check exists to catch.
-        self.declines: set[date] = set()
+        # (date, base) pairs the store declines to overwrite, as `upsert_rates`' ON CONFLICT
+        # clause declines a rate a person entered or a statement observed. Verified against
+        # Postgres: the declined row is **not** counted in `rowcount`, and the pre-existing
+        # row stays, so the pair remains covered. Both halves matter — the first is why
+        # `upsert_rates` returns rows written rather than rows offered, and the second is why
+        # a decline is not a way a date goes unpriced.
+        self.declines: set[tuple[date, str]] = set()
+        # Called after each write, so a test can widen what the household reports in.
+        self.on_write: Callable[[], None] | None = None
         self.executed: list[tuple[str, tuple[object, ...] | None]] = []
         self.written: list[dict[str, Any]] = []
         self.commits = 0
@@ -78,16 +98,25 @@ class FakeConn:
         """The dates the writes below actually cover — every base, as the real query counts."""
         seen: dict[date, set[str]] = {}
         for row in self.written:
-            if row["rate_date"] in self.declines:
-                continue
+            # A declined row still covers its pair: the store kept the observation that
+            # displaced the write.
             seen.setdefault(row["rate_date"], set()).add(row["base_currency"])
-        return {d for d, bases in seen.items() if bases >= set(BASES)}
+        return {d for d, bases in seen.items() if bases >= set(self.bases())}
+
+    def bases(self) -> list[str]:
+        """What `reporting_config` derives from `accounts` — recomputed, so a test can widen
+        it between the write and the coverage re-read."""
+        return sorted({c for (c,) in self.accounts} | {"XUS"})
 
     def cursor(self) -> FakeCursor:
         return FakeCursor(self)
 
     def commit(self) -> None:
         self.commits += 1
+
+    @property
+    def info(self) -> FakeInfo:
+        return FakeInfo(self.transaction_status)
 
 
 def _conn(covered: set[date] | None = None) -> psycopg.Connection:
@@ -121,6 +150,41 @@ class FailingSource:
 
 def _published(days: list[date]) -> dict[date, dict[str, Decimal]]:
     return {d: {"XIN": Decimal("91.28"), "XUS": Decimal("1.0956")} for d in days}
+
+
+def _route_stub(monkeypatch: MonkeyPatch) -> list[tuple[date, date]]:
+    """Replace the route's database and its range call, recording what it was handed.
+
+    Through `monkeypatch` rather than by assignment: a direct `fx.fill_range = ...` outlives
+    the test and would leave every later test running against the stub.
+    """
+    from oneledger.routes import fx
+
+    called: list[tuple[date, date]] = []
+
+    class Conn:
+        def __enter__(self) -> Conn:
+            return self
+
+        def __exit__(self, *_: object) -> None: ...
+
+    def fake_fill(conn: object, start: date, end: date) -> int:
+        called.append((start, end))
+        return 7
+
+    monkeypatch.setattr(fx, "connect", lambda: Conn(), raising=False)
+    monkeypatch.setattr(fx, "fill_range", fake_fill)
+    return called
+
+
+def _owned_client() -> TestClient:
+    app.dependency_overrides[require_owner] = lambda: OwnerSession(
+        user_id=UUID("11111111-1111-1111-1111-111111111111"),
+        household_id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=UUID("33333333-3333-3333-3333-333333333333"),
+        email="owner@example.com",
+    )
+    return TestClient(app)
 
 
 MONDAY = date(2026, 3, 2)
@@ -200,13 +264,27 @@ def test_a_date_the_fetch_did_not_cover_is_refused_by_name() -> None:
     assert MONDAY.isoformat() in str(raised.value)
 
 
-def test_a_fetch_that_stores_nothing_is_refused_after_the_write() -> None:
-    """The fetch can succeed, the write can return, and the date can still be unpriced —
-    `upsert_rates` declines to overwrite a rate a person entered or a statement observed. The
-    row count says the write happened; only re-reading coverage says it landed."""
+def test_a_declined_write_is_not_counted_but_still_covers_its_pair() -> None:
+    """`upsert_rates` returns rows written, not rows offered. Postgres reports `INSERT 0 1`
+    for two offered rows when one conflicts and the clause declines it — and the row that
+    displaced the write is still there, so the pair stays priced."""
     conn = FakeConn()
-    conn.declines = {MONDAY}
+    conn.declines = {(MONDAY, "XAE")}
     source = FakeSource(_published([MONDAY]))
+    written = fill_range(cast("psycopg.Connection", conn), MONDAY, MONDAY, source=source)
+    assert written == len(BASES) - 1, "a declined row is not a row written"
+    assert missing_dates(cast("psycopg.Connection", conn), [MONDAY]) == [], "still covered"
+
+
+def test_a_date_left_uncovered_by_the_write_is_refused_after_it() -> None:
+    """The fetch can succeed, the write can land, and the date can still be unpriced: an
+    account in a new currency committed while the range was in flight widens what the
+    household reports in, and the rows just written no longer cover it. Refusing is the only
+    honest answer — never 1.0, never today's rate (§4.8)."""
+    conn = FakeConn()
+    source = FakeSource(_published([MONDAY]))
+    # Committed by another writer between the coverage read and the coverage re-read.
+    conn.on_write = lambda: conn.accounts.append(("XBR",))
     with pytest.raises(FxCoverageError) as raised:
         ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=source)
     assert MONDAY.isoformat() in str(raised.value)
@@ -240,3 +318,52 @@ def test_fill_range_writes_what_the_backfill_would() -> None:
     start, _, codes = source.calls[0]
     assert start < MONDAY, "the feed snaps a range start back, so ask from earlier"
     assert codes == ["XIN", "XUS"], "the quote and the end of each peg chain, not XAE"
+
+
+def test_rates_are_never_fetched_inside_an_open_transaction() -> None:
+    """`upsert_rates` commits. Called mid-transaction it would persist whatever the caller had
+    already written — and spec §5.5 says a blocked batch leaves nothing behind, not even the
+    `document` row whose unique checksum would then refuse the retry."""
+    conn = FakeConn()
+    conn.transaction_status = TransactionStatus.INTRANS
+    source = FakeSource(_published([MONDAY]))
+    with pytest.raises(FxCoverageError, match="already in progress"):
+        ensure_rates(cast("psycopg.Connection", conn), [MONDAY], source=source)
+    assert conn.written == [] and conn.commits == 0, "nothing written, nothing committed"
+    assert source.calls == [], "and nothing fetched"
+
+
+def test_the_backfill_route_refuses_a_future_end_and_a_reversed_range(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """`carry_forward` fills every calendar day in the range, so a future end date writes the
+    last known rate forward into it — years of invented history from one typo (Invariant 7).
+    Both guards stay on the route, because they are about what a person may ask for."""
+    called = _route_stub(monkeypatch)
+    client = _owned_client()
+    try:
+        future = (date.today() + timedelta(days=30)).isoformat()
+        ahead = client.post(f"/fx/backfill?start=2026-01-01&end={future}")
+        reversed_range = client.post("/fx/backfill?start=2026-03-06&end=2026-03-02")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert ahead.status_code == 422 and "future" in ahead.json()["detail"]
+    assert reversed_range.status_code == 422
+    assert "after end date" in reversed_range.json()["detail"]
+    assert called == [], "neither refusal reaches the range"
+
+
+def test_the_backfill_route_passes_its_range_through_in_order(monkeypatch: MonkeyPatch) -> None:
+    """The extraction has to preserve argument order: `fill_range(conn, end, start)` fetches
+    nothing and reports a clean backfill, which is worse than an error."""
+    called = _route_stub(monkeypatch)
+    client = _owned_client()
+    try:
+        response = client.post("/fx/backfill?start=2026-03-02&end=2026-03-06")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"written": 7}
+    assert called == [(date(2026, 3, 2), date(2026, 3, 6))], "start first, end second"

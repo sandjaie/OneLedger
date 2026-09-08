@@ -21,6 +21,7 @@ from typing import Any, Protocol
 
 import httpx
 import psycopg
+from psycopg.pq import TransactionStatus
 
 from .fx import EcbFrankfurterSource, Peg, anchor_chain, carry_forward, cross_rate, terminal_anchor
 
@@ -35,8 +36,6 @@ class FxCoverageError(RuntimeError):
 
 
 class RateSource(Protocol):
-    name: str
-
     def fetch_range(
         self, start: date, end: date, codes: list[str]
     ) -> dict[date, dict[str, Decimal]]: ...
@@ -160,10 +159,16 @@ def fill_range(
 
 
 def missing_dates(conn: psycopg.Connection, dates: Iterable[date]) -> list[date]:
-    """Which of `dates` lack a stored rate for **every** pair the household reports in.
+    """Which of `dates` lack a stored rate for **every** base `reporting_config` returns.
 
-    Partial coverage is not coverage: freezing one row reads two legs (`money._frozen`), so a
-    date holding one of them prices nothing on its own and must still be fetched.
+    That is deliberately stricter than freezing one row needs: `money._frozen` reads only the
+    account's currency and the secondary, while `bases` also carries every other account
+    currency and every peg-chain intermediate. The strictness is what makes this function and
+    `fill_range` symmetric — `to_rows` writes exactly `bases` — and that symmetry is what
+    makes `ensure_rates` terminate instead of asking for the same range forever. Do not
+    loosen it to match `_frozen` without giving `ensure_rates` another way to stop.
+
+    Partial coverage is still not coverage: a date holding one leg prices nothing on its own.
     """
     wanted = sorted(set(dates))
     if not wanted:
@@ -194,6 +199,14 @@ def ensure_rates(
     wanted = sorted(set(dates))
     if not wanted:
         return 0
+    # `upsert_rates` commits. Called inside a caller's open transaction it would persist
+    # whatever that caller had already written — and spec §5.5 says a blocked batch leaves
+    # nothing behind, no document row included. Refuse rather than commit someone else's work.
+    if conn.info.transaction_status != TransactionStatus.IDLE:
+        raise FxCoverageError(
+            "rates must be fetched before a transaction opens — this one is already in "
+            "progress, and storing a rate would commit it"
+        )
     gaps = missing_dates(conn, wanted)
     if not gaps:
         return 0
