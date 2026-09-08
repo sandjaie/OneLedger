@@ -48,7 +48,7 @@ open below — synthetic checks do not substitute for them.
 | 1 — CI, backup, and the plan | `chore/m2-ci-and-backup` | Complete | [PR #32](https://github.com/sandjaie/OneLedger/pull/32), merged as `37d52cc` after five Codex review rounds |
 | 2 — documents, import batches and layout profiles (V12) | `feature/m2-documents-and-layouts` | Complete | `db/tests/0010_documents_and_layouts.sql`; `api/tests/test_layouts.py` |
 | 3 — extraction engine, quirks, account identification | `feature/m2-extraction-engine` | Complete | [PR #34](https://github.com/sandjaie/OneLedger/pull/34), merged as `30e6783` after eight Codex review rounds; branch deleted |
-| 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | In review | `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
+| 4a — staged rows and normalization (V13) | `feature/m2-staged-rows-and-normalization` | In review | [PR #35](https://github.com/sandjaie/OneLedger/pull/35); `db/tests/0011_staged_transactions.sql`; `api/tests/test_ingest_normalize.py` |
 | 4b — dedupe and reconciliation | `feature/m2-dedupe-and-reconcile` | Not started | — |
 | 5 — FX fetch-on-missing, storage, `POST /parse` | `feature/m2-parse-and-stage` | Not started | — |
 | 6 — review payload, row decisions, atomic commit (V14) | `feature/m2-review-and-commit-api` | Not started | — |
