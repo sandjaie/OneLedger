@@ -171,9 +171,14 @@ def reconcile(
     derived = False
     if opening is None:
         if not walk:
-            return _unavailable(
-                "no opening balance extracted and no running-balance column to derive one from"
+            # Since the zero-row fall-through above, an empty walk means either of two things,
+            # and a message naming the wrong one sends the owner to remap a mapped column.
+            missing = (
+                "the statement carried no rows to derive one from"
+                if profile.hasRunningBalance
+                else "no running-balance column to derive one from"
             )
+            return _unavailable(f"no opening balance extracted and {missing}")
         # The first chronological row's stated balance less its own amount. Only that row
         # implies the opening directly: a balance further down implies it only after
         # subtracting every amount before it, and ignoring those skews it by their sum.
