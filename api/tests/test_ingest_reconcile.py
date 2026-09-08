@@ -50,12 +50,20 @@ if TYPE_CHECKING:  # pragma: no cover - a type-level assertion, never executed
         return model
 
 
-def row(number: int, amount: str, *, balance: str | None = None, day: int = 1) -> NormalizedRow:
-    """One normalized row: `amount` is already in the ledger frame, `balance` is not.
+def row(
+    number: int,
+    amount: str,
+    *,
+    balance: str | None = None,
+    directed: bool = False,
+    day: int = 1,
+) -> NormalizedRow:
+    """One normalized row: `amount` is already in the ledger frame, `balance` may not be.
 
     That asymmetry is real — `normalize.py` applies `invertsSign` to the amount and leaves the
-    statement's own running balance verbatim — and it is the reason this module has to invert
-    one side and not the other.
+    statement's own running balance in the statement's frame — and it is the reason this module
+    has to frame one side and not the other. `directed` is the balance carrying its own Dr/Cr
+    suffix, which states its direction and so leaves nothing for `invertsSign` to reframe.
     """
     return NormalizedRow(
         source_page_number=1,
@@ -73,6 +81,7 @@ def row(number: int, amount: str, *, balance: str | None = None, day: int = 1) -
         original_currency=None,
         proposed_txn_type="expense",
         running_balance=Decimal(balance) if balance is not None else None,
+        balance_direction_is_stated=directed,
     )
 
 
@@ -617,3 +626,51 @@ def test_row_numbers_are_document_numbers_whatever_the_evaluation_order() -> Non
     )
     assert result.status == "running_balance_break"
     assert result.first_divergent_row == 8
+
+
+# --- Dr/Cr: a balance states its own direction -----------------------------
+
+
+def test_a_declared_balance_is_signed_by_its_own_dr_cr_suffix() -> None:
+    """`100.00 Dr` is an overdraft. Read the suffix short and no overdrawn statement imports.
+
+    A balance is a position, not a movement, so the suffix means one thing wherever it appears —
+    unlike an amount's, which means something only under `cr_suffix`.
+    """
+    in_credit = verdict([row(1, "-10.0000")], opening="100.00 Cr", closing="90.00 Cr")
+    assert in_credit.status == "matched"
+    assert in_credit.declared_opening == Decimal("100.0000")
+
+    overdrawn = verdict([row(1, "-10.0000")], opening="100.00 Dr", closing="110.00 Dr")
+    assert overdrawn.status == "matched"
+    assert overdrawn.declared_closing == Decimal("-110.0000")
+
+
+def test_a_declared_balance_that_stated_its_direction_is_not_inverted_as_well() -> None:
+    """Reading the suffix and then inverting would reverse the statement, not reframe it."""
+    result = verdict(
+        [row(1, "-10.0000")], opening="100.00 Cr", closing="90.00 Cr", invertsSign=True
+    )
+    assert result.status == "matched"
+    assert result.declared_opening == Decimal("100.0000")
+    # And an unsuffixed anchor under the same profile still is reframed.
+    bare = verdict([row(1, "10.0000")], opening="100.00", closing="90.00", invertsSign=True)
+    assert bare.status == "matched"
+    assert bare.declared_opening == Decimal("-100.0000")
+
+
+def test_a_row_balance_that_stated_its_direction_is_not_inverted_either() -> None:
+    """The rule belongs to the balance, not to the anchor: a suffixed one is already framed."""
+    rows = [
+        row(1, "-10.0000", balance="90.0000", directed=True, day=1),
+        row(2, "-20.0000", balance="70.0000", directed=True, day=2),
+    ]
+    result = verdict(
+        rows,
+        opening="100.00 Cr",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        invertsSign=True,
+    )
+    assert result.status == "matched"
+    assert result.declared_closing == Decimal("70.0000")

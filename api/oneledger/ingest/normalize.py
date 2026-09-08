@@ -56,13 +56,14 @@ class StatementPeriod:
 
 @dataclass(frozen=True)
 class SignedAmount:
-    """One row's ledger amount, and whether the row itself stated its direction.
+    """One signed figure, and whether the statement itself stated its direction.
 
     A debit or credit column and a Dr/Cr suffix each state it; an amount's own sign and a
     balance delta do not — they are written in whichever frame the issuer chose. That
     distinction is what `inverts_sign` may act on, and it is a property of the row rather than
     of the convention alone: `signed` and `cr_suffix` may both be declared with a debit/credit
-    pair, and then the columns have spoken.
+    pair, and then the columns have spoken. A balance states its direction the same way and
+    for the same reason, so `parse_balance` returns this shape too.
     """
 
     value: Decimal
@@ -95,6 +96,10 @@ class NormalizedRow:
     original_currency: str | None
     proposed_txn_type: str
     running_balance: Decimal | None
+    # Whether `running_balance` was signed by its own Dr/Cr suffix. It travels with the
+    # value because reconciliation reframes the statement's balances, and a figure that
+    # stated its direction has nothing left for `inverts_sign` to reframe.
+    balance_direction_is_stated: bool = False
 
 
 @dataclass(frozen=True)
@@ -137,6 +142,29 @@ def is_credit_suffixed(text: str) -> bool:
     """True when the cell carries a `CR` suffix. Under cr_suffix, everything else is a debit."""
     match = CREDIT_DEBIT_SUFFIX.search(text.strip())
     return match is not None and match.group(1).upper() == "CR"
+
+
+def parse_balance(text: str) -> SignedAmount | None:
+    """A balance figure signed by its own `Dr`/`Cr` suffix, or None when the cell is not a number.
+
+    A balance is a position rather than a movement, so the suffix means one thing wherever it
+    appears: `100.00 Dr` is an overdraft and `100.00 Cr` a credit balance, whatever convention
+    the amount column follows (`statement-ingestion.html`, "Sign conventions": Dr negative, Cr
+    positive). `parse_amount` refuses to read the suffix because on an *amount* it means
+    something only under `cr_suffix`; that refusal is right there and wrong here, and a running
+    balance read a suffix short reports a false break on every overdrawn statement.
+
+    `direction_is_stated` travels with the value for the reason it does on a row's amount: a
+    figure that said which way it goes has nothing left for `inverts_sign` to reframe.
+    """
+    value = parse_amount(text)
+    if value is None:
+        return None
+    match = CREDIT_DEBIT_SUFFIX.search(text.strip())
+    if match is None:
+        return SignedAmount(value, False)
+    credit = match.group(1).upper() == "CR"
+    return SignedAmount(value.copy_abs() if credit else -value.copy_abs(), True)
 
 
 def _parse_date(value: str, date_format: str, period: StatementPeriod | None) -> date | None:
@@ -354,14 +382,14 @@ def _from_columns(convention: str, row: RawRow) -> tuple[SignedAmount | None, st
 
 
 def _signed_amount(
-    profile: NormalizableProfile, row: RawRow, delta: Decimal | None
+    profile: NormalizableProfile, row: RawRow, delta: SignedAmount | None
 ) -> tuple[SignedAmount | None, str | None]:
     """The ledger's signed amount for one row, or the reason it has none (Invariant I2)."""
     convention = profile.signConvention
     if convention == "balance_delta":
         if delta is None:
             return None, "running_balance is not a number"
-        return SignedAmount(delta, False), None
+        return delta, None
     if convention == "debit_credit_columns":
         return _from_columns(convention, row)
     cell = _cell(row, "amount")
@@ -388,15 +416,20 @@ def _signed_amount(
 
 def _balance_deltas(
     profile: NormalizableProfile, result: ExtractionResult, reasons: dict[int, str]
-) -> dict[int, Decimal | None]:
+) -> dict[int, SignedAmount | None]:
     """Amounts derived from consecutive running balances, evaluated chronologically.
 
     `balanceₙ = balanceₙ₋₁ + amountₙ` reads the *previous chronological* row, so a descending
     statement is walked in reverse; the deltas are then returned against document row numbers.
+
+    A delta inherits the direction its balances stated. Two figures that said which way they go
+    describe the movement between them in the statement's true frame, and `inverts_sign` would
+    reverse it rather than reframe it; two bare balances state nothing, and the profile still
+    speaks for them.
     """
     if profile.signConvention != "balance_delta":
         return {}
-    opening = parse_amount(result.declared_opening or "")
+    opening = parse_balance(result.declared_opening or "")
     if opening is None:
         raise NormalizationError(
             "balance_delta needs the statement's opening balance, and this statement did not "
@@ -405,8 +438,8 @@ def _balance_deltas(
     ordered = list(result.rows)
     if profile.chronologicalOrder == "descending":
         ordered.reverse()
-    deltas: dict[int, Decimal | None] = {}
-    previous = opening
+    deltas: dict[int, SignedAmount | None] = {}
+    previous = opening.value
     broken_at: int | None = None
     for row in ordered:
         if broken_at is not None:
@@ -419,12 +452,12 @@ def _balance_deltas(
                 "amount cannot be derived"
             )
             continue
-        balance = parse_amount(_cell(row, "running_balance"))
+        balance = parse_balance(_cell(row, "running_balance"))
         if balance is None:
             deltas[row.row_number] = None
             broken_at = row.row_number
             continue
-        delta = balance - previous
+        delta = balance.value - previous
         if delta.copy_abs() >= LEDGER_LIMIT:
             # Both balances fit the column; their difference need not. Nothing downstream
             # re-checks an amount the parser did not produce.
@@ -432,8 +465,8 @@ def _balance_deltas(
             reasons[row.row_number] = "the derived amount is outside the ledger's range"
             broken_at = row.row_number
             continue
-        deltas[row.row_number] = delta
-        previous = balance
+        deltas[row.row_number] = SignedAmount(delta, balance.direction_is_stated)
+        previous = balance.value
     return deltas
 
 
@@ -554,6 +587,7 @@ def normalize(
             # itself permanently, whichever convention or inversion produced the sign.
             original_amount = -abs(original_amount) if amount < 0 else abs(original_amount)
         clean, applied = clean_description(description_raw)
+        balance = parse_balance(_cell(row, "running_balance"))
         rows.append(
             NormalizedRow(
                 source_page_number=row.page_number,
@@ -578,7 +612,8 @@ def normalize(
                 # neither, and transaction.amount_not_zero permits it under exactly one type,
                 # so that is the only one a zero row could ever commit under.
                 proposed_txn_type=_proposed_type(amount),
-                running_balance=parse_amount(_cell(row, "running_balance")),
+                running_balance=balance.value if balance is not None else None,
+                balance_direction_is_stated=balance is not None and balance.direction_is_stated,
             )
         )
     return NormalizedBatch(rows=rows, failures=failures, period=effective)

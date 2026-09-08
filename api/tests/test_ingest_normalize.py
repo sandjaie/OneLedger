@@ -599,6 +599,114 @@ def test_inversion_applies_to_a_card_running_balance() -> None:
     assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
 
 
+def test_a_balance_is_signed_by_its_own_dr_cr_suffix() -> None:
+    # A balance is a position rather than a movement, so the suffix means one thing wherever it
+    # appears — unlike an amount's, which means something only under `cr_suffix`. `parse_amount`
+    # is right to strip it and this is the place that is wrong to.
+    assert normalize.parse_balance("1,234.56 Cr") == normalize.SignedAmount(
+        Decimal("1234.5600"), True
+    )
+    assert normalize.parse_balance("100.00 Dr") == normalize.SignedAmount(
+        Decimal("-100.0000"), True
+    )
+    assert normalize.parse_balance("100.00") == normalize.SignedAmount(Decimal("100.0000"), False)
+    assert normalize.parse_balance("Closing balance") is None
+
+
+def test_a_suffixed_running_balance_reaches_the_row_signed_and_labelled() -> None:
+    # An account that falls into overdraft crosses from Cr to Dr, and a balance read a suffix
+    # short reports a false reconciliation break on every statement that does. The label travels
+    # with the value because a figure that stated its direction has nothing left to reframe.
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            description="ALPHA",
+            amount="-310.00",
+            running_balance="4,690.00 Cr",
+        ),
+        row(
+            2,
+            booked_date="16/07/2024",
+            description="BETA",
+            amount="-4,790.00",
+            running_balance="100.00 Dr",
+        ),
+    ]
+    layout = profile(
+        hasRunningBalance=True,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 300.0},
+            {"field": "amount", "xMin": 300.0, "xMax": 450.0},
+            {"field": "running_balance", "xMin": 450.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
+
+    assert [line.running_balance for line in batch.rows] == [
+        Decimal("4690.0000"),
+        Decimal("-100.0000"),
+    ]
+    assert [line.balance_direction_is_stated for line in batch.rows] == [True, True]
+
+
+def test_a_balance_delta_crosses_into_overdraft_without_losing_forty() -> None:
+    # 100 Cr to 50 Cr to 20 Dr is a fall of 50 and then of 70. Read the suffixes short and the
+    # second becomes a fall of 30: the derived amount is wrong by twice the overdrawn balance,
+    # and the row would commit that figure.
+    rows = [
+        row(1, booked_date="15/07/2024", description="ALPHA", running_balance="50.00 Cr"),
+        row(2, booked_date="16/07/2024", description="BETA", running_balance="20.00 Dr"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout, extraction(rows, declared_opening="100.00 Cr"), account_currency=ACCOUNT_CURRENCY
+    )
+
+    assert [line.amount for line in batch.rows] == [Decimal("-50.0000"), Decimal("-70.0000")]
+
+
+def test_a_delta_between_two_suffixed_balances_is_not_inverted_again() -> None:
+    # The balances said which way they go, so the movement between them is already in the
+    # ledger's frame: a card balance deepening from 4,500 Dr to 4,810 Dr is 310 more owed, and
+    # a purchase is negative. Inverting it on top of the suffix would make it a refund.
+    rows = [
+        row(1, booked_date="15/07/2024", description="PURCHASE", running_balance="4,810.00 Dr"),
+        row(2, booked_date="16/07/2024", description="PAYMENT", running_balance="4,310.00 Dr"),
+    ]
+    layout = profile(
+        signConvention="balance_delta",
+        invertsSign=True,
+        hasRunningBalance=True,
+        closingBalancePattern=None,
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "description", "xMin": 100.0, "xMax": 400.0},
+            {"field": "running_balance", "xMin": 400.0, "xMax": 600.0},
+        ],
+    )
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, declared_opening="4,500.00 Dr"),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert [line.amount for line in batch.rows] == [Decimal("-310.0000"), Decimal("500.0000")]
+
+
 def test_a_populated_original_amount_that_does_not_parse_fails_its_row() -> None:
     # Both halves absent looks exactly like a statement that stated no foreign amount, so the
     # bank's own conversion would be discarded without a word.
