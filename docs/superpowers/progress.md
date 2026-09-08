@@ -63,13 +63,16 @@ vocabulary, regex compilation, reserved metadata capture groups, the two-digit-y
 capture requirement, and the institution predicate). No parsing exists yet — that is Task 3.
 
 Task 3 is on `feature/m2-extraction-engine`; its second local re-review found no remaining
-findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open. Across seven GitHub Codex
-review rounds, all 15 privacy, proposal, header, grammar and validation findings are fixed; the
-eighth review is pending, and no merge is claimed yet. After those fixes, the closeout gates
-passed on 2026-09-08: API `266 passed, 2 warnings` against the live Compose database with no skips;
+findings. [PR #34](https://github.com/sandjaie/OneLedger/pull/34) is open. Across eight GitHub Codex
+review rounds, all 17 privacy, proposal, header, grammar and validation findings are fixed; the
+ninth review is pending, and no merge is claimed yet. The seven-round closeout gates passed on
+2026-09-08: API `266 passed, 2 warnings` against the live Compose database with no skips;
 web `97 passed` across 8 Vitest files with lint/typecheck clean; generated API types were unchanged;
-and the documentation/whitespace checks passed. Original RED evidence for the recovered first
-three implementation steps is unavailable and is not claimed.
+and the documentation/whitespace checks passed. The eighth round was fixed in an environment with
+no reachable database, so its API run is `261 passed, 10 skipped` — the ten skips are the
+database-backed account and transaction tests, which no eighth-round change touches; the web gate,
+the API type drift check, lint, strict mypy and the documentation checks all passed there. Original
+RED evidence for the recovered first three implementation steps is unavailable and is not claimed.
 
 Task 3 review clarifications: ambiguous numeric day/month dates are refused for both slash and
 dash separators. Since the profile contract has no line-tolerance field, the PDF boundary infers
@@ -81,6 +84,17 @@ Automatic proposals may be incomplete unsaved drafts (including two-digit dates 
 mapping); submitted drafts and saved profiles still enforce period captures. Raw diagnostics
 retain original PDF characters, including whitespace and filtered script text. Public previews
 redact identifiers in both modes, and account validation responses omit sensitive request input.
+
+Header recognition claims each word once, across all fields at once, longest label first: a
+directional label such as `Withdrawal Amount` is one debit column, never a debit column beside an
+amount column. The plan's synonym table is extended with those directional compounds (`withdrawal
+amount`, `debit amount`, `deposit amount`, `credit amount`, their `amt` spellings, and
+`transaction amount`) so the compound outranks the generic word it contains; the plan is not
+edited after dispatch. An automatic proposal that would still hold an amount column beside debit
+and credit is refused, because no saved layout may hold all three. Identifier screening treats any
+non-alphanumeric run as a grouping separator in previews, captures and fingerprints, so a
+non-breaking hyphen or an Arabic thousands separator groups an identifier exactly as a plain
+hyphen does.
 
 The preview privacy boundary preserves a validated date or monetary value only in its known
 typed field. Raw diagnostics and description/reference text redact every identifier-length digit
