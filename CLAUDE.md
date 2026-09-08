@@ -6,9 +6,11 @@
 |---|---|
 | What is complete and what to do next | `docs/superpowers/progress.md` — the single maintained implementation tracker |
 | How to execute the work | `docs/superpowers/plans/2026-09-06-phase-0-completion.md` — task requirements and verification steps |
-| What to ship, and when | `docs/superpowers/phase-0-pull-requests.md` — branch/review workflow and the 500-line cap |
+| What to ship, and when | `docs/git-workflow.md` — the delivery cycle, the diff budget and the review gates |
+| How Phase 0 was decomposed | `docs/superpowers/phase-0-pull-requests.md` — its PR breakdown, kept as the record |
 | Build order, global constraints | `docs/superpowers/plans/implementation-plan.md` |
 | How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
+| The three review skills | `.claude/skills/oneledger-{plan-review,code-review,code-hygiene}/SKILL.md` |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
@@ -37,7 +39,14 @@ in plan steps; Phase 1's existing plan and spec predate it and stay as delivered
 
 For feature work, a task specifies: outcome; affected files/modules; dependencies;
 interfaces/contracts; invariants; security requirements; required test behaviours; validation
-commands; acceptance criteria.
+commands; acceptance criteria; and `Workspace`, `Branch`, `Base and PR target`.
+
+**A task block runs to about 40 lines and a milestone plan to about 400.** Past that, the plan is
+carrying something that belongs elsewhere: architecture decisions and table semantics go to
+`docs/superpowers/specs/`, `docs/design/` or an ADR, which are reviewed once rather than on every
+task. **Each task must also fit the diff budget** (400 production / 800 total added lines) — a
+task that cannot is split before dispatch, not discovered mid-implementation.
+`/oneledger-plan-review` checks both and does the splitting.
 
 Use code snippets only when they define:
 
@@ -162,13 +171,35 @@ the next milestone. Integration-to-main still requires a separate owner request.
 pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
-Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest and every
-`db/tests/*.sql` against a live database. A failing push is not a reason to reach for
-`--no-verify`; fix it and push again.
+Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest, every
+`db/tests/*.sql` against a live database, and the diff budget. A failing push is not a reason to
+reach for `--no-verify`; fix it and push again.
 
-**Every PR waits for Codex review on GitHub** and merges only on Codex's thumbs-up. A PR carries
-one task-sized slice of a milestone (the milestone's plan rides with its first PR); there is no
-hard line cap — keep each PR reviewable at one sitting, because a large PR converges slowly.
+**Review here, not on GitHub.** A Codex round is the audit of a review that should already have
+happened locally. Three skills own that, and they run in this order:
+
+- `/oneledger-plan-review` — on every plan Superpowers produces, **before dispatching any task**.
+  It forecasts each task against the diff budget and splits what does not fit. Splitting on paper
+  costs a paragraph; splitting after implementation costs a day.
+- `/oneledger-code-review` — after implementation, **before every push**. Fresh-context subagents
+  read the diff against this repository's own rules: identifier leakage, money handling, the
+  authorization boundary, reporting views, migrations, invariants, TDD evidence. Nothing is pushed
+  with a blocking finding open.
+- `/oneledger-code-hygiene` — at milestone boundaries. Its findings ship as their own `chore/`
+  branch, never folded into a feature PR.
+
+**The diff budget**: **400 added production lines, 800 added production + test lines**, hard stop
+500 / 1000, measured against `develop` by `scripts/check-diff-size.sh` on push. Documentation,
+configuration and generated files do not count. Past the hard stop a branch is split, not argued
+with; `ONELEDGER_SIZE_OVERRIDE="reason"` exists for the indivisible migration and the reason goes
+in the PR. One module plus its tests already spends the whole budget in this tree — slice below
+the module.
+
+**Every PR waits for Codex review on GitHub** and merges when no blocking finding is open. A PR
+carries one task-sized slice of a milestone. Codex findings are triaged: correctness, security,
+invariant and contract findings are patched on the branch; hardening, style and out-of-scope
+suggestions are answered and recorded in the PR's Notes, not patched — each one widens the diff
+and buys another round. A documentation-only PR merges on owner review alone.
 
 **Commits**: `type(scope): a lowercase sentence stating what is now true`. Types `feat fix docs ci
 chore refactor test`; scopes `db api web ci docs plan`. Subjects are declarative, not imperative —
