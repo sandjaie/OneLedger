@@ -18,6 +18,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import httpx
@@ -26,7 +27,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.db import connect, scope_to_owner
 from oneledger.main import app
+from oneledger.routes import ingest as ingest_routes
 
 from .test_ingest_route_live import ORIGIN, SALT, Fixture, _statement
 
@@ -34,7 +37,6 @@ from .test_ingest_route_live import ORIGIN, SALT, Fixture, _statement
 def _connect() -> psycopg.Connection:
     if "POSTGRES_PASSWORD" not in os.environ:
         pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
 
     try:
         return connect()
@@ -81,8 +83,12 @@ class Staged(Fixture):
             email="o@e.com",
         )
 
-    def stage(self) -> str:
-        response = self.post(_statement(), stage="true")
+    # Spec §5.6's own example, and the reason the review payload is screened at all: a card
+    # payment line carries the number in the narration, separator-formatted.
+    CARD_NARRATION = "PAYMENT RECEIVED CARD 4111 1111 1111 1111"
+
+    def stage(self, description: str = CARD_NARRATION) -> str:
+        response = self.post(_statement(description=description), stage="true")
         assert response.status_code == 200, response.text
         batch: str = response.json()["batchId"]
         return batch
@@ -105,6 +111,35 @@ class Staged(Fixture):
         with self.conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM transaction")
             return int(cur.fetchone()[0])  # type: ignore[index]
+
+
+def _all_row_ids(live: Staged, batch: str) -> list[str]:
+    return [row["id"] for group in live.get(batch).json()["groups"] for row in group["rows"]]
+
+
+def _commit_racing_a_rejection(live: Staged, batch: str, rows: list[str]) -> httpx.Response:
+    """Commit with every accepted row rejected inside the route's own race window.
+
+    `scope_to_owner` is called after the accepted-row count and before `commit_import_batch`,
+    which is exactly the gap a second tab commits into. Rejecting there on a separate
+    connection is the race, made deterministic — the route's transaction is READ COMMITTED, so
+    the function sees the rejection the same way it would see a genuine concurrent one.
+    """
+    # The same object the route module imported, named from its home: `mypy --strict` will
+    # not read it back off `ingest_routes`, which does not re-export it.
+    real = scope_to_owner
+
+    def reject_then_scope(conn: psycopg.Connection, user_id: UUID) -> None:
+        with connect() as other, other.cursor() as cur:
+            cur.execute(
+                """UPDATE staged_transaction SET status = 'rejected'
+                    WHERE import_batch_id = %s AND id = ANY(%s)""",
+                (batch, [UUID(row) for row in rows]),
+            )
+        real(conn, user_id)
+
+    with patch.object(ingest_routes, "scope_to_owner", reject_then_scope):
+        return live.commit(batch)
 
 
 @pytest.fixture
@@ -155,7 +190,8 @@ def test_the_batch_comes_back_with_its_verdict_and_its_rows_grouped(live: Staged
     assert body["status"] == "awaiting_review"
     assert body["reconciliation"]["status"] == "matched"
     assert body["reconciliation"]["declaredClosing"] == "1490.0000"
-    assert body["period"] == {"start": "2026-03-01", "end": "2026-03-02", "isDerived": True}
+    # `isDerived` is null because no column records it — asserted on its own below.
+    assert body["period"] == {"start": "2026-03-01", "end": "2026-03-02", "isDerived": None}
     assert body["rowsExtracted"] == 2
 
     groups = {group["status"]: group for group in body["groups"]}
@@ -412,3 +448,145 @@ def test_the_review_routes_are_behind_the_owner(live: Staged) -> None:
         assert client.post(f"/import/{batch}/commit", headers=ORIGIN).status_code == 401
     finally:
         app.dependency_overrides[auth.require_owner] = live.owner
+
+
+def test_a_card_number_in_the_narration_is_screened_out_of_the_review_payload(
+    live: Staged,
+) -> None:
+    """Spec §5.6 leaves this to 1.1b explicitly, so 1.1b has to assert it.
+
+    `staged_transaction.description_raw` is stored unscreened — it is the audit record. Whether
+    the *payload* screens it was named as this slice's call rather than inherited, and the
+    answer is yes: statement narration is where a card number actually appears, and the reviewer
+    having already opened the PDF does not put one in a response body.
+
+    The assertion is on the response, not on the redactor: deleting the screening from
+    `read_import_batch` leaves every other test in this file green.
+    """
+    batch = live.stage()
+
+    row = next(
+        row
+        for group in live.get(batch).json()["groups"]
+        for row in group["rows"]
+        if row["sourceRowNumber"] == 2
+    )
+
+    assert "4111" not in row["descriptionRaw"], row["descriptionRaw"]
+    assert "[redacted]" in row["descriptionRaw"]
+    # The stored row keeps it: the payload is screened, the audit record is not.
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT description_raw FROM staged_transaction WHERE import_batch_id = %s"
+            " AND source_row_number = 2",
+            (batch,),
+        )
+        assert "4111 1111 1111 1111" in cur.fetchone()[0]  # type: ignore[index]
+
+
+def test_a_batch_that_never_reconciled_is_readable_and_says_so(live: Staged) -> None:
+    """`reconciliation_status`, `period_start` and `period_end` are all nullable (V12), and a
+    batch that failed before reconciling carries none of them.
+
+    `str()` over the null put the literal `"None"` on the wire — a value outside the column's
+    own CHECK vocabulary — and a required `date` made the whole batch a 500. The batch the owner
+    most needs to look at is the one that did not finish, so it has to be readable.
+    """
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE import_batch
+                  SET reconciliation_status = NULL, period_start = NULL, period_end = NULL
+                WHERE id = %s""",
+            (batch,),
+        )
+    live.conn.commit()
+
+    response = live.get(batch)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["reconciliation"]["status"] == "not reconciled"
+    assert body["period"] == {"start": None, "end": None, "isDerived": None}
+
+
+def test_the_period_never_claims_a_provenance_the_batch_did_not_record(live: Staged) -> None:
+    """Invariant I7. No column records whether the period was derived, so the payload says
+    nothing rather than guessing: `true` labels a declared period derived, `false` labels a
+    computed one declared, and both are inventions."""
+    batch = live.stage()
+
+    assert live.get(batch).json()["period"]["isDerived"] is None
+
+
+def test_groups_come_back_most_attention_needed_first(live: Staged) -> None:
+    """`statement-ingestion.html` §10 orders the groups; alphabetical would put `duplicate`
+    above `needs_review`, which is the sort the grouping exists to avoid."""
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        # One row of each, so the order is observable at all.
+        cur.execute(
+            """UPDATE staged_transaction SET status = 'duplicate'
+                WHERE import_batch_id = %s AND source_row_number = 1""",
+            (batch,),
+        )
+        cur.execute(
+            """UPDATE staged_transaction SET status = 'needs_review'
+                WHERE import_batch_id = %s AND source_row_number = 2""",
+            (batch,),
+        )
+    live.conn.commit()
+
+    statuses = [group["status"] for group in live.get(batch).json()["groups"]]
+
+    assert statuses == ["needs_review", "duplicate"], "duplicates are the last thing to read"
+
+
+def test_the_commit_reports_the_status_the_database_actually_set(live: Staged) -> None:
+    """The route re-implements none of V14's rules, and the status it writes is one of them. A
+    literal `"completed"` here goes on reading `completed` the day the function stops writing
+    it."""
+    batch = live.stage()
+    rows = _all_row_ids(live, batch)
+    assert live.patch(batch, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+
+    body = live.commit(batch).json()
+
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT status, rows_imported FROM import_batch WHERE id = %s", (batch,))
+        status, imported = cur.fetchone()  # type: ignore[misc]
+    assert body["status"] == status
+    assert body["rowsImported"] == imported
+
+
+def test_a_commit_that_imports_nothing_is_rolled_back_whole(live: Staged) -> None:
+    """The accepted-row count is read before V14 takes the household and batch rows FOR UPDATE,
+    so it answers for a moment that has passed.
+
+    Simulated here by rejecting the rows between the count and the call — which is what a second
+    tab does — rather than by racing two connections, because the outcome is what matters: the
+    batch must not end up `completed` having imported nothing. Only the count V14 returns is
+    race-free, and raising on it rolls the whole commit back.
+    """
+    # The narrow case the route's own comment names: the account already stands at the figure
+    # the statement declares, so V14's post-commit balance check passes having imported nothing
+    # and the batch completes empty. With any other opening balance the reconciliation refuses
+    # first and the defect is invisible.
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET opening_balance = 1490, current_balance = 1490 WHERE id = %s",
+            (live.account_id,),
+        )
+    live.conn.commit()
+    batch = live.stage()
+    rows = _all_row_ids(live, batch)
+    assert live.patch(batch, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+
+    response = _commit_racing_a_rejection(live, batch, rows)
+
+    assert response.status_code == 409, response.text
+    assert "no rows" in response.json()["detail"].lower()
+    assert live.ledger_rows() == 0
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT status, rows_imported FROM import_batch WHERE id = %s", (batch,))
+        assert cur.fetchone() == ("awaiting_review", 0), "nothing half-applied"

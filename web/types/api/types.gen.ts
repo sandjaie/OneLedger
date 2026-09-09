@@ -1216,7 +1216,7 @@ export type ReviewBatch = {
      * Layoutversion
      */
     layoutVersion: number | null;
-    period: ParsePeriod;
+    period: ReviewPeriod;
     /**
      * Rowsextracted
      */
@@ -1233,10 +1233,10 @@ export type ReviewBatch = {
  *
  * Rows sharing a status, and how many there are.
  *
- * `ui-information-architecture.html` §3 groups by attention needed rather than
- * chronologically: chronological order means scrolling past the rows that are fine to reach
- * the ones that are not. `count` is stated rather than left to the array's length because a
- * later page of a large group will not carry every row.
+ * `statement-ingestion.html` §10 groups by attention needed rather than chronologically:
+ * chronological order means scrolling past the rows that are fine to reach the ones that are
+ * not. `count` is stated rather than left to the array's length because a later page of a
+ * large group will not carry every row.
  */
 export type ReviewGroup = {
     /**
@@ -1251,6 +1251,35 @@ export type ReviewGroup = {
      * Rows
      */
     rows: Array<ReviewRow>;
+};
+
+/**
+ * ReviewPeriod
+ *
+ * The period as `import_batch` recorded it, which is not always all of it.
+ *
+ * Every field is optional because every underlying column is. `period_start` and `period_end`
+ * are nullable (V12), so a batch that failed before reconciliation has no period at all and
+ * must still be readable — a review screen that 500s on the batch the owner needs to look at
+ * is the wrong failure. `isDerived` is null because **the batch does not record it**: the flag
+ * exists on the parse-time verdict and no column carries it, so it is reported as unrecorded
+ * rather than guessed. Guessing `true` labels a declared period derived, and guessing `false`
+ * labels a computed one declared; Invariant I7 forbids inventing either. Recording it needs a
+ * column, which is a schema change this task does not carry.
+ */
+export type ReviewPeriod = {
+    /**
+     * Start
+     */
+    start: string | null;
+    /**
+     * End
+     */
+    end: string | null;
+    /**
+     * Isderived
+     */
+    isDerived: boolean | null;
 };
 
 /**

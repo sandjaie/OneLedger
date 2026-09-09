@@ -383,6 +383,14 @@ def parse_statement(
 # produces; `needs_review` arrives with M4's classifier. Review moves rows to the last two.
 DECIDABLE = frozenset({"accepted", "rejected"})
 
+# What `reconciliation_status` means when it is null — a batch that failed before it reconciled.
+# The same words V14 uses in its own refusal, so the screen and the database say one thing.
+NOT_RECONCILED = "not reconciled"
+
+# One sentence for "nothing was accepted", said before the work and again after it, so the two
+# checks below cannot drift into describing the same refusal two different ways.
+EMPTY_COMMIT = "this batch has no rows accepted for import; accept some first"
+
 
 class ReviewRow(BaseModel):
     """One staged row as the review screen reads it.
@@ -412,15 +420,40 @@ class ReviewRow(BaseModel):
 class ReviewGroup(BaseModel):
     """Rows sharing a status, and how many there are.
 
-    `ui-information-architecture.html` §3 groups by attention needed rather than
-    chronologically: chronological order means scrolling past the rows that are fine to reach
-    the ones that are not. `count` is stated rather than left to the array's length because a
-    later page of a large group will not carry every row.
+    `statement-ingestion.html` §10 groups by attention needed rather than chronologically:
+    chronological order means scrolling past the rows that are fine to reach the ones that are
+    not. `count` is stated rather than left to the array's length because a later page of a
+    large group will not carry every row.
     """
 
     status: str
     count: int
     rows: list[ReviewRow]
+
+
+# `statement-ingestion.html` §10's order, most attention needed first — the reason the payload
+# groups at all. Alphabetical would put `duplicate` above `needs_review`, which is the sort the
+# grouping exists to avoid. A status absent here sorts after these and then alphabetically, so a
+# vocabulary M4 extends still renders in a stable order rather than an arbitrary one.
+GROUP_ORDER = ("needs_review", "new", "near_duplicate", "accepted", "rejected", "duplicate")
+
+
+class ReviewPeriod(BaseModel):
+    """The period as `import_batch` recorded it, which is not always all of it.
+
+    Every field is optional because every underlying column is. `period_start` and `period_end`
+    are nullable (V12), so a batch that failed before reconciliation has no period at all and
+    must still be readable — a review screen that 500s on the batch the owner needs to look at
+    is the wrong failure. `isDerived` is null because **the batch does not record it**: the flag
+    exists on the parse-time verdict and no column carries it, so it is reported as unrecorded
+    rather than guessed. Guessing `true` labels a declared period derived, and guessing `false`
+    labels a computed one declared; Invariant I7 forbids inventing either. Recording it needs a
+    column, which is a schema change this task does not carry.
+    """
+
+    start: date | None
+    end: date | None
+    isDerived: bool | None
 
 
 class ReviewBatch(BaseModel):
@@ -430,7 +463,7 @@ class ReviewBatch(BaseModel):
     status: str
     layoutId: UUID | None
     layoutVersion: int | None
-    period: ParsePeriod
+    period: ReviewPeriod
     rowsExtracted: int
     reconciliation: Reconciliation
     groups: list[ReviewGroup]
@@ -492,9 +525,9 @@ def _grouped(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> li
                 sourceRowNumber=row[2],
                 bookedDate=row[3],
                 valueDate=row[4],
-                # Screened on the way out, exactly as the parse preview is: this is the same
-                # document text, one route later, and spec §5.6 does not stop applying because
-                # the reviewer has already seen the file.
+                # Carried raw here and screened by `read_import_batch` before the payload
+                # leaves — see `_screen`. The stored text is the audit record and stays
+                # unredacted in the table (spec §5.6); the redaction belongs on the way out.
                 descriptionRaw=row[5],
                 descriptionClean=row[6],
                 referenceRaw=row[7],
@@ -510,8 +543,38 @@ def _grouped(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> li
         )
     return [
         ReviewGroup(status=status, count=len(rows), rows=rows)
-        for status, rows in sorted(groups.items())
+        for status, rows in sorted(
+            groups.items(),
+            key=lambda item: (
+                GROUP_ORDER.index(item[0]) if item[0] in GROUP_ORDER else len(GROUP_ORDER),
+                item[0],
+            ),
+        )
     ]
+
+
+def _screen(groups: list[ReviewGroup]) -> None:
+    """Redact every untyped document string in the payload, in place.
+
+    Spec §5.6 leaves this to 1.1b explicitly: `staged_transaction.description_raw` is stored
+    unscreened because it is the audit record, and whether the review payload screens it on the
+    way out was left to be decided rather than inherited. It is screened — `PAYMENT RECEIVED
+    CARD 4111 1111 1111 1111` is narration, and the reviewer having already opened the PDF does
+    not put a card number in a response body. Same redactor as the parse preview, so the two
+    routes cannot drift apart on what a digit run is.
+
+    No capture is passed: the statement's own account number is never stored (never-store list),
+    so there is nothing here to match it against beyond the digit-run rule that already catches
+    it.
+    """
+    redact = _preview_redactor(None)
+    for group in groups:
+        for row in group.rows:
+            row.descriptionRaw = redact(row.descriptionRaw)
+            if row.descriptionClean is not None:
+                row.descriptionClean = redact(row.descriptionClean)
+            if row.referenceRaw is not None:
+                row.referenceRaw = redact(row.referenceRaw)
 
 
 @router.get("/import/{batch_id}")
@@ -522,14 +585,7 @@ def read_import_batch(
         batch = _batch_row(cur, batch_id, owner.household_id)
         groups = _grouped(cur, batch_id, owner.household_id)
 
-    redact = _preview_redactor(None)
-    for group in groups:
-        for row in group.rows:
-            row.descriptionRaw = redact(row.descriptionRaw)
-            if row.descriptionClean is not None:
-                row.descriptionClean = redact(row.descriptionClean)
-            if row.referenceRaw is not None:
-                row.referenceRaw = redact(row.referenceRaw)
+    _screen(groups)
 
     return ReviewBatch(
         batchId=batch[0],
@@ -538,19 +594,18 @@ def read_import_batch(
         status=str(batch[3]),
         layoutId=batch[4],
         layoutVersion=batch[5],
-        period=ParsePeriod(
-            start=batch[7],
-            end=batch[8],
-            # The batch does not record whether its period was derived, so the flag cannot be
-            # reconstructed from the row (spec §8 records the column as 1.1b's to add). Stated
-            # as derived rather than guessed at false: claiming a period was declared when it
-            # may have been computed is the direction Invariant I7 forbids.
-            isDerived=True,
-        ),
+        period=ReviewPeriod(start=batch[7], end=batch[8], isDerived=None),
         rowsExtracted=batch[6],
         reconciliation=Reconciliation(
-            status=str(batch[12]),
+            # Nullable in V12, and V14 reads it as `COALESCE(…, 'not reconciled')` — a batch
+            # that failed before reconciling has no verdict. `str()` over the null put the
+            # literal "None" on the wire, which is not in the column's own CHECK vocabulary and
+            # is not a state any consumer can be expected to recognise.
+            status=str(batch[12]) if batch[12] is not None else NOT_RECONCILED,
             declaredOpening=_out(batch[9]),
+            # An opening the statement did not declare is one the walk derived. This mirrors
+            # the parse-time verdict rather than restating it: the batch stores the figure, not
+            # the flag.
             openingIsDerived=batch[9] is None,
             declaredClosing=_out(batch[10]),
             computedClosing=_out(batch[11]),
@@ -612,7 +667,7 @@ def commit_import(
     them, which is how the two would drift.
     """
     with connect() as conn, conn.cursor() as cur:
-        batch = _batch_row(cur, batch_id, owner.household_id)
+        _batch_row(cur, batch_id, owner.household_id)
         cur.execute(
             """SELECT count(*) FROM staged_transaction
                 WHERE import_batch_id = %s AND household_id = %s AND status = 'accepted'""",
@@ -625,7 +680,7 @@ def commit_import(
             # imported. Committing nothing is never what the reviewer meant.
             raise HTTPException(
                 status_code=422,
-                detail="this batch has no rows accepted for import; accept some first",
+                detail=EMPTY_COMMIT,
             )
 
         scope_to_owner(conn, owner.user_id)
@@ -639,11 +694,28 @@ def commit_import(
             raise HTTPException(status_code=404, detail="no such import batch") from exc
         except psycopg.Error as exc:
             raise HTTPException(status_code=409, detail=_first_line(exc)) from None
-        imported = cur.fetchone()
-        del batch
+        row = cur.fetchone()
+        imported = int(row[0]) if row is not None else 0
+
+        if imported == 0:
+            # The count above is read before V14 takes the household and batch rows FOR UPDATE,
+            # so it answers for a moment that has passed: a decision rejecting every row can
+            # commit in between, and the batch is then marked `completed` having imported
+            # nothing — the state the count exists to prevent. What the function returned is the
+            # only race-free answer, and raising here rolls the commit back whole rather than
+            # leaving it applied. The count stays because it says this before any work is done.
+            raise HTTPException(status_code=409, detail=EMPTY_COMMIT)
+
+        # Read back rather than restated. This route re-implements none of V14's rules and the
+        # status it sets is one of them; a literal here would go on reading `completed` on the
+        # day the function stops writing it.
+        cur.execute("SELECT status FROM import_batch WHERE id = %s", (batch_id,))
+        committed = cur.fetchone()
 
     return CommitResult(
-        batchId=batch_id, rowsImported=int(imported[0]) if imported else 0, status="completed"
+        batchId=batch_id,
+        rowsImported=imported,
+        status=str(committed[0]) if committed is not None else "",
     )
 
 
