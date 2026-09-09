@@ -31,7 +31,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, scope_to_owner
 from ..fxrange import FxCoverageError
 from ..ingest import pipeline
 from ..ingest.reconcile import Verdict
@@ -373,3 +373,281 @@ def parse_statement(
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------------------
+# The review path. `POST /parse` stages; these three turn a staged batch into ledger rows.
+# ---------------------------------------------------------------------------------------
+
+# `staged_transaction.status` (V13). `new`, `duplicate` and `near_duplicate` are what staging
+# produces; `needs_review` arrives with M4's classifier. Review moves rows to the last two.
+DECIDABLE = frozenset({"accepted", "rejected"})
+
+
+class ReviewRow(BaseModel):
+    """One staged row as the review screen reads it.
+
+    Money is a string and the frozen pair travels with the row: the screen shows what will be
+    written, not a figure it recomputes (`api-contracts.html` §6).
+    """
+
+    id: UUID
+    sourcePageNumber: int | None
+    sourceRowNumber: int
+    bookedDate: date
+    valueDate: date | None
+    descriptionRaw: str
+    descriptionClean: str | None
+    referenceRaw: str | None
+    amount: str
+    currency: str
+    amountBase: str
+    amountSecondary: str
+    proposedTxnType: str | None
+    status: str
+    duplicateOfTransactionId: UUID | None
+    nearDuplicateOfId: UUID | None
+
+
+class ReviewGroup(BaseModel):
+    """Rows sharing a status, and how many there are.
+
+    `ui-information-architecture.html` §3 groups by attention needed rather than
+    chronologically: chronological order means scrolling past the rows that are fine to reach
+    the ones that are not. `count` is stated rather than left to the array's length because a
+    later page of a large group will not carry every row.
+    """
+
+    status: str
+    count: int
+    rows: list[ReviewRow]
+
+
+class ReviewBatch(BaseModel):
+    batchId: UUID
+    documentId: UUID | None
+    accountId: UUID
+    status: str
+    layoutId: UUID | None
+    layoutVersion: int | None
+    period: ParsePeriod
+    rowsExtracted: int
+    reconciliation: Reconciliation
+    groups: list[ReviewGroup]
+
+
+class RowDecision(BaseModel):
+    """A bulk decision. Reviewing 200 rows one at a time is why people abandon these tools."""
+
+    rowIds: list[UUID]
+    decision: str
+
+
+class DecisionResult(BaseModel):
+    updated: int
+
+
+class CommitResult(BaseModel):
+    batchId: UUID
+    rowsImported: int
+    status: str
+
+
+_BATCH = """SELECT b.id, b.document_id, b.account_id, b.status, b.statement_layout_id,
+                   b.layout_version, b.rows_extracted, b.period_start, b.period_end,
+                   b.declared_opening_balance, b.declared_closing_balance,
+                   b.computed_closing_balance, b.reconciliation_status, b.reconciliation_delta
+              FROM import_batch b
+             WHERE b.id = %s AND b.household_id = %s"""
+
+_ROWS = """SELECT id, source_page_number, source_row_number, booked_date, value_date,
+                  description_raw, description_clean, reference_raw, amount, currency,
+                  amount_base, amount_secondary, proposed_txn_type, status,
+                  duplicate_of_transaction_id, near_duplicate_of_id
+             FROM staged_transaction
+            WHERE import_batch_id = %s AND household_id = %s
+            ORDER BY source_row_number"""
+
+
+def _batch_row(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> tuple[Any, ...]:
+    cur.execute(_BATCH, (batch_id, household_id))
+    row = cur.fetchone()
+    if row is None:
+        # One answer for "no such batch" and "another household's batch", matching what V14's
+        # own function does and for the same reason: telling them apart tells a caller whether
+        # an id they guessed exists.
+        raise HTTPException(status_code=404, detail="no such import batch")
+    batch: tuple[Any, ...] = row
+    return batch
+
+
+def _grouped(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> list[ReviewGroup]:
+    cur.execute(_ROWS, (batch_id, household_id))
+    groups: dict[str, list[ReviewRow]] = {}
+    for row in cur.fetchall():
+        groups.setdefault(str(row[13]), []).append(
+            ReviewRow(
+                id=row[0],
+                sourcePageNumber=row[1],
+                sourceRowNumber=row[2],
+                bookedDate=row[3],
+                valueDate=row[4],
+                # Screened on the way out, exactly as the parse preview is: this is the same
+                # document text, one route later, and spec §5.6 does not stop applying because
+                # the reviewer has already seen the file.
+                descriptionRaw=row[5],
+                descriptionClean=row[6],
+                referenceRaw=row[7],
+                amount=str(row[8]),
+                currency=row[9],
+                amountBase=str(row[10]),
+                amountSecondary=str(row[11]),
+                proposedTxnType=row[12],
+                status=str(row[13]),
+                duplicateOfTransactionId=row[14],
+                nearDuplicateOfId=row[15],
+            )
+        )
+    return [
+        ReviewGroup(status=status, count=len(rows), rows=rows)
+        for status, rows in sorted(groups.items())
+    ]
+
+
+@router.get("/import/{batch_id}")
+def read_import_batch(
+    batch_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> ReviewBatch:
+    with connect() as conn, conn.cursor() as cur:
+        batch = _batch_row(cur, batch_id, owner.household_id)
+        groups = _grouped(cur, batch_id, owner.household_id)
+
+    redact = _preview_redactor(None)
+    for group in groups:
+        for row in group.rows:
+            row.descriptionRaw = redact(row.descriptionRaw)
+            if row.descriptionClean is not None:
+                row.descriptionClean = redact(row.descriptionClean)
+            if row.referenceRaw is not None:
+                row.referenceRaw = redact(row.referenceRaw)
+
+    return ReviewBatch(
+        batchId=batch[0],
+        documentId=batch[1],
+        accountId=batch[2],
+        status=str(batch[3]),
+        layoutId=batch[4],
+        layoutVersion=batch[5],
+        period=ParsePeriod(
+            start=batch[7],
+            end=batch[8],
+            # The batch does not record whether its period was derived, so the flag cannot be
+            # reconstructed from the row (spec §8 records the column as 1.1b's to add). Stated
+            # as derived rather than guessed at false: claiming a period was declared when it
+            # may have been computed is the direction Invariant I7 forbids.
+            isDerived=True,
+        ),
+        rowsExtracted=batch[6],
+        reconciliation=Reconciliation(
+            status=str(batch[12]),
+            declaredOpening=_out(batch[9]),
+            openingIsDerived=batch[9] is None,
+            declaredClosing=_out(batch[10]),
+            computedClosing=_out(batch[11]),
+            delta=_out(batch[13]),
+            firstDivergentRow=None,
+            previousBalance=None,
+            amount=None,
+            candidateRows=[],
+            message="",
+        ),
+        groups=groups,
+    )
+
+
+@router.patch("/import/{batch_id}/rows")
+def decide_import_rows(
+    batch_id: UUID, body: RowDecision, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> DecisionResult:
+    if body.decision not in DECIDABLE:
+        raise HTTPException(
+            status_code=422,
+            detail="decision must be one of: " + ", ".join(sorted(DECIDABLE)),
+        )
+
+    with connect() as conn, conn.cursor() as cur:
+        batch = _batch_row(cur, batch_id, owner.household_id)
+        if str(batch[3]) != "awaiting_review":
+            # Once the rows are in the ledger the staged copy is a record, not a working set.
+            raise HTTPException(
+                status_code=409, detail=f"this batch is {batch[3]} and can no longer be decided"
+            )
+
+        cur.execute(
+            """UPDATE staged_transaction SET status = %s
+                WHERE import_batch_id = %s AND household_id = %s AND id = ANY(%s)""",
+            (body.decision, batch_id, owner.household_id, list(body.rowIds)),
+        )
+        updated = cur.rowcount
+        if updated != len(set(body.rowIds)):
+            # Refused whole rather than reported as a partial success. A count that says 1 when
+            # the caller asked for 2 is how a reviewer comes to believe they decided rows they
+            # did not — and the transaction rolls back, so nothing is half-applied.
+            raise HTTPException(
+                status_code=422,
+                detail="some of those rows are not in this batch; nothing was changed",
+            )
+    return DecisionResult(updated=updated)
+
+
+@router.post("/import/{batch_id}/commit")
+def commit_import(
+    batch_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> CommitResult:
+    """V14's `commit_import_batch`, and nothing else.
+
+    Every rule about what may commit lives in that function, because the insert and the balance
+    verification have to share one transaction (`api-contracts.html` §3). This route resolves
+    the identity, calls it once, and translates its refusals — it does not re-implement any of
+    them, which is how the two would drift.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        batch = _batch_row(cur, batch_id, owner.household_id)
+        cur.execute(
+            """SELECT count(*) FROM staged_transaction
+                WHERE import_batch_id = %s AND household_id = %s AND status = 'accepted'""",
+            (batch_id, owner.household_id),
+        )
+        accepted = cur.fetchone()
+        if accepted is None or accepted[0] == 0:
+            # V14 would complete the batch with rows_imported = 0 whenever the declared closing
+            # already matched the standing balance — a statement marked imported with none of it
+            # imported. Committing nothing is never what the reviewer meant.
+            raise HTTPException(
+                status_code=422,
+                detail="this batch has no rows accepted for import; accept some first",
+            )
+
+        scope_to_owner(conn, owner.user_id)
+        try:
+            cur.execute("SELECT commit_import_batch(%s)", (batch_id,))
+        except psycopg.errors.RaiseException as exc:
+            # V14 raises with a sentence written for the owner. Its own message is the detail;
+            # the database's context and position are not echoed.
+            raise HTTPException(status_code=409, detail=_first_line(exc)) from None
+        except psycopg.errors.InsufficientPrivilege as exc:
+            raise HTTPException(status_code=404, detail="no such import batch") from exc
+        except psycopg.Error as exc:
+            raise HTTPException(status_code=409, detail=_first_line(exc)) from None
+        imported = cur.fetchone()
+        del batch
+
+    return CommitResult(
+        batchId=batch_id, rowsImported=int(imported[0]) if imported else 0, status="completed"
+    )
+
+
+def _first_line(exc: Exception) -> str:
+    """The refusal's own sentence. Postgres appends CONTEXT and a query position, and the query
+    text can carry the parameters that caused the failure."""
+    return str(exc).splitlines()[0].strip()
