@@ -28,10 +28,44 @@ from fastapi.testclient import TestClient
 
 from oneledger import auth
 from oneledger.db import connect, scope_to_owner
+from oneledger.ingest.dedupe import OCCURRENCE, fingerprint
 from oneledger.main import app
 from oneledger.routes import ingest as ingest_routes
 
+from .fixtures.synthetic_pdf import Placement, build_pdf
 from .test_ingest_route_live import ORIGIN, SALT, Fixture, _statement
+
+
+def _twin_statement() -> bytes:
+    """A statement whose two rows are genuinely identical — same date, same amount, same words.
+
+    The default fixture's rows differ in their descriptions, so their fingerprints differ
+    whatever the occurrence index is and they can never collide with each other. Only a pair
+    like this one can prove that two overrides in the same batch land on different indices.
+
+    Opening 1,000, two withdrawals of 10, closing 980. Same account number, so it resolves the
+    same way.
+    """
+    return build_pdf(
+        [
+            Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
+            Placement(page=0, x=20, y=750, text="Account Number 1234567890"),
+            Placement(page=0, x=20, y=740, text="Opening Balance 1,000.00"),
+            Placement(page=0, x=40, y=700, text="Date"),
+            Placement(page=0, x=140, y=700, text="Description"),
+            Placement(page=0, x=420, y=700, text="Amount"),
+            Placement(page=0, x=500, y=700, text="Balance"),
+            Placement(page=0, x=40, y=670, text="01/03/2026"),
+            Placement(page=0, x=140, y=670, text="COFFEE SHOP"),
+            Placement(page=0, x=420, y=670, text="-10.00"),
+            Placement(page=0, x=500, y=670, text="990.00"),
+            Placement(page=0, x=40, y=650, text="01/03/2026"),
+            Placement(page=0, x=140, y=650, text="COFFEE SHOP"),
+            Placement(page=0, x=420, y=650, text="-10.00"),
+            Placement(page=0, x=500, y=650, text="980.00"),
+            Placement(page=0, x=20, y=600, text="Closing Balance 980.00"),
+        ]
+    )
 
 
 def _connect() -> psycopg.Connection:
@@ -87,8 +121,10 @@ class Staged(Fixture):
     # payment line carries the number in the narration, separator-formatted.
     CARD_NARRATION = "PAYMENT RECEIVED CARD 4111 1111 1111 1111"
 
-    def stage(self, description: str = CARD_NARRATION) -> str:
-        response = self.post(_statement(description=description), stage="true")
+    def stage(self, description: str = CARD_NARRATION, statement: bytes | None = None) -> str:
+        response = self.post(
+            _statement(description=description) if statement is None else statement, stage="true"
+        )
         assert response.status_code == 200, response.text
         batch: str = response.json()["batchId"]
         return batch
@@ -590,3 +626,288 @@ def test_a_commit_that_imports_nothing_is_rolled_back_whole(live: Staged) -> Non
     with live.conn.cursor() as cur:
         cur.execute("SELECT status, rows_imported FROM import_batch WHERE id = %s", (batch,))
         assert cur.fetchone() == ("awaiting_review", 0), "nothing half-applied"
+
+
+# --------------------------------------------------------------------------------------
+# The confirmed-distinct override (spec §4.7, §7 item 12)
+# --------------------------------------------------------------------------------------
+
+
+def _committed_twin(live: Staged, batch: str) -> str:
+    """Commit the batch, stage the same statement again, and return the second batch.
+
+    The second staging sees the first's rows already in `transaction` and marks both
+    `duplicate` — a genuine collision, produced the way one actually arises, rather than by
+    writing a status into the table by hand.
+    """
+    rows = _all_row_ids(live, batch)
+    assert live.patch(batch, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+    assert live.commit(batch).status_code == 200
+    with live.conn.cursor() as cur:
+        # Layer 1 rejects identical bytes outright, so the checksum is moved aside rather than
+        # the document deleted — `import_batch` references it, and the first import has to
+        # stand for its rows to be the collision this exercises. What is being staged is the
+        # real case: a *different* file carrying the same transactions, which is what an
+        # overlapping Jul–Aug / Aug–Sep pair is.
+        cur.execute("UPDATE document SET sha256 = %s", (repeat_hex("f"),))
+    live.conn.commit()
+    return live.stage()
+
+
+def repeat_hex(ch: str) -> str:
+    return ch * 64
+
+
+def _hashes(live: Staged, batch: str) -> list[str]:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT dedupe_hash FROM staged_transaction WHERE import_batch_id = %s"
+            " ORDER BY source_row_number",
+            (batch,),
+        )
+        return [row[0] for row in cur.fetchall()]
+
+
+def test_a_re_import_stages_its_rows_as_duplicates(live: Staged) -> None:
+    """The precondition the override exists for, asserted rather than assumed."""
+    second = _committed_twin(live, live.stage())
+
+    groups = {group["status"]: group["count"] for group in live.get(second).json()["groups"]}
+
+    assert groups == {"duplicate": 2}
+
+
+def test_accepting_a_duplicate_recomputes_its_hash_to_the_next_free_index(
+    live: Staged,
+) -> None:
+    """Spec §4.7: accepting a duplicate is a confirmed-distinct override.
+
+    V10's unique `(household_id, account_id, dedupe_hash)` index means the colliding hash cannot
+    commit unchanged, so the accept recomputes it with the occurrence index advanced to the next
+    free index among committed collisions — deterministic, not a random suffix.
+    """
+    second = _committed_twin(live, live.stage())
+    before = _hashes(live, second)
+    rows = _all_row_ids(live, second)
+
+    assert live.patch(second, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+
+    after = _hashes(live, second)
+    assert after != before, "a colliding hash cannot commit unchanged"
+    assert len(set(after)) == 2, "and the two overrides do not collide with each other"
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT dedupe_hash FROM transaction")
+        committed = {row[0] for row in cur.fetchall()}
+    assert not committed.intersection(after), "nor with anything already in the ledger"
+
+
+def _expected_occurrences(live: Staged, batch: str) -> list[int]:
+    """For each staged row in order, the `occ:` index its stored hash actually encodes.
+
+    Derived by recomputing the fingerprint at each index and finding which one the row holds —
+    the only way to name the index from outside, and it re-derives none of the route's search.
+    """
+    found = []
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT account_id, booked_date, amount, description_raw, dedupe_hash
+                 FROM staged_transaction WHERE import_batch_id = %s
+                ORDER BY source_row_number""",
+            (batch,),
+        )
+        for account_id, booked_date, amount, description_raw, stored in cur.fetchall():
+            for index in range(16):
+                if stored == fingerprint(
+                    account_id=account_id,
+                    booked_date=booked_date,
+                    amount=amount,
+                    description_raw=description_raw,
+                    disambiguator=f"{OCCURRENCE}{index}",
+                ):
+                    found.append(index)
+                    break
+            else:
+                found.append(-1)
+    return found
+
+
+def test_the_override_advances_to_the_next_free_index_and_no_further(live: Staged) -> None:
+    """The exact indices, not merely "some free index".
+
+    That the index is the *next* one is the whole reason section 4.7 advances it rather than
+    marking the row exempt: a later statement carrying both occurrences hashes them 0 and 1 and
+    must recognise both as duplicates. An override that jumped to 5 would satisfy "changed" and
+    "does not collide" while breaking exactly that, and the overlapping month would import twice.
+
+    Two identical rows, so occurrences 0 and 1 are genuinely committed and the override has
+    something to advance past — and the second row must advance past the first's new index too.
+    """
+    first = live.stage(statement=_twin_statement())
+    assert (
+        live.patch(first, {"rowIds": _all_row_ids(live, first), "decision": "accepted"}).status_code
+        == 200
+    )
+    assert live.commit(first).status_code == 200
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE document SET sha256 = %s", (repeat_hex("d"),))
+        cur.execute("UPDATE account SET current_balance = 980 WHERE id = %s", (live.account_id,))
+    live.conn.commit()
+    second = live.stage(statement=_twin_statement())
+    assert _expected_occurrences(live, second) == [0, 1], "staged where the ledger already sits"
+
+    assert (
+        live.patch(
+            second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"}
+        ).status_code
+        == 200
+    )
+
+    assert _expected_occurrences(live, second) == [2, 3], (
+        "0 and 1 are committed, so the first free is 2 — and the second row advances past it"
+    )
+
+
+def test_the_override_recomputes_in_the_occurrence_namespace(live: Staged) -> None:
+    """Spec section 7 item 12: the override recomputes in the `occ:` form whatever disambiguated
+    the row before.
+
+    The fixture references its first row and not its second, so the two arrive here from
+    different namespaces and must land differently. The referenced row was fingerprinted
+    `ref:<reference>#0`, so **no `occ:` index is taken on its account** and the override lands on
+    0 — which is only possible because the namespace switched: advancing a `ref:` counter would
+    change a value the fingerprint does not contain and the hash would not move at all. The
+    unreferenced row was already `occ:0`, which the ledger now holds, so it advances to 1.
+    """
+    second = _committed_twin(live, live.stage())
+    before = _hashes(live, second)
+
+    live.patch(second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"})
+
+    assert _expected_occurrences(live, second) == [0, 1], (
+        "the referenced row crosses into a free occ: index; the occ: row advances past the ledger"
+    )
+    assert _hashes(live, second) != before, "and both stored hashes moved"
+
+
+def test_repeating_the_override_changes_nothing(live: Staged) -> None:
+    """A second accept must not advance the index again: the row is already accepted, and an
+    override that moved every time would make the same review produce a different ledger."""
+    second = _committed_twin(live, live.stage())
+    rows = _all_row_ids(live, second)
+    live.patch(second, {"rowIds": rows, "decision": "accepted"})
+    once = _hashes(live, second)
+
+    assert live.patch(second, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+
+    assert _hashes(live, second) == once
+
+
+def test_an_accepted_duplicate_reaches_the_ledger_as_its_own_row(live: Staged) -> None:
+    """The acceptance criterion: a genuinely distinct transaction that collides with a committed
+    one can be imported."""
+    second = _committed_twin(live, live.stage())
+    with live.conn.cursor() as cur:
+        # The ledger already holds the first import, so the second's closing target is the
+        # statement's own figure plus what is already there.
+        cur.execute(
+            "UPDATE import_batch SET declared_closing_balance = 1980 WHERE id = %s", (second,)
+        )
+    live.conn.commit()
+    rows = _all_row_ids(live, second)
+    live.patch(second, {"rowIds": rows, "decision": "accepted"})
+
+    response = live.commit(second)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rowsImported"] == 2
+    assert live.ledger_rows() == 4, "both imports stand, and neither overwrote the other"
+
+
+def test_rejecting_a_duplicate_leaves_its_hash_alone(live: Staged) -> None:
+    """The override is what accepting means, not what deciding means. A rejected row keeps the
+    fingerprint that recognised it, which is what a later statement carrying both occurrences
+    matches against."""
+    second = _committed_twin(live, live.stage())
+    before = _hashes(live, second)
+    rows = _all_row_ids(live, second)
+
+    live.patch(second, {"rowIds": rows, "decision": "rejected"})
+
+    assert _hashes(live, second) == before
+
+
+def test_accepting_a_row_with_no_proposed_type_is_refused_by_the_database(live: Staged) -> None:
+    """V13's `accepted_row_is_committable`. A row that can be accepted but never committed is a
+    dead end the database refuses to represent — and the route must not turn that refusal into
+    a 500."""
+    batch = live.stage()
+    rows = _all_row_ids(live, batch)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE staged_transaction SET proposed_txn_type = NULL WHERE id = %s",
+            (UUID(rows[0]),),
+        )
+    live.conn.commit()
+
+    response = live.patch(batch, {"rowIds": rows, "decision": "accepted"})
+
+    assert response.status_code == 422, response.text
+    assert "type" in response.json()["detail"].lower()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM staged_transaction WHERE import_batch_id = %s"
+            " AND status = 'accepted'",
+            (batch,),
+        )
+        assert cur.fetchone()[0] == 0, "nothing was decided"  # type: ignore[index]
+
+
+def test_two_overrides_in_one_batch_do_not_collide_with_each_other(live: Staged) -> None:
+    """The staged half of the search, which the committed half alone does not cover.
+
+    Two identical rows commit at occurrence 0 and 1. Re-imported, both stage as duplicates, and
+    both search the same candidate list — so a search that consults only the ledger hands both
+    of them occurrence 2, and V10's unique index rejects the whole commit a moment later, having
+    passed every check that looked at the ledger alone.
+    """
+    first = live.stage(statement=_twin_statement())
+    rows = _all_row_ids(live, first)
+    assert live.patch(first, {"rowIds": rows, "decision": "accepted"}).status_code == 200
+    assert live.commit(first).status_code == 200, "two identical rows import as two"
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE document SET sha256 = %s", (repeat_hex("e"),))
+        cur.execute("UPDATE account SET current_balance = 980 WHERE id = %s", (live.account_id,))
+    live.conn.commit()
+    second = live.stage(statement=_twin_statement())
+    assert len(set(_hashes(live, second))) == 2, "staging already tells them apart"
+
+    assert (
+        live.patch(
+            second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"}
+        ).status_code
+        == 200
+    )
+
+    after = _hashes(live, second)
+    assert len(set(after)) == 2, "the second override must not land where the first did"
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT dedupe_hash FROM transaction")
+        assert not {row[0] for row in cur.fetchall()}.intersection(after)
+
+
+def test_the_override_gives_up_rather_than_searching_forever(
+    live: Staged, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sixty-four identical transactions on one day is a statement to look at, not a number to
+    raise — and the refusal must leave the batch exactly as it was."""
+    second = _committed_twin(live, live.stage())
+    before = _hashes(live, second)
+    monkeypatch.setattr(ingest_routes, "OVERRIDE_LIMIT", 1)
+
+    response = live.patch(second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"})
+
+    assert response.status_code == 409, response.text
+    assert "too many times" in response.json()["detail"]
+    assert _hashes(live, second) == before, "and nothing was rewritten"
+    groups = {group["status"]: group["count"] for group in live.get(second).json()["groups"]}
+    assert groups == {"duplicate": 2}, "nor decided"
