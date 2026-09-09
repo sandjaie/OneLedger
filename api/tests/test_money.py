@@ -101,7 +101,12 @@ def test_the_transaction_currency_selects_the_legs() -> None:
     """fx_rate quotes against the base, so base and secondary each need one leg and a third
     currency needs both. A unity leg is exact, never a rate looked up against itself — the
     legs asked for are asserted, because a cross through the same pair happens to arrive at
-    the same number and would hide a currency reaching for a rate that cannot exist."""
+    the same number and would hide a currency reaching for a rate that cannot exist.
+
+    Every non-unity leg comes back **already fixed at 10 dp**, which is the precision it is
+    stored at. This is not a rounding preference: `1 / 3` is a 28-digit Decimal, and both
+    `NUMERIC(20,10)` and the `Rate` annotation that mirrors it refuse it outright, so a caller
+    handed the unrounded quotient could not store the row at all."""
     rows: Rows = {
         (ON, "XAE", "XIN"): ("3.0000000000", False, None),
         (ON, "XSG", "XIN"): ("60.0000000000", False, None),
@@ -110,7 +115,7 @@ def test_the_transaction_currency_selects_the_legs() -> None:
     in_base = FxCursor(rows)
     assert _frozen(_as_cursor(in_base), ON, "XIN", "XIN", "XAE") == (
         Decimal(1),
-        Decimal(1) / Decimal("3.0000000000"),
+        Decimal("0.3333333333"),
         False,
         ON,
     )
@@ -128,7 +133,7 @@ def test_the_transaction_currency_selects_the_legs() -> None:
     foreign = FxCursor(rows)
     assert _frozen(_as_cursor(foreign), ON, "XSG", "XIN", "XAE") == (
         Decimal("60.0000000000"),
-        Decimal("60.0000000000") / Decimal("3.0000000000"),
+        Decimal("20.0000000000"),
         False,
         ON,
     )

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 import psycopg
@@ -58,14 +58,23 @@ def _frozen(
     """(rate_to_base, rate_to_secondary, carried, effective rate date).
 
     fx_rate quotes everything against the household base, so the secondary leg is a cross
-    through it. Intermediates stay unrounded; storage rounds once, half-up
-    (multi-currency-and-fx.html)."""
+    through it — a division, which for most real rates does not terminate. **Both legs are
+    returned already fixed at the stored precision** (10 dp, half-up), because the stored rate
+    is the auditable fact and every amount must derive from it: `round(amount x stored rate)`
+    is what `transaction.frozen_amounts_derive` and `StagedTransaction` both check against, and
+    a repeating cross-rate rounded only after the multiplication disagrees with it.
+
+    Fixing the rate here rather than in each caller is deliberate. `1 / 3` is a 28-digit
+    Decimal, and `NUMERIC(20,10)` — and the `Rate` annotation that mirrors it — refuse it
+    outright, so a caller that forgot to quantize did not merely round differently: it could
+    not store the row at all (multi-currency-and-fx.html).
+    """
     if txn_currency == base:
         rate_sb, carried, effective = _rate_leg(cur, on, secondary, base)
-        return Decimal(1), Decimal(1) / rate_sb, carried, effective
+        return Decimal(1), _fixed(Decimal(1) / rate_sb), carried, effective
     if txn_currency == secondary:
         rate_sb, carried, effective = _rate_leg(cur, on, secondary, base)
-        return rate_sb, Decimal(1), carried, effective
+        return _fixed(rate_sb), Decimal(1), carried, effective
     rate_cb, carried_cb, effective_cb = _rate_leg(cur, on, txn_currency, base)
     rate_sb, carried_sb, effective_sb = _rate_leg(cur, on, secondary, base)
     # One row stores one rate date and one carried flag. Two legs from different days cannot
@@ -80,8 +89,20 @@ def _frozen(
             ),
         )
     return (
-        rate_cb,
-        rate_cb / rate_sb,
+        _fixed(rate_cb),
+        _fixed(rate_cb / rate_sb),
         carried_cb or carried_sb,
         effective_cb,
     )
+
+
+def _fixed(rate: Decimal) -> Decimal:
+    """One rate at the precision it is stored at, half away from zero, as Postgres rounds."""
+    try:
+        return rate.quantize(RATE, rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        # A rate too large to state at 10 dp is not a rate this ledger can freeze against, and
+        # saying so beats an InvalidOperation surfacing from a pydantic validator as a 500.
+        raise HTTPException(
+            status_code=422, detail="the exchange rate exceeds the storable range"
+        ) from exc

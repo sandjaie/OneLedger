@@ -772,3 +772,89 @@ reconciles `matched`, with no row failing to normalize.** That is slice 1.1's ac
 criterion at the parse and reconciliation level; staging, commit and the review screen are the
 branches that follow. No figure, date or per-file count from those statements is recorded here —
 they are git-ignored, and the committed evidence is the invented-figure suite.
+
+**Task 5d records four decisions and one budget exception.** They were taken while building
+`ingest/pipeline.py` and `POST /parse`, and none is covered by §4.3.
+
+**Identification declines on a tie.** §4.4 says the engine is driven entirely by a profile row
+and `statement-ingestion.html` §1 orders identification "text fingerprint → filename hint → ask",
+without saying when to stop. The pipeline scores every saved layout and chooses one only when a
+single layout scores highest and scores at least half its fingerprints; two layouts scoring alike
+go to the picker. The reason the ambiguous case cannot be resolved by taking the higher half of a
+coin toss is that column bands are geometry rather than meaning: the losing choice still parses
+every row, into the wrong fields, with no error raised anywhere. The **filename hint is not
+implemented** and `engine.matches` discards the argument on purpose — a statement's filename is
+owner-chosen and routinely carries a card number (§5.6), so scoring on it would both mis-identify
+and read a value the pipeline exists to keep out of everything it touches.
+
+**The account lookup is inverted through a resolver the caller supplies.** `ingest/` may not
+import `routes/` (§4.1), and resolving a statement's own account number needs the salted hash
+`routes/accounts.py` defines and the `ACCOUNT_HASH_SALT` it owns. `pipeline.parse` therefore takes
+an `AccountResolver` callable and the route passes a closure. The alternative — moving the hash
+into `ingest/` — would put a second copy of the account identity in the tree, and the never-store
+list makes one copy already delicate enough.
+
+**A blocked batch is returned, not raised.** §7.5 already decided that `POST /parse` answers a
+blocking condition with a 200 and a reconciliation object; this records that the *pipeline* does
+the same, returning `ParseResult(staged=False)` with the full analysis rather than an exception.
+A raise would have forced the route to re-parse to obtain the diagnostics the panel needs, and
+would have made "asked to stage, and it did not" indistinguishable from "the upload failed".
+`pipeline.blocks_staging` is the single predicate: reconciliation not `matched`, or any row that
+failed to normalize.
+
+**`document.document_type` comes from the account's own `account_type`.** An earlier draft of
+this entry recorded the column as hardcoded `bank_statement`, on the reasoning that the layout
+profile carries no document-type field and a heuristic over the fingerprints would be the silent
+guess ADR-0012 forbids. The review found the premise false: the account is resolved before
+staging and `account.account_type` already carries `credit_card` as a stored fact, so the card
+distinction needs no heuristic and no new layout column. It matters because the branch merged
+immediately before this one made card statements importable, `idx_document_period` indexes on
+`document_type`, and migrations are forward-only — a wrong value written now is a backfill later.
+Only the card distinction is drawn: a loan account's statements are M7's, and guessing ahead of
+the milestone that will map them is the same mistake in the other direction.
+
+**The review round added four fixes worth recording as contract.** Each was a defect the branch
+shipped and the gate caught, and each changes behaviour a later branch will rely on.
+
+*`money._frozen` returns both legs already fixed at 10 dp.* The secondary leg is a cross — a
+division — and `1 / 3` is a 28-digit Decimal that `NUMERIC(20,10)` and the `Rate` annotation both
+refuse outright, so staging raised a validation error for every reporting pair whose cross does
+not terminate. The rate is now fixed inside `_frozen`, where both callers share it, because the
+stored rate is the auditable fact and the stored amounts must derive from *it* rather than from an
+unrounded intermediate. `routes/transactions.py` already quantized after the call; that step is
+now redundant rather than load-bearing. The live fixture's rate moved from 4 to 3 for the same
+reason the bug survived: 1/4 terminates, and a fixture that only ever divides by 4 proves nothing.
+
+*Staging takes the household row lock before it freezes* (spec B3.5), making it the second writer
+of frozen amounts to do so after `routes/transactions.py`. Without it a `PATCH /household` landing
+during a parse sees no frozen rows — this batch's are uncommitted and so invisible under MVCC —
+changes the reporting pair, and the batch then commits rows frozen against the pair that no longer
+applies, which `reporting_pair_is_locked()` thereafter reports as locked by exactly those rows. A
+pair that moved refuses the staging rather than re-freezing, because the FX range was already
+fetched for the old secondary currency.
+
+*The staging transaction locks the account row.* `_refuse_second_staging`'s in-transaction re-check
+was documented as "actually atomic" and was not: a bare `SELECT` under READ COMMITTED takes no lock
+and cannot see a sibling transaction's uncommitted `import_batch` row, and `import_batch` carries no
+unique constraint to fall back on. The window is seconds wide — a rollback, a network rate fetch and
+a blob write separate the two checks. `SELECT … FROM account … FOR UPDATE` is the rendezvous; a
+partial unique index over `(household_id, account_id, period_start, period_end)` would be the
+stronger answer and needs a migration, so it belongs to whichever branch next opens one.
+
+*A derived opening is stored NULL rather than as a declared figure* (Invariant I7).
+`import_batch.declared_opening_balance` has no companion flag, and the label the parse response
+carries lives only as long as that response — the review screen reads the row. A computed number
+must not be readable there as one the statement stated.
+
+**Slice 1.1a ships as two PRs under the same `[P1.1]` prefix.** Written as one branch, it
+measured 1,233 production and 2,545 counted lines — past the 1,200 / 2,400 hard stop, which
+`git-workflow.md` makes a splitting instruction rather than an override case. The seam is the
+one the module boundary already draws: `feature/p1-1a-parse-pipeline` carries `ingest/pipeline.py`
+and the freeze helper it fixed, `feature/p1-1a-parse-route` carries `POST /parse` and the wire
+contract. The route branch bases off `develop` once the pipeline has merged, so neither PR
+reviews code the other has not landed.
+
+The pipeline branch is still **over the 800 / 1,600 budget and under the hard stop**: one module
+at 826 added lines, in the range `normalize.py` (705) and `engine.py` (607) already occupy, and
+its staging transaction cannot be halved into a pipeline that parses and a pipeline that writes
+without shipping one that no caller can use.
