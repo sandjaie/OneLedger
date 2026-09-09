@@ -9,6 +9,7 @@ import type {
   AccountRow,
   CurrencyRow,
   HouseholdCurrency,
+  HouseholdResponse,
   ReviewBatch,
   ReviewGroup,
   ReviewRow,
@@ -36,6 +37,22 @@ const accounts = [
   { id: "acct-card", name: "Synthetic Card", currency: "XAE" },
   { id: "acct-savings", name: "Synthetic Savings", currency: "XIN" },
 ] as Array<AccountRow>;
+// XAE is the household's base and XIN its secondary, so `amountBase` belongs under XAE and
+// `amountSecondary` under XIN — which is the whole point of the toggle.
+const household = {
+  id: "hh-1",
+  name: "Synthetic",
+  baseCurrency: "XAE",
+  secondaryCurrency: "XIN",
+} as HouseholdResponse;
+
+const secondary: HouseholdCurrency = {
+  code: other.code,
+  symbol: other.symbol,
+  decimals: other.decimals,
+  numberFormat: other.numberFormat,
+};
+
 const currency: HouseholdCurrency = {
   code: catalogue.code,
   symbol: catalogue.symbol,
@@ -55,10 +72,12 @@ function row(overrides: Partial<ReviewRow> = {}): ReviewRow {
     referenceRaw: null,
     amount: "-10.0000",
     currency: "XAE",
-    // Deliberately unequal to `amount`: an account in one currency reporting in another, which
-    // is the only shape in which a test can tell the two figures apart.
-    amountBase: "-40.0000",
-    amountSecondary: "-10.0000",
+    // The default row is in the household's base currency, so its own amount and `amountBase`
+    // are necessarily the same figure — a fixture where they differ describes a row that cannot
+    // exist. `amountSecondary` is the other side of the pair, and differs from both, which is
+    // what lets a test say which column the screen actually read.
+    amountBase: "-10.0000",
+    amountSecondary: "-2500.0000",
     proposedTxnType: "expense",
     status: "new",
     duplicateOfTransactionId: null,
@@ -112,13 +131,18 @@ function batch(overrides: Partial<ReviewBatch> = {}): ReviewBatch {
   };
 }
 
-function renderScreen(request: ReturnType<typeof vi.fn>, batchId = "batch-1") {
+function renderScreen(
+  request: ReturnType<typeof vi.fn>,
+  batchId = "batch-1",
+  displayed: HouseholdCurrency = currency,
+) {
   render(
     <ReviewScreen
       accounts={accounts}
       batchId={batchId}
       currencies={currencies}
-      currency={currency}
+      currency={displayed}
+      household={household}
       request={request as never}
     />,
   );
@@ -183,15 +207,32 @@ describe("reading a batch", () => {
   });
 
   it("shows the frozen converted amount beside the original, never the conversion alone", async () => {
-    // `ui-information-architecture.html` section 4. The frozen pair is the whole point of
-    // freezing at staging, and this is the screen where the owner decides whether it is written.
+    // `multi-currency-and-fx.html` section 2: the toggle **swaps a column**, it does not
+    // recompute. Formatting `amountBase` with whatever the toggle happens to be prints a
+    // base-currency figure under the secondary's symbol and grouping — real money, wrong
+    // currency. `transactions-screen.tsx` already reads it this way; this is the same rule one
+    // screen over.
+    const request = vi.fn().mockResolvedValue(batch());
+    renderScreen(request, "batch-1", secondary);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    // The statement's own figure is unchanged; the conversion is the *secondary* column.
+    expect(within(first).getByText("-A 10.00", { selector: ".review-amount" })).toBeTruthy();
+    expect(within(first).getByText("-I 2,500.00", { selector: ".review-converted" })).toBeTruthy();
+  });
+
+  it("shows no conversion for a row already in the displayed currency", async () => {
+    // Converting a figure into its own currency says nothing — and printing `amountBase` beside
+    // an equal `amount` under one symbol invites the reader to think they are two figures. The
+    // ledger screen omits it for the same reason.
     const request = vi.fn().mockResolvedValue(batch());
     renderScreen(request);
 
     const first = await screen.findByRole("listitem", { name: /row 1/i });
 
     expect(within(first).getByText("-A 10.00", { selector: ".review-amount" })).toBeTruthy();
-    expect(within(first).getByText("-A 40.00", { selector: ".review-converted" })).toBeTruthy();
+    expect(first.querySelector(".review-converted")).toBeNull();
   });
 
   it("formats the converted figure in the household's currency, not the account's", async () => {
