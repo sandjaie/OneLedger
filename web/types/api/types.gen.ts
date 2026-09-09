@@ -411,6 +411,24 @@ export type CategoryUpdate = {
 };
 
 /**
+ * CommitResult
+ */
+export type CommitResult = {
+    /**
+     * Batchid
+     */
+    batchId: string;
+    /**
+     * Rowsimported
+     */
+    rowsImported: number;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
  * CurrencyRow
  */
 export type CurrencyRow = {
@@ -434,6 +452,16 @@ export type CurrencyRow = {
      * Numberformat
      */
     numberFormat: 'international' | 'indian';
+};
+
+/**
+ * DecisionResult
+ */
+export type DecisionResult = {
+    /**
+     * Updated
+     */
+    updated: number;
 };
 
 /**
@@ -1158,6 +1186,191 @@ export type Reconciliation = {
      * Message
      */
     message: string;
+};
+
+/**
+ * ReviewBatch
+ */
+export type ReviewBatch = {
+    /**
+     * Batchid
+     */
+    batchId: string;
+    /**
+     * Documentid
+     */
+    documentId: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Layoutid
+     */
+    layoutId: string | null;
+    /**
+     * Layoutversion
+     */
+    layoutVersion: number | null;
+    period: ReviewPeriod;
+    /**
+     * Rowsextracted
+     */
+    rowsExtracted: number;
+    reconciliation: Reconciliation;
+    /**
+     * Groups
+     */
+    groups: Array<ReviewGroup>;
+};
+
+/**
+ * ReviewGroup
+ *
+ * Rows sharing a status, and how many there are.
+ *
+ * `statement-ingestion.html` §10 groups by attention needed rather than chronologically:
+ * chronological order means scrolling past the rows that are fine to reach the ones that are
+ * not. `count` is stated rather than left to the array's length because a later page of a
+ * large group will not carry every row.
+ */
+export type ReviewGroup = {
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Rows
+     */
+    rows: Array<ReviewRow>;
+};
+
+/**
+ * ReviewPeriod
+ *
+ * The period as `import_batch` recorded it, which is not always all of it.
+ *
+ * Every field is optional because every underlying column is. `period_start` and `period_end`
+ * are nullable (V12), so a batch that failed before reconciliation has no period at all and
+ * must still be readable — a review screen that 500s on the batch the owner needs to look at
+ * is the wrong failure. `isDerived` is null because **the batch does not record it**: the flag
+ * exists on the parse-time verdict and no column carries it, so it is reported as unrecorded
+ * rather than guessed. Guessing `true` labels a declared period derived, and guessing `false`
+ * labels a computed one declared; Invariant I7 forbids inventing either. Recording it needs a
+ * column, which is a schema change this task does not carry.
+ */
+export type ReviewPeriod = {
+    /**
+     * Start
+     */
+    start: string | null;
+    /**
+     * End
+     */
+    end: string | null;
+    /**
+     * Isderived
+     */
+    isDerived: boolean | null;
+};
+
+/**
+ * ReviewRow
+ *
+ * One staged row as the review screen reads it.
+ *
+ * Money is a string and the frozen pair travels with the row: the screen shows what will be
+ * written, not a figure it recomputes (`api-contracts.html` §6).
+ */
+export type ReviewRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Sourcepagenumber
+     */
+    sourcePageNumber: number | null;
+    /**
+     * Sourcerownumber
+     */
+    sourceRowNumber: number;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Valuedate
+     */
+    valueDate: string | null;
+    /**
+     * Descriptionraw
+     */
+    descriptionRaw: string;
+    /**
+     * Descriptionclean
+     */
+    descriptionClean: string | null;
+    /**
+     * Referenceraw
+     */
+    referenceRaw: string | null;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Amountsecondary
+     */
+    amountSecondary: string;
+    /**
+     * Proposedtxntype
+     */
+    proposedTxnType: string | null;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Duplicateoftransactionid
+     */
+    duplicateOfTransactionId: string | null;
+    /**
+     * Nearduplicateofid
+     */
+    nearDuplicateOfId: string | null;
+};
+
+/**
+ * RowDecision
+ *
+ * A bulk decision. Reviewing 200 rows one at a time is why people abandon these tools.
+ */
+export type RowDecision = {
+    /**
+     * Rowids
+     */
+    rowIds: Array<string>;
+    /**
+     * Decision
+     */
+    decision: string;
 };
 
 /**
@@ -2071,6 +2284,96 @@ export type ParseStatementParsePostResponses = {
 };
 
 export type ParseStatementParsePostResponse = ParseStatementParsePostResponses[keyof ParseStatementParsePostResponses];
+
+export type ReadImportBatchImportBatchIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/import/{batch_id}';
+};
+
+export type ReadImportBatchImportBatchIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadImportBatchImportBatchIdGetError = ReadImportBatchImportBatchIdGetErrors[keyof ReadImportBatchImportBatchIdGetErrors];
+
+export type ReadImportBatchImportBatchIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReviewBatch;
+};
+
+export type ReadImportBatchImportBatchIdGetResponse = ReadImportBatchImportBatchIdGetResponses[keyof ReadImportBatchImportBatchIdGetResponses];
+
+export type DecideImportRowsImportBatchIdRowsPatchData = {
+    body: RowDecision;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/import/{batch_id}/rows';
+};
+
+export type DecideImportRowsImportBatchIdRowsPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DecideImportRowsImportBatchIdRowsPatchError = DecideImportRowsImportBatchIdRowsPatchErrors[keyof DecideImportRowsImportBatchIdRowsPatchErrors];
+
+export type DecideImportRowsImportBatchIdRowsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResult;
+};
+
+export type DecideImportRowsImportBatchIdRowsPatchResponse = DecideImportRowsImportBatchIdRowsPatchResponses[keyof DecideImportRowsImportBatchIdRowsPatchResponses];
+
+export type CommitImportImportBatchIdCommitPostData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/import/{batch_id}/commit';
+};
+
+export type CommitImportImportBatchIdCommitPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CommitImportImportBatchIdCommitPostError = CommitImportImportBatchIdCommitPostErrors[keyof CommitImportImportBatchIdCommitPostErrors];
+
+export type CommitImportImportBatchIdCommitPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitResult;
+};
+
+export type CommitImportImportBatchIdCommitPostResponse = CommitImportImportBatchIdCommitPostResponses[keyof CommitImportImportBatchIdCommitPostResponses];
 
 export type HealthHealthGetData = {
     body?: never;

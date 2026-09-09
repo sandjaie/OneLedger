@@ -107,18 +107,22 @@ class Fixture:
         self.conn = conn
         with conn.cursor() as cur:
             _clean(cur)
-            cur.execute("SELECT id, base_currency, secondary_currency FROM household LIMIT 1")
+            # The household that has a person, not whichever row comes back first. `LIMIT 1`
+            # over an unordered table picks arbitrarily, and a test elsewhere that leaves a
+            # second household behind would otherwise make this fixture skip — silently, and
+            # only sometimes.
+            cur.execute(
+                """SELECT h.id, h.base_currency, h.secondary_currency, p.id
+                     FROM household h
+                     JOIN person p ON p.household_id = h.id AND p.is_self
+                    ORDER BY h.created_at
+                    LIMIT 1"""
+            )
             row = cur.fetchone()
             if row is None:
-                pytest.skip("no seeded household")
-            self.household_id, self.base, self.secondary = row
-
-            cur.execute(
-                "SELECT id FROM person WHERE household_id = %s LIMIT 1", (self.household_id,)
-            )
-            person = cur.fetchone()
-            if person is None:
-                pytest.skip("no seeded person")
+                pytest.skip("no seeded household with a person")
+            self.household_id, self.base, self.secondary = row[0], row[1], row[2]
+            person = (row[3],)
             cur.execute(
                 """INSERT INTO account (household_id, owner_person_id, name, account_type,
                                         currency, country, opening_balance_date, current_balance,
@@ -186,9 +190,12 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
     monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
     monkeypatch.setenv("ACCOUNT_HASH_SALT", SALT)
     conn = _connect()
-    fixture = Fixture(conn)
-    app.dependency_overrides[auth.require_owner] = fixture.owner
     try:
+        # Constructed inside the try: `Fixture.__init__` truncates before it can `pytest.skip`,
+        # and a skip that escaped this block would leave the connection open holding that
+        # TRUNCATE's lock, blocking every test after it rather than skipping with it.
+        fixture = Fixture(conn)
+        app.dependency_overrides[auth.require_owner] = fixture.owner
         yield fixture
     finally:
         app.dependency_overrides.clear()
