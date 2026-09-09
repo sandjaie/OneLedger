@@ -32,7 +32,7 @@ request.
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
-| 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
+| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Planned and reviewed | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
