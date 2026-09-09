@@ -191,8 +191,9 @@ fixture reproduces the arithmetic and the geometry, never the amounts.
 **Required test behaviours (failing first).**
 - A golden-output test for this layout: its redacted fixture in, the normalized rows and the
   reconciliation verdict out, asserted exactly.
-- Its profile validates through `LayoutCreate`, as `test_ingest_card_frame.py` holds the card
-  profile — so a seeded profile cannot drift from the shape the endpoint accepts.
+- ~~Its profile validates through `LayoutCreate`~~ — **already covered**, generically, by
+  `api/tests/test_seeded_layouts.py`: every file in `db/seeds/` is validated on every run, so
+  dropping the profile in is enough and no branch writes this test again.
 - Where this layout's narration wraps: one row per transaction, not one per physical line.
 - Where this layout is encrypted: it parses with its password and refuses without one.
 - Any engine change carries the fixture that failed before it.
