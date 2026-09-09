@@ -22,6 +22,17 @@
 ALTER TABLE import_batch
   ADD COLUMN period_is_derived BOOLEAN;
 
+-- Recorded provenance requires a period to have a provenance about. A batch claiming its period
+-- was derived while holding no period is a row the system has no meaning for — the same shape as
+-- V13's `original_pair`, where an original amount without its currency is a number with nothing
+-- to interpret it.
+--
+-- One-directional on purpose: a period *without* recorded provenance stays legal, because that is
+-- exactly the pre-V17 batch this column is nullable for.
+ALTER TABLE import_batch
+  ADD CONSTRAINT period_provenance_needs_a_period
+    CHECK (period_is_derived IS NULL OR (period_start IS NOT NULL AND period_end IS NOT NULL));
+
 COMMENT ON COLUMN import_batch.period_is_derived IS
   'True where the period came from the rows dates, false where the statement stated it, null '
   'for a batch staged before V17. Never inferred: the two are indistinguishable afterwards.';

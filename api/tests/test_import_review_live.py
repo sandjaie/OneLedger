@@ -155,7 +155,10 @@ class Staged(Fixture):
             _statement(description=description) if statement is None else statement, stage="true"
         )
         assert response.status_code == 200, response.text
-        batch: str = response.json()["batchId"]
+        # Kept so a test can hold the two renderings of one fact against each other: `POST /parse`
+        # answers from the analysis in memory, `GET /import/{batch}` from the column it wrote.
+        self.parsed = response.json()
+        batch: str = self.parsed["batchId"]
         return batch
 
     def get(self, batch: str) -> httpx.Response:
@@ -1012,3 +1015,39 @@ def test_the_period_provenance_survives_the_round_trip(live: Staged) -> None:
 
     assert stored is True
     assert live.get(batch).json()["period"]["isDerived"] == stored
+
+
+@pytest.mark.parametrize("statement", [None, "dated"])
+def test_the_parse_response_and_the_review_payload_agree(
+    live: Staged, statement: str | None
+) -> None:
+    """Two renderings of one fact, which nothing else holds against each other.
+
+    `POST /parse` answers from the analysis in memory; `GET /import/{batch}` answers from the
+    column that analysis wrote. Asserted for both values, because a check that only ever sees a
+    derived period would pass just as happily if the pipeline stored the opposite of what it
+    reported.
+    """
+    if statement == "dated":
+        with live.conn.cursor() as cur:
+            cur.execute(
+                """UPDATE statement_layout
+                      SET metadata_patterns = metadata_patterns || %s::jsonb
+                    WHERE id = %s""",
+                (
+                    psycopg.types.json.Json(
+                        {
+                            "period_start": r"Statement\s*Period\s*([0-9/]+)\s*to",
+                            "period_end": r"Statement\s*Period\s*[0-9/]+\s*to\s*([0-9/]+)",
+                        }
+                    ),
+                    LAYOUT_ID,
+                ),
+            )
+        live.conn.commit()
+
+    batch = live.stage(statement=_dated_statement() if statement == "dated" else None)
+
+    assert live.get(batch).json()["period"] == live.parsed["period"]
+    # And the two values really are different, so the agreement is not a constant agreeing.
+    assert live.parsed["period"]["isDerived"] is (statement != "dated")

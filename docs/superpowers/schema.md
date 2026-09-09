@@ -672,8 +672,13 @@ looks exactly like one a statement stated as 1–2 March, which is why this is s
 recomputed.
 
 **Nullable on purpose**: a batch staged before V17 recorded no provenance, and a default would
-assert one for it. Null reads back as "not recorded". `db/tests/0015` asserts that stated,
-derived and unrecorded stay three distinguishable answers.
+assert one for it. Null reads back as "not recorded".
+
+`period_provenance_needs_a_period` refuses the incoherent half: a batch may hold a period without
+recorded provenance — that is the pre-V17 row — but not a provenance without a period, which is a
+claim about how it arrived at something it does not have. The same shape as V13's `original_pair`.
+`db/tests/0015` asserts both, and that stated, derived and unrecorded stay three distinguishable
+answers.
 
 ## `V16` (applied)
 

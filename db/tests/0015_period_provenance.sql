@@ -53,5 +53,22 @@ BEGIN
   ASSERT (SELECT count(*) FROM import_batch
            WHERE household_id = h AND period_is_derived IS NULL) = 1, 'one unrecorded';
   RAISE NOTICE 'PASS 0015 stated, derived and unrecorded are three distinguishable answers';
+
+  -- A provenance for a period that does not exist is a row with nothing to interpret it.
+  found := false;
+  BEGIN
+    INSERT INTO import_batch (household_id, account_id, status, period_start, period_end,
+                              period_is_derived)
+    VALUES (h, a, 'awaiting_review', NULL, NULL, true);
+  EXCEPTION WHEN check_violation THEN
+    found := true;
+  END;
+  ASSERT found,
+    'a batch claiming its period was derived must hold a period to have derived';
+
+  -- The converse stays legal: that is the pre-V17 batch the column is nullable for.
+  INSERT INTO import_batch (household_id, account_id, status, period_start, period_end)
+  VALUES (h, a, 'awaiting_review', '2026-04-01', '2026-04-30');
+  RAISE NOTICE 'PASS 0015 provenance needs a period; a period needs no provenance';
 END $$;
 ROLLBACK;
