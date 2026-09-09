@@ -1,0 +1,23 @@
+{
+  "name": "Card statement",
+  "fingerprints": ["Credit Card Statement", "Card Type:"],
+  "headerRowPattern": "Transaction Date\\s*Posting Date\\s*Description\\s*Amount",
+  "columns": [
+    { "field": "booked_date", "xMin": 30.0, "xMax": 120.0, "label": "Transaction Date" },
+    { "field": "value_date", "xMin": 120.0, "xMax": 195.0, "label": "Posting Date" },
+    { "field": "description", "xMin": 195.0, "xMax": 460.0, "label": "Description" },
+    { "field": "amount", "xMin": 460.0, "xMax": 580.0, "label": "Amount" }
+  ],
+  "dateFormat": "dd/MM/yyyy",
+  "signConvention": "cr_suffix",
+  "invertsSign": true,
+  "chronologicalOrder": "ascending",
+  "rowStartRule": "has_date_and_amount",
+  "continuationRule": null,
+  "skipLinePatterns": [],
+  "openingBalancePattern": "^(\\d[\\d,]*\\.\\d{2})(?:\\d[\\d,]*\\.\\d{2}){5}$",
+  "closingBalancePattern": "^(?:\\d[\\d,]*\\.\\d{2}){4}(\\d[\\d,]*\\.\\d{2})\\d[\\d,]*\\.\\d{2}$",
+  "hasRunningBalance": false,
+  "quirks": ["filter_script:arabic"],
+  "metadataPatterns": null
+}

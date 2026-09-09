@@ -54,15 +54,28 @@ into staged rows via `POST /parse`; reviewed rows commit atomically to the ledge
 drives it from `/import` and a review screen.
 **Covers (old numbering).** M2 5d, 5e, 6a–6d, 7a, 7b, 9a, plus the card layout profile seeded as
 data (the mapper UI arrives in 1.7).
-**Branches.** `feature/p1-1a-parse-pipeline` (pipeline + route), `feature/p1-1b-commit-path`
-(V14 commit/verification functions, review payload, row decisions, atomic commit),
-`feature/p1-1c-import-review-ui`.
+**Branches**, revised by `/oneledger-plan-review` on 9 September 2026 and by the owner
+decisions it raised: `fix/p1-1-card-layout-fitness` (the balance-frame semantics the card needs
+before anything can reconcile, and the card profile as data), `feature/p1-1a-parse-pipeline`
+(pipeline + route), `feature/p1-1b-commit-path` (V14 commit/verification functions, review
+payload, row decisions, atomic commit), `feature/p1-1c-import-screen`,
+`feature/p1-1d-review-screen`. The UI is two branches because one forecast at ~950–1,150
+production lines against the 800 budget; all five carry the `[P1.1]` prefix.
 **Invariants.** Reconciliation blocks on mismatch (I8); commit is one transaction with
-post-commit balance verification; re-import of a committed file imports zero rows.
+post-commit balance verification; re-import of a committed file imports zero rows; a second
+staging is refused for an account and period that already has an unreviewed batch (spec §7
+item 11).
+**Security.** Every route behind `require_owner()`; no digit run of seven or more from the
+document in any log line, error or response; the uploaded original is written under its
+checksum, never under its own name.
 **Tests.** Pipeline behaviours per module; SQL tests for V14; an induced mid-commit failure
 leaves zero rows.
+**Validation.** `/verify`, then `/oneledger-code-review`, then `/verify` again, per
+[development-cycle.md](../../development-cycle.md).
 **Accept when.** The 38 card statements import end-to-end with no manual correction; duplicates
-name the earlier import.
+name the earlier import. That run is **local and owner-driven** — the statements are git-ignored
+and never enter the repository, so the committed evidence is the synthetic-fixture suite and the
+run itself is recorded in the PR's Verification table.
 
 ### 1.2 — all four bank layouts
 

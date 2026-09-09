@@ -711,3 +711,64 @@ now needs none, and such a card reconciles. What still blocks is the card that p
 balances **bare**: nothing then says the figures are owed, and the walk accuses row 1 for what is
 a frame error. One of those two documents is wrong; deciding which is the owner's, and the fix is
 its own task once decided.
+
+**Owner decision, 2026-09-09 — `inverts_sign` reframes whatever stated no direction.** The
+question 4d left open above is settled, and settled the way 4d's own rule already pointed. The
+flag is not a property of the row convention; it is the statement's frame, and it applies to
+every figure the statement wrote without a direction of its own — an amount under `signed` or
+`balance_delta`, and any declared or running balance carrying no `Dr`/`Cr` suffix. A figure that
+stated its direction has nothing left to reframe, so the flag is withheld from rows under
+`cr_suffix` and `debit_credit_columns`. That is the exact symmetry of the balance rule 4d
+delivered, now stated once for both halves rather than twice with different scope.
+
+`statement-ingestion.html` is the document that was right: a card pairing a `CR` suffix with
+`inverts_sign = True` is a valid layout, and it is the layout in hand. `layouts.py` was the one
+that was wrong — its `inversion_matches_its_convention` validator refused exactly that pairing,
+so the card had no frame switch for its bare anchors and every statement mismatched. The
+validator is removed rather than narrowed: with `has_a_balance_anchor` guaranteeing every saved
+layout declares an anchor, there is no convention under which the flag has nothing to act on.
+`DIRECTIONLESS_CONVENTIONS` goes with it, and the semantics now live on the field itself beside
+`normalize._signed_amount` and `normalize.frame_balance`, which is where they are applied.
+
+Measured on the layout in hand before the change, and the reason the decision is not a matter of
+taste: the statement declares a previous balance and a total payment due, both written bare and
+both money owed, and the identity closes only once both anchors are negative. Read in the
+issuer's frame the computed closing overshoots the declared one by twice the opening balance,
+which is what blocked all 38 files. The arithmetic is reproduced with invented figures in
+`api/tests/test_ingest_card_frame.py`; no real balance is recorded here.
+
+Two further findings from that measurement, recorded so they are not rediscovered as bugs:
+
+- **The card's transaction table legitimately carries rows dated outside its statement period.**
+  Its installment block prints each plan's original purchase date, and those instalment charges
+  are part of the declared purchase total the anchors reconcile against. The layout therefore
+  **derives** its period and must not capture it: capturing the printed period would fail those
+  rows and break the identity. Its `date_format` carries a four-digit year, so deriving is
+  permitted (§4.4's two-digit-year rule does not bind here).
+- **`continuation:no_date_and_no_amount` runs past the end of the transaction table**, appending
+  trailing page furniture to the last row's description — 2,232 characters of it against 46
+  with the rule off. The card writes each transaction on one physical line, so the profile
+  simply does not set the rule; the dropped lines are counted in `lines_unparsed` and reported
+  in the parse summary, which keeps the loss visible rather than silent (I7). Data, not code,
+  and it moves no amount and no verdict.
+- **The balance anchors cannot be regexes over a label.** This producer emits no space
+  characters between cells, so the statement summary extracts as one run —
+  one line of six figures with no separator. It is the
+  no-space case `statement-ingestion.html` §4 attributes to another layout, present here too.
+  Every figure ends in exactly two decimal places, so `\d[\d,]*\.\d{2}` segments the run
+  deterministically — the decimal points alone fix the six boundaries, so there is nothing for
+  the greedy digit class to explore. The seeded patterns require exactly six figures on their
+  own line, which makes a five- or seven-figure line yield no anchor at all rather than a wrong
+  one, and they
+  capture the first and the **fifth**. The fifth is the total payment due. The sixth is the
+  current balance, which also carries the remaining installment principal and reconciles
+  against nothing — anchoring on it would fail every statement that has an instalment plan.
+- **One profile covers both card variants.** Their summary blocks differ (one wraps its column
+  labels across two lines) but both print the same six figures in the same order on their own
+  line, so anchoring on the figures rather than the labels covers both without a second layout.
+
+Measured over the 38 card statements held locally, with the seeded profile: **every one of them
+reconciles `matched`, with no row failing to normalize.** That is slice 1.1's acceptance
+criterion at the parse and reconciliation level; staging, commit and the review screen are the
+branches that follow. No figure, date or per-file count from those statements is recorded here —
+they are git-ignored, and the committed evidence is the invented-figure suite.

@@ -563,9 +563,12 @@ def test_inversion_never_reverses_a_convention_that_already_states_direction(
         row(1, booked_date="15/07/2024", description="PURCHASE", **fields_purchase),
         row(2, booked_date="16/07/2024", description="PAYMENT", **fields_payment),
     ]
-    # model_copy bypasses validation on purpose: LayoutCreate now refuses this combination, and
-    # this proves the engine does not depend on that refusal to stay in the ledger frame.
-    layout = profile(**changes).model_copy(update={"invertsSign": True})
+    # LayoutCreate accepts this combination: inverts_sign is the statement's frame, not a
+    # property of its row convention. A debit/credit pair and a Dr/Cr suffix each state a row's
+    # direction, so the flag is a no-op on these amounts — it reframes the declared balances,
+    # which is what a card printing bare anchors needs. Built through the validator rather than
+    # around it, so the test proves the shape an owner can actually save.
+    layout = profile(**changes, invertsSign=True)
 
     batch = normalize.normalize(layout, extraction(rows), account_currency=ACCOUNT_CURRENCY)
 
