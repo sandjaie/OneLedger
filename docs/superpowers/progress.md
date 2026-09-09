@@ -61,6 +61,7 @@ The decisions themselves are contract and live in the
 | Decisions and deviations taken while building M2 | [M2 spec §8](specs/2026-09-07-m2-statement-importer.md) |
 | Dated gate and test-run evidence for M2 | [M2 delivery evidence](reports/2026-09-08-m2-delivery-evidence.md) |
 | Dated Phase 0 verification and dependency evidence | [Phase 0 verification](reports/2026-09-06-phase-0-verification.md) |
+| Slice 1.1 state, decisions and layout field notes | [slice 1.1 handoff](reports/2026-09-09-slice-1.1-handoff.md) |
 | Scope, sequence and acceptance criteria | [product roadmap](../product/roadmap.html) |
 | Task blocks, branches and forecasts | the milestone's plan in `plans/` |
 
