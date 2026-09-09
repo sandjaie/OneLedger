@@ -34,6 +34,7 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
 from ..fxrange import FxCoverageError
 from ..ingest import pipeline
+from ..ingest.dedupe import OCCURRENCE, fingerprint
 from ..ingest.reconcile import Verdict
 from ..ingest.storage import DuplicateDocument, StorageError
 from ..ingest.words import ExtractionError
@@ -391,6 +392,17 @@ NOT_RECONCILED = "not reconciled"
 # checks below cannot drift into describing the same refusal two different ways.
 EMPTY_COMMIT = "this batch has no rows accepted for import; accept some first"
 
+# How far the confirmed-distinct override will advance the occurrence index looking for a free
+# one. The index counts identical (date, amount, normalised description) rows, so reaching this
+# many would mean the same transaction on the same day sixty-four times over — which is a
+# statement to look at, not a number to raise.
+OVERRIDE_LIMIT = 64
+
+# Spec §4.7: a row staged `duplicate` collides with something already committed, so accepting it
+# is a confirmed-distinct override rather than an ordinary decision. Nothing else is overridden —
+# `near_duplicate` only warns, and V10's unique index has no quarrel with it.
+COLLIDING = "duplicate"
+
 
 class ReviewRow(BaseModel):
     """One staged row as the review screen reads it.
@@ -620,6 +632,71 @@ def read_import_batch(
     )
 
 
+_COLLIDING_ROWS = """SELECT id, account_id, booked_date, amount, description_raw
+                       FROM staged_transaction
+                      WHERE import_batch_id = %s AND household_id = %s
+                        AND id = ANY(%s) AND status = %s
+                      ORDER BY source_row_number"""
+
+# What a candidate hash must not already be. Both halves matter: the committed side is what
+# V10's unique index rejects, and the staged side is the batch's own other rows — the commit
+# inserts them together, so two overrides landing on one hash fail the same index a moment
+# later, having passed every check that looked only at the ledger.
+_TAKEN = """SELECT dedupe_hash FROM transaction
+             WHERE household_id = %s AND account_id = %s AND dedupe_hash = ANY(%s)
+            UNION
+            SELECT dedupe_hash FROM staged_transaction
+             WHERE import_batch_id = %s AND id <> %s AND dedupe_hash = ANY(%s)"""
+
+
+def _override_hashes(
+    cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID, row_ids: list[UUID]
+) -> None:
+    """Re-fingerprint every colliding row being accepted, in place.
+
+    Spec §4.7: accepting a `duplicate` is the owner saying this is a different transaction that
+    happens to look identical. V10's unique `(household_id, account_id, dedupe_hash)` index means
+    the colliding hash cannot commit unchanged, so the row is re-fingerprinted with its occurrence
+    index advanced to the next free one — deterministic and stable, never a random suffix, because
+    a later statement carrying both occurrences must hash them 0 and 1 and recognise both as
+    duplicates. That is why the index is advanced rather than the row being marked exempt.
+
+    Recomputed in the `occ:` namespace whatever disambiguated it before (spec §7 item 12): a
+    reference-disambiguated row that collided did so on its reference, and advancing a counter
+    that is not in the fingerprint would change nothing.
+
+    One row at a time, and each write is visible to the next row's search, so two overrides in
+    the same batch cannot land on one hash.
+    """
+    cur.execute(_COLLIDING_ROWS, (batch_id, household_id, row_ids, COLLIDING))
+    for row_id, account_id, booked_date, amount, description_raw in cur.fetchall():
+        candidates = [
+            fingerprint(
+                account_id=account_id,
+                booked_date=booked_date,
+                amount=amount,
+                description_raw=description_raw,
+                disambiguator=f"{OCCURRENCE}{index}",
+            )
+            for index in range(OVERRIDE_LIMIT)
+        ]
+        cur.execute(
+            _TAKEN,
+            (household_id, account_id, candidates, batch_id, row_id, candidates),
+        )
+        taken = {found[0] for found in cur.fetchall()}
+        free = next((candidate for candidate in candidates if candidate not in taken), None)
+        if free is None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "this row already exists in the ledger too many times over to accept "
+                    "another copy; check the statement before overriding"
+                ),
+            )
+        cur.execute("UPDATE staged_transaction SET dedupe_hash = %s WHERE id = %s", (free, row_id))
+
+
 @router.patch("/import/{batch_id}/rows")
 def decide_import_rows(
     batch_id: UUID, body: RowDecision, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -638,13 +715,32 @@ def decide_import_rows(
                 status_code=409, detail=f"this batch is {batch[3]} and can no longer be decided"
             )
 
-        cur.execute(
-            """UPDATE staged_transaction SET status = %s
-                WHERE import_batch_id = %s AND household_id = %s AND id = ANY(%s)""",
-            (body.decision, batch_id, owner.household_id, list(body.rowIds)),
-        )
+        row_ids = list(body.rowIds)
+        if body.decision == "accepted":
+            # Before the status changes, so a refusal here leaves the batch exactly as it was —
+            # and so V13's accepted_row_is_committable sees the row in its final shape.
+            _override_hashes(cur, batch_id, owner.household_id, row_ids)
+
+        try:
+            cur.execute(
+                """UPDATE staged_transaction SET status = %s
+                    WHERE import_batch_id = %s AND household_id = %s AND id = ANY(%s)""",
+                (body.decision, batch_id, owner.household_id, row_ids),
+            )
+        except psycopg.errors.CheckViolation as exc:
+            # V13's accepted_row_is_committable: an accepted row carries a txn_type, and a zero
+            # amount only as an adjustment. The database is the guard — a row that can be
+            # accepted but never committed is a dead end it refuses to represent — but its
+            # refusal is a client error about this request, not a 500.
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "a row cannot be accepted without a transaction type, and a zero amount "
+                    "only as an adjustment"
+                ),
+            ) from exc
         updated = cur.rowcount
-        if updated != len(set(body.rowIds)):
+        if updated != len(set(row_ids)):
             # Refused whole rather than reported as a partial success. A count that says 1 when
             # the caller asked for 2 is how a reviewer comes to believe they decided rows they
             # did not — and the transaction rolls back, so nothing is half-applied.

@@ -44,7 +44,10 @@ _INVISIBLE = frozenset({"Mn", "Mc", "Me", "Cf"})
 # referenced row, not only a repeated one, so that a literal reference "ABC#1" cannot collide with
 # the "ABC" that repeated once: splitting on the last "#" always separates the two.
 _REFERENCE = "ref:"
-_OCCURRENCE = "occ:"
+# Public because `routes/ingest.py`'s confirmed-distinct override recomputes in this namespace
+# (spec §7 item 12), and a second spelling of it there is the collision the prefix exists to
+# prevent.
+OCCURRENCE = "occ:"
 
 
 @dataclass(frozen=True)
@@ -201,7 +204,7 @@ def classify(
             repeats[(*key, reference)] = seen + 1
             disambiguator = f"{_REFERENCE}{reference}#{seen}"
         else:
-            disambiguator = f"{_OCCURRENCE}{occurrence}"
+            disambiguator = f"{OCCURRENCE}{occurrence}"
 
         digest = fingerprint(
             account_id=account_id,

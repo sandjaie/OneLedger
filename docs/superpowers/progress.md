@@ -31,7 +31,7 @@ request.
 
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
-| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | In progress — branch 6 of 8 | slice 1.1 branch table below |
+| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | In progress — branch 7 of 8 | slice 1.1 branch table below |
 | 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
@@ -56,7 +56,7 @@ are contract and live in the [M2 spec §8](specs/2026-09-07-m2-statement-importe
 | `fix/security-definer-search-path` | V15: every `SECURITY DEFINER` function names `pg_temp` last, so `current_household_id()` cannot be answered by a caller's temporary table; `db/tests/0013` | Merged | [#55](https://github.com/sandjaie/OneLedger/pull/55) |
 | `feature/p1-1b-review-routes` | `GET /import/{batch}`, `PATCH /import/{batch}/rows`, `POST /import/{batch}/commit` | Implemented; reviewed | `api/tests/test_import_review_live.py` (22 cases) |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Implemented; reviewed | `web/app/import/__tests__/import-screen.test.tsx` (14 cases) |
-| `feature/p1-1b-duplicate-override` | Accepting a row marked `duplicate` as a confirmed-distinct override: the dedupe hash is recomputed with the occurrence index advanced (M2 spec §4.7). Added in delivery — the slice covers M2 6a–6d and 6c was not in the review-routes branch | Not started | — |
+| `feature/p1-1b-duplicate-override` | Accepting a row marked `duplicate` as a confirmed-distinct override: the dedupe hash is recomputed with the occurrence index advanced (M2 spec §4.7). Added in delivery — the slice covers M2 6a–6d and 6c was not in the review-routes branch | Implemented; reviewed | `api/tests/test_import_review_live.py` (30 cases) |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
 
 ## Raised and not yet actioned
