@@ -653,6 +653,21 @@ ALTER TABLE transaction
 
 ---
 
+## `V15` (applied)
+
+Applied as `db/migrations/V15__definer_search_path_excludes_pg_temp.sql`. **It creates no table
+and changes no behaviour** — it replaces four `SECURITY DEFINER` function definitions from V2, V5
+and V7 with bodies identical to the originals, changing only `SET search_path = public` to
+`SET search_path = public, pg_temp`.
+
+That is a security fix, not a style one. Postgres searches the session's temporary schema
+**first** precisely when `pg_temp` is absent from a function's path, so every unqualified relation
+in those bodies was resolvable to a caller-created temp table — read with the definer's
+privileges, which here bypass RLS. `current_household_id()` is the authorization boundary every
+policy in this schema reads, and a temp `app_user` made it return a household of the caller's
+choosing. `db/tests/0013` enforces the rule against `pg_catalog` rather than against a list, so a
+definer function added later without `pg_temp` fails on the day it is added.
+
 ## `V14` (applied)
 
 Applied as `db/migrations/V14__commit_import_batch.sql`. **It creates no table**, which is why it
