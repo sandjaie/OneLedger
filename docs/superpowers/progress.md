@@ -31,7 +31,7 @@ request.
 
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
-| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 2 of 6 | slice 1.1 branch table below |
+| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 4 of 7 | slice 1.1 branch table below |
 | 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
@@ -44,17 +44,25 @@ request.
 `/oneledger-plan-review` ran on the phase delivery plan on 9 September 2026, before the first
 dispatch, and split the slice into five branches; the owner took the two decisions it raised.
 Branch 1a then split again in delivery — written as one branch it passed the diff budget's hard
-stop — so the slice runs to six. The decisions themselves are contract and live in the
-[M2 spec §8](specs/2026-09-07-m2-statement-importer.md).
+stop, and 1b split on the same forecast — so the slice runs to seven. The decisions themselves
+are contract and live in the [M2 spec §8](specs/2026-09-07-m2-statement-importer.md).
 
 | Branch | Delivers | Status | Evidence |
 | --- | --- | --- | --- |
 | `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
 | `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Merged | [#52](https://github.com/sandjaie/OneLedger/pull/52) |
-| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Implemented; review gate open | `api/tests/test_ingest_route_live.py` (14) |
-| `feature/p1-1b-commit-path` | V14 commit and verification functions, review payload, row decisions, atomic commit | Not started | — |
+| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Merged | [#53](https://github.com/sandjaie/OneLedger/pull/53) |
+| `feature/p1-1b-commit-functions` | V14's `commit_import_batch` and `assert_account_reconciles`, and `db/tests/0012` | Implemented; reviewed | `db/tests/0012_commit_import_batch.sql` (14 blocks) |
+| `feature/p1-1b-review-routes` | `GET /import/{batch}`, `PATCH /import/{batch}/rows`, `POST /import/{batch}/commit` | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
+
+## Raised and not yet actioned
+
+| What | Why it is not folded into the branch that found it |
+| --- | --- |
+| **`SET search_path = public` on five pre-existing `SECURITY DEFINER` functions** in V2, V5 and V7 — among them `current_household_id()`, which every RLS policy and `assert_is_owner()` read. Postgres searches `pg_temp` first when it is not named in the path, so a caller-created temp `app_user` makes `current_household_id()` return a household of the attacker's choosing; verified on PostgreSQL 18.6 while reviewing V14. Needs its own migration replacing each definition with `search_path = public, pg_temp`, and a `db/tests` block per function. | The functions are in applied, Flyway-checksummed migrations, so the repair is a new migration and a change to the authorization boundary — sized and reviewed on its own, not carried by a slice-1.1 branch. **Take this before the remaining 1.1 branches**: they all build on that boundary. |
+| `.claude/skills/oneledger-plan-review/SKILL.md` states the pre-#50 diff budget (400/800) rather than the authoritative 800/1,600 in `git-workflow.md`. | Tooling, not a slice. A `chore/` branch. |
 
 ## Where the rest is written down
 

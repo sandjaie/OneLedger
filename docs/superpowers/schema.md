@@ -653,6 +653,44 @@ ALTER TABLE transaction
 
 ---
 
+## `V14` (applied)
+
+Applied as `db/migrations/V14__commit_import_batch.sql`. **It creates no table**, which is why it
+has no section below and why diffing this file against the migration list shows nothing for it:
+V14 adds two `SECURITY DEFINER` functions, and this document is the table reference.
+
+It also adds three `CHECK` constraints to `staged_transaction`, mirroring the frozen-fact rules
+`transaction` already enforces (`fx_rates_positive`, `frozen_amounts_derive`,
+`carried_rate_dates`). V13's own comment argues for exactly that — "a row that can be accepted
+but never committed is a dead end the database refuses to represent, rather than one the
+all-or-nothing commit discovers" — and then covered only `txn_type` and the zero amount. V13 is
+applied and Flyway-checksummed, so the rest arrive here.
+
+**Both functions set `search_path = public, pg_temp`, naming `pg_temp` explicitly and last.**
+That is load-bearing, not tidiness: Postgres searches the session's temporary schema *first*
+precisely when `pg_temp` is absent from the path, so `SET search_path = public` alone leaves
+every unqualified relation in a function body resolvable to a caller-created temp table. With
+`CREATE TEMP TABLE transaction (LIKE public.transaction)` in the session, a `search_path = public`
+version of `commit_import_batch` reports a successful import, marks the batch `completed`, and
+writes every row into a temp table that vanishes at end of session — while the balance
+verification passes, because `v_transaction_posting` bound its dependency on `public.transaction`
+at `CREATE VIEW` time. `db/tests/0012` pins it.
+
+`commit_import_batch(p_batch_id)` turns one reviewed batch into `transaction` rows and
+`assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` verifies the
+account's balance as of the statement's close. They live in the database rather than the service
+because the insert and the verification have to succeed or fail together, which no sequence of
+application statements can promise across a dropped connection (`api-contracts.html` §3). Both
+call `assert_is_owner()` first, and `db/tests/0012` asserts that by the refusal's message rather
+than by the fact that something was raised — without the assertion an unauthenticated caller is
+still refused, by a NULL comparison two statements away, and refusal by accident is what
+ADR-0013 exists to stop being load-bearing.
+
+The balance reads `v_transaction_posting`, not the base table and not
+`v_transaction_reportable`: the first would double every split, and the second drops transfers
+and adjustments, which move money and so belong in a balance even though they belong in no
+spending report.
+
 ## `V13` (applied)
 
 Applied as `db/migrations/V13__staged_transactions.sql`. `staged_transaction` is an import's
