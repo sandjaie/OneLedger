@@ -30,6 +30,9 @@ LEDGER_LIMIT = Decimal(10) ** 16
 # error this whole section exists to prevent.
 PERIOD_FORMATS = tuple(key for key in DATE_FORMATS if "yyyy" in key)
 CREDIT_DEBIT_SUFFIX = re.compile(r"(CR|DR)\s*$", re.IGNORECASE)
+# ISO 4217 alphabetic codes are exactly three letters. The column is CHAR(3) in both tables that
+# hold it, so anything else is a mapping error, not a currency this ledger has not heard of.
+CURRENCY_CODE = re.compile(r"[A-Z]{3}")
 GROUPING = re.compile(r",")
 
 
@@ -664,6 +667,22 @@ def normalize(
                     row.page_number,
                     row.row_number,
                     "an original amount and its currency must appear together",
+                )
+            )
+            continue
+        if original_currency is not None and not CURRENCY_CODE.fullmatch(original_currency):
+            # `transaction.original_currency` and `staged_transaction.original_currency` are both
+            # CHAR(3), and `StagedTransaction` states the same rule. Without this check a cell
+            # reading `EURO` — a mis-mapped band, or an issuer that spells the word out — passes
+            # the dry run and fails inside the staging transaction, where the only thing that can
+            # refuse it is a pydantic validator whose message quotes the cell back. That is a 500
+            # the owner cannot act on and a document value in a log line (spec §5.6). The row is
+            # refused here instead, where the failure names the row and never the value.
+            failures.append(
+                RowFailure(
+                    row.page_number,
+                    row.row_number,
+                    "original_currency is not a three-letter code",
                 )
             )
             continue

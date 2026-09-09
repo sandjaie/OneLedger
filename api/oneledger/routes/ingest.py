@@ -208,13 +208,19 @@ def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountR
 
 
 def _rows(result: pipeline.ParseResult) -> list[ParseRow]:
-    # Statement narration is untyped text out of the document, so it goes out screened — the
-    # same treatment `POST /layouts/propose` gives its own preview rows, and for the same
-    # reason: a card payment line reads `PAYMENT RECEIVED CARD 4111 1111 1111 1111`, and spec
-    # §5.6 keeps a digit run of seven or more out of every response regardless of which field
-    # it sat in. Dates, amounts and balances are typed and pass through untouched, so the
-    # preview still answers the only question it is for — did the columns land where I mapped
-    # them. The account-number capture is passed in so its own spelling is screened too.
+    # Every document-sourced string goes out screened — the same treatment
+    # `POST /layouts/propose` gives its own preview rows, and for the same reason: a card
+    # payment line reads `PAYMENT RECEIVED CARD 4111 1111 1111 1111`, and spec §5.6 keeps a
+    # digit run of seven or more out of every response regardless of which field it sat in.
+    # `originalCurrency` is screened with the rest even though `normalize` now refuses anything
+    # but a three-letter code: a value that survives that rule can never be redacted, so this
+    # costs nothing, and it means the rule above reads "every untyped field" without an
+    # exception a later reader has to hold in their head.
+    #
+    # Dates, amounts and balances are typed and pass through untouched — screening them would
+    # destroy them (`-10.0000` becomes `-[redacted]`) and defeat the only question the preview
+    # is for: did the columns land where I mapped them. The account-number capture is passed in
+    # so its own spelling is screened too.
     redact = _preview_redactor(result.analysis.account_number_raw)
     return [
         ParseRow(
@@ -230,7 +236,9 @@ def _rows(result: pipeline.ParseResult) -> list[ParseRow]:
             amount=str(row.amount),
             currency=row.currency,
             originalAmount=_out(row.original_amount),
-            originalCurrency=row.original_currency,
+            originalCurrency=None
+            if row.original_currency is None
+            else redact(row.original_currency),
             runningBalance=_out(row.running_balance),
             proposedTxnType=row.proposed_txn_type,
             status=verdict.status,

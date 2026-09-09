@@ -871,3 +871,22 @@ The pipeline branch is still **over the 800 / 1,600 budget and under the hard st
 at 826 added lines, in the range `normalize.py` (705) and `engine.py` (607) already occupy, and
 its staging transaction cannot be halved into a pipeline that parses and a pipeline that writes
 without shipping one that no caller can use.
+
+**Task 5d's route round records one more.** `original_currency` was unconstrained between the
+extracted cell and the wire, and `staged_transaction.original_currency` is CHAR(3) with
+`StagedTransaction` stating the same rule. A cell reading `EURO` — a mis-mapped band, or an
+issuer spelling the word out — therefore passed the dry run and failed inside the staging
+transaction, where the only thing able to refuse it was a pydantic validator whose message quotes
+the cell back: a 500 the owner cannot act on, and a document value in a log line, which §5.6
+forbids outright. `normalize` now refuses a non-three-letter code as a named `RowFailure`, so the
+dry run reports it and `blocks_staging` stops the batch like any other unnormalizable row.
+
+`POST /parse`'s preview screens `originalCurrency` alongside the other document-sourced strings.
+After the rule above nothing redactable can reach that field, so the screen is a no-op in
+practice; it is there so the redaction rule reads "every untyped field" with no exception a later
+reader has to carry.
+
+**Open for 1.1c, not decided here.** `ParseResponse.counts` is built from a `Counter`, so a status
+with no rows is *absent* rather than zero and the generated TypeScript is an index signature —
+`counts.duplicate` is `undefined`, not `0`. Whether the wire should carry all four statuses
+explicitly is the import screen's call, and it is named here so it is made rather than discovered.

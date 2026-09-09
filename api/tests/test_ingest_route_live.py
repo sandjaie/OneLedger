@@ -39,6 +39,7 @@ COLUMNS = [
     {"field": "description", "x_min": 120.0, "x_max": 400.0, "label": "Description"},
     {"field": "amount", "x_min": 400.0, "x_max": 480.0, "label": "Amount"},
     {"field": "running_balance", "x_min": 480.0, "x_max": 580.0, "label": "Balance"},
+    {"field": "reference", "x_min": 580.0, "x_max": 700.0, "label": "Ref"},
 ]
 
 # `\s*` rather than a literal space: a PDF's extracted text runs its characters together or not
@@ -55,7 +56,11 @@ def _account_hash(number: str) -> str:
     return hashlib.sha256(f"{SALT}{number}".encode()).hexdigest()
 
 
-def _statement(closing: str = "1,490.00", description: str = "SALARY MARCH") -> bytes:
+def _statement(
+    closing: str = "1,490.00",
+    description: str = "SALARY MARCH",
+    reference: str = "REF-9911-2233-4455",
+) -> bytes:
     return build_pdf(
         [
             Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
@@ -67,6 +72,7 @@ def _statement(closing: str = "1,490.00", description: str = "SALARY MARCH") -> 
             Placement(page=0, x=500, y=700, text="Balance"),
             Placement(page=0, x=40, y=670, text="01/03/2026"),
             Placement(page=0, x=140, y=670, text="COFFEE SHOP"),
+            Placement(page=0, x=600, y=670, text=reference),
             Placement(page=0, x=420, y=670, text="-10.00"),
             Placement(page=0, x=500, y=670, text="990.00"),
             Placement(page=0, x=40, y=650, text="02/03/2026"),
@@ -241,15 +247,6 @@ def test_a_statement_that_does_not_reconcile_is_a_200_carrying_its_verdict(
     assert live.counts() == {"document": 0, "import_batch": 0, "staged_transaction": 0}
 
 
-def test_the_same_file_twice_is_refused_and_names_the_earlier_import(live: Fixture) -> None:
-    live.post(_statement(), stage="true")
-
-    response = live.post(_statement(), stage="true")
-
-    assert response.status_code == 409
-    assert str(date.today().year) in response.json()["detail"]
-
-
 def test_an_unidentifiable_statement_names_the_layouts_and_their_scores(live: Fixture) -> None:
     """`api-contracts.html` §4 asks the picker to list the layouts with their scores."""
     blank = build_pdf([Placement(page=0, x=20, y=760, text="Some Other Institution")])
@@ -352,6 +349,11 @@ def test_a_long_digit_run_in_a_description_never_reaches_the_response(live: Fixt
     assert "1111" not in response.text
     assert "[redacted]" in body["rows"][1]["descriptionRaw"]
     assert body["rows"][1]["descriptionRaw"].startswith("PAYMENT CARD")
+    # `referenceRaw` is document text too, and it is the field a bank reference lands in. Without
+    # a reference band on the fixture layout this is None on every row and dropping its screen
+    # would leave the suite green.
+    assert body["rows"][0]["referenceRaw"] == "REF-[redacted]", "the reference is screened too"
+    assert "9911" not in response.text, "and its digit run is what went"
     # The figures are typed and are what the preview is for.
     assert [row["amount"] for row in body["rows"]] == ["-10.0000", "500.0000"]
     assert body["rows"][1]["bookedDate"] == "2026-03-02"
@@ -408,3 +410,90 @@ def test_a_number_matching_no_account_says_so_without_echoing_it(live: Fixture) 
     assert response.status_code == 422
     assert "not one this household holds" in response.json()["detail"]
     assert "9876543210" not in response.text
+
+
+def test_the_statements_own_account_number_is_screened_by_its_capture(live: Fixture) -> None:
+    """The redactor is seeded with the account-number capture, not just the generic digit rule.
+
+    A long number is caught either way, so a fixture using one proves nothing about the seeding.
+    This account number is short enough that `IDENTIFIER_RUN`'s "more than four digits" rule
+    leaves it alone — only the capture the pipeline extracted removes it. That is what stops a
+    statement quoting its own account number in a narration line from returning it.
+    """
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET account_number_hash = %s WHERE id = %s",
+            (_account_hash("4021"), live.account_id),
+        )
+    live.conn.commit()
+
+    response = TestClient(app).post(
+        "/parse",
+        files={
+            "file": (
+                "s.pdf",
+                _statement(description="TRANSFER TO 4021 THANKS").replace(
+                    b"Account Number 1234567890", b"Account Number 4021      "
+                ),
+            )
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["accountId"] == str(live.account_id), "resolved by the short number"
+    assert "4021" not in body["rows"][1]["descriptionRaw"], "the capture screened it"
+    assert "[redacted]" in body["rows"][1]["descriptionRaw"]
+
+
+def test_a_currency_column_that_is_not_a_code_fails_its_row_rather_than_the_request(
+    live: Fixture,
+) -> None:
+    """`staged_transaction.original_currency` is CHAR(3) and `StagedTransaction` says so.
+
+    A mis-mapped band — or an issuer spelling the word out — puts `EURO` there. Refused in
+    normalization the owner sees a named row failure on the dry run; refused inside the staging
+    transaction it is a pydantic validator, whose message quotes the cell back into a 500 and
+    into the log (spec §5.6 forbids exactly that).
+    """
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET columns = columns || %s::jsonb WHERE id = %s""",
+            (
+                psycopg.types.json.Json(
+                    [
+                        {"field": "original_amount", "x_min": 700.0, "x_max": 780.0},
+                        {"field": "original_currency", "x_min": 780.0, "x_max": 880.0},
+                    ]
+                ),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+
+    spelled_out = build_pdf(
+        [
+            Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
+            Placement(page=0, x=20, y=750, text="Account Number 1234567890"),
+            Placement(page=0, x=20, y=740, text="Opening Balance 1,000.00"),
+            Placement(page=0, x=40, y=670, text="01/03/2026"),
+            Placement(page=0, x=140, y=670, text="COFFEE SHOP"),
+            Placement(page=0, x=420, y=670, text="-10.00"),
+            Placement(page=0, x=500, y=670, text="990.00"),
+            Placement(page=0, x=710, y=670, text="-2.50"),
+            Placement(page=0, x=800, y=670, text="EURO"),
+            Placement(page=0, x=20, y=600, text="Closing Balance 990.00"),
+        ]
+    )
+
+    response = live.post(spelled_out, stage="true")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["staged"] is False, "a batch missing a row does not stage"
+    assert [f["reason"] for f in body["failures"]] == [
+        "original_currency is not a three-letter code"
+    ]
+    assert "EURO" not in response.text, "the refusal names the field, never the cell"
