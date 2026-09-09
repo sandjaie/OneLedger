@@ -1,0 +1,33 @@
+{
+  "name": "Account statement",
+  "fingerprints": [
+    "Statement\\s*of\\s*Account",
+    "Debits\\s*Credits\\s*Balance",
+    "PERIOD\\s*OF"
+  ],
+  "headerRowPattern": "Date\\s*Description\\s*Debits\\s*Credits\\s*Balance",
+  "columns": [
+    { "field": "booked_date", "xMin": 30.0, "xMax": 98.0, "label": "Date" },
+    { "field": "description", "xMin": 98.0, "xMax": 288.0, "label": "Description" },
+    { "field": "amount", "xMin": 288.0, "xMax": 468.0, "label": "Debits and Credits" },
+    { "field": "running_balance", "xMin": 468.0, "xMax": 585.0, "label": "Balance" }
+  ],
+  "dateFormat": "dd MMM yyyy",
+  "signConvention": "signed",
+  "invertsSign": false,
+  "chronologicalOrder": "descending",
+  "rowStartRule": "has_date",
+  "continuationRule": "no_date_and_no_amount",
+  "skipLinePatterns": [
+    "Description\\s+Debits\\s+Credits",
+    "electronically generated"
+  ],
+  "openingBalancePattern": null,
+  "closingBalancePattern": null,
+  "hasRunningBalance": true,
+  "quirks": [],
+  "metadataPatterns": {
+    "period_start": "PERIOD\\s*OF\\s*(\\d{2} \\w{3} \\d{4})\\s*to",
+    "period_end": "PERIOD\\s*OF\\s*\\d{2} \\w{3} \\d{4}\\s*to\\s*(\\d{2} \\w{3} \\d{4})"
+  }
+}
