@@ -54,13 +54,24 @@ into staged rows via `POST /parse`; reviewed rows commit atomically to the ledge
 drives it from `/import` and a review screen.
 **Covers (old numbering).** M2 5d, 5e, 6a–6d, 7a, 7b, 9a, plus the card layout profile seeded as
 data (the mapper UI arrives in 1.7).
-**Branches**, revised by `/oneledger-plan-review` on 9 September 2026 and by the owner
-decisions it raised: `fix/p1-1-card-layout-fitness` (the balance-frame semantics the card needs
-before anything can reconcile, and the card profile as data), `feature/p1-1a-parse-pipeline`
-(pipeline + route), `feature/p1-1b-commit-path` (V14 commit/verification functions, review
-payload, row decisions, atomic commit), `feature/p1-1c-import-screen`,
-`feature/p1-1d-review-screen`. The UI is two branches because one forecast at ~950–1,150
-production lines against the 800 budget; all five carry the `[P1.1]` prefix.
+**Branches**, revised by `/oneledger-plan-review` on 9 September 2026 and by the owner decisions
+it raised, then twice again in delivery where a branch met the diff budget's hard stop. All carry
+the `[P1.1]` prefix and each bases off `develop` after the one before it merges:
+
+1. `fix/p1-1-card-layout-fitness` — the balance-frame semantics the card needs before anything
+   can reconcile, and the card profile as data.
+2. `feature/p1-1a-parse-pipeline` — `ingest/pipeline.py`, identification and the staging
+   transaction. Split from 3 during delivery: written as one branch the pair measured 1,233
+   production and 2,545 counted lines, past the 1,200 / 2,400 hard stop.
+3. `feature/p1-1a-parse-route` — `POST /parse` and its wire contract.
+4. `feature/p1-1b-commit-functions` — V14's `commit_import_batch` and
+   `assert_account_reconciles`, and `db/tests/0012`. Forecast ~250 production / ~350 test.
+5. `feature/p1-1b-review-routes` — `GET /import/{batch}`, `PATCH /import/{batch}/rows` and
+   `POST /import/{batch}/commit`. Forecast ~420 production / ~700 test. Split from 4 because the
+   two together forecast ~670 / ~1,720 against the 800 / 1,600 budget, and 1.1a's own forecast
+   was comfortable before its review round added a third again.
+6. `feature/p1-1c-import-screen` · 7. `feature/p1-1d-review-screen` — the UI is two branches
+   because one forecast at ~950–1,150 production lines against the 800 budget.
 **Invariants.** Reconciliation blocks on mismatch (I8); commit is one transaction with
 post-commit balance verification; re-import of a committed file imports zero rows; a second
 staging is refused for an account and period that already has an unreviewed batch (spec §7
