@@ -376,13 +376,18 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .review-rows { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .review-row {
   display: grid;
-  grid-template-columns: auto 96px minmax(0, 1fr) auto auto;
+  grid-template-columns: auto 96px minmax(0, 1fr) auto auto auto;
   gap: 14px; align-items: baseline; padding: 11px 0; border-top: 1px solid var(--rule);
 }
 .review-date { color: var(--muted); font-size: 0.85rem; }
 .review-description { min-width: 0; overflow-wrap: anywhere; }
 /* Tabular figures so a column of amounts lines up on its decimal point. */
 .review-amount { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+/* The frozen conversion, second and quieter — the original is the figure the statement states. */
+.review-converted {
+  color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums;
+  text-align: right; white-space: nowrap;
+}
 
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }

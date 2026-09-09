@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
+  AccountRow,
   CurrencyRow,
   HouseholdCurrency,
   ReviewBatch,
@@ -13,6 +14,7 @@ import type {
 } from "@/types/api";
 
 type Props = {
+  accounts: Array<AccountRow>;
   batchId: string;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
@@ -54,7 +56,21 @@ function accepted(batch: ReviewBatch) {
   return batch.groups.find((group) => group.status === ACCEPTED)?.count ?? 0;
 }
 
-export function ReviewScreen({ batchId, currencies, currency, request }: Props) {
+/** The catalogue row for a code, or the household's display currency.
+ *
+ * From the catalogue, never a union of codes (ADR-0012). The fallback keeps an account the
+ * catalogue does not cover formatting with real grouping rather than printing raw.
+ */
+function display(
+  currencies: Array<CurrencyRow>,
+  currency: HouseholdCurrency,
+  code: string | undefined,
+) {
+  return currencies.find((option) => option.code === code) ?? currency;
+}
+
+
+export function ReviewScreen({ accounts, batchId, currencies, currency, request }: Props) {
   const [batch, setBatch] = useState<ReviewBatch>();
   const [selected, setSelected] = useState<Array<string>>([]);
   const [problem, setProblem] = useState<string>();
@@ -75,10 +91,12 @@ export function ReviewScreen({ batchId, currencies, currency, request }: Props) 
         // The selection names rows by id and a decision moves them between groups. Clearing it
         // is what stops a second click from re-deciding rows already dealt with.
         setSelected([]);
+        setBusy(false);
       })
       .catch((error: unknown) => {
         if (!current) return;
         setProblem(detail(error, "This batch could not be loaded."));
+        setBusy(false);
       });
     return () => {
       current = false;
@@ -113,10 +131,11 @@ export function ReviewScreen({ batchId, currencies, currency, request }: Props) 
         body: JSON.stringify({ rowIds: selected, decision }),
         headers: { "Content-Type": "application/json" },
       });
+      // Left busy: the effect's re-read has not landed, and the buttons must not re-enable over
+      // a batch the screen has already discarded. `reading` clears it when the new one arrives.
       reload();
     } catch (error) {
       setProblem(detail(error, "Those rows could not be decided."));
-    } finally {
       setBusy(false);
     }
   }
@@ -134,7 +153,6 @@ export function ReviewScreen({ batchId, currencies, currency, request }: Props) 
       // V14's own sentence, written for the owner: which account failed to reconcile and by
       // how much. The whole commit rolled back, so the batch is exactly as it was.
       setProblem(detail(error, "This batch could not be imported."));
-    } finally {
       setBusy(false);
     }
   }
@@ -154,8 +172,14 @@ export function ReviewScreen({ batchId, currencies, currency, request }: Props) 
 
   const open = batch.status === REVIEWABLE;
   const ready = accepted(batch);
-  const shown =
-    currencies.find(({ code }) => code === batch.groups[0]?.rows[0]?.currency) ?? currency;
+  // The account's own currency, not a row's. The declared opening and closing are the account's
+  // figures, and a committed batch carries no groups at all — reading the code off the first
+  // row would then fall back to the household's and print the wrong symbol on real money.
+  const shown = display(
+    currencies,
+    currency,
+    accounts.find(({ id }) => id === batch.accountId)?.currency,
+  );
 
   return (
     <section className="workspace-content" aria-labelledby="review-title">
@@ -201,6 +225,7 @@ export function ReviewScreen({ batchId, currencies, currency, request }: Props) 
 
       {batch.groups.map((group) => (
         <Group
+          currencies={currencies}
           currency={shown}
           group={group}
           key={group.status}
@@ -233,6 +258,7 @@ function Banner({ batch, currency }: { batch: ReviewBatch; currency: HouseholdCu
 }
 
 function Group({
+  currencies,
   currency,
   group,
   onSelectGroup,
@@ -240,6 +266,7 @@ function Group({
   open,
   selected,
 }: {
+  currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   group: ReviewGroup;
   onSelectGroup: (ticked: boolean) => void;
@@ -260,7 +287,10 @@ function Group({
         {open && !colliding && (
           <label className="review-select-all">
             <input
-              aria-label={`Select all ${group.count} ${group.status}`}
+              // Named for the rows on screen, not the group's count: `count` is stated
+              // separately because a later page of a large group will not carry every row, and
+              // a label promising more than it ticks would go unnoticed until then.
+              aria-label={`Select the ${group.rows.length} ${group.status} rows shown`}
               checked={ticked}
               onChange={(event) => onSelectGroup(event.target.checked)}
               type="checkbox"
@@ -280,6 +310,7 @@ function Group({
       <ul className="review-rows">
         {group.rows.map((row) => (
           <Row
+            currencies={currencies}
             currency={currency}
             key={row.id}
             onToggle={onToggle}
@@ -294,12 +325,14 @@ function Group({
 }
 
 function Row({
+  currencies,
   currency,
   onToggle,
   open,
   row,
   selected,
 }: {
+  currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   onToggle: (id: string) => void;
   open: boolean;
@@ -318,9 +351,15 @@ function Row({
       )}
       <span className="review-date">{row.bookedDate}</span>
       <span className="review-description">{row.descriptionRaw}</span>
-      {/* The statement's own amount, formatted from the string the API sent. The frozen
-          amount_base travels with the row and is shown beside it rather than recomputed. */}
-      <span className="review-amount">{formatMoney(row.amount, currency)}</span>
+      {/* The statement's own amount first and the frozen conversion second — never the
+          conversion alone (`ui-information-architecture.html` section 4). Both are formatted
+          from the strings the API sent; `amount_base` was frozen at staging and is shown, not
+          recomputed. The row names its own currency, so a row is never formatted with a
+          batch-level guess. */}
+      <span className="review-amount">
+        {formatMoney(row.amount, display(currencies, currency, row.currency))}
+      </span>
+      <span className="review-converted">{formatMoney(row.amountBase, currency)}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>
       {row.duplicateOfTransactionId && (
         <span className="section-label">Already in the ledger</span>

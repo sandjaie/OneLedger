@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { ApiError } from "@/lib/api/client";
 import type {
+  AccountRow,
   CurrencyRow,
   HouseholdCurrency,
   ReviewBatch,
@@ -21,7 +22,20 @@ const catalogue: CurrencyRow = {
   numberFormat: "international",
 };
 
-const currencies: Array<CurrencyRow> = [catalogue];
+// A second currency with different grouping, so a test can tell which one was used.
+const other: CurrencyRow = {
+  code: "XIN",
+  name: "Synthetic I",
+  symbol: "I",
+  decimals: 2,
+  numberFormat: "indian",
+};
+
+const currencies: Array<CurrencyRow> = [catalogue, other];
+const accounts = [
+  { id: "acct-card", name: "Synthetic Card", currency: "XAE" },
+  { id: "acct-savings", name: "Synthetic Savings", currency: "XIN" },
+] as Array<AccountRow>;
 const currency: HouseholdCurrency = {
   code: catalogue.code,
   symbol: catalogue.symbol,
@@ -41,8 +55,10 @@ function row(overrides: Partial<ReviewRow> = {}): ReviewRow {
     referenceRaw: null,
     amount: "-10.0000",
     currency: "XAE",
-    amountBase: "-10.0000",
-    amountSecondary: "-40.0000",
+    // Deliberately unequal to `amount`: an account in one currency reporting in another, which
+    // is the only shape in which a test can tell the two figures apart.
+    amountBase: "-40.0000",
+    amountSecondary: "-10.0000",
     proposedTxnType: "expense",
     status: "new",
     duplicateOfTransactionId: null,
@@ -78,7 +94,20 @@ function batch(overrides: Partial<ReviewBatch> = {}): ReviewBatch {
       candidateRows: [],
       message: "",
     },
-    groups: [group("new", [row(), row({ id: "row-2", sourceRowNumber: 2, amount: "500.0000" })])],
+    groups: [
+      group("new", [
+        row(),
+        // The converted amount is overridden with it: a row whose frozen pair does not match
+        // its own amount is a row no staging produces.
+        row({
+          id: "row-2",
+          sourceRowNumber: 2,
+          amount: "500.0000",
+          amountBase: "2000.0000",
+          amountSecondary: "500.0000",
+        }),
+      ]),
+    ],
     ...overrides,
   };
 }
@@ -86,6 +115,7 @@ function batch(overrides: Partial<ReviewBatch> = {}): ReviewBatch {
 function renderScreen(request: ReturnType<typeof vi.fn>, batchId = "batch-1") {
   render(
     <ReviewScreen
+      accounts={accounts}
       batchId={batchId}
       currencies={currencies}
       currency={currency}
@@ -128,11 +158,40 @@ describe("reading a batch", () => {
 
     const first = await screen.findByRole("listitem", { name: /row 1/i });
 
-    expect(within(first).getByText("-A 10.00")).toBeTruthy();
+    expect(within(first).getByText("-A 10.00", { selector: ".review-amount" })).toBeTruthy();
     expect(within(first).getByText("COFFEE SHOP")).toBeTruthy();
     expect(within(first).getByText("2026-03-01")).toBeTruthy();
     // The declared closing is the statement's own figure, formatted from its string.
     expect(screen.getByText(/A 1,490\.00/)).toBeTruthy();
+  });
+
+  it("formats the account's figures in the account's currency, not the household's", async () => {
+    // The declared closing is the account's figure. A committed batch carries no groups at all,
+    // so reading the currency off the first row leaves the banner formatting XIN money with the
+    // household's XAE symbol.
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        accountId: "acct-savings",
+        status: "completed",
+        groups: [],
+        reconciliation: { ...batch().reconciliation, declaredClosing: "5982530.0000" },
+      }),
+    );
+    renderScreen(request);
+
+    expect(await screen.findByText(/I 59,82,530\.00/)).toBeTruthy();
+  });
+
+  it("shows the frozen converted amount beside the original, never the conversion alone", async () => {
+    // `ui-information-architecture.html` section 4. The frozen pair is the whole point of
+    // freezing at staging, and this is the screen where the owner decides whether it is written.
+    const request = vi.fn().mockResolvedValue(batch());
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(within(first).getByText("-A 10.00", { selector: ".review-amount" })).toBeTruthy();
+    expect(within(first).getByText("-A 40.00", { selector: ".review-converted" })).toBeTruthy();
   });
 
   it("says a batch cannot be read rather than rendering an empty screen", async () => {
@@ -208,12 +267,53 @@ describe("deciding rows", () => {
     renderScreen(request);
     await screen.findByRole("listitem", { name: /row 1/i });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /select all 2 new/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /select the 2 new rows shown/i }));
 
     const ticked = screen
       .getAllByRole<HTMLInputElement>("checkbox")
       .filter((box) => box.checked && box.getAttribute("aria-label")?.startsWith("Row"));
     expect(ticked).toHaveLength(2);
+  });
+
+  it("names the rows it will tick, not the group's total", async () => {
+    // `count` is stated separately from `rows` because a later page of a large group will not
+    // carry every row. A label promising more than it ticks stays true only until then.
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        groups: [
+          { status: "new", count: 240, rows: [row(), row({ id: "b", sourceRowNumber: 2 })] },
+        ],
+      }),
+    );
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(screen.getByRole("checkbox", { name: "Select the 2 new rows shown" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: /240/ })).toBeNull();
+  });
+
+  it("stays busy until the reloaded batch has arrived", async () => {
+    // The buttons must not re-enable over a batch the screen has already discarded.
+    let land: (value: unknown) => void = () => {};
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(batch())
+      .mockResolvedValueOnce({ updated: 1 })
+      .mockImplementationOnce(() => new Promise((resolve) => { land = resolve; }));
+    renderScreen(request);
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+    fireEvent.click(within(first).getByRole("checkbox"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^accept selected/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: /^reject selected/i }).disabled,
+    ).toBe(true);
+    land(batch({ groups: [group("accepted", [row({ status: "accepted" })])] }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /import 1 row/i })).toBeTruthy(),
+    );
   });
 
   it("says what a decision refused rather than leaving the screen unchanged", async () => {
@@ -263,7 +363,7 @@ describe("a duplicate row", () => {
     renderScreen(request);
     await screen.findByRole("listitem", { name: /row 1/i });
 
-    expect(screen.queryByRole("checkbox", { name: /select all 1 duplicate/i })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: /select the .* duplicate/i })).toBeNull();
   });
 });
 

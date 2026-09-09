@@ -343,8 +343,9 @@ export function Workspace({
             />
           )}
 
-          {activeSection === "review" && currencies && batchId && (
+          {activeSection === "review" && currencies && inventory && batchId && (
             <ReviewScreen
+              accounts={inventory.accounts}
               batchId={batchId}
               currencies={currencies}
               currency={currency}
