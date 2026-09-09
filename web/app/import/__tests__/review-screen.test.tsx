@@ -538,3 +538,100 @@ describe("committing", () => {
     expect(screen.getByText(/already imported/i)).toBeTruthy();
   });
 });
+
+describe("discarding a batch", () => {
+  it("asks before it discards, and says what will go", async () => {
+    // Destructive and unreversible, so it is two clicks rather than one. The confirmation names
+    // the count and says the ledger is untouched, because "cancel" on its own reads as "close
+    // this screen" at least as readily as "throw the batch away".
+    //
+    // `rowsExtracted` is deliberately not the staged count here: it is what the statement
+    // yielded, and a confirmation that quoted it would promise to discard nine rows while
+    // deleting two.
+    const request = vi.fn().mockResolvedValue(batch({ rowsExtracted: 9 }));
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /discard this batch/i }));
+
+    expect(screen.getByText(/2 staged rows/i)).toBeTruthy();
+    expect(screen.getByText(/nothing.*ledger/i)).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards nothing when the confirmation is declined", async () => {
+    const request = vi.fn().mockResolvedValue(batch());
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+    fireEvent.click(screen.getByRole("button", { name: /discard this batch/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /keep it/i }));
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/2 staged rows/i)).toBeNull();
+    expect(screen.getByRole("button", { name: /discard this batch/i })).toBeTruthy();
+  });
+
+  it("posts the cancel and re-reads the batch", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(batch())
+      .mockResolvedValueOnce({ batchId: "batch-1", status: "cancelled", rowsDiscarded: 2 })
+      .mockResolvedValueOnce(batch({ status: "cancelled", groups: [] }));
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+    fireEvent.click(screen.getByRole("button", { name: /discard this batch/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^discard 2 rows$/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    expect(request.mock.calls[1][0]).toBe("/import/batch-1/cancel");
+    expect(request.mock.calls[1][1].method).toBe("POST");
+    expect(request.mock.calls[2][0]).toBe("/import/batch-1");
+  });
+
+  it("says what happened to a discarded batch, not that it was imported", async () => {
+    // The one message for every closed state said "already imported", which is the opposite of
+    // what a discarded batch did. The owner needs to read that its account and period are free.
+    const request = vi.fn().mockResolvedValue(batch({ status: "cancelled", groups: [] }));
+    renderScreen(request);
+
+    expect(await screen.findByText(/discarded/i)).toBeTruthy();
+    expect(screen.queryByText(/already imported/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /discard this batch/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^accept selected/i })).toBeNull();
+  });
+
+  it("offers no discard once the batch is committed", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue(batch({ status: "completed", groups: [group("accepted", [row()])] }));
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(screen.queryByRole("button", { name: /discard this batch/i })).toBeNull();
+    expect(screen.getByText(/already imported/i)).toBeTruthy();
+  });
+
+  it("names a state it has no sentence for rather than calling it imported", async () => {
+    const request = vi.fn().mockResolvedValue(batch({ status: "failed", groups: [] }));
+    renderScreen(request);
+
+    expect(await screen.findByText(/this batch is failed/i)).toBeTruthy();
+    expect(screen.queryByText(/already imported/i)).toBeNull();
+  });
+
+  it("shows the service's own refusal when the discard is rejected", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(batch())
+      .mockRejectedValueOnce(new ApiError(409, "this batch has already been imported"));
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+    fireEvent.click(screen.getByRole("button", { name: /discard this batch/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^discard 2 rows$/i }));
+
+    expect(await screen.findByText("this batch has already been imported")).toBeTruthy();
+  });
+});

@@ -175,6 +175,28 @@ class Staged(Fixture):
         response: httpx.Response = TestClient(app).post(f"/import/{batch}/commit", headers=ORIGIN)
         return response
 
+    def cancel(self, batch: str) -> httpx.Response:
+        response: httpx.Response = TestClient(app).post(f"/import/{batch}/cancel", headers=ORIGIN)
+        return response
+
+    def staged_rows(self, batch: str) -> int:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM staged_transaction WHERE import_batch_id = %s", (batch,)
+            )
+            return int(cur.fetchone()[0])  # type: ignore[index]
+
+    def pair_is_locked(self) -> bool:
+        """V7's own guard, asked the way `update_household_configuration` asks it.
+
+        On its own connection and inside one transaction: `scope_to_owner` sets the identity
+        transaction-locally, and `assert_is_owner()` inside the function reads it back.
+        """
+        with connect() as other:
+            scope_to_owner(other, self.user_id)
+            locked = other.execute("SELECT reporting_pair_is_locked()").fetchone()
+            return bool(locked[0])  # type: ignore[index]
+
     def ledger_rows(self) -> int:
         with self.conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM transaction")
@@ -1051,3 +1073,211 @@ def test_the_parse_response_and_the_review_payload_agree(
     assert live.get(batch).json()["period"] == live.parsed["period"]
     # And the two values really are different, so the agreement is not a constant agreeing.
     assert live.parsed["period"]["isDerived"] is (statement != "dated")
+
+
+# --------------------------------------------------------------------------------------
+# POST /import/{batch}/cancel — abandoning a batch that was staged by mistake
+# --------------------------------------------------------------------------------------
+
+
+def test_cancelling_a_staged_batch_discards_it_and_imports_nothing(live: Staged) -> None:
+    """Cancellation is an abandonment, not a reversal: nothing was in the ledger to undo."""
+    batch = live.stage()
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"batchId": batch, "status": "cancelled", "rowsDiscarded": 2}
+    assert live.ledger_rows() == 0
+    assert live.get(batch).json()["status"] == "cancelled"
+
+
+def test_cancelling_takes_the_staged_rows_with_it(live: Staged) -> None:
+    """The rows are deleted, not left carrying a status.
+
+    `reporting_pair_is_locked()` (V7) discovers every table with `amount_base` beside
+    `household_id` and counts rows, and `staged_transaction` has both. A row left behind by a
+    batch that can never commit would answer that question `true` forever.
+    """
+    batch = live.stage()
+    assert live.staged_rows(batch) == 2
+
+    live.cancel(batch)
+
+    assert live.staged_rows(batch) == 0
+    assert live.get(batch).json()["groups"] == []
+
+
+def test_a_household_that_cancelled_everything_can_change_its_reporting_pair_again(
+    live: Staged,
+) -> None:
+    """The onboarding case the deletion exists for.
+
+    Stage a batch, notice the pair is wrong, cancel — and the pair has to be changeable again,
+    because nothing was ever committed. This asks V7's guard the way
+    `update_household_configuration` asks it, which is what `PATCH /household` refuses on.
+    """
+    batch = live.stage()
+    assert live.pair_is_locked() is True
+
+    live.cancel(batch)
+
+    assert live.pair_is_locked() is False
+
+
+def test_the_same_account_and_period_can_be_staged_again_once_the_batch_is_cancelled(
+    live: Staged,
+) -> None:
+    """The case the 1.1 acceptance run found: an abandoned batch blocked its period for good.
+
+    The second file is a different statement of the same period — different bytes, so layer 1
+    passes it — and `_refuse_second_staging` is what stops it while the first batch is open.
+    `cancelled` is already in that query's finished set; this is what lets an owner reach it.
+    """
+    batch = live.stage()
+
+    blocked = live.post(_statement(description="OTHER SHOP"), stage="true")
+    assert blocked.status_code == 422
+    assert "already has an unreviewed import" in blocked.json()["detail"]
+
+    assert live.cancel(batch).status_code == 200
+
+    allowed = live.post(_statement(description="OTHER SHOP"), stage="true")
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["batchId"] != batch
+
+
+def test_a_completed_batch_is_a_record_and_cannot_be_cancelled(live: Staged) -> None:
+    """Its rows are in the ledger. Cancelling would have to reverse them, which this is not."""
+    batch = live.stage()
+    rows = [row["id"] for row in live.get(batch).json()["groups"][0]["rows"]]
+    live.patch(batch, {"rowIds": rows, "decision": "accepted"})
+    assert live.commit(batch).status_code == 200
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "this batch has already been imported"
+    assert live.ledger_rows() == 2
+    assert live.staged_rows(batch) == 2
+
+
+def test_cancelling_twice_says_so_rather_than_pretending_it_did_something(live: Staged) -> None:
+    """A double submit is the ordinary way to reach this, so it gets its own sentence."""
+    batch = live.stage()
+    assert live.cancel(batch).status_code == 200
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "this batch is already cancelled"
+
+
+def test_a_cancelled_batch_can_neither_be_decided_nor_committed(live: Staged) -> None:
+    """Both refusals name the state, rather than describing the emptiness cancelling caused.
+
+    The commit route's own guard against importing nothing would otherwise answer first, and
+    "accept some rows first" is not what happened to a batch the owner abandoned. V14 already
+    refuses any state but `awaiting_review`; letting its refusal through is what says so.
+    """
+    batch = live.stage()
+    rows = [row["id"] for row in live.get(batch).json()["groups"][0]["rows"]]
+    assert live.cancel(batch).status_code == 200
+
+    decided = live.patch(batch, {"rowIds": rows, "decision": "accepted"})
+    assert decided.status_code == 409
+    assert "cancelled" in decided.json()["detail"]
+
+    committed = live.commit(batch)
+    assert committed.status_code == 409
+    assert committed.json()["detail"] == "a batch in state cancelled cannot be imported"
+    assert live.ledger_rows() == 0
+
+
+def test_a_batch_belonging_to_another_household_is_not_cancellable(live: Staged) -> None:
+    """404, the same answer `GET` gives: telling "no such batch" from "not yours" tells a
+    caller whether an id they guessed exists."""
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('other', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        other = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute("UPDATE import_batch SET household_id = %s WHERE id = %s", (other, batch))
+    live.conn.commit()
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 404
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM staged_transaction WHERE import_batch_id = %s", (batch,))
+        assert cur.fetchone()[0] == 2, "another household's rows are untouched"  # type: ignore[index]
+
+
+def test_a_batch_in_any_other_state_is_refused_with_that_state_named(live: Staged) -> None:
+    """`failed` is already finished as far as `_refuse_second_staging` is concerned, so there is
+    no period to recover and nothing to cancel. The enum carries nine more states than the three
+    named above; this is the branch that answers for all of them, and it says which one it saw
+    rather than describing it as imported or as already cancelled."""
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE import_batch SET status = 'failed' WHERE id = %s", (batch,))
+    live.conn.commit()
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "a batch in state failed cannot be cancelled"
+    assert live.staged_rows(batch) == 2
+
+
+def test_a_stray_row_from_another_household_is_left_where_it_is(live: Staged) -> None:
+    """The delete carries the household, not just the batch.
+
+    Nothing in V13 ties a staged row's household to its batch's — V14 counts such rows as
+    `v_stray` and refuses to commit a batch that has any, which is the repository saying the
+    state is reachable. Cancelling one household's batch is not licence to delete another
+    household's row, however it came to be attached.
+    """
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('other', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        other = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """UPDATE staged_transaction SET household_id = %s
+                WHERE import_batch_id = %s AND source_row_number = 2""",
+            (other, batch),
+        )
+    live.conn.commit()
+
+    response = live.cancel(batch)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["rowsDiscarded"] == 1
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT household_id FROM staged_transaction WHERE import_batch_id = %s", (batch,)
+        )
+        assert [row[0] for row in cur.fetchall()] == [other]
+
+
+def test_an_unknown_batch_cannot_be_cancelled(live: Staged) -> None:
+    assert live.cancel(str(uuid4())).status_code == 404
+
+
+def test_cancel_is_behind_the_owner(live: Staged) -> None:
+    """ADR-0013/0016. `test_health.py` enumerates every route's dependency; this asserts the
+    refusal, as the other three review routes do."""
+    batch = live.stage()
+    app.dependency_overrides.clear()
+    try:
+        assert TestClient(app).post(f"/import/{batch}/cancel", headers=ORIGIN).status_code == 401
+    finally:
+        app.dependency_overrides[auth.require_owner] = live.owner
+    assert live.staged_rows(batch) == 2
