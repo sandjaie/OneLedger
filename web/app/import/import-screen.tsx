@@ -254,7 +254,11 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               <label className="password-field">
                 <span>Password for this statement</span>
                 <input
-                  autoComplete="off"
+                  // `new-password` rather than `off`: browsers increasingly ignore `off` on a
+                  // password field and offer to save the value. The owner's own password manager
+                  // is not a never-store violation — the list binds OneLedger — but an unprompted
+                  // offer to keep a bank statement's password is a surprise worth declining.
+                  autoComplete="new-password"
                   onChange={(event) =>
                     update(item.key, { password: event.target.value || undefined })
                   }

@@ -290,8 +290,10 @@ describe("an encrypted statement", () => {
     await within(locked).findByRole("link", { name: /review/i });
 
     // Never persisted: a password is on the never-store list, and a browser store is storage.
+    // Both named the same way, so both fail for the same reason. A bare `length === 0` on
+    // either would hold whatever this screen did with the password.
     expect(JSON.stringify(window.localStorage)).not.toContain("s3cret");
-    expect(window.sessionStorage.length).toBe(0);
+    expect(JSON.stringify(window.sessionStorage)).not.toContain("s3cret");
     // Nor left on screen once the file is done with it.
     expect(within(locked).queryByLabelText(/password/i)).toBeNull();
     expect(document.body.textContent).not.toContain("s3cret");
