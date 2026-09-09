@@ -97,6 +97,62 @@ describe("apiFetch", () => {
     });
   });
 
+  it("unwraps the service's own sentence from the error envelope", async () => {
+    // Every refusal this service writes arrives as FastAPI's {"detail": …} envelope, and the
+    // sentence inside it is written for the owner — the date a duplicate first arrived, the
+    // layouts that scored, why a batch will not commit. Handing the envelope to a screen puts
+    // braces and quotes in front of that sentence, so it is unwrapped here rather than at each
+    // of the nine places that display it.
+    const request = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "this file was already imported on 2026-01-05" }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const error = await apiFetch("/parse").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      status: 409,
+      detail: "this file was already imported on 2026-01-05",
+    });
+  });
+
+  it("falls back to the status text when the envelope carries no sentence", async () => {
+    // main.py answers a validation failure with a list of field diagnostics rather than a
+    // sentence. Rendering "[object Object]" is worse than saying nothing, so a detail that is
+    // not a string is treated as no detail at all.
+    const request = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: [{ type: "missing", loc: ["body"], msg: "required" }] }), {
+        status: 422,
+        statusText: "Unprocessable Content",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const error = await apiFetch("/accounts").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ status: 422, detail: "Unprocessable Content" });
+  });
+
+  it("names the status when the refusal arrives with no body and no status text", async () => {
+    // A gateway can answer with neither, and HTTP/2 carries no reason phrase at all. An empty
+    // alert is the one outcome worse than a blunt one, so the code itself is the last resort.
+    const request = vi.fn().mockResolvedValue(
+      new Response(null, { status: 502, statusText: "" }),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const error = await apiFetch("/health").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      status: 502,
+      detail: "Request failed with status 502",
+    });
+  });
+
   it("keeps the timeout with a caller signal when AbortSignal.any is unavailable", async () => {
     vi.useFakeTimers();
     const timeout = AbortSignal.timeout.bind(AbortSignal);
