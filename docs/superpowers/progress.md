@@ -64,10 +64,14 @@ that boundary — the slice ran to nine. The decisions themselves are contract a
 
 ## Raised and not yet actioned
 
-| What | Why it is not folded into the branch that found it |
-| --- | --- |
-| `.claude/skills/oneledger-plan-review/SKILL.md` states the pre-#50 diff budget (400/800) rather than the authoritative 800/1,600 in `git-workflow.md`. | Tooling, not a slice. A `chore/` branch. |
-| `import_batch` records a period but not whether it was derived, so `GET /import/{batch}` reports `isDerived: null` rather than guessing (Invariant I7). | Recording it is a column, and a schema change does not belong in a route branch. Its own migration, with `schema.md` and `data-model.html` in the same commit. |
+Nothing outstanding. The four items slice 1.1 raised were delivered as their own branches:
+[#61](https://github.com/sandjaie/OneLedger/pull/61) the identifier and money static check,
+[#62](https://github.com/sandjaie/OneLedger/pull/62) `source_row_number NOT NULL`,
+[#63](https://github.com/sandjaie/OneLedger/pull/63) the review skills' stale diff budget, and
+this one's `period_is_derived`.
+
+The table returns when something is raised and deferred again — a finding in code the branch that
+found it does not touch, recorded here rather than folded in past its diff budget.
 
 ## Where the rest is written down
 

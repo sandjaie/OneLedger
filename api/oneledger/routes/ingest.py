@@ -456,11 +456,12 @@ class ReviewPeriod(BaseModel):
     Every field is optional because every underlying column is. `period_start` and `period_end`
     are nullable (V12), so a batch that failed before reconciliation has no period at all and
     must still be readable — a review screen that 500s on the batch the owner needs to look at
-    is the wrong failure. `isDerived` is null because **the batch does not record it**: the flag
-    exists on the parse-time verdict and no column carries it, so it is reported as unrecorded
-    rather than guessed. Guessing `true` labels a declared period derived, and guessing `false`
-    labels a computed one declared; Invariant I7 forbids inventing either. Recording it needs a
-    column, which is a schema change this task does not carry.
+    is the wrong failure. `isDerived` is the flag the batch recorded at staging (V17): true
+    where the period came from the rows' own dates, false where the statement stated it, and
+    null only for a batch staged before that column existed. It is never inferred — a period
+    derived from rows dated 1 and 2 March is indistinguishable afterwards from one a statement
+    stated as 1-2 March, and guessing either way labels a provenance nobody observed
+    (Invariant I7).
     """
 
     start: date | None
@@ -501,7 +502,8 @@ class CommitResult(BaseModel):
 _BATCH = """SELECT b.id, b.document_id, b.account_id, b.status, b.statement_layout_id,
                    b.layout_version, b.rows_extracted, b.period_start, b.period_end,
                    b.declared_opening_balance, b.declared_closing_balance,
-                   b.computed_closing_balance, b.reconciliation_status, b.reconciliation_delta
+                   b.computed_closing_balance, b.reconciliation_status, b.reconciliation_delta,
+                   b.period_is_derived
               FROM import_batch b
              WHERE b.id = %s AND b.household_id = %s"""
 
@@ -606,7 +608,7 @@ def read_import_batch(
         status=str(batch[3]),
         layoutId=batch[4],
         layoutVersion=batch[5],
-        period=ReviewPeriod(start=batch[7], end=batch[8], isDerived=None),
+        period=ReviewPeriod(start=batch[7], end=batch[8], isDerived=batch[14]),
         rowsExtracted=batch[6],
         reconciliation=Reconciliation(
             # Nullable in V12, and V14 reads it as `COALESCE(…, 'not reconciled')` — a batch

@@ -456,9 +456,9 @@ _BATCH = """INSERT INTO import_batch
                layout_version, rows_extracted, rows_new, rows_duplicate, rows_needs_review,
                declared_opening_balance, declared_closing_balance, computed_closing_balance,
                reconciliation_status, reconciliation_delta, period_start, period_end,
-               started_at)
+               period_is_derived, started_at)
             VALUES (%s, %s, %s, 'awaiting_review', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, now())
+                    %s, %s, %s, now())
          RETURNING id"""
 
 _STAGED = """INSERT INTO staged_transaction
@@ -770,6 +770,11 @@ def _staged_batch(
                 analysis.reconciliation.delta,
                 analysis.period.start,
                 analysis.period.end,
+                # Stored rather than left to be inferred later: a period derived from rows dated
+                # 1 and 2 March is indistinguishable afterwards from one a statement stated as
+                # 1-2 March, and the review screen must not read a computed period as a declared
+                # one (V17, Invariant I7).
+                analysis.period.is_derived,
             ),
         )
         batch_id = _returned(cur)

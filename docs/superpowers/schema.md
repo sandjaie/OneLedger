@@ -556,6 +556,8 @@ CREATE TABLE import_batch (
 
   period_start              DATE,
   period_end                DATE,
+  period_is_derived         BOOLEAN,               -- V17: true from the rows, false from the
+                                                   -- statement, null for a pre-V17 batch
   started_at                TIMESTAMPTZ,
   completed_at              TIMESTAMPTZ,
   error                     TEXT,
@@ -652,6 +654,31 @@ ALTER TABLE transaction
 `classification_rule_id` stays a bare `UUID`; its target table and its foreign key arrive with M4.
 
 ---
+
+## `V17` (applied)
+
+Applied as `db/migrations/V17__import_batch_records_period_provenance.sql`. **It creates no
+table** — it adds `import_batch.period_is_derived`.
+
+V12 stored the period and not how it was arrived at. The pipeline has always known —
+`normalize.StatementPeriod` carries `is_derived`, false where the layout captured a period
+pattern and true where the bounds came from the rows' own dates — but the flag lived only as
+long as the `POST /parse` response. `GET /import/{batch}` is where the period is actually read,
+and it had no honest answer: `true` labels a declared period derived, `false` labels a computed
+one stated, and Invariant I7 forbids inventing either, so it reported null.
+
+The two are indistinguishable after the fact. A period derived from rows dated 1 and 2 March
+looks exactly like one a statement stated as 1–2 March, which is why this is stored rather than
+recomputed.
+
+**Nullable on purpose**: a batch staged before V17 recorded no provenance, and a default would
+assert one for it. Null reads back as "not recorded".
+
+`period_provenance_needs_a_period` refuses the incoherent half: a batch may hold a period without
+recorded provenance — that is the pre-V17 row — but not a provenance without a period, which is a
+claim about how it arrived at something it does not have. The same shape as V13's `original_pair`.
+`db/tests/0015` asserts both, and that stated, derived and unrecorded stay three distinguishable
+answers.
 
 ## `V16` (applied)
 
