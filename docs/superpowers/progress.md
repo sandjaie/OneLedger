@@ -66,10 +66,8 @@ that boundary — the slice ran to nine. The decisions themselves are contract a
 
 | What | Why it is not folded into the branch that found it |
 | --- | --- |
-| `ReviewRow.sourceRowNumber` is a required `int` while `staged_transaction.source_row_number` is nullable (V13) — a row staged without one is a 500 on `GET /import/{batch}`. | The model is in `routes/ingest.py`, which the review-screen branch does not touch; patching it there would widen a UI branch into the API. |
 | `.claude/skills/oneledger-plan-review/SKILL.md` states the pre-#50 diff budget (400/800) rather than the authoritative 800/1,600 in `git-workflow.md`. | Tooling, not a slice. A `chore/` branch. |
 | `import_batch` records a period but not whether it was derived, so `GET /import/{batch}` reports `isDerived: null` rather than guessing (Invariant I7). | Recording it is a column, and a schema change does not belong in a route branch. Its own migration, with `schema.md` and `data-model.html` in the same commit. |
-| `CLAUDE.md` says a static check fails the build on a currency, institution or country name used as an identifier, and the M2 plan's Task 8a expects one covering `parseFloat`/`Number()` on money in `web/`. **No such check exists anywhere in the tree.** | It spans every file, not this branch's. A `chore/` branch, with the hygiene sweep at the phase boundary. |
 
 ## Where the rest is written down
 

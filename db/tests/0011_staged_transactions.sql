@@ -42,12 +42,12 @@ BEGIN
     VALUES (h, doc, a, layout) RETURNING id INTO batch;
 
   -- A clean staged row.
-  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                   booked_date, description_raw, amount, currency,
                                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                   amount_base, amount_secondary, dedupe_hash,
                                   proposed_txn_type)
-    VALUES (batch, h, a, '{"booked_date":"01/02/2024"}'::jsonb,
+    VALUES (batch, h, a, '{"booked_date":"01/02/2024"}'::jsonb, 1,
             '2024-02-01', 'POS PURCHASE', -310.0000, base,
             '2024-02-01', 1, 20, -310.0000, -6200.0000, 's1', 'expense')
     RETURNING id INTO staged;
@@ -66,35 +66,35 @@ BEGIN
   -- An accepted row always carries a committable type: transaction.txn_type is NOT NULL, so a
   -- row that can be accepted but never committed is a state the database refuses to represent.
   BEGIN
-    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                     booked_date, description_raw, amount, currency,
                                     fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                     amount_base, amount_secondary, dedupe_hash, status)
-      VALUES (batch, h, a, '{}'::jsonb, '2024-02-02', 'NO TYPE', -5.0000, base,
+      VALUES (batch, h, a, '{}'::jsonb, 2, '2024-02-02', 'NO TYPE', -5.0000, base,
               '2024-02-02', 1, 20, -5.0000, -100.0000, 's2', 'accepted');
     RAISE EXCEPTION 'unreachable';
   EXCEPTION WHEN check_violation THEN NULL;
   END;
 
   -- The same row with a type is accepted.
-  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                   booked_date, description_raw, amount, currency,
                                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                   amount_base, amount_secondary, dedupe_hash, status,
                                   proposed_txn_type)
-    VALUES (batch, h, a, '{}'::jsonb, '2024-02-02', 'WITH TYPE', -5.0000, base,
+    VALUES (batch, h, a, '{}'::jsonb, 3, '2024-02-02', 'WITH TYPE', -5.0000, base,
             '2024-02-02', 1, 20, -5.0000, -100.0000, 's3', 'accepted', 'expense');
 
   -- V10's amount_not_zero permits a zero amount only for 'adjustment', and review may
   -- override a proposed type. An accepted zero row typed anything else is a row the
   -- all-or-nothing commit must reject, so the database refuses to hold it.
   BEGIN
-    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                     booked_date, description_raw, amount, currency,
                                     fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                     amount_base, amount_secondary, dedupe_hash, status,
                                     proposed_txn_type)
-      VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO EXPENSE', 0, base,
+      VALUES (batch, h, a, '{}'::jsonb, 4, '2024-02-03', 'ZERO EXPENSE', 0, base,
               '2024-02-03', 1, 20, 0, 0, 's4', 'accepted', 'expense');
     RAISE EXCEPTION 'unreachable';
   EXCEPTION WHEN check_violation THEN NULL;
@@ -102,19 +102,19 @@ BEGIN
 
   -- The same zero row typed adjustment is accepted, and a zero row not yet accepted may
   -- carry any type while review decides.
-  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                   booked_date, description_raw, amount, currency,
                                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                   amount_base, amount_secondary, dedupe_hash, status,
                                   proposed_txn_type)
-    VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO ADJUSTMENT', 0, base,
+    VALUES (batch, h, a, '{}'::jsonb, 5, '2024-02-03', 'ZERO ADJUSTMENT', 0, base,
             '2024-02-03', 1, 20, 0, 0, 's5', 'accepted', 'adjustment');
-  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+  INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                   booked_date, description_raw, amount, currency,
                                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                   amount_base, amount_secondary, dedupe_hash,
                                   proposed_txn_type)
-    VALUES (batch, h, a, '{}'::jsonb, '2024-02-03', 'ZERO UNDER REVIEW', 0, base,
+    VALUES (batch, h, a, '{}'::jsonb, 6, '2024-02-03', 'ZERO UNDER REVIEW', 0, base,
             '2024-02-03', 1, 20, 0, 0, 's6', 'expense');
 
   -- A staged row is batch-scoped working state: deleting the batch takes its rows with it.
@@ -173,12 +173,12 @@ BEGIN;
       RETURNING id INTO doc;
     INSERT INTO import_batch (household_id, document_id, account_id, statement_layout_id)
       VALUES ('71111111-1111-1111-1111-111111111111', doc, a, layout) RETURNING id INTO batch;
-    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                     booked_date, description_raw, amount, currency,
                                     fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                     amount_base, amount_secondary, dedupe_hash,
                                     proposed_txn_type)
-      VALUES (batch, '71111111-1111-1111-1111-111111111111', a, '{}'::jsonb,
+      VALUES (batch, '71111111-1111-1111-1111-111111111111', a, '{}'::jsonb, 9,
               '2024-02-01', 'STAGED ONLY', -310.0000, was_base,
               '2024-02-01', 1, 20, -310.0000, -6200.0000, 'lock1', 'expense');
 
@@ -224,12 +224,12 @@ BEGIN;
       RETURNING id INTO doc;
     INSERT INTO import_batch (household_id, document_id, account_id, statement_layout_id)
       VALUES (h, doc, a, layout) RETURNING id INTO batch;
-    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row,
+    INSERT INTO staged_transaction (import_batch_id, household_id, account_id, raw_row, source_row_number,
                                     booked_date, description_raw, amount, currency,
                                     fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                                     amount_base, amount_secondary, dedupe_hash,
                                     proposed_txn_type)
-      VALUES (batch, h, a, '{}'::jsonb, '2024-02-01', 'ISOLATED', -1.0000, base,
+      VALUES (batch, h, a, '{}'::jsonb, 7, '2024-02-01', 'ISOLATED', -1.0000, base,
               '2024-02-01', 1, 20, -1.0000, -20.0000, 'rls1', 'expense');
   END $$;
 
