@@ -31,7 +31,7 @@ request.
 
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
-| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 2 of 6 | slice 1.1 branch table below |
+| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 4 of 6 | slice 1.1 branch table below |
 | 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
@@ -51,7 +51,7 @@ stop — so the slice runs to six. The decisions themselves are contract and liv
 | --- | --- | --- | --- |
 | `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
 | `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Merged | [#52](https://github.com/sandjaie/OneLedger/pull/52) |
-| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Implemented; review gate open | `api/tests/test_ingest_route_live.py` (14) |
+| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Merged | [#53](https://github.com/sandjaie/OneLedger/pull/53) |
 | `feature/p1-1b-commit-path` | V14 commit and verification functions, review payload, row decisions, atomic commit | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
