@@ -222,6 +222,35 @@ describe("reading a batch", () => {
     expect(within(first).getByText("-I 2,500.00", { selector: ".review-converted" })).toBeTruthy();
   });
 
+  it("keeps a row's cells in their columns whatever the row is", async () => {
+    // `.review-row` is a fixed six-column grid and CSS grid fills by position, so a row that
+    // renders fewer cells does not leave a gap — every later cell shifts one column left, and
+    // the description lands in the date's 96px column. Three of the cells are conditional (the
+    // checkbox, the conversion, the duplicate marker), so the count must not decide the column.
+    const shapes = [
+      // committed, in the displayed currency, not a duplicate — the fewest cells
+      { batch: batch({ status: "completed", groups: [group("accepted", [row()])] }), display: currency },
+      // open, converted, and a duplicate — the most
+      {
+        batch: batch({
+          groups: [group("duplicate", [row({ status: "duplicate", duplicateOfTransactionId: "t1" })])],
+        }),
+        display: secondary,
+      },
+    ];
+
+    const counts: Array<number> = [];
+    for (const shape of shapes) {
+      const request = vi.fn().mockResolvedValue(shape.batch);
+      renderScreen(request, "batch-1", shape.display);
+      const first = await screen.findByRole("listitem", { name: /row 1/i });
+      counts.push(first.childElementCount);
+      cleanup();
+    }
+
+    expect(counts[0]).toBe(counts[1]);
+  });
+
   it("shows no conversion for a row already in the displayed currency", async () => {
     // Converting a figure into its own currency says nothing — and printing `amountBase` beside
     // an equal `amount` under one symbol invites the reader to think they are two figures. The
@@ -232,7 +261,9 @@ describe("reading a batch", () => {
     const first = await screen.findByRole("listitem", { name: /row 1/i });
 
     expect(within(first).getByText("-A 10.00", { selector: ".review-amount" })).toBeTruthy();
-    expect(first.querySelector(".review-converted")).toBeNull();
+    // The cell holds its column and shows nothing — not absent, which would shift every cell
+    // after it one column left.
+    expect(first.querySelector(".review-converted")?.textContent).toBe("");
   });
 
   it("formats the converted figure in the household's currency, not the account's", async () => {

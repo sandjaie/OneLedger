@@ -384,15 +384,22 @@ function Row({
   selected: boolean;
 }) {
   const conversion = converted(row, household, currency);
+  // Six cells, always, in the same order. `.review-row` is a fixed six-column grid and CSS grid
+  // fills by position, so a row that renders fewer cells does not leave a gap — every later cell
+  // shifts one column left and the description ends up in the date's 96px column. Three of these
+  // are conditional, which is three ways for the count to decide the column; an empty span holds
+  // the place instead.
   return (
     <li aria-label={`Row ${row.sourceRowNumber}`} className="review-row">
-      {open && (
+      {open ? (
         <input
           aria-label={`Row ${row.sourceRowNumber}`}
           checked={selected}
           onChange={() => onToggle(row.id)}
           type="checkbox"
         />
+      ) : (
+        <span aria-hidden="true" />
       )}
       <span className="review-date">{row.bookedDate}</span>
       <span className="review-description">{row.descriptionRaw}</span>
@@ -404,11 +411,11 @@ function Row({
       <span className="review-amount">
         {formatMoney(row.amount, display(currencies, accountCurrency, row.currency))}
       </span>
-      {conversion !== undefined && <span className="review-converted">{conversion}</span>}
+      <span className="review-converted">{conversion ?? ""}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>
-      {row.duplicateOfTransactionId && (
-        <span className="section-label">Already in the ledger</span>
-      )}
+      <span className="section-label">
+        {row.duplicateOfTransactionId ? "Already in the ledger" : ""}
+      </span>
     </li>
   );
 }
