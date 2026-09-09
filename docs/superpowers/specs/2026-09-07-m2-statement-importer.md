@@ -442,6 +442,19 @@ correction in its PR. Do not work around it in code.
    separator-formatted — from the document.** Parse errors name page and row numbers and the
    *masked* filename.
 
+   **`POST /parse`'s preview rows are screened, not exempt.** Statement narration is untyped text
+   out of the document and is where a card number actually appears — `PAYMENT RECEIVED CARD 4111
+   1111 1111 1111` — so `description_raw`, `description_clean` and `reference_raw` go out through
+   the same redactor `POST /layouts/propose` already applies to its own preview rows. Dates,
+   amounts and balances are typed and pass through intact: the preview exists to show that the
+   columns landed where they were mapped, and redacting the figures would defeat it while
+   protecting nothing.
+
+   The *stored* `staged_transaction.description_raw` is deliberately unscreened — it is the audit
+   record, and `api-contracts.html` §4 makes it what the review screen shows for traceability.
+   Whether the review payload screens it on the way out is **1.1b's call, not this rule's**: it is
+   the same tension, one route later, and it is named here so it is decided rather than inherited.
+
 Task 5 owns both, and Task 5's tests assert them.
 
 ---
@@ -858,3 +871,22 @@ The pipeline branch is still **over the 800 / 1,600 budget and under the hard st
 at 826 added lines, in the range `normalize.py` (705) and `engine.py` (607) already occupy, and
 its staging transaction cannot be halved into a pipeline that parses and a pipeline that writes
 without shipping one that no caller can use.
+
+**Task 5d's route round records one more.** `original_currency` was unconstrained between the
+extracted cell and the wire, and `staged_transaction.original_currency` is CHAR(3) with
+`StagedTransaction` stating the same rule. A cell reading `EURO` — a mis-mapped band, or an
+issuer spelling the word out — therefore passed the dry run and failed inside the staging
+transaction, where the only thing able to refuse it was a pydantic validator whose message quotes
+the cell back: a 500 the owner cannot act on, and a document value in a log line, which §5.6
+forbids outright. `normalize` now refuses a non-three-letter code as a named `RowFailure`, so the
+dry run reports it and `blocks_staging` stops the batch like any other unnormalizable row.
+
+`POST /parse`'s preview screens `originalCurrency` alongside the other document-sourced strings.
+After the rule above nothing redactable can reach that field, so the screen is a no-op in
+practice; it is there so the redaction rule reads "every untyped field" with no exception a later
+reader has to carry.
+
+**Open for 1.1c, not decided here.** `ParseResponse.counts` is built from a `Counter`, so a status
+with no rows is *absent* rather than zero and the generated TypeScript is an index signature —
+`counts.duplicate` is `undefined`, not `0`. Whether the wire should carry all four statuses
+explicitly is the import screen's call, and it is named here so it is made rather than discovered.

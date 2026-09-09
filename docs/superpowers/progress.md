@@ -50,8 +50,8 @@ stop — so the slice runs to six. The decisions themselves are contract and liv
 | Branch | Delivers | Status | Evidence |
 | --- | --- | --- | --- |
 | `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
-| `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Implemented; reviewed | `api/tests/test_ingest_pipeline.py` (15), `test_ingest_pipeline_live.py` (14) |
-| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract. Bases off `develop` once the pipeline has merged | Implemented; awaiting the pipeline | `api/tests/test_ingest_route_live.py` (14) |
+| `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Merged | [#52](https://github.com/sandjaie/OneLedger/pull/52) |
+| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Implemented; review gate open | `api/tests/test_ingest_route_live.py` (14) |
 | `feature/p1-1b-commit-path` | V14 commit and verification functions, review payload, row decisions, atomic commit | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
