@@ -17,8 +17,14 @@ compilation — and could store a profile the application refuses to save and ca
 mapping UI supersedes this file entirely once it arrives; until then this is the same body that
 UI would post.
 
-`api/tests/test_ingest_card_frame.py` holds it to that: the file is validated through
-`LayoutCreate` on every test run, so it cannot drift out of the shape the endpoint accepts.
+`api/tests/test_seeded_layouts.py` holds every file in this directory to that: each is
+validated through `LayoutCreate` on every test run, so a seeded profile cannot drift out of the
+shape the endpoint accepts — and a layout added here is covered from the day it lands rather
+than from the day someone writes it a test. It also refuses a profile carrying an
+`institutionId`: `institutions.sql` inserts without ids, so every institution's key is whatever
+`gen_random_uuid()` produced on the machine that applied it, and a key exported with a profile
+either fails its foreign key elsewhere or, worse, resolves to a different institution. The
+mapper UI sets it per household when it arrives.
 
 Three of its values are not obvious, and each is measured rather than assumed.
 
