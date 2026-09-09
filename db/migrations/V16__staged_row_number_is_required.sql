@@ -20,5 +20,26 @@
 -- `transaction.source_row_number` stays nullable on purpose: a manually entered transaction
 -- (M1b) comes from no statement and has no row to name. `db/tests/0014` asserts both halves.
 
+-- The guard exists so the failure says what to do. `ALTER ... SET NOT NULL` reports only that
+-- the column contains nulls, and this is the one migration in the tree that can fail on real
+-- data — so it is the one that most needs to explain itself where the person actually reads it,
+-- which is the migration runner's output rather than this file.
+DO $$
+DECLARE offending BIGINT;
+BEGIN
+  SELECT count(*) INTO offending
+    FROM staged_transaction WHERE source_row_number IS NULL;
+
+  IF offending > 0 THEN
+    RAISE EXCEPTION
+      '% staged row(s) state no source row number, so this constraint cannot be applied',
+      offending
+      USING HINT = 'A staged batch is a working copy. Cancel the batch holding these rows and '
+                   're-import the statement; do not backfill a row number, because inventing '
+                   'one fabricates the provenance Invariant I6 exists to keep honest.',
+            ERRCODE = 'not_null_violation';
+  END IF;
+END $$;
+
 ALTER TABLE staged_transaction
   ALTER COLUMN source_row_number SET NOT NULL;
