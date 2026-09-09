@@ -175,6 +175,11 @@ export function ReviewScreen({ accounts, batchId, currencies, currency, request 
   // The account's own currency, not a row's. The declared opening and closing are the account's
   // figures, and a committed batch carries no groups at all — reading the code off the first
   // row would then fall back to the household's and print the wrong symbol on real money.
+  //
+  // It is the banner's currency and a row amount's last resort, and it is NOT the currency of a
+  // row's converted figure: `amount_base` is frozen in the household's base currency, so on a
+  // card denominated in anything else — the ordinary case here — formatting it with this one
+  // prints real money under the wrong symbol and the wrong grouping. `Row` is given both.
   const shown = display(
     currencies,
     currency,
@@ -225,8 +230,9 @@ export function ReviewScreen({ accounts, batchId, currencies, currency, request 
 
       {batch.groups.map((group) => (
         <Group
+          accountCurrency={shown}
           currencies={currencies}
-          currency={shown}
+          currency={currency}
           group={group}
           key={group.status}
           onSelectGroup={(ticked) => selectGroup(group, ticked)}
@@ -258,6 +264,7 @@ function Banner({ batch, currency }: { batch: ReviewBatch; currency: HouseholdCu
 }
 
 function Group({
+  accountCurrency,
   currencies,
   currency,
   group,
@@ -266,6 +273,7 @@ function Group({
   open,
   selected,
 }: {
+  accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   group: ReviewGroup;
@@ -310,6 +318,7 @@ function Group({
       <ul className="review-rows">
         {group.rows.map((row) => (
           <Row
+            accountCurrency={accountCurrency}
             currencies={currencies}
             currency={currency}
             key={row.id}
@@ -325,6 +334,7 @@ function Group({
 }
 
 function Row({
+  accountCurrency,
   currencies,
   currency,
   onToggle,
@@ -332,6 +342,7 @@ function Row({
   row,
   selected,
 }: {
+  accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   onToggle: (id: string) => void;
@@ -357,7 +368,7 @@ function Row({
           recomputed. The row names its own currency, so a row is never formatted with a
           batch-level guess. */}
       <span className="review-amount">
-        {formatMoney(row.amount, display(currencies, currency, row.currency))}
+        {formatMoney(row.amount, display(currencies, accountCurrency, row.currency))}
       </span>
       <span className="review-converted">{formatMoney(row.amountBase, currency)}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>

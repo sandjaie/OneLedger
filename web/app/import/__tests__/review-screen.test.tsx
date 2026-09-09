@@ -194,6 +194,49 @@ describe("reading a batch", () => {
     expect(within(first).getByText("-A 40.00", { selector: ".review-converted" })).toBeTruthy();
   });
 
+  it("formats the converted figure in the household's currency, not the account's", async () => {
+    // The row carries two figures in two different currencies: its own amount, in whatever the
+    // statement was written in, and `amountBase`, frozen at staging in the household's base
+    // currency. A card denominated in something other than the base — the ordinary case for
+    // this screen — is where formatting both with the account's currency prints the base figure
+    // under the wrong symbol and the wrong grouping.
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        accountId: "acct-savings",
+        groups: [group("new", [row({ currency: "XIN", amountBase: "-5982530.0000" })])],
+      }),
+    );
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    // The statement's own figure, in the account's XIN: indian grouping, the I symbol.
+    expect(within(first).getByText("-I 10.00", { selector: ".review-amount" })).toBeTruthy();
+    // The frozen conversion, in the household's XAE: international grouping, the A symbol.
+    expect(
+      within(first).getByText("-A 5,982,530.00", { selector: ".review-converted" }),
+    ).toBeTruthy();
+  });
+
+  it("falls back to the account's currency for a row the catalogue does not hold", async () => {
+    // `display` prefers the row's own code, so this fires only for a currency no catalogue row
+    // covers. The account's is the closer guess than the household's: the row is that account's,
+    // and reaching past it to the base currency is how the converted figure came to be formatted
+    // with the wrong one in the first place.
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        accountId: "acct-savings",
+        groups: [group("new", [row({ currency: "XZZ", amountBase: "-40.0000" })])],
+      }),
+    );
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(within(first).getByText("-I 10.00", { selector: ".review-amount" })).toBeTruthy();
+    expect(within(first).getByText("-A 40.00", { selector: ".review-converted" })).toBeTruthy();
+  });
+
   it("says a batch cannot be read rather than rendering an empty screen", async () => {
     const request = vi.fn().mockRejectedValue(new ApiError(404, "no such import batch"));
     renderScreen(request);
