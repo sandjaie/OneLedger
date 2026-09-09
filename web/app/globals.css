@@ -355,6 +355,35 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .import-verdict { margin: 0; padding: 12px 14px; border-left: 4px solid var(--blue); background: rgba(255, 255, 255, 0.6); line-height: 1.5; }
 .import-failures { display: grid; gap: 8px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.9rem; }
 
+/* Review — grouped by attention needed, not chronologically. The groups arrive in that order
+   from the API; the screen renders them as sent rather than sorting again. */
+.review-actions {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+  margin-top: 24px; padding: 20px 0; border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.review-actions .primary-action,
+.review-actions .text-action { margin-top: 0; }
+.review-hint { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.review-group { display: grid; gap: 12px; margin-top: 30px; }
+.review-group-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: baseline;
+}
+.review-group-head h3 {
+  margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 1.15rem;
+}
+.review-select-all { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.review-rows { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.review-row {
+  display: grid;
+  grid-template-columns: auto 96px minmax(0, 1fr) auto auto;
+  gap: 14px; align-items: baseline; padding: 11px 0; border-top: 1px solid var(--rule);
+}
+.review-date { color: var(--muted); font-size: 0.85rem; }
+.review-description { min-width: 0; overflow-wrap: anywhere; }
+/* Tabular figures so a column of amounts lines up on its decimal point. */
+.review-amount { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
@@ -464,6 +493,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   .accounts-heading,
   .import-controls,
   .import-summary dl,
+  .review-row,
   .fx-result dl { grid-template-columns: 1fr; }
   .currency-toggle { justify-self: start; }
   .format-preview { grid-column: 1; }

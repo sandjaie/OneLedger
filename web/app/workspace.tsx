@@ -7,6 +7,7 @@ import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
 import { HouseholdForm } from "@/app/settings/household-form";
 import { ImportScreen } from "@/app/import/import-screen";
+import { ReviewScreen } from "@/app/import/review-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
@@ -26,7 +27,10 @@ const PREFERENCE_KEY = "oneledger.reportingCurrency";
 const PREVIEW_VALUE = "1234567.89";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "import";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "import" | "review";
+  // The batch under review. A path parameter rather than a section of its own, because review
+  // is where an import ends up rather than a sibling destination.
+  batchId?: string;
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
@@ -76,6 +80,7 @@ function fxStatusText(fx: FxState) {
 
 export function Workspace({
   section,
+  batchId,
   request = apiFetch,
   navigate = (path) => window.location.replace(path),
 }: Props = {}) {
@@ -125,7 +130,7 @@ export function Workspace({
           setInventory(nextInventory);
           setCurrencies(catalogue);
         }
-        if (activeSection === "import") {
+        if (activeSection === "review" || activeSection === "import") {
           // The account list is the override picker's options; the currency catalogue formats
           // the statement's own declared figures. Neither is the boundary — the routes are.
           const nextInventory = await request<AccountsResponse>("/accounts");
@@ -287,7 +292,12 @@ export function Workspace({
           <nav className="workspace-nav" aria-label="Workspace">
             <Link aria-current={activeSection === "overview" ? "page" : undefined} href="/">Overview</Link>
             <Link aria-current={activeSection === "accounts" ? "page" : undefined} href="/accounts">Accounts</Link>
-            <Link aria-current={activeSection === "import" ? "page" : undefined} href="/import">Import</Link>
+            <Link
+              aria-current={
+                activeSection === "import" || activeSection === "review" ? "page" : undefined
+              }
+              href="/import"
+            >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
             <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
               <span>Plans</span><small>Available after ledger import</small>
@@ -319,6 +329,23 @@ export function Workspace({
           {activeSection === "import" && inventory && currencies && (
             <ImportScreen
               accounts={inventory.accounts}
+              currencies={currencies}
+              currency={currency}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "review" && currencies && batchId && (
+            <ReviewScreen
+              batchId={batchId}
               currencies={currencies}
               currency={currency}
               request={async (path, init) => {

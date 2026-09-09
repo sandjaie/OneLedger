@@ -417,6 +417,38 @@ describe("authenticated workspace", () => {
     expect(screen.getByLabelText("Statement files")).toBeTruthy();
   });
 
+  it("renders the review screen for the batch it was given", async () => {
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    const staged = {
+      batchId: "batch-1",
+      documentId: null,
+      accountId: "acct-1",
+      status: "awaiting_review",
+      layoutId: null,
+      layoutVersion: null,
+      period: { start: "2026-03-01", end: "2026-03-31", isDerived: null },
+      rowsExtracted: 0,
+      reconciliation: {
+        status: "matched", declaredOpening: null, openingIsDerived: true,
+        declaredClosing: null, computedClosing: null, delta: null, firstDivergentRow: null,
+        previousBalance: null, amount: null, candidateRows: [], message: "",
+      },
+      groups: [],
+    };
+    render(
+      <Workspace
+        batchId="batch-1"
+        section="review"
+        request={requestThat(household, inventory, catalogue, staged)}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Review" })).toBeTruthy();
+    // Import stays the current nav entry: review is where an import ends up, not a sibling.
+    expect(screen.getByRole("link", { name: "Import" }).getAttribute("aria-current")).toBe("page");
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("clears Accounts when create returns %i", async (status, destination) => {
