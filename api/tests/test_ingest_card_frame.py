@@ -2,58 +2,54 @@
 
 The layout in hand presents every purchase bare and every credit with a `CR` suffix, so
 `cr_suffix` already lands each row on the ledger's correct side. Its declared anchors are
-written bare — "Previous Statement Due 6,140.40" is money owed, and nothing in the figure says
-so — and only `inverts_sign` carries them into the ledger's frame. The two behaviours have to
-hold together on one profile, which is what these tests pin: the frame switch applies to the
+written bare — a previous statement due of 6,140.40 is money owed, and nothing in the figure
+says so — and only `inverts_sign` carries them into the ledger's frame. The two behaviours have
+to hold together on one profile, which is what these tests pin: the frame switch applies to the
 figures that stated no direction and is withheld from the ones that did.
 
-The amounts are the shape of a real statement's arithmetic, not its contents.
+The profile under test is `db/seeds/card-layout.json` itself, so the seed cannot drift away
+from the behaviour proved here. The amounts are the shape of a real statement's arithmetic,
+not its contents.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
 from oneledger.ingest.engine import extract_pages
 from oneledger.ingest.normalize import normalize
-from oneledger.ingest.reconcile import (
-    STATUS_MATCHED,
-    STATUS_MISMATCHED,
-    Verdict,
-    reconcile,
-)
+from oneledger.ingest.reconcile import STATUS_MATCHED, STATUS_MISMATCHED, Verdict, reconcile
 from oneledger.ingest.words import Line, Page, Word
 from oneledger.routes.layouts import LayoutCreate
 
-# Σ of the rows below in the ledger's frame: +6,140.40 − 36.50 − 4,442.68 = +1,661.22.
-# The anchors are owed, so the identity only closes once both are negative:
-#   −6,140.40 + 1,661.22 = −4,479.18
-OPENING = "6,140.40"
-CLOSING = "4,479.18"
+SEED = Path(__file__).resolve().parents[2] / "db" / "seeds" / "card-layout.json"
+
+# The six figures the statement summary prints, in its own order. Sigma of the rows below in
+# the ledger's frame is +6,140.40 - 36.50 - 4,442.68 = +1,661.22, and the anchors are owed, so
+# the identity closes only once both are negative: -6,140.40 + 1,661.22 = -4,479.18.
+PREVIOUS_DUE = "6,140.40"
+PURCHASES = "4,479.18"
+INTEREST = "0.00"
+PAYMENTS = "6,140.40"
+TOTAL_DUE = "4,479.18"
+# Total payment due plus the remaining installment principal. It reconciles against nothing,
+# which is why the closing anchor captures the fifth figure and not the last.
+CURRENT_BALANCE = "13,728.34"
+
+LABELLED_ANCHORS: dict[str, object] = {
+    "openingBalancePattern": r"Previous Statement Due\s+([0-9,.]+)",
+    "closingBalancePattern": r"Total Payment Due\s+([0-9,.]+)",
+}
 
 
 def card_profile(**changes: object) -> LayoutCreate:
-    values: dict[str, object] = {
-        "name": "Card statement",
-        "fingerprints": ["Credit Card Statement", "Card Type:"],
-        "columns": [
-            {"field": "booked_date", "xMin": 30.0, "xMax": 120.0},
-            {"field": "value_date", "xMin": 120.0, "xMax": 195.0},
-            {"field": "description", "xMin": 195.0, "xMax": 460.0},
-            {"field": "amount", "xMin": 460.0, "xMax": 580.0},
-        ],
-        "dateFormat": "dd/MM/yyyy",
-        "signConvention": "cr_suffix",
-        "invertsSign": True,
-        "chronologicalOrder": "ascending",
-        "rowStartRule": "has_date_and_amount",
-        "continuationRule": "no_date_and_no_amount",
-        "openingBalancePattern": r"Previous Statement Due\s+([0-9,.]+)",
-        "closingBalancePattern": r"Total Payment Due\s+([0-9,.]+)",
-        "hasRunningBalance": False,
-    }
+    """The seeded profile, with whatever this test needs changed about it."""
+    values = json.loads(SEED.read_text())
     values.update(changes)
     return LayoutCreate.model_validate(values)
 
@@ -76,27 +72,33 @@ def transaction(top: float, day: str, description: str, amount: str) -> Line:
     )
 
 
-def statement_pages(
-    *, opening: str = OPENING, closing: str = CLOSING, rows: list[Line] | None = None
-) -> list[Page]:
-    body = (
-        rows
-        if rows is not None
-        else [
-            transaction(100.0, "26/07/2026", "TRANSFER PAYMENT RECEIVED", "6,140.40CR"),
-            transaction(120.0, "29/07/2026", "TAXI RIDE", "36.50"),
-            transaction(140.0, "30/07/2026", "SUBSCRIPTION RENEWAL", "4,442.68"),
-        ]
-    )
-    summary = [
+def rows() -> list[Line]:
+    return [
+        transaction(100.0, "26/07/2026", "TRANSFER PAYMENT RECEIVED", "6,140.40CR"),
+        transaction(120.0, "29/07/2026", "TAXI RIDE", "36.50"),
+        transaction(140.0, "30/07/2026", "SUBSCRIPTION RENEWAL", "4,442.68"),
+    ]
+
+
+def run_together_summary(opening: str = PREVIOUS_DUE, closing: str = TOTAL_DUE) -> list[Line]:
+    """The summary as the producer writes it: six figures, one line, no separator."""
+    figures = f"{opening}{PURCHASES}{INTEREST}{PAYMENTS}{closing}{CURRENT_BALANCE}"
+    return [line(200.0, word(30.0, 260.0, figures, 200.0))]
+
+
+def labelled_summary(opening: str, closing: str) -> list[Line]:
+    return [
         line(200.0, word(30.0, 220.0, f"Previous Statement Due {opening}", 200.0)),
         line(220.0, word(30.0, 220.0, f"Total Payment Due {closing}", 220.0)),
     ]
-    return [Page(lines=body + summary, has_text=True)]
 
 
-def verdict_for(profile: LayoutCreate, pages: list[Page]) -> Verdict:
-    result = extract_pages(profile, pages)
+def pages(summary: list[Line]) -> list[Page]:
+    return [Page(lines=rows() + summary, has_text=True)]
+
+
+def verdict_for(profile: LayoutCreate, statement: list[Page]) -> Verdict:
+    result = extract_pages(profile, statement)
     batch = normalize(profile, result, account_currency="AED")
     assert not batch.failures, batch.failures
     return reconcile(
@@ -108,7 +110,7 @@ def verdict_for(profile: LayoutCreate, pages: list[Page]) -> Verdict:
 
 
 def test_a_card_reconciles_when_its_bare_anchors_are_reframed_and_its_rows_are_not() -> None:
-    verdict = verdict_for(card_profile(), statement_pages())
+    verdict = verdict_for(card_profile(), pages(run_together_summary()))
 
     assert verdict.status == STATUS_MATCHED
     assert verdict.declared_opening == Decimal("-6140.4000")
@@ -119,8 +121,10 @@ def test_a_card_reconciles_when_its_bare_anchors_are_reframed_and_its_rows_are_n
 def test_the_suffix_directs_each_row_and_the_frame_switch_leaves_it_alone() -> None:
     # If inverts_sign reached the rows as well, the payment would land negative and every
     # purchase positive — a card reversed end to end while still summing consistently.
-    result = extract_pages(card_profile(), statement_pages())
-    batch = normalize(card_profile(), result, account_currency="AED")
+    profile = card_profile()
+    batch = normalize(
+        profile, extract_pages(profile, pages(run_together_summary())), account_currency="AED"
+    )
 
     assert [row.amount for row in batch.rows] == [
         Decimal("6140.4000"),
@@ -130,9 +134,9 @@ def test_the_suffix_directs_each_row_and_the_frame_switch_leaves_it_alone() -> N
 
 
 def test_a_card_read_without_the_frame_switch_mismatches() -> None:
-    # The regression this branch exists to stop: with no inversion the anchors stay positive
-    # and the batch reports a delta of exactly twice the opening balance.
-    verdict = verdict_for(card_profile(invertsSign=False), statement_pages())
+    # The regression this branch exists to stop: with no inversion the anchors stay in the
+    # issuer's frame and the batch computes a closing balance nothing declared.
+    verdict = verdict_for(card_profile(invertsSign=False), pages(run_together_summary()))
 
     assert verdict.status == STATUS_MISMATCHED
     assert verdict.declared_closing == Decimal("4479.1800")
@@ -143,8 +147,8 @@ def test_an_anchor_that_states_its_own_direction_is_not_reframed_again() -> None
     # A statement mixing a suffixed anchor with a bare one must read each in its own terms;
     # reframing the suffixed one as well would reverse the half that had already spoken.
     verdict = verdict_for(
-        card_profile(),
-        statement_pages(opening="6,140.40 Dr", closing="4,479.18"),
+        card_profile(**LABELLED_ANCHORS),
+        pages(labelled_summary("6,140.40 Dr", TOTAL_DUE)),
     )
 
     assert verdict.status == STATUS_MATCHED
@@ -165,3 +169,55 @@ def test_a_direction_stating_convention_still_accepts_the_frame_switch(conventio
     )
 
     assert profile.invertsSign is True
+
+
+# --- the seeded profile ------------------------------------------------------------------
+#
+# db/seeds/card-layout.json is a POST /layouts body, so it is validated here on every run: a
+# seed the endpoint would reject is a seed that cannot be loaded, and nothing else in the tree
+# would notice until someone tried to load it.
+
+
+def test_the_seeded_card_layout_is_a_body_the_endpoint_accepts() -> None:
+    profile = card_profile()
+
+    assert profile.signConvention == "cr_suffix"
+    assert profile.invertsSign is True
+    assert [column.field for column in profile.columns] == [
+        "booked_date",
+        "value_date",
+        "description",
+        "amount",
+    ]
+
+
+def test_the_seeded_layout_names_no_institution_and_captures_no_period() -> None:
+    profile = card_profile()
+
+    # ADR-0012: a layout is data, and no institution name belongs in a file this repository
+    # tracks. The fingerprints are what the statement prints about itself.
+    assert profile.name == "Card statement"
+    assert profile.fingerprints == ["Credit Card Statement", "Card Type:"]
+    # The installment block prints each plan's original purchase date, so rows dated outside
+    # the printed period are legitimate and part of the total the anchors reconcile against.
+    assert profile.metadataPatterns is None
+
+
+def test_the_seeded_layout_takes_no_continuation_line() -> None:
+    # With the rule on, the last row absorbs every trailing line of the document — 2,232
+    # characters of page furniture in one description_raw against 46 with it off. The dropped
+    # lines are counted in lines_unparsed, so the loss is reported rather than silent (I7).
+    assert card_profile().continuationRule is None
+
+
+def test_the_seeded_anchors_segment_a_line_of_run_together_figures() -> None:
+    # The producer emits no spaces between cells, so the summary extracts as one run. Each
+    # figure ends in two decimals, which is what makes the split deterministic.
+    profile = card_profile()
+    summary = f"{PREVIOUS_DUE}{PURCHASES}{INTEREST}{PAYMENTS}{TOTAL_DUE}{CURRENT_BALANCE}"
+
+    opening = re.search(profile.openingBalancePattern or "", summary, re.MULTILINE)
+    closing = re.search(profile.closingBalancePattern or "", summary, re.MULTILINE)
+
+    assert opening is not None and opening.group(1) == PREVIOUS_DUE
+    assert closing is not None and closing.group(1) == TOTAL_DUE

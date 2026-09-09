@@ -746,5 +746,25 @@ Two further findings from that measurement, recorded so they are not rediscovere
   rows and break the identity. Its `date_format` carries a four-digit year, so deriving is
   permitted (§4.4's two-digit-year rule does not bind here).
 - **`continuation:no_date_and_no_amount` runs past the end of the transaction table**, appending
-  trailing page furniture to the last row's description. It is contained by the profile's
-  `skip_line_patterns` — data, not code — and it moves no amount and no verdict.
+  trailing page furniture to the last row's description — 2,232 characters of it against 46
+  with the rule off. The card writes each transaction on one physical line, so the profile
+  simply does not set the rule; the dropped lines are counted in `lines_unparsed` and reported
+  in the parse summary, which keeps the loss visible rather than silent (I7). Data, not code,
+  and it moves no amount and no verdict.
+- **The balance anchors cannot be regexes over a label.** This producer emits no space
+  characters between cells, so the statement summary extracts as one run —
+  `6,140.404,479.180.006,140.404,479.1813,728.34`, six figures and no separator. It is the
+  no-space case `statement-ingestion.html` §4 attributes to another layout, present here too.
+  Every figure ends in exactly two decimal places, so `\d[\d,]*\.\d{2}` segments the run
+  deterministically; the seeded patterns require exactly six figures on their own line and
+  capture the first and the **fifth**. The fifth is the total payment due. The sixth is the
+  current balance, which also carries the remaining installment principal and reconciles
+  against nothing — anchoring on it would fail every statement that has an instalment plan.
+- **One profile covers both card variants.** Their summary blocks differ (one wraps its column
+  labels across two lines) but both print the same six figures in the same order on their own
+  line, so anchoring on the figures rather than the labels covers both without a second layout.
+
+Measured over the 38 card statements held locally, with the seeded profile: **2,159 rows
+normalized, zero row failures, 38 of 38 reconciling `matched`.** That is slice 1.1's acceptance
+criterion at the parse and reconciliation level; staging, commit and the review screen are the
+branches that follow.
