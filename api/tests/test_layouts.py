@@ -927,12 +927,14 @@ def test_an_unknown_column_field_is_still_refused() -> None:
 
 
 @pytest.mark.parametrize("convention", ["cr_suffix", "debit_credit_columns"])
-def test_inversion_is_refused_where_the_convention_already_states_direction(
+def test_inversion_is_accepted_where_the_rows_state_direction_but_the_balances_do_not(
     convention: str,
 ) -> None:
-    # inverts_sign carries a statement written in the issuer's frame into the ledger's. A
-    # Dr/Cr suffix and a debit/credit pair already state direction, so inverting them reverses
-    # every row on the card — internally consistent and entirely wrong.
+    # A card writes its anchors bare — "Previous Statement Due 6,140.40" is money owed, with
+    # nothing in the figure saying so — while its rows state their own direction through the
+    # suffix or the column pair. inverts_sign reframes whichever figures stated no direction,
+    # so it is what carries those anchors into the ledger's frame, and refusing it here left
+    # such a card with no frame switch at all and every statement mismatched.
     body = {**VALID_CREATE, "signConvention": convention, "invertsSign": True}
     if convention == "debit_credit_columns":
         body["columns"] = [
@@ -941,8 +943,8 @@ def test_inversion_is_refused_where_the_convention_already_states_direction(
             {"field": "debit", "xMin": 200.0, "xMax": 260.0},
             {"field": "credit", "xMin": 260.0, "xMax": 320.0},
         ]
-    with pytest.raises(ValidationError, match="invertsSign"):
-        layouts.LayoutCreate.model_validate(body)
+
+    assert layouts.LayoutCreate.model_validate(body).invertsSign is True
 
 
 @pytest.mark.parametrize("convention", ["signed", "balance_delta"])

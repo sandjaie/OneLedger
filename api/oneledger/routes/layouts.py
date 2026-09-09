@@ -56,9 +56,6 @@ RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_en
 ROW_START_RULES = frozenset({"has_date_and_amount", "has_date"})
 CONTINUATION_RULES = frozenset({"no_date_and_no_amount"})
 SIGN_CONVENTIONS = frozenset({"debit_credit_columns", "signed", "cr_suffix", "balance_delta"})
-# The two whose numbers carry no direction of their own, and so are written in whichever frame
-# the issuer chose. Only these can be inverted into the ledger's frame (M2 Task 4).
-DIRECTIONLESS_CONVENTIONS = frozenset({"signed", "balance_delta"})
 CHRONOLOGICAL_ORDERS = frozenset({"ascending", "descending"})
 # A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.
 TWO_DIGIT_YEAR = re.compile(r"(?<!y)yy(?!y)")
@@ -133,6 +130,13 @@ class LayoutCreate(BaseModel):
     columns: list[LayoutColumn]
     dateFormat: str = Field(min_length=1, max_length=40)
     signConvention: str
+    # Reframes every figure the statement wrote without a direction of its own, and only those:
+    # an amount under `signed` or `balance_delta`, and any declared or running balance carrying
+    # no Dr/Cr suffix. A figure that stated its direction has nothing left to reframe, so this
+    # is withheld from rows under `cr_suffix` and `debit_credit_columns` — which is what lets a
+    # card declare it. Such a card needs it: its rows say which way they go and its anchors do
+    # not, so without it the anchors stay in the issuer's frame and every statement mismatches.
+    # `normalize._signed_amount` and `normalize.frame_balance` are where the rule is applied.
     invertsSign: bool = False
     chronologicalOrder: str = "ascending"
     rowStartRule: str = "has_date_and_amount"
@@ -252,24 +256,6 @@ class LayoutCreate(BaseModel):
             supported = ", ".join(sorted(CONTINUATION_RULES))
             raise ValueError("continuationRule must be omitted or one of: " + supported)
         return value
-
-    @model_validator(mode="after")
-    def inversion_matches_its_convention(self) -> LayoutCreate:
-        """`inverts_sign` carries the issuer's frame into the ledger's, so it needs that frame.
-
-        A Dr/Cr suffix and a debit/credit column pair state the direction themselves: the
-        generic rule already lands a card purchase on the ledger's negative side, and inverting
-        on top of it stores every purchase as income and every payment as expense — a card
-        reversed end to end while staying internally consistent, which is the sign error
-        Invariant I2 exists to catch.
-        """
-        if self.invertsSign and self.signConvention not in DIRECTIONLESS_CONVENTIONS:
-            raise ValueError(
-                f"invertsSign cannot be set with signConvention {self.signConvention!r}: that "
-                "convention already states each row's direction. It applies to: "
-                + ", ".join(sorted(DIRECTIONLESS_CONVENTIONS))
-            )
-        return self
 
     @model_validator(mode="after")
     def running_balance_flag_matches_its_column(self) -> LayoutCreate:

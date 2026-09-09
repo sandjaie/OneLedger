@@ -711,3 +711,40 @@ now needs none, and such a card reconciles. What still blocks is the card that p
 balances **bare**: nothing then says the figures are owed, and the walk accuses row 1 for what is
 a frame error. One of those two documents is wrong; deciding which is the owner's, and the fix is
 its own task once decided.
+
+**Owner decision, 2026-09-09 — `inverts_sign` reframes whatever stated no direction.** The
+question 4d left open above is settled, and settled the way 4d's own rule already pointed. The
+flag is not a property of the row convention; it is the statement's frame, and it applies to
+every figure the statement wrote without a direction of its own — an amount under `signed` or
+`balance_delta`, and any declared or running balance carrying no `Dr`/`Cr` suffix. A figure that
+stated its direction has nothing left to reframe, so the flag is withheld from rows under
+`cr_suffix` and `debit_credit_columns`. That is the exact symmetry of the balance rule 4d
+delivered, now stated once for both halves rather than twice with different scope.
+
+`statement-ingestion.html` is the document that was right: a card pairing a `CR` suffix with
+`inverts_sign = True` is a valid layout, and it is the layout in hand. `layouts.py` was the one
+that was wrong — its `inversion_matches_its_convention` validator refused exactly that pairing,
+so the card had no frame switch for its bare anchors and every statement mismatched. The
+validator is removed rather than narrowed: with `has_a_balance_anchor` guaranteeing every saved
+layout declares an anchor, there is no convention under which the flag has nothing to act on.
+`DIRECTIONLESS_CONVENTIONS` goes with it, and the semantics now live on the field itself beside
+`normalize._signed_amount` and `normalize.frame_balance`, which is where they are applied.
+
+Measured on the layout in hand before the change, and the reason the decision is not a matter of
+taste: the statement's rows sum to `+1,661.22` in the ledger's frame, and it declares a previous
+balance of `6,140.40` and a total payment due of `4,479.18`, both bare and both money owed. The
+identity closes only once both anchors are negative — `−6,140.40 + 1,661.22 = −4,479.18`. Read
+in the issuer's frame it computes `+7,801.62` against a declared `+4,479.18`, which is what
+blocked all 38 files.
+
+Two further findings from that measurement, recorded so they are not rediscovered as bugs:
+
+- **The card's transaction table legitimately carries rows dated outside its statement period.**
+  Its installment block prints each plan's original purchase date, and those instalment charges
+  are part of the declared purchase total the anchors reconcile against. The layout therefore
+  **derives** its period and must not capture it: capturing the printed period would fail those
+  rows and break the identity. Its `date_format` carries a four-digit year, so deriving is
+  permitted (§4.4's two-digit-year rule does not bind here).
+- **`continuation:no_date_and_no_amount` runs past the end of the transaction table**, appending
+  trailing page furniture to the last row's description. It is contained by the profile's
+  `skip_line_patterns` — data, not code — and it moves no amount and no verdict.
