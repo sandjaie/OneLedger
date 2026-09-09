@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 
 from oneledger import auth
 from oneledger.db import connect, scope_to_owner
+from oneledger.ingest.dedupe import OCCURRENCE, fingerprint
 from oneledger.main import app
 from oneledger.routes import ingest as ingest_routes
 
@@ -700,7 +701,95 @@ def test_accepting_a_duplicate_recomputes_its_hash_to_the_next_free_index(
     assert not committed.intersection(after), "nor with anything already in the ledger"
 
 
-def test_the_override_is_deterministic_and_repeating_it_changes_nothing(live: Staged) -> None:
+def _expected_occurrences(live: Staged, batch: str) -> list[int]:
+    """For each staged row in order, the `occ:` index its stored hash actually encodes.
+
+    Derived by recomputing the fingerprint at each index and finding which one the row holds —
+    the only way to name the index from outside, and it re-derives none of the route's search.
+    """
+    found = []
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT account_id, booked_date, amount, description_raw, dedupe_hash
+                 FROM staged_transaction WHERE import_batch_id = %s
+                ORDER BY source_row_number""",
+            (batch,),
+        )
+        for account_id, booked_date, amount, description_raw, stored in cur.fetchall():
+            for index in range(16):
+                if stored == fingerprint(
+                    account_id=account_id,
+                    booked_date=booked_date,
+                    amount=amount,
+                    description_raw=description_raw,
+                    disambiguator=f"{OCCURRENCE}{index}",
+                ):
+                    found.append(index)
+                    break
+            else:
+                found.append(-1)
+    return found
+
+
+def test_the_override_advances_to_the_next_free_index_and_no_further(live: Staged) -> None:
+    """The exact indices, not merely "some free index".
+
+    That the index is the *next* one is the whole reason section 4.7 advances it rather than
+    marking the row exempt: a later statement carrying both occurrences hashes them 0 and 1 and
+    must recognise both as duplicates. An override that jumped to 5 would satisfy "changed" and
+    "does not collide" while breaking exactly that, and the overlapping month would import twice.
+
+    Two identical rows, so occurrences 0 and 1 are genuinely committed and the override has
+    something to advance past — and the second row must advance past the first's new index too.
+    """
+    first = live.stage(statement=_twin_statement())
+    assert (
+        live.patch(first, {"rowIds": _all_row_ids(live, first), "decision": "accepted"}).status_code
+        == 200
+    )
+    assert live.commit(first).status_code == 200
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE document SET sha256 = %s", (repeat_hex("d"),))
+        cur.execute("UPDATE account SET current_balance = 980 WHERE id = %s", (live.account_id,))
+    live.conn.commit()
+    second = live.stage(statement=_twin_statement())
+    assert _expected_occurrences(live, second) == [0, 1], "staged where the ledger already sits"
+
+    assert (
+        live.patch(
+            second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"}
+        ).status_code
+        == 200
+    )
+
+    assert _expected_occurrences(live, second) == [2, 3], (
+        "0 and 1 are committed, so the first free is 2 — and the second row advances past it"
+    )
+
+
+def test_the_override_recomputes_in_the_occurrence_namespace(live: Staged) -> None:
+    """Spec section 7 item 12: the override recomputes in the `occ:` form whatever disambiguated
+    the row before.
+
+    The fixture references its first row and not its second, so the two arrive here from
+    different namespaces and must land differently. The referenced row was fingerprinted
+    `ref:<reference>#0`, so **no `occ:` index is taken on its account** and the override lands on
+    0 — which is only possible because the namespace switched: advancing a `ref:` counter would
+    change a value the fingerprint does not contain and the hash would not move at all. The
+    unreferenced row was already `occ:0`, which the ledger now holds, so it advances to 1.
+    """
+    second = _committed_twin(live, live.stage())
+    before = _hashes(live, second)
+
+    live.patch(second, {"rowIds": _all_row_ids(live, second), "decision": "accepted"})
+
+    assert _expected_occurrences(live, second) == [0, 1], (
+        "the referenced row crosses into a free occ: index; the occ: row advances past the ledger"
+    )
+    assert _hashes(live, second) != before, "and both stored hashes moved"
+
+
+def test_repeating_the_override_changes_nothing(live: Staged) -> None:
     """A second accept must not advance the index again: the row is already accepted, and an
     override that moved every time would make the same review produce a different ledger."""
     second = _committed_twin(live, live.stage())

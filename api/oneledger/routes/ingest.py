@@ -639,14 +639,21 @@ _COLLIDING_ROWS = """SELECT id, account_id, booked_date, amount, description_raw
                       ORDER BY source_row_number"""
 
 # What a candidate hash must not already be. Both halves matter: the committed side is what
-# V10's unique index rejects, and the staged side is the batch's own other rows — the commit
-# inserts them together, so two overrides landing on one hash fail the same index a moment
-# later, having passed every check that looked only at the ledger.
+# V10's unique index rejects, and the staged side is every row still able to reach the ledger —
+# the commit inserts a batch's rows together, so two overrides landing on one hash fail that
+# same index a moment later, having passed every check that looked only at the ledger.
+#
+# Scoped by account rather than by batch. `_refuse_second_staging` refuses a second staging only
+# for a period the account already has open, so two unreviewed batches covering *different*
+# periods coexist — which is exactly the overlapping Jul-Aug / Aug-Sep pair section 4.7 is
+# written around, and where the same transaction is staged `duplicate` in both. Stopping at this
+# batch's edge would hand both of them the same next index.
 _TAKEN = """SELECT dedupe_hash FROM transaction
              WHERE household_id = %s AND account_id = %s AND dedupe_hash = ANY(%s)
             UNION
             SELECT dedupe_hash FROM staged_transaction
-             WHERE import_batch_id = %s AND id <> %s AND dedupe_hash = ANY(%s)"""
+             WHERE household_id = %s AND account_id = %s AND id <> %s
+               AND dedupe_hash = ANY(%s)"""
 
 
 def _override_hashes(
@@ -665,8 +672,8 @@ def _override_hashes(
     reference-disambiguated row that collided did so on its reference, and advancing a counter
     that is not in the fingerprint would change nothing.
 
-    One row at a time, and each write is visible to the next row's search, so two overrides in
-    the same batch cannot land on one hash.
+    One row at a time, and each write is visible to the next row's search, so two overrides
+    cannot land on one hash.
     """
     cur.execute(_COLLIDING_ROWS, (batch_id, household_id, row_ids, COLLIDING))
     for row_id, account_id, booked_date, amount, description_raw in cur.fetchall():
@@ -682,7 +689,7 @@ def _override_hashes(
         ]
         cur.execute(
             _TAKEN,
-            (household_id, account_id, candidates, batch_id, row_id, candidates),
+            (household_id, account_id, candidates, household_id, account_id, row_id, candidates),
         )
         taken = {found[0] for found in cur.fetchall()}
         free = next((candidate for candidate in candidates if candidate not in taken), None)

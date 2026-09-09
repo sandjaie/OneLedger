@@ -56,7 +56,7 @@ are contract and live in the [M2 spec §8](specs/2026-09-07-m2-statement-importe
 | `fix/security-definer-search-path` | V15: every `SECURITY DEFINER` function names `pg_temp` last, so `current_household_id()` cannot be answered by a caller's temporary table; `db/tests/0013` | Merged | [#55](https://github.com/sandjaie/OneLedger/pull/55) |
 | `feature/p1-1b-review-routes` | `GET /import/{batch}`, `PATCH /import/{batch}/rows`, `POST /import/{batch}/commit` | Implemented; reviewed | `api/tests/test_import_review_live.py` (22 cases) |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Implemented; reviewed | `web/app/import/__tests__/import-screen.test.tsx` (14 cases) |
-| `feature/p1-1b-duplicate-override` | Accepting a row marked `duplicate` as a confirmed-distinct override: the dedupe hash is recomputed with the occurrence index advanced (M2 spec §4.7). Added in delivery — the slice covers M2 6a–6d and 6c was not in the review-routes branch | Implemented; reviewed | `api/tests/test_import_review_live.py` (30 cases) |
+| `feature/p1-1b-duplicate-override` | Accepting a row marked `duplicate` as a confirmed-distinct override: the dedupe hash is recomputed with the occurrence index advanced (M2 spec §4.7). Added in delivery — the slice covers M2 6a–6d and 6c was not in the review-routes branch | Implemented; reviewed | `api/tests/test_import_review_live.py` (32 cases) |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
 
 ## Raised and not yet actioned
