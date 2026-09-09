@@ -334,6 +334,19 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .file-field input:focus-visible,
 .select-field select:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 
+/* The password field sits inside its own file's item — one file's password is never another's,
+   and the layout has to make that obvious. */
+.password-field {
+  display: grid; gap: 6px; justify-self: start; max-width: 340px;
+  color: var(--muted); font-size: 0.82rem; font-weight: 700;
+}
+.password-field input {
+  padding: 11px 12px; border: 1px solid var(--rule);
+  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
+}
+.password-field input:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.password-field small { color: var(--muted); font-weight: 400; }
+
 .import-list { display: grid; gap: 22px; margin: 30px 0 0; padding: 0; list-style: none; }
 .import-file { display: grid; gap: 14px; padding: 22px 0; border-top: 1px solid var(--rule); }
 .import-file .primary-action,

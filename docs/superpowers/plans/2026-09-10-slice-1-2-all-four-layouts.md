@@ -77,7 +77,9 @@ exactly as any other per-file failure does today.
 **Invariants / security.** **The password is on the never-store list**
 (`security-and-privacy.html` §1). It lives in component state for the duration of the request and
 goes nowhere else: not `localStorage`, not a URL, not a log, not a retained field on the
-candidate, not the parse summary. It is cleared once the file is staged or refused.
+candidate, not the parse summary. It is cleared once the file is **staged**, and deliberately
+kept through a refusal: a wrong password answers with the same sentence as no password, so
+clearing there would give the owner one attempt and no way to make a second.
 `document.is_password_protected` is the only record that a file was encrypted, and the pipeline
 already sets it from `password is not None`. Money is formatted, never computed.
 
