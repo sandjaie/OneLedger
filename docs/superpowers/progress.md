@@ -52,10 +52,17 @@ are contract and live in the [M2 spec §8](specs/2026-09-07-m2-statement-importe
 | `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
 | `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Merged | [#52](https://github.com/sandjaie/OneLedger/pull/52) |
 | `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Merged | [#53](https://github.com/sandjaie/OneLedger/pull/53) |
-| `feature/p1-1b-commit-functions` | V14's `commit_import_batch` and `assert_account_reconciles`, and `db/tests/0012` | Implemented; review gate open | `db/tests/0012_commit_import_batch.sql` (8 blocks) |
+| `feature/p1-1b-commit-functions` | V14's `commit_import_batch` and `assert_account_reconciles`, and `db/tests/0012` | Implemented; reviewed | `db/tests/0012_commit_import_batch.sql` (14 blocks) |
 | `feature/p1-1b-review-routes` | `GET /import/{batch}`, `PATCH /import/{batch}/rows`, `POST /import/{batch}/commit` | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
+
+## Raised and not yet actioned
+
+| What | Why it is not folded into the branch that found it |
+| --- | --- |
+| **`SET search_path = public` on five pre-existing `SECURITY DEFINER` functions** in V2, V5 and V7 — among them `current_household_id()`, which every RLS policy and `assert_is_owner()` read. Postgres searches `pg_temp` first when it is not named in the path, so a caller-created temp `app_user` makes `current_household_id()` return a household of the attacker's choosing; verified on PostgreSQL 18.6 while reviewing V14. Needs its own migration replacing each definition with `search_path = public, pg_temp`, and a `db/tests` block per function. | The functions are in applied, Flyway-checksummed migrations, so the repair is a new migration and a change to the authorization boundary — sized and reviewed on its own, not carried by a slice-1.1 branch. **Take this before the remaining 1.1 branches**: they all build on that boundary. |
+| `.claude/skills/oneledger-plan-review/SKILL.md` states the pre-#50 diff budget (400/800) rather than the authoritative 800/1,600 in `git-workflow.md`. | Tooling, not a slice. A `chore/` branch. |
 
 ## Where the rest is written down
 

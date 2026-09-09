@@ -12,6 +12,8 @@
 -- country range, exactly as db/tests/0010 and 0011 do (ADR-0012).
 \set ON_ERROR_STOP on
 
+DROP FUNCTION IF EXISTS _t0012_fixture();
+
 DO $$
 BEGIN
   ASSERT (SELECT count(*) FROM pg_proc WHERE proname = 'commit_import_batch') = 1,
@@ -172,7 +174,9 @@ BEGIN
   SELECT * INTO committed FROM transaction WHERE dedupe_hash = repeat('a', 64);
   -- Invariant I6: the row names where it came from, and the mapping that produced it.
   ASSERT committed.source = 'statement_import', 'source is statement_import';
-  ASSERT committed.source_document_id IS NOT NULL, 'the document is named';
+  ASSERT committed.source_document_id
+         = (SELECT document_id FROM import_batch WHERE id = f.batch),
+    'the document named is the batch''s own, not merely some document';
   ASSERT committed.source_page_number = 1 AND committed.source_row_number = 1,
     'page and row travel through unchanged';
   ASSERT committed.statement_layout_id IS NOT NULL AND committed.layout_version = 1,
@@ -287,6 +291,215 @@ BEGIN
     ASSERT refused, format('a %s batch must not commit', verdict);
   END LOOP;
   RAISE NOTICE 'PASS 0012 only a matched batch belonging to the household commits';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- `assert_account_reconciles` has its own authorization, exercised on its own. Reached only
+-- through the unauthenticated path it looked covered: signed in as somebody, it would happily
+-- read and report another household's balance, and a missing account left every comparison
+-- against NULL — a clean return having verified nothing, which is the vacuous pass the null
+-- guard four lines above exists to prevent, arriving through a second door.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+DO $$
+DECLARE f RECORD; other RECORD; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  SELECT * INTO other FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', other.owner_user::TEXT, true);
+
+  refusal := NULL;
+  BEGIN
+    PERFORM assert_account_reconciles(f.account, 100::NUMERIC, '2026-03-31'::DATE);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal = 'not authorized',
+    format('another household''s account is not readable, got: %s', refusal);
+
+  refusal := NULL;
+  BEGIN
+    PERFORM assert_account_reconciles(gen_random_uuid(), 100::NUMERIC, '2026-03-31'::DATE);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal = 'not authorized',
+    format('a missing account must raise, not verify nothing; and must not say it is missing, got: %s',
+           refusal);
+
+  -- The account exists and is the caller's, but the date precedes its balance anchor: the sum
+  -- is empty and the opening balance would be returned as though it were the answer.
+  refusal := NULL;
+  BEGIN
+    PERFORM assert_account_reconciles(other.account, 100::NUMERIC, '2025-12-31'::DATE);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal LIKE '%anchored at%',
+    format('a date before the balance anchor is not a fact the ledger holds, got: %s', refusal);
+  RAISE NOTICE 'PASS 0012 the balance check refuses what it cannot answer';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- Whose money moves is decided by the batch, never by the staged row. The definer bypasses
+-- RLS, so `staged_transaction`'s isolation policy does not run inside these functions and the
+-- predicate has to be written out. Without it, rows re-pointed at another account commit
+-- there while the verification checks the batch's account and passes on an empty change.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+DO $$
+DECLARE f RECORD; other RECORD; refusal TEXT; second_account UUID; p UUID;
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+  SELECT owner_person_id INTO p FROM account WHERE id = f.account;
+  INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                       country, opening_balance, opening_balance_date)
+  SELECT f.household, p, 'Second Savings', 'savings', currency, 'XB', 0, '2026-01-01'
+  FROM account WHERE id = f.account
+  RETURNING id INTO second_account;
+
+  UPDATE staged_transaction SET account_id = second_account
+  WHERE import_batch_id = f.batch AND status = 'accepted';
+
+  refusal := NULL;
+  BEGIN
+    PERFORM commit_import_batch(f.batch);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal LIKE '%belonging to another account%',
+    format('a row pointing at another account must refuse, got: %s', refusal);
+  ASSERT NOT EXISTS (SELECT 1 FROM transaction WHERE account_id = second_account),
+    'and nothing reached that account';
+END $$;
+ROLLBACK;
+
+BEGIN;
+DO $$
+DECLARE f RECORD; other RECORD; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  SELECT * INTO other FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+  -- One accepted row re-pointed at a second household entirely.
+  UPDATE staged_transaction SET household_id = other.household, account_id = other.account
+  WHERE import_batch_id = f.batch AND dedupe_hash = repeat('a', 64);
+
+  refusal := NULL;
+  BEGIN
+    PERFORM commit_import_batch(f.batch);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal LIKE '%belonging to another account%',
+    format('a row pointing at another household must refuse, got: %s', refusal);
+  ASSERT NOT EXISTS (SELECT 1 FROM transaction WHERE household_id = other.household),
+    'and the other household''s ledger is untouched';
+  RAISE NOTICE 'PASS 0012 the batch decides whose ledger is written';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- The batch's own rows, and only those. Without `import_batch_id = p_batch_id` on the source
+-- select, every accepted row in the database commits into this batch — a regression that
+-- would have shipped green.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+DO $$
+DECLARE f RECORD; other RECORD; imported INTEGER;
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  SELECT * INTO other FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+
+  imported := commit_import_batch(f.batch);
+  ASSERT imported = 2, format('only this batch''s accepted rows commit, got %s', imported);
+  ASSERT NOT EXISTS (SELECT 1 FROM transaction WHERE household_id = other.household),
+    'the other batch is untouched';
+  RAISE NOTICE 'PASS 0012 a commit takes only its own batch';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- A batch that is not awaiting review does not commit. `reconciliation_status` is written at
+-- staging and outlives the batch's own state, so refusing only `completed` would let a
+-- cancelled or failed batch through — and `ingest/pipeline.py` allows a period to be re-staged
+-- once its earlier batch is cancelled, on the stated grounds that neither can still commit.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+DO $$
+DECLARE f RECORD; refusal TEXT; state TEXT;
+BEGIN
+  FOREACH state IN ARRAY ARRAY['cancelled', 'failed', 'uploaded'] LOOP
+    SELECT * INTO f FROM _t0012_fixture();
+    PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+    UPDATE import_batch SET status = state::import_status WHERE id = f.batch;
+
+    refusal := NULL;
+    BEGIN
+      PERFORM commit_import_batch(f.batch);
+    EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+    END;
+    ASSERT refusal LIKE format('a batch in state %s cannot be imported', state),
+      format('a %s batch must not commit, got: %s', state, refusal);
+    ASSERT NOT EXISTS (SELECT 1 FROM transaction WHERE import_batch_id = f.batch),
+      format('and a %s batch commits nothing', state);
+  END LOOP;
+  RAISE NOTICE 'PASS 0012 only a batch awaiting review commits';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- A row the ledger would refuse gets a sentence naming it, not a constraint name for the whole
+-- statement. Section 5.3 lets review accept a row staging flagged `duplicate`, so this is the
+-- ordinary path, not an exotic one.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+DO $$
+DECLARE f RECORD; refusal TEXT; base CHAR(3);
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+  SELECT currency INTO base FROM account WHERE id = f.account;
+
+  INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
+                           currency, fx_rate_date, fx_rate_is_carried, fx_rate_to_base,
+                           fx_rate_to_secondary, amount_base, amount_secondary, txn_type,
+                           source, source_document_id, dedupe_hash)
+  VALUES (f.household, f.account, '2026-03-02', 'SALARY', 100, base, '2026-03-02', false,
+          1, 1, 100, 100, 'income', 'statement_import',
+          (SELECT document_id FROM import_batch WHERE id = f.batch), repeat('a', 64));
+
+  refusal := NULL;
+  BEGIN
+    PERFORM commit_import_batch(f.batch);
+  EXCEPTION WHEN OTHERS THEN refusal := SQLERRM;
+  END;
+  ASSERT refusal = 'row 1 is already in the ledger; reject it rather than accepting it',
+    format('an accepted duplicate names its row, got: %s', refusal);
+  RAISE NOTICE 'PASS 0012 a row the ledger refuses is named';
+END $$;
+ROLLBACK;
+
+-- ---------------------------------------------------------------------------------------
+-- The hardening that is not tidiness: pg_temp is searched first when it is absent from the
+-- path, so a caller-created temp table captures every unqualified name in these functions.
+-- Without `pg_temp` named last, this block reports a successful import of rows that went to a
+-- temporary table and vanish at end of session, with the batch marked completed.
+-- ---------------------------------------------------------------------------------------
+BEGIN;
+CREATE TEMP TABLE transaction (LIKE public.transaction INCLUDING DEFAULTS);
+DO $$
+DECLARE f RECORD; imported INTEGER;
+BEGIN
+  SELECT * INTO f FROM _t0012_fixture();
+  PERFORM set_config('app.user_id', f.owner_user::TEXT, true);
+
+  imported := commit_import_batch(f.batch);
+  ASSERT imported = 2, 'the commit still runs';
+  ASSERT (SELECT count(*) FROM public.transaction WHERE import_batch_id = f.batch) = 2,
+    'the rows are in the real ledger, not a temp table shadowing it';
+  ASSERT (SELECT count(*) FROM pg_temp.transaction) = 0,
+    'and nothing was captured by the temp table';
+  RAISE NOTICE 'PASS 0012 a temp table cannot capture the ledger';
 END $$;
 ROLLBACK;
 
