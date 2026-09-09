@@ -310,6 +310,51 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .fx-result dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .fx-result dd { margin: 3px 0 0; overflow-wrap: anywhere; }
 .inline-alert { padding: 14px 16px; border-left: 4px solid #a65318; background: #fff4e9; line-height: 1.5; }
+/* Import — one row per chosen file, each carrying its own outcome. The list is the screen:
+   a file's verdict, its counts and its action all sit inside its own item, so a failure reads
+   as that file's failure rather than as the page's. */
+.import-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  gap: 22px;
+  align-items: end;
+  margin-top: 26px;
+  padding: 26px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.import-controls .primary-action { margin-top: 0; }
+.file-field,
+.select-field { display: grid; gap: 7px; min-width: 0; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.file-field input,
+.select-field select {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--rule);
+  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
+}
+.file-field input:focus-visible,
+.select-field select:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+
+.import-list { display: grid; gap: 22px; margin: 30px 0 0; padding: 0; list-style: none; }
+.import-file { display: grid; gap: 14px; padding: 22px 0; border-top: 1px solid var(--rule); }
+.import-file .primary-action,
+.import-file .text-action { justify-self: start; margin-top: 0; padding-left: 0; }
+.import-file-head {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: baseline;
+}
+.import-file-head strong { overflow-wrap: anywhere; }
+.import-summary { display: grid; gap: 14px; }
+.import-summary dl {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 0;
+}
+.import-summary div { min-width: 0; }
+.import-summary dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.import-summary dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+/* A verdict that passed. The blocked case reuses .inline-alert, which is already the tree's
+   one way of saying "this needs your attention" — a second colour for the same meaning is how
+   a palette stops meaning anything. */
+.import-verdict { margin: 0; padding: 12px 14px; border-left: 4px solid var(--blue); background: rgba(255, 255, 255, 0.6); line-height: 1.5; }
+.import-failures { display: grid; gap: 8px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.9rem; }
+
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
@@ -417,6 +462,8 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   .household-card,
   .fx-card,
   .accounts-heading,
+  .import-controls,
+  .import-summary dl,
   .fx-result dl { grid-template-columns: 1fr; }
   .currency-toggle { justify-self: start; }
   .format-preview { grid-column: 1; }

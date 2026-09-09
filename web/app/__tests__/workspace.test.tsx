@@ -94,6 +94,7 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
     expect(screen.getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe("/accounts");
+    expect(screen.getByRole("link", { name: "Import" }).getAttribute("href")).toBe("/import");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Plans.*unavailable/i }).disabled).toBe(true);
   });
 
@@ -399,6 +400,21 @@ describe("authenticated workspace", () => {
     expect((await screen.findByRole("link", { name: "Accounts" })).getAttribute("aria-current")).toBe("page");
     expect(screen.getByText("Inventory Savings")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Assets · XB" })).toBeTruthy();
+  });
+
+  it("renders the import screen and marks the nav current", async () => {
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    render(
+      <Workspace
+        section="import"
+        request={requestThat(household, inventory, catalogue)}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Import" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Import" })).toBeTruthy();
+    expect(screen.getByLabelText("Statement files")).toBeTruthy();
   });
 
   it.each([

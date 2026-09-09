@@ -1,0 +1,437 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { ImportScreen } from "@/app/import/import-screen";
+import { ApiError } from "@/lib/api/client";
+import type { AccountRow, CurrencyRow, HouseholdCurrency, ParseResponse } from "@/types/api";
+
+// `CurrencyRow` is the catalogue row and carries a display name; `HouseholdCurrency` is the
+// subset the formatter reads. Deriving one from the other keeps them from drifting in the
+// fixture the way they cannot drift in the API.
+const catalogue: CurrencyRow = {
+  code: "XAE",
+  name: "Synthetic A",
+  symbol: "A",
+  decimals: 2,
+  numberFormat: "international",
+};
+
+// A second currency with a different grouping, so a test can tell which one was used rather
+// than passing because both format the same.
+const other: CurrencyRow = {
+  code: "XIN",
+  name: "Synthetic I",
+  symbol: "I",
+  decimals: 2,
+  numberFormat: "indian",
+};
+
+const currencies: Array<CurrencyRow> = [catalogue, other];
+const currency: HouseholdCurrency = {
+  code: catalogue.code,
+  symbol: catalogue.symbol,
+  decimals: catalogue.decimals,
+  numberFormat: catalogue.numberFormat,
+};
+
+const accounts = [
+  { id: "acct-card", name: "Synthetic Card", currency: "XAE" },
+  { id: "acct-savings", name: "Synthetic Savings", currency: "XIN" },
+] as Array<AccountRow>;
+
+function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
+  return {
+    staged: false,
+    batchId: null,
+    documentId: null,
+    accountId: "acct-card",
+    layoutId: "layout-1",
+    layoutVersion: 1,
+    period: { start: "2026-03-01", end: "2026-03-31", isDerived: false },
+    rowsExtracted: 2,
+    counts: { new: 2 },
+    reconciliation: {
+      status: "matched",
+      declaredOpening: "1000.0000",
+      openingIsDerived: false,
+      declaredClosing: "1490.0000",
+      computedClosing: "1490.0000",
+      delta: "0.0000",
+      firstDivergentRow: null,
+      previousBalance: null,
+      amount: null,
+      candidateRows: [],
+      message: "opening 1000.0000 plus 2 rows reaches the declared closing",
+    },
+    rows: [],
+    failures: [],
+    ...overrides,
+  };
+}
+
+function pdf(name: string) {
+  return new File([new Uint8Array([37, 80, 68, 70])], name, { type: "application/pdf" });
+}
+
+function choose(files: Array<File>) {
+  const input = screen.getByLabelText("Statement files");
+  fireEvent.change(input, { target: { files } });
+}
+
+function renderScreen(request: ReturnType<typeof vi.fn>) {
+  render(
+    <ImportScreen
+      accounts={accounts}
+      currencies={currencies}
+      currency={currency}
+      request={request as never}
+    />,
+  );
+}
+
+afterEach(cleanup);
+
+describe("choosing files", () => {
+  it("lists every chosen file independently and uploads none of them", async () => {
+    const request = vi.fn();
+    renderScreen(request);
+
+    choose([pdf("march.pdf"), pdf("april.pdf")]);
+
+    expect(await screen.findByText("march.pdf")).toBeTruthy();
+    expect(screen.getByText("april.pdf")).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("refuses a file that is not a PDF, and says why, without asking the API", async () => {
+    const request = vi.fn();
+    renderScreen(request);
+
+    choose([new File(["x"], "statement.csv", { type: "text/csv" }), pdf("march.pdf")]);
+
+    expect(await screen.findByText(/only PDF statements/i)).toBeTruthy();
+    expect(screen.getByText("march.pdf")).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("does not post anything until the owner asks for the check", async () => {
+    const request = vi.fn().mockResolvedValue(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+
+    expect(request).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    const [path, init] = request.mock.calls[0];
+    expect(path).toBe("/parse");
+    expect((init.body as FormData).get("stage")).toBe("false");
+  });
+});
+
+describe("per-file outcomes", () => {
+  it("checks each file with its own request and reports each result separately", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed({ rowsExtracted: 2 }))
+      .mockRejectedValueOnce(new ApiError(422, "no layout matched this statement"));
+    renderScreen(request);
+    choose([pdf("march.pdf"), pdf("april.pdf")]);
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
+    expect(within(march).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
+    expect(within(april).getByText("no layout matched this statement")).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a blocked file's own verdict rather than a generic error", async () => {
+    const request = vi.fn().mockResolvedValue(
+      parsed({
+        reconciliation: {
+          ...parsed().reconciliation,
+          status: "mismatched",
+          computedClosing: "1400.0000",
+          delta: "-90.0000",
+          message: "the statement does not add up: declared 1490.0000, computed 1400.0000",
+        },
+      }),
+    );
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+
+    expect(
+      within(march).getByText(/the statement does not add up: declared 1490.0000/),
+    ).toBeTruthy();
+    expect(within(march).queryByRole("button", { name: /stage/i })).toBeNull();
+  });
+
+  it("reports an encrypted file as needing a password and offers no prompt", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValue(new ApiError(422, "this statement is password-protected"));
+    renderScreen(request);
+    choose([pdf("locked.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+
+    expect(within(locked).getByText(/password-protected/)).toBeTruthy();
+    expect(within(locked).queryByLabelText(/password/i)).toBeNull();
+    expect(within(locked).queryByRole("button", { name: /stage/i })).toBeNull();
+  });
+
+  it("keeps the other files' outcomes when one of them fails", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new Error("network is gone"))
+      .mockResolvedValueOnce(parsed({ rowsExtracted: 7, counts: { new: 7 } }));
+    renderScreen(request);
+    choose([pdf("a.pdf"), pdf("b.pdf"), pdf("c.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const c = await screen.findByRole("listitem", { name: /c\.pdf/ });
+    expect(within(c).getByText(/7 rows/, { selector: "dd" })).toBeTruthy();
+    const a = screen.getByRole("listitem", { name: /a\.pdf/ });
+    expect(within(a).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
+    const b = screen.getByRole("listitem", { name: /b\.pdf/ });
+    expect(within(b).getByText(/could not be checked/i)).toBeTruthy();
+  });
+});
+
+describe("staging", () => {
+  it("stages one file on its own action and links to the batch it created", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1", documentId: "doc-1" }));
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    const [, init] = request.mock.calls[1];
+    expect((init.body as FormData).get("stage")).toBe("true");
+    const link = await within(march).findByRole("link", { name: /review/i });
+    expect(link.getAttribute("href")).toBe("/import/batch-1");
+  });
+
+  it("does not claim a file was staged when the API says it was not", async () => {
+    // `blocks_staging` is two conditions, and the second is a row that would not normalize.
+    // The route answers 200 with `staged: false` rather than an error (spec §7.5), so HTTP
+    // success is not staging success — the boolean is.
+    const blocked = parsed({
+      failures: [{ sourcePageNumber: 1, sourceRowNumber: 3, reason: "no date in the date column" }],
+    });
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce({ ...blocked, staged: false, batchId: null });
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(within(march).queryByText(/staged for review/i)).toBeNull();
+    expect(within(march).queryByRole("link", { name: /review/i })).toBeNull();
+    expect(within(march).getByText(/was not staged/i)).toBeTruthy();
+  });
+
+  it("offers no Stage on a statement whose rows did not all normalize", async () => {
+    // It reconciles — but a batch missing rows reconciles only by coincidence, and the API
+    // refuses to stage it. Offering the button offers an action that cannot succeed.
+    const request = vi.fn().mockResolvedValue(
+      parsed({
+        failures: [{ sourcePageNumber: 1, sourceRowNumber: 3, reason: "no date in the date column" }],
+      }),
+    );
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+
+    expect(within(march).getByText(/no date in the date column/)).toBeTruthy();
+    expect(within(march).queryByRole("button", { name: /stage/i })).toBeNull();
+  });
+
+  it("re-checks the files still waiting and leaves the staged one alone", async () => {
+    // A second check re-posts the dry run, and an already-staged file's document is stored, so
+    // the route would answer 409 — a duplicate of itself — and take its review link with it.
+    // Asserted with a file still waiting beside it, so the check button is genuinely enabled
+    // and it is the loop that has to skip, not the disabled button doing the work.
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new Error("network is gone"))
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1", documentId: "doc-1" }))
+      .mockResolvedValueOnce(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf"), pdf("april.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
+    await within(april).findByText(/could not be checked/i);
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    await within(march).findByRole("link", { name: /review/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    // Four calls, not five: march's check, april's failure, march's staging, april's re-check.
+    await waitFor(() => expect(within(april).getByText(/2 rows/, { selector: "dd" })).toBeTruthy());
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(within(march).getByRole("link", { name: /review/i }).getAttribute("href")).toBe(
+      "/import/batch-1",
+    );
+  });
+
+  it("stops offering a check once every file is staged", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1", documentId: "doc-1" }));
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    await within(march).findByRole("link", { name: /review/i });
+
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: /check statements/i }).disabled,
+    ).toBe(true);
+  });
+
+  it("reports a statement already imported without losing the file's place", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new ApiError(409, "this statement was imported on 2026-03-05"));
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+
+    expect(
+      await within(march).findByText("this statement was imported on 2026-03-05"),
+    ).toBeTruthy();
+    expect(screen.getByText("march.pdf")).toBeTruthy();
+  });
+
+  it("sends the chosen account, and nothing when the statement is to be trusted", async () => {
+    const request = vi.fn().mockResolvedValue(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect((request.mock.calls[0][1].body as FormData).get("accountId")).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Account"), { target: { value: "acct-savings" } });
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect((request.mock.calls[1][1].body as FormData).get("accountId")).toBe("acct-savings");
+  });
+});
+
+describe("what the screen announces", () => {
+  it("announces each file's progress to a screen reader", async () => {
+    // WCAG AA (prd.html section 6): a state that changes across seconds of work has to be
+    // announced, not only redrawn. The tree's own pattern is role="status".
+    const request = vi.fn().mockResolvedValue(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const live = within(march).getByRole("status");
+    expect(live.textContent).toContain("Ready to check");
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(within(march).getByRole("status").textContent).toContain("Checked"));
+  });
+});
+
+describe("what the summary says", () => {
+  it("formats the statement's own figures and derives none of them", async () => {
+    const request = vi.fn().mockResolvedValue(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+
+    // formatMoney over the string the API sent — never arithmetic on it.
+    expect(within(march).getByText(/A 1,490\.00/, { selector: "dd" })).toBeTruthy();
+    expect(
+      within(march).getByText(/2026-03-01 to 2026-03-31/, { selector: "dd" }),
+    ).toBeTruthy();
+  });
+
+  it("formats the closing in the resolved account's currency, not the household's", async () => {
+    // 1490.0000 groups as 1,490.00 internationally and as 1,490.00 in Indian grouping too —
+    // so the figure is one that actually differs between the two.
+    const request = vi.fn().mockResolvedValue(
+      parsed({
+        accountId: "acct-savings",
+        reconciliation: { ...parsed().reconciliation, declaredClosing: "5982530.0000" },
+      }),
+    );
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+
+    expect(within(march).getByText("I 59,82,530.00", { selector: "dd" })).toBeTruthy();
+  });
+
+  it("says a period was derived when the parse says so, and stays silent when it was not", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed({ period: { start: "2026-03-01", end: "2026-03-31", isDerived: true } }))
+      .mockResolvedValueOnce(parsed());
+    renderScreen(request);
+    choose([pdf("derived.pdf"), pdf("stated.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const derived = await screen.findByRole("listitem", { name: /derived\.pdf/ });
+    const stated = await screen.findByRole("listitem", { name: /stated\.pdf/ });
+    expect(within(derived).getByText(/derived from the rows/i)).toBeTruthy();
+    expect(within(stated).queryByText(/derived from the rows/i)).toBeNull();
+  });
+
+  it("lists the rows that would not normalize, with their page and row numbers", async () => {
+    const request = vi.fn().mockResolvedValue(
+      parsed({
+        failures: [
+          { sourcePageNumber: 2, sourceRowNumber: 14, reason: "no amount in the amount column" },
+        ],
+      }),
+    );
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    expect(within(march).getByText(/page 2, row 14/i)).toBeTruthy();
+    expect(within(march).getByText(/no amount in the amount column/)).toBeTruthy();
+  });
+});
