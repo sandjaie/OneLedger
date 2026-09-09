@@ -23,9 +23,9 @@ UI would post.
 Three of its values are not obvious, and each is measured rather than assumed.
 
 **The balance anchors match a line of run-together figures, not a label.** The producer emits no
-space characters between cells, so the statement summary extracts as
-`6,140.404,479.180.006,140.404,479.1813,728.34` — one line, six figures, no separator. A regex
-anchored on the label cannot split them, which is the same reason
+space characters between cells, so the statement summary extracts as one line of six figures
+with no separator between them — `4,500.001,310.000.002,000.003,810.009,050.00` in the shape the
+tests use. A regex anchored on the label cannot split them, which is the same reason
 [statement ingestion](../../docs/design/statement-ingestion.html) calls word coordinates
 mandatory for this producer. Each figure ends in exactly two decimal places, so
 `\d[\d,]*\.\d{2}` segments the run deterministically; the patterns require exactly six figures on
@@ -46,5 +46,8 @@ those instalment charges are part of the declared purchase total the anchors rec
 Capturing the period would fail those rows and break the identity. `dateFormat` carries a
 four-digit year, so the derived period is sound.
 
-Measured across the 38 card statements held locally: 2,159 rows normalized, zero row failures,
-38 of 38 reconciling `matched`. Those files are git-ignored and never enter this repository.
+Measured across the card statements held locally: every one of them reconciles `matched`, with
+no row failing to normalize. Those files are git-ignored and never enter this repository, and
+no figure from any of them appears in this one — the example above and the fixtures in
+`api/tests/test_ingest_card_frame.py` are invented, and reproduce the arithmetic rather than
+the amounts.

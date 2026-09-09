@@ -731,11 +731,11 @@ layout declares an anchor, there is no convention under which the flag has nothi
 `normalize._signed_amount` and `normalize.frame_balance`, which is where they are applied.
 
 Measured on the layout in hand before the change, and the reason the decision is not a matter of
-taste: the statement's rows sum to `+1,661.22` in the ledger's frame, and it declares a previous
-balance of `6,140.40` and a total payment due of `4,479.18`, both bare and both money owed. The
-identity closes only once both anchors are negative — `−6,140.40 + 1,661.22 = −4,479.18`. Read
-in the issuer's frame it computes `+7,801.62` against a declared `+4,479.18`, which is what
-blocked all 38 files.
+taste: the statement declares a previous balance and a total payment due, both written bare and
+both money owed, and the identity closes only once both anchors are negative. Read in the
+issuer's frame the computed closing overshoots the declared one by twice the opening balance,
+which is what blocked all 38 files. The arithmetic is reproduced with invented figures in
+`api/tests/test_ingest_card_frame.py`; no real balance is recorded here.
 
 Two further findings from that measurement, recorded so they are not rediscovered as bugs:
 
@@ -753,10 +753,13 @@ Two further findings from that measurement, recorded so they are not rediscovere
   and it moves no amount and no verdict.
 - **The balance anchors cannot be regexes over a label.** This producer emits no space
   characters between cells, so the statement summary extracts as one run —
-  `6,140.404,479.180.006,140.404,479.1813,728.34`, six figures and no separator. It is the
+  one line of six figures with no separator. It is the
   no-space case `statement-ingestion.html` §4 attributes to another layout, present here too.
   Every figure ends in exactly two decimal places, so `\d[\d,]*\.\d{2}` segments the run
-  deterministically; the seeded patterns require exactly six figures on their own line and
+  deterministically — the decimal points alone fix the six boundaries, so there is nothing for
+  the greedy digit class to explore. The seeded patterns require exactly six figures on their
+  own line, which makes a five- or seven-figure line yield no anchor at all rather than a wrong
+  one, and they
   capture the first and the **fifth**. The fifth is the total payment due. The sixth is the
   current balance, which also carries the remaining installment principal and reconciles
   against nothing — anchoring on it would fail every statement that has an instalment plan.
@@ -764,7 +767,8 @@ Two further findings from that measurement, recorded so they are not rediscovere
   labels across two lines) but both print the same six figures in the same order on their own
   line, so anchoring on the figures rather than the labels covers both without a second layout.
 
-Measured over the 38 card statements held locally, with the seeded profile: **2,159 rows
-normalized, zero row failures, 38 of 38 reconciling `matched`.** That is slice 1.1's acceptance
+Measured over the 38 card statements held locally, with the seeded profile: **every one of them
+reconciles `matched`, with no row failing to normalize.** That is slice 1.1's acceptance
 criterion at the parse and reconciliation level; staging, commit and the review screen are the
-branches that follow.
+branches that follow. No figure, date or per-file count from those statements is recorded here —
+they are git-ignored, and the committed evidence is the invented-figure suite.

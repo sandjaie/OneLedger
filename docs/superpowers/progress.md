@@ -48,7 +48,7 @@ The decisions themselves are contract and live in the
 
 | Branch | Delivers | Status | Evidence |
 | --- | --- | --- | --- |
-| `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Implemented; review gate open | `api/tests/test_ingest_card_frame.py` (10 tests); `db/seeds/card-layout.json`; 38 of 38 card statements reconcile `matched`, 2,159 rows, zero row failures |
+| `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Implemented; review gate open | `api/tests/test_ingest_card_frame.py` (11 tests); `db/seeds/card-layout.json`; every card statement held locally reconciles `matched`, with no row failing to normalize |
 | `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`, `POST /parse`, the second-staging refusal | Not started | — |
 | `feature/p1-1b-commit-path` | V14 commit and verification functions, review payload, row decisions, atomic commit | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |

@@ -930,8 +930,8 @@ def test_an_unknown_column_field_is_still_refused() -> None:
 def test_inversion_is_accepted_where_the_rows_state_direction_but_the_balances_do_not(
     convention: str,
 ) -> None:
-    # A card writes its anchors bare — "Previous Statement Due 6,140.40" is money owed, with
-    # nothing in the figure saying so — while its rows state their own direction through the
+    # A card writes its anchors bare — a previous statement due is money owed, with nothing
+    # in the figure saying so — while its rows state their own direction through the
     # suffix or the column pair. inverts_sign reframes whichever figures stated no direction,
     # so it is what carries those anchors into the ledger's frame, and refusing it here left
     # such a card with no frame switch at all and every statement mismatched.

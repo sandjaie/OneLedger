@@ -131,12 +131,17 @@ class LayoutCreate(BaseModel):
     dateFormat: str = Field(min_length=1, max_length=40)
     signConvention: str
     # Reframes every figure the statement wrote without a direction of its own, and only those:
-    # an amount under `signed` or `balance_delta`, and any declared or running balance carrying
-    # no Dr/Cr suffix. A figure that stated its direction has nothing left to reframe, so this
-    # is withheld from rows under `cr_suffix` and `debit_credit_columns` — which is what lets a
-    # card declare it. Such a card needs it: its rows say which way they go and its anchors do
-    # not, so without it the anchors stay in the issuer's frame and every statement mismatches.
-    # `normalize._signed_amount` and `normalize.frame_balance` are where the rule is applied.
+    # an amount under `signed`, and any declared or running balance carrying no Dr/Cr suffix.
+    # A figure that stated its direction has nothing left to reframe, so this is withheld from
+    # rows under `cr_suffix` and `debit_credit_columns` — which is what lets a card declare it.
+    # Such a card needs it: its rows say which way they go and its anchors do not, so without
+    # it the anchors stay in the issuer's frame and every statement mismatches. Under
+    # `balance_delta` it acts on the balances the delta is taken between, not on the delta,
+    # which is already directed by the subtraction.
+    #
+    # Applied in `normalize.normalize` (a row's amount), `normalize._balance_deltas` (each
+    # balance, before the subtraction) and `reconcile`'s two framing helpers (the declared
+    # anchors and a row's running balance). `normalize.frame_balance` is the rule itself.
     invertsSign: bool = False
     chronologicalOrder: str = "ascending"
     rowStartRule: str = "has_date_and_amount"
