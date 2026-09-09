@@ -850,6 +850,23 @@ def commit_import(
     )
 
 
+def _not_cancellable(status: str) -> HTTPException:
+    """Why this batch cannot be cancelled, in words that fit the state it is actually in.
+
+    One function because the route asks twice — once from the status it read, once from the
+    status the guarded update found instead — and two spellings of the same refusal would
+    describe one batch two ways depending on which tab got there first.
+    """
+    if status == CANCELLED:
+        # Its own sentence. A double submit is the ordinary way to reach this, and the generic
+        # refusal would report back the state the caller was asking for.
+        return HTTPException(status_code=409, detail="this batch is already cancelled")
+    if status == COMPLETED:
+        # V14's own words, so the two refusals of an imported batch read the same.
+        return HTTPException(status_code=409, detail="this batch has already been imported")
+    return HTTPException(status_code=409, detail=f"a batch in state {status} cannot be cancelled")
+
+
 @router.post("/import/{batch_id}/cancel")
 def cancel_import(
     batch_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -877,32 +894,39 @@ def cancel_import(
     """
     with connect() as conn, conn.cursor() as cur:
         batch = _batch_row(cur, batch_id, owner.household_id)
-        status = str(batch[3])
-        if status == CANCELLED:
-            # Its own sentence. A double submit is the ordinary way to reach this, and the
-            # generic refusal would report back the state the caller was asking for.
-            raise HTTPException(status_code=409, detail="this batch is already cancelled")
-        if status == COMPLETED:
-            # V14's own words, so the two refusals of an imported batch read the same.
-            raise HTTPException(status_code=409, detail="this batch has already been imported")
-        if status != REVIEWABLE:
-            raise HTTPException(
-                status_code=409, detail=f"a batch in state {status} cannot be cancelled"
-            )
+        if str(batch[3]) != REVIEWABLE:
+            raise _not_cancellable(str(batch[3]))
 
-        # Both statements carry the household. The service connects privileged and bypasses RLS
-        # (ADR-0013, ADR-0016), so the predicate is the boundary, not a convenience over one —
-        # and this is a delete.
+        # The status above answered for a moment that has already passed: V14 takes the batch
+        # row FOR UPDATE and completes it, so a commit in a second tab can land between that
+        # read and this write. The predicate is what closes the window — under READ COMMITTED
+        # this statement blocks on that lock and re-evaluates against the row the commit left,
+        # so a batch that stopped being reviewable updates nothing. It runs *before* the delete
+        # for the same reason: its row lock is what stops a commit from starting underneath the
+        # rows this is about to remove.
+        cur.execute(
+            """UPDATE import_batch SET status = %s::import_status, completed_at = now()
+                WHERE id = %s AND household_id = %s AND status = %s::import_status""",
+            (CANCELLED, batch_id, owner.household_id, REVIEWABLE),
+        )
+        if cur.rowcount == 0:
+            cur.execute(
+                "SELECT status FROM import_batch WHERE id = %s AND household_id = %s",
+                (batch_id, owner.household_id),
+            )
+            current = cur.fetchone()
+            if current is None:
+                raise HTTPException(status_code=404, detail="no such import batch")
+            raise _not_cancellable(str(current[0]))
+
+        # The household is carried here too. The service connects privileged and bypasses RLS
+        # (ADR-0013, ADR-0016), so the predicate is the boundary rather than a convenience over
+        # one — and this is a delete.
         cur.execute(
             "DELETE FROM staged_transaction WHERE import_batch_id = %s AND household_id = %s",
             (batch_id, owner.household_id),
         )
         discarded = cur.rowcount
-        cur.execute(
-            """UPDATE import_batch SET status = %s::import_status, completed_at = now()
-                WHERE id = %s AND household_id = %s""",
-            (CANCELLED, batch_id, owner.household_id),
-        )
     return CancelResult(batchId=batch_id, status=CANCELLED, rowsDiscarded=discarded)
 
 

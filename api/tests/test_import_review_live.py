@@ -232,6 +232,27 @@ def _commit_racing_a_rejection(live: Staged, batch: str, rows: list[str]) -> htt
         return live.commit(batch)
 
 
+def _cancel_racing_a_commit(live: Staged, batch: str) -> httpx.Response:
+    """Cancel a batch that another tab completes between the status read and the write.
+
+    `_batch_row` is the read; V14 takes the batch row FOR UPDATE and completes it, so this is
+    the real window rather than an invented one. Completing on a separate connection inside the
+    route's own read makes it deterministic: the route holds a status the row no longer has.
+    """
+    real = ingest_routes._batch_row
+
+    def read_then_complete(
+        cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID
+    ) -> tuple[Any, ...]:
+        row = real(cur, batch_id, household_id)
+        with connect() as other, other.cursor() as c:
+            c.execute("UPDATE import_batch SET status = 'completed' WHERE id = %s", (batch_id,))
+        return row
+
+    with patch.object(ingest_routes, "_batch_row", read_then_complete):
+        return live.cancel(batch)
+
+
 @pytest.fixture
 def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Staged]:
     monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
@@ -1214,6 +1235,26 @@ def test_a_batch_belonging_to_another_household_is_not_cancellable(live: Staged)
     with live.conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM staged_transaction WHERE import_batch_id = %s", (batch,))
         assert cur.fetchone()[0] == 2, "another household's rows are untouched"  # type: ignore[index]
+
+
+def test_a_commit_landing_mid_cancel_keeps_its_rows(live: Staged) -> None:
+    """The status the route read is not the status it writes against.
+
+    A second tab commits between the two, and the staged rows the cancel is about to delete are
+    the audit record of transactions now in the ledger. The guarded update is what refuses —
+    under READ COMMITTED it re-evaluates its predicate against the row the commit left — and it
+    runs before the delete so its row lock covers what follows.
+    """
+    batch = live.stage()
+
+    response = _cancel_racing_a_commit(live, batch)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "this batch has already been imported"
+    assert live.staged_rows(batch) == 2
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT status FROM import_batch WHERE id = %s", (batch,))
+        assert cur.fetchone()[0] == "completed"  # type: ignore[index]
 
 
 def test_a_batch_in_any_other_state_is_refused_with_that_state_named(live: Staged) -> None:

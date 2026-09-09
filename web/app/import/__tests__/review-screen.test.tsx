@@ -559,6 +559,24 @@ describe("discarding a batch", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("does not count to zero at a batch that staged nothing", async () => {
+    // Reachable, not hypothetical: `reconcile.py` reconciles a dormant month against its stated
+    // opening and closing, so a statement with no transactions stages and then holds its period
+    // like any other. It still has to be discardable, and "Discard 0 rows" is not the way to ask.
+    const request = vi.fn().mockResolvedValue(batch({ groups: [], rowsExtracted: 0 }));
+    renderScreen(request);
+    await screen.findByRole("button", { name: /discard this batch/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /discard this batch/i }));
+
+    // Scoped to the confirmation: the reconciliation banner legitimately says "0 rows
+    // extracted", which is the statement's own figure and not a count of what is about to go.
+    const confirmation = screen.getByRole("group", { name: /confirm discarding/i });
+    expect(within(confirmation).queryByText(/0 (staged )?rows?/i)).toBeNull();
+    expect(within(confirmation).getByRole("button", { name: /^discard it$/i })).toBeTruthy();
+    expect(within(confirmation).getByText(/nothing from it has reached your ledger/i)).toBeTruthy();
+  });
+
   it("discards nothing when the confirmation is declined", async () => {
     const request = vi.fn().mockResolvedValue(batch());
     renderScreen(request);

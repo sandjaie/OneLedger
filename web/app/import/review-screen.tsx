@@ -360,14 +360,18 @@ function Discard({
       </button>
     );
   }
+  // A batch with no staged rows is reachable: `reconcile.py` reconciles a dormant month against
+  // its stated opening and closing, so a statement with no transactions stages and then holds
+  // its period like any other. Discarding it is right; counting to zero out loud is not.
+  const rows = `${count} staged ${count === 1 ? "row" : "rows"}`;
   return (
     <div className="review-discard" role="group" aria-label="Confirm discarding this batch">
       <p className="review-hint">
-        Discard {count} staged {count === 1 ? "row" : "rows"}? Nothing from this batch has reached
-        your ledger, and its account and period become free to import again.
+        Discard {count > 0 ? rows : "this batch"}? Nothing from it has reached your ledger, and
+        its account and period become free to import again.
       </p>
       <button className="text-action" disabled={busy} onClick={onConfirm} type="button">
-        Discard {count} {count === 1 ? "row" : "rows"}
+        {count > 0 ? `Discard ${count} ${count === 1 ? "row" : "rows"}` : "Discard it"}
       </button>
       <button className="text-action" disabled={busy} onClick={onCancel} type="button">
         Keep it
