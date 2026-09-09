@@ -32,12 +32,29 @@ request.
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
-| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | 2a and 2b delivered; 2c1–2c3 are local tasks and not started | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) · [#71](https://github.com/sandjaie/OneLedger/pull/71) |
+| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | 2a and 2b delivered; 2c1–2c3 not started — they need `pdf-statements/`, which exists on the owner's machine only, so they run there | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) · [#71](https://github.com/sandjaie/OneLedger/pull/71) · [#72](https://github.com/sandjaie/OneLedger/pull/72) |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
+
+## Phase 1 · slice 1.2 — all four bank layouts
+
+| Task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 2a — a password reaches the parse | `feature/p1-2a-encrypted-statements` | Delivered | [#71](https://github.com/sandjaie/OneLedger/pull/71) |
+| 2b — a staged batch can be discarded | `feature/p1-2b-batch-cancellation` | Delivered | [#72](https://github.com/sandjaie/OneLedger/pull/72) |
+| 2c1–2c3 — the three remaining layouts | `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Not started — local tasks | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) |
+
+The slice's survey found three of its four stated engine capabilities already delivered with M2
+and exercised by slice 1.1; the plan records that and the five-branch split that followed. What
+remained was the browser having no way to supply a password, and a staged batch having no way to
+be abandoned. Both are merged.
+
+`2c1`–`2c3` cannot run in a remote checkout: they need the statements, and `pdf-statements/` is
+git-ignored and exists on the owner's machine only. Each carries that bank's profile, a redacted
+fixture and a golden-output test; the last also carries the 71-file acceptance run.
 
 ## Phase 1 · slice 1.1 — statements land in the ledger
 
