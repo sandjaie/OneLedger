@@ -31,7 +31,7 @@ request.
 
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
-| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | All eight branches merged; the acceptance run is the owner's | slice 1.1 branch table below |
+| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
 | 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
@@ -62,16 +62,62 @@ that boundary — the slice ran to nine. The decisions themselves are contract a
 | `feature/p1-1b-duplicate-override` | Accepting a row marked `duplicate` as a confirmed-distinct override: the dedupe hash is recomputed with the occurrence index advanced (M2 spec §4.7). Added in delivery — the slice covers M2 6a–6d and 6c was not in the review-routes branch | Merged | [#58](https://github.com/sandjaie/OneLedger/pull/58) |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Merged | [#59](https://github.com/sandjaie/OneLedger/pull/59) |
 
+## Phase 1 · slice 1.1 — the acceptance run
+
+Run locally on 9 September 2026 against the 38 card statements in the git-ignored
+`pdf-statements/`. No figure, filename or row from any of them appears in this repository.
+
+| Question the run asked | Answer |
+| --- | --- |
+| Do all 38 import end-to-end with no manual correction? | Yes. 35 are distinct statements and every one imported: layout identified, period derived, reconciliation `matched`, no row failing to normalize, batch committed. The other 3 are byte-identical re-downloads of files already in the set, and each was refused. |
+| Do duplicates name the earlier import? | Yes, both kinds. The same file is refused by checksum, naming the date it first arrived and the batch that imported it. The same transactions in a different file stage as `duplicate`, each row naming the transaction it collides with. |
+| Was anything corrected by hand? | No layout was edited, no row was hand-fixed, and no `UPDATE` was written to make a batch reconcile. |
+
+The corpus covers two card accounts — 15 monthly statements on one, 20 on the other — across
+June 2025 to August 2026 and December 2024 to August 2026 respectively. 1,974 transactions
+committed across 35 batches, every batch `completed` and `matched`.
+
+**Flyway.** `flyway migrate` ran for the first time against this tree and applied V14–V17 onto a
+ledger standing at V13, validating all seventeen checksums first. A second `migrate` was a no-op.
+Migrating from empty on a scratch stack, seeds and all fifteen SQL suites are green. No checksum
+problem, no finding.
+
+**Account setup is not statement correction, and one part of it is worth stating.** A card
+statement prints its installment plans under each plan's *original purchase date*, so a statement
+legitimately carries rows dated before its own period. `commit_import_batch` refuses a row dated
+before the account's `opening_balance_date`, and `assert_account_reconciles` needs
+`opening_balance` to be the balance carried into the earliest statement held. The two do not refer
+to the same instant: the anchor is dated at or before the oldest installment row, while its value
+is the balance at the first statement's period start. That is the only sound setting for an
+account whose history starts mid-life, and it is what the Accounts screen asks for.
+
+| Finding | Fix |
+| --- | --- |
+| `db/tests/0005` asserted one active owner session **across the whole table**, so the push hook refused every push on every branch once the owner had signed in | [#65](https://github.com/sandjaie/OneLedger/pull/65) |
+| `apiFetch` handed the whole `{"detail": …}` body to `ApiError.detail`, so all nine screens that display it printed the JSON envelope instead of the sentence written for the owner | [#66](https://github.com/sandjaie/OneLedger/pull/66) |
+| The review screen formatted a row's frozen `amountBase` with the **account's** currency, printing a base-currency figure under the card's symbol and grouping | [#67](https://github.com/sandjaie/OneLedger/pull/67) |
+
+Each was invisible to the existing suite for the same reason: a fixture that agreed with itself
+where reality does not — an empty session table, a bare-text error body, a household reporting in
+the currency its card is denominated in.
+
 ## Raised and not yet actioned
 
-Nothing outstanding. The four items slice 1.1 raised were delivered as their own branches:
+The four items slice 1.1 raised during delivery were shipped as their own branches:
 [#61](https://github.com/sandjaie/OneLedger/pull/61) the identifier and money static check,
 [#62](https://github.com/sandjaie/OneLedger/pull/62) `source_row_number NOT NULL`,
 [#63](https://github.com/sandjaie/OneLedger/pull/63) the review skills' stale diff budget, and
-this one's `period_is_derived`.
+[#64](https://github.com/sandjaie/OneLedger/pull/64)'s `period_is_derived`. The three the
+acceptance run raised were shipped the same way, above.
 
-The table returns when something is raised and deferred again — a finding in code the branch that
-found it does not touch, recorded here rather than folded in past its diff budget.
+These are what the run raised and did not action — each in code the fixes it produced do not
+touch, recorded here rather than folded in past a diff budget.
+
+| Raised | What it is | Where it belongs |
+| --- | --- | --- |
+| A staged batch cannot be cancelled through the app | `ingest/pipeline.py` frees a period for re-staging once its batch is `cancelled`, and nothing sets that status: no route, no screen. A batch staged and then abandoned blocks re-staging its period permanently, and the only escape is an `UPDATE`. | A slice 1.2 branch — it is the same screen's work, and recurring user-facing work belongs in the app |
+| The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
+| `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
 
 ## Where the rest is written down
 
