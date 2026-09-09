@@ -89,6 +89,38 @@ def test_the_grouping_convention_needs_no_exception(tmp_path: pathlib.Path) -> N
     assert scan(tmp_path, "format.ts", "const indianTotal = 0;")
 
 
+@pytest.mark.parametrize(
+    "name,body",
+    [
+        # Postgres double quotes delimit an *identifier*, not a string — and "not a column" is
+        # the first thing the rule names, so the syntax that declares one most explicitly must
+        # not be the syntax the check cannot read.
+        ("t.sql", 'CREATE TABLE t ("amount_inr" INT);'),
+        ("t.sql", 'ALTER TABLE t RENAME "balance_aed" TO x;'),
+        # An interpolation holds an expression. A template literal is where a screen builds its
+        # labels, which is exactly where a currency-named local turns up.
+        ("screen.tsx", "const x = `${amountInr}`;"),
+        ("screen.tsx", "const x = `total ${total_aed} shown`;"),
+        ("thing.py", 'x = f"{amount_inr}"'),
+    ],
+)
+def test_a_name_the_syntax_hides_is_still_an_identifier(
+    tmp_path: pathlib.Path, name: str, body: str
+) -> None:
+    assert scan(tmp_path, name, body), f"{body!r} evades the check"
+
+
+def test_a_single_quoted_sql_string_is_still_data(tmp_path: pathlib.Path) -> None:
+    """The other half of the SQL rule: `'AED'` is a value, and seeds are full of them."""
+    assert scan(tmp_path, "seed.sql", "INSERT INTO currency (code) VALUES ('AED');") == []
+
+
+def test_a_format_placeholder_is_not_an_interpolation(tmp_path: pathlib.Path) -> None:
+    """Only an f-string interpolates. `"{amount_inr}"` elsewhere is a `.format` template — text
+    that names a placeholder, not code that names a variable."""
+    assert scan(tmp_path, "thing.py", 'TEMPLATE = "{amount_inr}"') == []
+
+
 # ---------------------------------------------------------------------------------------
 # Rule 2 — TypeScript formats money and never computes it
 # ---------------------------------------------------------------------------------------
@@ -116,6 +148,11 @@ def test_formatting_money_from_its_string_is_allowed(tmp_path: pathlib.Path) -> 
         "const total = row.amount + other.amount;",
         "const half = batch.declaredClosing / 2;",
         "const d = a.amountBase - b.amountBase;",
+        # A rule about money that a formatter can switch off is not a rule. Prettier inserts
+        # those spaces today; nothing makes that a guarantee.
+        "const t = row.amount+other.amount;",
+        "const t = row.amount*2;",
+        "const t = 2*row.amount;",
     ],
 )
 def test_arithmetic_on_a_money_field_is_refused(tmp_path: pathlib.Path, body: str) -> None:

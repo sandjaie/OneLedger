@@ -65,9 +65,10 @@ NAMES = frozenset(
     ).split()
 )
 
-# Rule 2 applies to the browser. Python holds money in `Decimal` and Postgres in `NUMERIC`;
-# neither can be turned into a float by these.
-WEB = re.compile(r"(^|/)web/")
+# Rule 2 applies to the browser's own source. Python holds money in `Decimal` and Postgres in
+# `NUMERIC`; neither can be turned into a float by these. `.mjs` is deliberately absent — the
+# build scripts under `web/scripts/` handle no money and legitimately count things.
+BROWSER = (".ts", ".tsx")
 TO_NUMBER = re.compile(r"\b(parseFloat|parseInt|Number)\s*\(")
 
 # A property whose name says it holds money. Matched as a property access — `row.amount` — so a
@@ -77,7 +78,31 @@ MONEY_FIELD = re.compile(
     r"currentBalance|creditLimit|declaredOpening|declaredClosing|computedClosing|delta|"
     r"originalAmount|runningBalance|rate|total)\b"
 )
-ARITHMETIC = re.compile(r"\s*[-+*/]\s*")
+ARITHMETIC = frozenset("-+*/")
+
+
+_OBJECT = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_$.")
+
+
+def _after(text: str, index: int) -> str:
+    """The nearest non-space character at or after `index`."""
+    while index < len(text) and text[index] in " \t":
+        index += 1
+    return text[index] if index < len(text) else ""
+
+
+def _before_the_object(text: str, index: int) -> str:
+    """The nearest non-space character before the member expression ending at `index`.
+
+    `2*row.amount` puts the operator before `row`, not before `.amount`, so the walk steps back
+    over the object it is a member of first. Without that, only arithmetic written to the right
+    of a money field is seen — half the rule.
+    """
+    while index >= 0 and text[index] in _OBJECT:
+        index -= 1
+    while index >= 0 and text[index] in " \t":
+        index -= 1
+    return text[index] if index >= 0 else ""
 
 
 def segments(name: str) -> list[str]:
@@ -88,28 +113,64 @@ def segments(name: str) -> list[str]:
     return found
 
 
+def _blank(text: str) -> str:
+    """Every character replaced by a space, newlines kept — so offsets and line numbers hold."""
+    return re.sub(r"[^\n]", " ", text)
+
+
+def _blank_literal(match: re.Match[str]) -> str:
+    """Blank a quoted region, but keep what an interpolation holds.
+
+    `${…}` in a template literal and `{…}` in an f-string are expressions, not text — a screen
+    building a label is exactly where a currency-named local turns up. The braces themselves go
+    with the literal so that what is left parses as the expression it is. A plain Python string
+    is not scanned for `{…}`: there it is a `.format` placeholder, which names a field rather
+    than a variable.
+    """
+    body = match.group()
+    interpolated = _INTERPOLATION if body[:1] == "`" or _FSTRING.match(body) else None
+    if interpolated is None:
+        return _blank(body)
+
+    out = []
+    last = 0
+    for inner in interpolated.finditer(body):
+        out.append(_blank(body[last : inner.start(1)]))
+        out.append(inner.group(1))
+        last = inner.end(1)
+    out.append(_blank(body[last:]))
+    return "".join(out)
+
+
+# The expression inside an interpolation, without its braces.
+_INTERPOLATION = re.compile(r"\$?\{([^{}]*)\}")
+_FSTRING = re.compile(r"[a-zA-Z]*[fF][a-zA-Z]*[\"\']")
+
+
 def code_only(text: str, suffix: str) -> str:
     """The file with its comments and string literals blanked.
 
     Both are where a currency code legitimately appears — a seed row, a test fixture, an error
-    message, a docstring naming an example. Blanking rather than deleting keeps every offset,
-    so a line number still points where it should.
+    message, a docstring naming an example.
+
+    **SQL is lexed on its own terms.** Postgres double quotes delimit an *identifier*, not a
+    string, and "not a column" is the first thing ADR-0012's rule names — so blanking a
+    double-quoted region there would hide the syntax that declares a column most explicitly.
+    Single quotes are SQL's string literal and are blanked as everywhere else.
     """
-
-    def blank(match: re.Match[str]) -> str:
-        return re.sub(r"[^\n]", " ", match.group())
-
     if suffix == ".py":
-        text = re.sub(r'"""(?:.|\n)*?"""', blank, text)
-        text = re.sub(r"'''(?:.|\n)*?'''", blank, text)
-        text = re.sub(r"#[^\n]*", blank, text)
+        text = re.sub(r'(?:[a-zA-Z]*)"""(?:.|\n)*?"""', _blank_literal, text)
+        text = re.sub(r"(?:[a-zA-Z]*)'''(?:.|\n)*?'''", _blank_literal, text)
+        text = re.sub(r"#[^\n]*", lambda m: _blank(m.group()), text)
     else:
-        text = re.sub(r"/\*(?:.|\n)*?\*/", blank, text)
-        text = re.sub(r"//[^\n]*", blank, text)
-        text = re.sub(r"--[^\n]*", blank, text)
-    text = re.sub(r'"(?:[^"\\\n]|\\.)*"', blank, text)
-    text = re.sub(r"'(?:[^'\\\n]|\\.)*'", blank, text)
-    text = re.sub(r"`(?:[^`\\]|\\.)*`", blank, text)
+        text = re.sub(r"/\*(?:.|\n)*?\*/", lambda m: _blank(m.group()), text)
+        text = re.sub(r"//[^\n]*", lambda m: _blank(m.group()), text)
+        text = re.sub(r"--[^\n]*", lambda m: _blank(m.group()), text)
+
+    if suffix != ".sql":
+        text = re.sub(r'(?:[a-zA-Z]*)"(?:[^"\\\n]|\\.)*"', _blank_literal, text)
+    text = re.sub(r"(?:[a-zA-Z]*)'(?:[^'\\\n]|\\.)*'", _blank_literal, text)
+    text = re.sub(r"`(?:[^`\\]|\\.)*`", _blank_literal, text)
     return text
 
 
@@ -137,7 +198,7 @@ def scan_file(path: pathlib.Path, label: str) -> list[str]:
                 )
                 break
 
-    if WEB.search(label.replace("\\", "/")) or label.endswith((".ts", ".tsx")):
+    if label.endswith(BROWSER):
         for match in TO_NUMBER.finditer(code):
             number = line_of(match.start())
             found.append(
@@ -146,9 +207,11 @@ def scan_file(path: pathlib.Path, label: str) -> list[str]:
                 f"TypeScript formats it and never computes it."
             )
         for match in MONEY_FIELD.finditer(code):
-            after = code[match.end() : match.end() + 4]
-            before = code[max(0, match.start() - 3) : match.start()]
-            if ARITHMETIC.fullmatch(after[:2]) or ARITHMETIC.fullmatch(before[-2:]):
+            # The nearest non-space character on each side, not a fixed window: a rule about
+            # money that `row.amount+x` slips past is a rule the formatter is enforcing.
+            if _after(code, match.end()) in ARITHMETIC or (
+                _before_the_object(code, match.start() - 1) in ARITHMETIC
+            ):
                 number = line_of(match.start())
                 found.append(
                     f"{label}:{number}: arithmetic on `{match.group().strip()}`. "
