@@ -36,8 +36,7 @@ export async function apiFetch<T>(
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => response.statusText);
-      throw new ApiError(response.status, detail);
+      throw new ApiError(response.status, await problem(response));
     }
 
     if (response.status === 204) {
@@ -49,4 +48,32 @@ export async function apiFetch<T>(
     clearTimeout(timeout);
     callerSignal?.removeEventListener("abort", abortFromCaller);
   }
+}
+
+/** The sentence a refusal was written to show, taken out of the envelope it arrives in.
+ *
+ * Every refusal this service writes reaches the browser as FastAPI's `{"detail": …}`, and the
+ * string inside it is composed for the owner — the date a duplicate first arrived, the layouts
+ * that scored, why a batch will not commit. Handed the envelope instead, every screen prints
+ * braces and quotes in front of that sentence, so it is unwrapped once here rather than at each
+ * of the places that display `ApiError.detail`.
+ *
+ * Two bodies carry no sentence and must not be shown raw: `main.py` answers a validation failure
+ * with a list of field diagnostics, and a proxy or the runtime may answer with HTML. The status
+ * text stands in for both — and for itself when HTTP/2 leaves it empty.
+ */
+async function problem(response: Response): Promise<string> {
+  const fallback = response.statusText || `Request failed with status ${response.status}`;
+  const body = await response.text().catch(() => "");
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    // Not JSON at all, so there is no envelope to open and the body is already the message.
+    return body || fallback;
+  }
+
+  const detail = (parsed as { detail?: unknown } | null)?.detail;
+  return typeof detail === "string" ? detail : fallback;
 }
