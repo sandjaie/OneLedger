@@ -13,19 +13,19 @@ PEGS = {"AED": Peg(anchor="USD", units_per_anchor=Decimal("3.6725"))}
 def test_cross_rate_matches_published_ecb_values() -> None:
     """ECB 2024-01-02: EUR/INR 91.285, EUR/USD 1.0956. Verified against the live API."""
     published = {"INR": Decimal("91.285"), "USD": Decimal("1.0956")}
-    usd_inr = cross_rate(published, "USD", "INR", PEGS)
-    assert usd_inr.quantize(Decimal("0.0001")) == Decimal("83.3196")
+    direct = cross_rate(published, "USD", "INR", PEGS)
+    assert direct.quantize(Decimal("0.0001")) == Decimal("83.3196")
 
 
 def test_a_pegged_currency_needs_no_published_rate() -> None:
     """The ECB publishes no AED, which is exactly why the peg derivation exists."""
     published = {"INR": Decimal("91.285"), "USD": Decimal("1.0956")}
-    aed_inr = cross_rate(published, "AED", "INR", PEGS)
-    usd_inr = cross_rate(published, "USD", "INR", PEGS)
+    derived = cross_rate(published, "AED", "INR", PEGS)
+    anchor = cross_rate(published, "USD", "INR", PEGS)
     # the peg identity must hold to 8 dp — test 2 of multi-currency-and-fx.html §9
-    assert (aed_inr * PEGS["AED"].units_per_anchor).quantize(
+    assert (derived * PEGS["AED"].units_per_anchor).quantize(
         Decimal("0.00000001")
-    ) == usd_inr.quantize(Decimal("0.00000001"))
+    ) == anchor.quantize(Decimal("0.00000001"))
 
 
 def test_an_unpublished_unpegged_currency_is_an_error_not_a_guess() -> None:
@@ -50,8 +50,8 @@ def test_carry_forward_refuses_to_start_on_a_gap() -> None:
         carry_forward({date(2024, 1, 8): Decimal("84.00")}, date(2024, 1, 5), date(2024, 1, 8))
 
 
-def test_eur_is_present_even_though_it_is_never_a_quoted_symbol() -> None:
-    """Frankfurter quotes against EUR, so EUR is absent from its own rates map.
+def test_the_feed_base_is_present_even_though_it_is_never_a_quoted_symbol() -> None:
+    """Frankfurter quotes against one denomination, which is absent from its own rates map.
 
     A household reporting in EUR, or holding it, would otherwise hit "neither published nor
     pegged" for the currency the feed is denominated in.

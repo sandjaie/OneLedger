@@ -689,7 +689,13 @@ def test_malformed_amount_does_not_start_a_row(amount: str) -> None:
     assert result.lines_unparsed == 1
 
 
-def test_indian_grouped_amount_starts_a_row() -> None:
+def test_an_amount_grouped_in_twos_starts_a_row() -> None:
+    """`1,23,456.7890` — grouped in twos after the final three, not in threes throughout.
+
+    Named for the shape rather than the country whose convention it is: the grouping style is a
+    property of a currency row (`currency.number_format`), and a country adjective in a name
+    here is what ADR-0012's identifier rule refuses.
+    """
     result = extract_pages(
         profile(),
         [

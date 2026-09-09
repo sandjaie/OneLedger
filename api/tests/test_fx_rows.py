@@ -30,9 +30,9 @@ def test_rows_carry_provenance() -> None:
     )
 
     assert len(rows) == 8  # 4 days x 2 currency pairs
-    usd = [r for r in rows if r["base_currency"] == "USD"]
-    assert [r["is_carried_forward"] for r in usd] == [False, True, True, False]
-    assert usd[1]["carried_from"] == date(2024, 1, 5)
+    published_pair = [r for r in rows if r["base_currency"] == "USD"]
+    assert [r["is_carried_forward"] for r in published_pair] == [False, True, True, False]
+    assert published_pair[1]["carried_from"] == date(2024, 1, 5)
     # the fx_rate CHECK requires a carried row to name its origin
     assert all(not r["is_carried_forward"] or r["carried_from"] for r in rows)
     # a pegged currency is always derived, never fetched

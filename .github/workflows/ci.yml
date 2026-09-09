@@ -35,6 +35,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: python3 scripts/check-docs.py
+      - run: python3 scripts/check-identifiers.py
       - run: scripts/check-no-real-data.sh
 
   # (b) every pre-commit-stage hook, across the whole tree
