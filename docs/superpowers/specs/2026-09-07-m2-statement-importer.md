@@ -442,6 +442,19 @@ correction in its PR. Do not work around it in code.
    separator-formatted — from the document.** Parse errors name page and row numbers and the
    *masked* filename.
 
+   **`POST /parse`'s preview rows are screened, not exempt.** Statement narration is untyped text
+   out of the document and is where a card number actually appears — `PAYMENT RECEIVED CARD 4111
+   1111 1111 1111` — so `description_raw`, `description_clean` and `reference_raw` go out through
+   the same redactor `POST /layouts/propose` already applies to its own preview rows. Dates,
+   amounts and balances are typed and pass through intact: the preview exists to show that the
+   columns landed where they were mapped, and redacting the figures would defeat it while
+   protecting nothing.
+
+   The *stored* `staged_transaction.description_raw` is deliberately unscreened — it is the audit
+   record, and `api-contracts.html` §4 makes it what the review screen shows for traceability.
+   Whether the review payload screens it on the way out is **1.1b's call, not this rule's**: it is
+   the same tension, one route later, and it is named here so it is decided rather than inherited.
+
 Task 5 owns both, and Task 5's tests assert them.
 
 ---

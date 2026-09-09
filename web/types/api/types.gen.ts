@@ -282,6 +282,32 @@ export type AccountsResponse = {
 };
 
 /**
+ * Body_parse_statement_parse_post
+ */
+export type BodyParseStatementParsePost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Stage
+     */
+    stage?: boolean;
+    /**
+     * Layoutid
+     */
+    layoutId?: string | null;
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+};
+
+/**
  * Body_propose_layout_layouts_propose_post
  */
 export type BodyProposeLayoutLayoutsProposePost = {
@@ -894,6 +920,165 @@ export type LayoutProposal = {
 };
 
 /**
+ * ParseFailure
+ *
+ * A line that extracted and would not normalize. The panel shows these beside the rows.
+ */
+export type ParseFailure = {
+    /**
+     * Sourcepagenumber
+     */
+    sourcePageNumber: number | null;
+    /**
+     * Sourcerownumber
+     */
+    sourceRowNumber: number;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * ParsePeriod
+ *
+ * `isDerived` travels with the dates because a derived period must never be read as a
+ * stated one (Invariant I7).
+ */
+export type ParsePeriod = {
+    /**
+     * Start
+     */
+    start: string;
+    /**
+     * End
+     */
+    end: string;
+    /**
+     * Isderived
+     */
+    isDerived: boolean;
+};
+
+/**
+ * ParseResponse
+ */
+export type ParseResponse = {
+    /**
+     * Staged
+     */
+    staged: boolean;
+    /**
+     * Batchid
+     */
+    batchId: string | null;
+    /**
+     * Documentid
+     */
+    documentId: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Layoutid
+     */
+    layoutId: string;
+    /**
+     * Layoutversion
+     */
+    layoutVersion: number;
+    period: ParsePeriod;
+    /**
+     * Rowsextracted
+     */
+    rowsExtracted: number;
+    /**
+     * Counts
+     */
+    counts: {
+        [key: string]: number;
+    };
+    reconciliation: Reconciliation;
+    /**
+     * Rows
+     */
+    rows: Array<ParseRow>;
+    /**
+     * Failures
+     */
+    failures: Array<ParseFailure>;
+};
+
+/**
+ * ParseRow
+ *
+ * One normalized row, as the preview and the diagnostics panel read it.
+ */
+export type ParseRow = {
+    /**
+     * Sourcepagenumber
+     */
+    sourcePageNumber: number | null;
+    /**
+     * Sourcerownumber
+     */
+    sourceRowNumber: number;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Valuedate
+     */
+    valueDate: string | null;
+    /**
+     * Descriptionraw
+     */
+    descriptionRaw: string;
+    /**
+     * Descriptionclean
+     */
+    descriptionClean: string | null;
+    /**
+     * Referenceraw
+     */
+    referenceRaw: string | null;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Originalamount
+     */
+    originalAmount: string | null;
+    /**
+     * Originalcurrency
+     */
+    originalCurrency: string | null;
+    /**
+     * Runningbalance
+     */
+    runningBalance: string | null;
+    /**
+     * Proposedtxntype
+     */
+    proposedTxnType: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Dedupehash
+     */
+    dedupeHash: string;
+};
+
+/**
  * ProposedRawRow
  *
  * Public raw extraction row. Sensitive transient extraction fields are absent by design.
@@ -917,6 +1102,62 @@ export type ProposedRawRow = {
     fields: {
         [key: string]: string;
     };
+};
+
+/**
+ * Reconciliation
+ *
+ * `reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.
+ *
+ * On a `running_balance_break` the three closing fields are row-level rather than
+ * statement-level, so a consumer must read `status` first — the same warning the dataclass
+ * carries, restated here because this is the shape the panel actually receives.
+ */
+export type Reconciliation = {
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Declaredopening
+     */
+    declaredOpening: string | null;
+    /**
+     * Openingisderived
+     */
+    openingIsDerived: boolean;
+    /**
+     * Declaredclosing
+     */
+    declaredClosing: string | null;
+    /**
+     * Computedclosing
+     */
+    computedClosing: string | null;
+    /**
+     * Delta
+     */
+    delta: string | null;
+    /**
+     * Firstdivergentrow
+     */
+    firstDivergentRow: number | null;
+    /**
+     * Previousbalance
+     */
+    previousBalance: string | null;
+    /**
+     * Amount
+     */
+    amount: string | null;
+    /**
+     * Candidaterows
+     */
+    candidateRows: Array<number>;
+    /**
+     * Message
+     */
+    message: string;
 };
 
 /**
@@ -1805,6 +2046,31 @@ export type CreateLayoutLayoutsPostResponses = {
 };
 
 export type CreateLayoutLayoutsPostResponse = CreateLayoutLayoutsPostResponses[keyof CreateLayoutLayoutsPostResponses];
+
+export type ParseStatementParsePostData = {
+    body: BodyParseStatementParsePost;
+    path?: never;
+    query?: never;
+    url: '/parse';
+};
+
+export type ParseStatementParsePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ParseStatementParsePostError = ParseStatementParsePostErrors[keyof ParseStatementParsePostErrors];
+
+export type ParseStatementParsePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ParseResponse;
+};
+
+export type ParseStatementParsePostResponse = ParseStatementParsePostResponses[keyof ParseStatementParsePostResponses];
 
 export type HealthHealthGetData = {
     body?: never;
