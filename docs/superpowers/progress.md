@@ -52,7 +52,7 @@ are contract and live in the [M2 spec §8](specs/2026-09-07-m2-statement-importe
 | `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
 | `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Merged | [#52](https://github.com/sandjaie/OneLedger/pull/52) |
 | `feature/p1-1a-parse-route` | `POST /parse` and its wire contract | Merged | [#53](https://github.com/sandjaie/OneLedger/pull/53) |
-| `feature/p1-1b-commit-functions` | V14's `commit_import_batch` and `assert_account_reconciles`, and `db/tests/0012` | Not started | — |
+| `feature/p1-1b-commit-functions` | V14's `commit_import_batch` and `assert_account_reconciles`, and `db/tests/0012` | Implemented; review gate open | `db/tests/0012_commit_import_batch.sql` (8 blocks) |
 | `feature/p1-1b-review-routes` | `GET /import/{batch}`, `PATCH /import/{batch}/rows`, `POST /import/{batch}/commit` | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |

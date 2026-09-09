@@ -653,6 +653,27 @@ ALTER TABLE transaction
 
 ---
 
+## `V14` (applied)
+
+Applied as `db/migrations/V14__commit_import_batch.sql`. **It creates no table**, which is why it
+has no section below and why diffing this file against the migration list shows nothing for it:
+V14 adds two `SECURITY DEFINER` functions, and this document is the table reference.
+
+`commit_import_batch(p_batch_id)` turns one reviewed batch into `transaction` rows and
+`assert_account_reconciles(p_account_id, p_declared_closing, p_period_end)` verifies the
+account's balance as of the statement's close. They live in the database rather than the service
+because the insert and the verification have to succeed or fail together, which no sequence of
+application statements can promise across a dropped connection (`api-contracts.html` §3). Both
+call `assert_is_owner()` first, and `db/tests/0012` asserts that by the refusal's message rather
+than by the fact that something was raised — without the assertion an unauthenticated caller is
+still refused, by a NULL comparison two statements away, and refusal by accident is what
+ADR-0013 exists to stop being load-bearing.
+
+The balance reads `v_transaction_posting`, not the base table and not
+`v_transaction_reportable`: the first would double every split, and the second drops transfers
+and adjustments, which move money and so belong in a balance even though they belong in no
+spending report.
+
 ## `V13` (applied)
 
 Applied as `db/migrations/V13__staged_transactions.sql`. `staged_transaction` is an import's
