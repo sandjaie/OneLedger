@@ -819,7 +819,12 @@ through silently — so it is rejected at creation.</p>
 <p><code>staged_transaction</code> mirrors <code>transaction</code>&#39;s shape plus review metadata, and carries the
 parser&#39;s original view of each line in <code>raw_row</code> — so &quot;what did the statement actually say?&quot;
 stays answerable without reopening the PDF. The pipeline stage it serves is
-<a href="./statement-ingestion.html">statement-ingestion.html</a> §9.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V13</code> (applied).</p>
+<a href="./statement-ingestion.html">statement-ingestion.html</a> §9.</p>
+<p><code>source_row_number</code> is <code>NOT NULL</code> (V16). Every writer types it and every reader
+requires one — reconciliation names its divergent row by it, and the review payload labels each row
+by it — so a null was a row nothing could produce and nothing could review. Its counterpart on
+<code>transaction</code> stays nullable: a manually entered transaction comes from no statement and has
+no row to name.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V13</code>, <code>V16</code> (applied).</p>
 <hr>
 <h2 id="13-classification-rules">13. Classification rules</h2>
 <p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
@@ -935,17 +940,26 @@ V10__transaction_ledger.sql           + posting/reportable views (applied)
 V11__category_overrides.sql           household choices beside the seed (applied)
 V12__documents_and_import.sql         + statement_layout (applied)
 V13__staged_transactions.sql          the import's working copy (applied)
-V14__import_commit.sql                assert_account_reconciles(), commit_import_batch()
-V15__classification_rules.sql         + seed rules
-V16__transfers.sql
-V17__card_statements.sql
-V18__investments.sql
-V19__loans.sql
-V20__valuations.sql
-V21__net_worth.sql
-V22__audit_log.sql
-V23__phase2_tables.sql                recurring, budget, payslip
+V14__commit_import_batch.sql          assert_account_reconciles(), commit_import_batch() (applied)
+V15__definer_search_path_excludes_pg_temp.sql   pg_temp last in every definer path (applied)
+V16__staged_row_number_is_required.sql          source_row_number NOT NULL (applied)
+
+  then, in this order, numbered as they land:
+
+classification_rules                  + seed rules
+transfers
+card_statements
+investments
+loans
+valuations
+net_worth
+audit_log
+phase2_tables                         recurring, budget, payslip
 </code></pre>
+<p>The planned entries carry no version number on purpose. V15 and V16 were both unplanned — a
+security fix and a constraint the code already required — and a list that pins a number to work
+not yet written goes stale the first time something has to be repaired ahead of it. Applied
+migrations name their real file; the rest name the work.</p>
 <h3 id="the-circular-references">The circular references</h3>
 <p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>

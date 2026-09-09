@@ -653,6 +653,26 @@ ALTER TABLE transaction
 
 ---
 
+## `V16` (applied)
+
+Applied as `db/migrations/V16__staged_row_number_is_required.sql`. **It creates no table** — it
+makes `staged_transaction.source_row_number` `NOT NULL`.
+
+V13 left it nullable while every path that writes it types the value `int` and every path that
+reads it requires one: reconciliation names its divergent row by it, and `GET /import/{batch}`
+declares it a required integer, so a row carrying none would answer 500 rather than render. A
+null was a row nothing could produce and nothing could review. The repair belongs on the column
+rather than on the API model — widening the model would have the service promise to render a row
+it cannot.
+
+The migration fails loudly rather than backfilling: the only other way to satisfy it is to invent
+a row number, and a fabricated provenance figure is what Invariant I6 exists to prevent. A staged
+batch is a working copy, so the recovery is to cancel it and re-import the statement.
+
+`transaction.source_row_number` stays nullable — a manually entered transaction comes from no
+statement and has no row to name. `db/tests/0014` asserts both halves, so neither is "corrected"
+into the other later.
+
 ## `V15` (applied)
 
 Applied as `db/migrations/V15__definer_search_path_excludes_pg_temp.sql`. **It creates no table
@@ -733,7 +753,7 @@ CREATE TABLE staged_transaction (
 
   raw_row              JSONB NOT NULL,        -- exactly what the parser saw
   source_page_number   SMALLINT,
-  source_row_number    INTEGER,
+  source_row_number    INTEGER NOT NULL,      -- V16: every writer types it, every reader needs it
 
   -- normalized, same shape as transaction
   booked_date          DATE NOT NULL,
