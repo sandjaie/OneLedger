@@ -208,6 +208,119 @@ describe("per-file outcomes", () => {
   });
 });
 
+describe("an encrypted statement", () => {
+  // The service answers a file it cannot open with this exact sentence, from
+  // `words.extract_pages`. The screen recognises it rather than guessing from the status code,
+  // because a 422 covers every parse refusal and only this one is answerable by the owner.
+  const LOCKED = "PDF is encrypted or the password is incorrect";
+
+  it("offers a password field for the file that needs one, and no other", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(422, LOCKED))
+      .mockResolvedValueOnce(parsed());
+    renderScreen(request);
+    choose([pdf("locked.pdf"), pdf("open.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    const open = await screen.findByRole("listitem", { name: /open\.pdf/ });
+
+    expect(within(locked).getByLabelText(/password/i)).toBeTruthy();
+    expect(within(open).queryByLabelText(/password/i)).toBeNull();
+  });
+
+  it("sends the password for that file only", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(422, LOCKED))
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed());
+    renderScreen(request);
+    choose([pdf("locked.pdf"), pdf("open.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    fireEvent.change(within(locked).getByLabelText(/password/i), {
+      target: { value: "let-me-in" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
+    const bodies = request.mock.calls.slice(2).map(([, init]) => init.body as FormData);
+    expect(bodies.map((body) => body.get("password"))).toEqual(["let-me-in", null]);
+  });
+
+  it("shows the service's own refusal for a wrong password and keeps the others intact", async () => {
+    // A second check re-runs every file that is not staged, so the pass takes two answers.
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new ApiError(422, LOCKED))
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new ApiError(422, LOCKED));
+    renderScreen(request);
+    choose([pdf("open.pdf"), pdf("locked.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "wrong" } });
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
+    expect(within(locked).getByText(LOCKED)).toBeTruthy();
+    const open = screen.getByRole("listitem", { name: /open\.pdf/ });
+    expect(within(open).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
+  });
+
+  it("never writes the password anywhere but the request that uses it", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(422, LOCKED))
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1" }));
+    renderScreen(request);
+    choose([pdf("locked.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "s3cret" } });
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    await within(locked).findByRole("button", { name: /stage/i });
+    fireEvent.click(within(locked).getByRole("button", { name: /stage/i }));
+    await within(locked).findByRole("link", { name: /review/i });
+
+    // Never persisted: a password is on the never-store list, and a browser store is storage.
+    expect(JSON.stringify(window.localStorage)).not.toContain("s3cret");
+    expect(window.sessionStorage.length).toBe(0);
+    // Nor left on screen once the file is done with it.
+    expect(within(locked).queryByLabelText(/password/i)).toBeNull();
+    expect(document.body.textContent).not.toContain("s3cret");
+  });
+
+  it("re-sends the password when the file is staged", async () => {
+    // Staging is a second `POST /parse`, and the service holds no password between requests.
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(422, LOCKED))
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1" }));
+    renderScreen(request);
+    choose([pdf("locked.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "s3cret" } });
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    await within(locked).findByRole("button", { name: /stage/i });
+
+    fireEvent.click(within(locked).getByRole("button", { name: /stage/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    const staging = request.mock.calls[2][1].body as FormData;
+    expect(staging.get("password")).toBe("s3cret");
+    expect(staging.get("stage")).toBe("true");
+  });
+});
+
 describe("staging", () => {
   it("stages one file on its own action and links to the batch it created", async () => {
     const request = vi

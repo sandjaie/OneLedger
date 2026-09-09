@@ -30,6 +30,15 @@ type Candidate = {
   parsed?: ParseResponse;
   batchId?: string;
   problem?: string;
+  /** True once the service has said this file is encrypted, so it is offered a password field. */
+  locked?: boolean;
+  /** The password for this file, for as long as it is needed and no longer.
+   *
+   * A password is on the never-store list (`security-and-privacy.html` §1). It lives here, in
+   * memory, and reaches nothing else — no `localStorage`, no URL, no log, no parse summary. It
+   * is cleared the moment the file is staged, because after that nothing will ask for it again.
+   */
+  password?: string;
 };
 
 // `POST /parse` takes a PDF. Refusing anything else here is not validation the API relies on —
@@ -40,6 +49,11 @@ const PDF = "application/pdf";
 // A statement whose verdict is anything but this cannot stage: Invariant I8 blocks the import
 // rather than importing figures the statement itself does not support.
 const RECONCILED = "matched";
+
+// `words.extract_pages` answers a file it cannot open with exactly this. Recognised by its
+// sentence rather than by its status: a 422 covers every parse refusal this route makes, and
+// only this one is something the owner can answer.
+const LOCKED = "PDF is encrypted or the password is incorrect";
 
 function reconciles(parsed: ParseResponse) {
   return parsed.reconciliation.status === RECONCILED;
@@ -76,13 +90,16 @@ function detail(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.detail : fallback;
 }
 
-function body(file: File, stage: boolean, accountId: string) {
+function body(item: Candidate, stage: boolean, accountId: string) {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", item.file);
   form.append("stage", stage ? "true" : "false");
   // Sent only when the owner overrode it. Absent, the pipeline resolves the account from the
   // statement's own number by salted hash, which is the path that needs no picker at all.
   if (accountId) form.append("accountId", accountId);
+  // This file's own password, never another's. The service holds none between requests — the
+  // blob it stores is the original and stays encrypted — so staging re-sends it.
+  if (item.password) form.append("password", item.password);
   return form;
 }
 
@@ -126,14 +143,14 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
       try {
         const parsed = await request<ParseResponse>("/parse", {
           method: "POST",
-          body: body(item.file, false, accountId),
+          body: body(item, false, accountId),
         });
         update(item.key, { state: "checked", parsed });
       } catch (error) {
-        update(item.key, {
-          state: "chosen",
-          problem: detail(error, "This file could not be checked. Try again."),
-        });
+        const problem = detail(error, "This file could not be checked. Try again.");
+        // `locked` is sticky: a wrong password answers with the same sentence, and the field has
+        // to survive that or the owner gets one attempt and no way to make a second.
+        update(item.key, { state: "chosen", problem, locked: item.locked || problem === LOCKED });
       }
     }
     setBusy(false);
@@ -144,10 +161,18 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
     try {
       const staged = await request<ParseResponse>("/parse", {
         method: "POST",
-        body: body(item.file, true, accountId),
+        body: body(item, true, accountId),
       });
       if (staged.staged && staged.batchId) {
-        update(item.key, { state: "staged", parsed: staged, batchId: staged.batchId });
+        // The password is done: the document is stored and every later request names the batch.
+        // Held past here it would only be a copy of a never-store value with nothing to do.
+        update(item.key, {
+          state: "staged",
+          parsed: staged,
+          batchId: staged.batchId,
+          password: undefined,
+          locked: false,
+        });
       } else {
         // 200 without staging is spec §7.5's answer for a batch the pipeline refused: the
         // verdict, the delta and the divergent row do not fit in an error's `detail` string.
@@ -224,6 +249,23 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
             </div>
 
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
+
+            {item.locked && (
+              <label className="password-field">
+                <span>Password for this statement</span>
+                <input
+                  autoComplete="off"
+                  onChange={(event) =>
+                    update(item.key, { password: event.target.value || undefined })
+                  }
+                  type="password"
+                  value={item.password ?? ""}
+                />
+                <small>
+                  Used for this file only, for this check. It is not saved anywhere.
+                </small>
+              </label>
+            )}
 
             {item.parsed && (
               <Summary
