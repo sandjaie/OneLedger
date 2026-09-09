@@ -31,7 +31,7 @@ request.
 
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
-| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 1 of 5 | slice 1.1 branch table below |
+| 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-path` · `feature/p1-1c-import-screen` · `feature/p1-1d-review-screen` | In progress — branch 2 of 6 | slice 1.1 branch table below |
 | 1.2 — all four bank layouts | `feature/p1-2a-engine-hardening` · `feature/p1-2b-remaining-layouts` | Not started | — |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
@@ -43,13 +43,15 @@ request.
 
 `/oneledger-plan-review` ran on the phase delivery plan on 9 September 2026, before the first
 dispatch, and split the slice into five branches; the owner took the two decisions it raised.
-The decisions themselves are contract and live in the
+Branch 1a then split again in delivery — written as one branch it passed the diff budget's hard
+stop — so the slice runs to six. The decisions themselves are contract and live in the
 [M2 spec §8](specs/2026-09-07-m2-statement-importer.md).
 
 | Branch | Delivers | Status | Evidence |
 | --- | --- | --- | --- |
-| `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Implemented; review gate open | `api/tests/test_ingest_card_frame.py` (11 tests); `db/seeds/card-layout.json`; every card statement held locally reconciles `matched`, with no row failing to normalize |
-| `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`, `POST /parse`, the second-staging refusal | Not started | — |
+| `fix/p1-1-card-layout-fitness` | `inverts_sign` reframes whatever stated no direction, so a card's bare anchors reach the ledger's frame; the card profile as data | Merged | [#51](https://github.com/sandjaie/OneLedger/pull/51) |
+| `feature/p1-1a-parse-pipeline` | `ingest/pipeline.py`: identification, the staging transaction, the second-staging refusal | Implemented; reviewed | `api/tests/test_ingest_pipeline.py` (15), `test_ingest_pipeline_live.py` (14) |
+| `feature/p1-1a-parse-route` | `POST /parse` and its wire contract. Bases off `develop` once the pipeline has merged | Implemented; awaiting the pipeline | `api/tests/test_ingest_route_live.py` (14) |
 | `feature/p1-1b-commit-path` | V14 commit and verification functions, review payload, row decisions, atomic commit | Not started | — |
 | `feature/p1-1c-import-screen` | `/import`: picker, per-file status, parse summary, diagnostics, stage | Not started | — |
 | `feature/p1-1d-review-screen` | grouped review, row decisions, commit | Not started | — |
