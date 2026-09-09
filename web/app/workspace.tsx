@@ -349,6 +349,7 @@ export function Workspace({
               batchId={batchId}
               currencies={currencies}
               currency={currency}
+              household={household}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

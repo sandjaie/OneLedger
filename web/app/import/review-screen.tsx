@@ -8,6 +8,7 @@ import type {
   AccountRow,
   CurrencyRow,
   HouseholdCurrency,
+  HouseholdResponse,
   ReviewBatch,
   ReviewGroup,
   ReviewRow,
@@ -18,8 +19,27 @@ type Props = {
   batchId: string;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
+  household: HouseholdResponse;
   request: typeof apiFetch;
 };
+
+/** The frozen figure that belongs under the currency being displayed, or nothing.
+ *
+ * `multi-currency-and-fx.html` §2: the toggle **swaps a column, it does not recompute**. Both
+ * figures were frozen at staging — `amount_base` against the household's base currency and
+ * `amount_secondary` against its secondary — so showing the right one is a choice of column, and
+ * formatting either with whatever the toggle happens to be prints real money under the wrong
+ * symbol and the wrong grouping.
+ *
+ * Nothing where the row is already in the displayed currency: converting a figure into its own
+ * currency says nothing, and printing an equal second figure beside it under one symbol invites
+ * the reader to think they are two. `transactions-screen.tsx` reads the pair the same way.
+ */
+function converted(row: ReviewRow, household: HouseholdResponse, currency: HouseholdCurrency) {
+  if (row.currency === currency.code) return undefined;
+  const value = currency.code === household.baseCurrency ? row.amountBase : row.amountSecondary;
+  return formatMoney(value, currency);
+}
 
 // `import_batch.status`. A batch that has committed is a record, not a working set — the API
 // refuses a decision on one, and the screen must not offer an action it would refuse.
@@ -70,7 +90,14 @@ function display(
 }
 
 
-export function ReviewScreen({ accounts, batchId, currencies, currency, request }: Props) {
+export function ReviewScreen({
+  accounts,
+  batchId,
+  currencies,
+  currency,
+  household,
+  request,
+}: Props) {
   const [batch, setBatch] = useState<ReviewBatch>();
   const [selected, setSelected] = useState<Array<string>>([]);
   const [problem, setProblem] = useState<string>();
@@ -234,6 +261,7 @@ export function ReviewScreen({ accounts, batchId, currencies, currency, request 
           currencies={currencies}
           currency={currency}
           group={group}
+          household={household}
           key={group.status}
           onSelectGroup={(ticked) => selectGroup(group, ticked)}
           onToggle={toggle}
@@ -267,6 +295,7 @@ function Group({
   accountCurrency,
   currencies,
   currency,
+  household,
   group,
   onSelectGroup,
   onToggle,
@@ -276,6 +305,7 @@ function Group({
   accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
+  household: HouseholdResponse;
   group: ReviewGroup;
   onSelectGroup: (ticked: boolean) => void;
   onToggle: (id: string) => void;
@@ -319,6 +349,7 @@ function Group({
         {group.rows.map((row) => (
           <Row
             accountCurrency={accountCurrency}
+            household={household}
             currencies={currencies}
             currency={currency}
             key={row.id}
@@ -337,6 +368,7 @@ function Row({
   accountCurrency,
   currencies,
   currency,
+  household,
   onToggle,
   open,
   row,
@@ -345,36 +377,45 @@ function Row({
   accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
+  household: HouseholdResponse;
   onToggle: (id: string) => void;
   open: boolean;
   row: ReviewRow;
   selected: boolean;
 }) {
+  const conversion = converted(row, household, currency);
+  // Six cells, always, in the same order. `.review-row` is a fixed six-column grid and CSS grid
+  // fills by position, so a row that renders fewer cells does not leave a gap — every later cell
+  // shifts one column left and the description ends up in the date's 96px column. Three of these
+  // are conditional, which is three ways for the count to decide the column; an empty span holds
+  // the place instead.
   return (
     <li aria-label={`Row ${row.sourceRowNumber}`} className="review-row">
-      {open && (
+      {open ? (
         <input
           aria-label={`Row ${row.sourceRowNumber}`}
           checked={selected}
           onChange={() => onToggle(row.id)}
           type="checkbox"
         />
+      ) : (
+        <span aria-hidden="true" />
       )}
       <span className="review-date">{row.bookedDate}</span>
       <span className="review-description">{row.descriptionRaw}</span>
       {/* The statement's own amount first and the frozen conversion second — never the
           conversion alone (`ui-information-architecture.html` section 4). Both are formatted
-          from the strings the API sent; `amount_base` was frozen at staging and is shown, not
-          recomputed. The row names its own currency, so a row is never formatted with a
-          batch-level guess. */}
+          from the strings the API sent, and the conversion is the column that matches the
+          displayed currency rather than a figure recomputed here (`converted`). The row names
+          its own currency, so a row is never formatted with a batch-level guess. */}
       <span className="review-amount">
         {formatMoney(row.amount, display(currencies, accountCurrency, row.currency))}
       </span>
-      <span className="review-converted">{formatMoney(row.amountBase, currency)}</span>
+      <span className="review-converted">{conversion ?? ""}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>
-      {row.duplicateOfTransactionId && (
-        <span className="section-label">Already in the ledger</span>
-      )}
+      <span className="section-label">
+        {row.duplicateOfTransactionId ? "Already in the ledger" : ""}
+      </span>
     </li>
   );
 }
