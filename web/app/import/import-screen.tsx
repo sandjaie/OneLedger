@@ -15,9 +15,13 @@ type Props = {
 
 /** One chosen file and whatever the API has said about it so far.
  *
- * `parsed` is the dry run's answer and `staged` the staging one, held separately: a staging
- * failure must not erase the summary the owner has already read, which is the only record of
- * what the file contains until they try again.
+ * `parsed` holds the most recent answer about this file, and a staging attempt that fails
+ * leaves the previous one in place: the summary is the only record of what the file contains
+ * until the owner tries again, so a failure must not erase it.
+ *
+ * `batchId` outlives the `staged` state deliberately. A second check re-posts the dry run and
+ * an already-staged file's document is stored, so the route answers 409 — a duplicate of
+ * itself — and losing the id there would lose the only pointer to the batch just created.
  */
 type Candidate = {
   key: string;
@@ -34,9 +38,23 @@ type Candidate = {
 const PDF = "application/pdf";
 
 // A statement whose verdict is anything but this cannot stage: Invariant I8 blocks the import
-// rather than importing figures the statement itself does not support. The API enforces it; the
-// screen reads the same verdict so it offers no action the API would refuse.
+// rather than importing figures the statement itself does not support.
 const RECONCILED = "matched";
+
+function reconciles(parsed: ParseResponse) {
+  return parsed.reconciliation.status === RECONCILED;
+}
+
+/** `pipeline.blocks_staging`, as the screen must read it.
+ *
+ * Two conditions, not one. The second — a row that would not normalize — is the half a screen
+ * gating on the verdict alone misses: a batch missing rows reconciles only by coincidence, and
+ * staging part of a statement produces a ledger wrong in a way no later check looks for.
+ * Offering Stage on such a file offers an action the API answers `staged: false` to.
+ */
+function canStage(parsed: ParseResponse) {
+  return reconciles(parsed) && parsed.failures.length === 0;
+}
 
 function candidate(file: File, index: number): Candidate {
   const key = `${file.name}-${index}-${file.lastModified}`;
@@ -101,7 +119,9 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
     // parses synchronously, and the staging path takes the household row FOR UPDATE. Firing
     // them together would queue on that lock anyway, with the failures arriving interleaved.
     for (const item of candidates) {
-      if (item.state === "refused") continue;
+      // A staged file is done. Re-posting its dry run would answer 409 against the document it
+      // just stored — a duplicate of itself — and take its review link with it.
+      if (item.state === "refused" || item.state === "staged") continue;
       update(item.key, { state: "checking", problem: undefined });
       try {
         const parsed = await request<ParseResponse>("/parse", {
@@ -126,11 +146,19 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
         method: "POST",
         body: body(item.file, true, accountId),
       });
-      update(item.key, {
-        state: "staged",
-        parsed: staged,
-        batchId: staged.batchId ?? undefined,
-      });
+      if (staged.staged && staged.batchId) {
+        update(item.key, { state: "staged", parsed: staged, batchId: staged.batchId });
+      } else {
+        // 200 without staging is spec §7.5's answer for a batch the pipeline refused: the
+        // verdict, the delta and the divergent row do not fit in an error's `detail` string.
+        // Reading HTTP success as staging success would tell the owner their statement was
+        // staged when none of it was.
+        update(item.key, {
+          state: "checked",
+          parsed: staged,
+          problem: "This statement was not staged. Resolve what is flagged below and try again.",
+        });
+      }
     } catch (error) {
       // Back to `checked`, keeping the summary: the file is still a candidate, and the reason
       // it was refused is what the owner needs beside it.
@@ -141,7 +169,11 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
     }
   }
 
-  const checkable = candidates.some((item) => item.state !== "refused");
+  // The same two exclusions the loop makes, so the button is not offered for a pass that would
+  // skip every file it has.
+  const checkable = candidates.some(
+    (item) => item.state !== "refused" && item.state !== "staged",
+  );
 
   return (
     <section className="workspace-content" aria-labelledby="import-title">
@@ -186,7 +218,9 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
           <li aria-label={item.file.name} className="import-file" key={item.key}>
             <div className="import-file-head">
               <strong>{item.file.name}</strong>
-              <span className="section-label">{stateLabel(item)}</span>
+              <span aria-live="polite" className="section-label" role="status">
+                {stateLabel(item)}
+              </span>
             </div>
 
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
@@ -201,7 +235,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               />
             )}
 
-            {item.state === "checked" && item.parsed?.reconciliation.status === RECONCILED && (
+            {item.state === "checked" && item.parsed && canStage(item.parsed) && (
               <button className="primary-action" onClick={() => stage(item)} type="button">
                 Stage batch
               </button>
@@ -268,7 +302,7 @@ function Summary({
         )}
       </dl>
 
-      <p className={reconciliation.status === RECONCILED ? "import-verdict" : "inline-alert"}>
+      <p className={reconciles(parsed) ? "import-verdict" : "inline-alert"}>
         {reconciliation.message}
       </p>
 

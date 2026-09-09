@@ -228,6 +228,95 @@ describe("staging", () => {
     expect(link.getAttribute("href")).toBe("/import/batch-1");
   });
 
+  it("does not claim a file was staged when the API says it was not", async () => {
+    // `blocks_staging` is two conditions, and the second is a row that would not normalize.
+    // The route answers 200 with `staged: false` rather than an error (spec §7.5), so HTTP
+    // success is not staging success — the boolean is.
+    const blocked = parsed({
+      failures: [{ sourcePageNumber: 1, sourceRowNumber: 3, reason: "no date in the date column" }],
+    });
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce({ ...blocked, staged: false, batchId: null });
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    expect(within(march).queryByText(/staged for review/i)).toBeNull();
+    expect(within(march).queryByRole("link", { name: /review/i })).toBeNull();
+    expect(within(march).getByText(/was not staged/i)).toBeTruthy();
+  });
+
+  it("offers no Stage on a statement whose rows did not all normalize", async () => {
+    // It reconciles — but a batch missing rows reconciles only by coincidence, and the API
+    // refuses to stage it. Offering the button offers an action that cannot succeed.
+    const request = vi.fn().mockResolvedValue(
+      parsed({
+        failures: [{ sourcePageNumber: 1, sourceRowNumber: 3, reason: "no date in the date column" }],
+      }),
+    );
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+
+    expect(within(march).getByText(/no date in the date column/)).toBeTruthy();
+    expect(within(march).queryByRole("button", { name: /stage/i })).toBeNull();
+  });
+
+  it("re-checks the files still waiting and leaves the staged one alone", async () => {
+    // A second check re-posts the dry run, and an already-staged file's document is stored, so
+    // the route would answer 409 — a duplicate of itself — and take its review link with it.
+    // Asserted with a file still waiting beside it, so the check button is genuinely enabled
+    // and it is the loop that has to skip, not the disabled button doing the work.
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockRejectedValueOnce(new Error("network is gone"))
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1", documentId: "doc-1" }))
+      .mockResolvedValueOnce(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf"), pdf("april.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
+    await within(april).findByText(/could not be checked/i);
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    await within(march).findByRole("link", { name: /review/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    // Four calls, not five: march's check, april's failure, march's staging, april's re-check.
+    await waitFor(() => expect(within(april).getByText(/2 rows/, { selector: "dd" })).toBeTruthy());
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(within(march).getByRole("link", { name: /review/i }).getAttribute("href")).toBe(
+      "/import/batch-1",
+    );
+  });
+
+  it("stops offering a check once every file is staged", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(parsed())
+      .mockResolvedValueOnce(parsed({ staged: true, batchId: "batch-1", documentId: "doc-1" }));
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    await within(march).findByRole("link", { name: /review/i });
+
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: /check statements/i }).disabled,
+    ).toBe(true);
+  });
+
   it("reports a statement already imported without losing the file's place", async () => {
     const request = vi
       .fn()
@@ -259,6 +348,24 @@ describe("staging", () => {
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
     expect((request.mock.calls[1][1].body as FormData).get("accountId")).toBe("acct-savings");
+  });
+});
+
+describe("what the screen announces", () => {
+  it("announces each file's progress to a screen reader", async () => {
+    // WCAG AA (prd.html section 6): a state that changes across seconds of work has to be
+    // announced, not only redrawn. The tree's own pattern is role="status".
+    const request = vi.fn().mockResolvedValue(parsed());
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const live = within(march).getByRole("status");
+    expect(live.textContent).toContain("Ready to check");
+
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    await waitFor(() => expect(within(march).getByRole("status").textContent).toContain("Checked"));
   });
 });
 
