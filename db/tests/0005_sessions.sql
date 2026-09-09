@@ -46,8 +46,14 @@ BEGIN;
       RAISE EXCEPTION 'duplicate Google subject was accepted';
     EXCEPTION WHEN unique_violation THEN NULL;
     END;
+    -- Scoped to this fixture's own household. Counted across the whole table, the assertion
+    -- also counts the install's real owner session, so it held only while nobody had ever
+    -- signed in — and this file runs on push against the working database, where signing in
+    -- is the ordinary state. An unscoped count made the push hook fail for the one reason that
+    -- proves the application works.
     ASSERT (SELECT count(*) FROM app_session s JOIN app_user u ON u.id = s.app_user_id
-            WHERE s.revoked_at IS NULL AND s.expires_at > now() AND u.role = 'owner') = 1,
+            WHERE s.revoked_at IS NULL AND s.expires_at > now() AND u.role = 'owner'
+              AND u.household_id = '51111111-1111-1111-1111-111111111111') = 1,
       'only an unexpired, unrevoked owner session is active';
     ASSERT NOT EXISTS (SELECT FROM app_session WHERE id =
       '54444444-4444-4444-4444-444444444442' AND revoked_at IS NULL),
