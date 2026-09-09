@@ -33,7 +33,36 @@ from oneledger.main import app
 from oneledger.routes import ingest as ingest_routes
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
-from .test_ingest_route_live import ORIGIN, SALT, Fixture, _statement
+from .test_ingest_route_live import LAYOUT_ID, ORIGIN, SALT, Fixture, _statement
+
+
+def _dated_statement() -> bytes:
+    """The same statement, plus the period the layout can capture.
+
+    The default fixture's layout maps no period pattern, so every batch it stages has a *derived*
+    period. A flag that is only ever true proves nothing — this is the other value.
+    """
+    return build_pdf(
+        [
+            Placement(page=0, x=20, y=770, text="Statement Period 01/03/2026 to 31/03/2026"),
+            Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
+            Placement(page=0, x=20, y=750, text="Account Number 1234567890"),
+            Placement(page=0, x=20, y=740, text="Opening Balance 1,000.00"),
+            Placement(page=0, x=40, y=700, text="Date"),
+            Placement(page=0, x=140, y=700, text="Description"),
+            Placement(page=0, x=420, y=700, text="Amount"),
+            Placement(page=0, x=500, y=700, text="Balance"),
+            Placement(page=0, x=40, y=670, text="01/03/2026"),
+            Placement(page=0, x=140, y=670, text="COFFEE SHOP"),
+            Placement(page=0, x=420, y=670, text="-10.00"),
+            Placement(page=0, x=500, y=670, text="990.00"),
+            Placement(page=0, x=40, y=650, text="02/03/2026"),
+            Placement(page=0, x=140, y=650, text="SALARY MARCH"),
+            Placement(page=0, x=420, y=650, text="500.00"),
+            Placement(page=0, x=500, y=650, text="1,490.00"),
+            Placement(page=0, x=20, y=600, text="Closing Balance 1,490.00"),
+        ]
+    )
 
 
 def _twin_statement() -> bytes:
@@ -226,8 +255,8 @@ def test_the_batch_comes_back_with_its_verdict_and_its_rows_grouped(live: Staged
     assert body["status"] == "awaiting_review"
     assert body["reconciliation"]["status"] == "matched"
     assert body["reconciliation"]["declaredClosing"] == "1490.0000"
-    # `isDerived` is null because no column records it — asserted on its own below.
-    assert body["period"] == {"start": "2026-03-01", "end": "2026-03-02", "isDerived": None}
+    # Derived: the fixture layout captures no period, so the dates came from the rows.
+    assert body["period"] == {"start": "2026-03-01", "end": "2026-03-02", "isDerived": True}
     assert body["rowsExtracted"] == 2
 
     groups = {group["status"]: group for group in body["groups"]}
@@ -532,7 +561,8 @@ def test_a_batch_that_never_reconciled_is_readable_and_says_so(live: Staged) -> 
     with live.conn.cursor() as cur:
         cur.execute(
             """UPDATE import_batch
-                  SET reconciliation_status = NULL, period_start = NULL, period_end = NULL
+                  SET reconciliation_status = NULL, period_start = NULL, period_end = NULL,
+                      period_is_derived = NULL
                 WHERE id = %s""",
             (batch,),
         )
@@ -546,13 +576,23 @@ def test_a_batch_that_never_reconciled_is_readable_and_says_so(live: Staged) -> 
     assert body["period"] == {"start": None, "end": None, "isDerived": None}
 
 
-def test_the_period_never_claims_a_provenance_the_batch_did_not_record(live: Staged) -> None:
-    """Invariant I7. No column records whether the period was derived, so the payload says
-    nothing rather than guessing: `true` labels a declared period derived, `false` labels a
-    computed one declared, and both are inventions."""
-    batch = live.stage()
+def test_a_batch_that_recorded_no_provenance_says_so(live: Staged) -> None:
+    """Invariant I7, for the one case that still has no answer: a batch staged before V17.
 
-    assert live.get(batch).json()["period"]["isDerived"] is None
+    Its column is null and stays null. Filling it in would label a provenance nobody observed —
+    `true` calls a declared period derived and `false` calls a computed one stated — and the two
+    are indistinguishable from the dates alone, which is why the column exists.
+    """
+    batch = live.stage()
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE import_batch SET period_is_derived = NULL WHERE id = %s", (batch,))
+    live.conn.commit()
+
+    body = live.get(batch).json()
+
+    assert body["period"]["isDerived"] is None
+    # The dates are still there, so nothing could be inferred from their absence either.
+    assert body["period"]["start"] == "2026-03-01"
 
 
 def test_groups_come_back_most_attention_needed_first(live: Staged) -> None:
@@ -911,3 +951,64 @@ def test_the_override_gives_up_rather_than_searching_forever(
     assert _hashes(live, second) == before, "and nothing was rewritten"
     groups = {group["status"]: group["count"] for group in live.get(second).json()["groups"]}
     assert groups == {"duplicate": 2}, "nor decided"
+
+
+# --------------------------------------------------------------------------------------
+# The period's provenance (Invariant I7)
+# --------------------------------------------------------------------------------------
+
+
+def test_a_derived_period_reads_back_as_derived(live: Staged) -> None:
+    """The fixture layout captures no period, so the pipeline computed one from the row dates.
+
+    That is a labelled fact, not a stated one, and the batch must carry the label — the review
+    screen is where it is read, and a computed period shown as a declared one is the direction
+    Invariant I7 forbids.
+    """
+    batch = live.stage()
+
+    assert live.get(batch).json()["period"]["isDerived"] is True
+
+
+def test_a_stated_period_reads_back_as_stated(live: Staged) -> None:
+    """The other value, which is what makes the flag mean anything.
+
+    A flag that is only ever true is a constant with a longer name.
+    """
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = metadata_patterns || %s::jsonb
+                WHERE id = %s""",
+            (
+                psycopg.types.json.Json(
+                    {
+                        "period_start": r"Statement\s*Period\s*([0-9/]+)\s*to",
+                        "period_end": r"Statement\s*Period\s*[0-9/]+\s*to\s*([0-9/]+)",
+                    }
+                ),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+
+    batch = live.stage(statement=_dated_statement())
+
+    body = live.get(batch).json()
+    assert body["period"] == {"start": "2026-03-01", "end": "2026-03-31", "isDerived": False}
+
+
+def test_the_period_provenance_survives_the_round_trip(live: Staged) -> None:
+    """Stored on the batch, not recomputed from the rows it happens to hold.
+
+    A period derived from two rows dated 1 and 2 March looks identical to one a statement
+    stated as 1–2 March; only the recorded flag tells them apart, which is why it is a column.
+    """
+    batch = live.stage()
+
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT period_is_derived FROM import_batch WHERE id = %s", (batch,))
+        stored = cur.fetchone()[0]  # type: ignore[index]
+
+    assert stored is True
+    assert live.get(batch).json()["period"]["isDerived"] == stored

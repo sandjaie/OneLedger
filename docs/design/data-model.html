@@ -824,7 +824,12 @@ stays answerable without reopening the PDF. The pipeline stage it serves is
 requires one — reconciliation names its divergent row by it, and the review payload labels each row
 by it — so a null was a row nothing could produce and nothing could review. Its counterpart on
 <code>transaction</code> stays nullable: a manually entered transaction comes from no statement and has
-no row to name.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V13</code>, <code>V16</code> (applied).</p>
+no row to name.</p>
+<p><code>import_batch.period_is_derived</code> (V17) records whether the batch&#39;s period came from the
+rows&#39; own dates or from the statement&#39;s own words. The two are indistinguishable afterwards — a
+period derived from rows dated 1 and 2 March looks exactly like one stated as 1–2 March — so the
+review payload reads the recorded flag rather than inferring one, and a batch staged before the
+column says it recorded none (Invariant I7).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V13</code>, <code>V16</code> (applied).</p>
 <hr>
 <h2 id="13-classification-rules">13. Classification rules</h2>
 <p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
@@ -943,6 +948,7 @@ V13__staged_transactions.sql          the import's working copy (applied)
 V14__commit_import_batch.sql          assert_account_reconciles(), commit_import_batch() (applied)
 V15__definer_search_path_excludes_pg_temp.sql   pg_temp last in every definer path (applied)
 V16__staged_row_number_is_required.sql          source_row_number NOT NULL (applied)
+V17__import_batch_records_period_provenance.sql period_is_derived (applied)
 
   then, in this order, numbered as they land:
 
