@@ -58,6 +58,14 @@ repos:
         pass_filenames: false
         files: '^(docs/|README\.md|scripts/check-docs\.py)'
 
+      - id: identifiers
+        name: no currency, institution or country name as an identifier
+        entry: python3 scripts/check-identifiers.py
+        language: system
+        pass_filenames: false
+        files: '\.(py|ts|tsx|sql|mjs)$'
+        exclude: '^(web/node_modules|web/\.next|api/\.venv|web/types/api)/'
+
       - id: ruff
         name: ruff — lint (api)
         entry: scripts/hooks/api.sh ruff check --fix

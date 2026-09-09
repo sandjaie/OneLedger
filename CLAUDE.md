@@ -94,7 +94,8 @@ member, a function name, a locale constant or a required seed row. `amount_base`
 `amount_secondary`, never `amount_inr`. `formatMoney` takes a `currency` row and reads its
 `symbol`, `decimals` and `number_format` — never a `"INR" | "AED"` union. The reporting pair is
 `household.base_currency` / `secondary_currency`. Every bank and currency in the docs is an
-example (ADR-0012). A static check fails the build on this; do not silence it.
+example (ADR-0012). `scripts/check-identifiers.py` fails the build on this and on money
+arithmetic in TypeScript; do not silence it. A name inside a string is data and is not read.
 
 **Reports never read the base table and never multiply by a rate.** Cash-flow, budget, spending
 and savings-rate queries read `v_transaction_reportable` and the frozen `amount_base` /

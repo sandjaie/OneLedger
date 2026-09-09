@@ -1,9 +1,11 @@
 # api/oneledger/fx.py
 """Exchange rates: fetch, peg derivation, gap filling.
 
-No currency code is hardcoded here. The ECB quotes everything against EUR, so any pair is a
-division; a currency the ECB does not publish is reached through its peg, which is a row in
-`currency`. See multi-currency-and-fx.html §3.
+No currency code decides anything here. The feed quotes everything against one denomination of
+its own, so any pair is a division; a currency the feed does not publish is reached through its
+peg, which is a row in `currency`. Only the Frankfurter client below names that denomination,
+because it is a fact about that service and not about the household — every household currency
+reaches the ledger through the same division either way. See multi-currency-and-fx.html §3.
 """
 
 from __future__ import annotations
@@ -27,8 +29,15 @@ class Peg:
     units_per_anchor: Decimal
 
 
-def units_per_eur(published: Mapping[str, Decimal], code: str, pegs: Mapping[str, Peg]) -> Decimal:
-    """How many units of `code` buy 1 EUR, following pegs for currencies the ECB skips."""
+def units_per_feed_base(
+    published: Mapping[str, Decimal], code: str, pegs: Mapping[str, Peg]
+) -> Decimal:
+    """How many units of `code` buy one of the feed's own denomination.
+
+    Named for the role rather than the currency: the function never learns which currency that
+    is — `published` already carries it at 1 — so a feed denominated in something else needs no
+    change here (ADR-0012).
+    """
     seen: set[str] = set()
     factor = Decimal(1)
     while code not in published:
@@ -69,7 +78,7 @@ def cross_rate(
     published: Mapping[str, Decimal], base: str, quote: str, pegs: Mapping[str, Peg]
 ) -> Decimal:
     """1 `base` = <returned> `quote`. Rates derived through a peg are stored as 'derived_peg'."""
-    return units_per_eur(published, quote, pegs) / units_per_eur(published, base, pegs)
+    return units_per_feed_base(published, quote, pegs) / units_per_feed_base(published, base, pegs)
 
 
 def carry_forward[T](
@@ -111,7 +120,8 @@ class EcbFrankfurterSource:
     def fetch_range(
         self, start: date, end: date, codes: list[str]
     ) -> dict[date, dict[str, Decimal]]:
-        """Return {published_date: {code: units_per_eur}}. Unpublished days are absent, not filled.
+        """Return {published_date: {code: units per feed base}}. Unpublished days are absent,
+        not filled.
 
         `codes` is what the household needs quoted — its reporting pair plus every currency its
         accounts hold, minus the pegged ones, which are derived rather than fetched.
