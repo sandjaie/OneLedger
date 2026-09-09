@@ -21,14 +21,18 @@ Reviewing after dispatch is too late — by then a split costs an implementation
 ## 1. Size every task against the budget
 
 This is the check that matters most, because it is the only one that is cheap now and expensive
-later. The budget, enforced at push by `scripts/check-diff-size.sh`:
+later. The budget is **owned by [docs/git-workflow.md](../../../docs/git-workflow.md)** and
+enforced at push by `scripts/check-diff-size.sh`; the table below restates it for reading, and
+that file wins if the two ever disagree:
 
 | | Budget | Hard stop |
 |---|---|---|
-| Production lines added | 400 | 500 |
-| Production + test lines added | 800 | 1000 |
+| Production lines added | 800 | 1,200 |
+| Production + test lines added | 1,600 | 2,400 |
 
-Documentation, configuration and generated files do not count.
+Documentation, configuration and generated files do not count. Past the hard stop,
+`ONELEDGER_SIZE_OVERRIDE="reason"` allows the push and the same reason goes in the PR's Notes —
+an indivisible migration is the case it exists for.
 
 **Forecast each task by naming its files and sizing them against what this repository already
 has.** These are the real numbers; use them, not optimism:
@@ -42,13 +46,18 @@ has.** These are the real numbers; use them, not optimism:
 | A web screen | `categories-manager.tsx` 200 · `workspace.tsx` 437 · `transactions-screen.tsx` 607 · `accounts-screen.tsx` 785 |
 | Its component test | 0.6–1× the screen: 377 · 433 · 474 |
 
-The consequence, stated plainly: **one module plus its tests already spends the whole budget.** A
-task that says "the extraction engine, quirks, and account identification" is four tasks. A task
-that adds two endpoints and a screen is three. Slice below the module: one endpoint, one
-behaviour cluster, one migration — each with its own branch.
+The consequence, stated plainly: **a large module plus its tests spends the whole budget.**
+`accounts.py` and its test are 1,682 counted lines; `layouts.py` and its test are 1,758. Both are
+over. A small module leaves room for a second — `categories.py` and its test are around 600 — so
+the question is never "how many files" but "how many lines, measured against the list above".
+
+A task that says "the extraction engine, quirks, and account identification" is still three or
+four tasks. A task that adds two endpoints and a screen is two. Slice below the module wherever
+the forecast says so: one endpoint, one behaviour cluster, one migration — each with its own
+branch.
 
 For every task, write the forecast into the finding: files, estimated production lines, estimated
-test lines, verdict. Any task over 400/800 is **split**, and the split is named — sub-tasks in
+test lines, verdict. Any task over 800/1,600 is **split**, and the split is named — sub-tasks in
 dependency order, each with its own `<type>/<name>` branch off `develop`.
 
 A migration that genuinely cannot be divided is the one legitimate exception, and it rides with

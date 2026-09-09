@@ -86,7 +86,8 @@ A table: finding · location · evidence it is unused or duplicated · proposed 
 by mechanical (safe to remove: unused import, unreachable branch, stale marker) and judgement
 (needs a decision: shared helper, dropped column, superseded fixture).
 
-Then propose one `chore/` branch, sized to the same budget every other branch obeys — if the
-cleanup is over 400 production lines, propose several, in the order they should ship. Whoever
+Then propose one `chore/` branch, sized to the same budget every other branch obeys
+([docs/git-workflow.md](../../../docs/git-workflow.md) owns it) — if the cleanup is over 800
+production lines, propose several, in the order they should ship. Whoever
 implements it goes through the same cycle as any other branch, `/oneledger-code-review` included:
 a deletion is a change like any other, and this report is not a licence to skip the gate.
