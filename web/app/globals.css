@@ -378,6 +378,10 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .review-actions .primary-action,
 .review-actions .text-action { margin-top: 0; }
 .review-hint { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+/* The discard confirmation replaces its button in place rather than opening a dialog, so the
+   batch's own figures stay on screen while the owner decides. */
+.review-discard { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.review-discard .review-hint { flex-basis: 100%; }
 .review-group { display: grid; gap: 12px; margin-top: 30px; }
 .review-group-head {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: baseline;

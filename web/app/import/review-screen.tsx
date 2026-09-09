@@ -46,6 +46,17 @@ function converted(row: ReviewRow, household: HouseholdResponse, currency: House
 const REVIEWABLE = "awaiting_review";
 const RECONCILED = "matched";
 
+// What a batch the owner can no longer act on has to say for itself. One sentence for every
+// closed state read "already imported", which is the opposite of what a discarded batch did —
+// and neither sentence fits the states the enum carries but this screen has no words for, so
+// those name themselves rather than borrow one.
+const CLOSED: Record<string, string> = {
+  completed: "This batch is already imported and can no longer be decided.",
+  cancelled:
+    "This batch was discarded. Nothing from it reached your ledger, and its account and " +
+    "period are free to import again.",
+};
+
 // V13's staged statuses. `duplicate` collides with something already committed, which is why
 // accepting it is a deliberate override rather than an ordinary tick; `accepted` is what the
 // commit imports.
@@ -76,6 +87,17 @@ function accepted(batch: ReviewBatch) {
   return batch.groups.find((group) => group.status === ACCEPTED)?.count ?? 0;
 }
 
+/** How many rows discarding would take with it.
+ *
+ * The group's own `count` rather than its rows' length: a later page of a large group will not
+ * carry every row, and a confirmation that undercounts what it is about to delete is worse than
+ * one that does not count at all. `rowsExtracted` is not the figure either — it is what the
+ * statement yielded, not what is staged now.
+ */
+function staged(batch: ReviewBatch) {
+  return batch.groups.reduce((total, group) => total + group.count, 0);
+}
+
 /** The catalogue row for a code, or the household's display currency.
  *
  * From the catalogue, never a union of codes (ADR-0012). The fallback keeps an account the
@@ -102,6 +124,10 @@ export function ReviewScreen({
   const [selected, setSelected] = useState<Array<string>>([]);
   const [problem, setProblem] = useState<string>();
   const [imported, setImported] = useState<number>();
+  const [discarded, setDiscarded] = useState<number>();
+  // Two clicks, not one. Discarding cannot be undone and "cancel" reads as "close this screen"
+  // at least as readily as "throw the batch away", so the confirmation says which it means.
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
@@ -118,6 +144,7 @@ export function ReviewScreen({
         // The selection names rows by id and a decision moves them between groups. Clearing it
         // is what stops a second click from re-deciding rows already dealt with.
         setSelected([]);
+        setConfirming(false);
         setBusy(false);
       })
       .catch((error: unknown) => {
@@ -184,6 +211,24 @@ export function ReviewScreen({
     }
   }
 
+  async function discard() {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const result = await request<{ rowsDiscarded: number }>(`/import/${batchId}/cancel`, {
+        method: "POST",
+      });
+      setDiscarded(result.rowsDiscarded);
+      reload();
+    } catch (error) {
+      // The service's own sentence — a batch someone else imported from a second tab reads back
+      // as already imported, which is not a failure to describe as "could not be discarded".
+      setProblem(detail(error, "This batch could not be discarded."));
+      setConfirming(false);
+      setBusy(false);
+    }
+  }
+
   if (!batch) {
     return (
       <section className="workspace-content" aria-labelledby="review-title">
@@ -226,6 +271,11 @@ export function ReviewScreen({
           {imported} {imported === 1 ? "row" : "rows"} imported.
         </p>
       )}
+      {discarded !== undefined && (
+        <p className="import-verdict" role="status">
+          {discarded} staged {discarded === 1 ? "row" : "rows"} discarded. Nothing was imported.
+        </p>
+      )}
 
       {open ? (
         <div className="review-actions">
@@ -248,10 +298,18 @@ export function ReviewScreen({
           ) : (
             <p className="review-hint">Accept some rows before importing.</p>
           )}
+          <Discard
+            busy={busy}
+            confirming={confirming}
+            count={staged(batch)}
+            onCancel={() => setConfirming(false)}
+            onConfirm={discard}
+            onStart={() => setConfirming(true)}
+          />
         </div>
       ) : (
         <p className="review-hint" role="status">
-          This batch is already imported and can no longer be decided.
+          {CLOSED[batch.status] ?? `This batch is ${batch.status} and can no longer be decided.`}
         </p>
       )}
 
@@ -270,6 +328,55 @@ export function ReviewScreen({
         />
       ))}
     </section>
+  );
+}
+
+/** The one destructive action on this screen, behind a confirmation that says what it does.
+ *
+ * `POST /import/{batch}/cancel` deletes the batch's staged rows: they are what keeps the
+ * household's reporting pair locked while nothing has been committed, so cancellation that left
+ * them behind would recover the period and not the pair. Nothing in the ledger is touched — a
+ * batch that has committed has no discard offered at all, and the API refuses one.
+ */
+function Discard({
+  busy,
+  confirming,
+  count,
+  onCancel,
+  onConfirm,
+  onStart,
+}: {
+  busy: boolean;
+  confirming: boolean;
+  count: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+  onStart: () => void;
+}) {
+  if (!confirming) {
+    return (
+      <button className="text-action" disabled={busy} onClick={onStart} type="button">
+        Discard this batch
+      </button>
+    );
+  }
+  // A batch with no staged rows is reachable: `reconcile.py` reconciles a dormant month against
+  // its stated opening and closing, so a statement with no transactions stages and then holds
+  // its period like any other. Discarding it is right; counting to zero out loud is not.
+  const rows = `${count} staged ${count === 1 ? "row" : "rows"}`;
+  return (
+    <div className="review-discard" role="group" aria-label="Confirm discarding this batch">
+      <p className="review-hint">
+        Discard {count > 0 ? rows : "this batch"}? Nothing from it has reached your ledger, and
+        its account and period become free to import again.
+      </p>
+      <button className="text-action" disabled={busy} onClick={onConfirm} type="button">
+        {count > 0 ? `Discard ${count} ${count === 1 ? "row" : "rows"}` : "Discard it"}
+      </button>
+      <button className="text-action" disabled={busy} onClick={onCancel} type="button">
+        Keep it
+      </button>
+    </div>
   );
 }
 

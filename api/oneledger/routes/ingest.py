@@ -403,6 +403,14 @@ OVERRIDE_LIMIT = 64
 # `near_duplicate` only warns, and V10's unique index has no quarrel with it.
 COLLIDING = "duplicate"
 
+# `import_batch.status` (V12). `awaiting_review` is the only state a batch is still a working set
+# in: every route below refuses anything else, and V14 refuses it again from inside the database.
+# Named rather than spelled out three times, so the routes and the function cannot drift apart on
+# which state that is.
+REVIEWABLE = "awaiting_review"
+COMPLETED = "completed"
+CANCELLED = "cancelled"
+
 
 class ReviewRow(BaseModel):
     """One staged row as the review screen reads it.
@@ -497,6 +505,18 @@ class CommitResult(BaseModel):
     batchId: UUID
     rowsImported: int
     status: str
+
+
+class CancelResult(BaseModel):
+    """What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
+
+    A screen that said only "cancelled" would leave the owner unable to tell a batch whose rows
+    were discarded from one that had none to discard.
+    """
+
+    batchId: UUID
+    status: str
+    rowsDiscarded: int
 
 
 _BATCH = """SELECT b.id, b.document_id, b.account_id, b.status, b.statement_layout_id,
@@ -718,7 +738,7 @@ def decide_import_rows(
 
     with connect() as conn, conn.cursor() as cur:
         batch = _batch_row(cur, batch_id, owner.household_id)
-        if str(batch[3]) != "awaiting_review":
+        if str(batch[3]) != REVIEWABLE:
             # Once the rows are in the ledger the staged copy is a record, not a working set.
             raise HTTPException(
                 status_code=409, detail=f"this batch is {batch[3]} and can no longer be decided"
@@ -772,21 +792,27 @@ def commit_import(
     them, which is how the two would drift.
     """
     with connect() as conn, conn.cursor() as cur:
-        _batch_row(cur, batch_id, owner.household_id)
-        cur.execute(
-            """SELECT count(*) FROM staged_transaction
-                WHERE import_batch_id = %s AND household_id = %s AND status = 'accepted'""",
-            (batch_id, owner.household_id),
-        )
-        accepted = cur.fetchone()
-        if accepted is None or accepted[0] == 0:
-            # V14 would complete the batch with rows_imported = 0 whenever the declared closing
-            # already matched the standing balance — a statement marked imported with none of it
-            # imported. Committing nothing is never what the reviewer meant.
-            raise HTTPException(
-                status_code=422,
-                detail=EMPTY_COMMIT,
+        batch = _batch_row(cur, batch_id, owner.household_id)
+        if str(batch[3]) == REVIEWABLE:
+            # Narrowed to the state it was written for, rather than asked of every batch. A
+            # cancelled batch has no accepted rows because cancelling deleted them, and
+            # answering "accept some rows first" would describe the emptiness instead of what
+            # actually happened to it. V14 refuses every other state with the state named, and
+            # this guard exists only to catch the one case V14 would let through.
+            cur.execute(
+                """SELECT count(*) FROM staged_transaction
+                    WHERE import_batch_id = %s AND household_id = %s AND status = 'accepted'""",
+                (batch_id, owner.household_id),
             )
+            accepted = cur.fetchone()
+            if accepted is None or accepted[0] == 0:
+                # V14 would complete the batch with rows_imported = 0 whenever the declared
+                # closing already matched the standing balance — a statement marked imported
+                # with none of it imported. Committing nothing is never what the reviewer meant.
+                raise HTTPException(
+                    status_code=422,
+                    detail=EMPTY_COMMIT,
+                )
 
         scope_to_owner(conn, owner.user_id)
         try:
@@ -822,6 +848,86 @@ def commit_import(
         rowsImported=imported,
         status=str(committed[0]) if committed is not None else "",
     )
+
+
+def _not_cancellable(status: str) -> HTTPException:
+    """Why this batch cannot be cancelled, in words that fit the state it is actually in.
+
+    One function because the route asks twice — once from the status it read, once from the
+    status the guarded update found instead — and two spellings of the same refusal would
+    describe one batch two ways depending on which tab got there first.
+    """
+    if status == CANCELLED:
+        # Its own sentence. A double submit is the ordinary way to reach this, and the generic
+        # refusal would report back the state the caller was asking for.
+        return HTTPException(status_code=409, detail="this batch is already cancelled")
+    if status == COMPLETED:
+        # V14's own words, so the two refusals of an imported batch read the same.
+        return HTTPException(status_code=409, detail="this batch has already been imported")
+    return HTTPException(status_code=409, detail=f"a batch in state {status} cannot be cancelled")
+
+
+@router.post("/import/{batch_id}/cancel")
+def cancel_import(
+    batch_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> CancelResult:
+    """Abandon a staged batch, and take its staged rows with it.
+
+    Not a reversal. A batch that never committed has nothing in the ledger to undo, and one that
+    has committed cannot be cancelled at all. What this recovers is the **period**:
+    `pipeline._refuse_second_staging` already counts `cancelled` among the states that can no
+    longer commit, so an abandoned batch stops blocking its account's period the moment this
+    runs. Before it existed there was no way to reach that state from the app, which is how the
+    slice 1.1 acceptance run found a period blocked for good.
+
+    **The staged rows are deleted rather than left carrying a status.** V7's
+    `reporting_pair_is_locked()` discovers every table with `amount_base` beside `household_id`
+    and counts rows, and `staged_transaction` has both (V13 says so in its own comment) — so
+    rows left behind by a batch that can never commit would answer that question `true` for
+    ever. It bites during onboarding, where the pair is still meant to be changeable: stage a
+    batch, notice the pair is wrong, cancel, and otherwise still be unable to change it.
+
+    What this does **not** free is the file. `idx_document_checksum` is a separate guard, and the
+    same bytes are still refused on re-upload naming a batch that never imported anything. That
+    is layer 1's semantics rather than this route's, and is recorded in
+    `docs/superpowers/progress.md` rather than fixed here.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        batch = _batch_row(cur, batch_id, owner.household_id)
+        if str(batch[3]) != REVIEWABLE:
+            raise _not_cancellable(str(batch[3]))
+
+        # The status above answered for a moment that has already passed: V14 takes the batch
+        # row FOR UPDATE and completes it, so a commit in a second tab can land between that
+        # read and this write. The predicate is what closes the window — under READ COMMITTED
+        # this statement blocks on that lock and re-evaluates against the row the commit left,
+        # so a batch that stopped being reviewable updates nothing. It runs *before* the delete
+        # for the same reason: its row lock is what stops a commit from starting underneath the
+        # rows this is about to remove.
+        cur.execute(
+            """UPDATE import_batch SET status = %s::import_status, completed_at = now()
+                WHERE id = %s AND household_id = %s AND status = %s::import_status""",
+            (CANCELLED, batch_id, owner.household_id, REVIEWABLE),
+        )
+        if cur.rowcount == 0:
+            cur.execute(
+                "SELECT status FROM import_batch WHERE id = %s AND household_id = %s",
+                (batch_id, owner.household_id),
+            )
+            current = cur.fetchone()
+            if current is None:
+                raise HTTPException(status_code=404, detail="no such import batch")
+            raise _not_cancellable(str(current[0]))
+
+        # The household is carried here too. The service connects privileged and bypasses RLS
+        # (ADR-0013, ADR-0016), so the predicate is the boundary rather than a convenience over
+        # one — and this is a delete.
+        cur.execute(
+            "DELETE FROM staged_transaction WHERE import_batch_id = %s AND household_id = %s",
+            (batch_id, owner.household_id),
+        )
+        discarded = cur.rowcount
+    return CancelResult(batchId=batch_id, status=CANCELLED, rowsDiscarded=discarded)
 
 
 def _first_line(exc: Exception) -> str:

@@ -326,6 +326,29 @@ export type BodyProposeLayoutLayoutsProposePost = {
 };
 
 /**
+ * CancelResult
+ *
+ * What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
+ *
+ * A screen that said only "cancelled" would leave the owner unable to tell a batch whose rows
+ * were discarded from one that had none to discard.
+ */
+export type CancelResult = {
+    /**
+     * Batchid
+     */
+    batchId: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Rowsdiscarded
+     */
+    rowsDiscarded: number;
+};
+
+/**
  * CategoryCreate
  */
 export type CategoryCreate = {
@@ -2375,6 +2398,36 @@ export type CommitImportImportBatchIdCommitPostResponses = {
 };
 
 export type CommitImportImportBatchIdCommitPostResponse = CommitImportImportBatchIdCommitPostResponses[keyof CommitImportImportBatchIdCommitPostResponses];
+
+export type CancelImportImportBatchIdCancelPostData = {
+    body?: never;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/import/{batch_id}/cancel';
+};
+
+export type CancelImportImportBatchIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelImportImportBatchIdCancelPostError = CancelImportImportBatchIdCancelPostErrors[keyof CancelImportImportBatchIdCancelPostErrors];
+
+export type CancelImportImportBatchIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CancelResult;
+};
+
+export type CancelImportImportBatchIdCancelPostResponse = CancelImportImportBatchIdCancelPostResponses[keyof CancelImportImportBatchIdCancelPostResponses];
 
 export type HealthHealthGetData = {
     body?: never;

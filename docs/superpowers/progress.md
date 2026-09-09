@@ -32,7 +32,7 @@ request.
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
-| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Planned and reviewed | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) |
+| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | 2a and 2b delivered; 2c1–2c3 are local tasks and not started | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) · [#71](https://github.com/sandjaie/OneLedger/pull/71) |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
@@ -108,16 +108,18 @@ The four items slice 1.1 raised during delivery were shipped as their own branch
 [#62](https://github.com/sandjaie/OneLedger/pull/62) `source_row_number NOT NULL`,
 [#63](https://github.com/sandjaie/OneLedger/pull/63) the review skills' stale diff budget, and
 [#64](https://github.com/sandjaie/OneLedger/pull/64)'s `period_is_derived`. The three the
-acceptance run raised were shipped the same way, above.
+acceptance run raised were shipped the same way, above. The fourth — a staged batch that could
+not be cancelled through the app, so an abandoned one blocked its period for good — was slice
+1.2's task 2b, and is delivered.
 
 These are what the run raised and did not action — each in code the fixes it produced do not
 touch, recorded here rather than folded in past a diff budget.
 
 | Raised | What it is | Where it belongs |
 | --- | --- | --- |
-| A staged batch cannot be cancelled through the app | `ingest/pipeline.py` frees a period for re-staging once its batch is `cancelled`, and nothing sets that status: no route, no screen. A batch staged and then abandoned blocks re-staging its period permanently, and the only escape is an `UPDATE`. | A slice 1.2 branch — it is the same screen's work, and recurring user-facing work belongs in the app |
 | The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
 | `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
+| Cancelling a batch frees its period but not its file | `POST /import/{batch}/cancel` reaches the state `_refuse_second_staging` treats as finished, so the account and period are re-stageable. `idx_document_checksum` is a separate guard: the same bytes are still refused on re-upload, naming a batch that imported nothing. Changing that means layer 1 reusing a document row rather than refusing it, which is its own decision. | A slice 1.7 branch, with the documents screen that would surface the stored file |
 
 ## Where the rest is written down
 
