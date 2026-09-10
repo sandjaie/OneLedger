@@ -555,3 +555,14 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
     grid-column: 2;
   }
 }
+
+.overview h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.overview-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px; }
+.overview-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px 24px; margin: 8px 0 0; }
+.overview-figures dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.overview-figures dd { margin: 4px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.5rem; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.overview-notes { margin: 0; padding-left: 18px; color: var(--muted); line-height: 1.6; }
+.overview-scroll { overflow-x: auto; }
+.overview-table th { padding: 12px 10px 12px 0; border-bottom: 1px solid var(--rule); font-weight: 400; text-align: left; }
+.overview-table thead th { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.overview-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }

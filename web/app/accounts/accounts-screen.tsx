@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { formatMoney, formatOwed } from "@/lib/money/format";
 import type {
   AccountCreate,
   AccountGroupTotal,
@@ -452,10 +452,9 @@ export function AccountsScreen({
 
   function balanceLabel(account: AccountRow) {
     const currency = currencyOf(currencies, account.currency);
-    if (account.accountClass === "liability" && account.currentBalance.startsWith("-")) {
-      return `You owe ${formatMoney(unsigned(account.currentBalance), currency)}`;
-    }
-    return formatMoney(account.currentBalance, currency);
+    return account.accountClass === "liability"
+      ? formatOwed(account.currentBalance, currency)
+      : formatMoney(account.currentBalance, currency);
   }
 
   function renderForm() {

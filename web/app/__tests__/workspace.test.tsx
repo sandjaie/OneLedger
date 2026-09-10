@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { AccountsResponse, CurrencyRow, FxRateResponse, HouseholdResponse, InstitutionRow } from "@/types/api";
+import type {
+  AccountsResponse,
+  CurrencyRow,
+  DashboardResponse,
+  FxRateResponse,
+  HouseholdResponse,
+  InstitutionRow,
+  MonthFlows,
+} from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
   { code: "XAE", name: "Synthetic A", symbol: "A", decimals: 2, numberFormat: "international" },
@@ -94,6 +102,41 @@ const rate: FxRateResponse = {
   carried_from: "2024-01-05",
 };
 
+const march: MonthFlows = {
+  month: "2026-03-01",
+  incomeBase: "500000.0000",
+  incomeSecondary: "22000.0000",
+  spendingBase: "100000.0000",
+  spendingSecondary: "4400.0000",
+  netBase: "400000.0000",
+  netSecondary: "17600.0000",
+  savingsRatePctBase: "80.0000",
+  savingsRatePctSecondary: "80.0000",
+};
+
+// The overview's figures. The base total formats to the string the Phase 0 preview used to show,
+// so the tests that wait on it now wait on the owner's own net worth.
+const dashboard: DashboardResponse = {
+  netWorth: {
+    asOf: "2026-03-15",
+    baseCurrency: "XIN",
+    secondaryCurrency: "XAE",
+    totalBase: "1234567.8900",
+    totalSecondary: "55555.5500",
+    assetsBase: "2000000.0000",
+    assetsSecondary: "90000.0000",
+    liabilitiesBase: "-765432.1100",
+    liabilitiesSecondary: "-34444.4500",
+    liquidBase: "300000.0000",
+    liquidSecondary: "13500.0000",
+    rates: [{ currency: "XIN", rateToBase: "1", rateToSecondary: "0.0450000000", rateDate: "2026-03-15", carried: false }],
+    missing: [],
+  },
+  thisMonth: march,
+  trend: [march],
+  cardsDue: [],
+};
+
 describe("authenticated workspace", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -105,16 +148,19 @@ describe("authenticated workspace", () => {
   });
 
   it("guards owner content with the household request and labels unavailable modules", async () => {
-    let resolve!: (value: HouseholdResponse) => void;
-    const request = vi.fn(() => new Promise<HouseholdResponse>((done) => (resolve = done))) as Request;
+    const pending = deferred<HouseholdResponse>();
+    const rest = requestThat(catalogue, dashboard);
+    const request = vi.fn((path: string, init?: RequestInit) =>
+      path === "/household" ? pending.promise : rest(path, init),
+    ) as Request;
 
     render(<Workspace request={request} navigate={vi.fn()} />);
     expect(screen.getByText("Checking owner access…")).toBeTruthy();
-    expect(screen.queryByText("Reporting currency")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Reporting currency" })).toBeNull();
 
-    resolve(household);
-    expect(await screen.findByText("Reporting currency")).toBeTruthy();
-    expect(screen.getByText("₹12,34,567.89")).toBeTruthy();
+    pending.resolve(household);
+    expect(await screen.findByRole("group", { name: "Reporting currency" })).toBeTruthy();
+    expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
@@ -134,22 +180,22 @@ describe("authenticated workspace", () => {
       />,
     );
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
-    expect(screen.queryByText("Reporting currency")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Reporting currency" })).toBeNull();
   });
 
   it("offers retry after a service failure instead of exposing owner content", async () => {
-    const request = requestThat(new TypeError("offline"), household);
+    const request = requestThat(new TypeError("offline"), household, catalogue, dashboard);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     expect(await screen.findByRole("heading", { name: "OneLedger is unavailable" })).toBeTruthy();
-    expect(screen.queryByText("Reporting currency")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Reporting currency" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
   });
 
   it("keeps the owner view on transient logout failure and clears it after retry succeeds", async () => {
     const navigate = vi.fn();
-    const request = requestThat(household, new TypeError("offline"), undefined);
+    const request = requestThat(household, catalogue, dashboard, new TypeError("offline"), undefined);
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -168,7 +214,7 @@ describe("authenticated workspace", () => {
     [401, "/login"], [403, "/unauthorized"],
   ])("clears the owner view when logout returns %i and routes to %s", async (status, destination) => {
     const navigate = vi.fn();
-    const request = requestThat(household, new ApiError(status, "synthetic"));
+    const request = requestThat(household, catalogue, dashboard, new ApiError(status, "synthetic"));
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByText("₹12,34,567.89");
 
@@ -180,24 +226,24 @@ describe("authenticated workspace", () => {
 
   it("persists the configured toggle, falls back from obsolete choices, and tolerates storage errors", async () => {
     localStorage.setItem("oneledger.reportingCurrency", "obsolete");
-    const first = render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
+    const first = render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
 
     const secondary = screen.getByRole("button", { name: "XAE" });
     expect(secondary.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(secondary);
-    expect(screen.getByText("AED 1,234,567.89")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "This month" })).getByText("AED 22,000.00")).toBeTruthy();
     expect(localStorage.getItem("oneledger.reportingCurrency")).toBe("XAE");
 
     first.unmount();
-    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
-    expect(await screen.findByText("AED 1,234,567.89")).toBeTruthy();
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
+    expect(within(await screen.findByRole("region", { name: "This month" })).getByText("AED 22,000.00")).toBeTruthy();
 
     cleanup();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("blocked");
     });
-    render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
   });
 
@@ -538,12 +584,16 @@ describe("authenticated workspace", () => {
     expect(screen.queryByText("Inventory Savings")).toBeNull();
   });
 
-  it("does not fetch the currency catalogue on overview", async () => {
-    const request = requestThat(household);
+  it("loads the currency catalogue and the dashboard on overview, and nothing else", async () => {
+    const request = requestThat(household, catalogue, dashboard);
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByText("₹12,34,567.89");
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(request).toHaveBeenCalledWith("/household");
+    expect(vi.mocked(request).mock.calls.map((call) => call[0])).toEqual([
+      "/household",
+      "/currencies",
+      "/dashboard",
+    ]);
+    expect(screen.queryByText(/Phase 0/)).toBeNull();
   });
 
   it.each([

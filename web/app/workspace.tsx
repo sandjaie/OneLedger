@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
+import { OverviewScreen } from "@/app/overview/overview-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
 import { DataQuality } from "@/app/settings/data-quality";
 import { HouseholdForm } from "@/app/settings/household-form";
@@ -12,7 +13,6 @@ import { ImportScreen } from "@/app/import/import-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
 import type {
   AccountsResponse,
   CategoryRow,
@@ -26,7 +26,6 @@ import type {
 } from "@/types/api";
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
-const PREVIEW_VALUE = "1234567.89";
 
 type Props = {
   section?: "overview" | "settings" | "accounts" | "transactions" | "import" | "review";
@@ -110,6 +109,13 @@ export function Workspace({
         if (!current) return;
         setHousehold(configuration);
         setCurrency(configuredCurrency(configuration));
+        if (activeSection === "overview") {
+          // The overview formats each card in that card's own currency, which need not be one
+          // of the household's pair.
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
+        }
         if (activeSection === "settings") {
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
           if (!current) return;
@@ -307,25 +313,23 @@ export function Workspace({
             <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
           </nav>
 
-          {activeSection === "overview" && (
-            <section className="workspace-content" aria-labelledby="overview-title">
-              <p className="eyebrow">Phase 0 overview</p>
-              <h1 className="workspace-title" id="overview-title">Your reporting workspace is ready.</h1>
-              <p className="lede">Ledger import and financial views arrive in a later phase. This preview confirms how configured currencies will be displayed.</p>
+          {activeSection === "overview" && currencies && (
+            <OverviewScreen
+              currencies={currencies}
+              currency={currency}
+              household={household}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            >
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
-
-              <section className="currency-card" aria-labelledby="currency-title">
-                <div>
-                  <p className="section-label">Display preference</p>
-                  <h2 id="currency-title">Reporting currency</h2>
-                </div>
-                <div className="format-preview">
-                  <span>Formatting preview · synthetic value</span>
-                  <output aria-live="polite">{formatMoney(PREVIEW_VALUE, currency)}</output>
-                  <small>{currency.code} · {currency.numberFormat} grouping · {currency.decimals} decimals</small>
-                </div>
-              </section>
-            </section>
+            </OverviewScreen>
           )}
 
           {activeSection === "import" && inventory && currencies && (
@@ -520,7 +524,7 @@ export function Workspace({
         </main>
       )}
 
-      <footer className="footer"><p>Private owner workspace</p><p className="edition">Phase 0</p></footer>
+      <footer className="footer"><p>Private owner workspace</p><p className="edition">Phase 1</p></footer>
     </div>
   );
 }

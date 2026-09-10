@@ -150,3 +150,18 @@ function integerPart(parsed: ParsedDecimal): bigint {
 function symbolGap(symbol: string): string {
   return WORD_SYMBOL_PATTERN.test(symbol) ? " " : "";
 }
+
+/** A percentage the API computed — `87.6550` is 87.655% — rounded for display on its digits, the
+ * way `formatMoney` rounds, so no float ever touches it. */
+export function formatPercent(value: string, decimals = 2): string {
+  const parts = roundToDecimals(parseDecimal(value), decimals);
+  return `${parts.negative ? "-" : ""}${parts.whole}${parts.fraction ? `.${parts.fraction}` : ""}%`;
+}
+
+/** A liability's balance — negative in the ledger — shown as what is owed. The one place a sign
+ * is flipped for display (ADR-0010); the value stays signed everywhere else. */
+export function formatOwed(value: string, currency: Currency): string {
+  return value.startsWith("-")
+    ? `You owe ${formatMoney(value.slice(1), currency)}`
+    : formatMoney(value, currency);
+}
