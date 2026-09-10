@@ -10,6 +10,9 @@ the live tests run was enough to aim all six at the real database.
 They now share this module, and it reads **`ONELEDGER_TEST_DSN` and nothing else**. It is set
 by `scripts/test-db.sh`, which points at the `db-test` container — its own port, its own
 volume, behind its own compose profile.
+
+`api/tests/conftest.py` then repoints it, for each run, at a throwaway database that run
+created on that server — so parallel sessions never share the tables these fixtures empty.
 """
 
 from __future__ import annotations

@@ -46,7 +46,7 @@ request.
 | 4a1 — the card cycle entity | `feature/p1-4a1-card-statement-schema` | Delivered | [#99](https://github.com/sandjaie/OneLedger/pull/99) |
 | 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
 | 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
-| 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | this branch |
+| 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) |
 | 4b2 — one payload: net worth, the month, the trend, the dues | `feature/p1-4b2-dashboard-api` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | the acceptance run | — | Not run | — |
