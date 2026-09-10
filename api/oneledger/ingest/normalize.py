@@ -112,6 +112,62 @@ class NormalizedBatch:
     period: StatementPeriod
 
 
+# The four facts a card cycle reads from its statement's metadata block (slice 1.4, task 4a2).
+CARD_FACT_KEYS = frozenset({"statement_date", "payment_due_date", "minimum_due", "credit_limit"})
+_CARD_DATES = ("statement_date", "payment_due_date")
+_CARD_AMOUNTS = ("minimum_due", "credit_limit")
+
+
+@dataclass(frozen=True)
+class MetadataFailure:
+    """A captured fact that would not read. It names the key and never the captured text: spec
+    §5.6 keeps a document's digit runs out of every response, and a pattern can swallow one."""
+
+    key: str
+    reason: str
+
+
+def card_facts(
+    metadata: dict[str, str], date_format: str, period: StatementPeriod | None = None
+) -> tuple[dict[str, str], list[MetadataFailure]]:
+    """A card statement's four facts, read once, in canonical form.
+
+    Dates are read under the layout's own `dateFormat` — no inference, as for every other date —
+    and stored ISO; amounts go through `parse_amount` and are stored at four places. So nothing
+    downstream re-reads a producer's formatting. A fact that will not read is reported and left
+    **absent**: never zero, never guessed, never silently dropped (Invariant 7). A captured zero
+    is a fact and is kept. Every other key passes through untouched — the period's bounds are
+    `_period`'s to read, and a second reading would be a second answer.
+    """
+    facts = {key: value for key, value in metadata.items() if key not in CARD_FACT_KEYS}
+    failures: list[MetadataFailure] = []
+    for key in _CARD_DATES:
+        if key not in metadata:
+            continue
+        parsed = _parse_date(metadata[key], date_format, period)
+        if parsed is None:
+            failures.append(
+                MetadataFailure(key, f"{key} does not read as a date in the layout's format")
+            )
+        else:
+            facts[key] = parsed.isoformat()
+    for key in _CARD_AMOUNTS:
+        if key not in metadata:
+            continue
+        value = parse_amount(metadata[key])
+        if value is None:
+            failures.append(MetadataFailure(key, f"{key} does not read as an amount"))
+        elif value < 0:
+            # Both are magnitudes a statement prints unsigned; a sign means the pattern caught
+            # something else.
+            failures.append(
+                MetadataFailure(key, f"{key} reads as negative, which it is never printed as")
+            )
+        else:
+            facts[key] = str(value)
+    return facts, failures
+
+
 def parse_amount(text: str) -> Decimal | None:
     """The statement's number as a Decimal, or None when the cell is not a number.
 

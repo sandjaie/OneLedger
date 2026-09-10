@@ -1143,10 +1143,32 @@ def test_reserved_metadata_keys_need_exactly_one_capture_group() -> None:
     assert layouts.LayoutCreate.model_validate(
         {**VALID_CREATE, "metadataPatterns": {"account_number": r"Account (\d+)"}}
     )
-    # A non-reserved key may carry any pattern, capture group or not — only the three reserved
-    # keys are constrained.
+    # A non-reserved key may carry any pattern, capture group or not — only the reserved keys
+    # are constrained. (This example was `credit_limit` until slice 1.4 made it reserved: a card
+    # cycle reads it, so it must capture exactly one value.)
     assert layouts.LayoutCreate.model_validate(
-        {**VALID_CREATE, "metadataPatterns": {"credit_limit": r"Limit [\d,.]+"}}
+        {**VALID_CREATE, "metadataPatterns": {"note": r"Note [\w ]+"}}
+    )
+
+
+@pytest.mark.parametrize(
+    ("key", "one_group"),
+    [
+        ("statement_date", r"Statement Date (\S+)"),
+        ("payment_due_date", r"Payment Due Date (\S+)"),
+        ("minimum_due", r"Minimum Due ([\d,.]+)"),
+        ("credit_limit", r"Credit Limit ([\d,.]+)"),
+    ],
+)
+def test_the_card_cycle_s_facts_are_reserved_keys(key: str, one_group: str) -> None:
+    """Slice 1.4 adds the four facts a card cycle reads. Each is stored as one normalised
+    value, so each must capture exactly one — two groups would leave which one ambiguous."""
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {key: r"(\d+) and (\d+)"}}
+        )
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {key: one_group}}
     )
 
 

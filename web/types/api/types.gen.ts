@@ -509,6 +509,14 @@ export type CommitResult = {
      * Status
      */
     status: string;
+    /**
+     * Cardstatementid
+     */
+    cardStatementId?: string | null;
+    /**
+     * Cardstatementmissing
+     */
+    cardStatementMissing?: Array<string>;
 };
 
 /**
@@ -1191,6 +1199,23 @@ export type ParseFailure = {
 };
 
 /**
+ * ParseMetadataFailure
+ *
+ * A captured statement fact that would not read. Reported beside the rows; it never stops
+ * the statement staging, and it never carries the text that was captured.
+ */
+export type ParseMetadataFailure = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * ParsePeriod
  *
  * `isDerived` travels with the dates because a derived period must never be read as a
@@ -1259,6 +1284,10 @@ export type ParseResponse = {
      * Failures
      */
     failures: Array<ParseFailure>;
+    /**
+     * Metadatafailures
+     */
+    metadataFailures: Array<ParseMetadataFailure>;
 };
 
 /**

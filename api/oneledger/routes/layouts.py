@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
-from ..ingest import engine
+from ..ingest import engine, normalize
 from ..ingest.words import ExtractionError
 
 router = APIRouter(tags=["layouts"])
@@ -49,7 +49,11 @@ COLUMN_FIELDS = frozenset(
 # The small, additive vocabulary (ADR-0012). A third entry is a considered addition, not a reflex.
 QUIRKS_VOCABULARY = frozenset({"filter_script:arabic", "continuation:no_date_and_no_amount"})
 # metadata_patterns keys the pipeline understands itself (plan section 4.4).
-RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_end"})
+# The card cycle's four facts are reserved too: each is stored as one normalised value, so
+# each must capture exactly one — and they are named once, where they are read.
+RESERVED_METADATA_KEYS = (
+    frozenset({"account_number", "period_start", "period_end"}) | normalize.CARD_FACT_KEYS
+)
 
 # The extraction contract's complete row-assembly vocabulary (plan section 4.4): the columns are
 # unconstrained TEXT in the database, so the service is what keeps garbage out of them.

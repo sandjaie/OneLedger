@@ -49,10 +49,12 @@ from .classify import Candidate as ClassifiableRow
 from .dedupe import CommittedRow, DedupeVerdict, classify
 from .engine import ExtractionResult, extract_pages, matches
 from .normalize import (
+    MetadataFailure,
     NormalizableProfile,
     NormalizedRow,
     RowFailure,
     StatementPeriod,
+    card_facts,
     normalize,
 )
 from .reconcile import STATUS_MATCHED, ReconcilableProfile, Verdict, reconcile
@@ -146,6 +148,9 @@ class Analysis:
     # same reason `ExtractionResult` keeps it out of its own: spec §5.6 forbids it reaching any
     # log line, and a dataclass repr is how it would get there.
     account_number_raw: str | None = field(repr=False, default=None)
+    # Reported, never gating: `blocks_staging` does not read these. A due date that will not
+    # read is not worth the statement's transactions.
+    metadata_failures: list[MetadataFailure] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -273,6 +278,7 @@ def _analysed(
         declared_opening=extraction.declared_opening,
         declared_closing=extraction.declared_closing,
     )
+    facts, metadata_failures = card_facts(extraction.metadata, profile.dateFormat, batch.period)
     return Analysis(
         layout_id=profile.id,
         layout_version=profile.version,
@@ -284,8 +290,9 @@ def _analysed(
         counts=dict(Counter(item.status for item in verdicts)),
         rows_extracted=len(batch.rows) + len(batch.failures),
         page_count=extraction.page_count,
-        metadata=extraction.metadata,
+        metadata=facts,
         account_number_raw=extraction.account_number_raw,
+        metadata_failures=metadata_failures,
     )
 
 

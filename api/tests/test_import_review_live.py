@@ -424,7 +424,15 @@ def test_accepted_rows_reach_the_ledger(live: Staged) -> None:
     response = live.commit(batch)
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"batchId": batch, "rowsImported": 2, "status": "completed"}
+    # Exact, including the two fields slice 1.4 added: a bank statement writes no card cycle
+    # and has nothing to report missing, and saying so is part of the contract.
+    assert response.json() == {
+        "batchId": batch,
+        "rowsImported": 2,
+        "status": "completed",
+        "cardStatementId": None,
+        "cardStatementMissing": [],
+    }
     assert live.ledger_rows() == 2
     with live.conn.cursor() as cur:
         cur.execute("SELECT source, import_batch_id, source_row_number FROM transaction ORDER BY 3")

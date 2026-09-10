@@ -67,6 +67,7 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
     },
     rows: [],
     failures: [],
+    metadataFailures: [],
     ...overrides,
   };
 }
