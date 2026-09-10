@@ -6,6 +6,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".pre-commit-config.yaml"
+CI = ROOT / ".github/workflows/ci.yml"
+VERIFY = ROOT / ".claude/skills/verify/SKILL.md"
 
 
 def _hook(hook_id: str) -> str:
@@ -38,6 +40,12 @@ def test_full_safety_suite_remains_on_pre_push() -> None:
         "db-invariants",
     ):
         assert "stages: [pre-push]" in _hook(hook_id)
+
+
+def test_markdown_lint_remains_in_ci_and_verify() -> None:
+    command = "pre-commit run markdownlint --all-files --hook-stage pre-push"
+    assert command in CI.read_text()
+    assert command in VERIFY.read_text()
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:
