@@ -1,9 +1,10 @@
-"""Slice 1.3 task 3b3a: transfers through the app — the reads.
+"""Slice 1.3 tasks 3b3a and 3b3b: transfers through the app.
 
 Candidates are computed over committed transactions, not stored, and confirmed on the
-transactions screen (ADR-0017, superseding ADR-0007). **Nothing in this module writes.** Scoring
-proposes; only a request naming the pair links it, and that request is 3b3b's `POST /transfers`
-through `confirm_transfer()`. A wrong silent link removes a genuine expense from spending and
+transactions screen (ADR-0017, superseding ADR-0007). **The reads write nothing.** Scoring
+proposes; only `POST /transfers`, naming the pair, links it — through `confirm_transfer()`, the
+one path that moves both legs' `transfer_id` and `txn_type` together (V20).
+A wrong silent link removes a genuine expense from spending and
 stays invisible for months, which is why even a score of 1.0 is returned as a suggestion.
 
 The scorer is `ingest/transfers.py`, and both candidate routes call it: §6 of
@@ -22,10 +23,10 @@ from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, scope_to_owner
 from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match
 from ..money import _fixed, _out
 from .transactions import COLUMNS, FIELDS, FROM, TransactionRow, transaction_row
@@ -108,6 +109,9 @@ class TransferRow(BaseModel):
     matchMethod: str
     status: str
     notes: str | None
+    # Invariant 7: a cost derived from a carried-forward rate is not a cost anyone observed.
+    # Derived on read from the rate row rather than stored, so it cannot drift from it.
+    costIsApproximate: bool
 
 
 class TransfersResponse(BaseModel):
@@ -120,7 +124,13 @@ TRANSFER_COLUMNS = """id, source_account_id, destination_account_id, source_tran
     destination_currency, transfer_date, settlement_date, implied_rate, market_rate,
     fx_spread_pct, fx_spread_cost_source, explicit_fee_amount, explicit_fee_currency,
     total_cost_source, transfer_kind::text, provider, match_confidence, match_method,
-    status::text, notes"""
+    status::text, notes,
+    market_rate IS NOT NULL AND EXISTS (
+        SELECT 1 FROM fx_rate f JOIN household h ON h.id = transfer.household_id
+         WHERE f.rate_date = transfer.transfer_date
+           AND f.quote_currency = h.base_currency
+           AND f.base_currency IN (transfer.source_currency, transfer.destination_currency)
+           AND f.is_carried_forward)"""
 TRANSFER_FIELDS = list(TransferRow.model_fields)
 _DECIMAL_FIELDS = {
     "sourceAmount",
@@ -211,21 +221,24 @@ class _Scorer:
             for on, currency, rate in cur.fetchall():
                 self.rates.setdefault(on, {})[currency] = Decimal(rate)
 
+    def market_rate(self, debit: _Loaded, credit: _Loaded) -> Decimal | None:
+        """The rate for the debit's booked date: the day the money left is the day it was
+        converted, whatever day it arrived. None for one currency — there is nothing to
+        convert — and None where no rate is held for the day."""
+        if debit.leg.currency == credit.leg.currency:
+            return None
+        return pair_rate(
+            self.rates.get(debit.leg.booked_date, {}),
+            self.base,
+            debit.leg.currency,
+            credit.leg.currency,
+        )
+
     def score(self, debit: _Loaded, credit: _Loaded) -> Candidate:
         kind = propose_kind(debit.leg, credit.leg, destination_is_card=credit.is_card)
-        # The rate for the debit's booked date: the day the money left is the day it was
-        # converted, whatever day it arrived.
-        rate = None
-        if debit.leg.currency != credit.leg.currency:
-            rate = pair_rate(
-                self.rates.get(debit.leg.booked_date, {}),
-                self.base,
-                debit.leg.currency,
-                credit.leg.currency,
-            )
         evidence = Evidence(
             kind=kind,
-            market_rate=rate,
+            market_rate=self.market_rate(debit, credit),
             confirmed_pairs=self.history.get((debit.leg.account_id, credit.leg.account_id), 0),
         )
         scored = score_match(debit.leg, credit.leg, evidence)
@@ -391,10 +404,164 @@ def list_transfers(
             (*params, limit, offset),
         )
         rows = cur.fetchall()
-    transfers = []
-    for values in rows:
-        fields = dict(zip(TRANSFER_FIELDS, values, strict=True))
-        for name in _DECIMAL_FIELDS:
-            fields[name] = _out(fields[name])
-        transfers.append(TransferRow(**fields))
-    return TransfersResponse(transfers=transfers, total=int(counted[0]) if counted else 0)
+    return TransfersResponse(
+        transfers=[_transfer_row(values) for values in rows],
+        total=int(counted[0]) if counted else 0,
+    )
+
+
+def _transfer_row(values: tuple[Any, ...]) -> TransferRow:
+    fields = dict(zip(TRANSFER_FIELDS, values, strict=True))
+    for name in _DECIMAL_FIELDS:
+        fields[name] = _out(fields[name])
+    return TransferRow(**fields)
+
+
+def _read_transfer(cur: psycopg.Cursor[Any], transfer_id: UUID, household_id: UUID) -> TransferRow:
+    cur.execute(
+        f"SELECT {TRANSFER_COLUMNS} FROM transfer WHERE id = %s AND household_id = %s",
+        (transfer_id, household_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=404, detail="transfer not found")
+    return _transfer_row(found)
+
+
+class TransferCreate(BaseModel):
+    sourceTransactionId: UUID
+    destinationTransactionId: UUID
+    # True when the owner is confirming a pair the scorer proposed, false when they picked the
+    # pair themselves. It decides `match_method` and whether a confidence is recorded; the
+    # score itself is recomputed here and never taken from the request.
+    fromCandidate: bool = False
+    notes: str | None = Field(default=None, max_length=500)
+
+
+# `multi-currency-and-fx.html` §5, in NUMERIC. Each figure derives from the one stored before
+# it — the spread from the stored implied and market rates, the cost from the stored spread —
+# so every stored figure can be recomputed from the figures stored beside it, the rule
+# `money._frozen` applies to a transaction's frozen amounts. A null market rate nulls
+# everything derived from it: a blank, never a guess (Invariant 7). No fee is stated by any
+# statement this ledger reads, so `explicit_fee_amount` stays null and the total is the spread.
+FX_COST = """
+    WITH observed AS (
+        SELECT id, round(destination_amount / source_amount, 10) AS implied,
+               %s::numeric AS market
+          FROM transfer WHERE id = %s
+    ), spread AS (
+        SELECT id, implied, market, round((market - implied) / market * 100, 4) AS pct
+          FROM observed
+    )
+    UPDATE transfer t
+       SET implied_rate = spread.implied,
+           market_rate = spread.market,
+           fx_spread_pct = spread.pct,
+           fx_spread_cost_source = round(t.source_amount * spread.pct / 100, 4),
+           total_cost_source = round(t.source_amount * spread.pct / 100, 4),
+           updated_at = now()
+      FROM spread
+     WHERE t.id = spread.id"""
+
+
+@router.post("/transfers", status_code=201)
+def create_transfer(
+    body: TransferCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> TransferRow:
+    """Confirm a proposed pair, or link one the owner picked, through `confirm_transfer()`.
+
+    Nothing calls this but a request naming both legs: there is no code path from a score to a
+    link (ADR-0007). One transaction, so a refusal anywhere writes nothing at all.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        loaded = _load(
+            cur, owner.household_id, {body.sourceTransactionId, body.destinationTransactionId}
+        )
+        debit = loaded.get(body.sourceTransactionId)
+        credit = loaded.get(body.destinationTransactionId)
+        # One answer for "no such transaction" and "another household's".
+        if debit is None or credit is None:
+            raise HTTPException(status_code=404, detail="transaction not found")
+        if debit.leg.account_id == credit.leg.account_id:
+            raise HTTPException(
+                status_code=422, detail="a transfer moves money between two accounts"
+            )
+        if debit.leg.amount >= 0 or credit.leg.amount <= 0:
+            raise HTTPException(
+                status_code=422,
+                detail="the source must be money leaving and the destination money arriving",
+            )
+        # Unreachable-by-construction behind the sign check above: a debit can only be a
+        # source and a credit only a destination, so a leg reused in its own role is refused
+        # by V20's unique indexes with this same 409. Kept so the refusal happens before any
+        # write, and says the same thing if a later route relaxes the sign rule.
+        if debit.row.transferId is not None or credit.row.transferId is not None:
+            raise HTTPException(
+                status_code=409, detail="a transaction is already a leg of a confirmed transfer"
+            )
+
+        scorer = _Scorer(cur, owner.household_id, [debit, credit])
+        proposal = scorer.score(debit, credit)
+        cur.execute(
+            """INSERT INTO transfer (household_id, source_account_id, destination_account_id,
+                                     source_transaction_id, destination_transaction_id,
+                                     source_amount, source_currency, destination_amount,
+                                     destination_currency, transfer_date, transfer_kind,
+                                     match_confidence, match_method, notes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::transfer_kind, %s, %s, %s)
+               RETURNING id""",
+            (
+                owner.household_id,
+                debit.leg.account_id,
+                credit.leg.account_id,
+                debit.row.id,
+                credit.row.id,
+                abs(debit.leg.amount),
+                debit.leg.currency,
+                credit.leg.amount,
+                credit.leg.currency,
+                debit.leg.booked_date,
+                proposal.proposedKind,
+                Decimal(str(round(proposal.score, 3))) if body.fromCandidate else None,
+                "auto" if body.fromCandidate else "user_created",
+                body.notes,
+            ),
+        )
+        created = cur.fetchone()
+        assert created is not None
+        transfer_id = created[0]
+
+        scope_to_owner(conn, owner.user_id)
+        try:
+            cur.execute("SELECT confirm_transfer(%s)", (transfer_id,))
+            # Also unreachable from this route today — the one shape only the trigger catches,
+            # a transaction as source here and destination there, needs a leg of each sign.
+            # `trg_one_transfer_per_leg` is deferred to commit. Asked for here, a leg another
+            # confirmed transfer already claims is a 409 on this request rather than a failed
+            # commit after the response has been built.
+            cur.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        except psycopg.errors.UniqueViolation:
+            raise HTTPException(
+                status_code=409, detail="a transaction is already a leg of a confirmed transfer"
+            ) from None
+        except psycopg.errors.InsufficientPrivilege:
+            raise HTTPException(status_code=404, detail="transaction not found") from None
+
+        if debit.leg.currency != credit.leg.currency:
+            cur.execute(FX_COST, (scorer.market_rate(debit, credit), transfer_id))
+        return _read_transfer(cur, transfer_id, owner.household_id)
+
+
+@router.delete("/transfers/{transfer_id}")
+def unlink_transfer(
+    transfer_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> TransferRow:
+    """Release both legs through `unlink_transfer()`. The row is kept as `rejected`, which is
+    what stops the pair being proposed again."""
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        try:
+            cur.execute("SELECT unlink_transfer(%s)", (transfer_id,))
+        except psycopg.errors.NoDataFound, psycopg.errors.InsufficientPrivilege:
+            raise HTTPException(status_code=404, detail="transfer not found") from None
+        return _read_transfer(cur, transfer_id, owner.household_id)

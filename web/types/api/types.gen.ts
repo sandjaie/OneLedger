@@ -2028,6 +2028,28 @@ export type TransactionsResponse = {
 };
 
 /**
+ * TransferCreate
+ */
+export type TransferCreate = {
+    /**
+     * Sourcetransactionid
+     */
+    sourceTransactionId: string;
+    /**
+     * Destinationtransactionid
+     */
+    destinationTransactionId: string;
+    /**
+     * Fromcandidate
+     */
+    fromCandidate?: boolean;
+    /**
+     * Notes
+     */
+    notes?: string | null;
+};
+
+/**
  * TransferRow
  */
 export type TransferRow = {
@@ -2127,6 +2149,10 @@ export type TransferRow = {
      * Notes
      */
     notes: string | null;
+    /**
+     * Costisapproximate
+     */
+    costIsApproximate: boolean;
 };
 
 /**
@@ -3149,6 +3175,61 @@ export type ListTransfersTransfersGetResponses = {
 };
 
 export type ListTransfersTransfersGetResponse = ListTransfersTransfersGetResponses[keyof ListTransfersTransfersGetResponses];
+
+export type CreateTransferTransfersPostData = {
+    body: TransferCreate;
+    path?: never;
+    query?: never;
+    url: '/transfers';
+};
+
+export type CreateTransferTransfersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateTransferTransfersPostError = CreateTransferTransfersPostErrors[keyof CreateTransferTransfersPostErrors];
+
+export type CreateTransferTransfersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TransferRow;
+};
+
+export type CreateTransferTransfersPostResponse = CreateTransferTransfersPostResponses[keyof CreateTransferTransfersPostResponses];
+
+export type UnlinkTransferTransfersTransferIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Transfer Id
+         */
+        transfer_id: string;
+    };
+    query?: never;
+    url: '/transfers/{transfer_id}';
+};
+
+export type UnlinkTransferTransfersTransferIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkTransferTransfersTransferIdDeleteError = UnlinkTransferTransfersTransferIdDeleteErrors[keyof UnlinkTransferTransfersTransferIdDeleteErrors];
+
+export type UnlinkTransferTransfersTransferIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: TransferRow;
+};
+
+export type UnlinkTransferTransfersTransferIdDeleteResponse = UnlinkTransferTransfersTransferIdDeleteResponses[keyof UnlinkTransferTransfersTransferIdDeleteResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
