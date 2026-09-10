@@ -170,6 +170,67 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- A version cited by a run is historical evidence. Its identity and evidence cannot be
+-- rewritten in place; revocation is the supported lifecycle change and new evidence appends a
+-- successor version under the same stable knowledge identity.
+BEGIN;
+DO $$
+DECLARE f RECORD; knowledge UUID; version1 UUID; version2 UUID; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0020_fixture();
+  INSERT INTO classification_knowledge (household_id)
+  VALUES (f.h1) RETURNING id INTO knowledge;
+  INSERT INTO classification_knowledge_version (
+    household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+    matcher_version, scope, state, verified_at
+  ) VALUES (
+    f.h1, knowledge, 1, 'owner', 'owner one', 'original synthetic evidence',
+    'matcher-v1', '{"direction":"debit"}', 'active', now()
+  ) RETURNING id INTO version1;
+  INSERT INTO classification_run (
+    household_id, knowledge_version_id, actor_user_id, state, reason, expires_at
+  ) VALUES (
+    f.h1, version1, f.u1, 'proposed', 'references the first evidence version',
+    now() + interval '1 hour'
+  );
+
+  BEGIN
+    UPDATE classification_knowledge_version
+       SET attribution = 'rewritten attribution', version = 7
+     WHERE id = version1;
+    RAISE EXCEPTION 'referenced evidence and identity fields must not be rewritten';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%classification_knowledge_version evidence is immutable%',
+      'expected immutable evidence refusal, got ' || refusal;
+  END;
+
+  UPDATE classification_knowledge_version
+     SET state = 'revoked', revoked_at = now()
+   WHERE id = version1;
+  INSERT INTO classification_knowledge_version (
+    household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+    matcher_version, scope, state, verified_at
+  ) VALUES (
+    f.h1, knowledge, 2, 'owner', 'owner one', 'successor synthetic evidence',
+    'matcher-v2', '{"direction":"debit","service":"purchase"}', 'active', now()
+  ) RETURNING id INTO version2;
+
+  ASSERT (SELECT attribution FROM classification_knowledge_version WHERE id = version1)
+           = 'owner one',
+    'the referenced version must retain its original evidence';
+  ASSERT (SELECT version FROM classification_knowledge_version WHERE id = version1) = 1,
+    'the referenced version must retain its identity';
+  ASSERT (SELECT state FROM classification_knowledge_version WHERE id = version1) = 'revoked',
+    'the original version can be revoked';
+  ASSERT (SELECT version FROM classification_knowledge_version WHERE id = version2) = 2,
+    'new evidence appends the next version';
+  ASSERT (SELECT state FROM classification_knowledge_version WHERE id = version2) = 'active',
+    'the successor version can become active';
+  RAISE NOTICE 'PASS 0020 evidence versions append and only their lifecycle changes';
+END $$;
+ROLLBACK;
+
 -- Composite foreign keys carry the household alongside every reference. A valid UUID from a
 -- different household is not merely hidden by RLS; it is impossible to persist.
 BEGIN;

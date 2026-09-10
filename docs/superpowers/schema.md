@@ -798,9 +798,11 @@ reference, source provenance or money field is refused. Category and merchant re
 shared system set or the row's household; a rule reference must belong to the household.
 
 The household-leading keys on `app_user` and `transaction` support the composite foreign keys
-above. All five new tables carry RLS. Preview items and decisions are immutable; a decision must
-equal its run item's expected/proposed state. A correction appends a new decision whose before
-state equals the prior event's after state and names it in `supersedes_decision_id`.
+above. All five new tables carry RLS. A knowledge version's identity and evidence are immutable;
+only `active` to `revoked` changes in place, and changed evidence appends a successor version.
+Preview items and decisions are immutable; a decision must equal its run item's expected/proposed
+state. A correction appends a new decision whose before state equals the prior event's after state
+and names it in `supersedes_decision_id`.
 
 ---
 

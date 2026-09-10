@@ -66,6 +66,41 @@ CREATE TABLE classification_knowledge_version (
 CREATE UNIQUE INDEX idx_classification_knowledge_one_active_version
   ON classification_knowledge_version (household_id, knowledge_id) WHERE state = 'active';
 
+CREATE FUNCTION assert_classification_knowledge_version_immutable() RETURNS TRIGGER
+  LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'classification_knowledge_version evidence is immutable; revoke it and append a successor';
+  END IF;
+  IF NEW.id              IS DISTINCT FROM OLD.id
+  OR NEW.household_id    IS DISTINCT FROM OLD.household_id
+  OR NEW.knowledge_id    IS DISTINCT FROM OLD.knowledge_id
+  OR NEW.version         IS DISTINCT FROM OLD.version
+  OR NEW.source_kind     IS DISTINCT FROM OLD.source_kind
+  OR NEW.source_url      IS DISTINCT FROM OLD.source_url
+  OR NEW.attribution     IS DISTINCT FROM OLD.attribution
+  OR NEW.evidence_note   IS DISTINCT FROM OLD.evidence_note
+  OR NEW.matcher_version IS DISTINCT FROM OLD.matcher_version
+  OR NEW.scope           IS DISTINCT FROM OLD.scope
+  OR NEW.verified_at     IS DISTINCT FROM OLD.verified_at
+  OR NEW.created_at      IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'classification_knowledge_version evidence is immutable; revoke it and append a successor';
+  END IF;
+  IF NEW.state IS NOT DISTINCT FROM OLD.state
+     AND NEW.revoked_at IS NOT DISTINCT FROM OLD.revoked_at THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.state = 'active' AND OLD.revoked_at IS NULL
+     AND NEW.state = 'revoked' AND NEW.revoked_at IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'classification_knowledge_version lifecycle only allows active to revoked';
+END $$;
+
+CREATE TRIGGER trg_classification_knowledge_version_immutable
+  BEFORE UPDATE OR DELETE ON classification_knowledge_version
+  FOR EACH ROW EXECUTE FUNCTION assert_classification_knowledge_version_immutable();
+
 -- The JSON snapshots contain the complete set of classification-derived fields, including
 -- explicit nulls. Requiring the full allowlist prevents a partial preview from applying against
 -- state it never checked, and prevents raw descriptions or money from being copied into history.

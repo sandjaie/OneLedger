@@ -840,11 +840,12 @@ column says it recorded none (Invariant I7).</p><p class="ddl-ref">Full DDL: <a 
 <h3 id="classification-decision-evidence">Decision evidence and preview scope</h3>
 <p><code>classification_knowledge</code> gives a household fact a stable identity, while numbered
 <code>classification_knowledge_version</code> rows preserve its bounded source attribution, matcher
-version, scope and active/revoked lifecycle. The supported evidence sources are private owner input,
-a public source, a statement or a model proposal. Public-source URLs are stored as references only;
-copied pages, private search queries and transaction originals do not belong in the evidence payload.
-Shared community packs are a later opt-in distribution mechanism, not a different evidence source or
-a public copy of household knowledge.</p>
+version, scope and active/revoked lifecycle. Identity and evidence fields never change in place:
+revocation is the only lifecycle transition, and changed evidence appends a successor version. The
+supported evidence sources are private owner input, a public source, a statement or a model proposal.
+Public-source URLs are stored as references only; copied pages, private search queries and transaction
+originals do not belong in the evidence payload. Shared community packs are a later opt-in
+distribution mechanism, not a different evidence source or a public copy of household knowledge.</p>
 <p>A <code>classification_run</code> owns an expiring, household-scoped preview and its idempotency
 key. Every <code>classification_run_item</code> names one exact transaction, its immutable source key
 and update version, and complete expected/proposed derived state. The state allowlist contains
