@@ -52,8 +52,8 @@ request.
 | 3a5 — the rules screen | `feature/p1-3a5-rules-screen` | Delivered | [#86](https://github.com/sandjaie/OneLedger/pull/86) |
 | 3b1 — the transfer store | `feature/p1-3b1-transfer-schema` | Delivered | [#90](https://github.com/sandjaie/OneLedger/pull/90) |
 | 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | this branch |
-| 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | this branch |
-| 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | [#94](https://github.com/sandjaie/OneLedger/pull/94) |
+| 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Delivered | this branch |
 | 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
 | the acceptance run | — | Not run | — |
 
@@ -80,6 +80,16 @@ was checked into a document first.
 - **Manual-linking peers look 31 days out**, where the candidate scan stops at §3's widest
   window of 7: the owner is choosing, and a remittance that took ten days is still theirs to
   link after the scorer's date signal has given up on it.
+- **3b3b derives each FX figure from the stored one before it.** The spread cost is the source
+  amount times the *stored* four-place spread, not the unrounded one, so every stored figure
+  can be recomputed from its neighbours — the rule `money._frozen` applies to frozen amounts.
+  On §5's own example that stores 77.6050, where the unrounded chain gives 77.6053.
+- **`costIsApproximate` is derived on read**, from the rate row's `is_carried_forward`, rather
+  than stored: 3b3 carries no migration, and a derived flag cannot drift from the rate it
+  describes.
+- **No fee is taken or stored yet.** No statement this ledger reads itemises a transfer fee, so
+  `explicit_fee_amount` stays null and the total cost is the spread. A fee input is its own
+  task once a source for one exists.
 - **3b2 adds `propose_kind()` and `band()`** beside `score_match()`, so 3b3 takes the kind and
   the presentation band from the same module rather than answering either a second way.
 
