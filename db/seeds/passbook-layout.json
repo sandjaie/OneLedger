@@ -1,0 +1,65 @@
+{
+  "name": "Passbook statement",
+  "fingerprints": [
+    "Tran\\s*Date\\s*Chq\\s*No\\s*Particulars",
+    "OPENING\\s*BALANCE",
+    "for\\s*the\\s*period\\s*\\(From"
+  ],
+  "headerRowPattern": "Tran\\s*Date\\s*Chq\\s*No\\s*Particulars\\s*Debit\\s*Credit\\s*Balance",
+  "columns": [
+    {
+      "field": "booked_date",
+      "xMin": 20.0,
+      "xMax": 84.0,
+      "label": "Tran Date"
+    },
+    {
+      "field": "reference",
+      "xMin": 84.0,
+      "xMax": 128.0,
+      "label": "Chq No"
+    },
+    {
+      "field": "description",
+      "xMin": 128.0,
+      "xMax": 330.0,
+      "label": "Particulars"
+    },
+    {
+      "field": "debit",
+      "xMin": 330.0,
+      "xMax": 390.0,
+      "label": "Debit"
+    },
+    {
+      "field": "credit",
+      "xMin": 390.0,
+      "xMax": 455.0,
+      "label": "Credit"
+    },
+    {
+      "field": "running_balance",
+      "xMin": 455.0,
+      "xMax": 535.0,
+      "label": "Balance"
+    }
+  ],
+  "dateFormat": "dd-MM-yyyy",
+  "signConvention": "debit_credit_columns",
+  "invertsSign": false,
+  "chronologicalOrder": "ascending",
+  "rowStartRule": "has_date",
+  "continuationRule": "blank_date_and_money_columns",
+  "skipLinePatterns": [
+    "OPENING BALANCE",
+    "CLOSING BALANCE"
+  ],
+  "openingBalancePattern": "OPENING\\s*BALANCE\\s*([\\d,]+\\.\\d{2})",
+  "closingBalancePattern": "CLOSING\\s*BALANCE\\s*([\\d,]+\\.\\d{2})",
+  "hasRunningBalance": true,
+  "quirks": [],
+  "metadataPatterns": {
+    "period_start": "\\(From\\s*:\\s*(\\d{2}-\\d{2}-\\d{4})\\s*To\\s*:",
+    "period_end": "\\(From\\s*:\\s*\\d{2}-\\d{2}-\\d{4}\\s*To\\s*:\\s*(\\d{2}-\\d{2}-\\d{4})\\)"
+  }
+}

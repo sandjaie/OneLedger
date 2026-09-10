@@ -200,6 +200,63 @@ def test_continuation_joins_description_fragments_in_physical_order() -> None:
     assert dropped.lines_unparsed == 2
 
 
+def test_the_stricter_continuation_rule_separates_wrapped_narration_from_a_paragraph() -> None:
+    """M2 spec §7 item 13: "no date" and "the date column is blank" are different questions.
+
+    A wrapped narration sits inside the description column and leaves the others empty. A closing
+    paragraph is set across the page, so it fills the date and money columns with prose that
+    merely fails to parse — and `no_date_and_no_amount` cannot tell the two apart, appending the
+    whole legal block to the last transaction of the statement.
+    """
+    document = page(
+        [word(20, 76, "01/02/2024"), word(130, 170, "FIRST"), word(445, 482, "17.25")],
+        # Wrapped narration: the description column only.
+        [word(130, 185, "SECOND", top=30.0)],
+        # A closing paragraph, set across the page: prose in the date and amount columns too.
+        [
+            word(20, 90, "Nothing", top=50.0),
+            word(130, 300, "in this paragraph is a sentence", top=50.0),
+            word(410, 520, "any producer wrote", top=50.0),
+        ],
+    )
+
+    strict = extract_pages(
+        profile(rowStartRule="has_date", continuationRule="blank_date_and_money_columns"),
+        [document],
+    )
+    loose = extract_pages(
+        profile(rowStartRule="has_date", continuationRule="no_date_and_no_amount"),
+        [document],
+    )
+
+    assert len(strict.rows) == 1
+    assert strict.rows[0].fields["description"] == "FIRST SECOND"
+    # The paragraph is dropped and counted, never silently discarded (Invariant I7).
+    assert strict.lines_unparsed == 1
+
+    # The looser rule takes the paragraph into the transaction, and says nothing was lost.
+    assert loose.rows[0].fields["description"] == ("FIRST SECOND in this paragraph is a sentence")
+    assert loose.lines_unparsed == 0
+
+
+def test_the_stricter_rule_still_needs_a_description_and_no_amount() -> None:
+    """It narrows `no_date_and_no_amount`; it does not replace its two conditions."""
+    priced = page(
+        [word(20, 76, "01/02/2024"), word(130, 170, "FIRST"), word(445, 482, "17.25")],
+        # A blank date column, but the amount column carries a figure: a row that lost its date,
+        # not a continuation of the one above, and appending it would hide the loss.
+        [word(130, 185, "SECOND", top=30.0), word(445, 482, "9.00", top=30.0)],
+    )
+
+    result = extract_pages(
+        profile(rowStartRule="has_date", continuationRule="blank_date_and_money_columns"),
+        [priced],
+    )
+
+    assert result.rows[0].fields["description"] == "FIRST"
+    assert result.lines_unparsed == 1
+
+
 def test_matches_uses_fingerprints_as_evidence_and_never_the_filename_alone() -> None:
     candidate = profile()
 
