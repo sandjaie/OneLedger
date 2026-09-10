@@ -89,6 +89,20 @@ tests skip; with `.env` exported instead they **fail**, because `tests/live_data
 refuses a database holding anything those fixtures would empty and refuses a split where the
 fixtures and the routes point at different databases.
 
+**Every checkout gets its own test server, a worktree included.** Each worktree under
+`.claude/worktrees/` is its own compose project, so `up` there starts `<worktree>-db-test-1` on
+the `<worktree>_pgdata_test` volume. The port is `TEST_DB_PORT` if set, then whatever this
+project's running `db-test` already holds, then 55434, then any free one. `env` reports the
+port the running container holds. When the container does not start or never accepts a
+connection, `up` exits non-zero, says why on stderr and prints `false`, so the `eval` fails too.
+It never exports a database that is not there. On 10 September 2026 a worktree's `up` could not
+bind the main checkout's port and printed nothing, so the live tests skipped and looked green.
+
+A new worktree has no `.env`, and compose refuses to load the project without one. Claude Code
+copies it into each worktree it creates, listed in `.worktreeinclude`. For a worktree made any
+other way, copy it from the main checkout yourself. Copy nothing else: `pdf-statements/` and
+`backups/` hold real data and stay in the main checkout.
+
 **Each pytest run then gets a database of its own on that server.** `api/tests/conftest.py`
 creates `pytest_<pid>_<n>` at the session start, migrates it from empty with the checkout's own
 migrations, seeds it, points the fixtures and the routes at it, and drops it at the end. Several
@@ -107,7 +121,9 @@ command removed `pgdata` and `documents` — the ledger and every original state
 back to. Both volumes are **external** now (`docker-compose.yml`), so `down -v` is refused on
 them whatever project it runs in; create them once with `docker volume create oneledger_pgdata`
 and `docker volume create oneledger_documents` before the first `up`. `pgdata_test` is
-deliberately not external: it exists to be destroyed.
+deliberately not external: it exists to be destroyed. `down` removes this checkout's own
+`<project>_pgdata_test` and no other. It used to remove `oneledger_pgdata_test` by name, which
+from a worktree was the main checkout's volume.
 
 **A scratch stack brings its own volumes.** The external names resolve per compose project —
 `${COMPOSE_PROJECT_NAME:-oneledger}_pgdata` — so under any project but the default one they
