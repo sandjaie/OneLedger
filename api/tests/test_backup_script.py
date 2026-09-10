@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -30,7 +31,7 @@ def tree(tmp_path: Path) -> Path:
 
 
 def run(
-    tree: Path, *args: str, dump: str = "echo synthetic-dump"
+    tree: Path, *args: str, dump: str = "echo synthetic-dump", prefix: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     pg_dump = tree / "bin" / "pg_dump"
     pg_dump.write_text(f"#!/bin/sh\n{dump}\n")
@@ -40,6 +41,8 @@ def run(
         "BACKUP_PASSPHRASE": PASSPHRASE,
         "DATABASE_URL": "postgresql://synthetic.invalid/none",
     }
+    if prefix:
+        env["BACKUP_PREFIX"] = prefix
     return subprocess.run(
         ["bash", str(tree / "scripts" / "backup-db.sh"), *args],
         env=env,
@@ -57,6 +60,15 @@ def backup(tree: Path, name: str, age_seconds: int) -> Path:
     return path
 
 
+def backups(tree: Path, count: int, age_seconds: int) -> list[Path]:
+    """`count` backups, oldest name first, one an hour from 1 July 2026, all `age_seconds` old."""
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    return [
+        backup(tree, f"oneledger-{start + timedelta(hours=i):%Y%m%dT%H%M%SZ}.dump.enc", age_seconds)
+        for i in range(count)
+    ]
+
+
 def names(tree: Path) -> list[str]:
     return sorted(path.name for path in (tree / "backups").iterdir())
 
@@ -68,6 +80,16 @@ def test_a_tick_within_a_day_of_the_last_backup_takes_none(tree: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert names(tree) == ["oneledger-20260910T080000Z.dump.enc"]
+
+
+def test_run_by_hand_it_dumps_however_recent_the_last_backup(tree: Path) -> None:
+    # The owner's own backup before a risky change must not be skipped as "not due".
+    backup(tree, "oneledger-20260910T080000Z.dump.enc", HOUR)
+
+    result = run(tree)
+
+    assert result.returncode == 0, result.stderr
+    assert len(names(tree)) == 2
 
 
 def test_a_tick_a_day_after_the_last_backup_takes_an_encrypted_one(tree: Path) -> None:
@@ -96,24 +118,48 @@ def test_a_tick_a_day_after_the_last_backup_takes_an_encrypted_one(tree: Path) -
     assert decrypted.stdout == b"synthetic-dump\n"
 
 
-def test_a_backup_prunes_what_is_older_than_thirty_days(tree: Path) -> None:
-    backup(tree, "oneledger-20260801T000000Z.dump.enc", 40 * DAY)
-    backup(tree, "oneledger-20260812T000000Z.dump.enc", 29 * DAY)
+def test_another_stacks_fresh_dump_is_not_this_stacks_backup(tree: Path) -> None:
+    # A scratch project run from this checkout writes beside the ledger's backups; its dump of
+    # an empty database must not make the ledger's tick believe it is covered.
+    backup(tree, "oneledger-verify-20260910T080000Z.dump.enc", HOUR)
+
+    result = run(tree, "--if-due")
+
+    assert result.returncode == 0, result.stderr
+    assert [name for name in names(tree) if not name.startswith("oneledger-verify-")]
+    assert run(tree, prefix="oneledger-verify").returncode == 0
+    assert sum(name.startswith("oneledger-verify-") for name in names(tree)) == 2
+
+
+def test_retention_keeps_the_thirty_newest_however_old_they_are(tree: Path) -> None:
+    # The owner was away for more than a month and the stack was reset: the first dump is of an
+    # empty database, and it must not age out every copy of the real one.
+    old = backups(tree, 31, 40 * DAY)
 
     result = run(tree)
 
     assert result.returncode == 0, result.stderr
     kept = names(tree)
-    assert "oneledger-20260801T000000Z.dump.enc" not in kept
-    assert "oneledger-20260812T000000Z.dump.enc" in kept
-    assert len(kept) == 2
+    assert len(kept) == 30
+    assert old[0].name not in kept
+    assert old[1].name not in kept
+    assert old[2].name in kept
+
+
+def test_retention_never_prunes_a_backup_younger_than_thirty_days(tree: Path) -> None:
+    backups(tree, 35, 29 * DAY)
+
+    result = run(tree)
+
+    assert result.returncode == 0, result.stderr
+    assert len(names(tree)) == 36
 
 
 def test_a_failed_dump_prunes_nothing_and_leaves_nothing(tree: Path) -> None:
     # A job that cannot dump must not age out the last good copies while it keeps failing.
-    backup(tree, "oneledger-20260801T000000Z.dump.enc", 40 * DAY)
+    backups(tree, 31, 40 * DAY)
 
     result = run(tree, dump="exit 1")
 
     assert result.returncode != 0
-    assert names(tree) == ["oneledger-20260801T000000Z.dump.enc"]
+    assert len(names(tree)) == 31

@@ -201,6 +201,15 @@ describe("authenticated workspace", () => {
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
   });
 
+  it("opens Settings on the data-quality report", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const request = requestThat(household, catalogue, []);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    expect(request).toHaveBeenCalledWith("/doctor", undefined);
+  });
+
   it("renders the Settings FX rate provenance for the requested date", async () => {
     window.history.replaceState(null, "", "/settings");
     render(<Workspace request={requestThat(household, catalogue, [], [rate])} navigate={vi.fn()} />);

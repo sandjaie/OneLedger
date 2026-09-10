@@ -616,7 +616,7 @@ Monthly  copy of both to a second physical location
 <p>The daily row runs itself. The compose <code>backup</code> service, which the api depends on,
 calls <code>scripts/backup-db.sh --if-due</code> every hour: it dumps only when the newest backup is
 more than a day old, so a stack that was down catches up on its first tick, and then prunes what is
-older than thirty days. <strong>Settings › Data Quality</strong> (<code>GET /doctor</code>) warns when
+older than thirty days, never below the thirty newest. <strong>Settings › Data Quality</strong> (<code>GET /doctor</code>) warns when
 two days pass without one and says how many transactions the newest backup does not hold. The weekly
 and monthly rows are not automated yet.</p>
 <p>Restore is tested <strong>quarterly</strong> against a scratch database, and the test is a checklist item in

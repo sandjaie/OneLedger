@@ -750,7 +750,9 @@ Quarterly RESTORE TEST → scratch database                verified, not assumed
 </code></pre>
 <p>The daily row is taken by the compose <code>backup</code> service, not by anyone remembering, and
 Settings › Data Quality says when it has not been
-(<a href="../design/architecture.html#10-backups">architecture.html</a> §10).</p>
+(<a href="../design/architecture.html#10-backups">architecture.html</a> §10). Retention never
+drops below the thirty newest, so a dump of an emptied database cannot age out the last good
+ones.</p>
 <p>The quarterly restore test is a checklist item in
 <a href="./testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
 restored is a hypothesis.</p>

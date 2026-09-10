@@ -86,6 +86,12 @@ services:
       DATABASE_URL: "postgresql://"
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
       BACKUP_DIR: /oneledger/backups
+      # ./backups is per checkout, not per project, so each project names its own dumps, as
+      # the volumes below are named: a scratch stack's dump of an empty database is neither
+      # counted by the ledger's tick and Data Quality nor pruned with the ledger's backups.
+      BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}
+    # On a Linux host this runs as root and its dumps are root's, mode 600. Create backups/
+    # yourself before the first `up` so the directory stays yours; read a dump with sudo.
     volumes: ["./scripts:/oneledger/scripts:ro", "./backups:/oneledger/backups"]
     # tini passes the stop signal on, so a `docker compose stop` does not wait out the sleep.
     init: true
@@ -110,6 +116,7 @@ services:
       POSTGRES_PORT: 5432
       # Read-only below: GET /doctor reports how old the newest backup is, never touches one.
       BACKUP_DIR: /var/lib/oneledger/backups
+      BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}
     # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
     # reaches these over the compose network rather than the host interface.
     ports: ["127.0.0.1:8000:8000"]

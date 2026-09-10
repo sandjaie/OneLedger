@@ -23,7 +23,6 @@ router = APIRouter(tags=["doctor"])
 # The compose `backup` service takes one a day. Past two days a run has been missed, rather
 # than merely being due.
 STALE_AFTER = timedelta(days=2)
-BACKUP_NAME = re.compile(r"oneledger-(\d{8}T\d{6}Z)\.dump\.enc")
 
 
 class Finding(BaseModel):
@@ -46,17 +45,25 @@ def backup_dir() -> Path:
     return Path(configured) if configured else Path(__file__).resolve().parents[3] / "backups"
 
 
-def newest_backup(directory: Path) -> datetime | None:
-    """When the newest backup began, as its name records it; None when there is none.
+def newest_backup(directory: Path, prefix: str = "oneledger") -> datetime | None:
+    """When this stack's newest backup began, as its name records it; None when there is none.
 
-    The name is stamped before pg_dump takes its snapshot, so counting rows created after it
-    can only over-report what the backup lacks, never hide something it does not hold.
+    Only names carrying this stack's prefix count (scripts/backup-db.sh): a scratch stack's
+    dump of an empty database, written beside the ledger's, is not a backup of the ledger.
+
+    The name is stamped before pg_dump takes its snapshot, so a row created after the stamp is
+    counted even when the dump caught it. The count is not a guarantee in the other direction:
+    `created_at` is its transaction's start, so an import that began before the stamp and
+    committed after the snapshot is missing from the dump and not counted.
     """
-    stamps = [
-        datetime.strptime(match[1], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
-        for path in directory.glob("oneledger-*.dump.enc")
-        if (match := BACKUP_NAME.fullmatch(path.name))
-    ]
+    name = re.compile(rf"{re.escape(prefix)}-(\d{{8}}T\d{{6}}Z)\.dump\.enc")
+    stamps = []
+    for path in directory.glob(f"{prefix}-*.dump.enc"):
+        if match := name.fullmatch(path.name):
+            try:
+                stamps.append(datetime.strptime(match[1], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC))
+            except ValueError:
+                continue  # an impossible date is a hand-placed file, not a backup
     return max(stamps, default=None)
 
 
@@ -100,7 +107,7 @@ def backup_finding(newest: datetime | None, not_held: int, now: datetime) -> Fin
 
 @router.get("/doctor")
 def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorReport:
-    newest = newest_backup(backup_dir())
+    newest = newest_backup(backup_dir(), os.environ.get("BACKUP_PREFIX") or "oneledger")
     finding = backup_finding(
         newest, transactions_since(owner.household_id, newest), datetime.now(UTC)
     )
