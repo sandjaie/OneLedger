@@ -50,6 +50,7 @@ repos:
         language: system
         files: '\.md$'
         exclude: '^(web/node_modules|web/\.next|api/\.venv)/'
+        stages: [pre-push]
 
       - id: docs
         name: docs — links, html, adr numbering
@@ -70,14 +71,12 @@ repos:
         name: ruff — lint (api)
         entry: scripts/hooks/api.sh ruff check --fix
         language: system
-        pass_filenames: false
         files: '^api/.*\.py$'
 
       - id: ruff-format
         name: ruff — format (api)
         entry: scripts/hooks/api.sh ruff format
         language: system
-        pass_filenames: false
         files: '^api/.*\.py$'
 
       - id: mypy
@@ -86,12 +85,12 @@ repos:
         language: system
         pass_filenames: false
         files: '^api/.*\.py$'
+        stages: [pre-push]
 
       - id: eslint
         name: eslint (web)
         entry: scripts/hooks/web.sh lint
         language: system
-        pass_filenames: false
         files: '^web/.*\.(ts|tsx|js|jsx)$'
 
       - id: tsc
@@ -100,6 +99,7 @@ repos:
         language: system
         pass_filenames: false
         files: '^web/.*\.(ts|tsx)$'
+        stages: [pre-push]
 
       # ---- pre-push: the full suite, so a red test never reaches a PR ----
 

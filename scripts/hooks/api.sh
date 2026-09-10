@@ -9,4 +9,12 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-cd api && exec uv run "$@"
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    api/*) args+=("${arg#api/}") ;;
+    *) args+=("$arg") ;;
+  esac
+done
+
+cd api && exec uv run "${args[@]}"

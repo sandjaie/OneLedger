@@ -52,6 +52,12 @@ an implementer who edits the test has removed the finding rather than the defect
 invariant is genuinely wrong, that is a superseding ADR. The same rule binds the gates, and for
 the same reason — "What a gate never does", below.
 
+**The commit hook is the fast feedback loop, not the full gate.** It checks staged-file secrets,
+configuration syntax, whitespace, real-data exclusion, documentation structure, identifier rules,
+and file-scoped Ruff/format and ESLint. It performs no network fetch. Whole-project type systems,
+Markdown lint, tests, generated API contracts, database invariants and the diff budget run at
+pre-push. `/verify` and CI retain their owning whole-tree checks.
+
 ### 4. Gate — `/verify`, on a tree the implementer believes is finished
 
 Red is not reviewed. A failing test is a finding that already found itself.
@@ -70,6 +76,11 @@ style, scope-widening suggestions — are recorded in the PR's Notes and become 
 task if they are worth one. One round is the default; re-review only what the fixes themselves
 changed. If the fixes keep producing new findings, stop and raise it with the owner — that is a
 design problem, not a patch problem.
+
+For a branch that contains one reviewed task, that clean task review **is** the branch review. Do
+not dispatch another reviewer over the same base-to-head range. A fix receives one confirmation
+over the fix range. A branch containing several separately reviewed tasks gets one final review
+only for their combined integration surface, not a repetition of each task review.
 
 Nothing reaches `origin` unreviewed. A documentation-only branch carries no code for this gate
 to read: `scripts/check-docs.py` and the commit hooks are its gate, and the PR says so.
@@ -137,9 +148,9 @@ ledger's data directory under a second Postgres. Create `<project>_pgdata` and
 
 ### 6. Push — the hooks are the enforcement
 
-`pre-push` runs pytest, vitest, the SQL invariant tests — in a throwaway database on the test
-server, migrated from empty with the branch's own migrations and dropped after, never the
-working ledger — the generated-type check and
+`pre-push` runs mypy, both TypeScript compilers, Markdown lint, pytest, vitest, the SQL invariant
+tests — in a throwaway database on the test server, migrated from empty with the branch's own
+migrations and dropped after, never the working ledger — the generated-type check and
 `scripts/check-diff-size.sh` (soft 800 / 1,600, hard stop 1,200 / 2,400; the
 `ONELEDGER_SIZE_OVERRIDE` reason exists for what genuinely cannot be split, and it goes in the
 PR). A skill can be skipped by an agent in a hurry; a hook cannot. `--no-verify` is not an

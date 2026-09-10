@@ -11,7 +11,15 @@ Run each section in order and stop at the first failure. Report every section as
 with **the number of checks that actually ran**, then one verdict line.
 
 1. `python3 scripts/check-docs.py` — links, ADR link labels, HTML, no statement tracked by git
-2. `pre-commit run --all-files` — secrets, formatting, and every commit-stage hook
+2. Commit-stage hooks plus the Markdown check intentionally reserved for pre-push:
+
+   ```bash
+   pre-commit run --all-files
+   pre-commit run markdownlint --all-files --hook-stage pre-push
+   ```
+
+   These cover secrets, formatting and every commit-stage hook without putting a network-resolved
+   Markdown runner in the ordinary commit path.
 3. `cd api && uv run ruff check . && uv run mypy . && uv run pytest -q`
 4. Migrations from empty, against a **scratch stack that cannot reach the working one**:
 

@@ -62,6 +62,7 @@ jobs:
         run: npm ci
       - run: pip install "pre-commit>=4.0.0"
       - run: pre-commit run --all-files
+      - run: pre-commit run markdownlint --all-files --hook-stage pre-push
 
   # (c) the API gate
   api-gate:
