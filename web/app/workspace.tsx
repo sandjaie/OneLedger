@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
 import { HouseholdForm } from "@/app/settings/household-form";
+import { RulesManager } from "@/app/settings/rules-manager";
 import { ImportScreen } from "@/app/import/import-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
@@ -433,6 +434,22 @@ export function Workspace({
 
               {categories && (
                 <CategoriesManager
+                  categories={categories}
+                  onChanged={() => setAttempt((value) => value + 1)}
+                  request={async (path, init) => {
+                    try {
+                      return await request(path, init);
+                    } catch (error) {
+                      const next = authDestination(error);
+                      if (next) leaveForAuth(next);
+                      throw error;
+                    }
+                  }}
+                />
+              )}
+
+              {categories && (
+                <RulesManager
                   categories={categories}
                   onChanged={() => setAttempt((value) => value + 1)}
                   request={async (path, init) => {

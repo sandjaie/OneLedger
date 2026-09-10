@@ -520,6 +520,17 @@ function Row({
       </span>
       <span className="review-converted">{conversion ?? ""}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>
+      {/* What the cascade proposed and how sure it is, read-only. Correcting a category is
+          the transactions screen's job, which already does it — a second place to do the same
+          thing is a second place for it to be done differently. */}
+      {row.proposedCategoryName && (
+        <span className="review-proposal">{row.proposedCategoryName}</span>
+      )}
+      {row.classifiedBy !== "unclassified" && (
+        <span className="section-label" title={`confidence ${row.classificationConfidence}`}>
+          {row.classifiedBy.replace(/_/g, " ")}
+        </span>
+      )}
       <span className="section-label">
         {row.duplicateOfTransactionId ? "Already in the ledger" : ""}
       </span>

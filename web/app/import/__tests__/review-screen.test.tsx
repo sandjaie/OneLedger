@@ -660,3 +660,65 @@ describe("discarding a batch", () => {
     expect(await screen.findByText("this batch has already been imported")).toBeTruthy();
   });
 });
+
+describe("the cascade's proposal", () => {
+  it("shows the proposed category and which step proposed it", async () => {
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        groups: [
+          group("new", [
+            row({
+              proposedCategoryId: "cat-groceries",
+              proposedCategoryName: "Groceries",
+              classifiedBy: "seed_rule",
+              classificationConfidence: "0.800",
+            }),
+          ]),
+        ],
+      }),
+    );
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(within(first).getByText("Groceries")).toBeTruthy();
+    expect(within(first).getByText("seed rule")).toBeTruthy();
+    expect(within(first).getByTitle("confidence 0.800")).toBeTruthy();
+  });
+
+  it("says nothing about a row the cascade could not decide", async () => {
+    const request = vi.fn().mockResolvedValue(batch());
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    // No proposal, no provenance label, and no empty placeholder pretending to be one.
+    expect(within(first).queryByText("unclassified", { selector: ".review-proposal" })).toBeNull();
+    expect(first.querySelector(".review-proposal")).toBeNull();
+  });
+
+  it("offers no way to categorise from review, and that is deliberate", async () => {
+    /**
+     * The proposal is shown; a correction is made on the transactions screen, which already
+     * does it. Bulk categorise-in-review with the keyboard interactions
+     * `statement-ingestion.html` §10 describes is a later branch, and until it exists two
+     * places to set a category would be two places for it to behave differently.
+     */
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        groups: [
+          group("new", [
+            row({ proposedCategoryName: "Groceries", classifiedBy: "seed_rule",
+                  classificationConfidence: "0.800" }),
+          ]),
+        ],
+      }),
+    );
+    renderScreen(request);
+
+    const first = await screen.findByRole("listitem", { name: /row 1/i });
+
+    expect(within(first).queryByRole("combobox")).toBeNull();
+    expect(within(first).queryByRole("button", { name: /categor/i })).toBeNull();
+  });
+});

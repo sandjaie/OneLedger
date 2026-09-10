@@ -35,6 +35,20 @@ const swappedHousehold: HouseholdResponse = {
 };
 
 type Request = typeof apiFetch;
+
+/**
+ * Settings renders a section that loads its own rules, and these tests mock `request` as a
+ * fixed sequence. Any request the sequence does not expect eats the next entry and the test
+ * fails somewhere unrelated — which is exactly what happened when the rules section landed.
+ *
+ * `withRules` answers `/rules` out of band so the sequence keeps describing only what the
+ * test is about. A section added later needs one more line here, not a re-counted chain.
+ */
+function withRules(sequenced: Request): Request {
+  return ((path: string, init?: RequestInit) =>
+    path === "/rules" ? Promise.resolve([]) : sequenced(path, init)) as Request;
+}
+
 type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
@@ -42,7 +56,11 @@ type Deferred<T> = {
 };
 
 function requestThat(...results: Array<unknown | Error>): Request {
-  const request = vi.fn(async () => {
+  const request = vi.fn(async (path: string) => {
+    // `/rules` is answered out of band for the reason `withRules` gives: the sequence
+    // describes what the test is about, and a section that loads its own data must not
+    // renumber it.
+    if (path === "/rules") return [];
     const result = results.shift();
     if (result instanceof Error) throw result;
     return result;
@@ -215,12 +233,13 @@ describe("authenticated workspace", () => {
   it("announces FX loading and success while focus stays on the submit button", async () => {
     window.history.replaceState(null, "", "/settings");
     const fx = deferred<Array<FxRateResponse>>();
-    const request = vi
+    const request = withRules(
+      vi
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
       .mockResolvedValueOnce([])
-      .mockReturnValueOnce(fx.promise) as Request;
+      .mockReturnValueOnce(fx.promise) as Request);
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
 
@@ -246,13 +265,14 @@ describe("authenticated workspace", () => {
     window.history.replaceState(null, "", "/settings");
     const stale = deferred<Array<FxRateResponse>>();
     const latest = deferred<Array<FxRateResponse>>();
-    const request = vi
+    const request = withRules(
+      vi
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
       .mockResolvedValueOnce([])
       .mockReturnValueOnce(stale.promise)
-      .mockReturnValueOnce(latest.promise) as Request;
+      .mockReturnValueOnce(latest.promise) as Request);
 
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
@@ -290,13 +310,14 @@ describe("authenticated workspace", () => {
     const fx = deferred<Array<FxRateResponse>>();
     const logout = deferred<void>();
     const navigate = vi.fn();
-    const request = vi
+    const request = withRules(
+      vi
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
       .mockResolvedValueOnce([])
       .mockReturnValueOnce(fx.promise)
-      .mockReturnValueOnce(logout.promise) as Request;
+      .mockReturnValueOnce(logout.promise) as Request);
 
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByRole("heading", { name: "Settings" });
@@ -325,13 +346,14 @@ describe("authenticated workspace", () => {
     window.history.replaceState(null, "", "/settings");
     const fx = deferred<Array<FxRateResponse>>();
     const navigate = vi.fn();
-    const request = vi
+    const request = withRules(
+      vi
       .fn()
       .mockResolvedValueOnce(household)
       .mockResolvedValueOnce(catalogue)
       .mockResolvedValueOnce([])
       .mockReturnValueOnce(fx.promise)
-      .mockRejectedValueOnce(new TypeError("offline")) as Request;
+      .mockRejectedValueOnce(new TypeError("offline")) as Request);
 
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByRole("heading", { name: "Settings" });
