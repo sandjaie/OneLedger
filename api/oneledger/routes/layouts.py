@@ -54,7 +54,7 @@ RESERVED_METADATA_KEYS = frozenset({"account_number", "period_start", "period_en
 # The extraction contract's complete row-assembly vocabulary (plan section 4.4): the columns are
 # unconstrained TEXT in the database, so the service is what keeps garbage out of them.
 ROW_START_RULES = frozenset({"has_date_and_amount", "has_date"})
-CONTINUATION_RULES = frozenset({"no_date_and_no_amount"})
+CONTINUATION_RULES = frozenset({"no_date_and_no_amount", "blank_date_and_money_columns"})
 SIGN_CONVENTIONS = frozenset({"debit_credit_columns", "signed", "cr_suffix", "balance_delta"})
 CHRONOLOGICAL_ORDERS = frozenset({"ascending", "descending"})
 # A run of exactly two 'y's, not part of a longer run — dd/MM/yy has one, dd/MM/yyyy does not.

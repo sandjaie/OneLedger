@@ -249,6 +249,38 @@ def _has_amount(profile: ProfileLike, fields: dict[str, str]) -> bool:
     return any(_is_number(fields.get(field, "")) for field in amount_fields)
 
 
+# The columns a continuation line must leave empty under the stricter rule. `reference` is not
+# among them: wrapped narration on a producer that maps one routinely carries a second reference
+# fragment, and requiring every column but the description to be blank drops those with it.
+_MONEY_COLUMNS = ("debit", "credit", "running_balance")
+
+
+def _continues(rule: str | None, profile: ProfileLike, fields: dict[str, str]) -> bool:
+    """Whether this line extends the row above it (spec section 4.4 rule 5, section 7 item 13).
+
+    `no_date_and_no_amount` asks whether the line *parses* as a dated, priced row. A statement's
+    closing legal block does not, so it appends -- forty lines of prose onto the last transaction
+    of the statement, with the money still reconciling and nothing to show the corruption.
+
+    `blank_date_and_money_columns` asks the geometric question instead: wrapped narration sits
+    inside the description column and leaves the date and money columns *empty*, while a
+    paragraph set across the page fills them with text that merely fails to parse. Both rules
+    require a line with no amount and something in the description column; the second adds that
+    those cells hold nothing at all.
+    """
+    if rule is None:
+        return False
+    if _date(fields.get("booked_date", ""), profile.dateFormat) is not None:
+        return False
+    if _has_amount(profile, fields):
+        return False
+    if rule == "blank_date_and_money_columns":
+        if fields.get("booked_date", "").strip():
+            return False
+        return not any(fields.get(column, "").strip() for column in _MONEY_COLUMNS)
+    return True
+
+
 def _starts_row(profile: ProfileLike, fields: dict[str, str]) -> bool:
     has_date = _date(fields.get("booked_date", ""), profile.dateFormat) is not None
     if profile.rowStartRule == "has_date":
@@ -274,10 +306,9 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
             metadata[key] = captured
 
     filter_arabic = "filter_script:arabic" in profile.quirks
-    continue_description = (
-        profile.continuationRule == "no_date_and_no_amount"
-        or "continuation:no_date_and_no_amount" in profile.quirks
-    )
+    continuation = profile.continuationRule
+    if continuation is None and "continuation:no_date_and_no_amount" in profile.quirks:
+        continuation = "no_date_and_no_amount"
     rows: list[RawRow] = []
     words_filtered = 0
     lines_unparsed = 0
@@ -305,10 +336,8 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
                     )
                 )
                 continue
-            has_date = _date(fields.get("booked_date", ""), profile.dateFormat) is not None
-            has_amount = _has_amount(profile, fields)
             description = fields.get("description", "").strip()
-            if continue_description and rows and not has_date and not has_amount and description:
+            if rows and description and _continues(continuation, profile, fields):
                 previous = rows[-1]
                 joined_fields = dict(previous.fields)
                 old_description = joined_fields.get("description", "")

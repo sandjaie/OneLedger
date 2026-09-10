@@ -541,6 +541,33 @@ worked around.
     a literal reference `ABC#1` cannot collide with the `ABC` that repeated once — splitting on
     the last `#` always separates the two. **Task 6c's confirmed-distinct override must recompute
     in this form**, advancing the `occ:` index to the next free one among committed collisions.
+13. **§4.4 rule 5's continuation test cannot separate wrapped narration from a trailing
+    paragraph.** The rule appends any line with no parsable date and no amount, and a statement's
+    closing legal block is exactly that: forty-odd lines of prose that fail both tests and are
+    appended, one after another, to the last transaction of the statement. Measured on slice
+    1.2's third layout, 246 such lines reach 6 of 1,532 rows and take their `description_raw`
+    past 1,400 characters. Nothing about the money is wrong — every statement still reconciles
+    identically — which is why it is invisible without looking.
+
+    The distinction the rule is missing is **geometric, not textual**: wrapped narration sits
+    inside the description column and leaves the date and money columns empty, while a paragraph
+    set across the page fills them with prose that merely fails to parse. "No date" and "the date
+    column is blank" are different questions, and only the second separates the two.
+
+    **`continuation_rule` therefore gains a second member, `blank_date_and_money_columns`**, which
+    appends a line only when its `booked_date`, `debit`, `credit` and `running_balance` cells are
+    *empty* and its description is not. The vocabulary grows by one considered member rather than
+    the engine learning a bank's footer (ADR-0012); `no_date_and_no_amount` is unchanged and stays
+    the right rule for a producer whose trailing lines carry no description column at all. On the
+    layout that raised it the stricter rule rejects all 246 prose lines and drops 48 lines that
+    the looser one appended — every one of them page furniture (the address block, the scheme
+    line, the period line, the repeated column header and the `OPENING BALANCE` line), and none of
+    them narration. Dropped lines are counted in `lines_unparsed` and reported, as rule 5 requires
+    (Invariant I7).
+
+    Owner decision, 10 September 2026, taken against the alternatives: accepting the six corrupted
+    descriptions, or switching the layout to no continuation at all, which costs roughly a
+    thousand rows their second narration line.
 
 ---
 

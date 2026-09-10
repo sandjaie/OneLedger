@@ -8,6 +8,7 @@ has already been migrated.
 | `institutions.sql` | The starter institution rows | `psql "$(scripts/dsn.sh)" -f db/seeds/institutions.sql` |
 | `card-layout.json` | A `POST /layouts` body for the card statement layout | through the API, not `psql` — see below |
 | `account-layout.json` | A `POST /layouts` body for the current-account statement layout | the same way |
+| `passbook-layout.json` | A `POST /layouts` body for the passbook-style account layout | the same way |
 
 ## Neither profile carries an `institutionId`
 
@@ -126,3 +127,58 @@ Measured across the current-account statements held locally: all twenty-one reco
 git-ignored and never enter this repository, and no figure from any of them appears in it — the
 fixtures in `api/tests/test_ingest_account_frame.py` are invented and reproduce the arithmetic
 rather than the amounts.
+
+## `passbook-layout.json`
+
+A passbook-style account, and the third producer. It is the first here to declare **both**
+balance anchors *and* a running balance, and the first whose statements end in forty lines of
+prose. Four of its values are measured, and one of them cost a change to the engine.
+
+**The cheque-reference column sits between the date and the narration, and its values print
+left of their own header.** The `Chq No` header prints at x≈92 and its values at x≈86, while the
+date ends at x≈81 — six points apart. A date band stretched to the narration column swallows
+both into one cell, `dd-MM-yyyy` cannot read it, and every row carrying a cheque reference simply
+never starts: an eleven-page statement yielded 25 rows instead of 240 before the band was split.
+The column is mapped as `reference` rather than discarded, which is also what lets layer 2 of the
+dedupe use it (spec §4.7).
+
+**The closing block needed a new continuation rule, not a skip pattern.** Its statements end with
+a legal notice, a legend and an end marker — forty-odd lines with no date and no amount, which is
+the definition `no_date_and_no_amount` matches. Measured across the six statements, 246 such
+lines were appended to 6 of 1,532 rows and took their narration past 1,400 characters, with every
+statement still reconciling `matched`: nothing about the money was wrong, which is why it is
+invisible without looking for it. Skipping them by pattern is not possible — there is no shared
+phrase, and one pattern per paragraph would put a bank's own legal text in this repository.
+Turning continuation off costs roughly a thousand rows their second narration line.
+
+So `continuation_rule` gained a second member, **`blank_date_and_money_columns`** (M2 spec §7
+item 13, owner decision of 10 September 2026). The distinction is geometric: wrapped narration
+sits inside the description column and leaves the date and money columns *empty*, while a
+paragraph set across the page fills them with text that merely fails to parse. On this corpus the
+stricter rule rejects all 246 prose lines and drops 48 lines the looser one had appended — every
+one of them page furniture (the address block, the scheme line, the period line, the repeated
+column header and the `OPENING BALANCE` line), and not one of them narration. `reference` is
+deliberately not among the columns it requires blank: this producer prints a reference fragment
+beside the wrapped narration, and requiring every column but the description to be empty drops
+276 of 1,639 continuation lines instead of 48.
+
+**Both balance anchors are mapped even though a running balance is.** The walk proves the rows
+agree with each other; the anchors prove they agree with two figures the statement states
+independently. Dropping the closing anchor is not free — reconcile then takes the terminal
+running balance as the closing, and a statement whose own two figures disagree has nothing left
+to disagree with.
+
+**The balance band's right edge is measured, not rounded.** A branch code prints immediately
+beside the balance, and a band that reaches it joins the two into a cell that is not a number —
+every row then carries no balance and the statement is refused. Its left edge is what separates
+credit from balance; between the two the exact value does not matter, and
+`api/tests/test_ingest_passbook_frame.py` pins the edges that do.
+
+`rowStartRule` is `has_date`, for the reason `account-layout.json` gives.
+
+Measured across the passbook statements held locally: five of the six reconcile `matched`, 1,532
+rows, none failing to normalize, every period stated. **The sixth is refused, and correctly.** One
+balance figure on it is missing its integer part in the document's own text layer — the
+characters are literally spaces, so no band and no tolerance can recover them — and Invariant I8
+refuses a statement it cannot verify rather than walking past the row. Those files are git-ignored
+and never enter this repository, and no figure from any of them appears in it.
