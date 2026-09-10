@@ -271,6 +271,13 @@ transaction, document or layout. `scripts/backup-db.sh` is manual and nothing ca
 backup taken only when someone remembers is a backup of whatever the project looked like when
 they last remembered.
 
+**Now nobody has to.** The compose `backup` service runs `scripts/backup-db.sh --if-due` hourly
+whenever the app's stack is up — a dump once the newest is over a day old, retention at thirty
+days, never below the thirty newest — and Settings › Data Quality (`GET /doctor`) warns when
+two days pass without one, naming how many transactions the newest backup does not hold
+(`fix/backups-run-without-anyone-remembering`). The documents volume is still not backed up:
+architecture §10's weekly copy was never written, and is its own `scripts/` branch.
+
 ## Phase 1 · slice 1.2 — all four bank layouts
 
 | Task | Branch | Status | Evidence |

@@ -209,6 +209,8 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/transfers.py",
     # A balance and the guards on an account's anchor must include every movement, transfers too.
     "api/oneledger/routes/accounts.py",
+    # Data Quality counts the rows a backup does not hold, and a backup holds every row.
+    "api/oneledger/routes/doctor.py",
     "db/migrations/",
 }
 

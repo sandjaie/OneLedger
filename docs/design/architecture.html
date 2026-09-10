@@ -609,10 +609,16 @@ first disk resize is years away.</p>
 <h2 id="10-backups">10. Backups</h2>
 <p>The one place where &quot;personal project&quot; is not an excuse. Hours of downtime are fine; losing the
 ledger is not.</p>
-<pre><code>Daily    pg_dump → gzip → local disk, 30 days retained     scripts/backup-db.sh
+<pre><code>Daily    pg_dump → encrypted → disk, 30 days retained      the compose backup service
 Weekly   documents volume → local disk                     scripts/backup-docs.sh
 Monthly  copy of both to a second physical location
 </code></pre>
+<p>The daily row runs itself. The compose <code>backup</code> service, which the api depends on,
+calls <code>scripts/backup-db.sh --if-due</code> every hour: it dumps only when the newest backup is
+more than a day old, so a stack that was down catches up on its first tick, and then prunes what is
+older than thirty days, never below the thirty newest. <strong>Settings › Data Quality</strong> (<code>GET /doctor</code>) warns when
+two days pass without one and says how many transactions the newest backup does not hold. The weekly
+and monthly rows are not automated yet.</p>
 <p>Restore is tested <strong>quarterly</strong> against a scratch database, and the test is a checklist item in
 <a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
 restored is a hypothesis, not a backup.</p>

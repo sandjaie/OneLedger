@@ -37,16 +37,23 @@ const swappedHousehold: HouseholdResponse = {
 type Request = typeof apiFetch;
 
 /**
- * Settings renders a section that loads its own rules, and these tests mock `request` as a
- * fixed sequence. Any request the sequence does not expect eats the next entry and the test
- * fails somewhere unrelated — which is exactly what happened when the rules section landed.
+ * Settings renders sections that load their own rules and data-quality report, and these tests
+ * mock `request` as a fixed sequence. Any request the sequence does not expect eats the next
+ * entry and the test fails somewhere unrelated — which is exactly what happened when the rules
+ * section landed.
  *
- * `withRules` answers `/rules` out of band so the sequence keeps describing only what the
- * test is about. A section added later needs one more line here, not a re-counted chain.
+ * `withRules` answers those out of band so the sequence keeps describing only what the test is
+ * about. A section added later needs one more line in `outOfBand`, not a re-counted chain.
  */
+function outOfBand(path: string): Promise<unknown> | undefined {
+  if (path === "/rules") return Promise.resolve([]);
+  if (path === "/doctor") return Promise.resolve({ sections: [] });
+  return undefined;
+}
+
 function withRules(sequenced: Request): Request {
   return ((path: string, init?: RequestInit) =>
-    path === "/rules" ? Promise.resolve([]) : sequenced(path, init)) as Request;
+    outOfBand(path) ?? sequenced(path, init)) as Request;
 }
 
 type Deferred<T> = {
@@ -57,10 +64,10 @@ type Deferred<T> = {
 
 function requestThat(...results: Array<unknown | Error>): Request {
   const request = vi.fn(async (path: string) => {
-    // `/rules` is answered out of band for the reason `withRules` gives: the sequence
-    // describes what the test is about, and a section that loads its own data must not
-    // renumber it.
-    if (path === "/rules") return [];
+    // Answered out of band for the reason `withRules` gives: the sequence describes what the
+    // test is about, and a section that loads its own data must not renumber it.
+    const answered = outOfBand(path);
+    if (answered) return answered;
     const result = results.shift();
     if (result instanceof Error) throw result;
     return result;
@@ -192,6 +199,15 @@ describe("authenticated workspace", () => {
     });
     render(<Workspace request={requestThat(household)} navigate={vi.fn()} />);
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
+  });
+
+  it("opens Settings on the data-quality report", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const request = requestThat(household, catalogue, []);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    expect(request).toHaveBeenCalledWith("/doctor", undefined);
   });
 
   it("renders the Settings FX rate provenance for the requested date", async () => {

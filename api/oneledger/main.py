@@ -15,6 +15,7 @@ from .routes import (
     categories,
     currencies,
     dashboard,
+    doctor,
     fx,
     household,
     ingest,
@@ -91,6 +92,7 @@ app.include_router(rules.router)
 app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(ingest.router)
+app.include_router(doctor.router)
 
 
 @app.get("/health")

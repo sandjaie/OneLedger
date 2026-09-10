@@ -63,6 +63,49 @@ services:
     depends_on:
       db-test: { condition: service_healthy }
 
+  # The daily encrypted dump (security-and-privacy.html §9), taken without anyone remembering.
+  # On 10 September 2026 the ledger was lost twice and the newest backup was three days old:
+  # scripts/backup-db.sh worked, and nothing ever ran it.
+  #
+  # Every hour it runs the script with --if-due, which dumps only when the newest backup is
+  # more than a day old, then prunes those past thirty days. A failed run is retried on the
+  # next tick, and Settings › Data Quality warns once two days pass without one. The api
+  # depends on it, so any stack the app can be used on is a stack being backed up.
+  backup:
+    # The server's own image: pg_dump of the server's major version, and openssl.
+    image: postgres:18
+    # Deliberately NOT env_file: .env — it needs the connection and the passphrase, not the
+    # session secret or the OAuth credentials. libpq reads the connection from PG*, so no
+    # character in the password has to survive being parsed out of a URI; the empty URI defers
+    # every part to them (scripts/dsn.sh, which assembles one, needs Python this image lacks).
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-oneledger}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-oneledger}
+      PGDATABASE: ${POSTGRES_DB:-oneledger}
+      DATABASE_URL: "postgresql://"
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_DIR: /oneledger/backups
+      # ./backups is per checkout, not per project, so each project names its own dumps, as
+      # the volumes below are named: a scratch stack's dump of an empty database is neither
+      # counted by the ledger's tick and Data Quality nor pruned with the ledger's backups.
+      BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}
+    # On a Linux host this runs as root and its dumps are root's, mode 600. Create backups/
+    # yourself before the first `up` so the directory stays yours; read a dump with sudo.
+    volumes: ["./scripts:/oneledger/scripts:ro", "./backups:/oneledger/backups"]
+    # tini passes the stop signal on, so a `docker compose stop` does not wait out the sleep.
+    init: true
+    entrypoint:
+      - bash
+      - -c
+      - |
+        while :; do
+          /oneledger/scripts/backup-db.sh --if-due || echo "backup failed; retrying in an hour" >&2
+          sleep 3600
+        done
+    depends_on:
+      db: { condition: service_healthy }
+
   api:
     build: ./api
     env_file: .env
@@ -71,12 +114,18 @@ services:
       # is the container itself, so only the host changes — the password is not restated.
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      # Read-only below: GET /doctor reports how old the newest backup is, never touches one.
+      BACKUP_DIR: /var/lib/oneledger/backups
+      BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}
     # Loopback, for the same reason as db: on the VPS only Caddy is exposed, and it
     # reaches these over the compose network rather than the host interface.
     ports: ["127.0.0.1:8000:8000"]
-    volumes: ["documents:/var/lib/oneledger/documents"]
+    volumes:
+      - documents:/var/lib/oneledger/documents
+      - ./backups:/var/lib/oneledger/backups:ro
     depends_on:
       db: { condition: service_healthy }
+      backup: { condition: service_started }
 
   web:
     build:
