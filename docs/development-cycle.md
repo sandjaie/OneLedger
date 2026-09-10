@@ -89,6 +89,13 @@ tests skip; with `.env` exported instead they **fail**, because `tests/live_data
 refuses a database holding anything those fixtures would empty and refuses a split where the
 fixtures and the routes point at different databases.
 
+**Each pytest run then gets a database of its own on that server.** `api/tests/conftest.py`
+creates `pytest_<pid>_<n>` at the session start, migrates it from empty with the checkout's own
+migrations, seeds it, points the fixtures and the routes at it, and drops it at the end. Several
+sessions can therefore run the live suites at once without emptying each other's tables — the
+state the repository was in on 10 September 2026, with five parallel sessions sharing one
+`oneledger_test`. The push hook does the same for the SQL tests.
+
 This is not a precaution in the abstract: on 10 September 2026 exporting `.env` to make the
 live suite run truncated the working ledger, taking 4,184 imported transactions and four layout
 profiles with it.
