@@ -47,9 +47,26 @@ request.
 | 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
 | 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) |
-| 4b2 — one payload: net worth, the month, the trend, the dues | `feature/p1-4b2-dashboard-api` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | this branch |
+| 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | the acceptance run | — | Not run | — |
+
+**4b2's deviations, recorded:**
+
+- **4b2 ships as the plan's own named split,** 4b2a the position (net worth, cards due) then 4b2b the
+  flows (this month, the trend): forecast near the 1,600 soft budget once tests are counted at this
+  repository's usual 1.5–2×.
+- **Net worth takes the date's own rate where the table holds one, and fills forward past the last
+  fetch.** `multi-currency-and-fx.html` §6 joins `fx_rate` on the exact as-of date, and the plan
+  names `_frozen()`, which does the same; but the rate table is filled forward only as far as its
+  last fetch, so an exact join makes net worth *today* null every day until someone backfills. The
+  plan asks for "a carried rate labelled, with the rate's real date", so past the last row the
+  dashboard fills forward the way the table fills its own weekends — never interpolating — and
+  labels the rate carried with the date it is really from. Within the fetched range it is §6
+  exactly.
+- **Utilisation reads the cycle's own `credit_limit`**, the limit at statement date, and is absent when
+  the cycle states none — which, until 4a3 teaches the card layout to capture it, is every real card.
 
 **4b1's deviations, recorded:**
 
