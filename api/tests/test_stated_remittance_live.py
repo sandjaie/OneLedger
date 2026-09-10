@@ -53,6 +53,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Staged]:
             cur.execute("DELETE FROM account WHERE name = 'route test'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
             cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")
+            cur.execute("DELETE FROM household WHERE name = 'other'")
         conn.commit()
         conn.close()
 
@@ -78,6 +79,19 @@ def _remittance_statement(currency: str) -> bytes:
             Placement(page=0, x=20, y=600, text="Closing Balance 690.00"),
         ]
     )
+
+
+# The seed posted again: a newer version of the fixture's layout, the older one kept for the rows
+# it imported. The household is a parameter because every household holds this same name.
+_NEXT_VERSION = """
+    INSERT INTO statement_layout
+      (household_id, name, version, fingerprints, columns, date_format, sign_convention,
+       inverts_sign, chronological_order, row_start_rule, opening_balance_pattern,
+       closing_balance_pattern, has_running_balance, metadata_patterns)
+    SELECT %s, name, version + %s, fingerprints, columns, date_format, sign_convention,
+           inverts_sign, chronological_order, row_start_rule, opening_balance_pattern,
+           closing_balance_pattern, has_running_balance, metadata_patterns || %s
+      FROM statement_layout WHERE id = %s"""
 
 
 def _bands(credit: UUID) -> dict[str, str]:
@@ -119,25 +133,36 @@ def test_a_remittance_already_imported_is_near_certain_once_its_layout_reads_the
     # Committed under a layout that reads no narration: §3's market-rate comparison alone.
     assert "high" not in _bands(arrived).values()
 
-    # The owner posts the seed again — a new version, the old one kept for the rows it imported.
-    captures = {
-        key: pattern
-        for key, pattern in json.loads(SEED.read_text())["metadataPatterns"].items()
-        if key.startswith("remit_")
-    }
+    captures = Jsonb(
+        {
+            key: pattern
+            for key, pattern in json.loads(SEED.read_text())["metadataPatterns"].items()
+            if key.startswith("remit_")
+        }
+    )
+    # Another household posting the same seed is the ordinary case, and the service connects
+    # past RLS. A newer version of the same name that is theirs must not read this household's
+    # narrations — neither lifting them with its captures, nor hiding them without.
     with live.conn.cursor() as cur:
         cur.execute(
-            """INSERT INTO statement_layout
-                 (household_id, name, version, fingerprints, columns, date_format,
-                  sign_convention, inverts_sign, chronological_order, row_start_rule,
-                  opening_balance_pattern, closing_balance_pattern, has_running_balance,
-                  metadata_patterns)
-               SELECT household_id, name, version + 1, fingerprints, columns, date_format,
-                      sign_convention, inverts_sign, chronological_order, row_start_rule,
-                      opening_balance_pattern, closing_balance_pattern, has_running_balance,
-                      metadata_patterns || %s
-                 FROM statement_layout WHERE id = %s""",
-            (Jsonb(captures), LAYOUT_ID),
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('other', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        other = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(_NEXT_VERSION, (other, 4, captures, LAYOUT_ID))
+    live.conn.commit()
+    assert "high" not in _bands(arrived).values()
+
+    # The owner posts the seed again, while the other household's newer version stops reading.
+    with live.conn.cursor() as cur:
+        cur.execute(_NEXT_VERSION, (live.household_id, 1, captures, LAYOUT_ID))
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = metadata_patterns
+                      - 'remit_amount' - 'remit_currency' - 'remit_rate'
+                WHERE household_id = %s""",
+            (other,),
         )
     live.conn.commit()
 

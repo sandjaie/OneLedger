@@ -579,6 +579,8 @@ def test_the_narration_is_read_from_its_three_captures() -> None:
     assert stated_remittance("100,000", "yyy", ".04271") == StatedRemittance(
         amount=Decimal("100000"), currency="YYY", rate=Decimal(".04271")
     )
+    # Twenty characters is the widest rate read; twenty-one is refused below.
+    assert stated_remittance("100000", "YYY", "." + "0" * 18 + "1") is not None
 
 
 @pytest.mark.parametrize(
@@ -594,6 +596,8 @@ def test_the_narration_is_read_from_its_three_captures() -> None:
         # the reproduction check into a 500 on every candidate request.
         ("100000", "YYY", "1E+999999"),
         ("100000", "YYY", "1_0"),
+        # A plain decimal, but wider than any printed rate.
+        ("100000", "YYY", "." + "0" * 19 + "1"),
         ("0", "YYY", ".04271"),
         ("-100000", "YYY", ".04271"),
         ("100000", "YYY", "0"),
