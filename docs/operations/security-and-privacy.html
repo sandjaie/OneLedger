@@ -407,7 +407,7 @@ steal that would let an attacker touch an actual bank account.</p>
 <td>Credential stuffing / password reuse</td>
 <td>Medium</td>
 <td>High</td>
-<td><strong>No password exists.</strong> Google OAuth only</td>
+<td><strong>No application password exists.</strong> A loopback-only local owner session is used on the laptop; Google OIDC is used when publicly deployed</td>
 </tr>
 <tr>
 <td>Leaked database credentials</td>
@@ -480,13 +480,20 @@ steal that would let an attacker touch an actual bank account.</p>
 addressed by unglamorous measures that are easy to skip and shouldn&#39;t be.</p>
 <hr>
 <h2 id="3-authentication">3. Authentication</h2>
-<p><strong>Google OIDC, implemented in the service. No password, ever.</strong></p>
+<p><strong>One authorization boundary, with local and Google login modes. No application password,
+ever.</strong> <a href="../adr/0018-local-owner-sessions.html">ADR-0018</a> adds a loopback-only local
+bootstrap while retaining Google OIDC for a public deployment.</p>
 <ul>
 <li>No signup flow. No public registration. No invitation system. No password reset.</li>
 <li>The allowed account is pinned by email in configuration; any other Google account
 authenticating is rejected by the service even though Google authenticated it successfully.</li>
 <li>MFA is inherited from the Google account, where it should live.</li>
 </ul>
+<p>In <code>AUTH_MODE=local</code>, which is accepted only with an HTTP loopback
+<code>WEB_ORIGIN</code>, <code>GET /auth/login</code> resolves exactly one configured owner and issues the
+same persisted, revocable session described below. It does not bypass <code>require_owner</code>, RLS,
+household scoping or the exact-origin mutation check. Application code defaults to
+<code>AUTH_MODE=google</code>, so a copied public configuration fails closed.</p>
 <p>Login uses authorization code flow with random state, nonce and PKCE S256. The signed flow cookie is
 HttpOnly, SameSite=Lax, valid for ten minutes and Secure when <code>COOKIE_SECURE=1</code>. Callback checks
 that cookie and state before any token exchange, then verifies the ID token's RSA signature with

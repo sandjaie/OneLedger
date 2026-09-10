@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from hmac import compare_digest
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import jwt
@@ -47,6 +48,30 @@ class GoogleIdentity:
 
 SessionLookup = Callable[[UUID, UUID, str], OwnerSession | None]
 SessionStore = Callable[[UUID, UUID, datetime], None]
+
+
+def auth_mode(value: str | None = None, web_origin: str | None = None) -> str:
+    """Return the configured login mode, refusing passwordless access off loopback."""
+    mode = (value if value is not None else os.environ.get("AUTH_MODE", "google")).strip().lower()
+    if mode not in {"google", "local"}:
+        raise RuntimeError("AUTH_MODE must be 'google' or 'local'")
+    if mode == "local":
+        origin = urlsplit(
+            web_origin
+            if web_origin is not None
+            else os.environ.get("WEB_ORIGIN", "http://localhost:3000")
+        )
+        if (
+            origin.scheme != "http"
+            or origin.hostname not in {"localhost", "127.0.0.1", "::1"}
+            or origin.username is not None
+            or origin.password is not None
+            or origin.path not in {"", "/"}
+            or origin.query
+            or origin.fragment
+        ):
+            raise RuntimeError("AUTH_MODE=local requires an HTTP loopback WEB_ORIGIN")
+    return mode
 
 
 def b64url(value: bytes) -> str:
@@ -183,6 +208,22 @@ def _allowed_email(value: str | None = None) -> str:
     if not isinstance(allowed, str) or not allowed.strip():
         raise NotAuthorized("permitted account is not configured")
     return allowed.strip().lower()
+
+
+def local_owner() -> tuple[UUID, str]:
+    """Resolve the one configured owner without creating a second identity mechanism."""
+    email = _allowed_email()
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT id, lower(btrim(email))
+                 FROM app_user
+                WHERE role = 'owner' AND lower(btrim(email)) = %s""",
+            (email,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise NotAuthorized("no configured local owner")
+    return UUID(str(row[0])), str(row[1])
 
 
 def _lookup_active_session(user_id: UUID, session_id: UUID, email: str) -> OwnerSession | None:
