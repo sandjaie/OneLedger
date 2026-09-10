@@ -168,7 +168,9 @@ CREATE TABLE account (
 
   CONSTRAINT closed_after_opened CHECK (closed_on IS NULL OR opened_on IS NULL OR closed_on >= opened_on),
   CONSTRAINT closed_account_has_a_date CHECK (is_active OR closed_on IS NOT NULL),
-  CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL)
+  CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL),
+  CONSTRAINT card_has_no_account_number_hash
+    CHECK (account_type <> 'credit_card' OR account_number_hash IS NULL)
 );
 
 CREATE INDEX idx_account_household ON account (household_id, is_active);
@@ -671,6 +673,15 @@ How often a layout was used is counted from `import_batch.statement_layout_id` a
 `started_at`. That count is right for every batch ever staged, where a counter maintained from
 here on would start short by every import before it. The M2 spec's §7 item 16 records the
 decision.
+
+---
+
+## `V27` (applied)
+
+Applied as `db/migrations/V27__card_accounts_store_mask_only.sql`. Existing credit-card account
+hashes are cleared and `card_has_no_account_number_hash` prevents every database writer from
+storing another. Card identity is its display mask only; non-card statement matching keeps the
+salted hash.
 
 ---
 

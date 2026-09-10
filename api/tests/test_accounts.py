@@ -500,6 +500,143 @@ def test_create_hashes_and_masks_the_account_number_without_exposing_it(
     assert full_number not in repr(accounts.AccountCreate.model_validate(payload))
 
 
+def test_create_card_keeps_only_the_mask_and_needs_no_hash_salt(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    full_number = "7234-5600-9812"
+    monkeypatch.delenv("ACCOUNT_HASH_SALT", raising=False)
+    response = TestClient(app).post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "accountType": "credit_card",
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": full_number,
+            "openingBalance": "-1.0000",
+            "creditLimit": "100.0000",
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 201
+    with live_accounts[0].cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s""",
+            (UUID(response.json()["id"]),),
+        )
+        assert cur.fetchone() == ("****9812", None)
+    assert full_number not in response.text
+    assert full_number not in caplog.text
+    assert full_number not in repr(
+        accounts.AccountCreate.model_validate(
+            {
+                **CREATE,
+                "accountType": "credit_card",
+                "accountNumber": full_number,
+                "openingBalance": "-1.0000",
+                "creditLimit": "100.0000",
+            }
+        )
+    )
+
+
+def test_changing_a_hashed_account_to_card_clears_the_hash_and_keeps_its_mask(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    client = TestClient(app)
+    created = client.post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": "7234-5600-9812",
+        },
+        headers=ORIGIN,
+    )
+    account_id = UUID(created.json()["id"])
+
+    response = client.patch(
+        f"/accounts/{account_id}",
+        json={
+            **UPDATE,
+            "accountType": "credit_card",
+            "currency": "USD",
+            "country": "XA",
+            "openingBalance": "-1.0000",
+            "creditLimit": "100.0000",
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200
+    with live_accounts[0].cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s""",
+            (account_id,),
+        )
+        assert cur.fetchone() == ("****9812", None)
+
+
+def test_patch_card_keeps_only_the_new_mask_and_needs_no_hash_salt(
+    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
+    monkeypatch: MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    full_number = "1111 2222 3333"
+    monkeypatch.delenv("ACCOUNT_HASH_SALT", raising=False)
+    client = TestClient(app)
+    created = client.post(
+        "/accounts",
+        json={
+            **CREATE,
+            "institutionId": None,
+            "accountType": "credit_card",
+            "currency": "USD",
+            "country": "XA",
+            "accountNumberMasked": "****9812",
+            "openingBalance": "-1.0000",
+            "creditLimit": "100.0000",
+        },
+        headers=ORIGIN,
+    )
+    account_id = UUID(created.json()["id"])
+
+    response = client.patch(
+        f"/accounts/{account_id}",
+        json={
+            **UPDATE,
+            "accountType": "credit_card",
+            "currency": "USD",
+            "country": "XA",
+            "accountNumber": full_number,
+            "openingBalance": "-1.0000",
+            "creditLimit": "100.0000",
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200
+    with live_accounts[0].cursor() as cur:
+        cur.execute(
+            """SELECT account_number_masked, account_number_hash
+                 FROM account WHERE id = %s""",
+            (account_id,),
+        )
+        assert cur.fetchone() == ("****3333", None)
+    assert full_number not in response.text
+    assert full_number not in caplog.text
+
+
 def test_same_account_number_is_rejected_twice_within_one_household(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
     monkeypatch: MonkeyPatch,
