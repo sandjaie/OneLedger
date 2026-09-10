@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR-0020 — Assisted ledger decisions — OneLedger</title>
+  <style>
+    :root { color-scheme: light; --ink: #1b211e; --muted: #5e6862; --line: #d5dbd4; --accent: #0b6b58; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); font: 1rem/1.65 ui-serif, Georgia, serif; }
+    header { border-bottom: 1px solid var(--line); padding: .9rem 1.4rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+    header a, main a { color: var(--accent); }
+    main { max-width: 46rem; margin: 0 auto; padding: 2.4rem 2rem 5rem; }
+    h1, h2 { font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.25; }
+    h1 { font-size: 2rem; }
+    h2 { margin-top: 2rem; }
+    code { background: #eef2ee; border-radius: 4px; padding: .1em .3em; }
+    .meta { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header><a href="./index.html">OneLedger architecture decisions</a></header>
+  <main>
+    <h1>ADR-0020 — Assisted ledger decisions</h1>
+    <p class="meta"><strong>Status:</strong> Accepted — owner direction, 10 September 2026 ·
+      <strong>Supersedes:</strong>
+      <a href="./0017-transfers-confirmed-on-the-transactions-screen.html">ADR-0017</a> ·
+      <strong>Clarifies:</strong> <a href="./0003-defer-ai-to-v2.html">ADR-0003</a></p>
+
+    <h2>Context</h2>
+    <p>The owner wants a consolidated financial picture without personally classifying recurring
+      merchants or clicking every transfer pair. The owner delegates routine ledger judgement to
+      the assisting agent and asks to be consulted when the evidence is ambiguous. The previous
+      handoff's owner-only link and unlink restriction is withdrawn for this workflow.</p>
+    <p>ADR-0017 correctly moved matching to committed transactions, where both legs exist. Requiring
+      the owner personally to perform each confirmation is no longer the chosen trade-off.
+      Financial correctness, household isolation and the distinction between observed facts and
+      inference remain requirements.</p>
+
+    <h2>Decision</h2>
+    <p><strong>Routine work is delegated; uncertainty is escalated.</strong> The agent may inspect
+      the authorised working ledger, classify supported cases, create reusable merchant rules,
+      and confirm or correct transfer links through supported application operations. The owner
+      need not repeat that review or perform the clicks. This authority concerns ledger records,
+      not initiating bank payments, trades or other real-world financial actions.</p>
+    <p>Matching still operates on committed transactions. Transactions remains the place to inspect
+      and correct results, not a mandatory owner approval checkpoint. The agent checks each
+      proposed batch before applying it and reports a concise, privacy-safe outcome.</p>
+
+    <h2>Classification and learning</h2>
+    <ul>
+      <li>Use the existing deterministic cascade, merchant aliases, rule preview and classification
+        backfill. Household-specific knowledge is database data, never institution-specific code
+        or real statement text committed to git.</li>
+      <li>Owner explanations are evidence. Record a reusable, narrowly scoped rule when the
+        explanation generalises; distinguish direction, account and narration where necessary.
+        Preview the affected set before applying it. Preserve explicit overrides.</li>
+      <li>A payment rail identifies how money moved, not what was purchased. Merchant identity can
+        support a category; a person's name alone cannot establish groceries, dining or another
+        specific purpose. Use a broad supported category or leave it unresolved, then ask one
+        grouped question for recurring ambiguous patterns rather than one question per row.</li>
+      <li>Public research may identify a provider's business, but cannot prove the purpose of every
+        payment to it. Distinguish investment funding, subscriptions, fees, refunds and redemptions
+        using direction, source evidence and the owner's explanation. Never manufacture fund
+        units, a destination posting, a holding value or an asset from a debit alone.</li>
+      <li>Saving a rule makes later matching deterministic. Automatic learning from every correction
+        and retroactive replacement of existing classifications are separate implementation work;
+        the current backfill fills only unclassified rows.</li>
+    </ul>
+
+    <h2>Transfer judgement</h2>
+    <p>Confirm a pair only when both committed legs exist, belong to the household, are unclaimed,
+      have the correct directions on distinct accounts, and have corroborating economic evidence.
+      For a card payment, check the bank debit against the card credit, amount, posting window and
+      payment narration or reference. For a remittance, check destination identity and the source's
+      stated destination amount/currency or a shared reference, with any difference supported by
+      the statement. Inspect competing peers on both sides; a plausible alternative means ask.</p>
+    <p>A confidence score ranks candidates; it is not a calibrated probability or sufficient
+      permission to link. Matching amounts and dates alone do not prove a transfer. A missing peer,
+      unexplained fee, split payment or uncertain household boundary stays unresolved. Do not hide
+      an expense by assigning a transfer type solely from a keyword.</p>
+    <p>Use the existing atomic confirmation and unlink operations and their exclusivity guards.
+      Identify delegated review and its evidence in transfer notes. The existing
+      <code>match_method</code> records candidate versus manually selected matching, not who
+      reviewed it. Unlinking retains the rejected record and restores the legs; re-linking during
+      acceptance must be deliberate, not automatic resurrection of a rejected pair.</p>
+
+    <h2>Provenance, privacy and implementation boundary</h2>
+    <p>Retain raw transactions, frozen amounts and source-document traceability unchanged. Keep
+      classification rule identity and source fields; label agent-authored rules in their names.
+      Keep the applied scope and prior derived values in private local run evidence before a
+      classification batch, so a correction can be targeted. This is not a claim that the current
+      schema already has a complete decision-history or one-click batch-undo feature.</p>
+    <p>Use supported authenticated, household-scoped operations; do not bypass authorisation with
+      direct SQL writes. Public searches contain public provider names only, never raw ledger
+      narrations, personal counterparties, identifiers or amounts. Private ledger evidence stays
+      out of source control. The separate clean local-production database receives no working-ledger
+      data or household-specific rules as a side effect of this work.</p>
+    <p>ADR-0003 still defers LLM calls made by the application. Owner-requested assistance in this
+      conversation, including public provider research and operation of existing controls, is
+      permitted now; it does not authorise a new external transaction-data feed. An embedded AI
+      classifier would require an explicit privacy and provider decision.</p>
+    <p>No migration is needed to permit this delegated workflow. Unattended transfer confirmation,
+      durable per-decision provenance and correction learning require a separately reviewed
+      implementation with bounded matching policies, ambiguity handling, an activity record,
+      correction support and regression evidence. This decision permits that direction; it does
+      not turn a documentation change into a shipped background service.</p>
+
+    <h2>Acceptance and alternatives</h2>
+    <p>The delegated agent may execute the remaining slice 1.3 and 1.4 checks, including controlled
+      link, unlink and re-link operations, an independent statement-based month tally, and card-dues
+      comparisons with source PDFs. Keep the exact spending deltas, restoration, frozen-rate and
+      net-worth assertions unchanged. Record the run as agent-executed under owner delegation,
+      never as unaided owner acceptance. Only verified results may mark a slice Accepted.</p>
+    <p><strong>Retain mandatory owner clicks:</strong> rejected because it imposes the routine work
+      the owner is delegating. <strong>Confirm everything above a score:</strong> rejected because
+      unrelated or competing legs can score highly and silently remove genuine spending.
+      Evidence-based delegated review reuses today's application while collecting the evidence
+      needed for reliable unattended automation.</p>
+  </main>
+</body>
+</html>

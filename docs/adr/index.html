@@ -365,6 +365,7 @@ body {
 <li><a href="./0017-transfers-confirmed-on-the-transactions-screen.html">0017 Transfers confirmed on the transactions screen</a></li>
 <li><a href="./0018-local-owner-sessions.html">0018 Local owner sessions</a></li>
 <li><a href="./0019-separate-local-production-stack.html">0019 Separate local production stack</a></li>
+<li><a href="./0020-assisted-ledger-decisions.html">0020 Assisted ledger decisions</a></li>
 <li><a href="./superseded.html">Decisions we changed</a></li></ul>
     </div>
       </nav>
@@ -374,7 +375,7 @@ body {
 <p>Each ADR records one decision, the alternatives that were genuinely considered, and the
 trade-off accepted. They exist so that a decision is not silently relitigated six months later
 by someone — including a future you — who has forgotten why it was made.</p>
-<p><strong>Everything numbered here is in force.</strong> Four decisions were made and replaced during the
+<p><strong>The status column identifies decisions in force and their replacements.</strong> Four decisions were made and replaced during the
 specification work, before any code existed; they are summarised in
 <a href="./superseded.html">Decisions we changed</a> and hold no number, because a folder where a
 third of the pages describe an abandoned architecture misleads on sight.</p>
@@ -469,7 +470,7 @@ third of the pages describe an abandoned architecture misleads on sight.</p>
 <tr>
 <td><a href="./0017-transfers-confirmed-on-the-transactions-screen.html">0017</a></td>
 <td>Transfers are confirmed on the transactions screen</td>
-<td>Accepted; supersedes 0007</td>
+<td>Superseded by <a href="./0020-assisted-ledger-decisions.html">0020</a></td>
 </tr>
 <tr>
 <td><a href="./0018-local-owner-sessions.html">0018</a></td>
@@ -480,6 +481,11 @@ third of the pages describe an abandoned architecture misleads on sight.</p>
 <td><a href="./0019-separate-local-production-stack.html">0019</a></td>
 <td>A clean local-production stack is isolated from the working ledger</td>
 <td>Accepted; refines 0014</td>
+</tr>
+<tr>
+<td><a href="./0020-assisted-ledger-decisions.html">0020</a></td>
+<td>Delegate routine ledger decisions; escalate ambiguity</td>
+<td>Accepted; supersedes 0017, clarifies 0003</td>
 </tr>
 </tbody></table>
 <h2 id="changing-a-decision">Changing a decision</h2>
