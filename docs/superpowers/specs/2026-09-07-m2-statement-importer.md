@@ -499,6 +499,11 @@ worked around.
    tree — there is no such script and no such ESLint rule. Roadmap **M5** owns the reporting
    check; M2 does not build any of them. Recorded here so the gap is known rather than assumed
    covered. M2's own compliance is enforced by review and by the tests each task declares.
+
+   **Settled, 10 September 2026.** Slice 1.4 writes the first reporting reader in this
+   repository, so the reporting checks are built there — task 4b1, before the dashboard
+   query they guard — rather than waiting for M5. Owner decision; this item stands as the
+   record of how long the claim outran the tree.
 7. **`FxRateResponse` uses snake_case** (`carried_from`) while every later route uses camelCase.
    M2's new models use camelCase; the existing response is not renamed here (it would break the
    Settings FX inspector for no M2 benefit).
