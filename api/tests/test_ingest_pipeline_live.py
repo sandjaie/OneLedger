@@ -348,14 +348,16 @@ def test_a_rival_re_import_of_a_cancelled_file_is_refused_inside_the_staging(
 ) -> None:
     """Layer 1 runs before the parse, and the parse is long — the FX fetch sits inside it.
 
-    A new file racing itself is stopped by `idx_document_checksum`. A cancelled file already has
-    its row, so that index cannot stop two re-imports of it: the staging asks again, under the
-    row's lock, or the file is imported twice. The rival stages into a second account, so the
-    period check — which serialises on the account — does not see it.
+    A cancelled file already has its row, so the checksum index cannot stop two re-imports of
+    it: the staging asks layer 1 again once the household lock is held, or the file is imported
+    twice. The rival stages into a second account, so the period check — which is per account —
+    does not see it. The first upload is back-dated so the refusal's date proves the reused row
+    was refreshed rather than left describing the abandoned attempt.
     """
     first = live.parse(stage=True)
     with live.conn.cursor() as cur:
         cur.execute("UPDATE import_batch SET status = 'cancelled' WHERE id = %s", (first.batch_id,))
+        cur.execute("UPDATE document SET uploaded_at = DATE '2026-01-01'")
         other = _account(cur, live.household)
     live.conn.commit()
 
@@ -400,6 +402,7 @@ def test_a_rival_re_import_of_a_cancelled_file_is_refused_inside_the_staging(
 
     assert rivals and rivals[0].staged, "the rival re-imported the cancelled file"
     assert str(rivals[0].batch_id) in str(raised.value)
+    assert "2026-01-01" not in str(raised.value), "the rival's upload date, not the cancelled one"
     with live.conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM import_batch WHERE status <> 'cancelled'")
         assert cur.fetchone()[0] == 1  # type: ignore[index]

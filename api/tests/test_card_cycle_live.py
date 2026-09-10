@@ -312,3 +312,44 @@ def test_a_capture_that_will_not_read_is_reported_and_does_not_block(live: CardS
     assert committed.status_code == 200, committed.text
     assert committed.json()["cardStatementMissing"] == ["payment_due_date"]
     assert live.ledger_rows() == 2
+
+
+# ---------------------------------------------------------------------------------------
+# A statement cancelled and imported again commits the cycle the second parse read.
+
+
+def test_a_re_imported_card_statement_commits_the_cycle_the_second_parse_read(
+    live: CardStaged,
+) -> None:
+    """The reasons an owner cancels: the wrong account, a mapping that missed the summary.
+
+    The same bytes are the same document row, and a re-import reuses it — so the row has to
+    describe the second attempt. The commit reads the document type and the cycle's facts back
+    from it, and a row still describing the first commits the rows with no cycle and nothing
+    saying why.
+    """
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE statement_layout SET metadata_patterns = NULL WHERE id = %s", (CARD_LAYOUT_ID,)
+        )
+    live.conn.commit()
+    wrong = live.post(_card_statement(), stage="true")  # into the bank account
+    assert wrong.status_code == 200, wrong.text
+    assert wrong.json()["staged"], wrong.text
+    assert live.cancel(wrong.json()["batchId"]).status_code == 200
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE statement_layout SET metadata_patterns = %s WHERE id = %s",
+            (psycopg.types.json.Json(CARD_METADATA), CARD_LAYOUT_ID),
+        )
+    live.conn.commit()
+
+    batch = live.stage_card()
+    live.accept_all(batch)
+    committed = live.commit(batch)
+
+    assert committed.status_code == 200, committed.text
+    assert committed.json()["cardStatementId"] is not None
+    [cycle] = live.cycles()
+    assert cycle["account_id"] == live.card_id
+    assert cycle["payment_due_date"] == date(2026, 4, 4)
