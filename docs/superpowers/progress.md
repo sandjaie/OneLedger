@@ -275,8 +275,9 @@ was checked into a document first.
   carries it.
 - **`api-contracts.html` §2 lists two routes twice**, with contracts that differ between the
   two entries.
-- **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the
-  address it wrote takes an `UPDATE`.
+- **`scripts/seed-household.sh` used to have no repair path** for the owner it seeded. The explicit
+  `--repair-owner-email` mode now changes only the sole existing owner's configured address;
+  delivered by `fix/seed-household-owner-repair`.
 - **The ordinary account form used to hash a submitted card number.** V27 clears legacy card
   hashes and enforces mask-only storage; `POST` and `PATCH /accounts` now apply the same boundary
   as statement confirmation. Delivered by `fix/card-accounts-store-mask-only`.
@@ -478,7 +479,7 @@ touch, recorded here rather than folded in past a diff budget.
 | --- | --- | --- |
 | The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
 | A repeated header line reaches the last row of each page on the encrypted layout | The producer runs whole lines together, so the account holder's locality is a single word centred in the narration column — no band separates it from real narration, and the only pattern that would match it is the owner's own address. 47 of 611 rows gain that one word; no figure, no balance. | A `web/` or layout-mapper branch, once 1.7 can edit a profile |
-| `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
+| `scripts/seed-household.sh` could not correct the owner it seeded | The ordinary command still refuses a second run; explicit `--repair-owner-email` now updates only the sole owner to the configured address. | Delivered by `fix/seed-household-owner-repair` |
 | A standing backup could not be restored directly once V23/V24 rows existed | Three recursive/helper functions resolved unqualified calls through the caller's search path; V26 pins their safe path so `pg_restore` can recreate checked rows under its deliberately empty path. | Delivered by `fix/restorable-schema-helpers`; Phase 2 still owns the quarterly row-count and totals drill |
 
 ## Where the rest is written down
