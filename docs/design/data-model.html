@@ -534,6 +534,10 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── category (tree, seeded)
             ├── merchant ──── merchant_alias
             ├── classification_rule
+            ├── classification_knowledge ──── classification_knowledge_version
+            │                                      └── classification_run
+            │                                             └── classification_run_item
+            ├── classification_decision (append-only, per transaction/run)
             ├── security ──── price_snapshot
             ├── statement_layout
             ├── document ──── import_batch ──── staged_transaction
@@ -833,6 +837,27 @@ column says it recorded none (Invariant I7).</p><p class="ddl-ref">Full DDL: <a 
 <hr>
 <h2 id="13-classification-rules">13. Classification rules</h2>
 <p>A rule matches when <strong>every non-null condition</strong> matches; absent conditions are ignored. Matchers cover description pattern and kind, account, currency, amount range or exact, direction, country and reference pattern. Outcomes set category, merchant, txn type, payment method, country, tags, or flag the row as a transfer candidate with a counterparty account. <code>priority</code> ascends — user rules default to 100, seed rules to 500, so a user rule always wins without either needing to know about the other.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0009</code>.</p>
+<h3 id="classification-decision-evidence">Decision evidence and preview scope</h3>
+<p><code>classification_knowledge</code> gives a household fact a stable identity, while numbered
+<code>classification_knowledge_version</code> rows preserve its bounded source attribution, matcher
+version, scope and active/revoked lifecycle. Identity and evidence fields never change in place:
+revocation is the only lifecycle transition, and changed evidence appends a successor version. The
+supported evidence sources are private owner input, a public source, a statement or a model proposal.
+Public-source URLs are stored as references only; copied pages, private search queries and transaction
+originals do not belong in the evidence payload. Shared community packs are a later opt-in
+distribution mechanism, not a different evidence source or a public copy of household knowledge.</p>
+<p>A <code>classification_run</code> owns an expiring, household-scoped preview and its idempotency
+key. Every <code>classification_run_item</code> names one exact transaction, its immutable source key
+and update version, and complete expected/proposed derived state. The state allowlist contains
+classification and reporting attributes only; amount, currency, narration and source provenance
+remain in <code>transaction</code>. Household-leading foreign keys bind the run, actor, knowledge and
+transaction even for the privileged service connection that bypasses RLS.</p>
+<p><code>classification_decision</code> is append-only and must exactly reproduce its preview item's
+before/after state. A correction is a new event for the same transaction whose before state equals
+the prior event's after state; <code>supersedes_decision_id</code> preserves the chain. This is dedicated
+classification history required for guarded apply and conditional undo. It does not implement the
+broader planned <code>audit_log</code>, and V23 adds no mutation API or background automation.</p>
+<p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V23</code>.</p>
 <hr>
 <h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
 <table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>net_worth_snapshot</code></td><td>Month-end totals in both currencies, broken out by cash, investments, property, other assets, loans and card debt — <em>with the rates used</em>, so a past figure is reproducible.</td></tr><tr><td><code>net_worth_attribution</code></td><td>The consolidated decomposition: retained income, market appreciation, asset revaluation, FX translation, other identified external changes and <code>unexplained_base</code>. Internal investment funding and principal reduction are supporting movements that cancel their cash legs, not additive wealth creation (F03).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0015</code>.</p>
@@ -959,6 +984,8 @@ V21__card_statements.sql              + card_statement (applied)
 V22__statement_layout_usage_is_derived.sql
                                       drops statement_layout's never-written usage
                                       counter; import_batch is the count (applied)
+V23__classification_decisions.sql     classification evidence, exact preview items and
+                                      immutable decision history (applied)
 
   then, in this order, numbered as they land:
 

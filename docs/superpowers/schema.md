@@ -673,6 +673,139 @@ decision.
 
 ---
 
+## `V23` (applied)
+
+### Classification evidence, exact previews and immutable decisions
+
+Applied as `db/migrations/V23__classification_decisions.sql`. This is the durable boundary for
+classification repair, not the planned general `audit_log`: it stores the evidence version used,
+the exact bounded rows previewed, and an append-only outcome per transaction. Task 3 supplies the
+authenticated operations that populate and apply it.
+
+```sql
+CREATE TABLE classification_knowledge (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES household(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (household_id, id)
+);
+
+CREATE TABLE classification_knowledge_version (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id    UUID NOT NULL,
+  knowledge_id    UUID NOT NULL,
+  version         INTEGER NOT NULL CHECK (version > 0),
+  source_kind     TEXT NOT NULL,       -- owner|public_source|statement|model_proposal
+  source_url      TEXT,                -- only public_source may carry one
+  attribution     TEXT NOT NULL,       -- 1..200 characters
+  evidence_note   TEXT NOT NULL,       -- 1..1000 characters
+  matcher_version TEXT NOT NULL,       -- 1..100 characters
+  scope           JSONB NOT NULL DEFAULT '{}', -- object, at most 4096 serialized bytes
+  state           TEXT NOT NULL DEFAULT 'active', -- active|revoked
+  verified_at     TIMESTAMPTZ,
+  revoked_at      TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (household_id, knowledge_id)
+    REFERENCES classification_knowledge(household_id, id) ON DELETE RESTRICT,
+  UNIQUE (household_id, knowledge_id, version),
+  UNIQUE (household_id, id)
+);
+
+CREATE UNIQUE INDEX idx_classification_knowledge_one_active_version
+  ON classification_knowledge_version (household_id, knowledge_id) WHERE state = 'active';
+
+CREATE TABLE classification_run (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id         UUID NOT NULL,
+  knowledge_version_id UUID NOT NULL,
+  actor_user_id        UUID NOT NULL,
+  state                TEXT NOT NULL DEFAULT 'proposed',
+                       -- proposed|applied|rejected|conflict|expired
+  reason               TEXT NOT NULL,       -- 1..1000 characters
+  result               JSONB NOT NULL DEFAULT '{}', -- object, at most 4096 serialized bytes
+  result_reason        TEXT,                -- when present, 1..1000 characters
+  expires_at           TIMESTAMPTZ NOT NULL,
+  resolved_at          TIMESTAMPTZ,
+  idempotency_key      TEXT,                -- when present, 1..200 characters
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (household_id, knowledge_version_id)
+    REFERENCES classification_knowledge_version(household_id, id) ON DELETE RESTRICT,
+  FOREIGN KEY (household_id, actor_user_id)
+    REFERENCES app_user(household_id, id) ON DELETE RESTRICT,
+  UNIQUE (household_id, id),
+  UNIQUE (household_id, id, knowledge_version_id, actor_user_id)
+);
+
+CREATE UNIQUE INDEX idx_classification_run_idempotency
+  ON classification_run (household_id, idempotency_key) WHERE idempotency_key IS NOT NULL;
+CREATE INDEX idx_classification_run_history
+  ON classification_run (household_id, created_at DESC);
+
+CREATE TABLE classification_run_item (
+  household_id                    UUID NOT NULL,
+  run_id                          UUID NOT NULL,
+  transaction_id                  UUID NOT NULL,
+  expected_transaction_updated_at TIMESTAMPTZ NOT NULL,
+  expected_source_key             TEXT NOT NULL, -- 1..128 characters
+  expected_state                  JSONB NOT NULL,
+  proposed_state                  JSONB NOT NULL,
+  reason                          TEXT NOT NULL, -- 1..1000 characters
+  created_at                      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (run_id, transaction_id),
+  FOREIGN KEY (household_id, run_id)
+    REFERENCES classification_run(household_id, id) ON DELETE RESTRICT,
+  FOREIGN KEY (household_id, transaction_id)
+    REFERENCES transaction(household_id, id) ON DELETE RESTRICT,
+  UNIQUE (household_id, run_id, transaction_id)
+);
+
+CREATE INDEX idx_classification_run_item_transaction
+  ON classification_run_item (household_id, transaction_id, created_at DESC);
+
+CREATE TABLE classification_decision (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id           UUID NOT NULL,
+  run_id                 UUID NOT NULL,
+  transaction_id         UUID NOT NULL,
+  knowledge_version_id   UUID NOT NULL,
+  actor_user_id          UUID NOT NULL,
+  before_state           JSONB NOT NULL,
+  after_state            JSONB NOT NULL,
+  reason                 TEXT NOT NULL, -- 1..1000 characters
+  supersedes_decision_id UUID,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (household_id, run_id, knowledge_version_id, actor_user_id)
+    REFERENCES classification_run(household_id, id, knowledge_version_id, actor_user_id)
+    ON DELETE RESTRICT,
+  FOREIGN KEY (household_id, run_id, transaction_id)
+    REFERENCES classification_run_item(household_id, run_id, transaction_id) ON DELETE RESTRICT,
+  UNIQUE (household_id, transaction_id, id),
+  FOREIGN KEY (household_id, transaction_id, supersedes_decision_id)
+    REFERENCES classification_decision(household_id, transaction_id, id) ON DELETE RESTRICT
+);
+
+CREATE UNIQUE INDEX idx_classification_decision_superseded_once
+  ON classification_decision (supersedes_decision_id) WHERE supersedes_decision_id IS NOT NULL;
+CREATE INDEX idx_classification_decision_history
+  ON classification_decision (household_id, transaction_id, created_at DESC);
+```
+
+`expected_state`, `proposed_state`, `before_state` and `after_state` are complete JSON objects,
+with explicit nulls, containing exactly these derived fields: `txn_type`, `category_id`,
+`merchant_id`, `payment_method`, `classified_by`, `classification_rule_id`,
+`classification_confidence`, `is_reviewed`, `country`, `tags` and `is_excluded`. A raw description,
+reference, source provenance or money field is refused. Category and merchant references admit the
+shared system set or the row's household; a rule reference must belong to the household.
+
+The household-leading keys on `app_user` and `transaction` support the composite foreign keys
+above. All five new tables carry RLS. A knowledge version's identity and evidence are immutable;
+only `active` to `revoked` changes in place, and changed evidence appends a successor version.
+Preview items and decisions are immutable; a decision must equal its run item's expected/proposed
+state. A correction appends a new decision whose before state equals the prior event's after state
+and names it in `supersedes_decision_id`.
+
+---
+
 ## `V21` (applied)
 
 ### Card cycles
