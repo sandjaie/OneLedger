@@ -956,6 +956,206 @@ export type InstitutionRow = {
 };
 
 /**
+ * KnowledgeBody
+ */
+export type KnowledgeBody = {
+    /**
+     * Displayname
+     */
+    displayName: string;
+    /**
+     * Kind
+     */
+    kind: 'merchant' | 'person' | 'own_account' | 'institution' | 'intermediary' | 'unresolved';
+    /**
+     * Merchantid
+     */
+    merchantId?: string | null;
+    /**
+     * Merchantname
+     */
+    merchantName?: string | null;
+    /**
+     * Ownaccountid
+     */
+    ownAccountId?: string | null;
+    /**
+     * Pattern
+     */
+    pattern: string;
+    /**
+     * Patternkind
+     */
+    patternKind?: 'exact' | 'prefix' | 'contains' | 'regex';
+    /**
+     * Role
+     */
+    role: 'purchase' | 'wallet' | 'processor' | 'transfer' | 'refund' | 'own_account' | 'institution' | 'unresolved' | 'other';
+    /**
+     * Priority
+     */
+    priority?: number;
+    /**
+     * Sourcekind
+     */
+    sourceKind?: 'owner' | 'public_source' | 'statement' | 'model_proposal';
+    /**
+     * Sourceurl
+     */
+    sourceUrl?: string | null;
+    /**
+     * Attribution
+     */
+    attribution: string;
+    /**
+     * Evidencenote
+     */
+    evidenceNote: string;
+    /**
+     * Matcherversion
+     */
+    matcherVersion: string;
+    /**
+     * Verifiedat
+     */
+    verifiedAt?: string | null;
+    /**
+     * Direction
+     */
+    direction?: 'debit' | 'credit' | 'any';
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
+    /**
+     * Txntype
+     */
+    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    /**
+     * Paymentmethod
+     */
+    paymentMethod?: 'card' | 'contactless' | 'atm' | 'cash' | 'cheque' | 'upi' | 'neft' | 'imps' | 'rtgs' | 'wire' | 'direct_debit' | 'standing_instruction' | 'wallet' | 'online' | 'other' | null;
+};
+
+/**
+ * KnowledgeRow
+ */
+export type KnowledgeRow = {
+    /**
+     * Aliasid
+     */
+    aliasId: string;
+    /**
+     * Counterpartyid
+     */
+    counterpartyId: string;
+    /**
+     * Knowledgeversionid
+     */
+    knowledgeVersionId: string;
+    /**
+     * Knowledgeid
+     */
+    knowledgeId: string;
+    /**
+     * Version
+     */
+    version: number;
+    /**
+     * Displayname
+     */
+    displayName: string;
+    /**
+     * Kind
+     */
+    kind: 'merchant' | 'person' | 'own_account' | 'institution' | 'intermediary' | 'unresolved';
+    /**
+     * Merchantid
+     */
+    merchantId: string | null;
+    /**
+     * Merchantname
+     */
+    merchantName: string | null;
+    /**
+     * Ownaccountid
+     */
+    ownAccountId: string | null;
+    /**
+     * Pattern
+     */
+    pattern: string;
+    /**
+     * Patternkind
+     */
+    patternKind: 'exact' | 'prefix' | 'contains' | 'regex';
+    /**
+     * Role
+     */
+    role: 'purchase' | 'wallet' | 'processor' | 'transfer' | 'refund' | 'own_account' | 'institution' | 'unresolved' | 'other';
+    /**
+     * Priority
+     */
+    priority: number;
+    /**
+     * Sourcekind
+     */
+    sourceKind: 'owner' | 'public_source' | 'statement' | 'model_proposal';
+    /**
+     * Sourceurl
+     */
+    sourceUrl: string | null;
+    /**
+     * Attribution
+     */
+    attribution: string;
+    /**
+     * Evidencenote
+     */
+    evidenceNote: string;
+    /**
+     * Matcherversion
+     */
+    matcherVersion: string;
+    /**
+     * Verifiedat
+     */
+    verifiedAt: string | null;
+    /**
+     * Direction
+     */
+    direction: 'debit' | 'credit' | 'any';
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Txntype
+     */
+    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    /**
+     * Paymentmethod
+     */
+    paymentMethod: 'card' | 'contactless' | 'atm' | 'cash' | 'cheque' | 'upi' | 'neft' | 'imps' | 'rtgs' | 'wire' | 'direct_debit' | 'standing_instruction' | 'wallet' | 'online' | 'other' | null;
+    /**
+     * Active
+     */
+    active: boolean;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
  * LayoutColumn
  */
 export type LayoutColumn = {
@@ -3510,6 +3710,123 @@ export type CreateLayoutLayoutsPostResponses = {
 };
 
 export type CreateLayoutLayoutsPostResponse = CreateLayoutLayoutsPostResponses[keyof CreateLayoutLayoutsPostResponses];
+
+export type ListKnowledgeMerchantKnowledgeGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Includeinactive
+         */
+        includeInactive?: boolean;
+    };
+    url: '/merchant-knowledge';
+};
+
+export type ListKnowledgeMerchantKnowledgeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListKnowledgeMerchantKnowledgeGetError = ListKnowledgeMerchantKnowledgeGetErrors[keyof ListKnowledgeMerchantKnowledgeGetErrors];
+
+export type ListKnowledgeMerchantKnowledgeGetResponses = {
+    /**
+     * Response List Knowledge Merchant Knowledge Get
+     *
+     * Successful Response
+     */
+    200: Array<KnowledgeRow>;
+};
+
+export type ListKnowledgeMerchantKnowledgeGetResponse = ListKnowledgeMerchantKnowledgeGetResponses[keyof ListKnowledgeMerchantKnowledgeGetResponses];
+
+export type CreateKnowledgeMerchantKnowledgePostData = {
+    body: KnowledgeBody;
+    path?: never;
+    query?: never;
+    url: '/merchant-knowledge';
+};
+
+export type CreateKnowledgeMerchantKnowledgePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateKnowledgeMerchantKnowledgePostError = CreateKnowledgeMerchantKnowledgePostErrors[keyof CreateKnowledgeMerchantKnowledgePostErrors];
+
+export type CreateKnowledgeMerchantKnowledgePostResponses = {
+    /**
+     * Successful Response
+     */
+    201: KnowledgeRow;
+};
+
+export type CreateKnowledgeMerchantKnowledgePostResponse = CreateKnowledgeMerchantKnowledgePostResponses[keyof CreateKnowledgeMerchantKnowledgePostResponses];
+
+export type DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Alias Id
+         */
+        alias_id: string;
+    };
+    query?: never;
+    url: '/merchant-knowledge/{alias_id}';
+};
+
+export type DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteError = DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteErrors[keyof DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteErrors];
+
+export type DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteResponse = DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteResponses[keyof DeactivateKnowledgeMerchantKnowledgeAliasIdDeleteResponses];
+
+export type ReviseKnowledgeMerchantKnowledgeAliasIdPatchData = {
+    body: KnowledgeBody;
+    path: {
+        /**
+         * Alias Id
+         */
+        alias_id: string;
+    };
+    query?: never;
+    url: '/merchant-knowledge/{alias_id}';
+};
+
+export type ReviseKnowledgeMerchantKnowledgeAliasIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReviseKnowledgeMerchantKnowledgeAliasIdPatchError = ReviseKnowledgeMerchantKnowledgeAliasIdPatchErrors[keyof ReviseKnowledgeMerchantKnowledgeAliasIdPatchErrors];
+
+export type ReviseKnowledgeMerchantKnowledgeAliasIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: KnowledgeRow;
+};
+
+export type ReviseKnowledgeMerchantKnowledgeAliasIdPatchResponse = ReviseKnowledgeMerchantKnowledgeAliasIdPatchResponses[keyof ReviseKnowledgeMerchantKnowledgeAliasIdPatchResponses];
 
 export type ListRulesRulesGetData = {
     body?: never;
