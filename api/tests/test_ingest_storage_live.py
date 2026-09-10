@@ -65,11 +65,18 @@ def _document(cur: psycopg.Cursor[Any], household: UUID, sha: str, on: date) -> 
     return UUID(str(cur.fetchone()[0]))  # type: ignore[index]
 
 
-def _batch(cur: psycopg.Cursor[Any], household: UUID, account: UUID, doc: UUID, at: str) -> UUID:
+def _batch(
+    cur: psycopg.Cursor[Any],
+    household: UUID,
+    account: UUID,
+    doc: UUID,
+    at: str,
+    status: str = "awaiting_review",
+) -> UUID:
     cur.execute(
-        """INSERT INTO import_batch (household_id, account_id, document_id, created_at)
-           VALUES (%s, %s, %s, %s) RETURNING id""",
-        (household, account, doc, at),
+        """INSERT INTO import_batch (household_id, account_id, document_id, created_at, status)
+           VALUES (%s, %s, %s, %s, %s::import_status) RETURNING id""",
+        (household, account, doc, at, status),
     )
     return UUID(str(cur.fetchone()[0]))  # type: ignore[index]
 
@@ -107,6 +114,47 @@ def test_a_document_with_no_batch_yet_is_still_a_duplicate() -> None:
             _document(cur, household, SHA, date(2026, 2, 1))
             with pytest.raises(DuplicateDocument, match="2026-02-01"):
                 refuse_if_already_imported(cur, household, SHA)
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_a_document_whose_only_batch_was_cancelled_passes() -> None:
+    """A cancelled batch never imported anything, so its file was never imported.
+
+    Counting it made every cancelled statement unimportable for good — three of them during
+    the 10 September rebuild, repaired by hand in SQL.
+    """
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            household, account = _fixture(cur)
+            document = _document(cur, household, SHA, date(2026, 2, 1))
+            _batch(cur, household, account, document, "2026-02-01T09:00:00Z", "cancelled")
+            refuse_if_already_imported(cur, household, SHA)
+    finally:
+        conn.rollback()
+        conn.close()
+
+
+def test_a_cancelled_attempt_is_passed_over_for_the_batch_that_counts() -> None:
+    """The earliest batch is named, but a cancelled one is not an import: naming it would link
+    the owner to the attempt they abandoned rather than the import that holds the file."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            household, account = _fixture(cur)
+            document = _document(cur, household, SHA, date(2026, 2, 1))
+            abandoned = _batch(
+                cur, household, account, document, "2026-02-01T09:00:00Z", "cancelled"
+            )
+            live = _batch(cur, household, account, document, "2026-03-01T09:00:00Z")
+
+            with pytest.raises(DuplicateDocument) as raised:
+                refuse_if_already_imported(cur, household, SHA)
+
+            assert str(live) in str(raised.value)
+            assert str(abandoned) not in str(raised.value)
     finally:
         conn.rollback()
         conn.close()

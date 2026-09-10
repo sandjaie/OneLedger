@@ -569,14 +569,30 @@ def _staged(
 
 AccountResolver = Callable[[str], AccountContext | None]
 
-_DOCUMENT = """INSERT INTO document
+_DOCUMENT_ROW = """INSERT INTO document
                  (household_id, account_id, document_type, original_filename, storage_bucket,
                   storage_path, mime_type, byte_size, sha256, page_count, parsed_status,
                   is_password_protected, statement_layout_id, layout_version, period_start,
                   period_end, currency, extracted_metadata)
                VALUES (%s, %s, %s, %s, %s, %s, 'application/pdf', %s, %s, %s,
-                       'parsed', %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id"""
+                       'parsed', %s, %s, %s, %s, %s, %s, %s)"""
+_DOCUMENT = _DOCUMENT_ROW + " RETURNING id"
+# A file whose every batch was cancelled keeps its one row (`idx_document_checksum`), and the
+# re-import re-describes it: the account, layout or period may be exactly what the owner
+# cancelled to correct, and the commit reads the row back. Each cancelled batch keeps its own
+# copy of those, so what was attempted stays on record.
+_REDESCRIBED_DOCUMENT = (
+    _DOCUMENT_ROW
+    + """ ON CONFLICT (household_id, sha256) DO UPDATE
+             SET account_id = EXCLUDED.account_id, document_type = EXCLUDED.document_type,
+                 original_filename = EXCLUDED.original_filename,
+                 statement_layout_id = EXCLUDED.statement_layout_id,
+                 layout_version = EXCLUDED.layout_version,
+                 period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
+                 currency = EXCLUDED.currency,
+                 extracted_metadata = EXCLUDED.extracted_metadata, uploaded_at = now()
+         RETURNING id"""
+)
 
 _BATCH = """INSERT INTO import_batch
               (household_id, document_id, account_id, status, statement_layout_id,
@@ -851,8 +867,21 @@ def _staged_batch(
         _refuse_second_staging(cur, household.id, account.id, analysis.period)
         rows = _staged(cur, analysis, account=account, household=pair)
 
+        # A cancelled file already has its row, so `idx_document_checksum` cannot separate two
+        # re-imports of it the way it separates two uploads of a new file. Lock the row, then
+        # ask layer 1 again in a statement of its own: under READ COMMITTED that one sees a
+        # rival that staged since the parse began. A new file keeps the plain insert, so its
+        # race still ends on the index and in `_stage`'s handler.
         cur.execute(
-            _DOCUMENT,
+            "SELECT 1 FROM document WHERE household_id = %s AND sha256 = %s FOR UPDATE",
+            (household.id, stored.sha256),
+        )
+        kept = cur.fetchone() is not None
+        if kept:
+            storage.refuse_if_already_imported(cur, household.id, stored.sha256)
+
+        cur.execute(
+            _REDESCRIBED_DOCUMENT if kept else _DOCUMENT,
             (
                 household.id,
                 account.id,

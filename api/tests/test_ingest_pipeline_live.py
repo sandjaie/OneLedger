@@ -20,13 +20,15 @@ from decimal import ROUND_HALF_UP, Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 from uuid import UUID
 
 import psycopg
 import pytest
 
+from oneledger.db import connect
 from oneledger.fxrange import RateSource
-from oneledger.ingest import pipeline
+from oneledger.ingest import pipeline, storage
 from oneledger.ingest.storage import DuplicateDocument
 from oneledger.ingest.words import Page
 from tests.test_ingest_pipeline import profile, statement, transaction
@@ -339,6 +341,70 @@ def test_the_same_file_twice_is_refused_before_anything_is_parsed(live: Fixture)
         live.parse(stage=True)
     with pytest.raises(DuplicateDocument):
         live.parse(stage=False)
+
+
+def test_a_rival_re_import_of_a_cancelled_file_is_refused_inside_the_staging(
+    live: Fixture,
+) -> None:
+    """Layer 1 runs before the parse, and the parse is long — the FX fetch sits inside it.
+
+    A new file racing itself is stopped by `idx_document_checksum`. A cancelled file already has
+    its row, so that index cannot stop two re-imports of it: the staging asks again, under the
+    row's lock, or the file is imported twice. The rival stages into a second account, so the
+    period check — which serialises on the account — does not see it.
+    """
+    first = live.parse(stage=True)
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE import_batch SET status = 'cancelled' WHERE id = %s", (first.batch_id,))
+        other = _account(cur, live.household)
+    live.conn.commit()
+
+    real = storage.store
+    rivals: list[pipeline.ParseResult] = []
+    raced = False
+
+    def a_rival_stages_first(
+        data: bytes, household_id: UUID, original_filename: str, *, root: Path | None = None
+    ) -> storage.StoredDocument:
+        nonlocal raced
+        if not raced:
+            # Set before the rival runs: its own parse calls `store` through this same patch.
+            raced = True
+            # The routes' own connection, as the review tests race theirs: the fixture's guard
+            # refuses a database with rows in it, and this one now holds the first batch.
+            with connect() as rival:
+                rivals.append(
+                    pipeline.parse(
+                        rival,
+                        pages=statement(),
+                        data=b"%PDF-1.4 one",
+                        original_filename=FILENAME,
+                        household=live.household,
+                        profiles=[profile()],
+                        account=pipeline.AccountContext(
+                            id=other, currency=live.household.base_currency
+                        ),
+                        resolve_account=lambda _: None,
+                        stage=True,
+                        documents_root=live.root,
+                        rate_source=cast("RateSource", NeverCalled()),
+                    )
+                )
+        return real(data, household_id, original_filename, root=root)
+
+    with (
+        patch.object(storage, "store", a_rival_stages_first),
+        pytest.raises(DuplicateDocument) as raised,
+    ):
+        live.parse(stage=True)
+
+    assert rivals and rivals[0].staged, "the rival re-imported the cancelled file"
+    assert str(rivals[0].batch_id) in str(raised.value)
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM import_batch WHERE status <> 'cancelled'")
+        assert cur.fetchone()[0] == 1  # type: ignore[index]
+        cur.execute("SELECT account_id FROM document")
+        assert cur.fetchone()[0] == other, "the reused row describes the live import"  # type: ignore[index]
 
 
 def test_a_row_that_cannot_be_normalized_refuses_the_whole_batch(live: Fixture) -> None:

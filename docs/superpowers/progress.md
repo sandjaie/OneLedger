@@ -314,6 +314,7 @@ architecture §10's weekly copy was never written, and is its own `scripts/` bra
 | 2a — a password reaches the parse | `feature/p1-2a-encrypted-statements` | Delivered | [#71](https://github.com/sandjaie/OneLedger/pull/71) |
 | 2b — a staged batch can be discarded | `feature/p1-2b-batch-cancellation` | Delivered | [#72](https://github.com/sandjaie/OneLedger/pull/72) |
 | 2c1–2c3 — the three remaining layouts | `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Delivered | [#75](https://github.com/sandjaie/OneLedger/pull/75) · [#76](https://github.com/sandjaie/OneLedger/pull/76) · [#77](https://github.com/sandjaie/OneLedger/pull/77) |
+| 2b — a cancelled batch releases its file | `fix/cancelled-batch-releases-its-file` | Delivered — layer 1 does not count a cancelled batch, and a re-import reuses the file's row | this branch |
 
 The slice's survey found three of its four stated engine capabilities already delivered with M2
 and exercised by slice 1.1; the plan records that and the five-branch split that followed. What
@@ -445,7 +446,6 @@ touch, recorded here rather than folded in past a diff budget.
 | The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
 | A repeated header line reaches the last row of each page on the encrypted layout | The producer runs whole lines together, so the account holder's locality is a single word centred in the narration column — no band separates it from real narration, and the only pattern that would match it is the owner's own address. 47 of 611 rows gain that one word; no figure, no balance. | A `web/` or layout-mapper branch, once 1.7 can edit a profile |
 | `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
-| Cancelling a batch frees its period but not its file | `POST /import/{batch}/cancel` reaches the state `_refuse_second_staging` treats as finished, so the account and period are re-stageable. `idx_document_checksum` is a separate guard: the same bytes are still refused on re-upload, naming a batch that imported nothing. Changing that means layer 1 reusing a document row rather than refusing it, which is its own decision. | A slice 1.7 branch, with the documents screen that would surface the stored file |
 
 ## Where the rest is written down
 
