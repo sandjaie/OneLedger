@@ -74,6 +74,25 @@ design problem, not a patch problem.
 Nothing reaches `origin` unreviewed. A documentation-only branch carries no code for this gate
 to read: `scripts/check-docs.py` and the commit hooks are its gate, and the PR says so.
 
+**The live tests need a database of their own, and refuse any other.** Every `*_live.py`
+fixture empties `transaction`, `import_batch`, `document`, `statement_layout` and
+`classification_rule`. Start theirs and export it in one step:
+
+```bash
+eval "$(scripts/test-db.sh up)"
+```
+
+That brings up the `db-test` container — its own port, its own volume, behind the `test`
+compose profile — migrates it, seeds it, and exports both `ONELEDGER_TEST_DSN` (which the
+fixtures read) and the `POSTGRES_*` the routes under test connect through. Without it the live
+tests skip; with `.env` exported instead they **fail**, because `tests/live_database.py`
+refuses a database holding anything those fixtures would empty and refuses a split where the
+fixtures and the routes point at different databases.
+
+This is not a precaution in the abstract: on 10 September 2026 exporting `.env` to make the
+live suite run truncated the working ledger, taking 4,184 imported transactions and four layout
+profiles with it.
+
 ### 6. Push — the hooks are the enforcement
 
 `pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and

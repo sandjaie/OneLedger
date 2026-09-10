@@ -12,7 +12,6 @@ Skipped when no database is reachable. Every figure is invented.
 from __future__ import annotations
 
 import hashlib
-import os
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
@@ -28,6 +27,7 @@ from oneledger import auth
 from oneledger.main import app
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
+from .live_database import connect_to_test_database
 
 ORIGIN = {"Origin": "http://localhost:3000"}
 LAYOUT_ID = UUID("66666666-6666-6666-6666-666666666666")
@@ -85,14 +85,8 @@ def _statement(
 
 
 def _connect() -> psycopg.Connection:
-    if "POSTGRES_PASSWORD" not in os.environ:
-        pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
-
-    try:
-        return connect()
-    except psycopg.OperationalError:
-        pytest.skip("database unreachable")
+    """See `tests/live_database.py`: the test database, and only the test database."""
+    return connect_to_test_database()
 
 
 def _clean(cur: psycopg.Cursor[Any]) -> None:
