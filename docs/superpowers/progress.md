@@ -27,6 +27,12 @@ Each phase ships as branches and PRs into `develop` under the cycle plan → imp
 review → merge ([git-workflow](../git-workflow.md)); any path to `main` needs a separate owner
 request.
 
+## Local operation
+
+| Capability | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| Isolated local-production stack | `feature/local-production-stack` | Delivered — production-built web and API, a migrated owner-only database, generated private secrets, persistent production-only volumes and loopback-only local sessions run beside the untouched development ledger | [ADR-0018](../adr/0018-local-owner-sessions.html) · [ADR-0019](../adr/0019-separate-local-production-stack.html) |
+
 ## Phase 1 — the complete application
 
 | Slice | Branches | Status | Evidence |

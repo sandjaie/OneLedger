@@ -69,8 +69,8 @@ financial data does not enter this repository, and test fixtures are redacted �
                  ├─────────────────────────────────────┤
                  │  db         Postgres 18             │   constraints · triggers · views
                  └─────────────────────────────────────┘
-                   one docker compose file
-                   your laptop now, one small VPS later
+                   explicit docker compose projects
+                   development and clean local production today
 ```
 
 Run the API locally without raw access logging so an OIDC callback code is not copied from the
@@ -80,6 +80,37 @@ request target into terminal output or captured logs:
 cd api
 uv run uvicorn oneledger.main:app --reload --port 8000 --no-access-log
 ```
+
+### Run the clean local-production stack
+
+The existing `docker-compose.yml` remains the development and acceptance environment, including
+its working ledger. A separate production-built stack uses its own Compose project, database and
+documents volume:
+
+```bash
+scripts/production-stack.sh init
+scripts/production-stack.sh up
+scripts/production-stack.sh status
+```
+
+Open <http://localhost:3100>. Its API is on <http://localhost:8100> and its database is exposed
+only on loopback port `55432`. The first `init` writes a private, mode-600 `.env.production` with
+generated secrets, runs every migration and creates only the configured owner; no mock, imported or
+financial row is seeded. Local login still creates the normal persisted, revocable owner session.
+
+`scripts/production-stack.sh down` stops only this project and preserves
+`oneledger-production_pgdata` and `oneledger-production_documents`. Starting it again resumes the
+same clean ledger. Erasure is deliberately separate and exact:
+
+```bash
+scripts/production-stack.sh reset --confirm oneledger-production
+```
+
+That command removes only those two production volumes. It is not part of normal operation. The
+future public deployment will explicitly select Google authentication and add its public-origin/TLS
+configuration; this local stack is not exposed beyond loopback. See
+[ADR-0018](docs/adr/0018-local-owner-sessions.html) and
+[ADR-0019](docs/adr/0019-separate-local-production-stack.html).
 
 Three jobs, cleanly split: **React renders, Python computes, Postgres guarantees.** The invariants
 live in the database rather than the service, because a backend is a convenient place to put logic
@@ -119,7 +150,7 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [UI & Information Architecture](docs/product/ui-information-architecture.html) | Screens, navigation, key interactions |
 | [Testing & Data Quality](docs/operations/testing-and-data-quality.html) | How correctness is proven, not assumed |
 | [Glossary](docs/reference/glossary.html) | Domain vocabulary used consistently everywhere |
-| [ADRs](docs/adr/index.html) | 14 decisions in force, each with the alternatives actually considered |
+| [ADRs](docs/adr/index.html) | 19 decisions in force, each with the alternatives actually considered |
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/superpowers/questions.html) | Scoping questions — **17 of 24 answered** |
 | **[Implementation Plan](docs/superpowers/plans/implementation-plan.md)** | **The build order. Start here to write code** |

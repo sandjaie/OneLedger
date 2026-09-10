@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
-from .auth import OwnerSession, require_owner, session_secret
+from .auth import OwnerSession, auth_mode, require_owner, session_secret
 from .routes import (
     accounts,
     auth,
@@ -29,6 +29,7 @@ from .routes import (
 # Fail at startup, not on the first request. A service that boots without the key that signs
 # its sessions is broken in a way every caller will experience as an unexplained 500.
 session_secret()
+auth_mode()
 
 # /docs, /redoc and /openapi.json are registered by default and depend on nothing, which
 # would add three public routes beyond health and the login/callback bootstrap boundary.

@@ -399,7 +399,7 @@ cookie-authenticated requests also require an exact <code>Origin</code> match wi
 CORS is not the CSRF boundary. See
 <a href="../adr/0016-revocable-owner-sessions.html">ADR-0016</a>.</p>
 <table><thead><tr><th>Route</th><th>Does</th></tr></thead><tbody>
-<tr><td><code>GET /auth/login</code></td><td>Starts Google authorization with signed ten-minute state, nonce and PKCE S256 context</td></tr>
+<tr><td><code>GET /auth/login</code></td><td>In <code>local</code> mode, resolves the configured owner and issues the normal persisted, revocable session; in <code>google</code> mode, starts Google authorization with signed ten-minute state, nonce and PKCE S256 context. Local mode is refused outside an HTTP loopback origin (<a href="../adr/0018-local-owner-sessions.html">ADR-0018</a>)</td></tr>
 <tr><td><code>GET /auth/callback</code></td><td>Validates flow context and Google's signed identity, binds the permitted seeded owner, and issues the revocable local session</td></tr>
 <tr><td><code>POST /auth/logout</code></td><td>Revokes the exact current session record, then clears the session cookie. Replaying the old cookie is rejected</td></tr>
 <tr><td><code>GET /household</code></td><td>Returns the authenticated owner's household id, name, owner display name and tax residency, configured reporting pair, whether that pair is locked, and currency display metadata. The browser cannot select a household id</td></tr>

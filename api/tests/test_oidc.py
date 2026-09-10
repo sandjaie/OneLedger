@@ -257,6 +257,27 @@ def test_login_without_a_session_secret_is_unavailable(monkeypatch: pytest.Monke
     assert response.json() == {"detail": "sign-in unavailable"}
 
 
+def test_local_login_issues_the_existing_session_without_google_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Calling the Google branch in local mode would make offline development unavailable."""
+    stored: list[object] = []
+    monkeypatch.setenv("AUTH_MODE", "local")
+    monkeypatch.setenv("WEB_ORIGIN", "http://localhost:3000")
+    for name in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(auth, "local_owner", lambda: (USER_ID, EMAIL), raising=False)
+    monkeypatch.setattr(auth, "_store_session", lambda *values: stored.append(values))
+
+    response = TestClient(app).get("/auth/login", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "http://localhost:3000/"
+    assert stored
+    assert response.cookies["session"]
+    assert "oidc_flow" not in response.cookies
+
+
 def test_owner_binding_rejects_a_subject_already_bound_elsewhere(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

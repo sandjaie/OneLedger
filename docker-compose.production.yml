@@ -1,0 +1,123 @@
+name: oneledger-production
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-oneledger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/production-stack.sh init}
+      POSTGRES_DB: ${POSTGRES_DB:-oneledger}
+    ports: ["127.0.0.1:${POSTGRES_PORT:-55432}:5432"]
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oneledger} -d ${POSTGRES_DB:-oneledger}"]
+      interval: 5s
+      retries: 10
+
+  migrate:
+    image: flyway/flyway:13.5.0-alpine
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-oneledger}
+      FLYWAY_USER: ${POSTGRES_USER:-oneledger}
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/production-stack.sh init}
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "20"
+    volumes: ["./db/migrations:/flyway/sql:ro"]
+    command: migrate
+    depends_on:
+      db: { condition: service_healthy }
+
+  bootstrap:
+    image: postgres:18
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-oneledger}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run scripts/production-stack.sh init}
+      PGDATABASE: ${POSTGRES_DB:-oneledger}
+      OWNER_EMAIL: ${ALLOWED_USER_EMAIL:?run scripts/production-stack.sh init}
+    volumes: ["./scripts/bootstrap-owner.sql:/bootstrap-owner.sql:ro"]
+    entrypoint: ["bash", "-c"]
+    command: ['psql -v ON_ERROR_STOP=1 -v email="$${OWNER_EMAIL}" -f /bootstrap-owner.sql']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  backup:
+    image: postgres:18
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-oneledger}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run scripts/production-stack.sh init}
+      PGDATABASE: ${POSTGRES_DB:-oneledger}
+      DATABASE_URL: "postgresql://"
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?run scripts/production-stack.sh init}
+      BACKUP_DIR: /oneledger/backups
+      BACKUP_PREFIX: oneledger-production
+    volumes: ["./scripts:/oneledger/scripts:ro", "./backups:/oneledger/backups"]
+    init: true
+    entrypoint:
+      - bash
+      - -c
+      - |
+        while :; do
+          /oneledger/scripts/backup-db.sh --if-due || echo "backup failed; retrying in an hour" >&2
+          sleep 3600
+        done
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+
+  api:
+    build: ./api
+    env_file: ${PRODUCTION_ENV_FILE:-.env.production}
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      AUTH_MODE: ${AUTH_MODE:-local}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3100}
+      BACKUP_DIR: /var/lib/oneledger/backups
+      BACKUP_PREFIX: oneledger-production
+    ports: ["127.0.0.1:8100:8000"]
+    volumes:
+      - documents:/var/lib/oneledger/documents
+      - ./backups:/var/lib/oneledger/backups:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      db: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+      bootstrap: { condition: service_completed_successfully }
+      backup: { condition: service_started }
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8100}
+    ports: ["127.0.0.1:3100:3000"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  pgdata:
+    external: true
+    name: oneledger-production_pgdata
+  documents:
+    external: true
+    name: oneledger-production_documents

@@ -1,22 +1,39 @@
 // @vitest-environment jsdom
 
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const redirectMock = vi.hoisted(() =>
+  vi.fn((destination: string): never => {
+    throw new Error(`NEXT_REDIRECT:${destination}`);
+  }),
+);
+
+vi.mock("next/navigation", () => ({ redirect: redirectMock }));
 
 import LoginPage from "@/app/login/page";
 import UnauthorizedPage from "@/app/unauthorized/page";
 
 describe("public authentication pages", () => {
-  afterEach(() => document.body.replaceChildren());
+  afterEach(() => {
+    document.body.replaceChildren();
+    redirectMock.mockClear();
+  });
 
-  it("starts sign-in as a top-level API navigation and only shows known failure text", async () => {
+  it("sends an initial visit directly to the configured owner login", async () => {
+    await expect(
+      LoginPage({ searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow("NEXT_REDIRECT:http://localhost:8000/auth/login");
+  });
+
+  it("shows a retry instead of redirecting an authentication failure forever", async () => {
     const page = await LoginPage({
-      searchParams: Promise.resolve({ reason: "<img src=x onerror=alert(1)>" }),
+      searchParams: Promise.resolve({ reason: "authentication_failed" }),
     });
     render(page);
-    const signIn = screen.getByRole("link", { name: "Continue with Google" });
-    expect(signIn.getAttribute("href")).toBe("http://localhost:8000/auth/login");
-    expect(document.body.textContent).not.toContain("<img");
+    const retry = screen.getByRole("link", { name: "Try again" });
+    expect(retry.getAttribute("href")).toBe("http://localhost:8000/auth/login");
+    expect(redirectMock).not.toHaveBeenCalled();
   });
 
   it("explains an owner rejection without exposing service details", () => {

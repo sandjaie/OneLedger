@@ -554,28 +554,36 @@ ledger. No loading spinner ever appears where a number belongs.</p>
 dashboard has no data. Acceptable while everything is local, and the first thing to reconsider when the cloud
 question is taken up (§11).</p>
 <h2 id="environments">7. Environments</h2>
-<p><strong>There is one environment definition.</strong> The compose file that runs on your laptop is the one
-that runs on the VPS (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>); only the
-<code>.env</code> and whether Caddy is enabled differ.</p>
-<pre><code>services:
-  caddy    reverse proxy · automatic TLS        (hosted only)
-  web      Next.js                              :3000
-  api      FastAPI                              :8000
-  db       Postgres 18                          :5432
-volumes:
-  pgdata      the ledger
-  documents   original statements
+<p><strong>Local development and local production are explicit, isolated Compose projects.</strong>
+The default <code>docker-compose.yml</code> owns the working development and acceptance ledger. The
+production-built rehearsal uses <code>docker-compose.production.yml</code>, project name
+<code>oneledger-production</code>, and two exact external volumes that no development command names
+(<a href="../adr/0019-separate-local-production-stack.html">ADR-0019</a>).</p>
+<pre><code>                         development       local production
+  web                    :3000             :3100
+  api                    :8000             :8100
+  db                     :5432             :55432
+  authentication         local             local
+  database               working ledger    migrated, owner-only start
+  Compose project        repository default oneledger-production
+  persisted volumes      development names oneledger-production_*
 </code></pre>
-<p><code>docker compose up</code> brings up the whole system with no network dependency beyond the FX rate
-fetch. Development works offline.</p>
+<p><code>scripts/production-stack.sh up</code> builds optimized application images, waits for migration
+and owner bootstrap, then waits for API and web health. Its ordinary <code>down</code> preserves both
+external volumes. Its <code>reset</code> requires the exact project name and can remove only those two
+volumes. Both local projects bind published ports to loopback.</p>
+<p>The hosted topology remains one small VPS and one Compose definition
+(<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>), but deployment is a later planning
+decision. It will add Caddy/TLS and explicitly switch to Google authentication; the local production
+file is a production-build rehearsal, not permission to expose its loopback configuration publicly.</p>
 <p><strong>Promotion</strong> is <code>git pull &amp;&amp; docker compose up -d --build</code> on the box.
 Migrations run forward against it. There is no staging environment — for a single-user personal system, one
 would cost more attention than it saves.</p>
 <h2 id="secrets">8. Secrets</h2>
 <table><thead><tr><th>Secret</th><th>Where it lives</th><th>Never</th></tr></thead><tbody>
 <tr><td><code>NEXT_PUBLIC_API_URL</code></td><td>Public — the browser needs to know where the API is</td><td>—</td></tr>
-<tr><td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td><td><strong>The API service's local <code>.env</code></strong></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
-<tr><td><code>SESSION_SECRET</code></td><td>The service's <code>.env</code> — it signs the session cookie</td><td>In the browser. Committed. Shared between deployments</td></tr>
+<tr><td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td><td><strong>The API service's local <code>.env</code></strong>; local production has a separately generated <code>.env.production</code></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
+<tr><td><code>SESSION_SECRET</code></td><td>The service's environment file — it signs the session cookie; each project has its own</td><td>In the browser. Committed. Shared between deployments</td></tr>
 <tr><td>Google OAuth client secret</td><td>The service's <code>.env</code></td><td>In the repository. In the browser</td></tr>
 <tr><td>Account-number hash salt</td><td>The API service's <code>.env</code></td><td>Rotated — it would invalidate every stored hash</td></tr>
 <tr><td>PDF passwords</td><td>Posted with the file, held in memory for the parse</td><td>Written to disk, a keychain, the database or a log</td></tr>

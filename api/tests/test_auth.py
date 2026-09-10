@@ -35,6 +35,120 @@ def owner() -> auth.OwnerSession:
     )
 
 
+def test_auth_mode_defaults_to_google(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Removing the fail-safe default must not make an unset deployment passwordless."""
+    monkeypatch.delenv("AUTH_MODE", raising=False)
+    assert auth.auth_mode(web_origin="https://ledger.example") == "google"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:3000",
+        "http://127.0.0.1:3100",
+        "http://[::1]:3100",
+    ],
+)
+def test_local_auth_accepts_only_http_loopback_origins(origin: str) -> None:
+    """Replacing the loopback guard with a broad URL check would expose local login."""
+    assert auth.auth_mode("local", origin) == "local"
+
+
+@pytest.mark.parametrize(
+    "mode,origin",
+    [
+        ("passwordless", "http://localhost:3000"),
+        ("local", "https://localhost:3000"),
+        ("local", "http://ledger.example"),
+        ("local", "http://localhost.example"),
+    ],
+)
+def test_auth_mode_rejects_unknown_modes_and_non_loopback_local_origins(
+    mode: str, origin: str
+) -> None:
+    """Weakening either validation would turn a copied cloud config into public access."""
+    with pytest.raises(RuntimeError, match="AUTH_MODE"):
+        auth.auth_mode(mode, origin)
+
+
+def test_local_owner_resolves_the_single_configured_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A role-only lookup could silently select a different seeded account."""
+    seen: list[tuple[object, ...]] = []
+
+    class Cursor:
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def execute(self, _sql: str, params: tuple[object, ...]) -> None:
+            seen.append(params)
+
+        def fetchone(self) -> tuple[UUID, str]:
+            return USER_ID, EMAIL
+
+        def fetchall(self) -> list[tuple[UUID, str]]:
+            return [(USER_ID, EMAIL)]
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    monkeypatch.setenv("ALLOWED_USER_EMAIL", EMAIL.upper())
+    monkeypatch.setattr(auth, "connect", lambda: Connection())
+
+    assert auth.local_owner() == (USER_ID, EMAIL)
+    assert seen == [(EMAIL,)]
+
+
+def test_local_owner_refuses_duplicate_configured_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two matching owners must not make local login choose a household nondeterministically."""
+    other_user = UUID("44444444-4444-4444-4444-444444444444")
+
+    class Cursor:
+        def __enter__(self) -> Cursor:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def execute(self, _sql: str, _params: tuple[object, ...]) -> None:
+            pass
+
+        def fetchone(self) -> tuple[UUID, str]:
+            return USER_ID, EMAIL
+
+        def fetchall(self) -> list[tuple[UUID, str]]:
+            return [(USER_ID, EMAIL), (other_user, EMAIL)]
+
+    class Connection:
+        def __enter__(self) -> Connection:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    monkeypatch.setenv("ALLOWED_USER_EMAIL", EMAIL)
+    monkeypatch.setattr(auth, "connect", lambda: Connection())
+
+    with pytest.raises(auth.NotAuthorized, match="configured local owner"):
+        auth.local_owner()
+
+
 def client_with(token: str) -> TestClient:
     client = TestClient(app)
     client.cookies.set("session", token)

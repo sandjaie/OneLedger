@@ -66,6 +66,23 @@ def _exchange_code(code: str, verifier: str) -> str:
 
 @router.get("/login")
 def login() -> Response:
+    if auth.auth_mode() == "local":
+        try:
+            user_id, email = auth.local_owner()
+            session = auth.issue_session(user_id, email)
+        except Exception:
+            return _clear_flow(JSONResponse({"detail": "sign-in unavailable"}, status_code=503))
+        response = RedirectResponse(_web_destination("/"), status_code=303)
+        response.set_cookie(
+            "session",
+            session,
+            max_age=auth.SESSION_HOURS * 60 * 60,
+            path="/",
+            secure=os.environ.get("COOKIE_SECURE") == "1",
+            httponly=True,
+            samesite="lax",
+        )
+        return _clear_flow(response)
     try:
         client_id = _config("GOOGLE_CLIENT_ID")
         _config("GOOGLE_CLIENT_SECRET")

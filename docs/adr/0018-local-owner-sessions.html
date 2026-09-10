@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR-0018 — Local owner sessions — OneLedger</title>
+  <style>
+    :root { color-scheme: light; --ink: #1b211e; --muted: #5e6862; --line: #d5dbd4; --accent: #0b6b58; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); font: 1rem/1.65 ui-serif, Georgia, serif; }
+    header { border-bottom: 1px solid var(--line); padding: .9rem 1.4rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+    header a, main a { color: var(--accent); }
+    main { max-width: 46rem; margin: 0 auto; padding: 2.4rem 2rem 5rem; }
+    h1, h2 { font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.25; }
+    h1 { font-size: 2rem; }
+    h2 { margin-top: 2rem; }
+    code { background: #eef2ee; border-radius: 4px; padding: .1em .3em; }
+    .meta { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header><a href="./index.html">OneLedger architecture decisions</a></header>
+  <main>
+    <h1>ADR-0018 — Local owner sessions</h1>
+    <p class="meta"><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-10 ·
+      <strong>Refines:</strong> <a href="./0004-google-auth-single-user.html">ADR-0004</a>,
+      <a href="./0014-one-vps-one-compose-file.html">ADR-0014</a> and
+      <a href="./0016-revocable-owner-sessions.html">ADR-0016</a></p>
+
+    <h2>Context</h2>
+    <p>OneLedger will run on the owner&rsquo;s laptop before it is deployed to a cloud server. Google
+      OIDC is valuable at the public boundary, but it adds an external dependency and credential
+      setup that local-only use does not need. Removing authorization entirely would expose every
+      financial route and make local behavior unlike the deployed application.</p>
+
+    <h2>Decision</h2>
+    <p>The API has an explicit <code>AUTH_MODE</code>: <code>local</code> or <code>google</code>.
+      Application code defaults to <code>google</code>. Local Compose configurations opt into
+      <code>local</code>.</p>
+    <p>In local mode, <code>GET /auth/login</code> resolves exactly one configured owner, creates the
+      same persisted twelve-hour <code>app_session</code> used by Google login, and sets the same signed,
+      HttpOnly cookie. Every protected route still passes through <code>require_owner</code>; session
+      expiry, revocation, household scoping and exact-origin mutation checks are unchanged.</p>
+    <p>Local mode is valid only when <code>WEB_ORIGIN</code> is an HTTP loopback origin. Any public or
+      HTTPS origin fails at service startup. No session token is put in JavaScript, a URL or a
+      checked-in file.</p>
+    <p>Google mode keeps authorization code flow, state, nonce, PKCE, signed identity verification,
+      pinned-address checking and Google subject binding unchanged. A later cloud deployment selects
+      it explicitly.</p>
+
+    <h2>Alternatives considered</h2>
+    <p><strong>Bypass <code>require_owner</code> locally.</strong> Rejected: it removes the actual API
+      boundary and leaves local mutations without the cookie-backed origin check.</p>
+    <p><strong>Remove Google until deployment.</strong> Rejected: reintroducing authentication during
+      deployment would create a second, late integration path. Keeping both modes under one login
+      route makes the deployed path continuously testable.</p>
+
+    <h2>Consequences</h2>
+    <p>Local startup is offline and automatic after the owner row exists. The database still records
+      and can revoke sessions, so tests and application behavior remain representative. The owner
+      must set <code>AUTH_MODE=google</code> and configure Google OIDC before exposing OneLedger through
+      a public origin; an unsafe copied local configuration refuses to boot.</p>
+  </main>
+</body>
+</html>
