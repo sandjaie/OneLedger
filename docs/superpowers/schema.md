@@ -674,6 +674,16 @@ decision.
 
 ---
 
+## `V26` (applied)
+
+Applied as `db/migrations/V26__restorable_schema_helpers.sql`. The recursive classification
+payload guard and the two counterparty identifier helpers carry a function-level
+`search_path = pg_catalog, public`. Their unqualified internal calls therefore resolve while
+`pg_restore` recreates rows under its deliberately empty caller search path; their signatures and
+stored-data rules are unchanged.
+
+---
+
 ## `V25` (applied)
 
 Applied as `db/migrations/V25__statement_layout_account_type.sql`. The nullable
