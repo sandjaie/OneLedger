@@ -273,8 +273,9 @@ was checked into a document first.
 - **`statement_layout.times_used` was never written.** V22 drops it and `last_used_at`, and
   usage is counted from `import_batch` instead (M2 spec §7 item 16). `fix/layout-usage-counter`
   carries it.
-- **`api-contracts.html` §2 lists two routes twice**, with contracts that differ between the
-  two entries.
+- **`api-contracts.html` §2 used to list two routes twice.** The stale duplicate summaries for
+  `GET /transactions` and `PATCH /transactions/{id}` are removed, and each route now has one
+  contract matching its API boundary; delivered by `docs/api-contract-route-deduplication`.
 - **`scripts/seed-household.sh` used to have no repair path** for the owner it seeded. The explicit
   `--repair-owner-email` mode now changes only the sole existing owner's configured address;
   delivered by `fix/seed-household-owner-repair`.
