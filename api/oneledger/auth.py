@@ -220,9 +220,10 @@ def local_owner() -> tuple[UUID, str]:
                 WHERE role = 'owner' AND lower(btrim(email)) = %s""",
             (email,),
         )
-        row = cur.fetchone()
-    if row is None:
-        raise NotAuthorized("no configured local owner")
+        rows = cur.fetchall()
+    if len(rows) != 1:
+        raise NotAuthorized("no unique configured local owner")
+    row = rows[0]
     return UUID(str(row[0])), str(row[1])
 
 

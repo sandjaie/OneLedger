@@ -70,6 +70,10 @@ def test_production_compose_resolves_to_the_isolated_runtime() -> None:
     assert (
         services["api"]["depends_on"]["bootstrap"]["condition"] == "service_completed_successfully"
     )
+    assert (
+        services["backup"]["depends_on"]["bootstrap"]["condition"]
+        == "service_completed_successfully"
+    )
     assert volumes["pgdata"] == {"name": "oneledger-production_pgdata", "external": True}
     assert volumes["documents"] == {
         "name": "oneledger-production_documents",

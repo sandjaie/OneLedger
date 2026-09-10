@@ -63,7 +63,7 @@ services:
           sleep 3600
         done
     depends_on:
-      db: { condition: service_healthy }
+      bootstrap: { condition: service_completed_successfully }
 
   api:
     build: ./api
