@@ -622,8 +622,6 @@ CREATE TABLE statement_layout (
   -- credit-card header block: limit, statement date, due date, minimum due
   metadata_patterns      JSONB,
 
-  times_used             INTEGER NOT NULL DEFAULT 0,
-  last_used_at           TIMESTAMPTZ,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -653,6 +651,25 @@ ALTER TABLE transaction
 
 `classification_rule_id` stays a bare `UUID` here; its target table and its foreign key
 arrive with V19.
+
+---
+
+## `V22` (applied)
+
+Applied as `db/migrations/V22__statement_layout_usage_is_derived.sql`. **It creates no table.**
+It drops the two columns V12 gave `statement_layout` and nothing ever wrote, so the V12 listing
+above no longer shows them:
+
+```sql
+ALTER TABLE statement_layout
+  DROP COLUMN times_used,
+  DROP COLUMN last_used_at;
+```
+
+How often a layout was used is counted from `import_batch.statement_layout_id` and
+`started_at`. That count is right for every batch ever staged, where a counter maintained from
+here on would start short by every import before it. The M2 spec's §7 item 16 records the
+decision.
 
 ---
 

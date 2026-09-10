@@ -87,8 +87,6 @@ def profile(**changes: object) -> LayoutProfile:
         "hasRunningBalance": True,
         "quirks": [],
         "metadataPatterns": None,
-        "timesUsed": 0,
-        "lastUsedAt": None,
     }
     values.update(changes)
     return LayoutProfile.model_validate(values)

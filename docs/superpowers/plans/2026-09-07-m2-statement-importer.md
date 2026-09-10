@@ -417,11 +417,11 @@ class LayoutProfile(BaseModel):          # GET /layouts item, POST /layouts resp
     hasRunningBalance: bool
     quirks: list[str]
     metadataPatterns: dict[str, str] | None
-    timesUsed: int
-    lastUsedAt: datetime | None
+    # timesUsed / lastUsedAt stood here until V22 dropped both columns: nothing wrote them,
+    # and usage is derived from `document` / `import_batch` (spec §7 item 16).
 
 class LayoutCreate(BaseModel):           # POST /layouts body — LayoutProfile minus
-    ...                                  # id/version/timesUsed/lastUsedAt
+    ...                                  # id/version
 ```
 
 **Contracts.**

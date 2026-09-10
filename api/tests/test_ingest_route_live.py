@@ -237,6 +237,17 @@ def test_staging_returns_the_batch_and_writes_it(live: Fixture) -> None:
     assert live.counts() == {"document": 1, "import_batch": 1, "staged_transaction": 2}
 
 
+def test_the_layout_lists_against_the_migrated_schema(live: Fixture) -> None:
+    """V22 drops `times_used` and `last_used_at`. The `GET /layouts` unit tests mock the
+    connection; this is the one that runs the route's SELECT against the schema V22 leaves."""
+    response = TestClient(app).get("/layouts")
+
+    assert response.status_code == 200, response.text
+    [layout] = response.json()
+    assert layout["id"] == str(LAYOUT_ID)
+    assert not {"timesUsed", "lastUsedAt"} & layout.keys()
+
+
 def test_a_statement_that_does_not_reconcile_is_a_200_carrying_its_verdict(
     live: Fixture,
 ) -> None:

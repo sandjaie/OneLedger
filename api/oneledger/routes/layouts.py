@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import datetime
 from pathlib import Path
 from shutil import copyfileobj
 from tempfile import NamedTemporaryFile
@@ -122,8 +121,6 @@ class LayoutProfile(BaseModel):
     hasRunningBalance: bool
     quirks: list[str]
     metadataPatterns: dict[str, str] | None
-    timesUsed: int
-    lastUsedAt: datetime | None
 
 
 class LayoutCreate(BaseModel):
@@ -327,8 +324,7 @@ class LayoutProposal(BaseModel):
 COLUMNS = """id, name, version, institution_id, fingerprints, header_row_pattern, columns,
              date_format, sign_convention::text, inverts_sign, chronological_order,
              row_start_rule, continuation_rule, skip_line_patterns, opening_balance_pattern,
-             closing_balance_pattern, has_running_balance, quirks, metadata_patterns,
-             times_used, last_used_at"""
+             closing_balance_pattern, has_running_balance, quirks, metadata_patterns"""
 
 
 def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
@@ -352,8 +348,6 @@ def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
         has_running_balance,
         quirks,
         metadata_patterns,
-        times_used,
-        last_used_at,
     ) = row
     return LayoutProfile(
         id=id_,
@@ -378,8 +372,6 @@ def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
         hasRunningBalance=has_running_balance,
         quirks=list(quirks or []),
         metadataPatterns=metadata_patterns,
-        timesUsed=times_used,
-        lastUsedAt=last_used_at,
     )
 
 
