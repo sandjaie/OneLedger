@@ -538,6 +538,142 @@ export type CategoryUpdate = {
 };
 
 /**
+ * ClassificationReviewGroup
+ */
+export type ClassificationReviewGroup = {
+    /**
+     * Groupkey
+     */
+    groupKey: string;
+    /**
+     * Reason
+     */
+    reason: 'conflicting_knowledge' | 'conflicting_prior' | 'excluded_role' | 'identity_unresolved' | 'low_confidence' | 'recognized_pending' | 'unclassified';
+    /**
+     * Explanation
+     */
+    explanation: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Direction
+     */
+    direction: 'debit' | 'credit';
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Occurrences
+     */
+    occurrences: number;
+    /**
+     * Firstbookeddate
+     */
+    firstBookedDate: string;
+    /**
+     * Lastbookeddate
+     */
+    lastBookedDate: string;
+    /**
+     * Transactionids
+     */
+    transactionIds: Array<string>;
+    /**
+     * Transactionidstruncated
+     */
+    transactionIdsTruncated: boolean;
+    /**
+     * Currentcategoryid
+     */
+    currentCategoryId: string | null;
+    /**
+     * Currentcategoryname
+     */
+    currentCategoryName: string | null;
+    /**
+     * Currenttxntype
+     */
+    currentTxnType: string;
+    /**
+     * Currentpaymentmethod
+     */
+    currentPaymentMethod: string | null;
+    /**
+     * Currentclassifiedby
+     */
+    currentClassifiedBy: string;
+    /**
+     * Proposedcategoryid
+     */
+    proposedCategoryId: string | null;
+    /**
+     * Proposedcategoryname
+     */
+    proposedCategoryName: string | null;
+    /**
+     * Proposedmerchantid
+     */
+    proposedMerchantId: string | null;
+    /**
+     * Proposedtxntype
+     */
+    proposedTxnType: string | null;
+    /**
+     * Proposedpaymentmethod
+     */
+    proposedPaymentMethod: string | null;
+    /**
+     * Proposedclassifiedby
+     */
+    proposedClassifiedBy: string;
+    /**
+     * Proposedconfidence
+     */
+    proposedConfidence: string;
+    /**
+     * Knowledgeversionid
+     */
+    knowledgeVersionId: string | null;
+    /**
+     * Rememberable
+     */
+    rememberable: boolean;
+};
+
+/**
+ * ClassificationReviewResponse
+ */
+export type ClassificationReviewResponse = {
+    /**
+     * Groups
+     */
+    groups: Array<ClassificationReviewGroup>;
+    /**
+     * Totalgroups
+     */
+    totalGroups: number;
+    /**
+     * Totaloccurrences
+     */
+    totalOccurrences: number;
+    /**
+     * Candidatesscanned
+     */
+    candidatesScanned: number;
+    /**
+     * Candidatelimitreached
+     */
+    candidateLimitReached: boolean;
+};
+
+/**
  * ClassificationState
  */
 export type ClassificationState = {
@@ -3628,6 +3764,48 @@ export type UndoClassificationRunsRunIdUndoPostResponses = {
 };
 
 export type UndoClassificationRunsRunIdUndoPostResponse = UndoClassificationRunsRunIdUndoPostResponses[keyof UndoClassificationRunsRunIdUndoPostResponses];
+
+export type ReviewGroupsClassificationReviewGroupsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Datefrom
+         */
+        dateFrom?: string | null;
+        /**
+         * Dateto
+         */
+        dateTo?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/classification-review/groups';
+};
+
+export type ReviewGroupsClassificationReviewGroupsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReviewGroupsClassificationReviewGroupsGetError = ReviewGroupsClassificationReviewGroupsGetErrors[keyof ReviewGroupsClassificationReviewGroupsGetErrors];
+
+export type ReviewGroupsClassificationReviewGroupsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClassificationReviewResponse;
+};
+
+export type ReviewGroupsClassificationReviewGroupsGetResponse = ReviewGroupsClassificationReviewGroupsGetResponses[keyof ReviewGroupsClassificationReviewGroupsGetResponses];
 
 export type ProposeLayoutLayoutsProposePostData = {
     body: BodyProposeLayoutLayoutsProposePost;
