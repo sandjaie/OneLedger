@@ -1,0 +1,5909 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OneLedger",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/auth/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_auth_login_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Callback",
+        "operationId": "callback_auth_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          },
+          {
+            "name": "oidc_flow",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Oidc Flow"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_auth_logout_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fx/backfill": {
+      "post": {
+        "tags": [
+          "fx"
+        ],
+        "summary": "Backfill",
+        "operationId": "backfill_fx_backfill_post",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Start"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "End"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Backfill Fx Backfill Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/fx/{on}": {
+      "get": {
+        "tags": [
+          "fx"
+        ],
+        "summary": "Rate On",
+        "operationId": "rate_on_fx__on__get",
+        "parameters": [
+          {
+            "name": "on",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "On"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FxRateResponse"
+                  },
+                  "title": "Response Rate On Fx  On  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/household": {
+      "get": {
+        "tags": [
+          "household"
+        ],
+        "summary": "Household",
+        "operationId": "household_household_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HouseholdResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "household"
+        ],
+        "summary": "Update Household",
+        "operationId": "update_household_household_patch",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HouseholdUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/currencies": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Currencies",
+        "operationId": "currencies_currencies_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CurrencyRow"
+                  },
+                  "title": "Response Currencies Currencies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List Accounts",
+        "operationId": "list_accounts_accounts_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Create Account",
+        "operationId": "create_account_accounts_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/accounts/{account_id}": {
+      "patch": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Update Account",
+        "operationId": "update_account_accounts__account_id__patch",
+        "parameters": [
+          {
+            "name": "account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Account Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/institutions": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List Institutions",
+        "operationId": "list_institutions_institutions_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InstitutionRow"
+                  },
+                  "title": "Response List Institutions Institutions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Create Institution",
+        "description": "Shared seeds are suggestions; any household can add its own (data-model.html \u00a74).",
+        "operationId": "create_institution_institutions_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transactions": {
+      "get": {
+        "tags": [
+          "transactions"
+        ],
+        "summary": "List Transactions",
+        "operationId": "list_transactions_transactions_get",
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accountid"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categoryid"
+            }
+          },
+          {
+            "name": "txnType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Txntype"
+            }
+          },
+          {
+            "name": "dateFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Datefrom"
+            }
+          },
+          {
+            "name": "dateTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dateto"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "merchantId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchantid"
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 3
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Currency"
+            }
+          },
+          {
+            "name": "country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Country"
+            }
+          },
+          {
+            "name": "amountMin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 25
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Amountmin"
+            }
+          },
+          {
+            "name": "amountMax",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 25
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Amountmax"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag"
+            }
+          },
+          {
+            "name": "reviewState",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(reviewed|unreviewed)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reviewstate"
+            }
+          },
+          {
+            "name": "sourceDocumentId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sourcedocumentid"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(bookedDate|amount|description|account)$",
+              "default": "bookedDate",
+              "title": "Sort"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(asc|desc)$",
+              "default": "desc",
+              "title": "Direction"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "transactions"
+        ],
+        "summary": "Create Transaction",
+        "operationId": "create_transaction_transactions_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transactions/{transaction_id}": {
+      "patch": {
+        "tags": [
+          "transactions"
+        ],
+        "summary": "Update Transaction",
+        "operationId": "update_transaction_transactions__transaction_id__patch",
+        "parameters": [
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Transaction Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": [
+          "categories"
+        ],
+        "summary": "List Categories",
+        "operationId": "list_categories_categories_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryRow"
+                  },
+                  "title": "Response List Categories Categories Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "categories"
+        ],
+        "summary": "Create Category",
+        "operationId": "create_category_categories_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories/{category_id}": {
+      "patch": {
+        "tags": [
+          "categories"
+        ],
+        "summary": "Update Category",
+        "operationId": "update_category_categories__category_id__patch",
+        "parameters": [
+          {
+            "name": "category_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Category Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CategoryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/layouts/propose": {
+      "post": {
+        "tags": [
+          "layouts"
+        ],
+        "summary": "Propose Layout",
+        "operationId": "propose_layout_layouts_propose_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_propose_layout_layouts_propose_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutProposal"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/layouts": {
+      "get": {
+        "tags": [
+          "layouts"
+        ],
+        "summary": "List Layouts",
+        "operationId": "list_layouts_layouts_get",
+        "parameters": [
+          {
+            "name": "allVersions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Allversions"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LayoutProfile"
+                  },
+                  "title": "Response List Layouts Layouts Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "layouts"
+        ],
+        "summary": "Create Layout",
+        "operationId": "create_layout_layouts_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LayoutProfile"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "List Rules",
+        "description": "Ascending priority, which is evaluation order \u2014 the list reads as the cascade runs.",
+        "operationId": "list_rules_rules_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleRow"
+                  },
+                  "title": "Response List Rules Rules Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Create Rule",
+        "operationId": "create_rule_rules_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/pack": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Load Pack",
+        "description": "The shipped packs in `db/seeds/rules/`, loaded once per household as `seed` rules.\n\nThis exists because `POST /rules` refuses to set `origin` and must keep refusing: a rule\nthe owner writes in Settings is `user_created`, and a body that could claim otherwise\nwould put itself in the wrong half of the cascade and lie about where it came from.\n`origin` is decided by what did the writing, and this route is that writer.\n\nOne pack is one transaction. A slug nothing answers to refuses the whole load rather than\nleaving the rules before it behind, because half a pack is a cascade nobody designed.",
+        "operationId": "load_pack_rules_pack_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Pack"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleRow"
+                  },
+                  "title": "Response Load Pack Rules Pack Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{rule_id}": {
+      "patch": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Update Rule",
+        "description": "A full replacement of the editable fields. `origin` and the counters are not editable:\na rule that could rewrite its own provenance could claim to be a seed rule.",
+        "operationId": "update_rule_rules__rule_id__patch",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Delete Rule",
+        "description": "Refused while any row names it, by V19's `RESTRICT`. A rule that classified something is\nthat row's provenance (I6), and deactivating is how such a rule is retired.",
+        "operationId": "delete_rule_rules__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/preview": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Preview Rule",
+        "description": "What a candidate rule would match, before it exists. Writes nothing.",
+        "operationId": "preview_rule_rules_preview_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/classify": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Classify Unclassified",
+        "description": "Run the cascade over the rows that have no answer, and over nothing else.\n\nThis can only fill a row that is `unclassified`. It can never overwrite `user_manual`,\n`user_rule`, `merchant_alias`, `prior_match` or `seed_rule` \u2014 rules never silently change\npast data \u2014 and it never runs as a side effect of creating or editing a rule. Re-applying a\nrule over rows that already have an answer is Phase 2's learn-from-correction.",
+        "operationId": "classify_unclassified_classify_post",
+        "parameters": [
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Preview"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassifyResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/parse": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Parse Statement",
+        "operationId": "parse_statement_parse_post",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_parse_statement_parse_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParseResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import/{batch_id}": {
+      "get": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Read Import Batch",
+        "operationId": "read_import_batch_import__batch_id__get",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewBatch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import/{batch_id}/rows": {
+      "patch": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Decide Import Rows",
+        "operationId": "decide_import_rows_import__batch_id__rows_patch",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RowDecision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import/{batch_id}/commit": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Commit Import",
+        "description": "V14's `commit_import_batch`, and nothing else.\n\nEvery rule about what may commit lives in that function, because the insert and the balance\nverification have to share one transaction (`api-contracts.html` \u00a73). This route resolves\nthe identity, calls it once, and translates its refusals \u2014 it does not re-implement any of\nthem, which is how the two would drift.",
+        "operationId": "commit_import_import__batch_id__commit_post",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import/{batch_id}/cancel": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Cancel Import",
+        "description": "Abandon a staged batch, and take its staged rows with it.\n\nNot a reversal. A batch that never committed has nothing in the ledger to undo, and one that\nhas committed cannot be cancelled at all. What this recovers is the **period**:\n`pipeline._refuse_second_staging` already counts `cancelled` among the states that can no\nlonger commit, so an abandoned batch stops blocking its account's period the moment this\nruns. Before it existed there was no way to reach that state from the app, which is how the\nslice 1.1 acceptance run found a period blocked for good.\n\n**The staged rows are deleted rather than left carrying a status.** V7's\n`reporting_pair_is_locked()` discovers every table with `amount_base` beside `household_id`\nand counts rows, and `staged_transaction` has both (V13 says so in its own comment) \u2014 so\nrows left behind by a batch that can never commit would answer that question `true` for\never. It bites during onboarding, where the pair is still meant to be changeable: stage a\nbatch, notice the pair is wrong, cancel, and otherwise still be unable to change it.\n\nWhat this does **not** free is the file. `idx_document_checksum` is a separate guard, and the\nsame bytes are still refused on re-upload naming a batch that never imported anything. That\nis layer 1's semantics rather than this route's, and is recorded in\n`docs/superpowers/progress.md` rather than fixed here.",
+        "operationId": "cancel_import_import__batch_id__cancel_post",
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Batch Id"
+            }
+          },
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Public health route; login/callback are public, while financial routes require the owner.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/whoami": {
+      "get": {
+        "summary": "Whoami",
+        "operationId": "whoami_whoami_get",
+        "parameters": [
+          {
+            "name": "session",
+            "in": "cookie",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Whoami Whoami Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "institutionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionid"
+          },
+          "accountType": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Accounttype"
+          },
+          "accountSubtype": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountsubtype"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Country"
+          },
+          "accountNumberMasked": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountnumbermasked"
+          },
+          "accountNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountnumber"
+          },
+          "openedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openedon"
+          },
+          "includeInNetWorth": {
+            "type": "boolean",
+            "title": "Includeinnetworth",
+            "default": true
+          },
+          "isLiquid": {
+            "type": "boolean",
+            "title": "Isliquid",
+            "default": true
+          },
+          "openingBalance": {
+            "type": "string",
+            "title": "Openingbalance"
+          },
+          "openingBalanceDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Openingbalancedate"
+          },
+          "openingBalanceNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalancenote"
+          },
+          "creditLimit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creditlimit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "accountType",
+          "currency",
+          "country",
+          "openingBalance",
+          "openingBalanceDate"
+        ],
+        "title": "AccountCreate"
+      },
+      "AccountGroupTotal": {
+        "properties": {
+          "accountClass": {
+            "type": "string",
+            "enum": [
+              "asset",
+              "liability"
+            ],
+            "title": "Accountclass"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "total": {
+            "type": "string",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accountClass",
+          "country",
+          "currency",
+          "total"
+        ],
+        "title": "AccountGroupTotal",
+        "description": "Computed by Postgres. Native per currency: an untagged converted total would be a dated\nposition without its date."
+      },
+      "AccountRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "institutionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionid"
+          },
+          "institutionName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionname"
+          },
+          "accountType": {
+            "type": "string",
+            "title": "Accounttype"
+          },
+          "accountClass": {
+            "type": "string",
+            "enum": [
+              "asset",
+              "liability"
+            ],
+            "title": "Accountclass"
+          },
+          "accountSubtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountsubtype"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Country"
+          },
+          "accountNumberMasked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountnumbermasked"
+          },
+          "openedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openedon"
+          },
+          "closedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedon"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          },
+          "includeInNetWorth": {
+            "type": "boolean",
+            "title": "Includeinnetworth"
+          },
+          "isLiquid": {
+            "type": "boolean",
+            "title": "Isliquid"
+          },
+          "openingBalance": {
+            "type": "string",
+            "title": "Openingbalance"
+          },
+          "openingBalanceDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Openingbalancedate"
+          },
+          "openingBalanceNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalancenote"
+          },
+          "openingBalanceConfirmedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalanceconfirmedat"
+          },
+          "currentBalance": {
+            "type": "string",
+            "title": "Currentbalance"
+          },
+          "currentBalanceAsOf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentbalanceasof"
+          },
+          "creditLimit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creditlimit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "institutionId",
+          "institutionName",
+          "accountType",
+          "accountClass",
+          "accountSubtype",
+          "currency",
+          "country",
+          "accountNumberMasked",
+          "openedOn",
+          "closedOn",
+          "isActive",
+          "includeInNetWorth",
+          "isLiquid",
+          "openingBalance",
+          "openingBalanceDate",
+          "openingBalanceNote",
+          "openingBalanceConfirmedAt",
+          "currentBalance",
+          "currentBalanceAsOf",
+          "creditLimit"
+        ],
+        "title": "AccountRow"
+      },
+      "AccountUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "institutionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionid"
+          },
+          "accountType": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Accounttype"
+          },
+          "accountSubtype": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountsubtype"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Country"
+          },
+          "accountNumberMasked": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountnumbermasked"
+          },
+          "accountNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountnumber"
+          },
+          "openedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openedon"
+          },
+          "closedOn": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closedon"
+          },
+          "includeInNetWorth": {
+            "type": "boolean",
+            "title": "Includeinnetworth"
+          },
+          "isLiquid": {
+            "type": "boolean",
+            "title": "Isliquid"
+          },
+          "openingBalance": {
+            "type": "string",
+            "title": "Openingbalance"
+          },
+          "openingBalanceDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Openingbalancedate"
+          },
+          "openingBalanceNote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalancenote"
+          },
+          "creditLimit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creditlimit"
+          },
+          "acknowledgeOpeningBalance": {
+            "type": "boolean",
+            "title": "Acknowledgeopeningbalance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "accountType",
+          "currency",
+          "country",
+          "includeInNetWorth",
+          "isLiquid",
+          "openingBalance",
+          "openingBalanceDate",
+          "acknowledgeOpeningBalance"
+        ],
+        "title": "AccountUpdate",
+        "description": "Every editable field, always sent: a full replacement has no absent-versus-null ambiguity\nand the client always holds the whole row. Spec C2 requires type, currency, country, the\nopening anchor and credit limit to be correctable; account_class stays trigger-derived."
+      },
+      "AccountsResponse": {
+        "properties": {
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/AccountRow"
+            },
+            "type": "array",
+            "title": "Accounts"
+          },
+          "totals": {
+            "items": {
+              "$ref": "#/components/schemas/AccountGroupTotal"
+            },
+            "type": "array",
+            "title": "Totals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accounts",
+          "totals"
+        ],
+        "title": "AccountsResponse"
+      },
+      "Body_parse_statement_parse_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "stage": {
+            "type": "boolean",
+            "title": "Stage",
+            "default": false
+          },
+          "layoutId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layoutid"
+          },
+          "accountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accountid"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_parse_statement_parse_post"
+      },
+      "Body_propose_layout_layouts_propose_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_propose_layout_layouts_propose_post"
+      },
+      "CancelResult": {
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Batchid"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rowsDiscarded": {
+            "type": "integer",
+            "title": "Rowsdiscarded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batchId",
+          "status",
+          "rowsDiscarded"
+        ],
+        "title": "CancelResult",
+        "description": "What cancelling did. `rowsDiscarded` is stated because the deletion is the point.\n\nA screen that said only \"cancelled\" would leave the owner unable to tell a batch whose rows\nwere discarded from one that had none to discard."
+      },
+      "CategoryCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentid"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CategoryCreate"
+      },
+      "CategoryRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "parentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parentid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "bucket": {
+            "type": "string",
+            "title": "Bucket"
+          },
+          "sortOrder": {
+            "type": "integer",
+            "title": "Sortorder"
+          },
+          "isSystem": {
+            "type": "boolean",
+            "title": "Issystem"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "parentId",
+          "name",
+          "slug",
+          "kind",
+          "bucket",
+          "sortOrder",
+          "isSystem",
+          "isActive"
+        ],
+        "title": "CategoryRow"
+      },
+      "CategoryUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "bucket": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Bucket"
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "bucket",
+          "isActive"
+        ],
+        "title": "CategoryUpdate",
+        "description": "Always sent in full. Name changes apply to the household's own rows; bucket and\nactivity apply to any row, because both are stated to be the owner's defaults."
+      },
+      "ClassifyResult": {
+        "properties": {
+          "considered": {
+            "type": "integer",
+            "title": "Considered"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/MatchedRow"
+            },
+            "type": "array",
+            "title": "Sample"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied"
+          }
+        },
+        "type": "object",
+        "required": [
+          "considered",
+          "changed",
+          "sample",
+          "applied"
+        ],
+        "title": "ClassifyResult",
+        "description": "`preview=true` reports what would change and writes nothing; otherwise `changed` is what\ndid. `considered` is every row with no answer, so a small `changed` reads as \"the rules do\nnot cover these yet\" rather than as a failure."
+      },
+      "CommitResult": {
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Batchid"
+          },
+          "rowsImported": {
+            "type": "integer",
+            "title": "Rowsimported"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batchId",
+          "rowsImported",
+          "status"
+        ],
+        "title": "CommitResult"
+      },
+      "CurrencyRow": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "symbol": {
+            "type": "string",
+            "title": "Symbol"
+          },
+          "decimals": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Decimals"
+          },
+          "numberFormat": {
+            "type": "string",
+            "enum": [
+              "international",
+              "indian"
+            ],
+            "title": "Numberformat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "symbol",
+          "decimals",
+          "numberFormat"
+        ],
+        "title": "CurrencyRow"
+      },
+      "DecisionResult": {
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated"
+        ],
+        "title": "DecisionResult"
+      },
+      "FxRateResponse": {
+        "properties": {
+          "base": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base"
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Quote"
+          },
+          "rate": {
+            "type": "string",
+            "title": "Rate"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "carried": {
+            "type": "boolean",
+            "title": "Carried"
+          },
+          "carried_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carried From"
+          }
+        },
+        "type": "object",
+        "required": [
+          "base",
+          "quote",
+          "rate",
+          "source",
+          "carried",
+          "carried_from"
+        ],
+        "title": "FxRateResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HouseholdCurrency": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Code"
+          },
+          "symbol": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Symbol"
+          },
+          "decimals": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Decimals"
+          },
+          "numberFormat": {
+            "type": "string",
+            "enum": [
+              "international",
+              "indian"
+            ],
+            "title": "Numberformat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "symbol",
+          "decimals",
+          "numberFormat"
+        ],
+        "title": "HouseholdCurrency"
+      },
+      "HouseholdResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ownerDisplayName": {
+            "type": "string",
+            "title": "Ownerdisplayname"
+          },
+          "ownerTaxResidency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownertaxresidency"
+          },
+          "baseCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Basecurrency"
+          },
+          "secondaryCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Secondarycurrency"
+          },
+          "reportingPairLocked": {
+            "type": "boolean",
+            "title": "Reportingpairlocked"
+          },
+          "currencies": {
+            "items": {
+              "$ref": "#/components/schemas/HouseholdCurrency"
+            },
+            "type": "array",
+            "title": "Currencies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "ownerDisplayName",
+          "ownerTaxResidency",
+          "baseCurrency",
+          "secondaryCurrency",
+          "reportingPairLocked",
+          "currencies"
+        ],
+        "title": "HouseholdResponse"
+      },
+      "HouseholdUpdate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "ownerDisplayName": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Ownerdisplayname"
+          },
+          "ownerTaxResidency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownertaxresidency"
+          },
+          "baseCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Basecurrency"
+          },
+          "secondaryCurrency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Secondarycurrency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "ownerDisplayName",
+          "baseCurrency",
+          "secondaryCurrency"
+        ],
+        "title": "HouseholdUpdate"
+      },
+      "InstitutionCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "shortName": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortname"
+          },
+          "country": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Country"
+          },
+          "institutionType": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Institutiontype"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "country",
+          "institutionType"
+        ],
+        "title": "InstitutionCreate"
+      },
+      "InstitutionRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shortName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shortname"
+          },
+          "country": {
+            "type": "string",
+            "title": "Country"
+          },
+          "institutionType": {
+            "type": "string",
+            "title": "Institutiontype"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "shortName",
+          "country",
+          "institutionType"
+        ],
+        "title": "InstitutionRow"
+      },
+      "LayoutColumn": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "xMin": {
+            "type": "number",
+            "title": "Xmin"
+          },
+          "xMax": {
+            "type": "number",
+            "title": "Xmax"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "xMin",
+          "xMax"
+        ],
+        "title": "LayoutColumn"
+      },
+      "LayoutColumnDraft": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "xMin": {
+            "type": "number",
+            "title": "Xmin"
+          },
+          "xMax": {
+            "type": "number",
+            "title": "Xmax"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "xMin",
+          "xMax"
+        ],
+        "title": "LayoutColumnDraft"
+      },
+      "LayoutCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "institutionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionid"
+          },
+          "fingerprints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fingerprints"
+          },
+          "headerRowPattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headerrowpattern"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "dateFormat": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Dateformat"
+          },
+          "signConvention": {
+            "type": "string",
+            "title": "Signconvention"
+          },
+          "invertsSign": {
+            "type": "boolean",
+            "title": "Invertssign",
+            "default": false
+          },
+          "chronologicalOrder": {
+            "type": "string",
+            "title": "Chronologicalorder",
+            "default": "ascending"
+          },
+          "rowStartRule": {
+            "type": "string",
+            "title": "Rowstartrule",
+            "default": "has_date_and_amount"
+          },
+          "continuationRule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuationrule"
+          },
+          "skipLinePatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skiplinepatterns"
+          },
+          "openingBalancePattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalancepattern"
+          },
+          "closingBalancePattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closingbalancepattern"
+          },
+          "hasRunningBalance": {
+            "type": "boolean",
+            "title": "Hasrunningbalance",
+            "default": false
+          },
+          "quirks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quirks"
+          },
+          "metadataPatterns": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatapatterns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "fingerprints",
+          "columns",
+          "dateFormat",
+          "signConvention"
+        ],
+        "title": "LayoutCreate",
+        "description": "POST /layouts body. Validation the database cannot express \u2014 everything the has_a_balance\nanchor CHECK and the sign_convention/chronological_order enums leave uncovered."
+      },
+      "LayoutDraft": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "institutionId": {
+            "type": "null",
+            "title": "Institutionid"
+          },
+          "fingerprints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fingerprints"
+          },
+          "headerRowPattern": {
+            "type": "string",
+            "title": "Headerrowpattern"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutColumnDraft"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "dateFormat": {
+            "type": "string",
+            "title": "Dateformat"
+          },
+          "signConvention": {
+            "type": "string",
+            "title": "Signconvention"
+          },
+          "invertsSign": {
+            "type": "boolean",
+            "title": "Invertssign"
+          },
+          "chronologicalOrder": {
+            "type": "string",
+            "title": "Chronologicalorder"
+          },
+          "rowStartRule": {
+            "type": "string",
+            "title": "Rowstartrule"
+          },
+          "continuationRule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuationrule"
+          },
+          "skipLinePatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skiplinepatterns"
+          },
+          "openingBalancePattern": {
+            "type": "null",
+            "title": "Openingbalancepattern"
+          },
+          "closingBalancePattern": {
+            "type": "null",
+            "title": "Closingbalancepattern"
+          },
+          "hasRunningBalance": {
+            "type": "boolean",
+            "title": "Hasrunningbalance"
+          },
+          "quirks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quirks"
+          },
+          "metadataPatterns": {
+            "type": "null",
+            "title": "Metadatapatterns"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "institutionId",
+          "fingerprints",
+          "headerRowPattern",
+          "columns",
+          "dateFormat",
+          "signConvention",
+          "invertsSign",
+          "chronologicalOrder",
+          "rowStartRule",
+          "continuationRule",
+          "skipLinePatterns",
+          "openingBalancePattern",
+          "closingBalancePattern",
+          "hasRunningBalance",
+          "quirks",
+          "metadataPatterns"
+        ],
+        "title": "LayoutDraft",
+        "description": "Unsaved layout proposal using the public layout API's field names."
+      },
+      "LayoutProfile": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "institutionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institutionid"
+          },
+          "fingerprints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Fingerprints"
+          },
+          "headerRowPattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headerrowpattern"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutColumn"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "dateFormat": {
+            "type": "string",
+            "title": "Dateformat"
+          },
+          "signConvention": {
+            "type": "string",
+            "title": "Signconvention"
+          },
+          "invertsSign": {
+            "type": "boolean",
+            "title": "Invertssign"
+          },
+          "chronologicalOrder": {
+            "type": "string",
+            "title": "Chronologicalorder"
+          },
+          "rowStartRule": {
+            "type": "string",
+            "title": "Rowstartrule"
+          },
+          "continuationRule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continuationrule"
+          },
+          "skipLinePatterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skiplinepatterns"
+          },
+          "openingBalancePattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openingbalancepattern"
+          },
+          "closingBalancePattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closingbalancepattern"
+          },
+          "hasRunningBalance": {
+            "type": "boolean",
+            "title": "Hasrunningbalance"
+          },
+          "quirks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Quirks"
+          },
+          "metadataPatterns": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadatapatterns"
+          },
+          "timesUsed": {
+            "type": "integer",
+            "title": "Timesused"
+          },
+          "lastUsedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastusedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "version",
+          "institutionId",
+          "fingerprints",
+          "headerRowPattern",
+          "columns",
+          "dateFormat",
+          "signConvention",
+          "invertsSign",
+          "chronologicalOrder",
+          "rowStartRule",
+          "continuationRule",
+          "skipLinePatterns",
+          "openingBalancePattern",
+          "closingBalancePattern",
+          "hasRunningBalance",
+          "quirks",
+          "metadataPatterns",
+          "timesUsed",
+          "lastUsedAt"
+        ],
+        "title": "LayoutProfile",
+        "description": "GET /layouts item, POST /layouts response."
+      },
+      "LayoutProposal": {
+        "properties": {
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LayoutDraft"
+              },
+              {
+                "$ref": "#/components/schemas/LayoutCreate"
+              }
+            ],
+            "title": "Draft"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ProposedRawRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "draft",
+          "rows"
+        ],
+        "title": "LayoutProposal",
+        "description": "POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation."
+      },
+      "MatchedRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "bookedDate": {
+            "type": "string",
+            "title": "Bookeddate"
+          },
+          "descriptionRaw": {
+            "type": "string",
+            "title": "Descriptionraw"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "classifiedBy": {
+            "type": "string",
+            "title": "Classifiedby"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "bookedDate",
+          "descriptionRaw",
+          "amount",
+          "currency",
+          "classifiedBy"
+        ],
+        "title": "MatchedRow",
+        "description": "One row a rule would touch. Money is a string; nothing here computes with it."
+      },
+      "Pack": {
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PackRule"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Rules"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rules"
+        ],
+        "title": "Pack"
+      },
+      "PackRule": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 32767.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive",
+            "default": true
+          },
+          "matchDescriptionPattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchdescriptionpattern"
+          },
+          "matchPatternKind": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "prefix",
+              "contains",
+              "regex"
+            ],
+            "title": "Matchpatternkind",
+            "default": "contains"
+          },
+          "matchAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchaccountid"
+          },
+          "matchCurrency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcurrency"
+          },
+          "matchAmountMin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmin"
+          },
+          "matchAmountMax": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmax"
+          },
+          "matchAmountExact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountexact"
+          },
+          "matchDirection": {
+            "type": "string",
+            "enum": [
+              "debit",
+              "credit",
+              "any"
+            ],
+            "title": "Matchdirection",
+            "default": "any"
+          },
+          "matchCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcountry"
+          },
+          "matchReferencePattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchreferencepattern"
+          },
+          "setCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcategoryid"
+          },
+          "setMerchantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setmerchantid"
+          },
+          "setTxnType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settxntype"
+          },
+          "setPaymentMethod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setpaymentmethod"
+          },
+          "setCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcountry"
+          },
+          "setTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Settags"
+          },
+          "setIsTransferCandidate": {
+            "type": "boolean",
+            "title": "Setistransfercandidate",
+            "default": false
+          },
+          "setCounterpartyAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcounterpartyaccountid"
+          },
+          "setCategorySlug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcategoryslug"
+          }
+        },
+        "type": "object",
+        "title": "PackRule",
+        "description": "A rule as a pack file writes it. The one addition is `setCategorySlug`: a pack cannot\ncarry a category id, because V9 generates a different one in every database, so it names\nthe slug and the load resolves it (`db/seeds/README.md`)."
+      },
+      "ParseFailure": {
+        "properties": {
+          "sourcePageNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcepagenumber"
+          },
+          "sourceRowNumber": {
+            "type": "integer",
+            "title": "Sourcerownumber"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sourcePageNumber",
+          "sourceRowNumber",
+          "reason"
+        ],
+        "title": "ParseFailure",
+        "description": "A line that extracted and would not normalize. The panel shows these beside the rows."
+      },
+      "ParsePeriod": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date",
+            "title": "End"
+          },
+          "isDerived": {
+            "type": "boolean",
+            "title": "Isderived"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "isDerived"
+        ],
+        "title": "ParsePeriod",
+        "description": "`isDerived` travels with the dates because a derived period must never be read as a\nstated one (Invariant I7)."
+      },
+      "ParseResponse": {
+        "properties": {
+          "staged": {
+            "type": "boolean",
+            "title": "Staged"
+          },
+          "batchId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Batchid"
+          },
+          "documentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Accountid"
+          },
+          "layoutId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Layoutid"
+          },
+          "layoutVersion": {
+            "type": "integer",
+            "title": "Layoutversion"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ParsePeriod"
+          },
+          "rowsExtracted": {
+            "type": "integer",
+            "title": "Rowsextracted"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "reconciliation": {
+            "$ref": "#/components/schemas/Reconciliation"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ParseRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/ParseFailure"
+            },
+            "type": "array",
+            "title": "Failures"
+          }
+        },
+        "type": "object",
+        "required": [
+          "staged",
+          "batchId",
+          "documentId",
+          "accountId",
+          "layoutId",
+          "layoutVersion",
+          "period",
+          "rowsExtracted",
+          "counts",
+          "reconciliation",
+          "rows",
+          "failures"
+        ],
+        "title": "ParseResponse"
+      },
+      "ParseRow": {
+        "properties": {
+          "sourcePageNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcepagenumber"
+          },
+          "sourceRowNumber": {
+            "type": "integer",
+            "title": "Sourcerownumber"
+          },
+          "bookedDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Bookeddate"
+          },
+          "valueDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuedate"
+          },
+          "descriptionRaw": {
+            "type": "string",
+            "title": "Descriptionraw"
+          },
+          "descriptionClean": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descriptionclean"
+          },
+          "referenceRaw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referenceraw"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "originalAmount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Originalamount"
+          },
+          "originalCurrency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Originalcurrency"
+          },
+          "runningBalance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runningbalance"
+          },
+          "proposedTxnType": {
+            "type": "string",
+            "title": "Proposedtxntype"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "dedupeHash": {
+            "type": "string",
+            "title": "Dedupehash"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sourcePageNumber",
+          "sourceRowNumber",
+          "bookedDate",
+          "valueDate",
+          "descriptionRaw",
+          "descriptionClean",
+          "referenceRaw",
+          "amount",
+          "currency",
+          "originalAmount",
+          "originalCurrency",
+          "runningBalance",
+          "proposedTxnType",
+          "status",
+          "dedupeHash"
+        ],
+        "title": "ParseRow",
+        "description": "One normalized row, as the preview and the diagnostics panel read it."
+      },
+      "PreviewResult": {
+        "properties": {
+          "affected": {
+            "type": "integer",
+            "title": "Affected"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/MatchedRow"
+            },
+            "type": "array",
+            "title": "Sample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "affected",
+          "sample"
+        ],
+        "title": "PreviewResult"
+      },
+      "ProposedRawRow": {
+        "properties": {
+          "pageNumber": {
+            "type": "integer",
+            "title": "Pagenumber"
+          },
+          "rowNumber": {
+            "type": "integer",
+            "title": "Rownumber"
+          },
+          "rawText": {
+            "type": "string",
+            "title": "Rawtext"
+          },
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pageNumber",
+          "rowNumber",
+          "rawText",
+          "fields"
+        ],
+        "title": "ProposedRawRow",
+        "description": "Public raw extraction row. Sensitive transient extraction fields are absent by design."
+      },
+      "Reconciliation": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "declaredOpening": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declaredopening"
+          },
+          "openingIsDerived": {
+            "type": "boolean",
+            "title": "Openingisderived"
+          },
+          "declaredClosing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Declaredclosing"
+          },
+          "computedClosing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Computedclosing"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "firstDivergentRow": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstdivergentrow"
+          },
+          "previousBalance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previousbalance"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "candidateRows": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Candidaterows"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "declaredOpening",
+          "openingIsDerived",
+          "declaredClosing",
+          "computedClosing",
+          "delta",
+          "firstDivergentRow",
+          "previousBalance",
+          "amount",
+          "candidateRows",
+          "message"
+        ],
+        "title": "Reconciliation",
+        "description": "`reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.\n\nOn a `running_balance_break` the three closing fields are row-level rather than\nstatement-level, so a consumer must read `status` first \u2014 the same warning the dataclass\ncarries, restated here because this is the shape the panel actually receives."
+      },
+      "ReviewBatch": {
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Batchid"
+          },
+          "documentId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentid"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Accountid"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "layoutId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layoutid"
+          },
+          "layoutVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layoutversion"
+          },
+          "period": {
+            "$ref": "#/components/schemas/ReviewPeriod"
+          },
+          "rowsExtracted": {
+            "type": "integer",
+            "title": "Rowsextracted"
+          },
+          "reconciliation": {
+            "$ref": "#/components/schemas/Reconciliation"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewGroup"
+            },
+            "type": "array",
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batchId",
+          "documentId",
+          "accountId",
+          "status",
+          "layoutId",
+          "layoutVersion",
+          "period",
+          "rowsExtracted",
+          "reconciliation",
+          "groups"
+        ],
+        "title": "ReviewBatch"
+      },
+      "ReviewGroup": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "count",
+          "rows"
+        ],
+        "title": "ReviewGroup",
+        "description": "Rows sharing a status, and how many there are.\n\n`statement-ingestion.html` \u00a710 groups by attention needed rather than chronologically:\nchronological order means scrolling past the rows that are fine to reach the ones that are\nnot. `count` is stated rather than left to the array's length because a later page of a\nlarge group will not carry every row."
+      },
+      "ReviewPeriod": {
+        "properties": {
+          "start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "isDerived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isderived"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "isDerived"
+        ],
+        "title": "ReviewPeriod",
+        "description": "The period as `import_batch` recorded it, which is not always all of it.\n\nEvery field is optional because every underlying column is. `period_start` and `period_end`\nare nullable (V12), so a batch that failed before reconciliation has no period at all and\nmust still be readable \u2014 a review screen that 500s on the batch the owner needs to look at\nis the wrong failure. `isDerived` is the flag the batch recorded at staging (V17): true\nwhere the period came from the rows' own dates, false where the statement stated it, and\nnull only for a batch staged before that column existed. It is never inferred \u2014 a period\nderived from rows dated 1 and 2 March is indistinguishable afterwards from one a statement\nstated as 1-2 March, and guessing either way labels a provenance nobody observed\n(Invariant I7)."
+      },
+      "ReviewRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "sourcePageNumber": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcepagenumber"
+          },
+          "sourceRowNumber": {
+            "type": "integer",
+            "title": "Sourcerownumber"
+          },
+          "bookedDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Bookeddate"
+          },
+          "valueDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuedate"
+          },
+          "descriptionRaw": {
+            "type": "string",
+            "title": "Descriptionraw"
+          },
+          "descriptionClean": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descriptionclean"
+          },
+          "referenceRaw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Referenceraw"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "amountBase": {
+            "type": "string",
+            "title": "Amountbase"
+          },
+          "amountSecondary": {
+            "type": "string",
+            "title": "Amountsecondary"
+          },
+          "proposedTxnType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposedtxntype"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "duplicateOfTransactionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duplicateoftransactionid"
+          },
+          "nearDuplicateOfId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearduplicateofid"
+          },
+          "proposedCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposedcategoryid"
+          },
+          "proposedCategoryName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposedcategoryname"
+          },
+          "classifiedBy": {
+            "type": "string",
+            "title": "Classifiedby"
+          },
+          "classificationConfidence": {
+            "type": "string",
+            "title": "Classificationconfidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "sourcePageNumber",
+          "sourceRowNumber",
+          "bookedDate",
+          "valueDate",
+          "descriptionRaw",
+          "descriptionClean",
+          "referenceRaw",
+          "amount",
+          "currency",
+          "amountBase",
+          "amountSecondary",
+          "proposedTxnType",
+          "status",
+          "duplicateOfTransactionId",
+          "nearDuplicateOfId",
+          "proposedCategoryId",
+          "proposedCategoryName",
+          "classifiedBy",
+          "classificationConfidence"
+        ],
+        "title": "ReviewRow",
+        "description": "One staged row as the review screen reads it.\n\nMoney is a string and the frozen pair travels with the row: the screen shows what will be\nwritten, not a figure it recomputes (`api-contracts.html` \u00a76)."
+      },
+      "RowDecision": {
+        "properties": {
+          "rowIds": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Rowids"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rowIds",
+          "decision"
+        ],
+        "title": "RowDecision",
+        "description": "A bulk decision. Reviewing 200 rows one at a time is why people abandon these tools."
+      },
+      "RuleBody": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 32767.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive",
+            "default": true
+          },
+          "matchDescriptionPattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchdescriptionpattern"
+          },
+          "matchPatternKind": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "prefix",
+              "contains",
+              "regex"
+            ],
+            "title": "Matchpatternkind",
+            "default": "contains"
+          },
+          "matchAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchaccountid"
+          },
+          "matchCurrency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcurrency"
+          },
+          "matchAmountMin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmin"
+          },
+          "matchAmountMax": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmax"
+          },
+          "matchAmountExact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountexact"
+          },
+          "matchDirection": {
+            "type": "string",
+            "enum": [
+              "debit",
+              "credit",
+              "any"
+            ],
+            "title": "Matchdirection",
+            "default": "any"
+          },
+          "matchCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcountry"
+          },
+          "matchReferencePattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchreferencepattern"
+          },
+          "setCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcategoryid"
+          },
+          "setMerchantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setmerchantid"
+          },
+          "setTxnType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settxntype"
+          },
+          "setPaymentMethod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setpaymentmethod"
+          },
+          "setCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcountry"
+          },
+          "setTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Settags"
+          },
+          "setIsTransferCandidate": {
+            "type": "boolean",
+            "title": "Setistransfercandidate",
+            "default": false
+          },
+          "setCounterpartyAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcounterpartyaccountid"
+          }
+        },
+        "type": "object",
+        "title": "RuleBody",
+        "description": "Everything a rule can say. Sent in full on create and on edit, as `AccountUpdate` is:\na full replacement has no absent-versus-null ambiguity and the screen holds the whole row."
+      },
+      "RuleRow": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "priority": {
+            "type": "integer",
+            "maximum": 32767.0,
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "isActive": {
+            "type": "boolean",
+            "title": "Isactive",
+            "default": true
+          },
+          "matchDescriptionPattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchdescriptionpattern"
+          },
+          "matchPatternKind": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "prefix",
+              "contains",
+              "regex"
+            ],
+            "title": "Matchpatternkind",
+            "default": "contains"
+          },
+          "matchAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchaccountid"
+          },
+          "matchCurrency": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 3,
+                "minLength": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcurrency"
+          },
+          "matchAmountMin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmin"
+          },
+          "matchAmountMax": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountmax"
+          },
+          "matchAmountExact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchamountexact"
+          },
+          "matchDirection": {
+            "type": "string",
+            "enum": [
+              "debit",
+              "credit",
+              "any"
+            ],
+            "title": "Matchdirection",
+            "default": "any"
+          },
+          "matchCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchcountry"
+          },
+          "matchReferencePattern": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchreferencepattern"
+          },
+          "setCategoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcategoryid"
+          },
+          "setMerchantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setmerchantid"
+          },
+          "setTxnType": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settxntype"
+          },
+          "setPaymentMethod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setpaymentmethod"
+          },
+          "setCountry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcountry"
+          },
+          "setTags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Settags"
+          },
+          "setIsTransferCandidate": {
+            "type": "boolean",
+            "title": "Setistransfercandidate",
+            "default": false
+          },
+          "setCounterpartyAccountId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setcounterpartyaccountid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "origin": {
+            "type": "string",
+            "title": "Origin"
+          },
+          "timesApplied": {
+            "type": "integer",
+            "title": "Timesapplied"
+          },
+          "lastAppliedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastappliedat"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "origin",
+          "timesApplied",
+          "lastAppliedAt"
+        ],
+        "title": "RuleRow",
+        "description": "A saved rule. `origin` and the counters are read-only: the first is set by whichever\npath created the rule, and the second two are the cascade's to maintain."
+      },
+      "TransactionCreate": {
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Accountid"
+          },
+          "bookedDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Bookeddate"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "txnType": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Txntype"
+          },
+          "categoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryid"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "paymentMethod": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paymentmethod"
+          }
+        },
+        "type": "object",
+        "required": [
+          "accountId",
+          "bookedDate",
+          "description",
+          "amount",
+          "txnType"
+        ],
+        "title": "TransactionCreate"
+      },
+      "TransactionRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Accountid"
+          },
+          "accountName": {
+            "type": "string",
+            "title": "Accountname"
+          },
+          "bookedDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Bookeddate"
+          },
+          "descriptionRaw": {
+            "type": "string",
+            "title": "Descriptionraw"
+          },
+          "descriptionClean": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descriptionclean"
+          },
+          "amount": {
+            "type": "string",
+            "title": "Amount"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "originalAmount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Originalamount"
+          },
+          "originalCurrency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Originalcurrency"
+          },
+          "amountBase": {
+            "type": "string",
+            "title": "Amountbase"
+          },
+          "amountSecondary": {
+            "type": "string",
+            "title": "Amountsecondary"
+          },
+          "fxRateDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Fxratedate"
+          },
+          "fxRateIsCarried": {
+            "type": "boolean",
+            "title": "Fxrateiscarried"
+          },
+          "fxRateToBase": {
+            "type": "string",
+            "title": "Fxratetobase"
+          },
+          "fxRateToSecondary": {
+            "type": "string",
+            "title": "Fxratetosecondary"
+          },
+          "txnType": {
+            "type": "string",
+            "title": "Txntype"
+          },
+          "categoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryid"
+          },
+          "categoryName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryname"
+          },
+          "merchantId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchantid"
+          },
+          "transferId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transferid"
+          },
+          "parentTransactionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parenttransactionid"
+          },
+          "isSplitParent": {
+            "type": "boolean",
+            "title": "Issplitparent"
+          },
+          "isExcluded": {
+            "type": "boolean",
+            "title": "Isexcluded"
+          },
+          "classifiedBy": {
+            "type": "string",
+            "title": "Classifiedby"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "accountId",
+          "accountName",
+          "bookedDate",
+          "descriptionRaw",
+          "descriptionClean",
+          "amount",
+          "currency",
+          "originalAmount",
+          "originalCurrency",
+          "amountBase",
+          "amountSecondary",
+          "fxRateDate",
+          "fxRateIsCarried",
+          "fxRateToBase",
+          "fxRateToSecondary",
+          "txnType",
+          "categoryId",
+          "categoryName",
+          "merchantId",
+          "transferId",
+          "parentTransactionId",
+          "isSplitParent",
+          "isExcluded",
+          "classifiedBy",
+          "source",
+          "notes"
+        ],
+        "title": "TransactionRow"
+      },
+      "TransactionUpdate": {
+        "properties": {
+          "categoryId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Categoryid"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "categoryId",
+          "notes"
+        ],
+        "title": "TransactionUpdate",
+        "description": "The two owner-editable fields, always sent \u2014 omitting notes would silently erase an\nexisting note, so it is required and an explicit null is the deliberate clear. Money is\nimmutable (I1/I5); the database trigger enforces what this model does not offer."
+      },
+      "TransactionsResponse": {
+        "properties": {
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionRow"
+            },
+            "type": "array",
+            "title": "Transactions"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transactions",
+          "total"
+        ],
+        "title": "TransactionsResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

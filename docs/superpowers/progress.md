@@ -33,11 +33,60 @@ request.
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
 | 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | **Accepted** — the run was made on 10 September 2026; 67 of the 71 gathered files imported and every account reconciles across its period | [acceptance run](#phase-1--slice-12--the-acceptance-run) |
-| 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
+| 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b4-transfer-screen` | In progress — the classification half is delivered; transfers and the acceptance run remain | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
+
+## Phase 1 · slice 1.3 — classification and transfers
+
+| Task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 3a1 — the rules table | `feature/p1-3a1-classification-rules` | Delivered | [#81](https://github.com/sandjaie/OneLedger/pull/81) |
+| 3a2 — the cascade | `feature/p1-3a2-classification-cascade` | Delivered | [#82](https://github.com/sandjaie/OneLedger/pull/82) |
+| 3a3a — rules through the app | `feature/p1-3a3a-rules-crud` | Delivered | [#83](https://github.com/sandjaie/OneLedger/pull/83) |
+| 3a3b — preview and backfill | `feature/p1-3a3b-preview-and-backfill` | Delivered | [#84](https://github.com/sandjaie/OneLedger/pull/84) |
+| 3a4 — the seed pack, and import classifies | `feature/p1-3a4-seed-rules-and-import` | Delivered | [#85](https://github.com/sandjaie/OneLedger/pull/85) |
+| 3a4 — a pack loads as seed rules | `fix/p1-3a4-a-seed-pack-loads-as-seed` | Delivered | this branch |
+| 3a5 — the rules screen | `feature/p1-3a5-rules-screen` | Delivered | [#86](https://github.com/sandjaie/OneLedger/pull/86) |
+| 3b1–3b4 — transfers | `feature/p1-3b1-transfer-schema` … `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| the acceptance run | — | Not run | — |
+
+Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
+confirmed on the transactions screen rather than at review, because a transfer's two legs are
+almost never in the same import batch. And `CLAUDE.md` gave up its restatement of the rules for
+a pointer table ([#79](https://github.com/sandjaie/OneLedger/pull/79)) — every rule it dropped
+was checked into a document first.
+
+### Raised, not fixed here
+
+- **`db/seeds/README.md` documented a step nothing could perform.** `POST /rules` stamps
+  `origin` as `user_created` and refuses to be told otherwise, so the shipped pack loaded as
+  thirty-seven of the owner's own rules — ahead of themselves in the cascade. `POST /rules/pack`
+  is the writer that means `seed`; the fix branch above carries it.
+- **`statement_layout.times_used` is never written.** The column exists and no code advances it.
+- **`api-contracts.html` §2 lists two routes twice**, with contracts that differ between the
+  two entries.
+- **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the
+  address it wrote takes an `UPDATE`.
+
+### The live suite lost the working ledger, and now cannot reach it
+
+On 10 September 2026, exporting `.env` so the live tests would run pointed their fixtures at the
+working database. Those fixtures empty `transaction`, `import_batch`, `document`,
+`statement_layout` and `classification_rule`; 4,184 imported transactions, 67 batches, 67
+documents and four layout profiles went with them. Everything was re-imported from the original
+statements the same day, and the four layout profiles re-seeded from `db/seeds/`.
+
+The fix is structural, not a habit: `db-test` is its own container on its own port and volume
+behind the `test` compose profile, `scripts/test-db.sh up` starts and exports it in one step,
+and `api/tests/live_database.py` refuses a database holding anything those fixtures would empty
+— and refuses a split where the fixtures and the routes under test point at different databases
+([#87](https://github.com/sandjaie/OneLedger/pull/87)). A side effect worth recording: with the
+suite finally reaching a database of its own, the six `test_auth`/`test_oidc` failures and two
+`test_ingest_pipeline_live` failures long treated as unavoidable turned out to be the same
+symptom, and the suite is green for the first time.
 
 ## Phase 1 · slice 1.2 — all four bank layouts
 
@@ -45,7 +94,7 @@ request.
 | --- | --- | --- | --- |
 | 2a — a password reaches the parse | `feature/p1-2a-encrypted-statements` | Delivered | [#71](https://github.com/sandjaie/OneLedger/pull/71) |
 | 2b — a staged batch can be discarded | `feature/p1-2b-batch-cancellation` | Delivered | [#72](https://github.com/sandjaie/OneLedger/pull/72) |
-| 2c1–2c3 — the three remaining layouts | `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Not started — local tasks | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) |
+| 2c1–2c3 — the three remaining layouts | `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Delivered | [#75](https://github.com/sandjaie/OneLedger/pull/75) · [#76](https://github.com/sandjaie/OneLedger/pull/76) · [#77](https://github.com/sandjaie/OneLedger/pull/77) |
 
 The slice's survey found three of its four stated engine capabilities already delivered with M2
 and exercised by slice 1.1; the plan records that and the five-branch split that followed. What
