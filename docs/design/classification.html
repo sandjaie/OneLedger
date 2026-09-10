@@ -367,9 +367,14 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="06--classification">06 — Classification</h1>
-<p><strong>Phase 1 and Phase 2 contain no AI.</strong> The cascade below is fully deterministic and
+<p><strong>The Phase 1 and Phase 2 application makes no LLM calls.</strong> The cascade below is fully deterministic and
 inspectable — every classification can name the rule that produced it. An LLM fallback is a V2
 consideration only (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>).</p>
+<p><a href="../adr/0020-assisted-ledger-decisions.html">ADR-0020</a> permits owner-delegated
+assistance now: the agent can research public provider identities, preview and save supported
+merchant rules, classify clear cases and ask grouped questions about uncertainty. Payment rails
+and personal names alone do not establish purchase categories. Existing overrides are preserved;
+embedded AI, automatic correction learning and unattended operation are not implied.</p>
 <p>This is not a limitation being worked around. A rule engine that is genuinely good is faster,
 free, offline, reproducible and debuggable — and it sets the bar that any later model has to
 beat. Most personal spending is a few hundred recurring merchants; that is a pattern-matching

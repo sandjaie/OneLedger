@@ -459,13 +459,15 @@ can forget it, because the reports never read the base table.</p>
 </tbody></table>
 <hr>
 <h2 id="3-detection">3. Detection</h2>
-<p>Automatic candidate generation, <strong>confirmed by the user</strong>
-(<a href="../adr/0007-transfer-auto-detection-with-review.html">ADR-0007</a>). Nothing links silently — a wrong
-silent link corrupts spending totals in a way that is invisible for months.</p>
+<p>Automatic candidate generation over committed transactions, <strong>confirmed by the owner or
+an owner-delegated agent</strong> under
+<a href="../adr/0020-assisted-ledger-decisions.html">ADR-0020</a>. The agent may perform the routine
+review and confirmation without another owner click; ambiguous or competing peers are escalated.
+Scores alone never establish a transfer, and delegated actions retain their evidence.</p>
 <h3 id="the-matching-algorithm">The matching algorithm</h3>
 <p>Implemented in the Python service as <code>transfers.py</code>
-(<a href="../adr/0013-python-backend-service.html">ADR-0013</a>) — called at stage 11 of the import pipeline,
-and again by the transactions screen to rank peers for manual linking (§6). The code below is the
+(<a href="../adr/0013-python-backend-service.html">ADR-0013</a>) — called by the transactions screen
+over committed rows, including peers for manual linking (§6). The code below is the
 specification of the scoring and close to the implementation.</p>
 <p>For each unmatched debit, find candidate credits within a window and score them.</p>
 <pre><code class="language-python">def score_match(debit: Txn, credit: Txn) -&gt; float:
@@ -570,9 +572,9 @@ near-certain matches.</p>
 <td>Not shown; findable via manual linking</td>
 </tr>
 </tbody></table>
-<p><strong>No threshold auto-confirms.</strong> Even 0.99 requires a click in Phase 1. Once a few months of
-history exists and false-positive rate is measured, raising this becomes a data-informed decision
-rather than a hopeful one.</p>
+<p><strong>No score alone confirms a transfer.</strong> An owner-delegated agent may inspect the
+evidence and perform the confirmation. The current application still requires an explicit request
+naming both legs; an unattended policy is separate implementation work under ADR-0020.</p>
 <h3 id="one-sided-transfers">One-sided transfers</h3>
 <p>Frequently only one leg is present — the destination account&#39;s statement hasn&#39;t been imported
 yet, or the account isn&#39;t tracked at all.</p>
@@ -599,7 +601,7 @@ A verified position discloses the missing peer and coverage gap. Any estimated e
 that includes in-transit funds labels them separately, keeps them out of settled available cash,
 and removes them once settlement appears. Do not invent a bank posting or silently count both.</p>
 <p>Failed and reversed transfers remain distinguishable from settled transfers. Re-matching proposes
-peers; confirmation still requires the user under ADR-0007. See
+peers; confirmation follows the owner or delegated review policy in ADR-0020. See
 <a href="../product/finance-os.html#financial-meaning">F01–F04</a> and scenarios P02/P04.</p>
 <h2 id="4-credit-card-payments-invariant-i4">4. Credit card payments (Invariant I4)</h2>
 <p>The most common double-counting error, and worth stating separately.</p>
