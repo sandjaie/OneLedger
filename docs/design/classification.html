@@ -384,21 +384,35 @@ problem, not a language problem.</p>
 <p>Evaluated in order. <strong>First match wins and evaluation stops.</strong></p>
 <pre><code>1  Explicit user override on this transaction    →  classified_by = user_manual
 2  User rule, by priority                        →  classified_by = user_rule
-3  Merchant alias match                          →  classified_by = merchant_alias
+3  Private knowledge / merchant alias match      →  classified_by = merchant_alias
 4  Recurring series match             [Phase 2]  →  classified_by = recurring_series
 5  Prior classification, same account + text     →  classified_by = prior_match
 6  Seed rule                                     →  classified_by = seed_rule
 7  No match                                      →  classified_by = unclassified
                                                      → review queue
 </code></pre>
+<p>Private knowledge is household-only and carries its evidence, economic role, direction and
+optional account scope. Within this step, lower priority wins; then exact beats prefix, prefix
+beats contains, and contains beats regex; then the longer, more specific service name wins. If
+equally strong matches propose different outcomes, the engine abstains as
+<code>unclassified</code> instead of depending on database order. This is what lets a provider&#39;s
+purchase service outrank its parent brand while keeping its wallet role separate.</p>
+<p>Prior matches learn only from direct owner decisions and still-active user rules. An alias
+decision cannot prove its originating evidence is still active on an older transaction, so it is
+not promoted into a prior; nor is a prior or seed decision. No prior
+may propagate a report-excluding transfer, investment, loan, adjustment or opening-balance type.
+Priors match only within the same posting direction, and conflicting equally strong outcomes
+abstain. Those meanings require explicit knowledge or review.</p>
 <p><code>classified_by</code> and <code>classification_rule_id</code> are stored on every transaction, so the UI can always
 answer <em>&quot;why is this Food &amp; Dining?&quot;</em> — which is what makes the engine trustworthy enough to
 rely on.</p>
 <p><strong>Where the cascade runs.</strong> In the Python service
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>) — <code>classify.py</code>, called at stage 10
-of the import pipeline and again by the rules screen for retroactive application and affected counts. One
-implementation with one caller, so the classification a row gets at import is by construction the one it gets
-after a rule edit.</p>
+of the import pipeline and again by the rules screen for retroactive application and affected counts. Both
+callers load the same rules, private knowledge and bounded trusted priors through one shared resolver, so the
+classification a row gets at import is by construction the one it gets from <code>POST /classify</code>. The
+resolver performs no network calls; a public evidence URL is provenance stored at write time, never an import-time
+fetch target.</p>
 <p>This replaces <a href="../adr/superseded.html#matching-in-postgres">an earlier decision</a> that put the cascade in
 SQL because two clients needed it. With a backend there is one client, and the cost that ADR recorded —
 matching logic being harder to test in SQL than in Python — is simply not paid.</p>

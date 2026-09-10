@@ -6,7 +6,7 @@ while building a task belongs to the milestone's spec, dated run evidence to `re
 scope and sequence to the roadmap and the plans. Keeping this file to status is what lets it be
 read at a glance and updated at a task boundary without an argument about what to write.
 
-Updated: 10 September 2026.
+Updated: 11 September 2026.
 
 ## Where the work stands
 
@@ -197,7 +197,7 @@ in another currency would make its balances incomparable with the account's.
 | 3b5 — a remittance's own narration as a matching signal | `feature/p1-3b5-stated-remittance` | Delivered | [#107](https://github.com/sandjaie/OneLedger/pull/107) |
 | the acceptance run | — | Not run | — |
 | Delegated classification and transfer judgement policy | `docs/assisted-ledger-decisions` | Recorded — routine review and acceptance operations may be delegated; unattended automation and acceptance results are not delivered by this policy change | [ADR-0020](../adr/0020-assisted-ledger-decisions.html) |
-| Statement-wide classification audit and safe knowledge expansion | `fix/p1-3-loan-rule-boundary` · `feature/p1-3-classification-decisions` · `feature/p1-3-classification-repair` · `feature/p1-3-counterparty-store` | Tasks 1–4 delivered — loan seeds require a delimited debit token; V23 stores bounded evidence, exact previews and immutable correction history; the authenticated API applies and conditionally undoes that history; V24 distinguishes merchants, intermediaries, people and own accounts through evidenced household-private aliases without duplicating the merchant catalogue. No private historical repair or acceptance run has been performed. Knowledge resolution/API, grouped review and local-model evaluation remain later tasks; acceptance remains open | [spec](specs/2026-09-10-classification-knowledge.md) · [plan](plans/2026-09-10-classification-knowledge.md) |
+| Statement-wide classification audit and safe knowledge expansion | `fix/p1-3-loan-rule-boundary` · `feature/p1-3-classification-decisions` · `feature/p1-3-classification-repair` · `feature/p1-3-counterparty-store` · `feature/p1-3-merchant-knowledge` | Tasks 1–5 delivered — loan seeds require a delimited debit token; V23 stores bounded evidence, exact previews and immutable correction history; the authenticated API applies and conditionally undoes that history; V24 distinguishes merchants, intermediaries, people and own accounts through evidenced household-private aliases; household knowledge now has owner-only list/create/version/deactivate operations and one deterministic resolver shared by import and backfill. Conflicting best evidence abstains, and derived or report-excluding priors cannot amplify. No private historical repair or acceptance run has been performed. Grouped review and local-model evaluation remain later tasks; acceptance remains open | [spec](specs/2026-09-10-classification-knowledge.md) · [plan](plans/2026-09-10-classification-knowledge.md) |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
 confirmed on the transactions screen rather than at review, because a transfer's two legs are

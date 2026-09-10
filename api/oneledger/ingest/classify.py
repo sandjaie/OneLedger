@@ -45,6 +45,24 @@ FUZZY_FLOOR = 0.85
 PatternKind = Literal["exact", "prefix", "contains", "regex"]
 Direction = Literal["debit", "credit", "any"]
 
+# A regex with nested repeats can take exponential time on a narration that nearly matches.
+_NESTED_QUANTIFIER = re.compile(r"\([^()]*[+*][^()]*\)\s*[+*]|\(\?:[^()]*[+*][^()]*\)\s*[+*]")
+
+
+def validate_pattern(pattern: str, kind: PatternKind) -> None:
+    """Validate every persisted matcher at its write boundary."""
+    if kind != "regex":
+        return
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"not a valid regular expression ({exc})") from None
+    if _NESTED_QUANTIFIER.search(pattern):
+        raise ValueError(
+            "this pattern nests one quantifier inside another, which can take exponential time "
+            "on an input that nearly matches; rewrite it without the nested repeat"
+        )
+
 
 @dataclass(frozen=True)
 class Rule:
@@ -76,13 +94,20 @@ class Rule:
 
 @dataclass(frozen=True)
 class Alias:
-    """One `merchant_alias` row, plus the category the merchant carries."""
+    """A merchant alias or an evidenced V24 counterparty alias."""
 
-    merchant_id: UUID
+    merchant_id: UUID | None
     pattern: str
     pattern_kind: PatternKind = "contains"
     priority: int = 100
     category_id: UUID | None = None
+    counterparty_id: UUID | None = None
+    knowledge_version_id: UUID | None = None
+    role: str | None = None
+    direction: Direction = "any"
+    account_id: UUID | None = None
+    txn_type: str | None = None
+    payment_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +120,8 @@ class Prior:
     merchant_id: UUID | None = None
     txn_type: str | None = None
     payment_method: str | None = None
+    trusted: bool = True
+    direction: Direction = "any"
 
 
 @dataclass(frozen=True)
@@ -127,6 +154,10 @@ class Classification:
     # Read by 3b2's matcher. A rule is how a household says "this narration is a transfer".
     is_transfer_candidate: bool = False
     counterparty_account_id: UUID | None = None
+    counterparty_id: UUID | None = None
+    knowledge_version_id: UUID | None = None
+    counterparty_role: str | None = None
+    unresolved_reason: str | None = None
 
     @property
     def is_pre_ticked(self) -> bool:
@@ -214,36 +245,121 @@ def _first_matching(rules: list[Rule], row: Candidate) -> Rule | None:
     return next((rule for rule in ordered if rule_matches(rule, row)), None)
 
 
+def _alias_matches(alias: Alias, row: Candidate) -> bool:
+    if alias.account_id is not None and alias.account_id != row.account_id:
+        return False
+    if alias.direction == "debit" and row.amount >= 0:
+        return False
+    if alias.direction == "credit" and row.amount <= 0:
+        return False
+    return matches_pattern(alias.pattern, alias.pattern_kind, row.description_clean)
+
+
+def _alias_rank(alias: Alias) -> tuple[int, int, int]:
+    """Priority first, then matcher precision and service-name specificity."""
+    kind_rank = {"exact": 0, "prefix": 1, "contains": 2, "regex": 3}
+    return alias.priority, kind_rank[alias.pattern_kind], -len(alias.pattern)
+
+
+def _alias_outcome(alias: Alias) -> tuple[object, ...]:
+    return (
+        alias.merchant_id,
+        alias.category_id,
+        alias.txn_type,
+        alias.payment_method,
+        alias.counterparty_id,
+        alias.role,
+    )
+
+
 def _from_alias(aliases: list[Alias], row: Candidate) -> Classification | None:
-    ordered = sorted(aliases, key=lambda alias: (alias.priority, str(alias.merchant_id)))
-    for alias in ordered:
-        if matches_pattern(alias.pattern, alias.pattern_kind, row.description_clean):
-            return Classification(
-                classified_by="merchant_alias",
-                classification_confidence=CONFIDENCE_MERCHANT_ALIAS,
-                merchant_id=alias.merchant_id,
-                category_id=alias.category_id,
-            )
-    return None
+    matched = [alias for alias in aliases if _alias_matches(alias, row)]
+    if not matched:
+        return None
+    best_rank = min(_alias_rank(alias) for alias in matched)
+    strongest = [alias for alias in matched if _alias_rank(alias) == best_rank]
+    if len({_alias_outcome(alias) for alias in strongest}) > 1:
+        return Classification(
+            classified_by="unclassified",
+            classification_confidence=CONFIDENCE_UNCLASSIFIED,
+            unresolved_reason="conflicting highest-priority knowledge",
+        )
+    chosen = min(
+        strongest,
+        key=lambda alias: (
+            str(alias.counterparty_id or UUID(int=0)),
+            str(alias.knowledge_version_id or UUID(int=0)),
+            str(alias.merchant_id or UUID(int=0)),
+        ),
+    )
+    return Classification(
+        classified_by="merchant_alias",
+        classification_confidence=CONFIDENCE_MERCHANT_ALIAS,
+        merchant_id=chosen.merchant_id,
+        category_id=chosen.category_id,
+        txn_type=chosen.txn_type,
+        payment_method=chosen.payment_method,
+        counterparty_id=chosen.counterparty_id,
+        knowledge_version_id=chosen.knowledge_version_id,
+        counterparty_role=chosen.role,
+    )
 
 
 def _from_prior(priors: list[Prior], row: Candidate) -> Classification | None:
     """Same account and same text is the evidence; a near-identical text is weaker evidence and
     says so. Fuzzy below the floor is not evidence at all and returns nothing — the engine
     abstains rather than guessing, which is what keeps `unclassified` meaningful."""
-    same_account = [prior for prior in priors if prior.account_id == row.account_id]
+    report_excluding = {
+        "transfer_in",
+        "transfer_out",
+        "investment_buy",
+        "investment_sell",
+        "investment_income",
+        "loan_disbursement",
+        "loan_repayment",
+        "adjustment",
+        "opening_balance",
+    }
+    direction = "debit" if row.amount < 0 else "credit"
+    same_account = [
+        prior
+        for prior in priors
+        if prior.account_id == row.account_id
+        and prior.trusted
+        and prior.direction in {"any", direction}
+        and prior.txn_type not in report_excluding
+    ]
     text = row.description_clean.casefold()
 
-    for prior in same_account:
-        if prior.description_clean.casefold() == text:
-            return _prior_classification(prior, CONFIDENCE_PRIOR_EXACT)
+    exact = [prior for prior in same_account if prior.description_clean.casefold() == text]
+    if exact:
+        return _resolve_priors(exact, CONFIDENCE_PRIOR_EXACT)
 
-    best: tuple[float, Prior] | None = None
+    scored: list[tuple[float, Prior]] = []
     for prior in same_account:
         score = SequenceMatcher(None, prior.description_clean.casefold(), text).ratio()
-        if score >= FUZZY_FLOOR and (best is None or score > best[0]):
-            best = (score, prior)
-    return _prior_classification(best[1], CONFIDENCE_PRIOR_FUZZY) if best else None
+        if score >= FUZZY_FLOOR:
+            scored.append((score, prior))
+    if not scored:
+        return None
+    best_score = max(score for score, _ in scored)
+    return _resolve_priors(
+        [prior for score, prior in scored if score == best_score], CONFIDENCE_PRIOR_FUZZY
+    )
+
+
+def _prior_outcome(prior: Prior) -> tuple[object, ...]:
+    return prior.category_id, prior.merchant_id, prior.txn_type, prior.payment_method
+
+
+def _resolve_priors(priors: list[Prior], confidence: Decimal) -> Classification:
+    if len({_prior_outcome(prior) for prior in priors}) > 1:
+        return Classification(
+            classified_by="unclassified",
+            classification_confidence=CONFIDENCE_UNCLASSIFIED,
+            unresolved_reason="conflicting prior evidence",
+        )
+    return _prior_classification(priors[0], confidence)
 
 
 def _prior_classification(prior: Prior, confidence: Decimal) -> Classification:

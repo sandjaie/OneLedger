@@ -17,6 +17,21 @@ PRODUCTION_SCRIPT = ROOT / "scripts" / "production-stack.sh"
 
 
 def _compose_config(file: Path, env_file: Path) -> dict[str, Any]:
+    # A live-test run exports POSTGRES_* for its disposable database. Shell variables outrank
+    # Docker Compose's --env-file, so letting those leak here would test the test database's
+    # port instead of the explicitly named production/development example configuration.
+    env = os.environ.copy()
+    for name in (
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_DB",
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "AUTH_MODE",
+        "WEB_ORIGIN",
+        "NEXT_PUBLIC_API_URL",
+    ):
+        env.pop(name, None)
     completed = subprocess.run(
         [
             "docker",
@@ -32,6 +47,7 @@ def _compose_config(file: Path, env_file: Path) -> dict[str, Any]:
             "json",
         ],
         cwd=ROOT,
+        env=env,
         check=True,
         capture_output=True,
         text=True,

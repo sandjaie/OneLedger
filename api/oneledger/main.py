@@ -22,6 +22,7 @@ from .routes import (
     household,
     ingest,
     layouts,
+    merchant_knowledge,
     rules,
     transactions,
     transfers,
@@ -92,6 +93,7 @@ app.include_router(transactions.router)
 app.include_router(categories.router)
 app.include_router(classification_decisions.router)
 app.include_router(layouts.router)
+app.include_router(merchant_knowledge.router)
 app.include_router(rules.router)
 app.include_router(transfers.router)
 app.include_router(dashboard.router)

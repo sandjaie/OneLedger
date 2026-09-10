@@ -12,7 +12,6 @@ cascade is re-run only when the owner asks for it, by the route 3a3b adds.
 
 from __future__ import annotations
 
-import re
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, ClassVar, Literal
 from uuid import UUID
@@ -24,15 +23,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..ingest.classify import (
-    Alias,
     Candidate,
-    Knowledge,
     PatternKind,
-    Prior,
     Rule,
     classify_row,
     rule_matches,
+    validate_pattern,
 )
+from ..ingest.knowledge import load_knowledge
 
 router = APIRouter(tags=["rules"])
 
@@ -53,11 +51,6 @@ MATCHER_FIELDS = (
 )
 OUTCOME_FIELDS = ("setCategoryId", "setMerchantId", "setTxnType", "setPaymentMethod")
 
-# A regex that can backtrack catastrophically is refused at creation, never at match time: at
-# match time it is a request that never returns, on a route that holds a database connection.
-# Nested quantifiers over an overlapping alternation are the shape that does it.
-_NESTED_QUANTIFIER = re.compile(r"\([^()]*[+*][^()]*\)\s*[+*]|\(\?:[^()]*[+*][^()]*\)\s*[+*]")
-
 
 def _money(value: str | None) -> str | None:
     """A money matcher arrives as a decimal string and stays exact. No float, ever."""
@@ -70,18 +63,6 @@ def _money(value: str | None) -> str | None:
     if not parsed.is_finite():
         raise ValueError("must be a finite decimal string")
     return str(parsed)
-
-
-def _compiled(pattern: str) -> None:
-    try:
-        re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"not a valid regular expression ({exc})") from None
-    if _NESTED_QUANTIFIER.search(pattern):
-        raise ValueError(
-            "this pattern nests one quantifier inside another, which can take exponential time "
-            "on an input that nearly matches; rewrite it without the nested repeat"
-        )
 
 
 class RuleBody(BaseModel):
@@ -122,7 +103,7 @@ class RuleBody(BaseModel):
         if self.matchPatternKind == "regex":
             for pattern in (self.matchDescriptionPattern, self.matchReferencePattern):
                 if pattern is not None:
-                    _compiled(pattern)
+                    validate_pattern(pattern, self.matchPatternKind)
         return self
 
     # A subclass may name a category some other way — `PackRule` names it by slug — and the
@@ -494,10 +475,6 @@ def delete_rule(rule_id: UUID, owner: Annotated[OwnerSession, Depends(require_ow
 # A sample, not a page. The count is the answer; the rows are there so the owner can see the
 # rule is matching what they meant, and twenty is enough to tell that.
 SAMPLE_ROWS = 20
-# The cascade needs every classified row in the account as prior evidence. Bounded so a
-# household with years of history does not build an unbounded list per request; the most recent
-# are also the most likely to repeat.
-PRIORS_PER_ACCOUNT = 500
 
 
 class MatchedRow(BaseModel):
@@ -602,92 +579,6 @@ def _decimal(value: str | None) -> Decimal | None:
     return None if value is None else Decimal(value)
 
 
-def _knowledge(cur: psycopg.Cursor[Any], household_id: UUID) -> Knowledge:
-    """Everything the cascade may consult, read once for the whole run rather than per row."""
-    cur.execute(
-        f"SELECT {COLUMNS} FROM classification_rule"
-        " WHERE household_id = %s AND is_active ORDER BY priority, id",
-        (household_id,),
-    )
-    saved = [rule_row(row) for row in cur.fetchall()]
-
-    def as_rule(row: RuleRow) -> Rule:
-        return Rule(
-            id=row.id,
-            priority=row.priority,
-            origin=row.origin,
-            match_description_pattern=row.matchDescriptionPattern,
-            match_pattern_kind=row.matchPatternKind,
-            match_account_id=row.matchAccountId,
-            match_currency=row.matchCurrency,
-            match_amount_min=_decimal(row.matchAmountMin),
-            match_amount_max=_decimal(row.matchAmountMax),
-            match_amount_exact=_decimal(row.matchAmountExact),
-            match_direction=row.matchDirection,
-            match_country=row.matchCountry,
-            match_reference_pattern=row.matchReferencePattern,
-            set_category_id=row.setCategoryId,
-            set_merchant_id=row.setMerchantId,
-            set_txn_type=row.setTxnType,
-            set_payment_method=row.setPaymentMethod,
-            set_country=row.setCountry,
-            set_tags=tuple(row.setTags),
-            set_is_transfer_candidate=row.setIsTransferCandidate,
-            set_counterparty_account_id=row.setCounterpartyAccountId,
-        )
-
-    cur.execute(
-        """SELECT a.merchant_id, a.pattern, a.pattern_kind::text, a.priority, m.default_category_id
-             FROM merchant_alias a
-             JOIN merchant m ON m.id = a.merchant_id
-            WHERE a.is_active AND (a.household_id IS NULL OR a.household_id = %s)
-              AND m.household_id = %s""",
-        (household_id, household_id),
-    )
-    aliases = [
-        Alias(
-            merchant_id=row[0],
-            pattern=row[1],
-            pattern_kind=row[2],
-            priority=row[3],
-            category_id=row[4],
-        )
-        for row in cur.fetchall()
-    ]
-
-    # Only rows that already have an answer are evidence. An unclassified row is what we are
-    # trying to decide, and treating it as a prior would make the first row of a run decide
-    # every later one that looks like it.
-    cur.execute(
-        """SELECT account_id, COALESCE(description_clean, description_raw), category_id,
-                  merchant_id, txn_type::text, payment_method::text
-             FROM (SELECT *, row_number() OVER (PARTITION BY account_id
-                                                ORDER BY booked_date DESC, id) AS seen
-                     FROM transaction
-                    WHERE household_id = %s AND classified_by <> 'unclassified') ranked
-            WHERE seen <= %s""",
-        (household_id, PRIORS_PER_ACCOUNT),
-    )
-    priors = [
-        Prior(
-            account_id=row[0],
-            description_clean=row[1],
-            category_id=row[2],
-            merchant_id=row[3],
-            txn_type=row[4],
-            payment_method=row[5],
-        )
-        for row in cur.fetchall()
-    ]
-
-    return Knowledge(
-        user_rules=[as_rule(row) for row in saved if row.origin != "seed"],
-        seed_rules=[as_rule(row) for row in saved if row.origin == "seed"],
-        aliases=aliases,
-        priors=priors,
-    )
-
-
 @router.post("/classify")
 def classify_unclassified(
     owner: Annotated[OwnerSession, Depends(require_owner)], preview: bool = False
@@ -700,7 +591,7 @@ def classify_unclassified(
     rule over rows that already have an answer is Phase 2's learn-from-correction.
     """
     with connect() as conn, conn.cursor() as cur:
-        knowledge = _knowledge(cur, owner.household_id)
+        knowledge = load_knowledge(cur, owner.household_id)
         rows = _candidates(cur, owner.household_id, unclassified_only=True)
 
         decided: list[tuple[tuple[Any, ...], Any]] = []
