@@ -1,0 +1,32 @@
+"""`scripts/check-docs.py` reads the documents git tracks, not every file under the root.
+
+Parallel sessions work in worktrees under `.claude/worktrees/`, each a whole second copy of this
+repository. Walking into one made the docs check pass or fail on another session's half-written
+page — on 10 September 2026 it counted 525 documents in a tree that tracks far fewer.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import pathlib
+import subprocess
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+# Loaded by path: the script's name has a hyphen, as its neighbours' do.
+_spec = importlib.util.spec_from_file_location("check_docs", ROOT / "scripts" / "check-docs.py")
+assert _spec and _spec.loader
+check_docs = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(check_docs)
+
+
+def test_a_nested_checkout_is_not_this_tree(tmp_path: pathlib.Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "mine.md").write_text("# Mine\n")
+    subprocess.run(["git", "add", "mine.md"], cwd=tmp_path, check=True)
+    nested = tmp_path / ".claude" / "worktrees" / "someone-else"
+    nested.mkdir(parents=True)
+    (nested / "theirs.md").write_text("[broken](nowhere.md)\n")
+
+    seen = {path.name for path in check_docs._tracked(tmp_path)}
+
+    assert seen == {"mine.md"}

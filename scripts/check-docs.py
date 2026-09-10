@@ -47,8 +47,25 @@ SKIP = {".git", ".venv", "node_modules", ".next", "__pycache__", ".ruff_cache",
         ".mypy_cache", ".pytest_cache", "dist", "build"}
 
 
+
+def _tracked(root: pathlib.Path = ROOT) -> list[pathlib.Path]:
+    """The files git tracks, not every file under the root.
+
+    A nested checkout — `.claude/worktrees/*`, where a parallel session works — is a whole second
+    copy of this repository. Walking into it made this check pass or fail on someone else's
+    uncommitted work: on 10 September 2026 it counted 525 documents in a tree that tracks 140.
+    Outside a git checkout it falls back to walking the directory.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=False
+    )
+    if listed.returncode != 0:
+        return sorted(root.rglob("*"))
+    return [root / name for name in sorted(filter(None, listed.stdout.split("\0")))
+            if (root / name).is_file()]
+
 def documents() -> list[pathlib.Path]:
-    return sorted(p for p in ROOT.rglob("*")
+    return sorted(p for p in _tracked()
                   if p.suffix in (".html", ".md") and not SKIP.intersection(p.parts))
 
 
@@ -81,7 +98,7 @@ def check_links() -> list[str]:
 
 def check_html() -> list[str]:
     out = []
-    for path in sorted(ROOT.rglob("*.html")):
+    for path in sorted(p for p in _tracked() if p.suffix == ".html"):
         if SKIP.intersection(path.parts):
             continue
         checker = TagBalance()

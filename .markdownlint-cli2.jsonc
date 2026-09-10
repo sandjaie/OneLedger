@@ -49,6 +49,11 @@
     // comment above is optimistic: cli2 unions its own globs with the file list a caller
     // passes, so staging any `.md` at all made the hook lint these 52 files and fail — which
     // is what blocked the commit that added this line.
-    ".superpowers/**"
+    ".superpowers/**",
+
+    // Worktrees where parallel sessions work. Each is a whole second copy of this repository,
+    // and the `**/*.md` glob walked into all of them — so a commit here could fail on another
+    // session's half-written markdown. They are that session's to lint, in its own checkout.
+    ".claude/worktrees/**"
   ]
 }
