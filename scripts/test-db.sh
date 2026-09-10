@@ -25,8 +25,10 @@ fail() {
   exit 1
 }
 
-# The compose project, normalised as compose normalises it: lower case, [a-z0-9_-], no leading
-# `-` or `_`. The volume compose creates for `pgdata_test` carries it as a prefix.
+# The compose project. A directory name is normalised as compose normalises it: lower case,
+# [a-z0-9_-], no leading `-` or `_`. An explicit COMPOSE_PROJECT_NAME must already be valid, and
+# compose refuses one that is not before anything here removes a volume. The volume compose
+# creates for `pgdata_test` carries the project as a prefix.
 # ponytail: ignores a COMPOSE_PROJECT_NAME set inside .env; read it from there if one ever is.
 project="$(printf %s "${COMPOSE_PROJECT_NAME:-$(basename "$PWD")}" |
   tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[-_]*//')"
@@ -62,15 +64,17 @@ export POSTGRES_PASSWORD=oneledger
 export POSTGRES_DB=oneledger_test
 export POSTGRES_HOST=127.0.0.1
 export POSTGRES_PORT=$port
+export TEST_DB_PORT=$port
 EOF
 }
 
 case "${1:-up}" in
   up)
-    # Exported, because every compose call below must see it: one that saw the default would
-    # recreate db-test on a port another checkout already holds.
-    export TEST_DB_PORT="${TEST_DB_PORT:-$(running_port || free_port)}"
-    port="$TEST_DB_PORT"
+    # Exported, because every compose call must see it — the ones below and, through emit_env,
+    # the caller's own: one that saw the default would recreate db-test on a port another
+    # checkout already holds. Assigned apart from the export so a failure here stops the script.
+    port="${TEST_DB_PORT:-$(running_port || free_port)}"
+    export TEST_DB_PORT="$port"
     dsn="postgresql://oneledger:oneledger@127.0.0.1:${port}/oneledger_test"
     docker compose --profile test up -d db-test >&2 ||
       fail "db-test did not start on 127.0.0.1:$port; compose says why above. If that port is taken, set TEST_DB_PORT to a free one."

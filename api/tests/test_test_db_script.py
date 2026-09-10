@@ -74,9 +74,9 @@ def test_down_drops_this_checkouts_volume_and_not_the_main_ones(tmp_path: pathli
 
 
 def test_down_follows_an_explicit_project_name(tmp_path: pathlib.Path) -> None:
-    _run(tmp_path, "down", COMPOSE_PROJECT_NAME="Scratch")
+    _run(tmp_path, "down", COMPOSE_PROJECT_NAME="scratch-2")
 
-    assert "volume rm -f scratch_pgdata_test" in _docker_calls(tmp_path)
+    assert "volume rm -f scratch-2_pgdata_test" in _docker_calls(tmp_path)
 
 
 def test_up_fails_loudly_when_the_container_does_not_start(tmp_path: pathlib.Path) -> None:
@@ -121,6 +121,8 @@ def test_up_takes_another_port_when_the_default_is_held(tmp_path: pathlib.Path) 
         line.split("=", 1)[1] for line in result.stdout.splitlines() if "POSTGRES_PORT=" in line
     )
     assert port != "55434"
+    # The caller's own compose calls must see it too, or they recreate db-test on the default.
+    assert f"export TEST_DB_PORT={port}" in result.stdout
     # Every compose call sees the same port, or `run flyway-test` recreates db-test on the default.
     compose_calls = [line for line in _docker_calls(tmp_path).splitlines() if " port " not in line]
     assert compose_calls and all(line.startswith(f"TEST_DB_PORT={port} ") for line in compose_calls)
