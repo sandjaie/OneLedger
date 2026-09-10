@@ -94,7 +94,13 @@ jobs:
       - name: Install postgresql client
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
       - name: Start the database
-        run: docker compose up -d db
+        # `pgdata` and `documents` are external volumes (#91), and a fresh runner has neither;
+        # without these two lines `up` is refused, by design (#97). The runner is ephemeral,
+        # so creating them here costs nothing and removes nothing.
+        run: |
+          docker volume create oneledger_pgdata
+          docker volume create oneledger_documents
+          docker compose up -d db
       - name: Migrate from empty
         run: docker compose run --rm flyway migrate
       - name: Apply seed data
@@ -116,7 +122,10 @@ jobs:
           fi
           echo "Found ${#tests[@]} invariant test file(s)."
       - name: Run invariant tests
-        run: scripts/hooks/db-tests.sh
+        # The hook migrates a throwaway database from empty on the server it is given. Here that
+        # server is this job's own database; locally it is the test server, never the ledger.
+        # dsn.sh assembles the URL from the job's variables, so no credential is written here.
+        run: ONELEDGER_TEST_DSN="$(scripts/dsn.sh)" scripts/hooks/db-tests.sh
       # No teardown: the runner is ephemeral, and `docker compose down -v` resolves the
       # whole compose model — including the api service's `env_file: .env`, which CI
       # deliberately does not have. Only `up -d db` and `run flyway` avoid that resolution.
