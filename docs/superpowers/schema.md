@@ -302,7 +302,7 @@ its siblings, the references to `document` (`source_document_id`, `receipt_docum
 `import_batch`, `statement_layout` and `classification_rule` are bare `UUID` columns in V10,
 because those tables arrive with M2 and M4. The `0018` rule is per target, not per milestone: V12
 adds the four foreign keys whose targets it creates (`document`, `import_batch`,
-`statement_layout`); `classification_rule_id` stays bare until M4 creates that table and adds
+`statement_layout`); `classification_rule_id` stayed bare until V19 created that table and added
 its foreign key. The `REFERENCES` clauses below on those columns are the target shape, not yet
 constraints.
 
@@ -651,7 +651,104 @@ ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_statement_layout FOREIGN KEY (statement_layout_id) REFERENCES statement_layout(id);
 ```
 
-`classification_rule_id` stays a bare `UUID`; its target table and its foreign key arrive with M4.
+`classification_rule_id` stays a bare `UUID` here; its target table and its foreign key
+arrive with V19.
+
+---
+
+## `V19` (applied)
+
+### Classification rules
+
+Applied as `db/migrations/V19__classification_rules.sql`. Step four of the classification
+cascade, and the only step the owner writes directly.
+
+```sql
+CREATE TABLE classification_rule (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id              UUID NOT NULL REFERENCES household(id),
+  name                      TEXT,
+  priority                  SMALLINT NOT NULL DEFAULT 100,   -- lower evaluated first
+  is_active                 BOOLEAN NOT NULL DEFAULT true,
+
+  -- matchers: all non-null conditions must match
+  match_description_pattern TEXT,
+  match_pattern_kind        pattern_type DEFAULT 'contains',
+  match_account_id          UUID REFERENCES account(id),
+  match_currency            CHAR(3),
+  match_amount_min          NUMERIC(20,4),
+  match_amount_max          NUMERIC(20,4),
+  match_amount_exact        NUMERIC(20,4),
+  match_direction           TEXT DEFAULT 'any',   -- debit|credit|any
+  match_country             CHAR(2),
+  match_reference_pattern   TEXT,
+
+  -- outcomes
+  set_category_id           UUID REFERENCES category(id),
+  set_merchant_id           UUID REFERENCES merchant(id),
+  set_txn_type              txn_type,
+  set_payment_method        payment_method,
+  set_country               CHAR(2),
+  set_tags                  TEXT[],
+  set_is_transfer_candidate BOOLEAN NOT NULL DEFAULT false,
+  set_counterparty_account_id UUID REFERENCES account(id),
+
+  origin                    TEXT NOT NULL,   -- seed|user_created|learned_from_correction
+  times_applied             INTEGER NOT NULL DEFAULT 0,
+  last_applied_at           TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT has_matcher CHECK (num_nonnulls(
+    match_description_pattern, match_account_id, match_amount_exact, match_reference_pattern) > 0),
+  CONSTRAINT has_outcome CHECK (num_nonnulls(
+    set_category_id, set_merchant_id, set_txn_type, set_payment_method) > 0
+    OR set_is_transfer_candidate)
+);
+
+CREATE INDEX idx_rule_priority ON classification_rule (household_id, priority) WHERE is_active;
+```
+
+Two `CHECK`s carry what a rule is: `has_matcher` refuses a rule that would apply to every row,
+and `has_outcome` refuses one that would consume a row and leave it unclassified — worse than
+not matching, because the cascade stops at the first match. The transfer flag alone satisfies
+`has_outcome`; marking a row a transfer candidate is the decision.
+
+Two more the migration adds beyond the sketch above, because both columns are written by more
+than one path and a value outside the set would be unreadable rather than merely wrong:
+`origin_is_known` (`seed | user_created | learned_from_correction`) and `direction_is_known`
+(`debit | credit | any`).
+
+`priority` is ascending and the defaults do the arbitration: a user rule starts at 100 and a
+seeded one at 500, so a user rule beats a seed rule without either knowing the other exists.
+Nothing reads `origin` to decide precedence.
+
+**There is no shared seed row here**, unlike `category`. A seeded rule belongs to the household
+that loaded it, so `household_id` is `NOT NULL` and the policy is a plain equality rather than
+V9's `household_id IS NULL OR …`.
+
+`times_applied`, `last_applied_at` and `updated_at` are maintained by the code that applies or
+edits a rule, not by a trigger — this schema maintains `updated_at` by trigger on exactly one
+table (`account`, inside `set_account_class`).
+
+### The deferred foreign keys this migration completes
+
+V10 and V13 left `classification_rule_id` a bare `UUID` because the target did not exist. Both
+columns are entirely NULL on every existing row, so these are pure schema changes:
+
+```sql
+ALTER TABLE transaction
+  ADD CONSTRAINT fk_txn_classification_rule
+    FOREIGN KEY (classification_rule_id) REFERENCES classification_rule(id) ON DELETE RESTRICT;
+
+ALTER TABLE staged_transaction
+  ADD CONSTRAINT fk_staged_classification_rule
+    FOREIGN KEY (classification_rule_id) REFERENCES classification_rule(id) ON DELETE RESTRICT;
+```
+
+`RESTRICT`, not `SET NULL`: a committed row names the rule that classified it, and nulling the
+id on delete would leave `classified_by = 'user_rule'` beside no rule at all — a row asserting
+a provenance it can no longer produce (I6). Retiring a rule is `is_active = false`.
 
 ---
 
@@ -876,58 +973,6 @@ CREATE INDEX idx_staged_batch ON staged_transaction (import_batch_id, status);
 ALTER TABLE staged_transaction ENABLE ROW LEVEL SECURITY;
 CREATE POLICY household_isolation ON staged_transaction
   USING (household_id = current_household_id());
-```
-
----
-
-## `0009`
-
-### Classification rules
-
-```sql
-CREATE TABLE classification_rule (
-  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id              UUID NOT NULL REFERENCES household(id),
-  name                      TEXT,
-  priority                  SMALLINT NOT NULL DEFAULT 100,   -- lower evaluated first
-  is_active                 BOOLEAN NOT NULL DEFAULT true,
-
-  -- matchers: all non-null conditions must match
-  match_description_pattern TEXT,
-  match_pattern_kind        pattern_type DEFAULT 'contains',
-  match_account_id          UUID REFERENCES account(id),
-  match_currency            CHAR(3),
-  match_amount_min          NUMERIC(20,4),
-  match_amount_max          NUMERIC(20,4),
-  match_amount_exact        NUMERIC(20,4),
-  match_direction           TEXT DEFAULT 'any',   -- debit|credit|any
-  match_country             CHAR(2),
-  match_reference_pattern   TEXT,
-
-  -- outcomes
-  set_category_id           UUID REFERENCES category(id),
-  set_merchant_id           UUID REFERENCES merchant(id),
-  set_txn_type              txn_type,
-  set_payment_method        payment_method,
-  set_country               CHAR(2),
-  set_tags                  TEXT[],
-  set_is_transfer_candidate BOOLEAN NOT NULL DEFAULT false,
-  set_counterparty_account_id UUID REFERENCES account(id),
-
-  origin                    TEXT NOT NULL,   -- seed|user_created|learned_from_correction
-  times_applied             INTEGER NOT NULL DEFAULT 0,
-  last_applied_at           TIMESTAMPTZ,
-  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT has_matcher CHECK (num_nonnulls(
-    match_description_pattern, match_account_id, match_amount_exact, match_reference_pattern) > 0),
-  CONSTRAINT has_outcome CHECK (num_nonnulls(
-    set_category_id, set_merchant_id, set_txn_type, set_payment_method) > 0
-    OR set_is_transfer_candidate)
-);
-
-CREATE INDEX idx_rule_priority ON classification_rule (household_id, priority) WHERE is_active;
 ```
 
 ---
