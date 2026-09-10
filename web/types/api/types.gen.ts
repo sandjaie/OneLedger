@@ -1398,6 +1398,208 @@ export type RowDecision = {
 };
 
 /**
+ * RuleBody
+ *
+ * Everything a rule can say. Sent in full on create and on edit, as `AccountUpdate` is:
+ * a full replacement has no absent-versus-null ambiguity and the screen holds the whole row.
+ */
+export type RuleBody = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Priority
+     */
+    priority?: number;
+    /**
+     * Isactive
+     */
+    isActive?: boolean;
+    /**
+     * Matchdescriptionpattern
+     */
+    matchDescriptionPattern?: string | null;
+    /**
+     * Matchpatternkind
+     */
+    matchPatternKind?: 'exact' | 'prefix' | 'contains' | 'regex';
+    /**
+     * Matchaccountid
+     */
+    matchAccountId?: string | null;
+    /**
+     * Matchcurrency
+     */
+    matchCurrency?: string | null;
+    /**
+     * Matchamountmin
+     */
+    matchAmountMin?: string | null;
+    /**
+     * Matchamountmax
+     */
+    matchAmountMax?: string | null;
+    /**
+     * Matchamountexact
+     */
+    matchAmountExact?: string | null;
+    /**
+     * Matchdirection
+     */
+    matchDirection?: 'debit' | 'credit' | 'any';
+    /**
+     * Matchcountry
+     */
+    matchCountry?: string | null;
+    /**
+     * Matchreferencepattern
+     */
+    matchReferencePattern?: string | null;
+    /**
+     * Setcategoryid
+     */
+    setCategoryId?: string | null;
+    /**
+     * Setmerchantid
+     */
+    setMerchantId?: string | null;
+    /**
+     * Settxntype
+     */
+    setTxnType?: string | null;
+    /**
+     * Setpaymentmethod
+     */
+    setPaymentMethod?: string | null;
+    /**
+     * Setcountry
+     */
+    setCountry?: string | null;
+    /**
+     * Settags
+     */
+    setTags?: Array<string>;
+    /**
+     * Setistransfercandidate
+     */
+    setIsTransferCandidate?: boolean;
+    /**
+     * Setcounterpartyaccountid
+     */
+    setCounterpartyAccountId?: string | null;
+};
+
+/**
+ * RuleRow
+ *
+ * A saved rule. `origin` and the counters are read-only: the first is set by whichever
+ * path created the rule, and the second two are the cascade's to maintain.
+ */
+export type RuleRow = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Priority
+     */
+    priority?: number;
+    /**
+     * Isactive
+     */
+    isActive?: boolean;
+    /**
+     * Matchdescriptionpattern
+     */
+    matchDescriptionPattern?: string | null;
+    /**
+     * Matchpatternkind
+     */
+    matchPatternKind?: 'exact' | 'prefix' | 'contains' | 'regex';
+    /**
+     * Matchaccountid
+     */
+    matchAccountId?: string | null;
+    /**
+     * Matchcurrency
+     */
+    matchCurrency?: string | null;
+    /**
+     * Matchamountmin
+     */
+    matchAmountMin?: string | null;
+    /**
+     * Matchamountmax
+     */
+    matchAmountMax?: string | null;
+    /**
+     * Matchamountexact
+     */
+    matchAmountExact?: string | null;
+    /**
+     * Matchdirection
+     */
+    matchDirection?: 'debit' | 'credit' | 'any';
+    /**
+     * Matchcountry
+     */
+    matchCountry?: string | null;
+    /**
+     * Matchreferencepattern
+     */
+    matchReferencePattern?: string | null;
+    /**
+     * Setcategoryid
+     */
+    setCategoryId?: string | null;
+    /**
+     * Setmerchantid
+     */
+    setMerchantId?: string | null;
+    /**
+     * Settxntype
+     */
+    setTxnType?: string | null;
+    /**
+     * Setpaymentmethod
+     */
+    setPaymentMethod?: string | null;
+    /**
+     * Setcountry
+     */
+    setCountry?: string | null;
+    /**
+     * Settags
+     */
+    setTags?: Array<string>;
+    /**
+     * Setistransfercandidate
+     */
+    setIsTransferCandidate?: boolean;
+    /**
+     * Setcounterpartyaccountid
+     */
+    setCounterpartyAccountId?: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Origin
+     */
+    origin: string;
+    /**
+     * Timesapplied
+     */
+    timesApplied: number;
+    /**
+     * Lastappliedat
+     */
+    lastAppliedAt: string | null;
+};
+
+/**
  * TransactionCreate
  */
 export type TransactionCreate = {
@@ -2283,6 +2485,118 @@ export type CreateLayoutLayoutsPostResponses = {
 };
 
 export type CreateLayoutLayoutsPostResponse = CreateLayoutLayoutsPostResponses[keyof CreateLayoutLayoutsPostResponses];
+
+export type ListRulesRulesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/rules';
+};
+
+export type ListRulesRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRulesRulesGetError = ListRulesRulesGetErrors[keyof ListRulesRulesGetErrors];
+
+export type ListRulesRulesGetResponses = {
+    /**
+     * Response List Rules Rules Get
+     *
+     * Successful Response
+     */
+    200: Array<RuleRow>;
+};
+
+export type ListRulesRulesGetResponse = ListRulesRulesGetResponses[keyof ListRulesRulesGetResponses];
+
+export type CreateRuleRulesPostData = {
+    body: RuleBody;
+    path?: never;
+    query?: never;
+    url: '/rules';
+};
+
+export type CreateRuleRulesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRuleRulesPostError = CreateRuleRulesPostErrors[keyof CreateRuleRulesPostErrors];
+
+export type CreateRuleRulesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RuleRow;
+};
+
+export type CreateRuleRulesPostResponse = CreateRuleRulesPostResponses[keyof CreateRuleRulesPostResponses];
+
+export type DeleteRuleRulesRuleIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Rule Id
+         */
+        rule_id: string;
+    };
+    query?: never;
+    url: '/rules/{rule_id}';
+};
+
+export type DeleteRuleRulesRuleIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteRuleRulesRuleIdDeleteError = DeleteRuleRulesRuleIdDeleteErrors[keyof DeleteRuleRulesRuleIdDeleteErrors];
+
+export type DeleteRuleRulesRuleIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteRuleRulesRuleIdDeleteResponse = DeleteRuleRulesRuleIdDeleteResponses[keyof DeleteRuleRulesRuleIdDeleteResponses];
+
+export type UpdateRuleRulesRuleIdPatchData = {
+    body: RuleBody;
+    path: {
+        /**
+         * Rule Id
+         */
+        rule_id: string;
+    };
+    query?: never;
+    url: '/rules/{rule_id}';
+};
+
+export type UpdateRuleRulesRuleIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRuleRulesRuleIdPatchError = UpdateRuleRulesRuleIdPatchErrors[keyof UpdateRuleRulesRuleIdPatchErrors];
+
+export type UpdateRuleRulesRuleIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RuleRow;
+};
+
+export type UpdateRuleRulesRuleIdPatchResponse = UpdateRuleRulesRuleIdPatchResponses[keyof UpdateRuleRulesRuleIdPatchResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
