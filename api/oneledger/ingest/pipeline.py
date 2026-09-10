@@ -569,30 +569,27 @@ def _staged(
 
 AccountResolver = Callable[[str], AccountContext | None]
 
-_DOCUMENT_ROW = """INSERT INTO document
+# The conflict is only ever a file whose every batch was cancelled: layer 1 has refused any other
+# by the time this runs (`_staged_batch`). That file keeps its one row, and the re-import
+# re-describes it — the account, layout or period may be exactly what the owner cancelled to
+# correct, and the commit reads the row back. Each cancelled batch keeps its own copy of those,
+# so what was attempted stays on record.
+_DOCUMENT = """INSERT INTO document
                  (household_id, account_id, document_type, original_filename, storage_bucket,
                   storage_path, mime_type, byte_size, sha256, page_count, parsed_status,
                   is_password_protected, statement_layout_id, layout_version, period_start,
                   period_end, currency, extracted_metadata)
                VALUES (%s, %s, %s, %s, %s, %s, 'application/pdf', %s, %s, %s,
-                       'parsed', %s, %s, %s, %s, %s, %s, %s)"""
-_DOCUMENT = _DOCUMENT_ROW + " RETURNING id"
-# A file whose every batch was cancelled keeps its one row (`idx_document_checksum`), and the
-# re-import re-describes it: the account, layout or period may be exactly what the owner
-# cancelled to correct, and the commit reads the row back. Each cancelled batch keeps its own
-# copy of those, so what was attempted stays on record.
-_REDESCRIBED_DOCUMENT = (
-    _DOCUMENT_ROW
-    + """ ON CONFLICT (household_id, sha256) DO UPDATE
-             SET account_id = EXCLUDED.account_id, document_type = EXCLUDED.document_type,
-                 original_filename = EXCLUDED.original_filename,
-                 statement_layout_id = EXCLUDED.statement_layout_id,
-                 layout_version = EXCLUDED.layout_version,
-                 period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
-                 currency = EXCLUDED.currency,
-                 extracted_metadata = EXCLUDED.extracted_metadata, uploaded_at = now()
-         RETURNING id"""
-)
+                       'parsed', %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (household_id, sha256) DO UPDATE
+               SET account_id = EXCLUDED.account_id, document_type = EXCLUDED.document_type,
+                   original_filename = EXCLUDED.original_filename,
+                   statement_layout_id = EXCLUDED.statement_layout_id,
+                   layout_version = EXCLUDED.layout_version,
+                   period_start = EXCLUDED.period_start, period_end = EXCLUDED.period_end,
+                   currency = EXCLUDED.currency,
+                   extracted_metadata = EXCLUDED.extracted_metadata, uploaded_at = now()
+            RETURNING id"""
 
 _BATCH = """INSERT INTO import_batch
               (household_id, document_id, account_id, status, statement_layout_id,
@@ -810,31 +807,16 @@ def _stage(
     One transaction is what makes staging atomic: a failure anywhere leaves no partial batch,
     so there is nothing for a later sweep to recognise or clean up.
     """
-    counters = Counter(analysis.counts)
-    try:
-        return _staged_batch(
-            conn,
-            analysis,
-            stored,
-            account=account,
-            household=household,
-            profile=profile,
-            encrypted=encrypted,
-            counters=counters,
-        )
-    except psycopg.errors.UniqueViolation as exc:
-        # The loser of a concurrent upload of the same bytes: layer 1 passed for both requests
-        # because neither had written a `document` row yet, and `idx_document_checksum` is what
-        # actually separates them. `api-contracts.html` §4 makes this a named UI state — "already
-        # imported on …", with a link to that batch — not a 500. The database's own message is
-        # not echoed: it can carry the parameters that violated the index.
-        if exc.diag.constraint_name != "idx_document_checksum":
-            raise
-        with conn.cursor() as cur:
-            storage.refuse_if_already_imported(cur, household.id, stored.sha256)
-        raise storage.DuplicateDocument(
-            "this file was imported by another request while this one was parsing"
-        ) from exc
+    return _staged_batch(
+        conn,
+        analysis,
+        stored,
+        account=account,
+        household=household,
+        profile=profile,
+        encrypted=encrypted,
+        counters=Counter(analysis.counts),
+    )
 
 
 def _staged_batch(
@@ -867,21 +849,16 @@ def _staged_batch(
         _refuse_second_staging(cur, household.id, account.id, analysis.period)
         rows = _staged(cur, analysis, account=account, household=pair)
 
-        # A cancelled file already has its row, so `idx_document_checksum` cannot separate two
-        # re-imports of it the way it separates two uploads of a new file. Lock the row, then
-        # ask layer 1 again in a statement of its own: under READ COMMITTED that one sees a
-        # rival that staged since the parse began. A new file keeps the plain insert, so its
-        # race still ends on the index and in `_stage`'s handler.
-        cur.execute(
-            "SELECT 1 FROM document WHERE household_id = %s AND sha256 = %s FOR UPDATE",
-            (household.id, stored.sha256),
-        )
-        kept = cur.fetchone() is not None
-        if kept:
-            storage.refuse_if_already_imported(cur, household.id, stored.sha256)
+        # Layer 1 again, in a statement of its own. It answered before the parse, and the parse
+        # is long — the FX fetch sits inside it. `_locked_pair` has since taken the household
+        # row, which serialises every staging in the household, so under READ COMMITTED this
+        # sees any rival that staged in between, and nothing can stage between it and the
+        # write below. That is what keeps `_DOCUMENT`'s conflict to a cancelled file: the
+        # checksum index cannot, because a cancelled file's row already exists.
+        storage.refuse_if_already_imported(cur, household.id, stored.sha256)
 
         cur.execute(
-            _REDESCRIBED_DOCUMENT if kept else _DOCUMENT,
+            _DOCUMENT,
             (
                 household.id,
                 account.id,
