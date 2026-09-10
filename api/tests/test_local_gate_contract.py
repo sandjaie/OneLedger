@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -8,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".pre-commit-config.yaml"
 CI = ROOT / ".github/workflows/ci.yml"
 VERIFY = ROOT / ".claude/skills/verify/SKILL.md"
+PRODUCTION = ROOT / "scripts/production-stack.sh"
+COMPOSE = ROOT / "docker-compose.yml"
 
 
 def _hook(hook_id: str) -> str:
@@ -46,6 +49,23 @@ def test_markdown_lint_remains_in_ci_and_verify() -> None:
     command = "pre-commit run markdownlint --all-files --hook-stage pre-push"
     assert command in CI.read_text()
     assert command in VERIFY.read_text()
+
+
+def test_verify_database_port_is_distinct_from_every_long_lived_stack() -> None:
+    verify_port = re.search(r"DB_PORT=(\d+)", VERIFY.read_text())
+    production_port = re.search(r"POSTGRES_PORT=(\d+)", PRODUCTION.read_text())
+    development_port = re.search(r"\$\{DB_PORT:-(\d+)\}", COMPOSE.read_text())
+    test_port = re.search(r"\$\{TEST_DB_PORT:-(\d+)\}", COMPOSE.read_text())
+
+    assert verify_port is not None
+    assert production_port is not None
+    assert development_port is not None
+    assert test_port is not None
+    assert verify_port.group(1) not in {
+        production_port.group(1),
+        development_port.group(1),
+        test_port.group(1),
+    }
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:

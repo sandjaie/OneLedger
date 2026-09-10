@@ -26,15 +26,15 @@ with **the number of checks that actually ran**, then one verdict line.
    ```bash
    (
      set -euo pipefail
-     export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55432
+     export COMPOSE_PROJECT_NAME=oneledger-verify DB_PORT=55433
      # Pin the scratch password rather than inheriting .env's: a properly secured install
      # sets a real POSTGRES_PASSWORD, and this URL would then fail to authenticate against
      # the database compose just initialised with it.
-     export POSTGRES_PASSWORD=oneledger POSTGRES_PORT=55432
+     export POSTGRES_PASSWORD=oneledger POSTGRES_PORT=55433
      export DATABASE_URL="$(scripts/dsn.sh)"   # assembled from the parts, never restated
 
      # Runs on success and on failure alike. Without it a failing test — the case this gate
-     # exists to catch — leaves the scratch stack up and port 55432 held.
+     # exists to catch — leaves the scratch stack up and port 55433 held.
      # Its own two volumes: the compose file names external volumes after the project, so
      # without these `up` is refused rather than handed the ledger's data directory.
      trap 'docker compose down -v >/dev/null 2>&1;
@@ -53,7 +53,8 @@ with **the number of checks that actually ran**, then one verdict line.
    **`COMPOSE_PROJECT_NAME` scopes the teardown, and it is not a tidiness flourish.** Without
    it these commands operate on the working stack: `down -v` stops its containers, and
    `up -d db` and `flyway migrate` would run against the ledger rather than a scratch copy.
-   `DB_PORT` keeps the scratch database off 5432 so it can run beside a working stack.
+   `DB_PORT` keeps the scratch database off the development stack on 5432, the local production
+   stack on 55432 and the disposable live-test default on 55434.
 
    The working volumes themselves are now **external** (`docker-compose.yml`), so `down -v`
    can no longer remove `pgdata` or `documents` whatever project it runs in. Their names carry
