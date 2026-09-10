@@ -570,7 +570,7 @@ def _staged(
 AccountResolver = Callable[[str], AccountContext | None]
 
 # The conflict is only ever a file whose every batch was cancelled: layer 1 has refused any other
-# by the time this runs (`_staged_batch`). That file keeps its one row, and the re-import
+# by the time this runs (`_stage`). That file keeps its one row, and the re-import
 # re-describes it — the account, layout or period may be exactly what the owner cancelled to
 # correct, and the commit reads the row back. Each cancelled batch keeps its own copy of those,
 # so what was attempted stays on record.
@@ -807,29 +807,7 @@ def _stage(
     One transaction is what makes staging atomic: a failure anywhere leaves no partial batch,
     so there is nothing for a later sweep to recognise or clean up.
     """
-    return _staged_batch(
-        conn,
-        analysis,
-        stored,
-        account=account,
-        household=household,
-        profile=profile,
-        encrypted=encrypted,
-        counters=Counter(analysis.counts),
-    )
-
-
-def _staged_batch(
-    conn: psycopg.Connection,
-    analysis: Analysis,
-    stored: storage.StoredDocument,
-    *,
-    account: AccountContext,
-    household: HouseholdContext,
-    profile: ImportableProfile,
-    encrypted: bool,
-    counters: Counter[str],
-) -> ParseResult:
+    counters = Counter(analysis.counts)
     with conn.transaction(), conn.cursor() as cur:
         pair = _locked_pair(cur, household)
         # Serialises this staging against a concurrent one for the same account. The period
