@@ -147,6 +147,10 @@ def refuse_if_already_imported(cur: psycopg.Cursor[Any], household_id: UUID, sha
     parsed. The blob write above is idempotent, so this — not the filesystem — is where a
     re-upload is stopped.
 
+    A cancelled batch is not an import: it was abandoned before committing anything, so a file
+    whose every batch was cancelled passes, and staging reuses its row rather than refusing it
+    (`pipeline._staged_batch`). A document with no batch at all still refuses.
+
     The join carries its own household predicate. Nothing in the schema ties a batch to its
     document's household, and the service connects privileged and bypasses RLS (ADR-0013,
     ADR-0016), so this query is the boundary for what it returns rather than a convenience
@@ -158,6 +162,7 @@ def refuse_if_already_imported(cur: psycopg.Cursor[Any], household_id: UUID, sha
              LEFT JOIN import_batch b
                     ON b.document_id = d.id AND b.household_id = d.household_id
             WHERE d.household_id = %s AND d.sha256 = %s
+              AND b.status IS DISTINCT FROM 'cancelled'
             ORDER BY b.created_at NULLS LAST
             LIMIT 1""",
         (household_id, sha256),

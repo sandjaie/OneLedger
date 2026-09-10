@@ -1177,6 +1177,44 @@ def test_the_same_account_and_period_can_be_staged_again_once_the_batch_is_cance
     assert allowed.json()["batchId"] != batch
 
 
+def test_a_cancelled_statement_can_be_imported_again(live: Staged) -> None:
+    """The 10 September rebuild: three statements cancelled, then refused for good.
+
+    Cancelling left the document row, and layer 1 refused the same bytes naming a batch that
+    imported nothing. Re-importing means reaching the ledger, so this goes as far as the commit.
+    """
+    cancelled = live.stage()
+    assert live.cancel(cancelled).status_code == 200
+
+    again = live.stage()
+
+    assert again != cancelled
+    live.patch(again, {"rowIds": _all_row_ids(live, again), "decision": "accepted"})
+    committed = live.commit(again)
+    assert committed.status_code == 200, committed.text
+    assert live.ledger_rows() == 2
+
+
+def test_a_re_imported_file_is_refused_naming_the_batch_that_counts(live: Staged) -> None:
+    """Layer 1 still holds after a cancel; it only stops counting the abandoned attempt.
+
+    The refusal names the live batch — the one the screen links to — and both batches point at
+    the one document row, so what was attempted stays on record.
+    """
+    cancelled = live.stage()
+    live.cancel(cancelled)
+    again = live.stage()
+
+    refused = live.post(_statement(description=Staged.CARD_NARRATION), stage="true")
+
+    assert refused.status_code == 409
+    assert again in refused.json()["detail"]
+    assert cancelled not in refused.json()["detail"]
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT count(DISTINCT document_id), count(*) FROM import_batch")
+        assert cur.fetchone() == (1, 2)
+
+
 def test_a_completed_batch_is_a_record_and_cannot_be_cancelled(live: Staged) -> None:
     """Its rows are in the ledger. Cancelling would have to reverse them, which this is not."""
     batch = live.stage()

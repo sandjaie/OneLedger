@@ -425,7 +425,10 @@ third-party host — only the original blob is uploaded to Storage at staging.</
 <pre><code class="language-python">sha256 = hashlib.sha256(file_bytes).hexdigest()
 </code></pre>
 <p><code>document.sha256</code> is uniquely indexed per household. An identical file is rejected immediately —
-before parsing, before any cost is incurred — with a message naming when it was first imported.</p>
+before parsing, before any cost is incurred — with a message naming when it was first imported.
+A file whose every batch was cancelled was never imported: it passes, and staging reuses its
+existing row — refreshing what the new parse found — rather than refusing it or adding a second.
+The row and the stored original are never deleted; the cancelled batch still names them.</p>
 <p>This is the cheapest of the three duplicate defences and catches the most common case: the same
 statement downloaded twice.</p>
 <p><strong>Password-protected PDFs.</strong> Some statements are encrypted — two of the seven accounts in the set

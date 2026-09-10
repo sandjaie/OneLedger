@@ -1005,10 +1005,10 @@ def cancel_import(
     ever. It bites during onboarding, where the pair is still meant to be changeable: stage a
     batch, notice the pair is wrong, cancel, and otherwise still be unable to change it.
 
-    What this does **not** free is the file. `idx_document_checksum` is a separate guard, and the
-    same bytes are still refused on re-upload naming a batch that never imported anything. That
-    is layer 1's semantics rather than this route's, and is recorded in
-    `docs/superpowers/progress.md` rather than fixed here.
+    It frees the file too, without deleting it. The document row and its stored original stay —
+    the cancelled batch still names them, which is the record of what was attempted — and layer 1
+    does not count a cancelled batch, so the same bytes stage again onto the same row
+    (`storage.refuse_if_already_imported`, `pipeline._staged_batch`).
     """
     with connect() as conn, conn.cursor() as cur:
         batch = _batch_row(cur, batch_id, owner.household_id)
