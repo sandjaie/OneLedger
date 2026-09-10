@@ -655,6 +655,26 @@ ALTER TABLE transaction
 
 ---
 
+## `V18` (applied)
+
+Applied as `db/migrations/V18__closing_balance_is_verified_as_of_its_own_last_row.sql`. **It
+creates no table** — it replaces `commit_import_batch()` with a body identical to V14's but for
+the date it verifies against.
+
+V14 checked the committed batch as of `import_batch.period_end`, on the assumption that a
+statement's declared closing is the balance at the close of the period it declares. Slice 1.2's
+fourth layout disproves it: that producer books year-end interest and its tax on **1 January**,
+one day after the period the statement declares, values both on 31 December inside it, and
+carries both in the closing balance it prints. Verified as of `period_end` those rows sit
+outside the sum while the declared closing includes them, and the statement is refused — two of
+the six statements held, each short by exactly its late rows' total.
+
+V18 verifies as of `GREATEST(max(booked_date) of the batch's accepted rows, period_end)`: the
+date the declared closing actually describes. `GREATEST` is what keeps the window from ever
+narrowing, because excluding a row the statement lists is the same defect from the other side.
+Where every row falls inside its period — the three layouts before this one — the as-of date is
+`period_end` and nothing changes, which `db/tests/0016` asserts alongside the new behaviour.
+
 ## `V17` (applied)
 
 Applied as `db/migrations/V17__import_batch_records_period_provenance.sql`. **It creates no

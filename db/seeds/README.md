@@ -9,6 +9,7 @@ has already been migrated.
 | `card-layout.json` | A `POST /layouts` body for the card statement layout | through the API, not `psql` — see below |
 | `account-layout.json` | A `POST /layouts` body for the current-account statement layout | the same way |
 | `passbook-layout.json` | A `POST /layouts` body for the passbook-style account layout | the same way |
+| `ledger-layout.json` | A `POST /layouts` body for the password-protected ledger layout | the same way |
 
 ## Neither profile carries an `institutionId`
 
@@ -182,3 +183,55 @@ balance figure on it is missing its integer part in the document's own text laye
 characters are literally spaces, so no band and no tolerance can recover them — and Invariant I8
 refuses a statement it cannot verify rather than walking past the row. Those files are git-ignored
 and never enter this repository, and no figure from any of them appears in it.
+
+## `ledger-layout.json`
+
+The fourth producer, and the only one that ships its statements **encrypted**. Four of its
+values are measured, and one of them corrected a rule in the specification.
+
+**The password comes from the owner, and from nowhere else.** `POST /parse` takes it as a form
+field and `/import` asks for it per file (slice 1.2 task 2a); it lives in the request that used
+it and is on the never-store list. No profile field, no environment variable and no seed carries
+it — a layout says a statement *is* encrypted only by needing one, and
+`document.is_password_protected` is the only record that a file did.
+
+**It writes no space anywhere** — not between cells and not inside labels. The column header
+extracts as `DateNarrationChq./Ref.No.ValueDtWithdrawalAmt.DepositAmt.ClosingBalance` and the
+period as `StatementFrom:01/01/2025To:31/03/2025`, so every pattern is written against the
+run-together form. This is the third producer here to do it and the most thorough about it.
+
+**Its rows carry a two-digit year, and that forces everything else.** A profile whose
+`date_format` has one must capture both period bounds, because windowing a two-digit year
+against a period derived from those same dates is circular — so unlike the card layout, this one
+cannot leave the period derived to escape a row dated outside it. And it has such rows: the
+year-end interest and the tax deducted on it are booked on **1 January**, one day after the
+period the statement declares, and valued 31 December inside it. Six such rows across four of
+the six statements failed the period gate, and because they sit at the *end* of the statement,
+dropping them left a consistent prefix that still reconciled `matched` — a statement short two
+money-bearing rows reporting itself correct. Only `blocks_staging` stopped it.
+
+That is recorded as M2 spec §7 item 14 and the gate is corrected there: **a row booked outside
+the captured period is the statement's own when its value date falls inside**. The statement
+wrote both dates, so nothing is invented and no tolerance is guessed; a row with neither date
+inside still fails, and a layout mapping no value date is unaffected.
+
+**Its page furniture needs patterns, not geometry.** Because the producer runs whole lines
+together into single words, each footer line is one long word whose midpoint lands in the
+narration column — the closing summary, the bank's own name, the balance footnote and the
+registered-office line all read as wrapped narration however the bands are drawn. Seven
+patterns remove them, none naming an institution. The stricter continuation rule is still
+needed alongside: it is what rejects the header block the producer repeats at the top of every
+page, whose account-detail lines run across the money columns. Without it the longest narration
+on the six statements doubles, from 120 characters to 240.
+
+**One line of furniture is left, knowingly.** The repeated header block carries the account
+holder's locality on a line of its own, centred in the narration column, and it reaches the last
+row of each page — 47 of 611 rows gain that one word. It is skipped by no pattern here because
+the only pattern that would match it is the owner's own address, which does not belong in a
+seed file, and no band separates it from real narration: both are single words centred in the
+same column. It carries no figure and changes no balance.
+
+Measured across the encrypted statements held locally: all six reconcile `matched`, 611 rows,
+none failing to normalize, every period stated. Those files are git-ignored and never enter this
+repository; the fixture in `api/tests/test_ingest_ledger_frame.py` is invented, including its
+password, and reproduces the arithmetic rather than the amounts.

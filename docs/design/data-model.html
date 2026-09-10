@@ -949,6 +949,9 @@ V14__commit_import_batch.sql          assert_account_reconciles(), commit_import
 V15__definer_search_path_excludes_pg_temp.sql   pg_temp last in every definer path (applied)
 V16__staged_row_number_is_required.sql          source_row_number NOT NULL (applied)
 V17__import_batch_records_period_provenance.sql period_is_derived (applied)
+V18__closing_balance_is_verified_as_of_its_own_last_row.sql
+                                      commit_import_batch() verifies as of the last row
+                                      the statement lists (applied)
 
   then, in this order, numbered as they land:
 
