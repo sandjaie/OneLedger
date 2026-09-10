@@ -656,6 +656,50 @@ arrive with V19.
 
 ---
 
+## `V21` (applied)
+
+### Card cycles
+
+Applied as `db/migrations/V21__card_statements.sql`, carrying `0011` verbatim — every column,
+`period_valid`, `due_after_statement` and the unique `idx_card_stmt_period` on
+`(account_id, period_end)`. What follows is what the migration adds beyond that sketch.
+
+**The sign rule, made refusable.** `opening_balance` and `closing_balance` are signed from the
+household's side like every balance here (ADR-0010), so a card the owner owes on stores a
+negative closing balance; `statement_balance` is the one positive figure — what was due. The
+table invites one confusion in particular, the amount due stored as the closing balance, and
+ADR-0010 says why that is dangerous: a sign error is internally consistent and therefore
+invisible. Two `CHECK`s make it visible:
+
+```sql
+CONSTRAINT statement_balance_is_what_was_due CHECK (statement_balance >= 0),
+CONSTRAINT owed_is_negative CHECK (closing_balance <= 0 OR statement_balance = 0)
+```
+
+A card in credit has nothing due, so a row holding a positive closing balance *and* an amount
+due has had its sign swapped.
+
+**A cycle only on a credit card of this household, in its currency.** The foreign key says
+only that the account exists. `assert_card_statement_account()` refuses a cycle on any other
+account type, on another household's card, or in a currency other than the card's — V10's
+shape for the same question on a transaction.
+
+**Row-level security** is a single `household_isolation` policy, as V19 and V20 have. V9
+splits reading from writing only because its categories have shared seed rows with no
+household, and a cycle always has one.
+
+### The foreign key this migration completes
+
+```sql
+ALTER TABLE transaction
+  ADD CONSTRAINT fk_txn_card_stmt FOREIGN KEY (card_statement_id) REFERENCES card_statement(id);
+```
+
+Exactly as `0018` reserves it, with no `ON DELETE` clause: a transaction names the cycle it was
+billed in.
+
+---
+
 ## `V20` (applied)
 
 ### Transfers

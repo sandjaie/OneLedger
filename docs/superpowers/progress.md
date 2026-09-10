@@ -34,10 +34,28 @@ request.
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
 | 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | **Accepted** — the run was made on 10 September 2026; 67 of the 71 gathered files imported and every account reconciles across its period | [acceptance run](#phase-1--slice-12--the-acceptance-run) |
 | 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b4-transfer-screen` | In progress — the classification half is delivered; transfers and the acceptance run remain | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
-| 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
+| 1.4 — cards, net worth and trends | `feature/p1-4a1-card-statement-schema` … `feature/p1-4b3-overview-screen` | In progress | [slice 1.4](#phase-1--slice-14--cards-net-worth-and-trends) |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
+
+## Phase 1 · slice 1.4 — cards, net worth and trends
+
+| Task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 4a1 — the card cycle entity | `feature/p1-4a1-card-statement-schema` | Delivered | this branch |
+| 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b2 — one payload: net worth, the month, the trend, the dues | `feature/p1-4b2-dashboard-api` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| the acceptance run | — | Not run | — |
+
+**4a1 adds two `CHECK`s beyond `schema.md` `0011`**, both ADR-0010 made refusable: an amount due
+is never negative, and a card in credit has nothing due — so the amount due stored as the
+closing balance, the one sign swap this table invites, is refused rather than trusted. It also
+refuses a cycle in a currency other than its card's, which the task block did not list: a cycle
+in another currency would make its balances incomparable with the account's.
 
 ## Phase 1 · slice 1.3 — classification and transfers
 
