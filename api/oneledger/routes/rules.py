@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 from uuid import UUID
 
 import psycopg
@@ -41,6 +41,7 @@ DIRECTIONS: frozenset[str] = frozenset({"debit", "credit", "any"})
 # `origin` is not settable through this module. A rule the owner writes is `user_created`; the
 # seed pack sets `seed` when it loads (3a4), and `learned_from_correction` is Phase 2's.
 ORIGIN_USER = "user_created"
+ORIGIN_SEED = "seed"
 
 # The matchers `has_matcher` counts, and the outcomes `has_outcome` counts. Named here so the
 # 422 can say which half is missing rather than letting a CHECK answer with a constraint name.
@@ -124,6 +125,11 @@ class RuleBody(BaseModel):
                     _compiled(pattern)
         return self
 
+    # A subclass may name a category some other way — `PackRule` names it by slug — and the
+    # outcome check has to count it, or a pack rule with only a slug reads as deciding
+    # nothing and is refused before anything can resolve it.
+    _EXTRA_OUTCOMES: ClassVar[tuple[str, ...]] = ()
+
     @model_validator(mode="after")
     def matches_something_and_decides_something(self) -> RuleBody:
         """The two CHECKs V19 carries, refused here so the owner reads a sentence rather than
@@ -133,7 +139,8 @@ class RuleBody(BaseModel):
                 "a rule needs something to match on: a description pattern, an account, an "
                 "exact amount or a reference pattern"
             )
-        decides = any(getattr(self, field) is not None for field in OUTCOME_FIELDS)
+        outcomes = OUTCOME_FIELDS + self._EXTRA_OUTCOMES
+        decides = any(getattr(self, field) is not None for field in outcomes)
         if not decides and not self.setIsTransferCandidate:
             raise ValueError(
                 "a rule needs something to decide: a category, a merchant, a transaction type, "
@@ -237,8 +244,10 @@ def _assert_owned(
         raise HTTPException(status_code=422, detail=f"{subject} is not available to this household")
 
 
-def _assert_references(cur: psycopg.Cursor[Any], body: RuleBody, household_id: UUID) -> None:
-    _assert_category_allowed(cur, body.setCategoryId, household_id)
+def _assert_references(
+    cur: psycopg.Cursor[Any], body: RuleBody, household_id: UUID, category_id: UUID | None = None
+) -> None:
+    _assert_category_allowed(cur, category_id or body.setCategoryId, household_id)
     _assert_owned(cur, "merchant", body.setMerchantId, household_id, "merchant")
     _assert_owned(cur, "account", body.matchAccountId, household_id, "the matched account")
     _assert_owned(
@@ -261,7 +270,9 @@ def _write_error(exc: psycopg.Error) -> str:
     return str(exc).splitlines()[0]
 
 
-def _values(body: RuleBody, household_id: UUID) -> tuple[Any, ...]:
+def _values(body: RuleBody, household_id: UUID, category_id: UUID | None = None) -> tuple[Any, ...]:
+    """`category_id` is how a pack passes the id it resolved from a slug, without
+    mutating the validated body to carry it."""
     return (
         household_id,
         body.name,
@@ -277,7 +288,7 @@ def _values(body: RuleBody, household_id: UUID) -> tuple[Any, ...]:
         body.matchDirection,
         body.matchCountry,
         body.matchReferencePattern,
-        body.setCategoryId,
+        category_id if category_id is not None else body.setCategoryId,
         body.setMerchantId,
         body.setTxnType,
         body.setPaymentMethod,
@@ -286,6 +297,35 @@ def _values(body: RuleBody, household_id: UUID) -> tuple[Any, ...]:
         body.setIsTransferCandidate,
         body.setCounterpartyAccountId,
     )
+
+
+INSERT_RULE = f"""INSERT INTO classification_rule (
+    household_id, name, priority, is_active,
+    match_description_pattern, match_pattern_kind, match_account_id,
+    match_currency, match_amount_min, match_amount_max, match_amount_exact,
+    match_direction, match_country, match_reference_pattern,
+    set_category_id, set_merchant_id, set_txn_type, set_payment_method,
+    set_country, set_tags, set_is_transfer_candidate,
+    set_counterparty_account_id, origin)
+VALUES (%s, %s, %s, %s, %s, %s::pattern_type, %s, %s, %s, %s, %s, %s, %s, %s,
+        %s, %s, %s::txn_type, %s::payment_method, %s, %s, %s, %s, %s)
+RETURNING {COLUMNS}"""
+
+
+def _insert_rule(
+    cur: psycopg.Cursor[Any],
+    body: RuleBody,
+    household_id: UUID,
+    origin: str,
+    category_id: UUID | None = None,
+) -> RuleRow:
+    """The one INSERT both writers share. `origin` is a parameter because it is the only thing
+    that differs between a rule the owner writes and a rule a pack loads, and two copies of a
+    twenty-three-column statement drift the day a twenty-fourth column arrives."""
+    cur.execute(INSERT_RULE, (*_values(body, household_id, category_id), origin))
+    row = cur.fetchone()
+    assert row is not None
+    return rule_row(row)
 
 
 @router.get("/rules")
@@ -305,23 +345,81 @@ def create_rule(body: RuleBody, owner: Annotated[OwnerSession, Depends(require_o
     try:
         with connect() as conn, conn.cursor() as cur:
             _assert_references(cur, body, owner.household_id)
+            return _insert_rule(cur, body, owner.household_id, ORIGIN_USER)
+    except WRITE_ERRORS as exc:
+        raise HTTPException(status_code=422, detail=_write_error(exc)) from None
+
+
+class PackRule(RuleBody):
+    """A rule as a pack file writes it. The one addition is `setCategorySlug`: a pack cannot
+    carry a category id, because V9 generates a different one in every database, so it names
+    the slug and the load resolves it (`db/seeds/README.md`)."""
+
+    _EXTRA_OUTCOMES: ClassVar[tuple[str, ...]] = ("setCategorySlug",)
+
+    setCategorySlug: str | None = None
+
+    @model_validator(mode="after")
+    def one_way_of_naming_a_category(self) -> PackRule:
+        if self.setCategorySlug is not None and self.setCategoryId is not None:
+            raise ValueError("a rule names its category by slug or by id, not both")
+        return self
+
+
+class Pack(BaseModel):
+    rules: list[PackRule] = Field(min_length=1)
+
+
+def _category_by_slug(cur: psycopg.Cursor[Any], slug: str, household_id: UUID) -> UUID:
+    """`categories.py`'s scoping: the household's own categories and the system seeds. Where
+    both answer to a slug the household's own wins, which is what an override is for."""
+    cur.execute(
+        """SELECT id FROM category
+            WHERE slug = %s AND (household_id IS NULL OR household_id = %s)
+            ORDER BY household_id NULLS LAST
+            LIMIT 1""",
+        (slug, household_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=422, detail=f"no category has the slug {slug}")
+    return UUID(str(found[0]))
+
+
+@router.post("/rules/pack", status_code=201)
+def load_pack(pack: Pack, owner: Annotated[OwnerSession, Depends(require_owner)]) -> list[RuleRow]:
+    """The shipped packs in `db/seeds/rules/`, loaded once per household as `seed` rules.
+
+    This exists because `POST /rules` refuses to set `origin` and must keep refusing: a rule
+    the owner writes in Settings is `user_created`, and a body that could claim otherwise
+    would put itself in the wrong half of the cascade and lie about where it came from.
+    `origin` is decided by what did the writing, and this route is that writer.
+
+    One pack is one transaction. A slug nothing answers to refuses the whole load rather than
+    leaving the rules before it behind, because half a pack is a cascade nobody designed.
+    """
+    try:
+        with connect() as conn, conn.cursor() as cur:
             cur.execute(
-                f"""INSERT INTO classification_rule (
-                    household_id, name, priority, is_active,
-                    match_description_pattern, match_pattern_kind, match_account_id,
-                    match_currency, match_amount_min, match_amount_max, match_amount_exact,
-                    match_direction, match_country, match_reference_pattern,
-                    set_category_id, set_merchant_id, set_txn_type, set_payment_method,
-                    set_country, set_tags, set_is_transfer_candidate,
-                    set_counterparty_account_id, origin)
-                VALUES (%s, %s, %s, %s, %s, %s::pattern_type, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s::txn_type, %s::payment_method, %s, %s, %s, %s, '{ORIGIN_USER}')
-                RETURNING {COLUMNS}""",
-                _values(body, owner.household_id),
+                "SELECT 1 FROM classification_rule"
+                " WHERE household_id = %s AND origin = 'seed' LIMIT 1",
+                (owner.household_id,),
             )
-            row = cur.fetchone()
-            assert row is not None
-            return rule_row(row)
+            if cur.fetchone() is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="this household already holds seed rules; a pack loads once",
+                )
+            loaded = []
+            for rule in pack.rules:
+                category_id = (
+                    None
+                    if rule.setCategorySlug is None
+                    else _category_by_slug(cur, rule.setCategorySlug, owner.household_id)
+                )
+                _assert_references(cur, rule, owner.household_id, category_id)
+                loaded.append(_insert_rule(cur, rule, owner.household_id, ORIGIN_SEED, category_id))
+            return loaded
     except WRITE_ERRORS as exc:
         raise HTTPException(status_code=422, detail=_write_error(exc)) from None
 

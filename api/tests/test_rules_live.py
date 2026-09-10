@@ -9,6 +9,7 @@ Skipped when no database is reachable. Every figure is invented.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
@@ -41,6 +42,11 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Fixture]:
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM household")
         seeded: list[UUID] = [row[0] for row in cur.fetchall()]
+        # And the categories that were here before. A category this suite adds to the seeded
+        # household survives the household clean-up below, and its slug is unique per
+        # household — so the second run of the same test would collide with the first.
+        cur.execute("SELECT id FROM category")
+        categories: list[UUID] = [row[0] for row in cur.fetchall()]
     try:
         fixture = Fixture(conn)
         app.dependency_overrides[auth.require_owner] = fixture.owner
@@ -55,11 +61,7 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Fixture]:
             # Then every household this suite invented. `db/tests/0006` asserts the seed
             # creates at most one, and a test that leaves a second behind fails the next
             # push rather than its own run — which is how this was found.
-            cur.execute(
-                "DELETE FROM category WHERE household_id IS NOT NULL"
-                " AND NOT (household_id = ANY(%s))",
-                (seeded,),
-            )
+            cur.execute("DELETE FROM category WHERE NOT (id = ANY(%s))", (categories,))
             cur.execute("DELETE FROM person WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM household WHERE NOT (id = ANY(%s))", (seeded,))
         conn.commit()
@@ -450,3 +452,145 @@ def test_a_known_transaction_type_is_accepted(live: Fixture) -> None:
     for known in ("income", "expense", "fee", "transfer_in", "transfer_out"):
         created = client().post("/rules", json=rule_body(setTxnType=known), headers=ORIGIN)
         assert created.status_code == 201, known
+
+
+# ---------------------------------------------------------------------------
+# Loading a pack. `db/seeds/README.md` documented this and nothing performed it: `POST /rules`
+# stamps `user_created` by design, so the shipped pack loaded as thirty-seven of the owner's own
+# rules — ahead of themselves in the cascade, and in the wrong half of `GET /rules`.
+
+
+def a_category(live: Fixture, slug: str) -> UUID:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO category (household_id, slug, name, kind, bucket)
+               VALUES (%s, %s, %s, 'expense', 'need') RETURNING id""",
+            (live.household_id, slug, slug.replace("-", " ")),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    live.conn.commit()
+    return UUID(str(row[0]))
+
+
+def pack(*rules: dict[str, object]) -> dict[str, object]:
+    return {"rules": list(rules)}
+
+
+def test_a_pack_loads_as_seed_rules(live: Fixture) -> None:
+    """The whole point: a pack's rules rank behind the household's own, and `origin` is what
+    the cascade reads to know it."""
+    loaded = client().post(
+        "/rules/pack",
+        json=pack(
+            rule_body(matchDescriptionPattern="SALARY", setTxnType="income", priority=400),
+            rule_body(matchDescriptionPattern="ATM WDL", setTxnType="expense", priority=440),
+        ),
+        headers=ORIGIN,
+    )
+
+    assert loaded.status_code == 201
+    assert [rule["origin"] for rule in loaded.json()] == ["seed", "seed"]
+
+    listed = client().get("/rules", headers=ORIGIN).json()
+    assert [rule["origin"] for rule in listed] == ["seed", "seed"]
+
+
+def test_a_pack_names_its_categories_by_slug(live: Fixture) -> None:
+    """A pack cannot carry a category id — V9 generates a different one in every database —
+    so it names the slug and the load resolves it."""
+    expected = a_category(live, "pack-test-slug")
+
+    loaded = client().post(
+        "/rules/pack",
+        json=pack(
+            {
+                "matchDescriptionPattern": "GROCER",
+                "setCategorySlug": "pack-test-slug",
+                "priority": 400,
+            }
+        ),
+        headers=ORIGIN,
+    )
+
+    assert loaded.status_code == 201
+    assert loaded.json()[0]["setCategoryId"] == str(expected)
+
+
+def test_a_slug_no_category_answers_to_is_refused_whole(live: Fixture) -> None:
+    """And the rules before it in the pack are not left behind: one pack is one transaction."""
+    a_category(live, "pack-test-slug")
+
+    refused = client().post(
+        "/rules/pack",
+        json=pack(
+            {"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"},
+            {"matchDescriptionPattern": "FUEL", "setCategorySlug": "no-such-slug"},
+        ),
+        headers=ORIGIN,
+    )
+
+    assert refused.status_code == 422
+    assert "no-such-slug" in refused.json()["detail"]
+    assert client().get("/rules", headers=ORIGIN).json() == []
+
+
+def test_a_pack_loads_once_per_household(live: Fixture) -> None:
+    """A second load would double every rule in the cascade. There is no name uniqueness to
+    lean on, so the refusal is on the household already holding seed rules."""
+    body = pack(rule_body(matchDescriptionPattern="SALARY", setTxnType="income"))
+    assert client().post("/rules/pack", json=body, headers=ORIGIN).status_code == 201
+
+    again = client().post("/rules/pack", json=body, headers=ORIGIN)
+
+    assert again.status_code == 409
+    assert len(client().get("/rules", headers=ORIGIN).json()) == 1
+
+
+def test_a_rule_the_owner_writes_is_never_seed(live: Fixture) -> None:
+    """The reason `POST /rules` refuses `origin` at all, asserted rather than assumed: a body
+    claiming to be a seed rule is written as what actually wrote it."""
+    created = client().post("/rules", json={**rule_body(), "origin": "seed"}, headers=ORIGIN)
+
+    assert created.status_code == 201
+    assert created.json()["origin"] == "user_created"
+
+
+def test_the_shipped_pack_loads(live: Fixture) -> None:
+    """The file as committed, through the route as documented. `db/seeds/README.md` described
+    this and nothing performed it, so the pack went in as thirty-seven `user_created` rules."""
+    root = Path(__file__).resolve().parents[2]
+    body = json.loads((root / "db" / "seeds" / "rules" / "banking-narration.json").read_text())
+
+    loaded = client().post("/rules/pack", json=body, headers=ORIGIN)
+
+    assert loaded.status_code == 201, loaded.text
+    assert len(loaded.json()) == len(body["rules"])
+    assert {rule["origin"] for rule in loaded.json()} == {"seed"}
+    # Every slug resolved to a real category rather than quietly landing as no outcome.
+    named = [rule for rule in body["rules"] if rule.get("setCategorySlug")]
+    assert named
+    resolved = sum(1 for rule in loaded.json() if rule["setCategoryId"] is not None)
+    assert resolved == len(named)
+
+
+def test_a_slug_both_answer_to_resolves_to_the_household_own(live: Fixture) -> None:
+    """A pack names V9's system slugs, and V9's unique indexes let a household hold a category
+    on the same slug — `category_system_slug` and `category_household_slug` are separate. When
+    both answer, the owner's own is the one they meant."""
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO category (household_id, slug, name, kind, bucket)
+               VALUES (NULL, 'pack-test-slug', 'System', 'expense', 'need')"""
+        )
+    live.conn.commit()
+    theirs = a_category(live, "pack-test-slug")
+
+    loaded = client().post(
+        "/rules/pack",
+        json=pack({"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"}),
+        headers=ORIGIN,
+    )
+
+    assert loaded.status_code == 201, loaded.text
+    assert loaded.json()[0]["setCategoryId"] == str(theirs)

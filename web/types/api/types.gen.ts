@@ -1029,6 +1029,114 @@ export type MatchedRow = {
 };
 
 /**
+ * Pack
+ */
+export type Pack = {
+    /**
+     * Rules
+     */
+    rules: Array<PackRule>;
+};
+
+/**
+ * PackRule
+ *
+ * A rule as a pack file writes it. The one addition is `setCategorySlug`: a pack cannot
+ * carry a category id, because V9 generates a different one in every database, so it names
+ * the slug and the load resolves it (`db/seeds/README.md`).
+ */
+export type PackRule = {
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Priority
+     */
+    priority?: number;
+    /**
+     * Isactive
+     */
+    isActive?: boolean;
+    /**
+     * Matchdescriptionpattern
+     */
+    matchDescriptionPattern?: string | null;
+    /**
+     * Matchpatternkind
+     */
+    matchPatternKind?: 'exact' | 'prefix' | 'contains' | 'regex';
+    /**
+     * Matchaccountid
+     */
+    matchAccountId?: string | null;
+    /**
+     * Matchcurrency
+     */
+    matchCurrency?: string | null;
+    /**
+     * Matchamountmin
+     */
+    matchAmountMin?: string | null;
+    /**
+     * Matchamountmax
+     */
+    matchAmountMax?: string | null;
+    /**
+     * Matchamountexact
+     */
+    matchAmountExact?: string | null;
+    /**
+     * Matchdirection
+     */
+    matchDirection?: 'debit' | 'credit' | 'any';
+    /**
+     * Matchcountry
+     */
+    matchCountry?: string | null;
+    /**
+     * Matchreferencepattern
+     */
+    matchReferencePattern?: string | null;
+    /**
+     * Setcategoryid
+     */
+    setCategoryId?: string | null;
+    /**
+     * Setmerchantid
+     */
+    setMerchantId?: string | null;
+    /**
+     * Settxntype
+     */
+    setTxnType?: string | null;
+    /**
+     * Setpaymentmethod
+     */
+    setPaymentMethod?: string | null;
+    /**
+     * Setcountry
+     */
+    setCountry?: string | null;
+    /**
+     * Settags
+     */
+    setTags?: Array<string>;
+    /**
+     * Setistransfercandidate
+     */
+    setIsTransferCandidate?: boolean;
+    /**
+     * Setcounterpartyaccountid
+     */
+    setCounterpartyAccountId?: string | null;
+    /**
+     * Setcategoryslug
+     */
+    setCategorySlug?: string | null;
+};
+
+/**
  * ParseFailure
  *
  * A line that extracted and would not normalize. The panel shows these beside the rows.
@@ -2625,6 +2733,33 @@ export type CreateRuleRulesPostResponses = {
 };
 
 export type CreateRuleRulesPostResponse = CreateRuleRulesPostResponses[keyof CreateRuleRulesPostResponses];
+
+export type LoadPackRulesPackPostData = {
+    body: Pack;
+    path?: never;
+    query?: never;
+    url: '/rules/pack';
+};
+
+export type LoadPackRulesPackPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LoadPackRulesPackPostError = LoadPackRulesPackPostErrors[keyof LoadPackRulesPackPostErrors];
+
+export type LoadPackRulesPackPostResponses = {
+    /**
+     * Response Load Pack Rules Pack Post
+     *
+     * Successful Response
+     */
+    201: Array<RuleRow>;
+};
+
+export type LoadPackRulesPackPostResponse = LoadPackRulesPackPostResponses[keyof LoadPackRulesPackPostResponses];
 
 export type DeleteRuleRulesRuleIdDeleteData = {
     body?: never;
