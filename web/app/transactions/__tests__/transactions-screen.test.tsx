@@ -13,6 +13,7 @@ import type {
   HouseholdCurrency,
   HouseholdResponse,
   TransactionRow,
+  TransferRow,
 } from "@/types/api";
 
 const currencies: Array<CurrencyRow> = [
@@ -374,4 +375,138 @@ it("sends the entry note and edits a row note in place", async () => {
   const body = JSON.parse(String(init.body));
   expect(body.notes).toBe("row note");
   expect(body.categoryId).toBe("cat-food");
+});
+
+describe("transfers on the transactions screen", () => {
+  function linked(id: string, transferId: string | null): TransactionRow {
+    return transaction({
+      id,
+      descriptionRaw: id === "txn-out" ? "OUTWARD REMIT" : "INWARD REMIT",
+      amount: id === "txn-out" ? "-310.5000" : "310.5000",
+      transferId,
+    });
+  }
+
+  const made: TransferRow = {
+    id: "tr-1",
+    sourceAccountId: "acct-card",
+    destinationAccountId: "acct-card-2",
+    sourceTransactionId: "txn-out",
+    destinationTransactionId: "txn-in",
+    sourceAmount: "310.5000",
+    sourceCurrency: "XAE",
+    destinationAmount: "310.5000",
+    destinationCurrency: "XAE",
+    transferDate: "2024-02-02",
+    settlementDate: null,
+    impliedRate: null,
+    marketRate: null,
+    fxSpreadPct: null,
+    fxSpreadCostSource: null,
+    explicitFeeAmount: null,
+    explicitFeeCurrency: null,
+    totalCostSource: null,
+    transferKind: "internal_same_currency",
+    provider: null,
+    matchConfidence: "0.950",
+    matchMethod: "auto",
+    status: "confirmed",
+    notes: null,
+    costIsApproximate: false,
+  };
+
+  /** Answers by method and path; the ledger reload is any GET under /transactions?. */
+  function answering(table: Record<string, unknown>, ledger: () => unknown) {
+    return vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith("/transactions?")) return ledger();
+      const answer = table[`${init?.method ?? "GET"} ${path}`];
+      if (answer === undefined) throw new Error(`unexpected request: ${path}`);
+      return answer;
+    });
+  }
+
+  function legs() {
+    return screen.queryAllByRole("img", { name: "Transfer leg, linked to its peer" });
+  }
+
+  it("offers Link as transfer only on a row that is not already a leg", () => {
+    // A leg already linked cannot be linked again; offering it would lead only to a refusal.
+    renderScreen([linked("txn-out", "tr-1"), linked("txn-in", null)], 2);
+
+    expect(screen.queryByRole("button", { name: "Link OUTWARD REMIT as a transfer" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Link INWARD REMIT as a transfer" })).toBeDefined();
+  });
+
+  it("offers the transfer queue without loading it", () => {
+    const request = vi.fn();
+    renderScreen([linked("txn-out", null)], 1, request as unknown as typeof apiFetch);
+
+    expect(screen.getByRole("button", { name: "Find transfers" })).toBeDefined();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("confirming a pair re-renders both of its legs as a transfer", async () => {
+    let confirmed = false;
+    const request = answering(
+      {
+        "GET /transfers/candidates": {
+          candidates: [
+            {
+              debit: linked("txn-out", null),
+              credit: linked("txn-in", null),
+              score: 0.95,
+              band: "high",
+              proposedKind: "internal_same_currency",
+            },
+          ],
+          total: 1,
+        },
+        "GET /transfers?status=confirmed": { transfers: [], total: 0 },
+        "POST /transfers": made,
+      },
+      () => ({
+        transactions: [
+          linked("txn-out", confirmed ? "tr-1" : null),
+          linked("txn-in", confirmed ? "tr-1" : null),
+        ],
+        total: 2,
+      }),
+    );
+    renderScreen([linked("txn-out", null), linked("txn-in", null)], 2, request as unknown as typeof apiFetch);
+    expect(legs()).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find transfers" }));
+    await screen.findByRole("group", { name: /High confidence/ });
+    confirmed = true;
+    fireEvent.click(screen.getByRole("button", { name: "Confirm selected" }));
+
+    await waitFor(() => expect(legs()).toHaveLength(2));
+  });
+
+  it("unlinking returns both legs to how they looked before they were linked", async () => {
+    let released = false;
+    const request = answering(
+      {
+        "GET /transfers/candidates": { candidates: [], total: 0 },
+        "GET /transfers?status=confirmed": { transfers: [made], total: 1 },
+        "DELETE /transfers/tr-1": { ...made, status: "rejected" },
+      },
+      () => ({
+        transactions: [
+          linked("txn-out", released ? null : "tr-1"),
+          linked("txn-in", released ? null : "tr-1"),
+        ],
+        total: 2,
+      }),
+    );
+    renderScreen([linked("txn-out", "tr-1"), linked("txn-in", "tr-1")], 2, request as unknown as typeof apiFetch);
+    expect(legs()).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find transfers" }));
+    const unlink = await screen.findByRole("button", { name: /Unlink/ });
+    released = true;
+    fireEvent.click(unlink);
+
+    await waitFor(() => expect(legs()).toHaveLength(0));
+  });
 });

@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { type apiFetch } from "@/lib/api/client";
+import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
 import { formatMoney } from "@/lib/money/format";
 import type {
   AccountRow,
@@ -127,6 +128,8 @@ export function TransactionsScreen({
   const [applied, setApplied] = useState<Filters>(NO_FILTERS);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
+  // The row whose peers are open for manual linking, if any.
+  const [linking, setLinking] = useState<TransactionRow>();
   const [draft, setDraft] = useState({
     accountId: "",
     bookedDate: "",
@@ -187,6 +190,13 @@ export function TransactionsScreen({
     } finally {
       setBusy(false);
     }
+  }
+
+  // A link or an unlink changes two rows this ledger is showing and the balances behind
+  // them, so the applied view reloads and the workspace is told.
+  function refresh() {
+    void reload(applied, 0, false);
+    onChanged();
   }
 
   async function patchRow(row: TransactionRow, categoryId: string | null, notes: string | null) {
@@ -513,6 +523,23 @@ export function TransactionsScreen({
         </div>
       </form>
 
+      <TransferQueue
+        currencies={currencies}
+        household={household}
+        onChanged={refresh}
+        request={request}
+      />
+      {linking && (
+        <PeerPicker
+          currencies={currencies}
+          household={household}
+          onChanged={refresh}
+          onClose={() => setLinking(undefined)}
+          request={request}
+          transaction={linking}
+        />
+      )}
+
       {rows.length === 0 ? (
         <p className="lede">
           The ledger is empty for this view. Record your first transaction with the form above;
@@ -538,6 +565,17 @@ export function TransactionsScreen({
                   {row.descriptionRaw}
                   {row.transferId && (
                     <span aria-label="Transfer leg, linked to its peer" role="img"> 🔗</span>
+                  )}
+                  {!row.transferId && !row.isSplitParent && (
+                    <button
+                      aria-label={`Link ${row.descriptionRaw} as a transfer`}
+                      className="text-action"
+                      disabled={busy}
+                      onClick={() => setLinking(row)}
+                      type="button"
+                    >
+                      Link as transfer
+                    </button>
                   )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
