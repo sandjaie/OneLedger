@@ -9,7 +9,6 @@ the stack up, which is where this proof matters.
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from decimal import Decimal
 from typing import Any, cast
@@ -18,6 +17,8 @@ import psycopg
 import pytest
 
 from oneledger.fxrange import missing_dates, reporting_config, upsert_rates
+
+from .live_database import connect_to_test_database
 
 # Far enough out that no backfill has reached them, so the rows below are the whole story.
 COVERED = date(2099, 1, 1)
@@ -29,14 +30,8 @@ CARRIED_FROM = date(2099, 1, 4)
 
 
 def _connect() -> psycopg.Connection:
-    if "POSTGRES_PASSWORD" not in os.environ:
-        pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
-
-    try:
-        return connect()
-    except psycopg.OperationalError:
-        pytest.skip("database unreachable")
+    """See `tests/live_database.py`: the test database, and only the test database."""
+    return connect_to_test_database()
 
 
 def _insert(cur: psycopg.Cursor[Any], on: date, base: str, quote: str) -> None:

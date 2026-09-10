@@ -8,7 +8,6 @@ inside a transaction that rolls back; nothing persists. Skipped when no database
 
 from __future__ import annotations
 
-import os
 from datetime import date
 from typing import Any
 from uuid import UUID
@@ -18,19 +17,15 @@ import pytest
 
 from oneledger.ingest.storage import DuplicateDocument, refuse_if_already_imported
 
+from .live_database import connect_to_test_database
+
 SHA = "0" * 64
 OTHER_SHA = "1" * 64
 
 
 def _connect() -> psycopg.Connection:
-    if "POSTGRES_PASSWORD" not in os.environ:
-        pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
-
-    try:
-        return connect()
-    except psycopg.OperationalError:
-        pytest.skip("database unreachable")
+    """See `tests/live_database.py`: the test database, and only the test database."""
+    return connect_to_test_database()
 
 
 def _fixture(cur: psycopg.Cursor[Any]) -> tuple[UUID, UUID]:

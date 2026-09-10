@@ -22,6 +22,47 @@ services:
       interval: 5s
       retries: 10
 
+  # The database the live test suite truncates, and the only one it is allowed to reach.
+  #
+  # `api/tests/*_live.py` empties `transaction`, `import_batch`, `document`,
+  # `statement_layout` and `classification_rule` on every fixture. Pointed at the working
+  # database that is not a test run, it is data loss — which is exactly what happened on
+  # 10 September 2026, taking 4,184 imported transactions and four layout profiles with it.
+  # The tests now read `ONELEDGER_TEST_DSN` and nothing else, so the working credentials in
+  # `.env` cannot reach them however the environment is arranged.
+  #
+  # Behind the `test` profile, so `docker compose up -d` does not start it and the working
+  # stack costs nothing extra:  docker compose --profile test up -d db-test
+  db-test:
+    image: postgres:18
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: oneledger
+      POSTGRES_PASSWORD: oneledger
+      POSTGRES_DB: oneledger_test
+    # A different port and a different volume from `db`. Both, deliberately: sharing either
+    # is how the two become one database again.
+    ports: ["127.0.0.1:${TEST_DB_PORT:-55434}:5432"]
+    volumes: ["pgdata_test:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oneledger -d oneledger_test"]
+      interval: 5s
+      retries: 10
+
+  # Migrates `db-test`, on demand:  docker compose --profile test run --rm flyway-test migrate
+  flyway-test:
+    image: flyway/flyway:13.5.0-alpine
+    profiles: ["test"]
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db-test:5432/oneledger_test
+      FLYWAY_USER: oneledger
+      FLYWAY_PASSWORD: oneledger
+      FLYWAY_LOCATIONS: filesystem:/flyway/sql
+      FLYWAY_CONNECT_RETRIES: "20"
+    volumes: ["./db/migrations:/flyway/sql:ro"]
+    depends_on:
+      db-test: { condition: service_healthy }
+
   api:
     build: ./api
     env_file: .env
@@ -70,4 +111,5 @@ services:
 
 volumes:
   pgdata:
+  pgdata_test:
   documents:

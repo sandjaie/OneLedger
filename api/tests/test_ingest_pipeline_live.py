@@ -14,7 +14,6 @@ Skipped when no database is reachable. Every figure is invented.
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterator
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -31,6 +30,8 @@ from oneledger.ingest import pipeline
 from oneledger.ingest.storage import DuplicateDocument
 from oneledger.ingest.words import Page
 from tests.test_ingest_pipeline import profile, statement, transaction
+
+from .live_database import connect_to_test_database
 
 # A card number in the filename, which is how the real ones arrive: `document.original_filename`
 # must hold the masked form and nothing else (spec §5.6).
@@ -56,14 +57,8 @@ class NeverCalled:
 
 
 def _connect() -> psycopg.Connection:
-    if "POSTGRES_PASSWORD" not in os.environ:
-        pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
-
-    try:
-        return connect()
-    except psycopg.OperationalError:
-        pytest.skip("database unreachable")
+    """See `tests/live_database.py`: the test database, and only the test database."""
+    return connect_to_test_database()
 
 
 def _household(cur: psycopg.Cursor[Any]) -> pipeline.HouseholdContext:

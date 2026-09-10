@@ -5,22 +5,17 @@ pre-push hook runs with the stack up, which is where this proof matters."""
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import psycopg
 import pytest
 
+from .live_database import connect_to_test_database
+
 
 def _connect() -> psycopg.Connection:
-    if "POSTGRES_PASSWORD" not in os.environ:
-        pytest.skip("no database credentials in the environment")
-    from oneledger.db import connect
-
-    try:
-        return connect()
-    except psycopg.OperationalError:
-        pytest.skip("database unreachable")
+    """See `tests/live_database.py`: the test database, and only the test database."""
+    return connect_to_test_database()
 
 
 def _fixture(cur: psycopg.Cursor[Any]) -> tuple[Any, Any, str, str, tuple[Any, ...]]:
