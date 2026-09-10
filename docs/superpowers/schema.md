@@ -656,6 +656,78 @@ arrive with V19.
 
 ---
 
+## `V20` (applied)
+
+### Transfers
+
+Applied as `db/migrations/V20__transfers.sql`, and it carries `0010` unchanged — the enums, the
+table, its three `CHECK`s and the two partial unique indexes. What follows is what the migration
+adds beyond the DDL sketch, since a table reference carries no function, trigger or policy.
+
+**Linking is a function, not three statements in a route.** `transaction.transfer_type_agrees`
+(V10) says a row holding a `transfer_id` must also carry `transfer_in` or `transfer_out`, so the
+id and the type move in the same `UPDATE` or neither moves. A route setting them separately
+would be refused by its own constraint halfway through, leaving one leg linked and the other
+not.
+
+```sql
+confirm_transfer(p_transfer_id UUID)   -- both legs and the status, one statement set
+unlink_transfer(p_transfer_id UUID)    -- releases both legs, status becomes 'rejected'
+```
+
+Both are `SECURITY DEFINER`, both call `assert_is_owner()` first, and both declare
+`search_path = public, pg_temp` with `pg_temp` explicitly last (V15's reason). `confirm_transfer`
+refuses a leg that is not this household's, or not in the account the transfer names, before it
+writes anything — the definer bypasses RLS, so that predicate is the isolation rather than a
+second opinion on one. Confirming an already-confirmed transfer returns without writing.
+
+`unlink_transfer` restores each leg's type **from its own sign** — `amount > 0 → income`,
+otherwise `expense`, the rule `normalize.py` applies to a freshly parsed row — rather than
+restoring a remembered type the ledger never stored. The status becomes `rejected`, not
+`candidate`: the owner has said this pair is not a transfer, and the matcher must not propose
+it again.
+
+Neither function touches money. `assert_transaction_money_immutable()` (V10) would refuse them
+if they did; they change only `txn_type`, `transfer_id` and `updated_at` (I1, I5).
+
+### The invariant the two indexes do not carry
+
+`data-model.html` §8: the partial unique indexes stop one *transfer* claiming the same
+transaction twice in the same role, but nothing in them stops one *transaction* being the
+source of transfer A and the destination of transfer B. Each index is satisfied independently
+while `transaction.transfer_id` can point at only one of the two.
+
+```sql
+CREATE CONSTRAINT TRIGGER trg_one_transfer_per_leg
+  AFTER INSERT OR UPDATE ON transfer
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW WHEN (NEW.status = 'confirmed')
+  EXECUTE FUNCTION assert_legs_unclaimed();
+```
+
+`assert_legs_unclaimed()` raises if either leg's `transaction.transfer_id` is non-null and
+differs from `NEW.id` — the second half being what lets a confirmed transfer be edited over the
+legs that name it. `WHEN (NEW.status = 'confirmed')` is what lets candidates overlap freely
+while the matcher proposes alternatives.
+
+### What this migration completes and converts
+
+```sql
+ALTER TABLE transaction
+  ADD CONSTRAINT fk_txn_transfer
+    FOREIGN KEY (transfer_id) REFERENCES transfer(id) ON DELETE SET NULL;
+```
+
+`SET NULL`, unlike V19's `RESTRICT` on `classification_rule_id`: deleting a transfer is
+unlinking it, and a leg with no `transfer_id` is a complete, correct row that reports as income
+or expense again. A rule's id is provenance and cannot be nulled away; a transfer's is a link.
+
+`staged_transaction.proposed_transfer_kind` was `TEXT` with a `CHECK` listing the seven values,
+because `transfer_kind` did not exist when V13 was written. The `CHECK` becomes the type; all
+seven values still load.
+
+---
+
 ## `V19` (applied)
 
 ### Classification rules
