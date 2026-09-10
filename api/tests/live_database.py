@@ -53,7 +53,13 @@ def connect_to_test_database() -> psycopg.Connection:
     # thirty-seven classification rules in it is still one somebody is using, and the run
     # that proved this guard works is the run that deleted them.
     with connection.cursor() as cur:
-        for table in ("transaction", "document", "statement_layout", "classification_rule"):
+        for table in (
+            "transaction",
+            "document",
+            "statement_layout",
+            "classification_rule",
+            "transfer",
+        ):
             cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 - fixed table names
             row = cur.fetchone()
             if row is not None and row[0] > 0:

@@ -349,6 +349,40 @@ export type CancelResult = {
 };
 
 /**
+ * Candidate
+ */
+export type Candidate = {
+    debit: TransactionRow;
+    credit: TransactionRow;
+    /**
+     * Score
+     */
+    score: number;
+    /**
+     * Band
+     */
+    band: string;
+    /**
+     * Proposedkind
+     */
+    proposedKind: string;
+};
+
+/**
+ * CandidatesResponse
+ */
+export type CandidatesResponse = {
+    /**
+     * Candidates
+     */
+    candidates: Array<Candidate>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
  * CategoryCreate
  */
 export type CategoryCreate = {
@@ -1296,6 +1330,16 @@ export type ParseRow = {
 };
 
 /**
+ * PeersResponse
+ */
+export type PeersResponse = {
+    /**
+     * Peers
+     */
+    peers: Array<Candidate>;
+};
+
+/**
  * PreviewResult
  */
 export type PreviewResult = {
@@ -1977,6 +2021,122 @@ export type TransactionsResponse = {
      * Transactions
      */
     transactions: Array<TransactionRow>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
+ * TransferRow
+ */
+export type TransferRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Sourceaccountid
+     */
+    sourceAccountId: string;
+    /**
+     * Destinationaccountid
+     */
+    destinationAccountId: string;
+    /**
+     * Sourcetransactionid
+     */
+    sourceTransactionId: string | null;
+    /**
+     * Destinationtransactionid
+     */
+    destinationTransactionId: string | null;
+    /**
+     * Sourceamount
+     */
+    sourceAmount: string;
+    /**
+     * Sourcecurrency
+     */
+    sourceCurrency: string;
+    /**
+     * Destinationamount
+     */
+    destinationAmount: string;
+    /**
+     * Destinationcurrency
+     */
+    destinationCurrency: string;
+    /**
+     * Transferdate
+     */
+    transferDate: string;
+    /**
+     * Settlementdate
+     */
+    settlementDate: string | null;
+    /**
+     * Impliedrate
+     */
+    impliedRate: string | null;
+    /**
+     * Marketrate
+     */
+    marketRate: string | null;
+    /**
+     * Fxspreadpct
+     */
+    fxSpreadPct: string | null;
+    /**
+     * Fxspreadcostsource
+     */
+    fxSpreadCostSource: string | null;
+    /**
+     * Explicitfeeamount
+     */
+    explicitFeeAmount: string | null;
+    /**
+     * Explicitfeecurrency
+     */
+    explicitFeeCurrency: string | null;
+    /**
+     * Totalcostsource
+     */
+    totalCostSource: string | null;
+    /**
+     * Transferkind
+     */
+    transferKind: string;
+    /**
+     * Provider
+     */
+    provider: string | null;
+    /**
+     * Matchconfidence
+     */
+    matchConfidence: string | null;
+    /**
+     * Matchmethod
+     */
+    matchMethod: string;
+    /**
+     * Status
+     */
+    status: string;
+    /**
+     * Notes
+     */
+    notes: string | null;
+};
+
+/**
+ * TransfersResponse
+ */
+export type TransfersResponse = {
+    /**
+     * Transfers
+     */
+    transfers: Array<TransferRow>;
     /**
      * Total
      */
@@ -2875,6 +3035,120 @@ export type ClassifyUnclassifiedClassifyPostResponses = {
 };
 
 export type ClassifyUnclassifiedClassifyPostResponse = ClassifyUnclassifiedClassifyPostResponses[keyof ClassifyUnclassifiedClassifyPostResponses];
+
+export type ListCandidatesTransfersCandidatesGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Datefrom
+         */
+        dateFrom?: string | null;
+        /**
+         * Dateto
+         */
+        dateTo?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/transfers/candidates';
+};
+
+export type ListCandidatesTransfersCandidatesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCandidatesTransfersCandidatesGetError = ListCandidatesTransfersCandidatesGetErrors[keyof ListCandidatesTransfersCandidatesGetErrors];
+
+export type ListCandidatesTransfersCandidatesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CandidatesResponse;
+};
+
+export type ListCandidatesTransfersCandidatesGetResponse = ListCandidatesTransfersCandidatesGetResponses[keyof ListCandidatesTransfersCandidatesGetResponses];
+
+export type ListPeersTransactionsTransactionIdTransferCandidatesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Transaction Id
+         */
+        transaction_id: string;
+    };
+    query?: never;
+    url: '/transactions/{transaction_id}/transfer-candidates';
+};
+
+export type ListPeersTransactionsTransactionIdTransferCandidatesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPeersTransactionsTransactionIdTransferCandidatesGetError = ListPeersTransactionsTransactionIdTransferCandidatesGetErrors[keyof ListPeersTransactionsTransactionIdTransferCandidatesGetErrors];
+
+export type ListPeersTransactionsTransactionIdTransferCandidatesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PeersResponse;
+};
+
+export type ListPeersTransactionsTransactionIdTransferCandidatesGetResponse = ListPeersTransactionsTransactionIdTransferCandidatesGetResponses[keyof ListPeersTransactionsTransactionIdTransferCandidatesGetResponses];
+
+export type ListTransfersTransfersGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: string | null;
+        /**
+         * Accountid
+         */
+        accountId?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/transfers';
+};
+
+export type ListTransfersTransfersGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListTransfersTransfersGetError = ListTransfersTransfersGetErrors[keyof ListTransfersTransfersGetErrors];
+
+export type ListTransfersTransfersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TransfersResponse;
+};
+
+export type ListTransfersTransfersGetResponse = ListTransfersTransfersGetResponses[keyof ListTransfersTransfersGetResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
