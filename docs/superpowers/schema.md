@@ -806,6 +806,59 @@ and names it in `supersedes_decision_id`.
 
 ---
 
+## `V24` (applied)
+
+### Counterparty identities and role aliases
+
+```sql
+CREATE TABLE counterparty (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id   UUID NOT NULL REFERENCES household(id),
+  kind           TEXT NOT NULL,
+                 -- merchant|person|own_account|institution|intermediary|unresolved
+  display_name   TEXT NOT NULL, -- 1..200 chars and 800 bytes; no unmasked identifier
+  merchant_id    UUID REFERENCES merchant(id) ON DELETE RESTRICT,
+  own_account_id UUID REFERENCES account(id) ON DELETE RESTRICT,
+  is_active      BOOLEAN NOT NULL DEFAULT true,
+  deactivated_at TIMESTAMPTZ,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (household_id, id),
+  FOREIGN KEY (household_id, own_account_id)
+    REFERENCES account(household_id, id) ON DELETE RESTRICT
+);
+
+CREATE TABLE counterparty_alias (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id         UUID NOT NULL REFERENCES household(id),
+  counterparty_id       UUID NOT NULL,
+  knowledge_version_id UUID NOT NULL,
+  pattern              TEXT NOT NULL, -- 1..500 chars and 2000 bytes; no unmasked identifier
+  pattern_kind         pattern_type NOT NULL DEFAULT 'contains',
+  role                  TEXT NOT NULL,
+                        -- purchase|wallet|processor|transfer|refund|own_account|
+                        -- institution|unresolved|other
+  priority              SMALLINT NOT NULL DEFAULT 100,
+  is_active             BOOLEAN NOT NULL DEFAULT true,
+  deactivated_at        TIMESTAMPTZ,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (household_id, counterparty_id)
+    REFERENCES counterparty(household_id, id) ON DELETE RESTRICT,
+  FOREIGN KEY (household_id, knowledge_version_id)
+    REFERENCES classification_knowledge_version(household_id, id) ON DELETE RESTRICT
+);
+```
+
+Merchant and intermediary identities reuse an existing merchant row; an own-account identity names
+an existing account from the same household; people, institutions and unresolved entities do not
+misuse either reference. Alias roles must agree with the entity kind. Equal highest-priority aliases
+are allowed so the resolver can report ambiguity rather than choosing by UUID order. Both tables are
+household-isolated and immutable except for one-way deactivation. Full identifiers are refused across
+ASCII, arbitrary formatting and Unicode 17 decimal scripts; the household's alphanumeric tax
+identifier shape is refused explicitly, while a masked last four remains valid. Merchant tenancy is
+immutable, so a valid household reference cannot become foreign after insertion.
+
+---
+
 ## `V21` (applied)
 
 ### Card cycles

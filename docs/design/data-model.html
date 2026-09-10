@@ -533,6 +533,7 @@ personal finance software, and it is designed out here rather than tested for.</
             │
             ├── category (tree, seeded)
             ├── merchant ──── merchant_alias
+            │      └── counterparty ──── counterparty_alias
             ├── classification_rule
             ├── classification_knowledge ──── classification_knowledge_version
             │                                      └── classification_run
@@ -690,6 +691,21 @@ twice (<a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>). Seed
 <p>One <code>merchant</code>, many <code>merchant_alias</code> rows — because the same coffee shop appears as <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements. Each alias carries a <code>pattern_kind</code> (<code>exact</code>, <code>prefix</code>, <code>contains</code>, <code>regex</code>) and a priority, and counts how often it has matched.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0006</code>.</p>
 <p>One merchant, many aliases — because the same coffee shop appears as
 <code>STARBUCKS DUBAI MALL</code>, <code>STARBUCKS #4471 DXB</code> and <code>SBUX DUBAI</code> across three statements.</p>
+<h3 id="counterparty-identities">Counterparty identities and roles</h3>
+<p><code>counterparty</code> separates a merchant, person, own account, institution, intermediary or
+unresolved identity. Merchant and intermediary rows reference the existing <code>merchant</code>
+catalogue; own-account rows reference an account in the same household. This prevents a person from
+becoming a fake merchant and lets one provider retain distinct purchase and wallet services without
+duplicating its business identity.</p>
+<p><code>counterparty_alias</code> binds a statement pattern and general service role to versioned
+classification evidence. Aliases are household-private and may remain intentionally ambiguous;
+Task 5's resolver must abstain when the highest-priority evidence conflicts. Identity, matcher and
+evidence links never change in place. One-way deactivation preserves explanations, while full
+unmasked identifiers are refused across arbitrary separators and Unicode 17 decimal scripts;
+the household's alphanumeric tax identifier shape is refused explicitly. Merchant tenancy is also
+immutable, so an existing counterparty reference cannot be re-homed after validation.</p>
+<p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a>
+<code>V24</code> (applied).</p>
 <hr>
 <h2 id="7-the-transaction-ledger">7. The transaction ledger</h2>
 <p>The centre of the system.</p>
@@ -986,6 +1002,8 @@ V22__statement_layout_usage_is_derived.sql
                                       counter; import_batch is the count (applied)
 V23__classification_decisions.sql     classification evidence, exact preview items and
                                       immutable decision history (applied)
+V24__counterparty_store.sql           private counterparty identity and evidenced role aliases
+                                      (applied)
 
   then, in this order, numbered as they land:
 
