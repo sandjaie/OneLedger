@@ -46,6 +46,12 @@ One implementation agent at a time, on the slice's declared branch, TDD in the p
 deviation from the plan is legitimate where repository reality requires it, and is recorded in
 the PR and `progress.md` — never by editing the plan after dispatch.
 
+**Nothing is weakened to reach green.** Not a loosened assertion, not a deleted case, not a
+skipped test, not a softened invariant. A red suite is a finding that already found itself, and
+an implementer who edits the test has removed the finding rather than the defect. If an
+invariant is genuinely wrong, that is a superseding ADR. The same rule binds the gates, and for
+the same reason — "What a gate never does", below.
+
 ### 4. Gate — `/verify`, on a tree the implementer believes is finished
 
 Red is not reviewed. A failing test is a finding that already found itself.

@@ -14,7 +14,7 @@
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
 | The eight invariants | `README.md`; each one's test, `docs/operations/testing-and-data-quality.html` §1 |
 | Tables by migration | `docs/superpowers/schema.md`; the model behind them, `docs/design/data-model.html` |
-| Decisions in force | `docs/adr/index.html` — 16, plus four replaced ones kept apart in `superseded.html` |
+| Decisions in force | `docs/adr/index.html`; replaced ones kept apart in `superseded.html` |
 
 **When documents disagree**, and they do: ADRs decide, `docs/design/` and `docs/operations/`
 specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of
@@ -82,58 +82,38 @@ merge lists, current-phase banners, test-run summaries and pending-work recaps o
 Use a neutral link to the progress file where needed. Dated verification reports and PR reviews
 are historical evidence, not live trackers; retain their results without refreshing them as status.
 
-## Rules you will otherwise break by reflex
+## The rules are in the documents, not here
 
-**Money.** `Decimal` in Python, `NUMERIC(20,4)` in Postgres, a **string** on the wire
-(`"-310.0000"`). Never `float`, never a JSON number, never `parseFloat`/`Number()` on a money
-field. TypeScript formats money and does no arithmetic on it; aggregation happens in Postgres.
-Percentages are human-readable — `15.2500` is 15.25%, not `0.1525`.
+This file used to restate the application's rules — money representation, the identifier rule,
+the authorization boundary, the never-store list. Every one of them already lives in a document
+that owns it, and a rule written twice is a rule that drifts: the copy here claimed two static
+checks existed that the tree had never had. So the rules stay where they are decided, and this
+file says where to look and what is mechanically enforced.
 
-**No currency, institution or country name is ever an identifier.** Not a column, a type, an enum
-member, a function name, a locale constant or a required seed row. `amount_base` /
-`amount_secondary`, never `amount_inr`. `formatMoney` takes a `currency` row and reads its
-`symbol`, `decimals` and `number_format` — never a `"INR" | "AED"` union. The reporting pair is
-`household.base_currency` / `secondary_currency`. Every bank and currency in the docs is an
-example (ADR-0012). `scripts/check-identifiers.py` fails the build on this and on money
-arithmetic in TypeScript; do not silence it. A name inside a string is data and is not read.
+**Read the owning document before working in its area.** These are not optional background.
 
-**Reports never read the base table and never multiply by a rate.** Cash-flow, budget, spending
-and savings-rate queries read `v_transaction_reportable` and the frozen `amount_base` /
-`amount_secondary` columns. Both are static checks, not conventions.
+| The rule | Who owns it |
+|---|---|
+| How money is represented, in Python, in Postgres and on the wire | [api-contracts.html](docs/design/api-contracts.html) §2, [data-model.html](docs/design/data-model.html) |
+| Frozen dual-currency amounts, and why they are frozen | [ADR-0002](docs/adr/0002-frozen-dual-currency-amounts.html) |
+| No currency, institution or country name as an identifier | [ADR-0012](docs/adr/0012-statement-layouts-as-data.html) |
+| Which relations a report may read | [testing-and-data-quality.html](docs/operations/testing-and-data-quality.html) §1–2 |
+| The authorization boundary, and what is public | [ADR-0013](docs/adr/0013-python-backend-service.html), [ADR-0016](docs/adr/0016-revocable-owner-sessions.html), [security-and-privacy.html](docs/operations/security-and-privacy.html) |
+| Migrations: forward-only, Flyway, never edited once applied | [ADR-0015](docs/adr/0015-flyway-for-schema-migrations.html), [schema.md](docs/superpowers/schema.md) |
+| The never-store list, and what may be kept instead | [security-and-privacy.html](docs/operations/security-and-privacy.html) §1 |
+| The eight invariants, and the test that proves each | [README.md](README.md), [testing-and-data-quality.html](docs/operations/testing-and-data-quality.html) §1 |
+| When AI may be called at all | [ADR-0003](docs/adr/0003-defer-ai-to-v2.html) |
+| Branches, releases, commit style, the diff budget | [git-workflow.md](docs/git-workflow.md) |
+| The gates, when each runs, and what it may do | [development-cycle.md](docs/development-cycle.md) |
+| That nothing is weakened to reach green | [development-cycle.md](docs/development-cycle.md) §3 |
+| That an ADR is superseded, never rewritten | [docs/adr/index.html](docs/adr/index.html) |
 
-**The authorization boundary is `require_owner()` in the API service** (ADR-0013, refined by
-ADR-0016). Every financial route depends on it. `/health` and the `/auth/login` and
-`/auth/callback` bootstrap routes are the complete public set. RLS is depth, not the wall — the
-service connects privileged and bypasses it. Every `SECURITY DEFINER` function calls
-`assert_is_owner()` first. The UI is never the boundary.
-
-**Migrations are forward-only and run by Flyway** (ADR-0015). `db/migrations/V<n>__<name>.sql`,
-applied with `docker compose run --rm flyway migrate`. **Never edit an applied migration** —
-Flyway checksums them and will refuse to run. A table change edits the migration, `schema.md` and
-`data-model.html` in one commit.
-
-**Nothing about money is invented silently.** A carried-forward rate, an interpolated valuation
-and an unexplained residual are stored as labelled facts and shown as such (Invariant 7).
-
-**Recurring user-facing work belongs in the app, not a terminal.** `GET /doctor` backs
-Settings › Data Quality. There is no `oneledger` command.
-
-**No LLM calls before Phase 5** (ADR-0003 — AI is Phase 5, the phase formerly named V2).
-
-## Never
-
-- **Real financial data in this repository** — no statement, no unredacted fixture, no `.env`, on
-  any branch. `pdf-statements/` sits in the working tree, git-ignored, holding real statements
-  with card numbers in the filenames. Never `git add -f` it.
-- Anything on the never-store list (`security-and-privacy.html` §1): full account or card number,
-  CVV, PIN, OTP, password, full tax or national ID. Masked value plus salted hash only.
-- A secret behind `NEXT_PUBLIC_`. `NEXT_PUBLIC_API_URL` is the only such variable, and it holds
-  a URL.
-- String-interpolated SQL.
-- Weakening an invariant, loosening an assertion or deleting a test to reach green. If an
-  invariant is genuinely wrong, that is a superseding ADR, not an edit.
-- Editing an ADR body. One that gets rewritten stops being a record — supersede it.
-- Committing straight to `main`.
+**What is enforced mechanically, so you will be told rather than trusted:**
+`scripts/check-identifiers.py` fails the build on a currency, institution or country name used as
+an identifier, and on money arithmetic in TypeScript. `scripts/check-docs.py` fails on a broken
+link, malformed HTML, and on real financial data reaching git. `scripts/check-diff-size.sh`
+refuses an oversized push. The pre-commit and pre-push hooks run lint, types, secrets, pytest,
+vitest and every `db/tests/*.sql` against a live database. None of these may be silenced.
 
 ## Working
 
