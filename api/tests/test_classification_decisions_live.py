@@ -1,0 +1,611 @@
+"""Guarded classification repairs against a disposable migrated database.
+
+Every figure and label is synthetic. The module opens the guarded test connection once because
+V23's preview and decision rows are intentionally immutable; pytest drops the whole per-run
+database when the session ends.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from decimal import Decimal
+from threading import Barrier, Lock, get_ident
+from typing import Any, cast
+from uuid import UUID, uuid4
+
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from httpx import Response
+
+from oneledger import auth
+from oneledger.main import app
+from oneledger.routes import classification_decisions
+
+from .live_database import connect_to_test_database
+from .test_ingest_route_live import ORIGIN
+
+
+@pytest.fixture(scope="module")
+def database() -> Iterator[psycopg.Connection[Any]]:
+    conn = connect_to_test_database()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@dataclass
+class RepairFixture:
+    conn: psycopg.Connection[Any]
+    household_id: UUID
+    user_id: UUID
+    account_id: UUID
+    category_id: UUID
+    knowledge_version_id: UUID
+    currency: str
+
+    def owner(self) -> auth.OwnerSession:
+        return auth.OwnerSession(
+            user_id=self.user_id,
+            household_id=self.household_id,
+            session_id=UUID(int=3),
+            email="repair-owner@example.invalid",
+        )
+
+
+@pytest.fixture
+def live(database: psycopg.Connection[Any]) -> Iterator[RepairFixture]:
+    with database.cursor() as cur:
+        cur.execute("SELECT min(code), max(code) FROM currency")
+        currency, secondary = cur.fetchone()  # type: ignore[misc]
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES (%s, %s, %s) RETURNING id""",
+            (f"repair household {uuid4()}", currency, secondary),
+        )
+        household_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            "INSERT INTO person (household_id, display_name, is_self) VALUES (%s, %s, true)"
+            " RETURNING id",
+            (household_id, "synthetic repair owner"),
+        )
+        person_id = cur.fetchone()[0]  # type: ignore[index]
+        user_id = uuid4()
+        cur.execute(
+            """INSERT INTO app_user (id, household_id, person_id, email, role)
+               VALUES (%s, %s, %s, %s, 'owner')""",
+            (user_id, household_id, person_id, f"repair-{user_id}@example.invalid"),
+        )
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type,
+                                     currency, country, opening_balance, opening_balance_date)
+               VALUES (%s, %s, %s, 'savings', %s, 'XZ', 0, DATE '2026-01-01')
+               RETURNING id""",
+            (household_id, person_id, f"repair account {uuid4()}", currency),
+        )
+        account_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO category (household_id, name, slug, kind, bucket)
+               VALUES (%s, 'Synthetic spending', %s, 'expense', 'want') RETURNING id""",
+            (household_id, f"synthetic-spending-{uuid4()}"),
+        )
+        category_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            "INSERT INTO classification_knowledge (household_id) VALUES (%s) RETURNING id",
+            (household_id,),
+        )
+        knowledge_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO classification_knowledge_version
+                 (household_id, knowledge_id, version, source_kind, attribution,
+                  evidence_note, matcher_version, scope, state, verified_at)
+               VALUES (%s, %s, 1, 'owner', 'synthetic owner', 'reviewed synthetic correction',
+                       'repair-v1', '{"direction":"debit"}', 'active', now())
+               RETURNING id""",
+            (household_id, knowledge_id),
+        )
+        knowledge_version_id = cur.fetchone()[0]  # type: ignore[index]
+    database.commit()
+    fixture = RepairFixture(
+        database,
+        household_id,
+        user_id,
+        account_id,
+        category_id,
+        knowledge_version_id,
+        str(currency),
+    )
+    app.dependency_overrides[auth.require_owner] = fixture.owner
+    try:
+        yield fixture
+    finally:
+        app.dependency_overrides.clear()
+        # V23 records are immutable by design, so the disposable test database is cleaned at
+        # the table boundary. CASCADE clears their transaction-dependent rows without adding
+        # a production-only delete path; later live fixtures require an empty ledger.
+        with database.cursor() as cur:
+            cur.execute("TRUNCATE transaction CASCADE")
+        database.commit()
+
+
+def _transaction(
+    live: RepairFixture,
+    *,
+    txn_type: str = "loan_repayment",
+    classified_by: str = "seed_rule",
+    amount: str = "-37.2500",
+    account_id: UUID | None = None,
+) -> UUID:
+    dedupe = uuid4().hex + uuid4().hex
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction
+                 (household_id, account_id, booked_date, description_raw, amount, currency,
+                  fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
+                  amount_secondary, txn_type, source, dedupe_hash, classified_by,
+                  classification_confidence, is_excluded)
+               VALUES (%s, %s, DATE '2026-04-01', 'SYNTHETIC WRONG CLASSIFICATION', %s, %s,
+                       DATE '2026-04-01', 1, 1, %s, %s, %s::txn_type, 'manual', %s,
+                       %s::classified_by, 0.700, true) RETURNING id""",
+            (
+                live.household_id,
+                account_id or live.account_id,
+                amount,
+                live.currency,
+                amount,
+                amount,
+                txn_type,
+                dedupe,
+                classified_by,
+            ),
+        )
+        transaction_id = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+    return UUID(str(transaction_id))
+
+
+def _preview(live: RepairFixture, transaction_ids: list[UUID]) -> Response:
+    return cast(
+        Response,
+        TestClient(app).post(
+            "/classification-runs/preview",
+            json={
+                "knowledgeVersionId": str(live.knowledge_version_id),
+                "reason": "synthetic wrong exclusion repair",
+                "items": [
+                    {
+                        "transactionId": str(transaction_id),
+                        "changes": {
+                            "txnType": "expense",
+                            "categoryId": str(live.category_id),
+                            "classifiedBy": "user_manual",
+                            "classificationRuleId": None,
+                            "classificationConfidence": "1.000",
+                            "isReviewed": True,
+                            "isExcluded": False,
+                        },
+                    }
+                    for transaction_id in transaction_ids
+                ],
+            },
+            headers=ORIGIN,
+        ),
+    )
+
+
+def _stored(live: RepairFixture, transaction_id: UUID) -> tuple[Any, ...]:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT txn_type::text, category_id, classified_by::text,
+                      classification_confidence, is_reviewed, is_excluded, amount,
+                      fx_rate_to_base, amount_base, dedupe_hash, updated_at
+                 FROM transaction WHERE id = %s""",
+            (transaction_id,),
+        )
+        return cur.fetchone()  # type: ignore[return-value]
+
+
+def test_preview_persists_the_complete_guard_and_changes_no_transaction(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live)
+    before = _stored(live, transaction_id)
+
+    response = _preview(live, [transaction_id])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["state"], body["changed"], body["conflicted"], body["unresolved"]) == (
+        "proposed",
+        1,
+        0,
+        0,
+    )
+    [proposal] = body["proposals"]
+    assert proposal["transactionId"] == str(transaction_id)
+    assert proposal["expectedState"]["txnType"] == "loan_repayment"
+    assert proposal["proposedState"]["txnType"] == "expense"
+    assert set(proposal["expectedState"]) == {
+        "txnType",
+        "categoryId",
+        "merchantId",
+        "paymentMethod",
+        "classifiedBy",
+        "classificationRuleId",
+        "classificationConfidence",
+        "isReviewed",
+        "country",
+        "tags",
+        "isExcluded",
+    }
+    assert _stored(live, transaction_id) == before
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT expected_source_key, expected_transaction_updated_at,
+                      expected_state, proposed_state
+                 FROM classification_run_item WHERE run_id = %s""",
+            (body["runId"],),
+        )
+        source_key, updated_at, expected, proposed = cur.fetchone()  # type: ignore[misc]
+    assert (source_key, updated_at) == (before[9], before[10])
+    assert expected["txn_type"] == "loan_repayment"
+    assert proposed["txn_type"] == "expense"
+
+
+def test_apply_changes_classification_and_history_but_not_frozen_money(
+    live: RepairFixture,
+) -> None:
+    selected = _transaction(live)
+    unrelated = _transaction(live, amount="-12.5000")
+    selected_before = _stored(live, selected)
+    unrelated_before = _stored(live, unrelated)
+    preview = _preview(live, [selected]).json()
+
+    applied = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-apply-one"},
+        headers=ORIGIN,
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert (applied.json()["state"], applied.json()["changed"]) == ("applied", 1)
+    after = _stored(live, selected)
+    assert after[:6] == ("expense", live.category_id, "user_manual", Decimal("1.000"), True, False)
+    assert after[6:10] == selected_before[6:10]
+    assert _stored(live, unrelated) == unrelated_before
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*), min(before_state->>'txn_type'), min(after_state->>'txn_type')"
+            " FROM classification_decision WHERE run_id = %s",
+            (preview["runId"],),
+        )
+        assert cur.fetchone() == (1, "loan_repayment", "expense")
+        cur.execute(
+            "SELECT COALESCE(-sum(amount_base), 0) FROM v_transaction_reportable"
+            " WHERE household_id = %s",
+            (live.household_id,),
+        )
+        assert cur.fetchone()[0] == Decimal("37.2500")  # type: ignore[index]
+
+
+def test_one_stale_item_makes_the_whole_apply_conflict(live: RepairFixture) -> None:
+    first, stale = _transaction(live), _transaction(live, amount="-18.7500")
+    preview = _preview(live, [first, stale]).json()
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE transaction SET txn_type = 'fee' WHERE id = %s", (stale,))
+    live.conn.commit()
+
+    response = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-stale-batch"},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["state"], response.json()["changed"]) == ("conflict", 0)
+    assert response.json()["conflicted"] == 1
+    assert _stored(live, first)[0] == "loan_repayment"
+    assert _stored(live, stale)[0] == "fee"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM classification_decision WHERE run_id = %s", (preview["runId"],)
+        )
+        assert cur.fetchone()[0] == 0  # type: ignore[index]
+
+
+def test_apply_rechecks_the_source_key_and_evidence_lifecycle(live: RepairFixture) -> None:
+    source_changed = _transaction(live)
+    source_preview = _preview(live, [source_changed]).json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE transaction SET dedupe_hash = %s WHERE id = %s",
+            (uuid4().hex + uuid4().hex, source_changed),
+        )
+    live.conn.commit()
+    source_result = TestClient(app).post(
+        f"/classification-runs/{source_preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-source-conflict"},
+        headers=ORIGIN,
+    )
+
+    evidence_revoked = _transaction(live, amount="-18.7500")
+    evidence_preview = _preview(live, [evidence_revoked]).json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE classification_knowledge_version
+                  SET state = 'revoked', revoked_at = now()
+                WHERE id = %s""",
+            (live.knowledge_version_id,),
+        )
+    live.conn.commit()
+    evidence_result = TestClient(app).post(
+        f"/classification-runs/{evidence_preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-evidence-conflict"},
+        headers=ORIGIN,
+    )
+
+    assert source_result.json()["items"][0]["reason"] == "transaction changed after preview"
+    assert evidence_result.json()["items"][0]["reason"] == ("knowledge version is no longer active")
+    assert _stored(live, source_changed)[0] == "loan_repayment"
+    assert _stored(live, evidence_revoked)[0] == "loan_repayment"
+
+
+def test_apply_keeps_its_stored_result_bounded_when_reasons_are_maximal(
+    live: RepairFixture,
+) -> None:
+    transaction_ids = [_transaction(live, amount=f"-{value}.0000") for value in range(41, 45)]
+    preview = (
+        TestClient(app)
+        .post(
+            "/classification-runs/preview",
+            json={
+                "knowledgeVersionId": str(live.knowledge_version_id),
+                "reason": "bounded",
+                "items": [
+                    {
+                        "transactionId": str(transaction_id),
+                        "changes": {"txnType": "expense", "isExcluded": False},
+                        "reason": "r" * 1000,
+                    }
+                    for transaction_id in transaction_ids
+                ],
+            },
+            headers=ORIGIN,
+        )
+        .json()
+    )
+
+    response = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-bounded-result"},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["changed"] == 4
+    assert len(response.json()["items"]) == 3
+
+
+def test_apply_is_idempotent_and_undo_restores_category_and_type_together(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live)
+    original = _stored(live, transaction_id)
+    preview = _preview(live, [transaction_id]).json()
+    apply_url = f"/classification-runs/{preview['runId']}/apply"
+
+    first = TestClient(app).post(
+        apply_url, json={"idempotencyKey": "synthetic-repeat"}, headers=ORIGIN
+    )
+    repeated = TestClient(app).post(
+        apply_url, json={"idempotencyKey": "synthetic-repeat"}, headers=ORIGIN
+    )
+    assert repeated.json() == first.json()
+
+    undone = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/undo",
+        json={"idempotencyKey": "synthetic-undo", "reason": "synthetic owner undo"},
+        headers=ORIGIN,
+    )
+
+    assert undone.status_code == 200, undone.text
+    assert (undone.json()["state"], undone.json()["changed"]) == ("applied", 1)
+    restored = _stored(live, transaction_id)
+    assert restored[:6] == original[:6]
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT count(*), count(supersedes_decision_id)
+                 FROM classification_decision WHERE transaction_id = %s""",
+            (transaction_id,),
+        )
+        assert cur.fetchone() == (2, 1)
+
+
+def test_simultaneous_undo_retries_return_one_result(
+    live: RepairFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transaction_id = _transaction(live)
+    source = _preview(live, [transaction_id]).json()
+    TestClient(app).post(
+        f"/classification-runs/{source['runId']}/apply",
+        json={"idempotencyKey": "synthetic-concurrent-source"},
+        headers=ORIGIN,
+    )
+    rendezvous = Barrier(2)
+    seen: set[int] = set()
+    seen_lock = Lock()
+    real_lookup = classification_decisions._idempotency_owner
+
+    def synchronized_lookup(
+        cur: psycopg.Cursor[Any], household_id: UUID, key: str
+    ) -> tuple[UUID, dict[str, Any]] | None:
+        result = real_lookup(cur, household_id, key)
+        thread_id = get_ident()
+        with seen_lock:
+            first_lookup = thread_id not in seen
+            seen.add(thread_id)
+        if first_lookup:
+            rendezvous.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(classification_decisions, "_idempotency_owner", synchronized_lookup)
+    url = f"/classification-runs/{source['runId']}/undo"
+    body = {"idempotencyKey": "synthetic-concurrent-undo", "reason": "concurrent retry"}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        requests = [
+            pool.submit(TestClient(app).post, url, json=body, headers=ORIGIN) for _ in range(2)
+        ]
+        responses = [request.result() for request in requests]
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json() == responses[1].json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM classification_decision WHERE transaction_id = %s",
+            (transaction_id,),
+        )
+        assert cur.fetchone()[0] == 2  # type: ignore[index]
+
+
+def test_undo_refuses_a_later_correction(live: RepairFixture) -> None:
+    transaction_id = _transaction(live)
+    first = _preview(live, [transaction_id]).json()
+    TestClient(app).post(
+        f"/classification-runs/{first['runId']}/apply",
+        json={"idempotencyKey": "synthetic-first-correction"},
+        headers=ORIGIN,
+    )
+    later = TestClient(app).post(
+        f"/classification-runs/{first['runId']}/undo",
+        json={"idempotencyKey": "synthetic-later-correction", "reason": "later correction"},
+        headers=ORIGIN,
+    )
+    assert later.json()["state"] == "applied"
+
+    refused = TestClient(app).post(
+        f"/classification-runs/{first['runId']}/undo",
+        json={"idempotencyKey": "synthetic-stale-undo", "reason": "too late"},
+        headers=ORIGIN,
+    )
+
+    assert refused.status_code == 200, refused.text
+    assert (refused.json()["state"], refused.json()["changed"]) == ("conflict", 0)
+    assert refused.json()["conflicted"] == 1
+    assert _stored(live, transaction_id)[0] == "loan_repayment"
+
+
+def test_manual_decisions_are_unresolved_and_never_enter_the_run_scope(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live, classified_by="user_manual")
+
+    response = _preview(live, [transaction_id])
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert (body["changed"], body["unresolved"]) == (0, 1)
+    assert body["items"][0]["reason"] == "manual classification is protected"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM classification_run_item WHERE run_id = %s", (body["runId"],)
+        )
+        assert cur.fetchone()[0] == 0  # type: ignore[index]
+
+
+def test_another_households_transaction_is_indistinguishable_from_missing(
+    live: RepairFixture,
+) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT min(code) FROM currency WHERE code <> %s", (live.currency,))
+        secondary = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES (%s, %s, %s) RETURNING id""",
+            (f"foreign repair {uuid4()}", live.currency, secondary),
+        )
+        other_household = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            "INSERT INTO person (household_id, display_name, is_self) VALUES (%s, %s, true)"
+            " RETURNING id",
+            (other_household, "foreign synthetic owner"),
+        )
+        other_person = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type,
+                                     currency, country, opening_balance, opening_balance_date)
+               VALUES (%s, %s, %s, 'savings', %s, 'XZ', 0, DATE '2026-01-01') RETURNING id""",
+            (other_household, other_person, f"foreign account {uuid4()}", live.currency),
+        )
+        other_account = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO transaction
+                 (household_id, account_id, booked_date, description_raw, amount, currency,
+                  fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
+                  amount_secondary, txn_type, source, dedupe_hash, classified_by)
+               VALUES (%s, %s, DATE '2026-04-01', 'FOREIGN SYNTHETIC', -1, %s,
+                       DATE '2026-04-01', 1, 1, -1, -1, 'expense', 'manual', %s,
+                       'unclassified') RETURNING id""",
+            (other_household, other_account, live.currency, uuid4().hex + uuid4().hex),
+        )
+        foreign_transaction = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+
+    response = _preview(live, [foreign_transaction])
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["reason"] == "transaction not found"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM classification_run_item WHERE run_id = %s",
+            (response.json()["runId"],),
+        )
+        assert cur.fetchone()[0] == 0  # type: ignore[index]
+
+
+def test_confirmed_transfer_legs_are_unresolved_and_never_relinked(live: RepairFixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type,
+                                     currency, country, opening_balance, opening_balance_date)
+               SELECT %s, owner_person_id, %s, 'savings', currency, 'XZ', 0, DATE '2026-01-01'
+                 FROM account WHERE id = %s RETURNING id""",
+            (live.household_id, f"transfer peer {uuid4()}", live.account_id),
+        )
+        peer_account = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+    debit = _transaction(live)
+    credit = _transaction(live, txn_type="income", amount="37.2500", account_id=peer_account)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transfer
+                 (household_id, source_account_id, destination_account_id,
+                  source_transaction_id, destination_transaction_id, source_amount,
+                  source_currency, destination_amount, destination_currency, transfer_date,
+                  transfer_kind, match_method)
+               VALUES (%s, %s, %s, %s, %s, 37.2500, %s, 37.2500, %s, DATE '2026-04-01',
+                       'internal_same_currency', 'user_created') RETURNING id""",
+            (
+                live.household_id,
+                live.account_id,
+                peer_account,
+                debit,
+                credit,
+                live.currency,
+                live.currency,
+            ),
+        )
+        transfer_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(live.user_id),))
+        cur.execute("SELECT confirm_transfer(%s)", (transfer_id,))
+    live.conn.commit()
+
+    response = _preview(live, [debit])
+
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["reason"] == "confirmed transfer leg is protected"
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT transfer_id, txn_type::text FROM transaction WHERE id = %s", (debit,))
+        assert cur.fetchone() == (transfer_id, "transfer_out")
