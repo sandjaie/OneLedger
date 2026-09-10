@@ -27,9 +27,14 @@ with **the number of checks that actually ran**, then one verdict line.
 
      # Runs on success and on failure alike. Without it a failing test — the case this gate
      # exists to catch — leaves the scratch stack up and port 55432 held.
-     trap 'docker compose down -v >/dev/null 2>&1' EXIT
+     # Its own two volumes: the compose file names external volumes after the project, so
+     # without these `up` is refused rather than handed the ledger's data directory.
+     trap 'docker compose down -v >/dev/null 2>&1;
+           docker volume rm oneledger-verify_pgdata oneledger-verify_documents >/dev/null 2>&1' EXIT
 
      docker compose down -v
+     docker volume create oneledger-verify_pgdata >/dev/null
+     docker volume create oneledger-verify_documents >/dev/null
      docker compose up -d db
      docker compose run --rm flyway migrate
      for f in db/seeds/*.sql; do psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"; done
@@ -43,7 +48,10 @@ with **the number of checks that actually ran**, then one verdict line.
    `DB_PORT` keeps the scratch database off 5432 so it can run beside a working stack.
 
    The working volumes themselves are now **external** (`docker-compose.yml`), so `down -v`
-   can no longer remove `pgdata` or `documents` whatever project it runs in. That guard exists
+   can no longer remove `pgdata` or `documents` whatever project it runs in. Their names carry
+   the project's name, so this scratch project's `db` mounts `oneledger-verify_pgdata`, created
+   above and removed by the trap — never the ledger's `oneledger_pgdata`. Skip the two
+   `docker volume create` lines and `up` is refused: the stack fails closed. That guard exists
    because the discipline above was not enough on its own: on 10 September 2026 a
    `docker compose --profile test down -v`, which looks scoped to the test stack and is not,
    removed both. Rely on the volumes being external; keep the project name anyway, because it

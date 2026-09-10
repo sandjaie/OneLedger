@@ -102,6 +102,12 @@ them whatever project it runs in; create them once with `docker volume create on
 and `docker volume create oneledger_documents` before the first `up`. `pgdata_test` is
 deliberately not external: it exists to be destroyed.
 
+**A scratch stack brings its own volumes.** The external names resolve per compose project —
+`${COMPOSE_PROJECT_NAME:-oneledger}_pgdata` — so under any project but the default one they
+name volumes that do not exist, and `docker compose up` refuses rather than mounting the
+ledger's data directory under a second Postgres. Create `<project>_pgdata` and
+`<project>_documents` first, as the verify skill does, and remove them after.
+
 ### 6. Push — the hooks are the enforcement
 
 `pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and
