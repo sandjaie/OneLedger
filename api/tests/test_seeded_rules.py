@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 import pytest
 
+from oneledger.ingest.classify import Candidate, Knowledge, Rule, classify_row
 from oneledger.routes.rules import RuleBody
 
 # Stands in for whatever id the taxonomy has in the database doing the loading.
@@ -140,3 +142,54 @@ def test_a_pack_leaves_room_above_it_for_the_household_s_own_rules(path: Path) -
     for rule in _pack(path)["rules"]:
         priority = rule.get("priority", 100)
         assert priority > 100, f"{rule.get('name')} sits at {priority}, at or above user rules"
+
+
+@pytest.mark.parametrize(
+    ("description", "amount", "expected_type"),
+    [
+        ("PREMIER CAFE", "-10", None),
+        ("REMITTANCE OUTWARD", "-10", None),
+        ("EMILY MARKET", "-10", None),
+        ("CHEMICAL SUPPLIES", "-10", None),
+        ("éEMIé SHOP", "-10", None),
+        ("漢EMI字 SHOP", "-10", None),
+        ("EMÍLY MARKET", "-10", None),
+        ("EMI\u0301LY MARKET", "-10", None),
+        ("E\u0301EMI CAFE", "-10", None),
+        ("EMI\u093e SHOP", "-10", None),
+        ("LOAN EMI PAYMENT", "10", None),
+        ("LOAN EMI PAYMENT", "-10", "loan_repayment"),
+        ("EMI COLLECTION", "-10", "loan_repayment"),
+        ("emi (2/12)", "-10", "loan_repayment"),
+        ("EMI", "-10", "loan_repayment"),
+        ("ACH-DR-EMI-COLLECTION", "-10", "loan_repayment"),
+        ("PAYMENT:EMI/INSTALMENT", "-10", "loan_repayment"),
+        ("LOAN\u00a0EMI\u00a0PAYMENT", "-10", "loan_repayment"),
+    ],
+)
+def test_loan_seed_requires_a_debit_and_a_whole_token(
+    description: str, amount: str, expected_type: str | None
+) -> None:
+    """A substring match wrongly hides purchases from reporting as loan repayments."""
+    raw = next(
+        rule for path in PACKS for rule in _pack(path)["rules"] if rule["name"] == "Loan instalment"
+    )
+    rule = Rule(
+        id=RESOLVED,
+        priority=raw["priority"],
+        origin="seed",
+        match_description_pattern=raw["matchDescriptionPattern"],
+        match_pattern_kind=raw.get("matchPatternKind", "contains"),
+        match_direction=raw.get("matchDirection", "any"),
+        set_category_id=RESOLVED,
+        set_txn_type=raw["setTxnType"],
+    )
+    candidate = Candidate(
+        account_id=RESOLVED,
+        description_clean=description,
+        amount=Decimal(amount),
+        currency="XXX",
+    )
+    answer = classify_row(candidate, Knowledge(seed_rules=[rule]))
+    assert answer.txn_type == expected_type
+    assert answer.classified_by == ("seed_rule" if expected_type else "unclassified")

@@ -41,7 +41,7 @@
     { "name": "Standing instruction", "priority": 460, "matchDescriptionPattern": "STANDING INSTRUCTION", "setCategorySlug": "uncategorized" },
     { "name": "Recurring deposit instalment", "priority": 460, "matchDescriptionPattern": "RD INSTAL", "setCategorySlug": "investments-fd" },
     { "name": "Systematic investment instalment", "priority": 460, "matchDescriptionPattern": "SIP", "matchPatternKind": "prefix", "setCategorySlug": "investments-sip" },
-    { "name": "Loan instalment", "priority": 460, "matchDescriptionPattern": "EMI", "setCategorySlug": "debt-service-loan-emi", "setTxnType": "loan_repayment" },
+    { "name": "Loan instalment", "priority": 460, "matchDescriptionPattern": "(?:^|[\\s/():,;.-])EMI(?=$|[\\s/():,;.-])", "matchPatternKind": "regex", "matchDirection": "debit", "setCategorySlug": "debt-service-loan-emi", "setTxnType": "loan_repayment" },
     { "name": "Insurance premium", "priority": 460, "matchDescriptionPattern": "PREMIUM", "matchDirection": "debit", "setCategorySlug": "insurance" },
 
     { "name": "Refund or reversal", "priority": 470, "matchDescriptionPattern": "REVERSAL", "matchDirection": "credit", "setTxnType": "refund" },

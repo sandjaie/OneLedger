@@ -775,8 +775,11 @@ explicitly deferred and must be made before any of this starts.</p>
 </tr>
 <tr>
 <td><strong>AI classification fallback</strong></td>
-<td>Step 7 of the cascade, after everything deterministic abstains</td>
-<td>Rule engine ≥ 90%; redaction spec; cost measured</td>
+<td>Step 7 of the cascade, after everything deterministic abstains. Evaluate a local-only model
+on held-out exceptions before selecting a runtime; constrained proposals, not direct ledger writes.
+See the <a href="../superpowers/specs/2026-09-10-classification-knowledge.md">classification knowledge design</a>.</td>
+<td>Rule engine ≥ 90%; redaction/privacy decision; precision, abstention, memory and latency measured;
+offline inference and no transaction-data telemetry</td>
 </tr>
 <tr>
 <td><strong>Financial insights</strong></td>
