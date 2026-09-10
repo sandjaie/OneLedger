@@ -383,6 +383,52 @@ export type CandidatesResponse = {
 };
 
 /**
+ * CardDue
+ */
+export type CardDue = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Periodend
+     */
+    periodEnd: string;
+    /**
+     * Statementbalance
+     */
+    statementBalance: string;
+    /**
+     * Minimumdue
+     */
+    minimumDue: string | null;
+    /**
+     * Paymentduedate
+     */
+    paymentDueDate: string;
+    /**
+     * Daysremaining
+     */
+    daysRemaining: number;
+    /**
+     * Ispaidinfull
+     */
+    isPaidInFull: boolean | null;
+    /**
+     * Utilisationpct
+     */
+    utilisationPct: string | null;
+};
+
+/**
  * CategoryCreate
  */
 export type CategoryCreate = {
@@ -543,6 +589,17 @@ export type CurrencyRow = {
      * Numberformat
      */
     numberFormat: 'international' | 'indian';
+};
+
+/**
+ * DashboardResponse
+ */
+export type DashboardResponse = {
+    netWorth: NetWorth;
+    /**
+     * Cardsdue
+     */
+    cardsDue: Array<CardDue>;
 };
 
 /**
@@ -1071,6 +1128,82 @@ export type MatchedRow = {
 };
 
 /**
+ * MissingRate
+ */
+export type MissingRate = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Reportingcurrency
+     */
+    reportingCurrency: string;
+    /**
+     * Asof
+     */
+    asOf: string;
+};
+
+/**
+ * NetWorth
+ */
+export type NetWorth = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    /**
+     * Totalbase
+     */
+    totalBase: string | null;
+    /**
+     * Totalsecondary
+     */
+    totalSecondary: string | null;
+    /**
+     * Assetsbase
+     */
+    assetsBase: string | null;
+    /**
+     * Assetssecondary
+     */
+    assetsSecondary: string | null;
+    /**
+     * Liabilitiesbase
+     */
+    liabilitiesBase: string | null;
+    /**
+     * Liabilitiessecondary
+     */
+    liabilitiesSecondary: string | null;
+    /**
+     * Liquidbase
+     */
+    liquidBase: string | null;
+    /**
+     * Liquidsecondary
+     */
+    liquidSecondary: string | null;
+    /**
+     * Rates
+     */
+    rates: Array<RateUsed>;
+    /**
+     * Missing
+     */
+    missing: Array<MissingRate>;
+};
+
+/**
  * Pack
  */
 export type Pack = {
@@ -1406,6 +1539,32 @@ export type ProposedRawRow = {
     fields: {
         [key: string]: string;
     };
+};
+
+/**
+ * RateUsed
+ */
+export type RateUsed = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Ratetobase
+     */
+    rateToBase: string | null;
+    /**
+     * Ratetosecondary
+     */
+    rateToSecondary: string | null;
+    /**
+     * Ratedate
+     */
+    rateDate: string | null;
+    /**
+     * Carried
+     */
+    carried: boolean;
 };
 
 /**
@@ -3259,6 +3418,36 @@ export type UnlinkTransferTransfersTransferIdDeleteResponses = {
 };
 
 export type UnlinkTransferTransfersTransferIdDeleteResponse = UnlinkTransferTransfersTransferIdDeleteResponses[keyof UnlinkTransferTransfersTransferIdDeleteResponses];
+
+export type ReadDashboardDashboardGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/dashboard';
+};
+
+export type ReadDashboardDashboardGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadDashboardDashboardGetError = ReadDashboardDashboardGetErrors[keyof ReadDashboardDashboardGetErrors];
+
+export type ReadDashboardDashboardGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DashboardResponse;
+};
+
+export type ReadDashboardDashboardGetResponse = ReadDashboardDashboardGetResponses[keyof ReadDashboardDashboardGetResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

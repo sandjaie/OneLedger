@@ -14,6 +14,7 @@ from .routes import (
     auth,
     categories,
     currencies,
+    dashboard,
     fx,
     household,
     ingest,
@@ -88,6 +89,7 @@ app.include_router(categories.router)
 app.include_router(layouts.router)
 app.include_router(rules.router)
 app.include_router(transfers.router)
+app.include_router(dashboard.router)
 app.include_router(ingest.router)
 
 
