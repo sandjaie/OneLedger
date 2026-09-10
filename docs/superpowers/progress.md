@@ -50,7 +50,9 @@ request.
 | 3a4 — the seed pack, and import classifies | `feature/p1-3a4-seed-rules-and-import` | Delivered | [#85](https://github.com/sandjaie/OneLedger/pull/85) |
 | 3a4 — a pack loads as seed rules | `fix/p1-3a4-a-seed-pack-loads-as-seed` | Delivered | this branch |
 | 3a5 — the rules screen | `feature/p1-3a5-rules-screen` | Delivered | [#86](https://github.com/sandjaie/OneLedger/pull/86) |
-| 3b1–3b4 — transfers | `feature/p1-3b1-transfer-schema` … `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| 3b1 — the transfer store | `feature/p1-3b1-transfer-schema` | Delivered | [#90](https://github.com/sandjaie/OneLedger/pull/90) |
+| 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | this branch |
+| 3b3–3b4 — transfers through the app, and on screen | `feature/p1-3b3-transfer-api` · `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
 | the acceptance run | — | Not run | — |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
@@ -58,6 +60,18 @@ confirmed on the transactions screen rather than at review, because a transfer's
 almost never in the same import batch. And `CLAUDE.md` gave up its restatement of the rules for
 a pointer table ([#79](https://github.com/sandjaie/OneLedger/pull/79)) — every rule it dropped
 was checked into a document first.
+
+### Deviations recorded
+
+- **3b1 carries `assert_legs_unclaimed()`**, which the task block did not list and
+  `data-model.html` §8 specifies: the two partial unique indexes do not stop one transaction
+  being the source of one confirmed transfer and the destination of another. The design
+  document wins over the plan.
+- **3b2's pair-history signal saturates at three confirmations.** §3's "confirmed eleven times"
+  is an illustration of the effect rather than a threshold; read as one, the signal would
+  contribute almost nothing for a pair's first ten transfers.
+- **3b2 adds `propose_kind()` and `band()`** beside `score_match()`, so 3b3 takes the kind and
+  the presentation band from the same module rather than answering either a second way.
 
 ### Raised, not fixed here
 
