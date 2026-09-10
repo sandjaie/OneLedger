@@ -23,6 +23,26 @@ becomes a JavaScript number has already lost the guarantee `NUMERIC(20,4)` exist
 `0.1 + 0.2` is not `0.3`, and a ledger that disagrees with itself by a hundredth is a ledger
 nobody trusts. Aggregation happens in Postgres.
 
+**Rule 3 — a report reads `v_transaction_reportable`, never the base table (I3).** The view
+excludes transfer legs, excluded rows and balance-sheet movements; a report reading `transaction`
+directly puts all three back into spending, and nothing downstream can tell. A few files read the
+base table on purpose — each named in `BASE_TABLE_READERS` with the reason — and any other file
+that reads it fails until someone adds it deliberately, saying why. A balance is one of those
+reasons: a balance must include the transfers a report must exclude.
+
+**Rule 4 — a flow is never multiplied by a rate outside the freeze (I5).** A transaction's base
+and secondary figures are frozen once, at the rate of its own day. A read that multiplies a flow
+by a rate re-translates history at whatever rate it found. `money.translate()` is the freeze and
+V10's `frozen_amounts_derive` is its definition, so both may. **A balance times today's rate is
+allowed everywhere and meant to be** (ADR-0002, `multi-currency-and-fx.html` §6): a balance is a
+position, translated as of now; only a flow is frozen.
+
+Both rules read SQL where it lives — inside string literals — with comments removed, and match
+its keywords in the upper case this repository writes SQL in, so prose that says a figure is
+read "from transaction rows" is not a query. Lower-case SQL would slip past; there is none. Both
+guard product code: tests build ledgers and re-derive frozen figures independently, and report
+nothing.
+
 Run it the way the hook does:  python3 scripts/check-identifiers.py
 """
 
@@ -30,6 +50,7 @@ from __future__ import annotations
 
 import pathlib
 import re
+import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -174,6 +195,55 @@ def code_only(text: str, suffix: str) -> str:
     return text
 
 
+# Rule 3's named readers. A literal, not a pragma a caller can write for itself: `CLAUDE.md` says
+# this check may not be silenced, and an exemption anyone can add is a silenced check.
+BASE_TABLE_READERS = {
+    # The ledger listing: transfer legs and duplicates stay visible and labelled there.
+    "api/oneledger/routes/transactions.py",
+    # Import writes the rows and checks them against what is already committed.
+    "api/oneledger/routes/ingest.py",
+    "api/oneledger/ingest/",
+    # Classification preview and backfill must see rows that already carry an answer.
+    "api/oneledger/routes/rules.py",
+    # Transfer matching looks for unlinked legs, which the reportable view drops by design.
+    "api/oneledger/routes/transfers.py",
+    # A balance and the guards on an account's anchor must include every movement, transfers too.
+    "api/oneledger/routes/accounts.py",
+    "db/migrations/",
+}
+
+# Rule 4's freeze sites: the definition, and the one function that applies it.
+RATE_MULTIPLIERS = {"db/migrations/", "api/oneledger/money.py", "api/oneledger/ingest/"}
+
+# Tests build ledgers and re-derive frozen figures on purpose; they report nothing.
+TEST_CODE = ("api/tests/", "db/tests/", "/__tests__/")
+
+BASE_TABLE = re.compile(r"\b(?:FROM|JOIN|UPDATE|INSERT\s+INTO)\s+transaction\b")
+PRODUCT = re.compile(r"([A-Za-z_][\w.]*)\s*\*\s*([A-Za-z_][\w.]*)")
+FLOWS = frozenset({"amount", "amount_base", "amount_secondary", "amountBase", "amountSecondary"})
+
+
+def _is_rate(name: str) -> bool:
+    last = name.rsplit(".", 1)[-1]
+    return last.lower().endswith("rate") or last.startswith(("rate_to", "fx_rate", "fxRate"))
+
+
+def _under(label: str, places: set[str]) -> bool:
+    return any(
+        label.startswith(place) if place.endswith("/") else label == place for place in places
+    )
+
+
+def _sql_visible(text: str, suffix: str) -> str:
+    """The file with comments blanked and strings kept, because SQL lives in strings."""
+    if suffix == ".py":
+        text = re.sub(r"#[^\n]*", lambda m: _blank(m.group()), text)
+    else:
+        text = re.sub(r"/\*(?:.|\n)*?\*/", lambda m: _blank(m.group()), text)
+        text = re.sub(r"//[^\n]*", lambda m: _blank(m.group()), text)
+    return re.sub(r"--[^\n]*", lambda m: _blank(m.group()), text)
+
+
 def scan_file(path: pathlib.Path, label: str) -> list[str]:
     """Every violation in one file, as a line the fixer can act on."""
     try:
@@ -218,13 +288,52 @@ def scan_file(path: pathlib.Path, label: str) -> list[str]:
                     f"Money is aggregated in Postgres, never in the browser."
                 )
 
+    if not any(part in label for part in TEST_CODE):
+        visible = _sql_visible(raw, path.suffix)
+        if not _under(label, BASE_TABLE_READERS):
+            for match in BASE_TABLE.finditer(visible):
+                found.append(
+                    f"{label}:{line_of(match.start())}: `{match.group()}` reads the base table. "
+                    f"A report reads v_transaction_reportable, which excludes transfer legs, "
+                    f"excluded rows and balance-sheet movements (I3). If this is not a report "
+                    f"— a balance, a matcher, an import — add the file to BASE_TABLE_READERS "
+                    f"with the reason."
+                )
+        if not _under(label, RATE_MULTIPLIERS):
+            for match in PRODUCT.finditer(visible):
+                left, right = match.group(1), match.group(2)
+                flow = left.rsplit(".", 1)[-1] in FLOWS or right.rsplit(".", 1)[-1] in FLOWS
+                if flow and (_is_rate(left) or _is_rate(right)):
+                    found.append(
+                        f"{label}:{line_of(match.start())}: `{match.group()}` multiplies a flow "
+                        f"by a rate. A transaction's base and secondary figures are frozen at "
+                        f"its own day's rate and read from amount_base / amount_secondary (I5); "
+                        f"money.translate() is the freeze. A balance times today's rate is "
+                        f"allowed — only a flow is frozen."
+                    )
+
     return found
 
 
 def sources(root: pathlib.Path) -> list[pathlib.Path]:
+    """The files git tracks, not every file under the root.
+
+    A nested checkout — `.claude/worktrees/*`, where a parallel session works — is a whole second
+    copy of this repository, and walking into it made this check pass or fail on someone else's
+    uncommitted work. The pre-commit hook sees a new file once it is staged, which is when git
+    tracks it. Outside a git checkout it falls back to walking the directory.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=root, capture_output=True, text=True, check=False
+    )
+    candidates = (
+        [root / name for name in sorted(filter(None, listed.stdout.split("\0")))]
+        if listed.returncode == 0
+        else sorted(root.rglob("*"))
+    )
     return [
         path
-        for path in sorted(root.rglob("*"))
+        for path in candidates
         if path.is_file()
         and path.suffix in SOURCE
         and not any(part in SKIP_DIRS for part in path.parts)

@@ -109,11 +109,13 @@ file says where to look and what is mechanically enforced.
 | That an ADR is superseded, never rewritten | [docs/adr/index.html](docs/adr/index.html) |
 
 **What is enforced mechanically, so you will be told rather than trusted:**
-`scripts/check-identifiers.py` fails the build on a currency, institution or country name used as
-an identifier, and on money arithmetic in TypeScript. `scripts/check-docs.py` fails on a broken
-link, malformed HTML, and on real financial data reaching git. `scripts/check-diff-size.sh`
-refuses an oversized push. The pre-commit and pre-push hooks run lint, types, secrets, pytest,
-vitest and every `db/tests/*.sql` against a live database. None of these may be silenced.
+`scripts/check-identifiers.py` fails the build on a currency, institution or country name used as an
+identifier, on money arithmetic in TypeScript, on a report reading the base `transaction` table
+instead of `v_transaction_reportable`, and on a flow multiplied by a rate outside the freeze.
+`scripts/check-docs.py` fails on a broken link, malformed HTML, and on real financial data reaching
+git. `scripts/check-diff-size.sh` refuses an oversized push. The pre-commit and pre-push hooks run
+lint, types, secrets, pytest, vitest and every `db/tests/*.sql` against a live database. None of
+these may be silenced.
 
 ## Working
 
