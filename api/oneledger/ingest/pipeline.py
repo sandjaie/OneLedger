@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
@@ -37,8 +37,8 @@ from fastapi import HTTPException
 from psycopg.types.json import Json
 
 from ..fxrange import RateSource, ensure_rates
-from ..money import _frozen
-from ..schemas.staging import CENTS, StagedTransaction
+from ..money import _frozen, translate
+from ..schemas.staging import StagedTransaction
 from . import storage
 
 # `Candidate` is aliased: this module already has one, for a layout that might match the
@@ -542,8 +542,8 @@ def _staged(
                 fx_rate_is_carried=carried,
                 fx_rate_to_base=to_base,
                 fx_rate_to_secondary=to_secondary,
-                amount_base=_translated(row.amount, to_base),
-                amount_secondary=_translated(row.amount, to_secondary),
+                amount_base=translate(row.amount, to_base),
+                amount_secondary=translate(row.amount, to_secondary),
                 dedupe_hash=verdict.dedupe_hash,
                 source_page_number=row.source_page_number,
                 source_row_number=row.source_row_number,
@@ -565,13 +565,6 @@ def _staged(
             )
         )
     return rows
-
-
-def _translated(amount: Decimal, rate: Decimal) -> Decimal:
-    """Half away from zero, once, matching Postgres — `frozen_amounts_derive` compares against
-    `round(amount * rate, 4)` and rounds that way, so any other rule stages a row the ledger's
-    own CHECK would reject."""
-    return (amount * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
 
 
 AccountResolver = Callable[[str], AccountContext | None]

@@ -8,11 +8,13 @@ the offending row — rather than in Postgres, where it names a constraint.
 from __future__ import annotations
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Self
 from uuid import UUID
 
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
+
+from ..money import translate
 
 
 def _not_a_json_number(value: object) -> object:
@@ -108,7 +110,7 @@ class StagedTransaction(BaseModel):
             ("amount_secondary", self.fx_rate_to_secondary, self.amount_secondary),
         ):
             try:
-                expected = (self.amount * rate).quantize(CENTS, rounding=ROUND_HALF_UP)
+                expected = translate(self.amount, rate)
             except InvalidOperation as exc:
                 # Each operand fits its column and the product does not fit the Decimal
                 # context. That is still a translation this row cannot support, and it must

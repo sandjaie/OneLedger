@@ -187,3 +187,159 @@ def test_the_repository_passes_its_own_check() -> None:
     arithmetic — never an exemption added to make this pass.
     """
     assert check.scan_tree(ROOT) == []
+
+
+# ---------------------------------------------------------------------------------------
+# Rule 3 — a report reads v_transaction_reportable, never the base table (I3)
+#
+# The view excludes transfer legs, excluded rows and balance-sheet movements; a report that
+# reads `transaction` directly reintroduces all three and nothing downstream can tell. A handful
+# of files read the base table on purpose — the ledger listing, import, classification, transfer
+# matching, account balances — and each is named in the script with its reason.
+# ---------------------------------------------------------------------------------------
+
+REPORT = "api/oneledger/routes/dashboard.py"
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "SELECT sum(amount_base) FROM transaction WHERE household_id = %s",
+        "SELECT a.name FROM account a JOIN transaction t ON t.account_id = a.id",
+        "UPDATE transaction SET notes = %s WHERE id = %s",
+        "INSERT INTO transaction (id) VALUES (%s)",
+    ],
+)
+def test_a_new_reader_of_the_base_table_is_refused(tmp_path: pathlib.Path, statement: str) -> None:
+    found = scan(tmp_path, REPORT, f'QUERY = """{statement}"""\n')
+    assert found, f"{statement!r} reads the base table from a file not named as a reader"
+    assert "v_transaction_reportable" in found[0]
+    assert "I3" in found[0]
+
+
+@pytest.mark.parametrize(
+    "reader",
+    [
+        "api/oneledger/routes/transactions.py",
+        "api/oneledger/routes/ingest.py",
+        "api/oneledger/routes/rules.py",
+        "api/oneledger/routes/transfers.py",
+        "api/oneledger/routes/accounts.py",
+        "api/oneledger/ingest/pipeline.py",
+        "db/migrations/V99__something.sql",
+    ],
+)
+def test_each_named_reader_may_read_the_base_table(tmp_path: pathlib.Path, reader: str) -> None:
+    body = (
+        "SELECT * FROM transaction t;\n"
+        if reader.endswith(".sql")
+        else 'QUERY = "SELECT * FROM transaction t"\n'
+    )
+    assert scan(tmp_path, reader, body) == []
+
+
+def test_a_report_reads_the_reportable_view(tmp_path: pathlib.Path) -> None:
+    body = (
+        'QUERY = "SELECT sum(amount_base) FROM v_transaction_reportable WHERE household_id = %s"\n'
+    )
+    assert scan(tmp_path, REPORT, body) == []
+
+
+def test_prose_about_transactions_is_not_a_query(tmp_path: pathlib.Path) -> None:
+    """The keywords are SQL's, in the upper case this repository writes them in. English that
+    says a figure is read from transaction rows is not a query and must not be refused."""
+    body = (
+        "# the balance is read from transaction rows, and moves from transaction to transaction\n"
+        'def f() -> None:\n    """Money moved from transaction rows into the view."""\n'
+    )
+    assert scan(tmp_path, REPORT, body) == []
+
+
+def test_sql_quoted_in_a_comment_is_not_a_query(tmp_path: pathlib.Path) -> None:
+    """A comment may quote the very query it warns against, in the upper case SQL is written in.
+    The rules read SQL where it runs — inside string literals — and a comment is not where it
+    runs. Without this, explaining the rule in the code that obeys it would break the build."""
+    body = (
+        "# never write: SELECT sum(amount) FROM transaction — read the reportable view instead\n"
+        "# and never: SUM(amount * fx_rate_to_base), which re-translates history\n"
+        'QUERY = "SELECT sum(amount_base) FROM v_transaction_reportable"\n'
+    )
+    assert scan(tmp_path, REPORT, body) == []
+
+
+def test_a_test_may_set_up_the_base_table(tmp_path: pathlib.Path) -> None:
+    """Fixtures build ledgers; they report nothing. The rule guards product code."""
+    body = 'cur.execute("INSERT INTO transaction (id) VALUES (%s)", (1,))\n'
+    assert scan(tmp_path, "api/tests/test_something_live.py", body) == []
+    assert (
+        scan(tmp_path, "db/tests/0099_something.sql", "INSERT INTO transaction (id) VALUES (1);")
+        == []
+    )
+
+
+# ---------------------------------------------------------------------------------------
+# Rule 4 — a flow is never multiplied by a rate outside the freeze (I5)
+#
+# A transaction's base and secondary figures are frozen once, at the rate of its own day, and
+# never recomputed. A read that multiplies a flow by a rate re-translates history at whatever
+# rate it found — last March's spending moving with today's exchange rate.
+# ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "SELECT SUM(amount * fx_rate_to_base) FROM v_transaction_reportable",
+        "SELECT SUM(t.amount * t.fx_rate_to_secondary) FROM v_transaction_reportable t",
+        "total = row.amount_base * market_rate",
+        "x = rate * amount",
+    ],
+)
+def test_translating_a_flow_at_read_time_is_refused(
+    tmp_path: pathlib.Path, expression: str
+) -> None:
+    found = scan(tmp_path, REPORT, f'QUERY = """{expression}"""\n')
+    assert found, f"{expression!r} translates a flow at read time"
+    assert any("I5" in line for line in found)
+
+
+def test_the_ledger_s_own_derivation_check_may_multiply(tmp_path: pathlib.Path) -> None:
+    """V10's `frozen_amounts_derive` defines the frozen figures as amount times rate."""
+    body = "CHECK (abs(amount_base - round(amount * fx_rate_to_base, 4)) <= 0.0001);"
+    assert scan(tmp_path, "db/migrations/V99__something.sql", body) == []
+
+
+@pytest.mark.parametrize("freeze", ["api/oneledger/money.py", "api/oneledger/ingest/pipeline.py"])
+def test_the_freeze_itself_may_multiply(tmp_path: pathlib.Path, freeze: str) -> None:
+    assert scan(tmp_path, freeze, "frozen = (amount * rate).quantize(CENT)\n") == []
+
+
+def test_a_balance_translated_at_today_s_rate_is_meant_to_pass(tmp_path: pathlib.Path) -> None:
+    """ADR-0002 and `multi-currency-and-fx.html` §6: a balance is a position, translated as of
+    now on purpose; only a flow is frozen. A rule that refused this would have the next reader
+    delete working code to make a check pass."""
+    body = 'QUERY = "SELECT sum(current_balance * rate) FROM account a JOIN fx_rate r ON true"\n'
+    assert scan(tmp_path, REPORT, body) == []
+
+
+def test_a_nested_checkout_is_not_this_tree(tmp_path: pathlib.Path) -> None:
+    """The check reads the files git tracks, not every file under the root.
+
+    Parallel sessions work in worktrees under `.claude/worktrees/`, each a whole second copy of
+    this repository. Walking into one made this check pass or fail on someone else's uncommitted
+    work — which is how it was found, on 10 September 2026, when it scanned 967 files in a tree
+    that tracks 163.
+    """
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "mine.py").write_text("x = 1\n")
+    subprocess.run(["git", "add", "mine.py"], cwd=tmp_path, check=True)
+    nested = tmp_path / ".claude" / "worktrees" / "someone-else"
+    nested.mkdir(parents=True)
+    (nested / "theirs.py").write_text("amount_inr = 0\n")
+
+    scanned = {path.name for path in check.sources(tmp_path)}
+
+    assert scanned == {"mine.py"}
+    assert check.scan_tree(tmp_path) == []

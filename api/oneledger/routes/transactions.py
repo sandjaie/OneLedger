@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
-from ..money import CENT, RATE, _frozen, _money, _out
+from ..money import RATE, _frozen, _money, _out, translate
 
 router = APIRouter(tags=["transactions"])
 
@@ -366,10 +366,8 @@ def create_transaction(
             try:
                 rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
                 rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
-                amount_base = (amount * rate_to_base).quantize(CENT, rounding=ROUND_HALF_UP)
-                amount_secondary = (amount * rate_to_secondary).quantize(
-                    CENT, rounding=ROUND_HALF_UP
-                )
+                amount_base = translate(amount, rate_to_base)
+                amount_secondary = translate(amount, rate_to_secondary)
             except InvalidOperation as exc:
                 raise HTTPException(
                     status_code=422,

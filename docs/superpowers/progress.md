@@ -44,12 +44,30 @@ request.
 | Task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | 4a1 — the card cycle entity | `feature/p1-4a1-card-statement-schema` | Delivered | [#99](https://github.com/sandjaie/OneLedger/pull/99) |
-| 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | this branch |
+| 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
 | 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
-| 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | this branch |
 | 4b2 — one payload: net worth, the month, the trend, the dues | `feature/p1-4b2-dashboard-api` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | the acceptance run | — | Not run | — |
+
+**4b1's deviations, recorded:**
+
+- **Three readers were added to the allowlist, each with its reason, none of them a report.** The
+  plan's list predates slice 1.3: `routes/rules.py` (classification preview and backfill must see
+  rows that already carry an answer), `routes/transfers.py` (matching looks for unlinked legs, which
+  the reportable view drops) and `routes/accounts.py` (a balance and the guards on an account's
+  anchor must include every movement, transfers too). A report reading the base table would have
+  been a finding; none of these is one.
+- **The rate rule's allowed paths are exactly the plan's, and the tree was brought to them rather
+  than the list widened.** The manual route and the staging validator each multiplied a flow by a
+  rate themselves — a second and third copy of the freeze that `money.py`'s own docstring said did
+  not exist. All three now call `money.translate()`; the full suite proves the change is
+  behaviour-preserving.
+- **Both rules guard product code and read SQL inside strings, keyword upper-case only.** Tests
+  build ledgers and re-derive frozen figures on purpose; and case-insensitive keywords would refuse
+  English that says a figure is read "from transaction rows". Lower-case SQL would slip past, and
+  the script's docstring says so.
 
 **4a2's deviations, recorded:**
 

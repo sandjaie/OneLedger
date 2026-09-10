@@ -96,6 +96,20 @@ def _frozen(
     )
 
 
+def translate(amount: Decimal, rate: Decimal) -> Decimal:
+    """A flow's frozen figure: the amount times the stored rate, fixed at four places, half away
+    from zero — as Postgres rounds, because `frozen_amounts_derive` compares against
+    `round(amount * rate, 4)` and any other rule stages a row the ledger's own CHECK refuses.
+
+    This is the one place outside a migration where a transaction amount meets a rate (I5).
+    The manual route, the import pipeline and the staging validator all call it, so they freeze
+    identically because they run this code rather than because three copies happen to agree —
+    and `scripts/check-identifiers.py` refuses a fourth. `InvalidOperation` is the caller's to
+    name, because only the caller knows which row it was.
+    """
+    return (amount * rate).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
 def _fixed(rate: Decimal) -> Decimal:
     """One rate at the precision it is stored at, half away from zero, as Postgres rounds."""
     try:
