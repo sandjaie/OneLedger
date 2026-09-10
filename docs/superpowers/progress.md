@@ -45,6 +45,16 @@ request.
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
+| 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Task 8a1 delivers the account-proposal and confirmation API; the screen, local layout captures and unclassified prompt remain | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
+
+## Phase 1 · slice 1.8 — the import asks
+
+| Task | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| 8a1 — a statement proposes its own account | `feature/p1-8a1-account-from-statement-api` | Delivered — V25 adds the layout product type; an unresolved statement returns a read-only masked proposal, and an owner-only confirmation creates or adopts the account without accepting identity from the browser | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
+| 8a2 — the import screen offers the account | `feature/p1-8a2-account-from-statement-screen` | Not started | — |
+| 8a3 — the layouts read the account identity | `feature/p1-8a3-layout-identity-captures` | Not started | — |
+| 8b — an unclassified row asks | `feature/p1-8b-unclassified-asks` | Not started | — |
 
 ## Phase 1 · slice 1.4 — cards, net worth and trends
 
@@ -267,6 +277,9 @@ was checked into a document first.
   two entries.
 - **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the
   address it wrote takes an `UPDATE`.
+- **The ordinary account form hashes a submitted card number.** The statement-confirmation path
+  stores a card mask only; bringing `POST` and `PATCH /accounts` to that same privacy boundary is
+  `fix/card-accounts-store-mask-only`, separate from slice 1.8 Task 8a1.
 
 ### Twice in one day, the working ledger was destroyed
 
@@ -466,6 +479,7 @@ touch, recorded here rather than folded in past a diff budget.
 | The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
 | A repeated header line reaches the last row of each page on the encrypted layout | The producer runs whole lines together, so the account holder's locality is a single word centred in the narration column — no band separates it from real narration, and the only pattern that would match it is the owner's own address. 47 of 611 rows gain that one word; no figure, no balance. | A `web/` or layout-mapper branch, once 1.7 can edit a profile |
 | `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
+| A standing backup cannot be restored directly once V23/V24 rows exist | Three recursive/helper functions resolve unqualified calls through the caller's search path; `pg_restore` deliberately uses an empty one, so restore-time checks cannot find the helpers. Applying fixed search paths on an isolated copy let that copy migrate through V25. | `fix/restorable-schema-helpers`, before Phase 2's restore drill |
 
 ## Where the rest is written down
 

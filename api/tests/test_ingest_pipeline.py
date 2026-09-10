@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -67,6 +68,7 @@ def profile(**changes: object) -> LayoutProfile:
         "name": "Acme current account",
         "version": 3,
         "institutionId": None,
+        "accountType": "current",
         "fingerprints": ["Acme Bank Statement"],
         "headerRowPattern": r"Date\s*Description\s*Amount\s*Balance",
         "columns": [
@@ -97,6 +99,7 @@ def statement(closing: str = CLOSING, opening: str = OPENING) -> list[Page]:
         Page(
             lines=[
                 spaced(20.0, "Acme Bank Statement"),
+                spaced(30.0, "Account Number 1234567890"),
                 spaced(40.0, f"Opening Balance {opening}"),
                 transaction(100.0, "01/03/2026", "COFFEE SHOP", "-10.00", "990.00"),
                 transaction(120.0, "02/03/2026", "SALARY MARCH", "500.00", "1,490.00"),
@@ -105,6 +108,53 @@ def statement(closing: str = CLOSING, opening: str = OPENING) -> list[Page]:
             has_text=True,
         )
     ]
+
+
+def test_an_unknown_captured_account_returns_analysis_without_staging() -> None:
+    result = pipeline.parse(
+        cast(Any, _ReadOnlyConnection()),
+        pages=statement(),
+        data=b"synthetic-statement",
+        original_filename="statement.pdf",
+        household=pipeline.HouseholdContext(
+            id=UUID("33333333-3333-3333-3333-333333333333"),
+            base_currency="AED",
+            secondary_currency="INR",
+        ),
+        profiles=[profile(metadataPatterns={"account_number": r"Account Number ([0-9]+)"})],
+        account=None,
+        resolve_account=lambda _number: None,
+        stage=True,
+    )
+
+    assert result.account is None
+    assert result.staged is False
+    assert result.analysis.rows_extracted == 2
+
+
+class _ReadOnlyCursor:
+    def __enter__(self) -> _ReadOnlyCursor:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        pass
+
+    def execute(self, _sql: str, _params: object = None) -> None:
+        pass
+
+    def fetchall(self) -> list[tuple[object, ...]]:
+        return []
+
+    def fetchone(self) -> tuple[object, ...] | None:
+        return None
+
+
+class _ReadOnlyConnection:
+    def cursor(self) -> _ReadOnlyCursor:
+        return _ReadOnlyCursor()
+
+    def rollback(self) -> None:
+        pass
 
 
 def analyse(pages: list[Page] | None = None, **changes: object) -> pipeline.Analysis:

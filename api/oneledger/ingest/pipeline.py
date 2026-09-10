@@ -159,7 +159,7 @@ class ParseResult:
     """The `POST /parse` payload. `batch_id` and `document_id` are set only on a staged run."""
 
     analysis: Analysis
-    account: AccountContext
+    account: AccountContext | None
     staged: bool
     batch_id: UUID | None = None
     document_id: UUID | None = None
@@ -573,15 +573,22 @@ def parse(
 
     extraction = _extracted(profile, pages)
     resolved = account if account is not None else _resolved(extraction, resolve_account)
+    analysis_account = resolved or AccountContext(id=UUID(int=0), currency=household.base_currency)
 
     with conn.cursor() as cur:
         analysis = _analysed(
             profile,
             extraction,
-            account_id=resolved.id,
-            account_currency=resolved.currency,
-            committed=committed_rows(cur, household.id, resolved.id),
+            account_id=analysis_account.id,
+            account_currency=analysis_account.currency,
+            committed=[]
+            if resolved is None
+            else committed_rows(cur, household.id, analysis_account.id),
         )
+
+    if resolved is None:
+        conn.rollback()
+        return ParseResult(analysis=analysis, account=None, staged=False)
 
     if not stage or blocks_staging(analysis):
         # Nothing above this line wrote anything, and the FX step below is the only stage that
@@ -632,20 +639,13 @@ def blocks_staging(analysis: Analysis) -> bool:
     return analysis.reconciliation.status != STATUS_MATCHED or bool(analysis.failures)
 
 
-def _resolved(extraction: ExtractionResult, resolve: AccountResolver) -> AccountContext:
+def _resolved(extraction: ExtractionResult, resolve: AccountResolver) -> AccountContext | None:
     number = extraction.account_number_raw
     if not number:
         raise AccountNotResolved(
             "this statement states no account number, so choose the account to import it into"
         )
     account = resolve(number)
-    if account is None:
-        # The number itself is never echoed: spec §5.6 forbids any digit run of seven or more
-        # from the document reaching a response, and an account number is exactly that.
-        raise AccountNotResolved(
-            "the account this statement names is not one this household holds; choose the "
-            "account to import it into, or add it first"
-        )
     return account
 
 

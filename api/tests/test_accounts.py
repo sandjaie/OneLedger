@@ -385,6 +385,17 @@ def test_account_identity_uses_statement_separator_vocabulary(monkeypatch: Monke
     )
 
 
+def test_statement_identity_hashes_only_a_full_number(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
+    full_mask, full_hash = accounts._statement_account_identity("7234-5600-9812")
+    assert full_mask == "****9812"
+    assert full_hash is not None
+    assert accounts._statement_account_identity("XXXX XXXX XXXX 9812") == ("****9812", None)
+    assert accounts._statement_account_identity("9812") == ("****9812", None)
+    with pytest.raises(ValueError, match="usable account identity"):
+        accounts._statement_account_identity("12")
+
+
 @pytest.mark.parametrize("method", ["post", "patch"])
 def test_account_database_validation_cannot_echo_identifier(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],

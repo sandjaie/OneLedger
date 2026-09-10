@@ -152,6 +152,17 @@ library (list, filter, open, transaction links); the import diagnostics panel.
 touching the codebase (the ADR-0012 acceptance test); every imported transaction links back to
 document, page and row.
 
+### 1.8 — the import asks
+
+**Outcome.** A statement for an account OneLedger does not yet hold offers that account prefilled
+from the document; every unclassified ledger row is reachable from one view and can become a
+narrow reusable rule or a one-off answer.
+**Branches.** `feature/p1-8a1-account-from-statement-api` through
+`feature/p1-8a3-layout-identity-captures`, and `feature/p1-8b-unclassified-asks`.
+**Accept when.** A synthetic unknown account is proposed and created once without exposing its
+full number; every statement then resolves to it, and answering one unclassified pattern can mark
+the matching unresolved rows without changing an existing classification.
+
 ## Phases 2–5 — planned when they start
 
 Per the standing granularity rule, each later phase gets its dated plan written immediately

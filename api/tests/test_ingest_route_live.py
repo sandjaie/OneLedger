@@ -417,14 +417,16 @@ def test_a_statements_own_account_number_resolves_the_account(live: Fixture) -> 
     assert ACCOUNT_NUMBER not in response.text, "and the number itself never comes back"
 
 
-def test_a_number_matching_no_account_says_so_without_echoing_it(live: Fixture) -> None:
-    """The other half of the resolver: a genuine miss, distinguished from a missing salt."""
+def test_a_number_matching_no_account_is_proposed_without_echoing_it(live: Fixture) -> None:
+    """A genuine miss is a read-only masked proposal, distinct from a missing salt."""
     other = _statement().replace(b"1234567890", b"9876543210")
 
     response = TestClient(app).post("/parse", files={"file": ("s.pdf", other)}, headers=ORIGIN)
 
-    assert response.status_code == 422
-    assert "not one this household holds" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["accountId"] is None
+    assert response.json()["accountProposal"]["accountNumberMasked"] == "****3210"
+    assert response.json()["rows"] == []
     assert "9876543210" not in response.text
 
 
@@ -453,6 +455,7 @@ def test_the_statements_own_account_number_is_screened_by_its_capture(live: Fixt
                 ),
             )
         },
+        data={"accountId": str(live.account_id)},
         headers=ORIGIN,
     )
 

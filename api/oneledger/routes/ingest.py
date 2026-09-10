@@ -19,6 +19,9 @@ Nothing here echoes the uploaded filename, and no message carries a digit run fr
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from shutil import copyfileobj
@@ -27,8 +30,8 @@ from typing import Annotated, Any
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from pydantic import BaseModel, Field, ValidationError
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
@@ -40,8 +43,15 @@ from ..ingest.storage import DuplicateDocument, StorageError
 from ..ingest.words import ExtractionError
 from ..ingest.words import extract_pages as read_pdf_pages
 from ..money import _out
-from .accounts import _account_number_identity as account_number_identity
-from .accounts import resolve_account_by_hash
+from .accounts import (
+    AccountCreate,
+    AccountRow,
+    _account_write_error,
+    _insert_account,
+    _one,
+    resolve_account_by_hash,
+)
+from .accounts import _statement_account_identity as statement_account_identity
 from .layouts import COLUMNS, _preview_redactor, _row_to_profile
 
 router = APIRouter(tags=["ingest"])
@@ -117,11 +127,33 @@ class ParsePeriod(BaseModel):
     isDerived: bool
 
 
+class SuggestedAccount(BaseModel):
+    id: UUID
+    name: str
+    accountNumberMasked: str
+
+
+class AccountProposal(BaseModel):
+    accountNumberMasked: str
+    suggestedAccounts: list[SuggestedAccount]
+    name: str
+    accountType: str | None
+    institutionId: UUID | None
+    country: str | None
+    currency: str | None
+    openingBalance: str | None
+    openingBalanceIsDerived: bool
+    openingBalanceDate: date
+    openingBalanceNote: str
+    creditLimit: str | None
+
+
 class ParseResponse(BaseModel):
     staged: bool
     batchId: UUID | None
     documentId: UUID | None
-    accountId: UUID
+    accountId: UUID | None
+    accountProposal: AccountProposal | None = None
     layoutId: UUID
     layoutVersion: int
     period: ParsePeriod
@@ -204,10 +236,12 @@ def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountR
         # when the salt is unset, which is the refusal that condition is owed: returning None
         # here would report a misconfigured deployment as "you do not hold this account".
         try:
-            _, digest = account_number_identity(account_number_raw)
+            _, digest = statement_account_identity(account_number_raw)
         except ValueError:
             # Not an account number at all — a capture that matched something else on the page.
             # The number itself is never echoed (spec §5.6).
+            return None
+        if digest is None:
             return None
         found = resolve_account_by_hash(cur, digest, household_id)
         if found is None:
@@ -278,13 +312,89 @@ def _reconciliation(verdict: Verdict) -> Reconciliation:
     )
 
 
-def _response(result: pipeline.ParseResult) -> ParseResponse:
+def _proposal(
+    cur: psycopg.Cursor[Any], result: pipeline.ParseResult, household_id: UUID
+) -> AccountProposal:
+    raw = result.analysis.account_number_raw
+    if raw is None:
+        raise HTTPException(
+            status_code=422, detail="this statement states no usable account number"
+        )
+    try:
+        masked, _digest = statement_account_identity(raw)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="this statement states no usable account number"
+        ) from None
+    cur.execute(
+        """SELECT sl.account_type::text, sl.institution_id, sl.name,
+                  i.short_name, i.name, i.country
+             FROM statement_layout sl
+             LEFT JOIN institution i ON i.id = sl.institution_id
+              AND (i.household_id IS NULL OR i.household_id = sl.household_id)
+            WHERE sl.id = %s AND sl.household_id = %s""",
+        (result.analysis.layout_id, household_id),
+    )
+    layout = cur.fetchone()
+    if layout is None:  # pragma: no cover - the profile was selected from this household
+        raise HTTPException(status_code=404, detail="no such layout")
+    account_type, institution_id, layout_name, short_name, institution_name, country = layout
+    currency = result.analysis.metadata.get("currency", "").strip().upper() or None
+    if currency is not None:
+        cur.execute("SELECT code FROM currency WHERE code = %s", (currency,))
+        if cur.fetchone() is None:
+            currency = None
+    last_four = masked[-4:]
+    cur.execute(
+        """SELECT id, name, account_number_masked
+             FROM account
+            WHERE household_id = %s AND account_number_hash IS NULL
+              AND account_number_masked IS NOT NULL
+              AND right(account_number_masked, 4) = %s
+            ORDER BY name, id""",
+        (household_id, last_four),
+    )
+    suggestions = [
+        SuggestedAccount(id=row[0], name=row[1], accountNumberMasked=row[2])
+        for row in cur.fetchall()
+    ]
+    reconciliation = result.analysis.reconciliation
+    opening_date = min(
+        [result.analysis.period.start, *(row.booked_date for row in result.analysis.rows)]
+    )
+    period = result.analysis.period
+    source = (
+        "Derived from the first row's running balance"
+        if reconciliation.opening_is_derived
+        else "Declared opening balance of the statement"
+    )
+    note = f"{source} for {period.start} to {period.end}"
+    return AccountProposal(
+        accountNumberMasked=masked,
+        suggestedAccounts=suggestions,
+        name=short_name or institution_name or layout_name or masked,
+        accountType=account_type,
+        institutionId=institution_id,
+        country=country,
+        currency=currency,
+        openingBalance=_out(reconciliation.declared_opening),
+        openingBalanceIsDerived=reconciliation.opening_is_derived,
+        openingBalanceDate=opening_date,
+        openingBalanceNote=note,
+        creditLimit=result.analysis.metadata.get("credit_limit"),
+    )
+
+
+def _response(
+    result: pipeline.ParseResult, proposal: AccountProposal | None = None
+) -> ParseResponse:
     analysis = result.analysis
     return ParseResponse(
         staged=result.staged,
         batchId=result.batch_id,
         documentId=result.document_id,
-        accountId=result.account.id,
+        accountId=None if result.account is None else result.account.id,
+        accountProposal=proposal,
         layoutId=analysis.layout_id,
         layoutVersion=analysis.layout_version,
         period=ParsePeriod(
@@ -295,7 +405,7 @@ def _response(result: pipeline.ParseResult) -> ParseResponse:
         rowsExtracted=analysis.rows_extracted,
         counts=analysis.counts,
         reconciliation=_reconciliation(analysis.reconciliation),
-        rows=_rows(result),
+        rows=[] if proposal is not None else _rows(result),
         failures=[
             ParseFailure(
                 sourcePageNumber=failure.source_page_number,
@@ -329,6 +439,24 @@ def _unidentified(exc: pipeline.LayoutNotIdentified) -> HTTPException:
     return HTTPException(status_code=422, detail=f"{exc} — scored: {ranked}")
 
 
+@contextmanager
+def _uploaded_pages(file: UploadFile, password: str | None) -> Iterator[tuple[bytes, list[Any]]]:
+    """Read an upload once and remove its private scratch copy on every exit."""
+    data = file.file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="the uploaded file is empty")
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(prefix="oneledger-parse-", suffix=".pdf", delete=False) as temp:
+            temporary_path = Path(temp.name)
+            file.file.seek(0)
+            copyfileobj(file.file, temp)
+        yield data, read_pdf_pages(temporary_path, password=password)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
 @router.post("/parse")
 def parse_statement(
     file: Annotated[UploadFile, File()],
@@ -338,40 +466,28 @@ def parse_statement(
     accountId: Annotated[UUID | None, Form()] = None,
     password: Annotated[str | None, Form()] = None,
 ) -> ParseResponse:
-    data = file.file.read()
-    if not data:
-        raise HTTPException(status_code=422, detail="the uploaded file is empty")
-
-    temporary_path: Path | None = None
     try:
-        # pdfplumber reads a path, and the upload is a stream. The temporary file is this
-        # request's alone and is removed however the request ends — the durable copy is written
-        # by `storage.store`, under the checksum, and only on the staging path.
-        with NamedTemporaryFile(prefix="oneledger-parse-", suffix=".pdf", delete=False) as temp:
-            temporary_path = Path(temp.name)
-            file.file.seek(0)
-            copyfileobj(file.file, temp)
-        pages = read_pdf_pages(temporary_path, password=password)
-
-        with connect() as conn, conn.cursor() as cur:
-            household = _household(cur, owner.household_id)
-            result = pipeline.parse(
-                conn,
-                pages=pages,
-                data=data,
-                original_filename=file.filename or "statement.pdf",
-                household=household,
-                profiles=_profiles(cur, owner.household_id, layoutId),
-                account=_account(cur, owner.household_id, accountId),
-                resolve_account=_resolver(cur, owner.household_id),
-                stage=stage,
-                # The blob `storage.store` writes is the original, so for an encrypted upload it
-                # is still encrypted. `document.is_password_protected` is the only record of
-                # that — the password itself is on the never-store list and goes no further than
-                # this frame — and a column defaulting to false would assert the opposite.
-                encrypted=password is not None,
-            )
-        return _response(result)
+        with _uploaded_pages(file, password) as (data, pages):
+            with connect() as conn, conn.cursor() as cur:
+                household = _household(cur, owner.household_id)
+                result = pipeline.parse(
+                    conn,
+                    pages=pages,
+                    data=data,
+                    original_filename=file.filename or "statement.pdf",
+                    household=household,
+                    profiles=_profiles(cur, owner.household_id, layoutId),
+                    account=_account(cur, owner.household_id, accountId),
+                    resolve_account=_resolver(cur, owner.household_id),
+                    stage=stage,
+                    # The original encrypted bytes are the durable blob. The password remains
+                    # only in this request frame and is never stored.
+                    encrypted=password is not None,
+                )
+                proposal = (
+                    _proposal(cur, result, owner.household_id) if result.account is None else None
+                )
+        return _response(result, proposal)
     except DuplicateDocument as exc:
         # Already carries the date it first arrived and the batch that imported it, which is
         # what the screen links to.
@@ -384,9 +500,164 @@ def parse_statement(
         # `PipelineError` and every parse refusal under it. Never carries the filename or a
         # digit run from the document.
         raise HTTPException(status_code=422, detail=str(exc)) from None
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+
+
+def _account_body(value: str) -> AccountCreate:
+    try:
+        raw = json.loads(value)
+        if not isinstance(raw, dict):
+            raise ValueError
+        if {"accountNumber", "accountNumberMasked"} & raw.keys():
+            raise HTTPException(
+                status_code=422,
+                detail="account identity comes from the statement and must not be submitted",
+            )
+        return AccountCreate.model_validate(raw)
+    except HTTPException:
+        raise
+    except json.JSONDecodeError, ValidationError, ValueError, TypeError:
+        raise HTTPException(status_code=422, detail="account fields are invalid") from None
+
+
+@router.post(
+    "/parse/account",
+    response_model=AccountRow,
+    status_code=201,
+    responses={200: {"model": AccountRow, "description": "Existing account adopted"}},
+)
+def confirm_statement_account(
+    response: Response,
+    file: Annotated[UploadFile, File()],
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    password: Annotated[str | None, Form()] = None,
+    layoutId: Annotated[UUID | None, Form()] = None,
+    account: Annotated[str | None, Form()] = None,
+    accountId: Annotated[UUID | None, Form()] = None,
+) -> AccountRow:
+    """Create or adopt the account identity captured from one confirmed statement."""
+    if (account is None) == (accountId is None):
+        raise HTTPException(status_code=422, detail="provide exactly one of account or accountId")
+    try:
+        with _uploaded_pages(file, password) as (data, pages):
+            with connect() as conn, conn.cursor() as cur:
+                household = _household(cur, owner.household_id)
+                result = pipeline.parse(
+                    conn,
+                    pages=pages,
+                    data=data,
+                    original_filename=file.filename or "statement.pdf",
+                    household=household,
+                    profiles=_profiles(cur, owner.household_id, layoutId),
+                    account=None,
+                    resolve_account=_resolver(cur, owner.household_id),
+                    stage=False,
+                    encrypted=password is not None,
+                )
+                if result.account is not None:
+                    existing = _one(cur, result.account.id, owner.household_id)
+                    raise HTTPException(
+                        status_code=409, detail=f"this statement belongs to {existing.name}"
+                    )
+                captured = result.analysis.account_number_raw
+                if captured is None:
+                    raise HTTPException(
+                        status_code=422, detail="this statement states no usable account number"
+                    )
+                try:
+                    masked, digest = statement_account_identity(captured)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=422, detail="this statement states no usable account number"
+                    ) from None
+
+                # Serialize every statement-confirmation decision in this household. This keeps
+                # a mask-only create's check adjacent to its insert and uses the same lock order
+                # as account edits, so a concurrent type or identity change cannot invalidate
+                # the decision made below.
+                cur.execute(
+                    "SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,)
+                )
+
+                if account is not None:
+                    body = _account_body(account)
+                    stored_digest = None if body.accountType == "credit_card" else digest
+                    if stored_digest is not None:
+                        cur.execute(
+                            """SELECT name FROM account
+                                WHERE household_id = %s AND account_number_hash = %s""",
+                            (owner.household_id, stored_digest),
+                        )
+                    else:
+                        cur.execute(
+                            """SELECT name FROM account
+                                WHERE household_id = %s AND account_type = %s::account_type
+                                  AND account_number_masked = %s""",
+                            (owner.household_id, body.accountType, masked),
+                        )
+                    duplicate = cur.fetchone()
+                    if duplicate is not None:
+                        raise HTTPException(
+                            status_code=409, detail=f"this statement belongs to {duplicate[0]}"
+                        )
+                    return _insert_account(
+                        cur,
+                        body,
+                        owner.household_id,
+                        account_number_masked=masked,
+                        account_number_hash=stored_digest,
+                    )
+
+                assert accountId is not None
+                cur.execute(
+                    """SELECT account_type::text, account_number_masked, account_number_hash
+                         FROM account WHERE id = %s AND household_id = %s FOR UPDATE""",
+                    (accountId, owner.household_id),
+                )
+                target = cur.fetchone()
+                if target is None:
+                    raise HTTPException(status_code=404, detail="no such account")
+                account_type, existing_mask, existing_digest = target
+                if existing_mask is None or existing_mask[-4:] != masked[-4:]:
+                    raise HTTPException(
+                        status_code=409, detail="the statement and account masks do not match"
+                    )
+                if existing_digest is not None:
+                    raise HTTPException(
+                        status_code=409, detail="this account already has a different identity"
+                    )
+                if account_type != "credit_card" and digest is not None:
+                    cur.execute(
+                        """UPDATE account SET account_number_masked = %s,
+                                              account_number_hash = %s
+                              WHERE id = %s AND household_id = %s
+                                AND account_type <> 'credit_card'::account_type
+                                AND account_number_hash IS NULL
+                          RETURNING id""",
+                        (masked, digest, accountId, owner.household_id),
+                    )
+                    if cur.fetchone() is None:  # pragma: no cover - household + row locks guard it
+                        raise HTTPException(
+                            status_code=409,
+                            detail="the account identity changed before it could be confirmed",
+                        )
+                response.status_code = 200
+                return _one(cur, accountId, owner.household_id)
+    except DuplicateDocument as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except pipeline.LayoutNotIdentified as exc:
+        raise _unidentified(exc) from None
+    except (pipeline.AccountNotResolved, FxCoverageError, StorageError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(status_code=409, detail="account identity already exists") from None
+    except (
+        psycopg.errors.InvalidTextRepresentation,
+        psycopg.errors.CheckViolation,
+        psycopg.errors.ForeignKeyViolation,
+    ) as exc:
+        raise HTTPException(status_code=422, detail=_account_write_error(exc)) from None
+    except ExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 # ---------------------------------------------------------------------------------------
