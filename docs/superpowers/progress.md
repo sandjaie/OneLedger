@@ -32,7 +32,7 @@ request.
 | Capability | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | Isolated local-production stack | `feature/local-production-stack` | Delivered — production-built web and API, a migrated owner-only database, generated private secrets, persistent production-only volumes and loopback-only local sessions run beside the untouched development ledger | [ADR-0018](../adr/0018-local-owner-sessions.html) · [ADR-0019](../adr/0019-separate-local-production-stack.html) |
-| Slim local delivery gates | `chore/slim-local-gates` | Delivered — commits run staged-file-fast checks with no network fetch; whole-project types, Markdown lint, tests, generated contracts, database invariants and size remain enforced at pre-push; a one-task diff is reviewed once | [plan](plans/2026-09-11-slim-local-gates.md) · [development cycle](../development-cycle.md) |
+| Slim local delivery gates | `chore/slim-local-gates` · `codex/verify-port-is-distinct` | Delivered — commits run staged-file-fast checks with no network fetch; whole-project types, Markdown lint, tests, generated contracts, database invariants and size remain enforced at pre-push; a one-task diff is reviewed once; the verification database uses its own port beside development, local production and live tests | [plan](plans/2026-09-11-slim-local-gates.md) · [development cycle](../development-cycle.md) |
 
 ## Phase 1 — the complete application
 
