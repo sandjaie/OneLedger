@@ -82,6 +82,13 @@ function row(overrides: Partial<ReviewRow> = {}): ReviewRow {
     status: "new",
     duplicateOfTransactionId: null,
     nearDuplicateOfId: null,
+    // The cascade's proposal travels with the row from staging (slice 1.3 task 3a4). The
+    // screen does not render it yet — that is 3a5 — but the payload carries it, and a fixture
+    // that omitted it would be testing a shape the API no longer sends.
+    proposedCategoryId: null,
+    proposedCategoryName: null,
+    classifiedBy: "unclassified",
+    classificationConfidence: "0.000",
     ...overrides,
   };
 }

@@ -1451,6 +1451,22 @@ export type ReviewRow = {
      * Nearduplicateofid
      */
     nearDuplicateOfId: string | null;
+    /**
+     * Proposedcategoryid
+     */
+    proposedCategoryId: string | null;
+    /**
+     * Proposedcategoryname
+     */
+    proposedCategoryName: string | null;
+    /**
+     * Classifiedby
+     */
+    classifiedBy: string;
+    /**
+     * Classificationconfidence
+     */
+    classificationConfidence: string;
 };
 
 /**

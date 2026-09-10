@@ -1,0 +1,50 @@
+{
+  "name": "Banking narration",
+  "description": "Rules matching what a bank writes about itself, not what a merchant is called. Every pattern here describes a banking operation — an interest posting, a fee, a cash withdrawal, a standing instruction — so none of them names an institution, a merchant, a currency or a country, and none needs to (ADR-0012). Merchant rules are the household's own and are written from Settings > Rules.",
+  "rules": [
+    { "name": "Salary credit", "priority": 400, "matchDescriptionPattern": "SALARY", "matchDirection": "credit", "setCategorySlug": "salary-base", "setTxnType": "income" },
+    { "name": "Salary arrears", "priority": 400, "matchDescriptionPattern": "ARREAR", "matchDirection": "credit", "setCategorySlug": "salary-arrears", "setTxnType": "income" },
+    { "name": "Bonus credit", "priority": 400, "matchDescriptionPattern": "BONUS", "matchDirection": "credit", "setCategorySlug": "bonus", "setTxnType": "income" },
+    { "name": "Overtime credit", "priority": 400, "matchDescriptionPattern": "OVERTIME", "matchDirection": "credit", "setCategorySlug": "salary-overtime", "setTxnType": "income" },
+
+    { "name": "Interest credited", "priority": 410, "matchDescriptionPattern": "INTEREST", "matchDirection": "credit", "setCategorySlug": "investment-income-interest", "setTxnType": "interest" },
+    { "name": "Interest charged", "priority": 410, "matchDescriptionPattern": "INTEREST", "matchDirection": "debit", "setCategorySlug": "debt-service-interest-paid", "setTxnType": "interest" },
+    { "name": "Dividend credited", "priority": 410, "matchDescriptionPattern": "DIVIDEND", "matchDirection": "credit", "setCategorySlug": "investment-income-dividend", "setTxnType": "investment_income" },
+
+    { "name": "Tax deducted at source", "priority": 420, "matchDescriptionPattern": "TAX DEDUCT", "setCategorySlug": "taxes-income-tax", "setTxnType": "tax" },
+    { "name": "Withholding tax", "priority": 420, "matchDescriptionPattern": "WITHHOLDING", "setCategorySlug": "taxes-income-tax", "setTxnType": "tax" },
+    { "name": "Value added tax", "priority": 420, "matchDescriptionPattern": "VAT", "matchPatternKind": "prefix", "setCategorySlug": "taxes-vat", "setTxnType": "tax" },
+
+    { "name": "Service charge", "priority": 430, "matchDescriptionPattern": "SERVICE CHARGE", "setCategorySlug": "financial-bank-charges", "setTxnType": "fee" },
+    { "name": "Account maintenance charge", "priority": 430, "matchDescriptionPattern": "MAINTENANCE CHG", "setCategorySlug": "financial-bank-charges", "setTxnType": "fee" },
+    { "name": "Minimum balance charge", "priority": 430, "matchDescriptionPattern": "AVG BAL", "setCategorySlug": "financial-bank-charges", "setTxnType": "fee" },
+    { "name": "Late payment fee", "priority": 430, "matchDescriptionPattern": "LATE PAYMENT", "setCategorySlug": "financial-late-fees", "setTxnType": "fee" },
+    { "name": "Card annual fee", "priority": 430, "matchDescriptionPattern": "ANNUAL FEE", "setCategorySlug": "financial-card-fees", "setTxnType": "fee" },
+    { "name": "Card replacement fee", "priority": 430, "matchDescriptionPattern": "CARD REPLACEMENT", "setCategorySlug": "financial-card-fees", "setTxnType": "fee" },
+    { "name": "Overlimit fee", "priority": 430, "matchDescriptionPattern": "OVERLIMIT", "setCategorySlug": "financial-late-fees", "setTxnType": "fee" },
+    { "name": "Cheque return charge", "priority": 430, "matchDescriptionPattern": "CHEQUE RETURN", "setCategorySlug": "financial-bank-charges", "setTxnType": "fee" },
+    { "name": "Remittance fee", "priority": 430, "matchDescriptionPattern": "REMIT.*(FEE|CHARGE)", "matchPatternKind": "regex", "setCategorySlug": "financial-fx-remittance-fees", "setTxnType": "fee" },
+    { "name": "Foreign exchange markup", "priority": 430, "matchDescriptionPattern": "MARKUP", "setCategorySlug": "financial-fx-remittance-fees", "setTxnType": "fee" },
+
+    { "name": "Cash withdrawal at a machine", "priority": 440, "matchDescriptionPattern": "ATM", "setCategorySlug": "transfers-cash-withdrawal" },
+    { "name": "Cash withdrawal", "priority": 440, "matchDescriptionPattern": "CASH WDL", "setCategorySlug": "transfers-cash-withdrawal" },
+    { "name": "Cash deposit", "priority": 440, "matchDescriptionPattern": "CASH DEP", "matchDirection": "credit", "setCategorySlug": "transfers-internal" },
+
+    { "name": "Card payment received", "priority": 450, "matchDescriptionPattern": "PAYMENT RECEIVED", "matchDirection": "credit", "setIsTransferCandidate": true },
+    { "name": "Card payment made", "priority": 450, "matchDescriptionPattern": "CARD PAYMENT", "matchDirection": "debit", "setIsTransferCandidate": true },
+    { "name": "Credit card autopay", "priority": 450, "matchDescriptionPattern": "AUTOPAY", "setIsTransferCandidate": true },
+    { "name": "Own account transfer", "priority": 450, "matchDescriptionPattern": "SELF TRANSFER", "setIsTransferCandidate": true },
+    { "name": "Internal fund transfer", "priority": 450, "matchDescriptionPattern": "INTERNAL FUND TRANSFER", "setIsTransferCandidate": true },
+    { "name": "Outward remittance", "priority": 450, "matchDescriptionPattern": "OUTWARD REMITTANCE", "setIsTransferCandidate": true },
+    { "name": "Inward remittance", "priority": 450, "matchDescriptionPattern": "INWARD REMITTANCE", "setIsTransferCandidate": true },
+
+    { "name": "Standing instruction", "priority": 460, "matchDescriptionPattern": "STANDING INSTRUCTION", "setCategorySlug": "uncategorized" },
+    { "name": "Recurring deposit instalment", "priority": 460, "matchDescriptionPattern": "RD INSTAL", "setCategorySlug": "investments-fd" },
+    { "name": "Systematic investment instalment", "priority": 460, "matchDescriptionPattern": "SIP", "matchPatternKind": "prefix", "setCategorySlug": "investments-sip" },
+    { "name": "Loan instalment", "priority": 460, "matchDescriptionPattern": "EMI", "setCategorySlug": "debt-service-loan-emi", "setTxnType": "loan_repayment" },
+    { "name": "Insurance premium", "priority": 460, "matchDescriptionPattern": "PREMIUM", "matchDirection": "debit", "setCategorySlug": "insurance" },
+
+    { "name": "Refund or reversal", "priority": 470, "matchDescriptionPattern": "REVERSAL", "matchDirection": "credit", "setTxnType": "refund" },
+    { "name": "Chargeback credit", "priority": 470, "matchDescriptionPattern": "CHARGEBACK", "matchDirection": "credit", "setTxnType": "refund" }
+  ]
+}
