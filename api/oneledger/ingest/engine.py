@@ -206,9 +206,14 @@ def _is_number(value: str) -> bool:
     return bool(value.strip() and NUMBER.fullmatch(value.strip()))
 
 
-def _page_text(pages: list[Page]) -> str:
+def _page_text(pages: list[Page], *, words: bool = False) -> str:
+    """The document as one string: each line's raw run of characters, or — asked for `words`, or
+    when there is no raw run — its words joined by single spaces, which keeps the gap between
+    cells a run-together producer otherwise erases."""
     return "\n".join(
-        line.raw_text if line.raw_text is not None else " ".join(word.text for word in line.words)
+        line.raw_text
+        if line.raw_text is not None and not words
+        else " ".join(word.text for word in line.words)
         for page in pages
         for line in page.lines
     )
@@ -314,12 +319,16 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     This is deliberately public: quirks and band semantics can be tested without a PDF parser.
     """
     source_text = _page_text(pages)
+    # The balance anchors always read the raw run; a layout may point its metadata at the words.
+    metadata_text = (
+        _page_text(pages, words=True) if "metadata_text:words" in profile.quirks else source_text
+    )
     metadata: dict[str, str] = {}
     account_number_raw: str | None = None
     for key, pattern in (profile.metadataPatterns or {}).items():
         if key in ROW_CAPTURE_KEYS:
             continue
-        captured = _capture(pattern, source_text)
+        captured = _capture(pattern, metadata_text)
         if captured is None:
             continue
         if key == "account_number":

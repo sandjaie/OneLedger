@@ -913,7 +913,7 @@ looked like before.</p>
 <td>38</td>
 <td>No</td>
 <td>Header block: credit limit, statement date, due date, minimum due</td>
-<td>One issuer, one layout for both cards. Bilingual AR/EN — Arabic text interleaves in extraction order, so filter by script or use x-position. Credits carry a <code>CR</code> suffix; debits are bare. <code>inverts_sign = True</code></td>
+<td>One issuer, one layout for both cards. Bilingual AR/EN — Arabic text interleaves in extraction order, so filter by script or use x-position. Credits carry a <code>CR</code> suffix; debits are bare. <code>inverts_sign = True</code>. The header block writes its values with no space between cells, and the credit limit — a whole number with no decimals — fuses onto the available credit in the raw text, so this layout's metadata reads the words instead (<code>metadata_text:words</code>); its balance anchors still read the raw text</td>
 </tr>
 <tr>
 <td><strong>Axis</strong> (2 accounts)</td>

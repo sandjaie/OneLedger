@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 from oneledger.ingest.engine import extract_pages
-from oneledger.ingest.normalize import normalize
+from oneledger.ingest.normalize import CARD_FACT_KEYS, card_facts, normalize
 from oneledger.ingest.reconcile import STATUS_MATCHED, STATUS_MISMATCHED, Verdict, reconcile
 from oneledger.ingest.words import Line, Page, Word
 from oneledger.routes.layouts import LayoutCreate
@@ -246,7 +246,8 @@ def test_the_seeded_layout_names_no_institution_and_captures_no_period() -> None
 
     assert profile.name == "Card statement"
     assert profile.fingerprints == ["Credit Card Statement", "Card Type:"]
-    assert profile.metadataPatterns is None
+    # It captures the card cycle's four facts and nothing else: no period.
+    assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS
 
 
 def test_the_seeded_layout_drops_a_trailing_line_instead_of_absorbing_it() -> None:
@@ -286,3 +287,112 @@ def test_a_summary_line_of_the_wrong_length_yields_no_anchor_rather_than_a_wrong
 
     assert re.search(profile.openingBalancePattern or "", figures, re.MULTILINE) is None
     assert re.search(profile.closingBalancePattern or "", figures, re.MULTILINE) is None
+
+
+# --- the summary block's four facts ----------------------------------------------------------
+#
+# Measured on the real statements (db/seeds/README.md): a label line, then a value line whose
+# five cells the producer writes with no space between them. The raw run fuses the credit limit,
+# printed with no decimals, onto the available credit, and no pattern can find that seam; the
+# words, split on the gap between cells, can. `metadata_text:words` points the metadata patterns
+# at the words. Every figure is invented: a 20,000 limit with 10,950.00 of it available.
+
+CREDIT_LIMIT = "20000"
+AVAILABLE = "10,950.00"
+STATEMENT_DATE = "05/08/2026"
+DUE_DATE = "30/08/2026"
+MINIMUM_DUE = "190.50"
+
+
+def summary_block(top: float = 40.0) -> list[Line]:
+    """The label line and the value line, each word under its own column as the producer lays
+    them out, with each line's raw text run together as the engine receives it."""
+    labels = [
+        (62.8, 83.7, "Credit"),
+        (85.4, 102.6, "Limit"),
+        (142.9, 174.6, "Available"),
+        (176.3, 197.2, "Credit"),
+        (198.9, 216.1, "Limit"),
+        (217.7, 237.5, "(AED)"),
+        (270.8, 307.0, "Statement"),
+        (308.7, 325.0, "Date"),
+        (373.9, 404.7, "Payment"),
+        (406.4, 420.2, "Due"),
+        (421.9, 438.2, "Date"),
+        (473.9, 506.3, "Minimum"),
+        (508.0, 538.7, "Payment"),
+        (540.4, 554.2, "Due"),
+    ]
+    values = [
+        (73.0, 93.0, CREDIT_LIMIT),
+        (170.0, 210.0, AVAILABLE),
+        (276.0, 320.9, STATEMENT_DATE),
+        (383.7, 428.6, DUE_DATE),
+        (500.1, 527.6, MINIMUM_DUE),
+    ]
+    return [
+        line(top, *(word(x0, x1, text, top) for x0, x1, text in labels)),
+        line(top + 20.0, *(word(x0, x1, text, top + 20.0) for x0, x1, text in values)),
+    ]
+
+
+def test_the_card_reads_its_four_facts_from_the_words_and_still_reconciles() -> None:
+    profile = card_profile()
+    statement = pages(run_together_summary(), extra=summary_block())
+
+    facts, failures = card_facts(extract_pages(profile, statement).metadata, profile.dateFormat)
+
+    assert failures == []
+    assert {key: facts.get(key) for key in CARD_FACT_KEYS} == {
+        "statement_date": "2026-08-05",
+        "payment_due_date": "2026-08-30",
+        "minimum_due": "190.5000",
+        "credit_limit": "20000.0000",
+    }
+    # Reading the summary block moves no anchor: the closing is still the fifth figure.
+    verdict = verdict_for(profile, statement)
+    assert verdict.status == STATUS_MATCHED
+    assert verdict.declared_closing == Decimal("-3810.0000")
+
+
+def test_the_raw_run_is_never_split_by_guesswork() -> None:
+    # Read against the raw run instead, the limit and the available credit are one string of
+    # digits. Nothing matches, so every fact is absent rather than a limit that took some of the
+    # available credit's digits.
+    profile = card_profile(quirks=["filter_script:arabic"])
+
+    result = extract_pages(profile, pages(run_together_summary(), extra=summary_block()))
+
+    assert not set(result.metadata) & CARD_FACT_KEYS
+
+
+def test_a_statement_without_its_summary_block_reports_the_facts_as_absent() -> None:
+    profile = card_profile()
+    statement = pages(run_together_summary())
+
+    facts, failures = card_facts(extract_pages(profile, statement).metadata, profile.dateFormat)
+
+    assert failures == []
+    assert not set(facts) & CARD_FACT_KEYS
+    assert verdict_for(profile, statement).status == STATUS_MATCHED
+
+
+def six_cells() -> list[Line]:
+    """The summary as it really lies on the page: six words, one per cell, whose raw run is the
+    same six figures with nothing between them."""
+    figures = [PREVIOUS_DUE, PURCHASES, INTEREST, PAYMENTS, TOTAL_DUE, CURRENT_BALANCE]
+    return [
+        line(
+            200.0,
+            *(word(30.0 + 90.0 * i, 80.0 + 90.0 * i, f, 200.0) for i, f in enumerate(figures)),
+        )
+    ]
+
+
+def test_the_anchors_read_the_raw_run_even_where_the_metadata_reads_the_words() -> None:
+    # On every real statement the six figures are six words. The metadata reads the words; the
+    # anchors must not, because a space between figures is what their segmentation has no room for.
+    verdict = verdict_for(card_profile(), pages(six_cells(), extra=summary_block()))
+
+    assert verdict.status == STATUS_MATCHED
+    assert verdict.declared_closing == Decimal("-3810.0000")
