@@ -434,6 +434,32 @@ export type CategoryUpdate = {
 };
 
 /**
+ * ClassifyResult
+ *
+ * `preview=true` reports what would change and writes nothing; otherwise `changed` is what
+ * did. `considered` is every row with no answer, so a small `changed` reads as "the rules do
+ * not cover these yet" rather than as a failure.
+ */
+export type ClassifyResult = {
+    /**
+     * Considered
+     */
+    considered: number;
+    /**
+     * Changed
+     */
+    changed: number;
+    /**
+     * Sample
+     */
+    sample: Array<MatchedRow>;
+    /**
+     * Applied
+     */
+    applied: boolean;
+};
+
+/**
  * CommitResult
  */
 export type CommitResult = {
@@ -971,6 +997,38 @@ export type LayoutProposal = {
 };
 
 /**
+ * MatchedRow
+ *
+ * One row a rule would touch. Money is a string; nothing here computes with it.
+ */
+export type MatchedRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Descriptionraw
+     */
+    descriptionRaw: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Classifiedby
+     */
+    classifiedBy: string;
+};
+
+/**
  * ParseFailure
  *
  * A line that extracted and would not normalize. The panel shows these beside the rows.
@@ -1127,6 +1185,20 @@ export type ParseRow = {
      * Dedupehash
      */
     dedupeHash: string;
+};
+
+/**
+ * PreviewResult
+ */
+export type PreviewResult = {
+    /**
+     * Affected
+     */
+    affected: number;
+    /**
+     * Sample
+     */
+    sample: Array<MatchedRow>;
 };
 
 /**
@@ -2597,6 +2669,61 @@ export type UpdateRuleRulesRuleIdPatchResponses = {
 };
 
 export type UpdateRuleRulesRuleIdPatchResponse = UpdateRuleRulesRuleIdPatchResponses[keyof UpdateRuleRulesRuleIdPatchResponses];
+
+export type PreviewRuleRulesPreviewPostData = {
+    body: RuleBody;
+    path?: never;
+    query?: never;
+    url: '/rules/preview';
+};
+
+export type PreviewRuleRulesPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewRuleRulesPreviewPostError = PreviewRuleRulesPreviewPostErrors[keyof PreviewRuleRulesPreviewPostErrors];
+
+export type PreviewRuleRulesPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PreviewResult;
+};
+
+export type PreviewRuleRulesPreviewPostResponse = PreviewRuleRulesPreviewPostResponses[keyof PreviewRuleRulesPreviewPostResponses];
+
+export type ClassifyUnclassifiedClassifyPostData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Preview
+         */
+        preview?: boolean;
+    };
+    url: '/classify';
+};
+
+export type ClassifyUnclassifiedClassifyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClassifyUnclassifiedClassifyPostError = ClassifyUnclassifiedClassifyPostErrors[keyof ClassifyUnclassifiedClassifyPostErrors];
+
+export type ClassifyUnclassifiedClassifyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ClassifyResult;
+};
+
+export type ClassifyUnclassifiedClassifyPostResponse = ClassifyUnclassifiedClassifyPostResponses[keyof ClassifyUnclassifiedClassifyPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
