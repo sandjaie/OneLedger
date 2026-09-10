@@ -94,10 +94,11 @@ fixtures and the routes point at different databases.
 the `<worktree>_pgdata_test` volume. The port is `TEST_DB_PORT` if set, then whatever this
 project's running `db-test` already holds, then 55434, then any free one. `up` exports it as
 `TEST_DB_PORT`, so your own compose calls in that shell keep the container where it is. `env`
-reports the port this checkout's running container holds. When none is running, `env` falls back
-to 55434, which is another checkout's server. That is safe: pytest and the push hook each create
-and drop a database of their own there. When the container does not start or never accepts a
-connection, `up` exits non-zero, says why on stderr and prints `false`, so the `eval` fails too.
+reports the port this checkout's running container holds, and exports no `TEST_DB_PORT`. When
+none is running, `env` falls back to 55434 and whichever server holds it, if any. That is safe:
+pytest and the push hook each create and drop a database of their own there. When the container
+does not start or never accepts a connection, `up` exits non-zero, says why on stderr and prints
+`false`, so the `eval` fails too.
 It never exports a database that is not there. On 10 September 2026 a worktree's `up` could not
 bind the main checkout's port and printed nothing, so the live tests skipped and looked green.
 

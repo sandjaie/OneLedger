@@ -105,6 +105,13 @@ def test_env_reports_the_port_this_checkouts_container_holds(tmp_path: pathlib.P
     assert "POSTGRES_PORT=55998" in result.stdout
 
 
+def test_env_does_not_pin_a_fallback_port_for_a_later_up(tmp_path: pathlib.Path) -> None:
+    result = _run(tmp_path, "env")  # no db-test running here
+
+    assert result.returncode == 0, result.stderr
+    assert "TEST_DB_PORT" not in result.stdout
+
+
 def test_up_takes_another_port_when_the_default_is_held(tmp_path: pathlib.Path) -> None:
     held = socket.socket()
     try:
