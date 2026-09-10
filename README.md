@@ -217,6 +217,10 @@ The permitted Google address is chosen in `.env`. The household name, the owner'
 name and tax residency, and the reporting pair are chosen in the app. Two more that look like
 decisions answer themselves. Everything else is editable in the app later.
 
+If the configured permitted address was corrected after this database's one-time owner seed, run
+`scripts/seed-household.sh --repair-owner-email`. The explicit repair changes only the sole
+existing owner's email; the ordinary command still refuses a second run.
+
 | Choice | Notes |
 |---|---|
 | **Reporting pair** — chosen in **Settings › Household** before the first import | The one that is expensive to change afterwards: both amounts are frozen per row, so switching the *pair* later is a backfill. Denominate the base where the money will eventually be spent ([§4](docs/design/multi-currency-and-fx.html)) |
