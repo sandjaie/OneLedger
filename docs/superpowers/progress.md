@@ -32,7 +32,7 @@ request.
 | Slice | Branches | Status | Evidence |
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
-| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | 2a and 2b delivered; 2c1–2c3 not started — they need `pdf-statements/`, which exists on the owner's machine only, so they run there | [slice 1.2 plan](plans/2026-09-10-slice-1-2-all-four-layouts.md) · [#71](https://github.com/sandjaie/OneLedger/pull/71) · [#72](https://github.com/sandjaie/OneLedger/pull/72) |
+| 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | **Accepted** — the run was made on 10 September 2026; 67 of the 71 gathered files imported and every account reconciles across its period | [acceptance run](#phase-1--slice-12--the-acceptance-run) |
 | 1.3 — classification and transfers | `feature/p1-3a-classification` · `feature/p1-3b-transfers` | Not started | — |
 | 1.4 — cards, net worth and trends | `feature/p1-4a-cards` · `feature/p1-4b-dashboard` | Not started | — |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
@@ -118,6 +118,46 @@ Each was invisible to the existing suite for the same reason: a fixture that agr
 where reality does not — an empty session table, a bare-text error body, a household reporting in
 the currency its card is denominated in.
 
+## Phase 1 · slice 1.2 — the acceptance run
+
+Run locally on 10 September 2026 against all 71 statements in the git-ignored
+`pdf-statements/`, across four producers and seven accounts. No figure, filename or row from
+any of them appears in this repository.
+
+| Question the run asked | Answer |
+| --- | --- |
+| Do all 71 gathered files import? | **67 of 71.** The four that did not are all refused by design, and each is named below. 4,184 transactions across 67 batches, every one `completed` and `matched`. |
+| Does every account reconcile across its period? | Yes, all seven. Every commit runs `assert_account_reconciles`, so a batch that reached `completed` proved it. |
+| Does an encrypted statement import without its password touching disk? | Yes. Six documents are recorded `is_password_protected`; the stored blob is the encrypted original, and the password appears in no filename, no storage path, no description, no reference and no log line. |
+
+| Layout | Files | Imported | Rows |
+| --- | --- | --- | --- |
+| Card (slice 1.1) | 38 | 35 | 1,974 |
+| Current account | 21 | 21 | 307 |
+| Passbook | 6 | 5 | 1,292 |
+| Ledger (encrypted) | 6 | 6 | 611 |
+
+**The four that did not import, and why each is right.** Three are byte-identical re-downloads
+of card statements already in the set, refused by checksum, each naming the earlier import — the
+slice 1.1 criterion, unchanged. The fourth is a passbook statement whose *own text layer* is
+missing the integer part of one balance figure: the characters are literally spaces, confirmed
+against the page's character layer, so no band and no tolerance can recover them. Invariant I8
+refuses a statement it cannot verify rather than walking past the row, and that account is
+anchored at its earliest importable statement instead.
+
+**Period provenance is now split, as it should be.** 32 of the 67 batches record a period the
+statement stated and 35 one derived from the rows — the card layout deliberately derives, because
+its installment block prints purchase dates outside the period; the three account layouts state.
+
+| Finding | Fix |
+| --- | --- |
+| `continuation_rule` could not tell wrapped narration from a closing legal block: 246 prose lines reached 6 of 1,532 rows, and every statement still reconciled | [#76](https://github.com/sandjaie/OneLedger/pull/76) — `blank_date_and_money_columns`, M2 spec §7 item 13 |
+| The period gate failed rows a statement books after its period and values inside it, dropping money-bearing rows from the end where the remainder still reconciled | [#77](https://github.com/sandjaie/OneLedger/pull/77) — §7 item 14 |
+| `commit_import_batch` verified as of `period_end`, which excludes those same rows while the declared closing includes them | [#77](https://github.com/sandjaie/OneLedger/pull/77) — V18, §7 item 15 |
+
+The first two were invisible to every other check: the statements reconciled `matched` either
+way. That is what a run against real files buys.
+
 ## Raised and not yet actioned
 
 The four items slice 1.1 raised during delivery were shipped as their own branches:
@@ -135,6 +175,7 @@ touch, recorded here rather than folded in past a diff budget.
 | Raised | What it is | Where it belongs |
 | --- | --- | --- |
 | The review screen renders no period | `import_batch.period_is_derived` reaches the payload and stops there; the import screen does show it. | A small `web/` branch |
+| A repeated header line reaches the last row of each page on the encrypted layout | The producer runs whole lines together, so the account holder's locality is a single word centred in the narration column — no band separates it from real narration, and the only pattern that would match it is the owner's own address. 47 of 611 rows gain that one word; no figure, no balance. | A `web/` or layout-mapper branch, once 1.7 can edit a profile |
 | `scripts/seed-household.sh` cannot correct the owner it seeded | It refuses a second run once an owner exists, which is right, but an owner seeded before `.env` was filled in carries the example address and no supported path fixes it. Hit during this run's setup. | A `scripts/` branch, or Settings › Household once that screen owns the field |
 | Cancelling a batch frees its period but not its file | `POST /import/{batch}/cancel` reaches the state `_refuse_second_staging` treats as finished, so the account and period are re-stageable. `idx_document_checksum` is a separate guard: the same bytes are still refused on re-upload, naming a batch that imported nothing. Changing that means layer 1 reusing a document row rather than refusing it, which is its own decision. | A slice 1.7 branch, with the documents screen that would surface the stored file |
 
