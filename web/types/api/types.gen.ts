@@ -596,6 +596,11 @@ export type CurrencyRow = {
  */
 export type DashboardResponse = {
     netWorth: NetWorth;
+    thisMonth: MonthFlows;
+    /**
+     * Trend
+     */
+    trend: Array<MonthFlows>;
     /**
      * Cardsdue
      */
@@ -1143,6 +1148,48 @@ export type MissingRate = {
      * Asof
      */
     asOf: string;
+};
+
+/**
+ * MonthFlows
+ */
+export type MonthFlows = {
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Incomebase
+     */
+    incomeBase: string;
+    /**
+     * Incomesecondary
+     */
+    incomeSecondary: string;
+    /**
+     * Spendingbase
+     */
+    spendingBase: string;
+    /**
+     * Spendingsecondary
+     */
+    spendingSecondary: string;
+    /**
+     * Netbase
+     */
+    netBase: string;
+    /**
+     * Netsecondary
+     */
+    netSecondary: string;
+    /**
+     * Savingsratepctbase
+     */
+    savingsRatePctBase: string | null;
+    /**
+     * Savingsratepctsecondary
+     */
+    savingsRatePctSecondary: string | null;
 };
 
 /**
