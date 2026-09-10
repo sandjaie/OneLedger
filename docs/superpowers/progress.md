@@ -71,22 +71,57 @@ was checked into a document first.
 - **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the
   address it wrote takes an `UPDATE`.
 
-### The live suite lost the working ledger, and now cannot reach it
+### Twice in one day, the working ledger was destroyed
 
-On 10 September 2026, exporting `.env` so the live tests would run pointed their fixtures at the
-working database. Those fixtures empty `transaction`, `import_batch`, `document`,
-`statement_layout` and `classification_rule`; 4,184 imported transactions, 67 batches, 67
-documents and four layout profiles went with them. Everything was re-imported from the original
-statements the same day, and the four layout profiles re-seeded from `db/seeds/`.
+**First, by the live test suite.** Exporting `.env` so the live tests would run pointed their
+fixtures at the working database. Those fixtures empty `transaction`, `import_batch`,
+`document`, `statement_layout` and `classification_rule`; 4,184 transactions, 67 batches, 67
+documents and four layout profiles went with them.
 
-The fix is structural, not a habit: `db-test` is its own container on its own port and volume
-behind the `test` compose profile, `scripts/test-db.sh up` starts and exports it in one step,
-and `api/tests/live_database.py` refuses a database holding anything those fixtures would empty
-— and refuses a split where the fixtures and the routes under test point at different databases
-([#87](https://github.com/sandjaie/OneLedger/pull/87)). A side effect worth recording: with the
-suite finally reaching a database of its own, the six `test_auth`/`test_oidc` failures and two
-`test_ingest_pipeline_live` failures long treated as unavoidable turned out to be the same
-symptom, and the suite is green for the first time.
+**Then, by a teardown that looked scoped and was not.** `docker compose --profile test down -v`
+removed `oneledger_pgdata` and `oneledger_documents` — the whole database and every original
+statement it traces back to. `--profile` selects which services *start*; it does not scope a
+teardown.
+
+Both fixes are structural rather than habits, and each closes its own door:
+
+| | |
+|---|---|
+| the suite cannot reach the working database | `db-test` is its own container, port and volume behind the `test` profile; `scripts/test-db.sh up` starts and exports it in one step; `api/tests/live_database.py` refuses a database holding anything the fixtures would empty, and refuses a split where the fixtures and the routes point at different databases ([#87](https://github.com/sandjaie/OneLedger/pull/87)) |
+| a teardown cannot remove the working data | `pgdata` and `documents` are external volumes, which `down -v` is refused on in any project ([#91](https://github.com/sandjaie/OneLedger/pull/91)) |
+
+A side effect of the first worth recording: with the suite finally reaching a database of its
+own, the six `test_auth`/`test_oidc` failures and two `test_ingest_pipeline_live` failures long
+treated as unavoidable turned out to be the same symptom, and the suite is green for the first
+time.
+
+### What the second rebuild cost, and what it proved
+
+The 7 September backups predate the accounts, so the seven `account` rows were the one thing no
+artifact held. They were reconstructed from the statements themselves — account number,
+currency, account type, credit limit and opening balance are each stated on page one — and the
+rebuild then reproduced **4,184 transactions across 67 batches, every account matching its
+previous row count, and all 67 reconciling**. That last part is the evidence: a wrong opening
+anchor makes I8 block its batches, so 67 matched reconciliations verify the reconstructed
+anchors rather than merely being consistent with them.
+
+Two things were derived rather than recovered and are worth an owner's eye: the account
+**names** are the ones the tracker recorded, not something a statement states, and **Card A's
+credit limit** is the first figure on its statement's limit row. Neither moves money.
+
+Three defects surfaced during the rebuild, each raised as its own task rather than folded in:
+**cancelling a batch leaves its document**, so the duplicate check refuses that file forever
+and a cancelled statement can never be re-imported; **an import cannot create the account it
+just read**, though the statement states everything an account row needs; and an
+**unclassified row stays silent** rather than asking the owner how to mark it.
+
+### Backups do not cover what changed most
+
+Four backups existed and all four were from 7 September, before a single statement had been
+imported. They held the household, currencies, categories and FX rates — and not one account,
+transaction, document or layout. `scripts/backup-db.sh` is manual and nothing calls it. A
+backup taken only when someone remembers is a backup of whatever the project looked like when
+they last remembered.
 
 ## Phase 1 · slice 1.2 — all four bank layouts
 
