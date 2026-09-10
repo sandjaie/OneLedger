@@ -4,7 +4,11 @@
 The service does not serve /openapi.json: that would be an unauthenticated route handing out
 the whole route surface (main.py). Generating types is a build step, not a runtime feature.
 
-    uv run --project api python scripts/openapi.py > web/openapi.json
+`web/scripts/generate-api-types.mjs` runs this into a scratch file and generates
+`web/types/api/` from it, so the schema itself is never committed:
+
+    cd web && npm run api:types        # regenerate
+    cd web && npm run api:types:check   # fail if the committed types are stale
 """
 
 import json
