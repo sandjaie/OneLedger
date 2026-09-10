@@ -413,7 +413,7 @@ steal that would let an attacker touch an actual bank account.</p>
 <td>Leaked database credentials</td>
 <td><strong>Low</strong></td>
 <td>Critical</td>
-<td>Held by the API service only, in a local <code>.env</code>. Never in the browser bundle, never <code>NEXT_PUBLIC_</code>, git-ignored, pre-commit scanned, rotatable. <a href="../adr/0013-python-backend-service.html">ADR-0013</a> reintroduced a privileged connection that <a href="../adr/superseded.html#parse-in-the-browser">browser parsing</a> had removed</td>
+<td>Held by the API service only, in a local <code>.env</code> or the separately generated <code>.env.production</code>. Never in the browser bundle, never <code>NEXT_PUBLIC_</code>, git-ignored, pre-commit scanned, rotatable. <a href="../adr/0013-python-backend-service.html">ADR-0013</a> reintroduced a privileged connection that <a href="../adr/superseded.html#parse-in-the-browser">browser parsing</a> had removed</td>
 </tr>
 <tr>
 <td>VPS or provider compromise</td>
@@ -668,12 +668,12 @@ across forty tables.</li>
 </tr>
 <tr>
 <td><code>SESSION_SECRET</code></td>
-<td>The service's <code>.env</code>, mode 600. <strong>It signs the session cookie</strong> — anyone holding it can mint a valid session</td>
+<td>The service's mode-600 environment file. Local production generates a separate <code>.env.production</code>. <strong>It signs the session cookie</strong> — anyone holding it can mint a valid session</td>
 <td>Immediately if exposed; this invalidates every session</td>
 </tr>
 <tr>
 <td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td>
-<td>The service's <code>.env</code>. <strong>This is the application's own connection</strong>, and it is privileged enough to bypass RLS</td>
+<td>The service's environment file; local production generates its own credentials. <strong>This is the application's own connection</strong>, and it is privileged enough to bypass RLS</td>
 <td>Immediately if exposed</td>
 </tr>
 <tr>
@@ -699,7 +699,12 @@ across forty tables.</li>
 </tbody></table>
 <p><strong>Controls</strong></p>
 <ul>
-<li><code>.env</code> is git-ignored; <code>.env.example</code> documents every variable with placeholder values.</li>
+<li><code>.env</code> and <code>.env.production</code> are git-ignored; <code>.env.example</code> and
+<code>.env.production.example</code> document variables with placeholder values. The production
+lifecycle script creates the real file with mode 600 and independent generated secrets.</li>
+<li>The local-production project publishes only to loopback, uses exact external volume names, and
+can erase them only after <code>reset --confirm oneledger-production</code>. Normal <code>down</code>
+preserves them (<a href="../adr/0019-separate-local-production-stack.html">ADR-0019</a>).</li>
 <li>Pre-commit hook (<code>gitleaks</code> or equivalent) scans staged changes for key-shaped strings.</li>
 <li>CI fails on a detected secret.</li>
 <li>No secret is <strong>ever</strong> prefixed <code>NEXT_PUBLIC_</code>. A lint rule enforces this — the prefix is

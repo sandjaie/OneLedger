@@ -114,6 +114,9 @@ services:
       # is the container itself, so only the host changes — the password is not restated.
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      # Local development issues the normal persisted owner session without contacting Google.
+      # Application code still defaults to Google, and refuses local mode off loopback.
+      AUTH_MODE: ${AUTH_MODE:-local}
       # Read-only below: GET /doctor reports how old the newest backup is, never touches one.
       BACKUP_DIR: /var/lib/oneledger/backups
       BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}

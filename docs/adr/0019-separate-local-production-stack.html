@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR-0019 — Separate local production stack — OneLedger</title>
+  <style>
+    :root { color-scheme: light; --ink: #1b211e; --muted: #5e6862; --line: #d5dbd4; --accent: #0b6b58; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); font: 1rem/1.65 ui-serif, Georgia, serif; }
+    header { border-bottom: 1px solid var(--line); padding: .9rem 1.4rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+    header a, main a { color: var(--accent); }
+    main { max-width: 46rem; margin: 0 auto; padding: 2.4rem 2rem 5rem; }
+    h1, h2 { font-family: ui-sans-serif, system-ui, sans-serif; line-height: 1.25; }
+    h1 { font-size: 2rem; }
+    h2 { margin-top: 2rem; }
+    code { background: #eef2ee; border-radius: 4px; padding: .1em .3em; }
+    .meta { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header><a href="./index.html">OneLedger architecture decisions</a></header>
+  <main>
+    <h1>ADR-0019 — Separate local production stack</h1>
+    <p class="meta"><strong>Status:</strong> Accepted · <strong>Date:</strong> 2026-09-10 ·
+      <strong>Refines:</strong> <a href="./0014-one-vps-one-compose-file.html">ADR-0014</a></p>
+
+    <h2>Context</h2>
+    <p>The default Compose project is the development and acceptance environment. Its ledger holds
+      working data and must remain available while production-built images are exercised locally.
+      Reusing that database, its ports or its volumes would make a clean start destructive or leave
+      production behavior dependent on test and imported data.</p>
+
+    <h2>Decision</h2>
+    <p>A second file, <code>docker-compose.production.yml</code>, always runs as project
+      <code>oneledger-production</code>. It binds web, API and database to loopback ports 3100, 8100
+      and 55432. It owns the exact external volumes <code>oneledger-production_pgdata</code> and
+      <code>oneledger-production_documents</code>; the default and test stacks never name them.</p>
+    <p><code>scripts/production-stack.sh</code> is the lifecycle boundary. Its first initialization
+      creates a mode-600, git-ignored <code>.env.production</code> with independent generated secrets.
+      Startup builds application images, migrates the database, idempotently creates exactly the
+      configured owner, then waits for healthy API and web services. It seeds no financial, import
+      or mock data.</p>
+    <p>Ordinary <code>down</code> preserves both external volumes. Destructive reset requires the exact
+      argument <code>--confirm oneledger-production</code>, brings down only that project and removes
+      only the two literal production volume names. No wildcard, inferred Compose volume or
+      development name participates.</p>
+    <p>This stack uses the loopback-only local session mode from
+      <a href="./0018-local-owner-sessions.html">ADR-0018</a>. It is a local production-build
+      rehearsal, not the hosted topology. Public deployment remains a separate planned change that
+      adds TLS and selects Google authentication explicitly.</p>
+
+    <h2>Alternatives considered</h2>
+    <p><strong>Use Compose profiles in the default file.</strong> Rejected: shared defaults and implicit
+      project-derived volume names make it too easy for an operator command to address the working
+      ledger.</p>
+    <p><strong>Use an ephemeral clean database.</strong> Rejected: local production is meant for normal
+      use before cloud deployment, so its ledger and original documents must survive teardown and
+      machine restarts.</p>
+    <p><strong>Copy the development environment file.</strong> Rejected: shared database, session, hash
+      and backup secrets couple two security boundaries and make later rotation ambiguous.</p>
+
+    <h2>Consequences</h2>
+    <p>Both stacks can run concurrently and be recognized by their fixed ports and project names.
+      The local-production ledger starts empty but persists intentionally. A reset is more verbose
+      by design. Cloud deployment cannot happen by exposing this file unchanged; its authentication,
+      origin and TLS decisions must be made explicitly.</p>
+  </main>
+</body>
+</html>
