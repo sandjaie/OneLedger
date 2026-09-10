@@ -616,14 +616,24 @@ worked around.
     and no code did: after 67 real imports across four layouts, all four reported
     `timesUsed: 0`.
 
-    **V22 drops them rather than maintaining them.** Nothing reads them. The only layout picker
+    **V22 drops them rather than maintaining them.** No code reads them. The only layout picker
     is the import screen's (`api-contracts.html` §4), and it ranks by fingerprint score. Slice
     1.7 builds the mapper, the document library and the diagnostics panel, and none of those
-    ranks layouts. If one ever needs to, `import_batch.statement_layout_id` already records the
-    layout row every batch used. A count and the latest `started_at` over that is right for all
-    67 existing imports, while a counter maintained from here on would start 67 short and need a
-    backfill before it stopped being wrong. `LayoutProfile` loses both fields, `web/types/api/`
-    is regenerated, and no screen read either one.
+    ranks layouts.
+
+    One specified screen does want the two facts. `ui-information-architecture.html` §6's
+    Settings › Statement layouts shows, for each saved layout, "how many documents it has
+    parsed, and when it was last used". **Both are derived, never stored.** The first is a count
+    of `document` rows by `statement_layout_id`; the second is the latest
+    `import_batch.started_at` by the same key. Both are grouped by layout name across versions.
+    That grouping is why a counter is the wrong shape as well as a stale one: re-mapping a
+    layout inserts a new versioned `statement_layout` row (the same §6), so a counter on the row
+    restarts at every version, while the screen describes the layout. The derived figures are
+    also right for all 67 existing imports, where a counter maintained from here on would start
+    67 short and need a backfill before it stopped being wrong.
+
+    `LayoutProfile` loses both fields and `web/types/api/` is regenerated. No screen in the tree
+    read either one.
 
     Decided 10 September 2026 under the owner's delegation. The alternative was incrementing the
     counter in `ingest/pipeline.py` when a batch stages.
