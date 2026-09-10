@@ -207,6 +207,8 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/rules.py",
     # Classification repair compares and updates the exact stored state, including protected rows.
     "api/oneledger/routes/classification_decisions.py",
+    # Classification review groups unanswered ledger rows and never reports spending or income.
+    "api/oneledger/routes/classification_review.py",
     # Transfer matching looks for unlinked legs, which the reportable view drops by design.
     "api/oneledger/routes/transfers.py",
     # A balance and the guards on an account's anchor must include every movement, transfers too.
