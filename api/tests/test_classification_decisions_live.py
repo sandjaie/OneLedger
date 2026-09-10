@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal
-from threading import Barrier, Lock, get_ident
+from threading import Barrier, Event, Lock, get_ident
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -255,6 +255,64 @@ def test_preview_persists_the_complete_guard_and_changes_no_transaction(
     assert proposed["txn_type"] == "expense"
 
 
+def test_preview_rejects_a_complete_proposed_state_over_the_jsonb_byte_limit(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live)
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/classification-runs/preview",
+        json={
+            "knowledgeVersionId": str(live.knowledge_version_id),
+            "reason": "synthetic unicode state boundary",
+            "items": [
+                {
+                    "transactionId": str(transaction_id),
+                    "changes": {"txnType": "expense", "tags": ["界" * 100] * 32},
+                }
+            ],
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["changed"], response.json()["unresolved"]) == (0, 1)
+    assert response.json()["items"][0]["reason"] == "classification state exceeds storage limit"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM classification_run_item WHERE run_id = %s",
+            (response.json()["runId"],),
+        )
+        assert cur.fetchone()[0] == 0  # type: ignore[index]
+
+
+def test_preview_rejects_a_complete_expected_state_over_the_escaped_jsonb_limit(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live)
+    escaped_tag = '\\"' * 50
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE transaction SET tags = %s WHERE id = %s",
+            ([escaped_tag] * 32, transaction_id),
+        )
+    live.conn.commit()
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/classification-runs/preview",
+        json={
+            "knowledgeVersionId": str(live.knowledge_version_id),
+            "reason": "synthetic escaped state boundary",
+            "items": [{"transactionId": str(transaction_id), "changes": {"txnType": "expense"}}],
+        },
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["changed"], response.json()["unresolved"]) == (0, 1)
+    assert response.json()["items"][0]["reason"] == "classification state exceeds storage limit"
+
+
 def test_apply_changes_classification_and_history_but_not_frozen_money(
     live: RepairFixture,
 ) -> None:
@@ -389,6 +447,59 @@ def test_apply_keeps_its_stored_result_bounded_when_reasons_are_maximal(
     assert len(response.json()["items"]) == 3
 
 
+def test_apply_budgets_unicode_result_samples_and_preserves_exact_history(
+    live: RepairFixture,
+) -> None:
+    transaction_ids = [_transaction(live, amount=f"-{value}.0000") for value in range(45, 48)]
+    exact_reason = "界" * 1000
+    preview = (
+        TestClient(app)
+        .post(
+            "/classification-runs/preview",
+            json={
+                "knowledgeVersionId": str(live.knowledge_version_id),
+                "reason": "synthetic unicode result boundary",
+                "items": [
+                    {
+                        "transactionId": str(transaction_id),
+                        "changes": {"txnType": "expense", "isExcluded": False},
+                        "reason": exact_reason,
+                    }
+                    for transaction_id in transaction_ids
+                ],
+            },
+            headers=ORIGIN,
+        )
+        .json()
+    )
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-unicode-result"},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["changed"] == 3
+    assert len(response.json()["items"]) == 1
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT octet_length(r.result::text),
+                      count(*) FILTER (WHERE i.reason = %s),
+                      count(*) FILTER (WHERE d.reason = %s)
+                 FROM classification_run r
+                 JOIN classification_run_item i ON i.run_id = r.id
+                 JOIN classification_decision d
+                   ON d.run_id = i.run_id AND d.transaction_id = i.transaction_id
+                WHERE r.id = %s
+                GROUP BY r.result""",
+            (exact_reason, exact_reason, preview["runId"]),
+        )
+        result_bytes, item_reasons, decision_reasons = cur.fetchone()  # type: ignore[misc]
+    assert result_bytes <= 4096
+    assert (item_reasons, decision_reasons) == (3, 3)
+
+
 def test_apply_is_idempotent_and_undo_restores_category_and_type_together(
     live: RepairFixture,
 ) -> None:
@@ -468,6 +579,120 @@ def test_simultaneous_undo_retries_return_one_result(
             (transaction_id,),
         )
         assert cur.fetchone()[0] == 2  # type: ignore[index]
+
+
+def test_chain_head_uses_topology_when_undo_transaction_started_before_apply(
+    live: RepairFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transaction_id = _transaction(live)
+    source = _preview(live, [transaction_id]).json()
+    undo_started = Event()
+    allow_undo = Event()
+    pause_lock = Lock()
+    paused = False
+    real_lookup = classification_decisions._idempotency_owner
+
+    def pause_undo_after_its_transaction_starts(
+        cur: psycopg.Cursor[Any], household_id: UUID, key: str
+    ) -> tuple[UUID, dict[str, Any]] | None:
+        nonlocal paused
+        result = real_lookup(cur, household_id, key)
+        with pause_lock:
+            should_pause = key == "synthetic-overlap-undo" and not paused
+            if should_pause:
+                paused = True
+        if should_pause:
+            undo_started.set()
+            assert allow_undo.wait(timeout=5)
+        return result
+
+    monkeypatch.setattr(
+        classification_decisions, "_idempotency_owner", pause_undo_after_its_transaction_starts
+    )
+    undo_url = f"/classification-runs/{source['runId']}/undo"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending_undo = pool.submit(
+            TestClient(app).post,
+            undo_url,
+            json={"idempotencyKey": "synthetic-overlap-undo", "reason": "overlapping undo"},
+            headers=ORIGIN,
+        )
+        assert undo_started.wait(timeout=5)
+        try:
+            applied = TestClient(app).post(
+                f"/classification-runs/{source['runId']}/apply",
+                json={"idempotencyKey": "synthetic-overlap-apply"},
+                headers=ORIGIN,
+            )
+            assert applied.status_code == 200, applied.text
+            assert applied.json()["state"] == "applied"
+        finally:
+            allow_undo.set()
+        undone = pending_undo.result(timeout=5)
+
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["state"] == "applied"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT source.created_at, reversal.created_at
+                 FROM classification_decision source
+                 JOIN classification_decision reversal
+                   ON reversal.supersedes_decision_id = source.id
+                WHERE source.run_id = %s""",
+            (source["runId"],),
+        )
+        source_created_at, undo_created_at = cur.fetchone()  # type: ignore[misc]
+    assert undo_created_at < source_created_at
+
+    fresh = _preview(live, [transaction_id]).json()
+    repaired = TestClient(app).post(
+        f"/classification-runs/{fresh['runId']}/apply",
+        json={"idempotencyKey": "synthetic-after-overlap"},
+        headers=ORIGIN,
+    )
+
+    assert repaired.status_code == 200, repaired.text
+    assert (repaired.json()["state"], repaired.json()["changed"]) == ("applied", 1)
+
+
+def test_undo_budgets_escaped_result_samples_and_preserves_exact_history(
+    live: RepairFixture,
+) -> None:
+    transaction_ids = [_transaction(live, amount=f"-{value}.0000") for value in range(48, 51)]
+    source = _preview(live, transaction_ids).json()
+    applied = TestClient(app).post(
+        f"/classification-runs/{source['runId']}/apply",
+        json={"idempotencyKey": "synthetic-escaped-source"},
+        headers=ORIGIN,
+    )
+    assert applied.status_code == 200, applied.text
+    exact_reason = '\\"\n\t' * 250
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        f"/classification-runs/{source['runId']}/undo",
+        json={"idempotencyKey": "synthetic-escaped-result", "reason": exact_reason},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["changed"] == 3
+    assert len(response.json()["items"]) == 1
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT octet_length(r.result::text),
+                      count(*) FILTER (WHERE i.reason = %s),
+                      count(*) FILTER (WHERE d.reason = %s)
+                 FROM classification_run r
+                 JOIN classification_run_item i ON i.run_id = r.id
+                 JOIN classification_decision d
+                   ON d.run_id = i.run_id AND d.transaction_id = i.transaction_id
+                WHERE r.id = %s
+                GROUP BY r.result""",
+            (exact_reason, exact_reason, response.json()["runId"]),
+        )
+        result_bytes, item_reasons, decision_reasons = cur.fetchone()  # type: ignore[misc]
+    assert result_bytes <= 4096
+    assert (item_reasons, decision_reasons) == (3, 3)
 
 
 def test_undo_refuses_a_later_correction(live: RepairFixture) -> None:

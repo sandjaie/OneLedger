@@ -195,6 +195,7 @@ _STATE_COLUMNS = """jsonb_build_object(
     'is_reviewed', {alias}.is_reviewed, 'country', {alias}.country,
     'tags', {alias}.tags, 'is_excluded', {alias}.is_excluded)"""
 _RESULT_ITEMS = 3
+_JSONB_BYTES = 4096
 
 
 def _state_sql(alias: str = "t") -> str:
@@ -244,11 +245,20 @@ def _payload(result: RunResult) -> dict[str, Any]:
     )
 
 
+def _jsonb_fits(cur: psycopg.Cursor[Any], value: dict[str, Any]) -> bool:
+    cur.execute(
+        "SELECT octet_length(%s::jsonb::text) <= %s",
+        (Jsonb(value), _JSONB_BYTES),
+    )
+    return bool(cur.fetchone()[0])  # type: ignore[index]
+
+
 def _stored_result(run_id: UUID, result: dict[str, Any]) -> RunResult:
     return RunResult.model_validate({"runId": run_id, **result})
 
 
 def _summary(
+    cur: psycopg.Cursor[Any],
     run_id: UUID,
     state: Literal["proposed", "applied", "conflict", "expired"],
     *,
@@ -258,15 +268,22 @@ def _summary(
     items: list[ResultItem] | None = None,
     source_run_id: UUID | None = None,
 ) -> RunResult:
-    return RunResult(
+    result = RunResult(
         runId=run_id,
         state=state,
         changed=changed,
         conflicted=conflicted,
         unresolved=unresolved,
-        items=(items or [])[:_RESULT_ITEMS],
+        items=[],
         sourceRunId=source_run_id,
     )
+    for item in items or []:
+        if len(result.items) == _RESULT_ITEMS:
+            break
+        candidate = result.model_copy(update={"items": [*result.items, item]})
+        if _jsonb_fits(cur, _payload(candidate)):
+            result = candidate
+    return result
 
 
 def _finish_run(
@@ -382,6 +399,8 @@ def preview(
                     refusal = "proposal makes no classification change"
                 elif not _references_exist(cur, owner.household_id, proposed):
                     refusal = "classification reference not found"
+                elif not _jsonb_fits(cur, current) or not _jsonb_fits(cur, proposed):
+                    refusal = "classification state exceeds storage limit"
             if refusal is not None:
                 unresolved.append(
                     ResultItem(
@@ -416,6 +435,7 @@ def preview(
                 )
             )
         result = _summary(
+            cur,
             run_id,
             "proposed",
             changed=len(proposals),
@@ -467,15 +487,22 @@ def apply(
             f"""SELECT i.transaction_id, i.expected_transaction_updated_at,
                        i.expected_source_key, i.expected_state, i.proposed_state, i.reason,
                        t.updated_at, t.dedupe_hash, t.transfer_id, {state_sql},
-                       latest.id, latest.after_state
+                       latest.id, latest.after_state, latest.head_count
                   FROM classification_run_item i
                   JOIN transaction t ON t.id = i.transaction_id
                                     AND t.household_id = i.household_id
                   LEFT JOIN LATERAL (
-                    SELECT d.id, d.after_state FROM classification_decision d
+                    SELECT d.id, d.after_state, count(*) OVER () AS head_count
+                      FROM classification_decision d
                      WHERE d.household_id = i.household_id
                        AND d.transaction_id = i.transaction_id
-                     ORDER BY d.created_at DESC, d.id DESC LIMIT 1
+                       AND NOT EXISTS (
+                         SELECT FROM classification_decision successor
+                          WHERE successor.household_id = d.household_id
+                            AND successor.transaction_id = d.transaction_id
+                            AND successor.supersedes_decision_id = d.id
+                       )
+                     ORDER BY d.id LIMIT 1
                   ) latest ON true
                  WHERE i.run_id = %s AND i.household_id = %s
                  ORDER BY i.transaction_id FOR UPDATE OF t""",  # noqa: S608
@@ -487,7 +514,7 @@ def apply(
                 ResultItem(transactionId=row[0], status="unresolved", reason="preview expired")
                 for row in rows
             ]
-            result = _summary(run_id, "expired", unresolved=len(rows), items=items)
+            result = _summary(cur, run_id, "expired", unresolved=len(rows), items=items)
             _finish_run(cur, run_id, result, body.idempotencyKey)
             return result
 
@@ -507,6 +534,7 @@ def apply(
                 actual_state,
                 latest_id,
                 latest_after,
+                head_count,
             ) = row
             conflict: str | None = None
             if evidence is None or evidence[0] != "active":
@@ -519,6 +547,8 @@ def apply(
                 conflict = "classification changed after preview"
             elif not _references_exist(cur, owner.household_id, proposed_state):
                 conflict = "classification reference is no longer available"
+            elif head_count is not None and head_count != 1:
+                conflict = "classification correction history has multiple heads"
             elif latest_id is not None and latest_after != expected_state:
                 conflict = "later classification correction exists"
             if conflict is not None:
@@ -527,7 +557,7 @@ def apply(
                 )
             supersedes[transaction_id] = latest_id
         if conflicts:
-            result = _summary(run_id, "conflict", conflicted=len(conflicts), items=conflicts)
+            result = _summary(cur, run_id, "conflict", conflicted=len(conflicts), items=conflicts)
             _finish_run(cur, run_id, result, body.idempotencyKey)
             return result
 
@@ -558,6 +588,7 @@ def apply(
         unresolved = int(prior_result.get("unresolved", 0))
         prior_items = [ResultItem.model_validate(item) for item in prior_result.get("items", [])]
         result = _summary(
+            cur,
             run_id,
             "applied",
             changed=len(changed),
@@ -664,6 +695,7 @@ def undo(
                 )
         if conflicts:
             result = _summary(
+                cur,
                 undo_run_id,
                 "conflict",
                 conflicted=len(conflicts),
@@ -714,6 +746,7 @@ def undo(
                 ResultItem(transactionId=transaction_id, status="changed", reason=body.reason)
             )
         result = _summary(
+            cur,
             undo_run_id,
             "applied",
             changed=len(changed),
