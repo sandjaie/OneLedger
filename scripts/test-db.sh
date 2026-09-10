@@ -64,14 +64,13 @@ export POSTGRES_PASSWORD=oneledger
 export POSTGRES_DB=oneledger_test
 export POSTGRES_HOST=127.0.0.1
 export POSTGRES_PORT=$port
-export TEST_DB_PORT=$port
 EOF
 }
 
 case "${1:-up}" in
   up)
-    # Exported, because every compose call must see it — the ones below and, through emit_env,
-    # the caller's own: one that saw the default would recreate db-test on a port another
+    # Exported, because every compose call must see it — the ones below and, once printed at the
+    # end, the caller's own: one that saw the default would recreate db-test on a port another
     # checkout already holds. Assigned apart from the export so a failure here stops the script.
     port="${TEST_DB_PORT:-$(running_port || free_port)}"
     export TEST_DB_PORT="$port"
@@ -106,6 +105,8 @@ BEGIN
 END $$;
 SQL
     emit_env
+    # `up` only: `env` may be reporting a fallback nobody checked, and a later `up` would trust it.
+    echo "export TEST_DB_PORT=$port"
     ;;
   env)
     port="${TEST_DB_PORT:-$(running_port || echo 55434)}"
