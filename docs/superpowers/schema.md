@@ -587,6 +587,7 @@ CREATE TABLE statement_layout (
   id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id           UUID NOT NULL REFERENCES household(id),
   institution_id         UUID REFERENCES institution(id),
+  account_type           account_type,
   name                   TEXT NOT NULL,          -- user-chosen, e.g. 'Axis savings'
   version                SMALLINT NOT NULL DEFAULT 1,
 
@@ -670,6 +671,15 @@ How often a layout was used is counted from `import_batch.statement_layout_id` a
 `started_at`. That count is right for every batch ever staged, where a counter maintained from
 here on would start short by every import before it. The M2 spec's §7 item 16 records the
 decision.
+
+---
+
+## `V25` (applied)
+
+Applied as `db/migrations/V25__statement_layout_account_type.sql`. The nullable
+`statement_layout.account_type` uses the existing `account_type` enum. It lets an unresolved
+statement prefill its account product from the selected layout; null means the document did not
+state enough and the owner must choose. Existing layout versions are unchanged.
 
 ---
 

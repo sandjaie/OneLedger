@@ -44,6 +44,7 @@ VALID_CREATE = {
 CREATE_BODY = {
     "name": "Layout A savings",
     "institutionId": str(INSTITUTION_ID),
+    "accountType": "savings",
     "fingerprints": ["EXAMPLE BANK", "Statement of Account"],
     "headerRowPattern": "Date\\s+Description\\s+Amount",
     "columns": [
@@ -72,6 +73,7 @@ FETCHED_ROW: tuple[object, ...] = (
     "Layout A savings",
     1,
     INSTITUTION_ID,
+    "savings",
     ["EXAMPLE BANK", "Statement of Account"],
     "Date\\s+Description\\s+Amount",
     [
@@ -435,6 +437,7 @@ def test_propose_with_an_edited_draft_extracts_with_that_draft() -> None:
             headers=ORIGIN,
         ).json()
         edited = automatic["draft"]
+        edited["accountType"] = None
         edited["columns"] = [
             {"field": "booked_date", "xMin": 20.0, "xMax": 109.0, "label": None},
             {"field": "description", "xMin": 109.0, "xMax": 150.0, "label": None},
@@ -1153,8 +1156,15 @@ def test_reserved_metadata_keys_need_exactly_one_capture_group() -> None:
         layouts.LayoutCreate.model_validate(
             {**VALID_CREATE, "metadataPatterns": {"period_start": r"(\d+)-(\d+)"}}
         )
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {"currency": r"([A-Z]+)-([A-Z]+)"}}
+        )
     assert layouts.LayoutCreate.model_validate(
         {**VALID_CREATE, "metadataPatterns": {"account_number": r"Account (\d+)"}}
+    )
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {"currency": r"Currency ([A-Z]{3})"}}
     )
     # A non-reserved key may carry any pattern, capture group or not — only the reserved keys
     # are constrained. (This example was `credit_limit` until slice 1.4 made it reserved: a card

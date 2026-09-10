@@ -57,7 +57,7 @@ QUIRKS_VOCABULARY = frozenset(
 # each must capture exactly one — and they are named once, where they are read. So are the three
 # a remittance's narration states, which the engine reads per row rather than per statement.
 RESERVED_METADATA_KEYS = (
-    frozenset({"account_number", "period_start", "period_end"})
+    frozenset({"account_number", "currency", "period_start", "period_end"})
     | normalize.CARD_FACT_KEYS
     | engine.ROW_CAPTURE_KEYS
 )
@@ -111,6 +111,7 @@ class LayoutProfile(BaseModel):
     name: str
     version: int
     institutionId: UUID | None
+    accountType: str | None = None
     fingerprints: list[str]
     headerRowPattern: str | None
     columns: list[LayoutColumn]
@@ -134,6 +135,7 @@ class LayoutCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     institutionId: UUID | None = None
+    accountType: str | None = Field(default=None, min_length=1, max_length=40)
     fingerprints: list[str]
     headerRowPattern: str | None = None
     columns: list[LayoutColumn]
@@ -326,7 +328,8 @@ class LayoutProposal(BaseModel):
     rows: list[ProposedRawRow]
 
 
-COLUMNS = """id, name, version, institution_id, fingerprints, header_row_pattern, columns,
+COLUMNS = """id, name, version, institution_id, account_type::text, fingerprints,
+             header_row_pattern, columns,
              date_format, sign_convention::text, inverts_sign, chronological_order,
              row_start_rule, continuation_rule, skip_line_patterns, opening_balance_pattern,
              closing_balance_pattern, has_running_balance, quirks, metadata_patterns"""
@@ -338,6 +341,7 @@ def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
         name,
         version,
         institution_id,
+        account_type,
         fingerprints,
         header_row_pattern,
         columns_json,
@@ -359,6 +363,7 @@ def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
         name=name,
         version=version,
         institutionId=institution_id,
+        accountType=account_type,
         fingerprints=list(fingerprints or []),
         headerRowPattern=header_row_pattern,
         columns=[
@@ -621,12 +626,13 @@ def _create_layout_once(
             # name inserts version 1 in the same statement.
             cur.execute(
                 """INSERT INTO statement_layout (
-                       household_id, institution_id, name, version, fingerprints,
+                       household_id, institution_id, account_type, name, version, fingerprints,
                        header_row_pattern, columns, date_format, sign_convention, inverts_sign,
                        chronological_order, row_start_rule, continuation_rule,
                        skip_line_patterns, opening_balance_pattern, closing_balance_pattern,
                        has_running_balance, quirks, metadata_patterns)
-                   SELECT %s, %s, %s, COALESCE(MAX(version), 0) + 1, %s, %s, %s::jsonb, %s,
+                   SELECT %s, %s, %s::account_type, %s, COALESCE(MAX(version), 0) + 1,
+                          %s, %s, %s::jsonb, %s,
                           %s::sign_convention, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb
                      FROM statement_layout
                     WHERE household_id = %s AND name = %s
@@ -634,6 +640,7 @@ def _create_layout_once(
                 (
                     owner.household_id,
                     body.institutionId,
+                    body.accountType,
                     body.name,
                     body.fingerprints,
                     body.headerRowPattern,

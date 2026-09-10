@@ -454,6 +454,7 @@ from the statement header. Profiles are rows in <code>statement_layout</code>, c
 {
   &quot;name&quot;: &quot;UAE card&quot;,                    // whatever the user calls it
   &quot;version&quot;: 1,
+  &quot;account_type&quot;: &quot;credit_card&quot;,
   &quot;fingerprints&quot;: [&quot;Credit Card Statement&quot;, &quot;Card Type:&quot;],
   &quot;header_row_pattern&quot;: &quot;Transaction Date\\s+Posting Date\\s+Description\\s+Amount&quot;,
   &quot;columns&quot;: [
@@ -476,9 +477,12 @@ row and shows the parsed result live; the user confirms or drags. The saved prof
 automatically from then on — including for statements from an account that has since been closed.</p>
 <p><strong>This is the path for every future bank.</strong> No code change, no deploy.</p>
 <p><strong>Account resolution.</strong> Once the institution is known, the account is resolved by hashing the
-account number found in the statement and matching <code>account.account_number_hash</code>. If no account
-matches, the import screen stops and asks — it never guesses which account a statement belongs to,
-because a wrong guess corrupts two accounts at once.</p>
+full bank-account number found in the statement and matching <code>account.account_number_hash</code>.
+If no account matches, the import screen stops and asks — offering an account prefilled from the
+statement, or a hashless existing account with the same last-four mask to adopt its identity. A
+credit card is last-four only and is never hashed. One owner confirmation is required; the service
+never guesses which account a statement belongs to, because a wrong guess corrupts two accounts at
+once.</p>
 <hr>
 <h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
 <h3 id="the-extraction-engine">The extraction engine</h3>

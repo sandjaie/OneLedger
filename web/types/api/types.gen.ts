@@ -96,6 +96,60 @@ export type AccountGroupTotal = {
 };
 
 /**
+ * AccountProposal
+ */
+export type AccountProposal = {
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string;
+    /**
+     * Suggestedaccounts
+     */
+    suggestedAccounts: Array<SuggestedAccount>;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Accounttype
+     */
+    accountType: string | null;
+    /**
+     * Institutionid
+     */
+    institutionId: string | null;
+    /**
+     * Country
+     */
+    country: string | null;
+    /**
+     * Currency
+     */
+    currency: string | null;
+    /**
+     * Openingbalance
+     */
+    openingBalance: string | null;
+    /**
+     * Openingbalanceisderived
+     */
+    openingBalanceIsDerived: boolean;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string;
+    /**
+     * Openingbalancenote
+     */
+    openingBalanceNote: string;
+    /**
+     * Creditlimit
+     */
+    creditLimit: string | null;
+};
+
+/**
  * AccountRow
  */
 export type AccountRow = {
@@ -303,6 +357,32 @@ export type BackfillResult = {
      * Skipped
      */
     skipped: Array<SkippedStatement>;
+};
+
+/**
+ * Body_confirm_statement_account_parse_account_post
+ */
+export type BodyConfirmStatementAccountParseAccountPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Layoutid
+     */
+    layoutId?: string | null;
+    /**
+     * Account
+     */
+    account?: string | null;
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
 };
 
 /**
@@ -1351,6 +1431,10 @@ export type LayoutCreate = {
      */
     institutionId?: string | null;
     /**
+     * Accounttype
+     */
+    accountType?: string | null;
+    /**
      * Fingerprints
      */
     fingerprints: Array<string>;
@@ -1512,6 +1596,10 @@ export type LayoutProfile = {
      * Institutionid
      */
     institutionId: string | null;
+    /**
+     * Accounttype
+     */
+    accountType?: string | null;
     /**
      * Fingerprints
      */
@@ -1927,7 +2015,8 @@ export type ParseResponse = {
     /**
      * Accountid
      */
-    accountId: string;
+    accountId: string | null;
+    accountProposal?: AccountProposal | null;
     /**
      * Layoutid
      */
@@ -2665,6 +2754,24 @@ export type SkippedStatement = {
      * Reason
      */
     reason: string;
+};
+
+/**
+ * SuggestedAccount
+ */
+export type SuggestedAccount = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string;
 };
 
 /**
@@ -4448,6 +4555,35 @@ export type ParseStatementParsePostResponses = {
 };
 
 export type ParseStatementParsePostResponse = ParseStatementParsePostResponses[keyof ParseStatementParsePostResponses];
+
+export type ConfirmStatementAccountParseAccountPostData = {
+    body: BodyConfirmStatementAccountParseAccountPost;
+    path?: never;
+    query?: never;
+    url: '/parse/account';
+};
+
+export type ConfirmStatementAccountParseAccountPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmStatementAccountParseAccountPostError = ConfirmStatementAccountParseAccountPostErrors[keyof ConfirmStatementAccountParseAccountPostErrors];
+
+export type ConfirmStatementAccountParseAccountPostResponses = {
+    /**
+     * Existing account adopted
+     */
+    200: AccountRow;
+    /**
+     * Successful Response
+     */
+    201: AccountRow;
+};
+
+export type ConfirmStatementAccountParseAccountPostResponse = ConfirmStatementAccountParseAccountPostResponses[keyof ConfirmStatementAccountParseAccountPostResponses];
 
 export type ReadImportBatchImportBatchIdGetData = {
     body?: never;
