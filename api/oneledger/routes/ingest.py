@@ -28,7 +28,7 @@ from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
@@ -79,6 +79,14 @@ class ParseFailure(BaseModel):
     reason: str
 
 
+class ParseMetadataFailure(BaseModel):
+    """A captured statement fact that would not read. Reported beside the rows; it never stops
+    the statement staging, and it never carries the text that was captured."""
+
+    key: str
+    reason: str
+
+
 class Reconciliation(BaseModel):
     """`reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.
 
@@ -122,6 +130,7 @@ class ParseResponse(BaseModel):
     reconciliation: Reconciliation
     rows: list[ParseRow]
     failures: list[ParseFailure]
+    metadataFailures: list[ParseMetadataFailure]
 
 
 def _household(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.HouseholdContext:
@@ -294,6 +303,10 @@ def _response(result: pipeline.ParseResult) -> ParseResponse:
                 reason=failure.reason,
             )
             for failure in analysis.failures
+        ],
+        metadataFailures=[
+            ParseMetadataFailure(key=failure.key, reason=failure.reason)
+            for failure in analysis.metadata_failures
         ],
     )
 
@@ -513,6 +526,10 @@ class CommitResult(BaseModel):
     batchId: UUID
     rowsImported: int
     status: str
+    # A card statement's cycle, written in the same transaction as its rows — or, when the
+    # statement did not yield what a cycle requires, None and the facts that were missing.
+    cardStatementId: UUID | None = None
+    cardStatementMissing: list[str] = Field(default_factory=list)
 
 
 class CancelResult(BaseModel):
@@ -545,6 +562,82 @@ _ROWS = """SELECT s.id, s.source_page_number, s.source_row_number, s.booked_date
              LEFT JOIN category c ON c.id = s.proposed_category_id
             WHERE s.import_batch_id = %s AND s.household_id = %s
             ORDER BY s.source_row_number"""
+
+
+# V21 holds both dates NOT NULL, and inventing either would break Invariant 7. So a card statement
+# that did not yield them commits its rows and records no cycle, naming what was missing — rather
+# than refusing the import and losing the transactions over a due date.
+_CYCLE_REQUIRES = ("payment_due_date", "statement_date")
+
+_CYCLE = """INSERT INTO card_statement
+              (household_id, account_id, period_start, period_end, statement_date,
+               payment_due_date, currency, opening_balance, closing_balance, statement_balance,
+               minimum_due, credit_limit, source_document_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, greatest(-%s::numeric, 0), %s, %s, %s)
+         RETURNING id"""
+
+
+def _write_card_cycle(
+    cur: psycopg.Cursor[Any], batch: tuple[Any, ...], household_id: UUID
+) -> tuple[UUID | None, list[str]]:
+    """The cycle a committed card statement describes, inside the commit's own transaction.
+
+    `closing_balance` is the batch's declared closing, signed as I8 reconciled it — negative on
+    a card the owner owes on. `statement_balance` is what was due: its magnitude when owed and
+    zero when in credit, computed in Postgres (ADR-0010; V21 refuses the swap). A refusal here
+    raises, and the raise rolls the ledger rows back with it: the cycle and the rows land
+    together or not at all (`statement-ingestion.html` §11).
+    """
+    cur.execute(
+        """SELECT document_type::text, extracted_metadata, currency FROM document
+            WHERE id = %s AND household_id = %s""",
+        (batch[1], household_id),
+    )
+    document = cur.fetchone()
+    if document is None or document[0] != "card_statement":
+        return None, []
+    facts: dict[str, str] = document[1] or {}
+    opening, closing = batch[9], batch[10]
+    missing = [key for key in _CYCLE_REQUIRES if key not in facts]
+    if opening is None:
+        missing.append("declared_opening_balance")
+    if closing is None:
+        missing.append("declared_closing_balance")
+    if missing:
+        return None, sorted(missing)
+    try:
+        cur.execute(
+            _CYCLE,
+            (
+                household_id,
+                batch[2],
+                batch[7],
+                batch[8],
+                facts["statement_date"],
+                facts["payment_due_date"],
+                document[2],
+                opening,
+                closing,
+                closing,
+                facts.get("minimum_due"),
+                facts.get("credit_limit"),
+                batch[1],
+            ),
+        )
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(
+            status_code=409,
+            detail="this card already has a cycle ending on that date; nothing was committed",
+        ) from None
+    except (psycopg.errors.CheckViolation, psycopg.errors.RaiseException) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=f"the statement's cycle could not be recorded, so nothing was committed: "
+            f"{_first_line(exc)}",
+        ) from None
+    written = cur.fetchone()
+    assert written is not None
+    return written[0], []
 
 
 def _batch_row(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> tuple[Any, ...]:
@@ -857,6 +950,9 @@ def commit_import(
             # leaving it applied. The count stays because it says this before any work is done.
             raise HTTPException(status_code=409, detail=EMPTY_COMMIT)
 
+        # The cycle, inside the same transaction: if it cannot be written, neither are the rows.
+        cycle_id, missing = _write_card_cycle(cur, batch, owner.household_id)
+
         # Read back rather than restated. This route re-implements none of V14's rules and the
         # status it sets is one of them; a literal here would go on reading `completed` on the
         # day the function stops writing it.
@@ -867,6 +963,8 @@ def commit_import(
         batchId=batch_id,
         rowsImported=imported,
         status=str(committed[0]) if committed is not None else "",
+        cardStatementId=cycle_id,
+        cardStatementMissing=missing,
     )
 
 

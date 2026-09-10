@@ -552,6 +552,7 @@ appears in some formats. Rules:</p>
 <li>Parsed dates must fall inside the statement period, which is itself extracted. A date outside
 it fails the row.</li>
 <li>Two-digit years are windowed against the statement period, not against a fixed pivot.</li>
+<li>A card statement's own facts — <code>statement_date</code>, <code>payment_due_date</code>, <code>minimum_due</code>, <code>credit_limit</code> — are read <strong>once</strong>, here: dates under the layout's own <code>dateFormat</code>, amounts through the same money parser as every row, and stored in <code>document.extracted_metadata</code> in canonical form (<code>2026-03-15</code>, <code>40.0000</code>), so nothing downstream re-reads a producer's formatting. One that will not read is reported beside the rows — its key and a reason, never the captured text — and left absent, never zero (I7). Unlike a row that will not normalize, it does not stop the statement staging: a due date is not worth the transactions.</li>
 </ol>
 <h3 id="signs-invariant-i2">Signs (Invariant I2)</h3>
 <p>Statements express direction in at least four ways:</p>
@@ -830,6 +831,7 @@ COMMIT;
 </code></pre>
 <p><strong>All or nothing.</strong> A partial import leaves the ledger in a state that reconciles against nothing
 and is worse than no import at all.</p>
+<p><strong>The card cycle is inside that transaction.</strong> A card statement's <code>card_statement</code> row is written after the rows commit and before the transaction does, so the two land together or not at all. Its <code>closing_balance</code> is the batch's declared closing, signed as reconciliation already verified it — negative on a card the owner owes on — and <code>statement_balance</code> is what was due: that figure's magnitude when owed, zero in credit (<a href="../adr/0010-signed-balance-convention.html">ADR-0010</a>; V21 refuses the swap). A cycle already recorded for the same card and period end refuses the commit whole. <code>statement_date</code> and <code>payment_due_date</code> are required by the table and never invented, so a statement that did not yield them commits its rows, writes no cycle, and says which facts were missing.</p>
 <p>Post-commit, asynchronously: net-worth snapshot, holdings, XIRR, recurring-series detection.</p>
 <hr>
 <h2 id="12-the-import-screen">12. The import screen</h2>
