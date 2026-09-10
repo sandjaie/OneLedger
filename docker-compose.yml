@@ -123,12 +123,19 @@ volumes:
   #     docker volume create oneledger_documents
   #
   # Deleting one is then a deliberate, separate act: `docker volume rm oneledger_pgdata`.
+  #
+  # The names carry the project's name, and that is what keeps a scratch stack off the ledger.
+  # External names are global, not per project: with a fixed name, `COMPOSE_PROJECT_NAME=anything
+  # docker compose up -d db` — the verify skill's "migrations from empty" — would mount THIS
+  # data directory under a second Postgres. Resolved per project, the default project gets
+  # exactly the names above, and any other project names volumes that do not exist, so its `up`
+  # is refused instead of borrowing the ledger's. A scratch stack creates its own two first.
   pgdata:
     external: true
-    name: oneledger_pgdata
+    name: ${COMPOSE_PROJECT_NAME:-oneledger}_pgdata
   documents:
     external: true
-    name: oneledger_documents
+    name: ${COMPOSE_PROJECT_NAME:-oneledger}_documents
   # Not external. This one exists to be destroyed — `scripts/test-db.sh down` drops it, and
   # the live fixtures empty it on every run.
   pgdata_test:
