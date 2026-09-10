@@ -51,6 +51,21 @@ request.
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | the acceptance run | — | Not run | — |
 
+**Two things 4a2 must not read literally**, found in 4a1's review:
+
+- **`statement_balance` is the magnitude of what was due, not the batch's declared closing.** The
+  plan's 4a2 contract says it "is `import_batch.declared_closing_balance`", but that figure is
+  signed — negative on a card the owner owes on — and `schema.md` `0011` defines
+  `statement_balance` as positive. V21 refuses the literal reading
+  (`statement_balance_is_what_was_due`): `closing_balance` takes the signed declared closing and
+  `statement_balance` its magnitude when owed, zero when in credit. The plan is imprecise here;
+  `schema.md` is right.
+- **Whoever writes `payment_transaction_id` or `source_document_id` asserts the household.** V21
+  checks the account and nothing else; V10 checks a transaction's category and merchant for the
+  same reason — a foreign reference leaks another household's data. 4a2 writes
+  `source_document_id` from the household's own batch, safe by construction; nothing writes
+  `payment_transaction_id` yet.
+
 **4a1 adds two `CHECK`s beyond `schema.md` `0011`**, both ADR-0010 made refusable: an amount due
 is never negative, and a card in credit has nothing due — so the amount due stored as the
 closing balance, the one sign swap this table invites, is refused rather than trusted. It also
