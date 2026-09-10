@@ -223,6 +223,7 @@ def test_a_new_reader_of_the_base_table_is_refused(tmp_path: pathlib.Path, state
         "api/oneledger/routes/transactions.py",
         "api/oneledger/routes/ingest.py",
         "api/oneledger/routes/rules.py",
+        "api/oneledger/routes/classification_decisions.py",
         "api/oneledger/routes/transfers.py",
         "api/oneledger/routes/accounts.py",
         "api/oneledger/ingest/pipeline.py",

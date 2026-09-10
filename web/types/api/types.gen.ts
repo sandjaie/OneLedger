@@ -282,6 +282,16 @@ export type AccountsResponse = {
 };
 
 /**
+ * ApplyBody
+ */
+export type ApplyBody = {
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
  * BackfillResult
  */
 export type BackfillResult = {
@@ -528,6 +538,56 @@ export type CategoryUpdate = {
 };
 
 /**
+ * ClassificationState
+ */
+export type ClassificationState = {
+    /**
+     * Txntype
+     */
+    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance';
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Merchantid
+     */
+    merchantId: string | null;
+    /**
+     * Paymentmethod
+     */
+    paymentMethod: 'card' | 'contactless' | 'atm' | 'cash' | 'cheque' | 'upi' | 'neft' | 'imps' | 'rtgs' | 'wire' | 'direct_debit' | 'standing_instruction' | 'wallet' | 'online' | 'other' | null;
+    /**
+     * Classifiedby
+     */
+    classifiedBy: 'user_manual' | 'user_rule' | 'merchant_alias' | 'recurring_series' | 'prior_match' | 'seed_rule' | 'unclassified' | 'ai';
+    /**
+     * Classificationruleid
+     */
+    classificationRuleId: string | null;
+    /**
+     * Classificationconfidence
+     */
+    classificationConfidence: string | null;
+    /**
+     * Isreviewed
+     */
+    isReviewed: boolean;
+    /**
+     * Country
+     */
+    country: string | null;
+    /**
+     * Tags
+     */
+    tags: Array<string> | null;
+    /**
+     * Isexcluded
+     */
+    isExcluded: boolean;
+};
+
+/**
  * ClassifyResult
  *
  * `preview=true` reports what would change and writes nothing; otherwise `changed` is what
@@ -629,6 +689,58 @@ export type DecisionResult = {
      * Updated
      */
     updated: number;
+};
+
+/**
+ * DerivedChanges
+ *
+ * Only V23's derived-state allowlist; absence means preserve, null means clear.
+ */
+export type DerivedChanges = {
+    /**
+     * Txntype
+     */
+    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
+    /**
+     * Merchantid
+     */
+    merchantId?: string | null;
+    /**
+     * Paymentmethod
+     */
+    paymentMethod?: 'card' | 'contactless' | 'atm' | 'cash' | 'cheque' | 'upi' | 'neft' | 'imps' | 'rtgs' | 'wire' | 'direct_debit' | 'standing_instruction' | 'wallet' | 'online' | 'other' | null;
+    /**
+     * Classifiedby
+     */
+    classifiedBy?: 'user_manual' | 'user_rule' | 'merchant_alias' | 'recurring_series' | 'prior_match' | 'seed_rule' | 'unclassified' | 'ai' | null;
+    /**
+     * Classificationruleid
+     */
+    classificationRuleId?: string | null;
+    /**
+     * Classificationconfidence
+     */
+    classificationConfidence?: number | string | null;
+    /**
+     * Isreviewed
+     */
+    isReviewed?: boolean | null;
+    /**
+     * Country
+     */
+    country?: string | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string> | null;
+    /**
+     * Isexcluded
+     */
+    isExcluded?: boolean | null;
 };
 
 /**
@@ -1593,17 +1705,52 @@ export type PeersResponse = {
 };
 
 /**
- * PreviewResult
+ * PreviewBody
  */
-export type PreviewResult = {
+export type PreviewBody = {
     /**
-     * Affected
+     * Knowledgeversionid
      */
-    affected: number;
+    knowledgeVersionId: string;
     /**
-     * Sample
+     * Reason
      */
-    sample: Array<MatchedRow>;
+    reason: string;
+    /**
+     * Items
+     */
+    items: Array<PreviewItem>;
+};
+
+/**
+ * PreviewItem
+ */
+export type PreviewItem = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    changes: DerivedChanges;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * Proposal
+ */
+export type Proposal = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    expectedState: ClassificationState;
+    proposedState: ClassificationState;
+    /**
+     * Reason
+     */
+    reason: string;
 };
 
 /**
@@ -1712,6 +1859,24 @@ export type Reconciliation = {
      * Message
      */
     message: string;
+};
+
+/**
+ * ResultItem
+ */
+export type ResultItem = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Status
+     */
+    status: 'changed' | 'conflicted' | 'unresolved';
+    /**
+     * Reason
+     */
+    reason: string;
 };
 
 /**
@@ -2119,6 +2284,40 @@ export type RuleRow = {
 };
 
 /**
+ * RunResult
+ */
+export type RunResult = {
+    /**
+     * Runid
+     */
+    runId: string;
+    /**
+     * State
+     */
+    state: 'proposed' | 'applied' | 'conflict' | 'expired';
+    /**
+     * Changed
+     */
+    changed: number;
+    /**
+     * Conflicted
+     */
+    conflicted: number;
+    /**
+     * Unresolved
+     */
+    unresolved: number;
+    /**
+     * Items
+     */
+    items: Array<ResultItem>;
+    /**
+     * Sourcerunid
+     */
+    sourceRunId?: string | null;
+};
+
+/**
  * SkippedStatement
  */
 export type SkippedStatement = {
@@ -2463,6 +2662,20 @@ export type TransfersResponse = {
 };
 
 /**
+ * UndoBody
+ */
+export type UndoBody = {
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -2488,6 +2701,58 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * PreviewResult
+ */
+export type OneledgerRoutesClassificationDecisionsPreviewResult = {
+    /**
+     * Runid
+     */
+    runId: string;
+    /**
+     * State
+     */
+    state: 'proposed' | 'applied' | 'conflict' | 'expired';
+    /**
+     * Changed
+     */
+    changed: number;
+    /**
+     * Conflicted
+     */
+    conflicted: number;
+    /**
+     * Unresolved
+     */
+    unresolved: number;
+    /**
+     * Items
+     */
+    items: Array<ResultItem>;
+    /**
+     * Sourcerunid
+     */
+    sourceRunId?: string | null;
+    /**
+     * Proposals
+     */
+    proposals: Array<Proposal>;
+};
+
+/**
+ * PreviewResult
+ */
+export type OneledgerRoutesRulesPreviewResult = {
+    /**
+     * Affected
+     */
+    affected: number;
+    /**
+     * Sample
+     */
+    sample: Array<MatchedRow>;
 };
 
 export type LoginAuthLoginGetData = {
@@ -3079,6 +3344,91 @@ export type UpdateCategoryCategoriesCategoryIdPatchResponses = {
 
 export type UpdateCategoryCategoriesCategoryIdPatchResponse = UpdateCategoryCategoriesCategoryIdPatchResponses[keyof UpdateCategoryCategoriesCategoryIdPatchResponses];
 
+export type PreviewClassificationRunsPreviewPostData = {
+    body: PreviewBody;
+    path?: never;
+    query?: never;
+    url: '/classification-runs/preview';
+};
+
+export type PreviewClassificationRunsPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewClassificationRunsPreviewPostError = PreviewClassificationRunsPreviewPostErrors[keyof PreviewClassificationRunsPreviewPostErrors];
+
+export type PreviewClassificationRunsPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: OneledgerRoutesClassificationDecisionsPreviewResult;
+};
+
+export type PreviewClassificationRunsPreviewPostResponse = PreviewClassificationRunsPreviewPostResponses[keyof PreviewClassificationRunsPreviewPostResponses];
+
+export type ApplyClassificationRunsRunIdApplyPostData = {
+    body: ApplyBody;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/classification-runs/{run_id}/apply';
+};
+
+export type ApplyClassificationRunsRunIdApplyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApplyClassificationRunsRunIdApplyPostError = ApplyClassificationRunsRunIdApplyPostErrors[keyof ApplyClassificationRunsRunIdApplyPostErrors];
+
+export type ApplyClassificationRunsRunIdApplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunResult;
+};
+
+export type ApplyClassificationRunsRunIdApplyPostResponse = ApplyClassificationRunsRunIdApplyPostResponses[keyof ApplyClassificationRunsRunIdApplyPostResponses];
+
+export type UndoClassificationRunsRunIdUndoPostData = {
+    body: UndoBody;
+    path: {
+        /**
+         * Run Id
+         */
+        run_id: string;
+    };
+    query?: never;
+    url: '/classification-runs/{run_id}/undo';
+};
+
+export type UndoClassificationRunsRunIdUndoPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UndoClassificationRunsRunIdUndoPostError = UndoClassificationRunsRunIdUndoPostErrors[keyof UndoClassificationRunsRunIdUndoPostErrors];
+
+export type UndoClassificationRunsRunIdUndoPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunResult;
+};
+
+export type UndoClassificationRunsRunIdUndoPostResponse = UndoClassificationRunsRunIdUndoPostResponses[keyof UndoClassificationRunsRunIdUndoPostResponses];
+
 export type ProposeLayoutLayoutsProposePostData = {
     body: BodyProposeLayoutLayoutsProposePost;
     path?: never;
@@ -3320,7 +3670,7 @@ export type PreviewRuleRulesPreviewPostResponses = {
     /**
      * Successful Response
      */
-    200: PreviewResult;
+    200: OneledgerRoutesRulesPreviewResult;
 };
 
 export type PreviewRuleRulesPreviewPostResponse = PreviewRuleRulesPreviewPostResponses[keyof PreviewRuleRulesPreviewPostResponses];

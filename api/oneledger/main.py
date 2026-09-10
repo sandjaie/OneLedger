@@ -14,6 +14,7 @@ from .routes import (
     auth,
     card_cycles,
     categories,
+    classification_decisions,
     currencies,
     dashboard,
     doctor,
@@ -89,6 +90,7 @@ app.include_router(currencies.router)
 app.include_router(accounts.router)
 app.include_router(transactions.router)
 app.include_router(categories.router)
+app.include_router(classification_decisions.router)
 app.include_router(layouts.router)
 app.include_router(rules.router)
 app.include_router(transfers.router)
