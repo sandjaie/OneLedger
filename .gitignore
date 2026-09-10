@@ -38,3 +38,7 @@ venv/
 backups/
 *.dump
 *.sql.gz
+
+# The OpenAPI schema is an intermediate: `npm run api:types` writes it to a scratch
+# directory and generates `web/types/api/` from it. A copy here is a stale second answer.
+web/openapi.json
