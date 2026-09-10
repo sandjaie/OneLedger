@@ -78,6 +78,16 @@ def _account_number_identity(value: str) -> tuple[str, str]:
     return masked, digest
 
 
+def _stored_account_identity(account_type: str, value: str) -> tuple[str, str | None]:
+    """Reduce a browser-supplied identity to what this account type may retain."""
+    if account_type == "credit_card":
+        digits = _account_digits(value)
+        masked = _masked(f"****{digits[-4:]}")
+        assert masked is not None
+        return masked, None
+    return _account_number_identity(value)
+
+
 def _statement_account_identity(value: str) -> tuple[str, str | None]:
     """Reduce a statement capture to the only identity facts storage may hold.
 
@@ -452,7 +462,9 @@ def create_account(
     account_number_masked = body.accountNumberMasked
     account_number_hash = None
     if body.accountNumber is not None:
-        account_number_masked, account_number_hash = _account_number_identity(body.accountNumber)
+        account_number_masked, account_number_hash = _stored_account_identity(
+            body.accountType, body.accountNumber
+        )
     try:
         with connect() as conn, conn.cursor() as cur:
             return _insert_account(
@@ -478,13 +490,16 @@ def update_account(
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
     replace_account_identity = "accountNumber" in body.model_fields_set
+    replace_account_hash = replace_account_identity or body.accountType == "credit_card"
     replace_account_mask = (
         replace_account_identity or "accountNumberMasked" in body.model_fields_set
     )
     account_number_masked: str | None = None
     account_number_hash: str | None = None
     if body.accountNumber is not None:
-        account_number_masked, account_number_hash = _account_number_identity(body.accountNumber)
+        account_number_masked, account_number_hash = _stored_account_identity(
+            body.accountType, body.accountNumber
+        )
     elif not replace_account_identity:
         account_number_masked = body.accountNumberMasked
     # Changing the opening anchor recomputes the materialised balance from the ledger:
@@ -503,7 +518,11 @@ def update_account(
             # POST /transactions, so the two paths cannot deadlock.
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
-            if replace_account_mask and not replace_account_identity:
+            if (
+                replace_account_mask
+                and not replace_account_identity
+                and body.accountType != "credit_card"
+            ):
                 cur.execute(
                     """SELECT account_number_masked, account_number_hash FROM account
                        WHERE id = %s AND household_id = %s""",
@@ -629,7 +648,7 @@ def update_account(
                     body.country,
                     replace_account_mask,
                     account_number_masked,
-                    replace_account_identity,
+                    replace_account_hash,
                     account_number_hash,
                     body.openedOn,
                     body.closedOn,

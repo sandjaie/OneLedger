@@ -277,9 +277,9 @@ was checked into a document first.
   two entries.
 - **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the
   address it wrote takes an `UPDATE`.
-- **The ordinary account form hashes a submitted card number.** The statement-confirmation path
-  stores a card mask only; bringing `POST` and `PATCH /accounts` to that same privacy boundary is
-  `fix/card-accounts-store-mask-only`, separate from slice 1.8 Task 8a1.
+- **The ordinary account form used to hash a submitted card number.** V27 clears legacy card
+  hashes and enforces mask-only storage; `POST` and `PATCH /accounts` now apply the same boundary
+  as statement confirmation. Delivered by `fix/card-accounts-store-mask-only`.
 
 ### Twice in one day, the working ledger was destroyed
 
