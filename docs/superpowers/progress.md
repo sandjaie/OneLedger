@@ -52,7 +52,9 @@ request.
 | 3a5 — the rules screen | `feature/p1-3a5-rules-screen` | Delivered | [#86](https://github.com/sandjaie/OneLedger/pull/86) |
 | 3b1 — the transfer store | `feature/p1-3b1-transfer-schema` | Delivered | [#90](https://github.com/sandjaie/OneLedger/pull/90) |
 | 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | this branch |
-| 3b3–3b4 — transfers through the app, and on screen | `feature/p1-3b3-transfer-api` · `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | this branch |
+| 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
 | the acceptance run | — | Not run | — |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
@@ -70,6 +72,14 @@ was checked into a document first.
 - **3b2's pair-history signal saturates at three confirmations.** §3's "confirmed eleven times"
   is an illustration of the effect rather than a threshold; read as one, the signal would
   contribute almost nothing for a pair's first ten transfers.
+- **3b3 ships as the plan's own split**, `3b3a` reads then `3b3b` writes: forecast at about
+  590 production lines and tests running 1.5–1.8× that, the whole task sat on the 1,600 soft
+  budget before a line was written.
+- **The candidate list's default window ends at the ledger's latest row, not today.** Anchored
+  to today, a ledger whose statements lag three months would report nothing to confirm.
+- **Manual-linking peers look 31 days out**, where the candidate scan stops at §3's widest
+  window of 7: the owner is choosing, and a remittance that took ten days is still theirs to
+  link after the scorer's date signal has given up on it.
 - **3b2 adds `propose_kind()` and `band()`** beside `score_match()`, so 3b3 takes the kind and
   the presentation band from the same module rather than answering either a second way.
 

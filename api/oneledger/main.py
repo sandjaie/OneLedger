@@ -20,6 +20,7 @@ from .routes import (
     layouts,
     rules,
     transactions,
+    transfers,
 )
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
@@ -86,6 +87,7 @@ app.include_router(transactions.router)
 app.include_router(categories.router)
 app.include_router(layouts.router)
 app.include_router(rules.router)
+app.include_router(transfers.router)
 app.include_router(ingest.router)
 
 
