@@ -235,7 +235,10 @@ ROLLBACK;
 -- different household is not merely hidden by RLS; it is impossible to persist.
 BEGIN;
 DO $$
-DECLARE f RECORD; k1 UUID; k2 UUID; v1 UUID; v2 UUID; r1 UUID; refusal TEXT;
+DECLARE
+  f RECORD; k1 UUID; k2 UUID; v1 UUID; v2 UUID; r1 UUID; refusal TEXT;
+  merchant1 UUID; merchant2 UUID; rule1 UUID; rule2 UUID; field_name TEXT;
+  own_id UUID; their_id UUID; expected_state JSONB; proposed_state JSONB;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0020_fixture();
   INSERT INTO classification_knowledge (household_id) VALUES (f.h1) RETURNING id INTO k1;
@@ -281,6 +284,83 @@ BEGIN
     ASSERT refusal LIKE '%fk_classification_run_item_transaction_household%',
       'expected the transaction household foreign key, got ' || refusal;
   END;
+
+  INSERT INTO merchant (household_id, canonical_name)
+  VALUES (f.h1, 'Synthetic merchant one') RETURNING id INTO merchant1;
+  INSERT INTO merchant (household_id, canonical_name)
+  VALUES (f.h2, 'Synthetic merchant two') RETURNING id INTO merchant2;
+  INSERT INTO classification_rule (
+    household_id, match_description_pattern, set_txn_type, origin
+  ) VALUES (f.h1, 'SYNTHETIC ONE', 'expense', 'user_created') RETURNING id INTO rule1;
+  INSERT INTO classification_rule (
+    household_id, match_description_pattern, set_txn_type, origin
+  ) VALUES (f.h2, 'SYNTHETIC TWO', 'expense', 'user_created') RETURNING id INTO rule2;
+
+  -- Each JSON reference is checked in both snapshot positions. A trigger, not RLS visibility,
+  -- refuses another household's valid UUID.
+  FOREACH field_name IN ARRAY ARRAY['category_id', 'merchant_id', 'classification_rule_id'] LOOP
+    own_id := CASE field_name
+      WHEN 'category_id' THEN f.category1 WHEN 'merchant_id' THEN merchant1 ELSE rule1 END;
+    their_id := CASE field_name
+      WHEN 'category_id' THEN f.category2 WHEN 'merchant_id' THEN merchant2 ELSE rule2 END;
+    expected_state := jsonb_set(
+      pg_temp.t0020_state('loan_repayment', f.category1, merchant1,
+                           p_classified => 'user_rule', p_rule => rule1),
+      ARRAY[field_name], to_jsonb(their_id::TEXT)
+    );
+    proposed_state := pg_temp.t0020_state(
+      'expense', f.category1, merchant1, p_classified => 'user_rule', p_rule => rule1
+    );
+    BEGIN
+      INSERT INTO classification_run_item (
+        household_id, run_id, transaction_id, expected_transaction_updated_at,
+        expected_source_key, expected_state, proposed_state, reason
+      ) SELECT f.h1, r1, f.t1, t.updated_at, t.dedupe_hash,
+               expected_state, proposed_state, 'cross-household expected ' || field_name
+          FROM transaction t WHERE t.id = f.t1;
+      RAISE EXCEPTION 'another household''s % in expected_state must be refused', field_name;
+    EXCEPTION WHEN foreign_key_violation THEN
+      GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+      ASSERT refusal LIKE '%references % outside household%',
+        'expected household refusal for expected ' || field_name || ', got ' || refusal;
+    END;
+
+    expected_state := pg_temp.t0020_state(
+      'loan_repayment', f.category1, merchant1, p_classified => 'user_rule', p_rule => rule1
+    );
+    proposed_state := jsonb_set(
+      pg_temp.t0020_state('expense', f.category1, merchant1,
+                           p_classified => 'user_rule', p_rule => rule1),
+      ARRAY[field_name], to_jsonb(their_id::TEXT)
+    );
+    BEGIN
+      INSERT INTO classification_run_item (
+        household_id, run_id, transaction_id, expected_transaction_updated_at,
+        expected_source_key, expected_state, proposed_state, reason
+      ) SELECT f.h1, r1, f.t1, t.updated_at, t.dedupe_hash,
+               expected_state, proposed_state, 'cross-household proposed ' || field_name
+          FROM transaction t WHERE t.id = f.t1;
+      RAISE EXCEPTION 'another household''s % in proposed_state must be refused', field_name;
+    EXCEPTION WHEN foreign_key_violation THEN
+      GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+      ASSERT refusal LIKE '%references % outside household%',
+        'expected household refusal for proposed ' || field_name || ', got ' || refusal;
+    END;
+  END LOOP;
+
+  -- The same references from this household are the valid counterpart.
+  INSERT INTO classification_run_item (
+    household_id, run_id, transaction_id, expected_transaction_updated_at,
+    expected_source_key, expected_state, proposed_state, reason
+  ) SELECT f.h1, r1, f.t1, t.updated_at, t.dedupe_hash,
+           pg_temp.t0020_state('loan_repayment', f.category1, merchant1,
+                                p_classified => 'user_rule', p_rule => rule1),
+           pg_temp.t0020_state('expense', f.category1, merchant1,
+                                p_classified => 'user_rule', p_rule => rule1),
+           'same-household state references'
+      FROM transaction t WHERE t.id = f.t1;
+  ASSERT (SELECT count(*) FROM classification_run_item WHERE run_id = r1) = 1,
+    'only the valid same-household preview item may remain';
   RAISE NOTICE 'PASS 0020 every knowledge and transaction reference stays in its household';
 END $$;
 ROLLBACK;
@@ -369,7 +449,8 @@ ROLLBACK;
 BEGIN;
 DO $$
 DECLARE
-  f RECORD; knowledge UUID; version UUID; run1 UUID; run2 UUID; decision1 UUID; decision2 UUID;
+  f RECORD; knowledge UUID; version UUID; run1 UUID; run2 UUID; run3 UUID;
+  decision1 UUID; decision2 UUID;
   original_state JSONB; first_state JSONB; corrected_state JSONB; original_created TIMESTAMPTZ;
   refusal TEXT;
 BEGIN
@@ -397,6 +478,59 @@ BEGIN
   ) SELECT f.h1, run1, f.t1, t.updated_at, t.dedupe_hash, original_state, first_state,
            'supported synthetic evidence'
       FROM transaction t WHERE t.id = f.t1;
+
+  BEGIN
+    UPDATE classification_run_item SET reason = 'rewritten preview'
+     WHERE run_id = run1 AND transaction_id = f.t1;
+    RAISE EXCEPTION 'a preview item update must be refused';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%classification_run_item is immutable%',
+      'expected immutable preview update refusal, got ' || refusal;
+  END;
+  BEGIN
+    DELETE FROM classification_run_item WHERE run_id = run1 AND transaction_id = f.t1;
+    RAISE EXCEPTION 'a preview item deletion must be refused';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%classification_run_item is immutable%',
+      'expected immutable preview delete refusal, got ' || refusal;
+  END;
+  ASSERT (SELECT reason FROM classification_run_item
+           WHERE run_id = run1 AND transaction_id = f.t1) = 'supported synthetic evidence',
+    'refused preview mutations must leave the persisted item unchanged';
+
+  BEGIN
+    INSERT INTO classification_decision (
+      household_id, run_id, transaction_id, knowledge_version_id, actor_user_id,
+      before_state, after_state, reason
+    ) VALUES (
+      f.h1, run1, f.t1, version, f.u1, corrected_state, first_state,
+      'wrong before state'
+    );
+    RAISE EXCEPTION 'a decision before state differing from preview must be refused';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%must exactly match its persisted preview item%',
+      'expected before-state preview mismatch, got ' || refusal;
+  END;
+  BEGIN
+    INSERT INTO classification_decision (
+      household_id, run_id, transaction_id, knowledge_version_id, actor_user_id,
+      before_state, after_state, reason
+    ) VALUES (
+      f.h1, run1, f.t1, version, f.u1, original_state, corrected_state,
+      'wrong after state'
+    );
+    RAISE EXCEPTION 'a decision after state differing from preview must be refused';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%must exactly match its persisted preview item%',
+      'expected after-state preview mismatch, got ' || refusal;
+  END;
+  ASSERT (SELECT count(*) FROM classification_decision WHERE run_id = run1) = 0,
+    'refused preview mismatches must not leave decision records';
+
   INSERT INTO classification_decision (
     household_id, run_id, transaction_id, knowledge_version_id, actor_user_id,
     before_state, after_state, reason
@@ -404,21 +538,53 @@ BEGIN
     f.h1, run1, f.t1, version, f.u1, original_state, first_state, 'first synthetic decision'
   ) RETURNING id, created_at INTO decision1, original_created;
 
+  -- This decision matches its own persisted preview, but that preview starts before the state
+  -- left by decision1. The correction-chain guard must reject it independently.
   INSERT INTO classification_run (
     household_id, knowledge_version_id, actor_user_id, state, reason, expires_at, idempotency_key
-  ) VALUES (f.h1, version, f.u1, 'applied', 'correct synthetic role',
-            now() + interval '1 hour', 'apply-correction') RETURNING id INTO run2;
+  ) VALUES (f.h1, version, f.u1, 'applied', 'malformed correction chain',
+            now() + interval '1 hour', 'apply-bad-chain') RETURNING id INTO run2;
   INSERT INTO classification_run_item (
     household_id, run_id, transaction_id, expected_transaction_updated_at,
     expected_source_key, expected_state, proposed_state, reason
-  ) SELECT f.h1, run2, f.t1, t.updated_at, t.dedupe_hash, first_state, corrected_state,
+  ) SELECT f.h1, run2, f.t1, t.updated_at, t.dedupe_hash, original_state, corrected_state,
+           'malformed predecessor state'
+      FROM transaction t WHERE t.id = f.t1;
+  BEGIN
+    INSERT INTO classification_decision (
+      household_id, run_id, transaction_id, knowledge_version_id, actor_user_id,
+      before_state, after_state, reason, supersedes_decision_id
+    ) VALUES (
+      f.h1, run2, f.t1, version, f.u1, original_state, corrected_state,
+      'wrong predecessor state', decision1
+    );
+    RAISE EXCEPTION 'a correction not starting from its predecessor after-state must be refused';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%must begin from the state left by the decision it supersedes%',
+      'expected predecessor-state mismatch, got ' || refusal;
+  END;
+  ASSERT (SELECT count(*) FROM classification_decision WHERE transaction_id = f.t1) = 1,
+    'a refused correction must leave only the prior decision';
+  ASSERT (SELECT after_state FROM classification_decision WHERE id = decision1) = first_state,
+    'a refused correction must not alter its predecessor';
+
+  -- Valid correction counterpart: its preview begins exactly where decision1 ended.
+  INSERT INTO classification_run (
+    household_id, knowledge_version_id, actor_user_id, state, reason, expires_at, idempotency_key
+  ) VALUES (f.h1, version, f.u1, 'applied', 'correct synthetic role',
+            now() + interval '1 hour', 'apply-correction') RETURNING id INTO run3;
+  INSERT INTO classification_run_item (
+    household_id, run_id, transaction_id, expected_transaction_updated_at,
+    expected_source_key, expected_state, proposed_state, reason
+  ) SELECT f.h1, run3, f.t1, t.updated_at, t.dedupe_hash, first_state, corrected_state,
            'later synthetic correction'
       FROM transaction t WHERE t.id = f.t1;
   INSERT INTO classification_decision (
     household_id, run_id, transaction_id, knowledge_version_id, actor_user_id,
     before_state, after_state, reason, supersedes_decision_id
   ) VALUES (
-    f.h1, run2, f.t1, version, f.u1, first_state, corrected_state,
+    f.h1, run3, f.t1, version, f.u1, first_state, corrected_state,
     'corrected synthetic decision', decision1
   ) RETURNING id INTO decision2;
 
