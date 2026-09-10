@@ -47,8 +47,8 @@ request.
 | 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
 | 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) |
-| 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | this branch |
-| 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | [#104](https://github.com/sandjaie/OneLedger/pull/104) |
+| 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Delivered | this branch |
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | the acceptance run | — | Not run | — |
 
@@ -67,6 +67,11 @@ request.
   exactly.
 - **Utilisation reads the cycle's own `credit_limit`**, the limit at statement date, and is absent when
   the cycle states none — which, until 4a3 teaches the card layout to capture it, is every real card.
+- **Spending is one figure.** F02 separates consumption spending from external household outflows;
+  nothing in Phase 1's classification tells the two apart, so both are in spending. That leaves net
+  equal to F02's retained income, and the savings rate F02's own.
+- **The savings rate is null at negative income, not only at zero.** The plan names the zero-income
+  month; F02 says "not applicable" when income is zero or negative, and the product document wins.
 
 **4b1's deviations, recorded:**
 

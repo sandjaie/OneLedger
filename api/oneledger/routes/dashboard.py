@@ -1,8 +1,7 @@
-"""Slice 1.4 task 4b2a: the dashboard's balance-sheet half — net worth and cards due.
+"""Slice 1.4 task 4b2: the dashboard — net worth, this month, the trend and the cards due.
 
-`GET /dashboard` answers in one payload. This half reads `account` and `card_statement`, and never a
-flow; 4b2b adds the month and the trend, which read `v_transaction_reportable`. The screen tolerates
-either half arriving first.
+`GET /dashboard` answers in one payload. Its balance-sheet half (4b2a) reads `account` and
+`card_statement`; its flow half (4b2b) reads `v_transaction_reportable` and nothing else.
 
 **Net worth is one SUM of signed balances** (ADR-0010) — assets positive, liabilities negative, no
 CASE on the account's class and no subtraction, because each of those is a place a sign error
@@ -19,6 +18,13 @@ fills its weekends, never interpolating, and labels the rate carried with its re
 currency with no rate at or before the date makes that reporting currency's net worth **null**,
 naming the currency and the date — never a partial sum, which would be a smaller, confident, wrong
 number. This route fetches no rate: reads write nothing.
+
+**Flows are frozen (I3, I5).** This month and the eleven before it sum `amount_base` and
+`amount_secondary` as each row froze them on its own day — never the base table, never a rate.
+Income is the `income` rows; spending is every other reportable row with its sign turned, so a
+refund lowers spending rather than counting as income (`classification.html`); net is one SUM of
+the lot. The savings rate is net over income, null when income is not positive (`finance-os.html`
+F02).
 """
 
 from __future__ import annotations
@@ -84,8 +90,24 @@ class CardDue(BaseModel):
     utilisationPct: str | None
 
 
+class MonthFlows(BaseModel):
+    # The first day of the month the figures belong to.
+    month: date
+    incomeBase: str
+    incomeSecondary: str
+    spendingBase: str
+    spendingSecondary: str
+    netBase: str
+    netSecondary: str
+    # net ÷ income, human-readable: 15.2500 is 15.25%. Null when income is not positive.
+    savingsRatePctBase: str | None
+    savingsRatePctSecondary: str | None
+
+
 class DashboardResponse(BaseModel):
     netWorth: NetWorth
+    thisMonth: MonthFlows
+    trend: list[MonthFlows]
     cardsDue: list[CardDue]
 
 
@@ -129,6 +151,38 @@ CARDS_DUE = """
          ORDER BY c.account_id, c.period_end DESC
     ) latest
     ORDER BY payment_due_date, name"""
+
+
+# The month of the as-of date and the eleven before it, through the as-of date, from frozen
+# amounts only. A month with no rows is zeros and no savings rate; GREATEST and NULLIF make the
+# rate null wherever income is not positive, so no CASE is needed.
+FLOWS = """
+    WITH months AS (
+        SELECT generate_series(date_trunc('month', %(as_of)s::timestamp) - interval '11 months',
+                               date_trunc('month', %(as_of)s::timestamp),
+                               interval '1 month')::date AS month
+    ), flows AS (
+        SELECT date_trunc('month', booked_date::timestamp)::date AS month,
+               sum(amount_base) FILTER (WHERE txn_type = 'income') AS income_base,
+               sum(amount_secondary) FILTER (WHERE txn_type = 'income') AS income_secondary,
+               -sum(amount_base) FILTER (WHERE txn_type <> 'income') AS spending_base,
+               -sum(amount_secondary) FILTER (WHERE txn_type <> 'income') AS spending_secondary,
+               sum(amount_base) AS net_base,
+               sum(amount_secondary) AS net_secondary
+          FROM v_transaction_reportable
+         WHERE household_id = %(household)s
+           AND booked_date >= date_trunc('month', %(as_of)s::timestamp) - interval '11 months'
+           AND booked_date <= %(as_of)s
+         GROUP BY 1
+    )
+    SELECT m.month,
+           coalesce(f.income_base, 0.0000), coalesce(f.income_secondary, 0.0000),
+           coalesce(f.spending_base, 0.0000), coalesce(f.spending_secondary, 0.0000),
+           coalesce(f.net_base, 0.0000), coalesce(f.net_secondary, 0.0000),
+           round(f.net_base / NULLIF(GREATEST(f.income_base, 0), 0) * 100, 4),
+           round(f.net_secondary / NULLIF(GREATEST(f.income_secondary, 0), 0) * 100, 4)
+      FROM months m LEFT JOIN flows f USING (month)
+     ORDER BY m.month"""
 
 
 class _Rate:
@@ -233,6 +287,21 @@ def read_dashboard(
         pair = cur.fetchone()
         assert pair is not None
         net_worth = _net_worth(cur, owner.household_id, str(pair[0]), str(pair[1]), as_of)
+        cur.execute(FLOWS, {"as_of": as_of, "household": owner.household_id})
+        trend = [
+            MonthFlows(
+                month=row[0],
+                incomeBase=str(row[1]),
+                incomeSecondary=str(row[2]),
+                spendingBase=str(row[3]),
+                spendingSecondary=str(row[4]),
+                netBase=str(row[5]),
+                netSecondary=str(row[6]),
+                savingsRatePctBase=_out(row[7]),
+                savingsRatePctSecondary=_out(row[8]),
+            )
+            for row in cur.fetchall()
+        ]
         cur.execute(CARDS_DUE, (as_of, owner.household_id, as_of))
         cards = [
             CardDue(
@@ -249,4 +318,4 @@ def read_dashboard(
             )
             for row in cur.fetchall()
         ]
-    return DashboardResponse(netWorth=net_worth, cardsDue=cards)
+    return DashboardResponse(netWorth=net_worth, thisMonth=trend[-1], trend=trend, cardsDue=cards)
