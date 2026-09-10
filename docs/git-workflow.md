@@ -39,7 +39,9 @@ what it produces. This file says only where the branches go:
    PR target` per slice before implementation starts.
 3. Before the **first** push: `/verify`, then one `/oneledger-code-review` round, then the fixes
    it asks for and `/verify` again. Nothing reaches `origin` unreviewed, and the push hooks
-   enforce the suite and the diff budget below.
+   enforce the suite and the diff budget below. A clean task review is the branch review when the
+   branch contains that one task; never repeat a review over the same range. Re-review only a fix
+   range, or the integration surface of a branch that genuinely contains several reviewed tasks.
 4. **One PR to `develop` per branch** from `.github/PULL_REQUEST_TEMPLATE.md`, with honest
    verification evidence, and **titled so the list says which slice it is** (below).
 5. **The orchestrator merges** once the local gates are green and the PR's evidence is honestly
@@ -82,6 +84,9 @@ was wrong and why this is right. `git log` is the style guide.
 
 ## Rules
 
+- Commit hooks stay fast and staged-file-scoped: secrets, file/config hygiene, real-data exclusion,
+  documentation structure, identifiers, Ruff/format and ESLint. Whole-project types, Markdown
+  lint, tests, generated contracts, SQL invariants and the diff budget run at pre-push.
 - Nothing commits straight to `main`; it moves only through `release/*` on owner request.
   `develop` moves by PR (owner-directed integrations excepted).
 - One coherent slice (or one fix) per branch and PR, inside the **diff budget**:
