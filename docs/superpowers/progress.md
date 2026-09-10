@@ -48,9 +48,24 @@ request.
 | 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
 | 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) · #102's tests no longer reach the repository a push hook is for, [#106](https://github.com/sandjaie/OneLedger/pull/106) |
 | 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | [#104](https://github.com/sandjaie/OneLedger/pull/104) |
-| 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Delivered | this branch |
-| 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Not started | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Delivered | [#105](https://github.com/sandjaie/OneLedger/pull/105) |
+| 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Delivered | this branch |
 | the acceptance run | — | Not run | — |
+
+**4b3's deviations, recorded:**
+
+- **The workspace loads the currency catalogue on the Overview.** A card due can be in a currency
+  outside the household's pair, and it is formatted with its own row, so the test that said the
+  Overview never fetches `/currencies` now says it fetches exactly `/household`, `/currencies` and
+  `/dashboard`.
+- **The empty state reads "no held currency and no card".** The payload has no account count, and
+  `netWorth.rates` lists every currency an account that counts toward net worth is held in, so an
+  empty list means nothing counts yet. A household whose only accounts are excluded from net worth
+  sees the empty state even when it has flows.
+- **One liability flip, not two.** `formatOwed` in `web/lib/money/format.ts` is the flip, and the
+  accounts screen's per-account "You owe" now calls it. That screen's group totals still write "₹X
+  owed" through their own `unsigned()`; unifying the wording changes that screen and its tests, so
+  it is left for its own change.
 
 **4b2's deviations, recorded:**
 
