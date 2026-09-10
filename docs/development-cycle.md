@@ -93,6 +93,15 @@ This is not a precaution in the abstract: on 10 September 2026 exporting `.env` 
 live suite run truncated the working ledger, taking 4,184 imported transactions and four layout
 profiles with it.
 
+**Tear the test stack down with `scripts/test-db.sh down`, never with a compose command of your
+own.** `--profile test` selects which services *start*; it does not scope a teardown, and
+`docker compose --profile test down -v` operates on the whole project. Later the same day that
+command removed `pgdata` and `documents` — the ledger and every original statement it traces
+back to. Both volumes are **external** now (`docker-compose.yml`), so `down -v` is refused on
+them whatever project it runs in; create them once with `docker volume create oneledger_pgdata`
+and `docker volume create oneledger_documents` before the first `up`. `pgdata_test` is
+deliberately not external: it exists to be destroyed.
+
 ### 6. Push — the hooks are the enforcement
 
 `pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and

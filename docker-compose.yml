@@ -110,6 +110,25 @@ services:
       db: { condition: service_healthy }
 
 volumes:
+  # `pgdata` holds the ledger and `documents` holds every original statement it traces back
+  # to (I6). Both are EXTERNAL, and that is the whole point: `docker compose down -v` removes
+  # a compose-managed volume without asking, and on 10 September 2026 it removed both — once
+  # from a plan step that recommended it, once from a `--profile test down -v` that looked
+  # scoped to the test stack and was not. `--profile` selects what starts; it does not scope
+  # a teardown. An external volume is refused by `down -v`, so the accident stops being
+  # possible rather than being remembered against.
+  #
+  # Create them once, before the first `docker compose up`:
+  #     docker volume create oneledger_pgdata
+  #     docker volume create oneledger_documents
+  #
+  # Deleting one is then a deliberate, separate act: `docker volume rm oneledger_pgdata`.
   pgdata:
-  pgdata_test:
+    external: true
+    name: oneledger_pgdata
   documents:
+    external: true
+    name: oneledger_documents
+  # Not external. This one exists to be destroyed — `scripts/test-db.sh down` drops it, and
+  # the live fixtures empty it on every run.
+  pgdata_test:
