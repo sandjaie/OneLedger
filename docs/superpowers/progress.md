@@ -53,8 +53,8 @@ request.
 | 3b1 — the transfer store | `feature/p1-3b1-transfer-schema` | Delivered | [#90](https://github.com/sandjaie/OneLedger/pull/90) |
 | 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | this branch |
 | 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | [#94](https://github.com/sandjaie/OneLedger/pull/94) |
-| 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Delivered | this branch |
-| 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Not started | [slice 1.3 plan](plans/2026-09-10-slice-1-3-classification-and-transfers.md) |
+| 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Delivered | [#95](https://github.com/sandjaie/OneLedger/pull/95) |
+| 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Delivered | this branch |
 | the acceptance run | — | Not run | — |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
@@ -80,6 +80,11 @@ was checked into a document first.
 - **Manual-linking peers look 31 days out**, where the candidate scan stops at §3's widest
   window of 7: the owner is choosing, and a remittance that took ten days is still theirs to
   link after the scorer's date signal has given up on it.
+- **3b4 loads the transfer queue when the owner asks, not when the screen renders.** The
+  scan is the ledger joined against itself; running it on every visit to Transactions would
+  make that screen as slow as its heaviest query, and would renumber every existing test that
+  mocks the screen's requests in sequence. "Find transfers" is the click; nothing posts until
+  "Confirm selected" is the next one.
 - **3b3b derives each FX figure from the stored one before it.** The spread cost is the source
   amount times the *stored* four-place spread, not the unrounded one, so every stored figure
   can be recomputed from its neighbours — the rule `money._frozen` applies to frozen amounts.
