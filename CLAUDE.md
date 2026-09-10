@@ -139,6 +139,11 @@ Only one implementation agent may work at a time. Wait for any reviewer using th
 finish before changing its branch or files; do not run builds and type checks concurrently against
 the same generated output.
 
+**A session already running in a worktree** (`.claude/worktrees/<name>`) needs the main checkout's
+`.env`. `.worktreeinclude` copies it; if it is missing, copy it and nothing else. Its live tests get
+their own `db-test` from `scripts/test-db.sh up` — see
+[docs/development-cycle.md](docs/development-cycle.md).
+
 **Put the branch in the plan or spec before dispatch.** Pass that file to the implementer; do
 not leave the branch name only in a chat message or let the agent invent another one. The
 orchestrator checks local changes, switches branches and dispatches the agent. Preserve
