@@ -9,6 +9,9 @@ when the owner has asked for that pair by name (ADR-0007, refined by ADR-0017). 
 link corrupts spending totals in a way that stays invisible for months, which is why even a
 score of 1.0 is a suggestion.
 
+`multi-currency-and-fx.html` §5 adds one signal §3 does not list: a source whose own narration
+states what arrives, in which currency and at what rate.
+
 `ingest/` may not import from `routes/`, so this module issues no query: the market rate, the
 pair history and the rule hint arrive as arguments. It reads no database and writes nothing.
 """
@@ -18,8 +21,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
+
+from .normalize import parse_amount
 
 # §3's weighted sum. They total 1.0, and a test says so — a weight edited in isolation
 # otherwise moves every score without moving any threshold.
@@ -67,6 +72,48 @@ _REFERENCE_MINIMUM = 4
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
+# §5. A credit arriving as the source's narration states it — or short by a flat receiving
+# charge — is the same movement; wider than this is a different amount, and the weighted sum
+# decides it. The narration's own two figures must reproduce the debit within the same bound.
+# ponytail: one flat bound for every provider; a per-provider fee schedule if one ever matters.
+_STATED_FEE_TOLERANCE = Decimal("0.01")
+# `band()`'s "high". A stated match is lifted into it and the weighted sum still orders pairs
+# inside it, so two credits of the stated amount do not tie.
+_NEAR_CERTAIN = 0.90
+
+
+@dataclass(frozen=True)
+class StatedRemittance:
+    """What an outbound remittance's narration says arrives (`multi-currency-and-fx.html` §5).
+
+    `rate` is as the narration writes it — source units per one destination unit — so `amount
+    × rate` is the debit. That held on every such narration the owner's statements carry, and
+    is checked on every read rather than trusted.
+    """
+
+    amount: Decimal
+    currency: str
+    rate: Decimal
+
+
+def stated_remittance(
+    amount: str | None, currency: str | None, rate: str | None
+) -> StatedRemittance | None:
+    """The three captures a layout reads into `raw_row`, or None unless all three are figures."""
+    if amount is None or currency is None or rate is None:
+        return None
+    parsed_amount = parse_amount(amount)
+    try:
+        parsed_rate = Decimal(rate.strip())
+    except InvalidOperation:
+        return None
+    code = currency.strip().upper()
+    if parsed_amount is None or parsed_amount <= 0 or len(code) != 3 or not code.isalpha():
+        return None
+    if not parsed_rate.is_finite() or parsed_rate <= 0:
+        return None
+    return StatedRemittance(amount=parsed_amount, currency=code, rate=parsed_rate)
+
 
 @dataclass(frozen=True)
 class Leg:
@@ -84,6 +131,7 @@ class Leg:
     reference_raw: str | None
     is_transfer_candidate: bool
     counterparty_account_id: UUID | None
+    remittance: StatedRemittance | None = None
 
 
 @dataclass(frozen=True)
@@ -140,13 +188,34 @@ def _tokens(text: str) -> frozenset[str]:
     return frozenset(match.group().upper() for match in _TOKEN.finditer(text))
 
 
-def _amount_score(debit: Leg, credit: Leg, market_rate: Decimal | None) -> float:
+def _stated_shortfall(debit: Leg, credit: Leg) -> Decimal | None:
+    """How far short of what the debit's narration states the credit arrived, as a fraction of
+    the stated amount — None when the narration names another currency, or states figures that
+    do not describe this debit, which a near-certain match must never be built on."""
+    stated = debit.remittance
+    if stated is None or stated.currency != credit.currency:
+        return None
+    source = abs(debit.amount)
+    if abs(stated.amount * stated.rate - source) > source * _STATED_FEE_TOLERANCE:
+        return None
+    return (stated.amount - abs(credit.amount)) / stated.amount
+
+
+def _one_currency_score(difference: Decimal) -> float:
+    if difference < _SAME_CURRENCY_EXACT:
+        return 1.0
+    return max(0.0, 1.0 - float(difference) * _SAME_CURRENCY_SLOPE)
+
+
+def _amount_score(
+    debit: Leg, credit: Leg, market_rate: Decimal | None, shortfall: Decimal | None
+) -> float:
     source, destination = abs(debit.amount), abs(credit.amount)
+    if shortfall is not None:
+        # The narration named what arrives, in the credit's own currency: no rate between them.
+        return _one_currency_score(abs(shortfall))
     if debit.currency == credit.currency:
-        difference = abs(source - destination) / source
-        if difference < _SAME_CURRENCY_EXACT:
-            return 1.0
-        return max(0.0, 1.0 - float(difference) * _SAME_CURRENCY_SLOPE)
+        return _one_currency_score(abs(source - destination) / source)
     if market_rate is None or market_rate <= 0:
         return 0.0
     expected = source * market_rate
@@ -212,13 +281,23 @@ def score_match(debit: Leg, credit: Leg, evidence: Evidence) -> float:
         same_institution=debit.institution_id is not None
         and debit.institution_id == credit.institution_id,
     )
+    shortfall = _stated_shortfall(debit, credit)
+    dated = _date_score(debit, credit, window)
     score = (
-        AMOUNT_WEIGHT * _amount_score(debit, credit, evidence.market_rate)
-        + DATE_WEIGHT * _date_score(debit, credit, window)
+        AMOUNT_WEIGHT * _amount_score(debit, credit, evidence.market_rate, shortfall)
+        + DATE_WEIGHT * dated
         + DESCRIPTION_WEIGHT * _description_score(debit, credit)
         + PAIR_HISTORY_WEIGHT * _pair_history_score(evidence.confirmed_pairs)
         + RULE_HINT_WEIGHT * _rule_hint_score(debit, credit)
     )
+    # §5: the source's own narration names what arrives. Arriving so, inside the window, the
+    # pair is near-certain — which §3's weights alone cannot say before any history exists.
+    if (
+        shortfall is not None
+        and dated > 0
+        and -_SAME_CURRENCY_EXACT < shortfall <= _STATED_FEE_TOLERANCE
+    ):
+        score = _NEAR_CERTAIN + (1 - _NEAR_CERTAIN) * score
     # §3's own text. It cannot bind while every component is bounded to [0, 1] and the
     # weights sum to one — kept so a component that later escapes its bound caps rather than
     # outranks a perfect match, and said here so a reviewer does not hunt for its test.

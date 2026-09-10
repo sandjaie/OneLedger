@@ -50,9 +50,12 @@ COLUMN_FIELDS = frozenset(
 QUIRKS_VOCABULARY = frozenset({"filter_script:arabic", "continuation:no_date_and_no_amount"})
 # metadata_patterns keys the pipeline understands itself (plan section 4.4).
 # The card cycle's four facts are reserved too: each is stored as one normalised value, so
-# each must capture exactly one — and they are named once, where they are read.
+# each must capture exactly one — and they are named once, where they are read. So are the three
+# a remittance's narration states, which the engine reads per row rather than per statement.
 RESERVED_METADATA_KEYS = (
-    frozenset({"account_number", "period_start", "period_end"}) | normalize.CARD_FACT_KEYS
+    frozenset({"account_number", "period_start", "period_end"})
+    | normalize.CARD_FACT_KEYS
+    | engine.ROW_CAPTURE_KEYS
 )
 
 # The extraction contract's complete row-assembly vocabulary (plan section 4.4): the columns are

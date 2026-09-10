@@ -26,10 +26,12 @@ from oneledger.ingest.transfers import (
     RULE_HINT_WEIGHT,
     Evidence,
     Leg,
+    StatedRemittance,
     band,
     date_window,
     propose_kind,
     score_match,
+    stated_remittance,
 )
 
 SOURCE = UUID("11111111-1111-4111-8111-111111111111")
@@ -468,3 +470,110 @@ def test_a_card_being_paid_in_another_currency_is_still_a_card_payment() -> None
         propose_kind(leg(currency="XXX"), credit(currency="YYY"), destination_is_card=True)
         == "card_payment"
     )
+
+
+# ---------------------------------------------------------------------------------------
+# What the source's own narration states (`multi-currency-and-fx.html` §5). An outbound
+# remittance can name the amount that arrives, its currency and the rate achieved. Where it
+# does, the destination is compared in its own currency — no market rate stands between the
+# two — and a credit arriving as stated is near-certain. 100000 at .04271 is the 4271.00
+# debited: the document's own invented example, as arithmetic.
+
+STATED = StatedRemittance(amount=Decimal("100000"), currency="YYY", rate=Decimal(".04271"))
+# 4271 at 23.9 expects 102076.90, 2% from what arrived. §3's tolerance scores that only in part,
+# which is the weak band every remittance on the owner's ledger landed in.
+REMITTANCE = evidence(kind="remittance", market_rate=Decimal("23.9"))
+
+
+def remitted(**changes: object) -> Leg:
+    changes.setdefault("amount", "-4271.0000")
+    changes.setdefault("description", "OUTWARD REMITTANCE")
+    changes.setdefault("remittance", STATED)
+    return leg(**changes)  # type: ignore[arg-type]
+
+
+def arriving(amount: str = "100000.0000", **changes: object) -> Leg:
+    changes.setdefault("currency", "YYY")
+    changes.setdefault("description", "INWARD CREDIT")
+    return credit(amount=amount, **changes)
+
+
+def test_a_credit_arriving_as_the_narration_states_is_near_certain() -> None:
+    assert band(score_match(remitted(), arriving(), REMITTANCE)) == "high"
+    assert band(score_match(remitted(remittance=None), arriving(), REMITTANCE)) == "weak"
+
+
+def test_the_stated_amount_needs_no_market_rate() -> None:
+    """Compared in the destination's own currency, nothing is converted — so a day with no rate
+    held still has an amount to compare, where §3's path rightly scores it nothing (I7)."""
+    unrated = evidence(kind="remittance", market_rate=None)
+    assert band(score_match(remitted(), arriving(), unrated)) == "high"
+    assert band(score_match(remitted(remittance=None), arriving(), unrated)) == "hidden"
+
+
+def test_a_receiving_charge_keeps_it_near_certain() -> None:
+    """Short by a flat charge at the receiving end — here 0.5% — is the same movement."""
+    assert band(score_match(remitted(), arriving("99500.0000"), REMITTANCE)) == "high"
+
+
+def test_short_by_more_than_a_charge_is_left_to_the_weighted_sum() -> None:
+    """3% short is a different amount, not a fee, so it is not near-certain. Its amount is still
+    compared with the stated one, in one currency: 1 - 0.03*20 of the weight."""
+    scored = score_match(remitted(), arriving("97000.0000"), REMITTANCE)
+    floor = score_match(remitted(), arriving("50000.0000"), REMITTANCE)
+    assert band(scored) != "high"
+    assert component(scored, without=floor) == pytest.approx(AMOUNT_WEIGHT * 0.4, abs=1e-9)
+
+
+def test_more_than_the_narration_states_is_a_different_movement() -> None:
+    """Money does not grow in transit."""
+    assert band(score_match(remitted(), arriving("100500.0000"), REMITTANCE)) != "high"
+
+
+def test_near_certain_needs_the_remittance_window() -> None:
+    """Arriving before it left, or after the window, it is not this movement's arrival."""
+    assert band(score_match(remitted(day=9), arriving(day=2), REMITTANCE)) != "high"
+    assert band(score_match(remitted(day=2), arriving(day=20), REMITTANCE)) != "high"
+
+
+def test_a_narration_naming_another_currency_says_nothing_about_this_credit() -> None:
+    elsewhere = arriving(currency="ZZZ")
+    assert score_match(remitted(), elsewhere, REMITTANCE) == score_match(
+        remitted(remittance=None), elsewhere, REMITTANCE
+    )
+
+
+def test_figures_that_do_not_reproduce_the_debit_are_not_read() -> None:
+    """100000 at .5 is 50000, not the 4271 debited: the capture read something else, and a
+    near-certain match built on it would be pre-ticked on the transactions screen."""
+    misread = StatedRemittance(amount=Decimal("100000"), currency="YYY", rate=Decimal(".5"))
+    assert score_match(remitted(remittance=misread), arriving(), REMITTANCE) == score_match(
+        remitted(remittance=None), arriving(), REMITTANCE
+    )
+
+
+def test_the_narration_is_read_from_its_three_captures() -> None:
+    assert stated_remittance("100,000", "yyy", ".04271") == StatedRemittance(
+        amount=Decimal("100000"), currency="YYY", rate=Decimal(".04271")
+    )
+
+
+@pytest.mark.parametrize(
+    ("amount", "currency", "rate"),
+    [
+        (None, "YYY", ".04271"),
+        ("100000", None, ".04271"),
+        ("100000", "YYY", None),
+        ("ABC", "YYY", ".04271"),
+        ("100000", "YYY", "x"),
+        ("100000", "YYY", "NaN"),
+        ("0", "YYY", ".04271"),
+        ("-100000", "YYY", ".04271"),
+        ("100000", "YYY", "0"),
+        ("100000", "YY", ".04271"),
+    ],
+)
+def test_a_capture_that_is_missing_or_not_a_figure_states_nothing(
+    amount: str | None, currency: str | None, rate: str | None
+) -> None:
+    assert stated_remittance(amount, currency, rate) is None

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Protocol
@@ -123,6 +123,12 @@ CONTEXTUAL_SECRET = re.compile(
 )
 
 
+# Reserved metadata keys read from each row's narration rather than from the statement: an
+# outbound remittance can state what arrives, in which currency and at what rate
+# (`multi-currency-and-fx.html` §5). They land in that row's fields, and so in `raw_row`.
+ROW_CAPTURE_KEYS = frozenset({"remit_amount", "remit_currency", "remit_rate"})
+
+
 @dataclass(frozen=True)
 class RawRow:
     page_number: int
@@ -217,6 +223,16 @@ def _capture(pattern: str | None, text: str) -> str | None:
     return matched.group(1) if matched.re.groups else matched.group(0)
 
 
+def _with_row_captures(row: RawRow, patterns: dict[str, str]) -> RawRow:
+    narration = row.fields.get("description", "")
+    captured = {
+        key: value
+        for key, pattern in patterns.items()
+        if (value := _capture(pattern, narration)) is not None
+    }
+    return replace(row, fields={**row.fields, **captured}) if captured else row
+
+
 def _filtered_lines(page: Page, filter_arabic: bool) -> tuple[list[Line], int]:
     if not filter_arabic:
         return page.lines, 0
@@ -297,6 +313,8 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     metadata: dict[str, str] = {}
     account_number_raw: str | None = None
     for key, pattern in (profile.metadataPatterns or {}).items():
+        if key in ROW_CAPTURE_KEYS:
+            continue
         captured = _capture(pattern, source_text)
         if captured is None:
             continue
@@ -352,6 +370,15 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
                 )
             else:
                 lines_unparsed += 1
+
+    # Only once continuation has joined each row: a narration's facts can sit on its second line.
+    row_patterns = {
+        key: pattern
+        for key, pattern in (profile.metadataPatterns or {}).items()
+        if key in ROW_CAPTURE_KEYS
+    }
+    if row_patterns:
+        rows = [_with_row_captures(row, row_patterns) for row in rows]
 
     return ExtractionResult(
         rows=rows,

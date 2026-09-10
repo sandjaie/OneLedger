@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
-from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match
+from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match, stated_remittance
 from ..money import _fixed, _out
 from .transactions import COLUMNS, FIELDS, FROM, TransactionRow, transaction_row
 
@@ -51,9 +51,19 @@ LEG_COLUMNS = (
     COLUMNS
     + """, a.institution_id, t.reference_raw, t.counterparty_raw,
           COALESCE(r.set_is_transfer_candidate, false), r.set_counterparty_account_id,
-          a.account_type::text"""
+          a.account_type::text, st.raw_row->>'remit_amount', st.raw_row->>'remit_currency',
+          st.raw_row->>'remit_rate'"""
 )
-LEG_FROM = FROM + " LEFT JOIN classification_rule r ON r.id = t.classification_rule_id"
+# The staged row an imported ledger row came from, for what its narration stated
+# (`multi-currency-and-fx.html` §5). Staged rows outlive their commit; only a cancelled batch's
+# are deleted, and a cancelled batch committed nothing.
+LEG_FROM = (
+    FROM
+    + " LEFT JOIN classification_rule r ON r.id = t.classification_rule_id"
+    + " LEFT JOIN staged_transaction st ON st.import_batch_id = t.import_batch_id"
+    + " AND st.source_row_number = t.source_row_number"
+    + " AND st.household_id = t.household_id AND st.status = 'accepted'"
+)
 
 # A row that can be a leg at all: not already linked, not excluded, not a split parent — a
 # parent is a container whose children already carry its movement.
@@ -169,7 +179,15 @@ class _Loaded:
     def __init__(self, values: tuple[Any, ...]) -> None:
         width = len(FIELDS)
         self.row = transaction_row(values[:width])
-        institution, reference, counterparty, flagged, peer_account, account_type = values[width:]
+        (
+            institution,
+            reference,
+            counterparty,
+            flagged,
+            peer_account,
+            account_type,
+            *remittance,
+        ) = values[width:]
         self.is_card = account_type == "credit_card"
         self.leg = Leg(
             transaction_id=self.row.id,
@@ -183,6 +201,7 @@ class _Loaded:
             reference_raw=reference,
             is_transfer_candidate=bool(flagged),
             counterparty_account_id=peer_account,
+            remittance=stated_remittance(*remittance),
         )
 
 

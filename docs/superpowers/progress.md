@@ -33,7 +33,7 @@ request.
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
 | 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | **Accepted** — the run was made on 10 September 2026; 67 of the 71 gathered files imported and every account reconciles across its period | [acceptance run](#phase-1--slice-12--the-acceptance-run) |
-| 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b4-transfer-screen` | In progress — the classification half is delivered; transfers and the acceptance run remain | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
+| 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b5-stated-remittance` | In progress — the classification half is delivered; transfers and the acceptance run remain | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
 | 1.4 — cards, net worth and trends | `feature/p1-4a1-card-statement-schema` … `feature/p1-4b3-overview-screen` | In progress | [slice 1.4](#phase-1--slice-14--cards-net-worth-and-trends) |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
@@ -147,6 +147,7 @@ in another currency would make its balances incomparable with the account's.
 | 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | [#94](https://github.com/sandjaie/OneLedger/pull/94) |
 | 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Delivered | [#95](https://github.com/sandjaie/OneLedger/pull/95) |
 | 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Delivered | this branch |
+| 3b5 — a remittance's own narration as a matching signal | `feature/p1-3b5-stated-remittance` | Delivered | this branch |
 | the acceptance run | — | Not run | — |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
@@ -189,6 +190,14 @@ was checked into a document first.
   task once a source for one exists.
 - **3b2 adds `propose_kind()` and `band()`** beside `score_match()`, so 3b3 takes the kind and
   the presentation band from the same module rather than answering either a second way.
+- **3b5 takes `multi-currency-and-fx.html` §5's narration signal for matching only** (owner
+  decision, 10 September 2026). The current-account layout reads `remit_currency`,
+  `remit_amount` and `remit_rate` per row into `raw_row`, and the scorer compares a credit with
+  the stated amount in its own currency, lifting one that arrives as stated into the high band.
+  `implied_rate` is still derived from the two legs, and a one-sided remittance still yields no
+  cost figure: the owner chose not to take the per-transfer cost analysis §5 also describes.
+- **3b5's lift is bounded at a 1% receiving charge, not §3's 5%.** It is the one signal that
+  reaches "high" before any pair history exists, and the transactions screen pre-ticks that band.
 
 ### Raised, not fixed here
 

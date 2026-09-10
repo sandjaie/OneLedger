@@ -783,6 +783,13 @@ CREATE INDEX idx_staged_batch ON staged_transaction (import_batch_id, status);
 <p><code>raw_row</code> retains the parser&#39;s original view of the data. When a classification looks wrong six
 months later, the question &quot;what did the statement actually say?&quot; is answerable without reopening
 the PDF.</p>
+<p>It also carries what a row's own narration states, where a layout reads it. The reserved metadata
+keys <code>remit_currency</code>, <code>remit_amount</code> and <code>remit_rate</code> are captured from each
+row's joined narration rather than from the statement — the first match in the statement at large
+would stamp one remittance onto every row — and land in that row's <code>raw_row</code> as the text the
+statement wrote. The transfer matcher reads them back through the staged row a ledger row came from
+(<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5,
+<a href="transfers-and-reconciliation.html">transfers-and-reconciliation.html</a> §3).</p>
 <hr>
 <h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
 <p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because
