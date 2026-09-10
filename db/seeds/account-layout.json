@@ -28,6 +28,9 @@
   "quirks": [],
   "metadataPatterns": {
     "period_start": "PERIOD\\s*OF\\s*(\\d{2} \\w{3} \\d{4})\\s*to",
-    "period_end": "PERIOD\\s*OF\\s*\\d{2} \\w{3} \\d{4}\\s*to\\s*(\\d{2} \\w{3} \\d{4})"
+    "period_end": "PERIOD\\s*OF\\s*\\d{2} \\w{3} \\d{4}\\s*to\\s*(\\d{2} \\w{3} \\d{4})",
+    "remit_currency": "([A-Z]{3})\\s*[\\d,]+(?:\\.\\d+)?\\s*@\\s*\\d*\\.\\d+",
+    "remit_amount": "[A-Z]{3}\\s*([\\d,]+(?:\\.\\d+)?)\\s*@\\s*\\d*\\.\\d+",
+    "remit_rate": "[A-Z]{3}\\s*[\\d,]+(?:\\.\\d+)?\\s*@\\s*(\\d*\\.\\d+)"
   }
 }

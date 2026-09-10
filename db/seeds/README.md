@@ -75,7 +75,7 @@ the amounts.
 
 A current account, and the second producer this repository has met. Its statements print a
 running balance, wrap their narration over several physical lines, and are the first here to
-state their own period. Five of its values are measured rather than assumed.
+state their own period. Six of its values are measured rather than assumed.
 
 **It writes no space character between cells, so every pattern uses `\s*` and never `\s+`.**
 The same producer trait the card layout meets, and the same trap, reached from the other side:
@@ -116,6 +116,22 @@ alone among the profile's patterns use `\s+`.
 block, so no row is dated outside the period the statement declares, and the captured bounds gate
 the row dates instead of being derived from them. Both bounds come from one line and one capture
 each, as `LayoutCreate` requires.
+
+**An outbound remittance states what arrives, and three captures read it per row.** Its
+narration carries the destination currency and amount and the rate achieved, run together in the
+shape `YYY12500@.03200` ([multi-currency-and-fx](../../docs/design/multi-currency-and-fx.html)
+§5). `remit_currency`, `remit_amount` and `remit_rate` are reserved metadata keys that the engine
+reads from each row's joined narration rather than from the statement — the first match in the
+statement at large would stamp one remittance onto every row — and they land in `raw_row`. The
+transfer matcher asks the same question of each ledger row's narration under the newest version
+of the layout that imported it, so a household's stored profile learns the keys only when this
+file is posted again, which makes a new version — and from then on every row that profile ever
+imported is read, the ones committed before it included. The
+rate is written as source units per destination unit: across the statements measured, 30 of the
+307 rows carry the shape, every one a debit, and on every one the stated amount times the stated
+rate reproduces the debit to within 0.005%. The matcher checks that again on every read, because
+a near-certain match built on a misread capture would be pre-ticked on the transactions screen. A
+percentage in a narration (`@ 5%`) has no decimal rate after its `@` and is not read.
 
 `rowStartRule` is `has_date`. No line of the statements measured carries a date without an
 amount, so `has_date_and_amount` reads all of them identically; the two differ only on a line

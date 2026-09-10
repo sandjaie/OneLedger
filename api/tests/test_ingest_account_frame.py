@@ -111,7 +111,7 @@ def _footer(page: int, number: str) -> list[Placement]:
     ]
 
 
-def _placements() -> list[Placement]:
+def _placements(rows: tuple[Row, ...] = ROWS) -> list[Placement]:
     """Two pages: the header block, the period line, a repeated column header and four rows."""
     return [
         Placement(page=0, x=85.0, y=668.0, text="Account Statement"),
@@ -123,13 +123,13 @@ def _placements() -> list[Placement]:
         Placement(page=0, x=390.0, y=479.0, text="to"),
         Placement(page=0, x=491.0, y=479.0, text="31 Mar 2026"),
         *_header(0, 439.0),
-        *_row_placements(0, 421.0, ROWS[0]),
-        *_row_placements(0, 383.0, ROWS[1]),
-        *_row_placements(0, 345.0, ROWS[2]),
+        *_row_placements(0, 421.0, rows[0]),
+        *_row_placements(0, 383.0, rows[1]),
+        *_row_placements(0, 345.0, rows[2]),
         *_footer(0, "1 / 2"),
         # Page two repeats the column header above its first row.
         *_header(1, 652.0),
-        *_row_placements(1, 634.0, ROWS[3]),
+        *_row_placements(1, 634.0, rows[3]),
         *_footer(1, "2 / 2"),
     ]
 
@@ -348,3 +348,39 @@ def test_the_periods_patterns_survive_a_producer_that_writes_no_spaces(statement
     assert str(refusal.value) == (
         "the layout captures the statement period but this statement did not yield it"
     )
+
+
+def test_a_remittance_s_narration_states_what_arrives_and_at_what_rate(tmp_path: Path) -> None:
+    """`multi-currency-and-fx.html` §5: an outbound remittance's narration carries the amount
+    that arrives, its currency and the rate it was converted at, and the seeded profile reads
+    all three into that row's `raw_row`.
+
+    They sit on the narration's second physical line, so they are read from the row once
+    continuation has joined it — never from the statement at large, where the first match would
+    stamp one remittance onto every row. A percentage in another narration is not a remittance
+    and is not read as one. The figures are invented: 12500 at .03200 is the 400.00 debited.
+    """
+    rows = (
+        ROWS[0],
+        ("11 Mar 2026", "INWARD TRANSFER REF", "PROFIT (ABC) @ 5%", None, "1,000.00", "1,750.00"),
+        (
+            "10 Mar 2026",
+            "OUTWARD REMITTANCE REF",
+            "BENEFICIARY YYY12500@.03200",
+            "-400.00",
+            None,
+            "750.00",
+        ),
+        ROWS[3],
+    )
+    path = tmp_path / "remittance.pdf"
+    path.write_bytes(build_pdf(_placements(rows)))
+
+    result, batch, verdict = parsed(path, account_profile())
+
+    assert [
+        {key: value for key, value in row.raw_row.items() if key.startswith("remit_")}
+        for row in batch.rows
+    ] == [{}, {}, {"remit_amount": "12500", "remit_currency": "YYY", "remit_rate": ".03200"}, {}]
+    assert not any(key.startswith("remit_") for key in result.metadata)
+    assert verdict.status == STATUS_MATCHED

@@ -495,6 +495,18 @@ Cross-currency: convert the source at the market rate for that date and compare.
 </code></pre>
 <p>The 5% tolerance is deliberate. Exchange houses take a spread; a strict match would miss every
 genuine remittance. Below 5% is a plausible transfer, above it is more likely a coincidence.</p>
+<p><strong>Where the source states what arrives.</strong> An outbound remittance's narration can carry
+the destination amount, its currency and the rate achieved
+(<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5), read from the row's
+narration under the newest version of the layout that imported it — so a row imported before its
+layout learned to read them is read too. Where it does and the credit is in that currency, the amount is
+compared with the stated figure in one currency, with no market rate between them. A credit that
+arrives as stated, or short of it by at most 1% — a flat receiving charge — inside the kind's
+window is near-certain: its score is lifted into the high band as <code>0.90 + 0.10 × score</code>,
+so the weighted sum still orders two such credits. The narration's own figures must reproduce the
+debit — amount × rate, within the same 1% — or they are not read. This is the one signal that
+reaches "high" before any pair history exists, and that band is pre-ticked, which is why its bound
+is a charge rather than the 5% an unstated remittance is allowed.</p>
 <p><strong>Date (25%).</strong> Same day scores 1.0, decaying over a window that varies by kind:</p>
 <table>
 <thead>

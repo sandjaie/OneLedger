@@ -1172,6 +1172,19 @@ def test_the_card_cycle_s_facts_are_reserved_keys(key: str, one_group: str) -> N
     )
 
 
+@pytest.mark.parametrize("key", ["remit_amount", "remit_currency", "remit_rate"])
+def test_a_remittance_s_stated_figures_are_reserved_keys(key: str) -> None:
+    """Read per row from the narration into `raw_row` (`multi-currency-and-fx.html` §5), and
+    each compared as one value, so each must capture exactly one."""
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {key: r"([A-Z]{3})([\d,]+)@"}}
+        )
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {key: r"[A-Z]{3}([\d,]+)@"}}
+    )
+
+
 def test_two_digit_year_date_format_requires_both_period_captures() -> None:
     with pytest.raises(ValidationError, match="period_start and period_end"):
         layouts.LayoutCreate.model_validate({**VALID_CREATE, "dateFormat": "dd/MM/yy"})
