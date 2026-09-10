@@ -39,7 +39,7 @@ than from the day someone writes it a test. It also refuses a profile carrying a
 either fails its foreign key elsewhere or, worse, resolves to a different institution. The
 mapper UI sets it per household when it arrives.
 
-Three of its values are not obvious, and each is measured rather than assumed.
+Four of its values are not obvious, and each is measured rather than assumed.
 
 **The balance anchors match a line of run-together figures, not a label.** The producer emits no
 space characters between cells, so the statement summary extracts as one line of six figures
@@ -64,6 +64,24 @@ purchase date, so the statement legitimately carries rows dated outside its own 
 those instalment charges are part of the declared purchase total the anchors reconcile against.
 Capturing the period would fail those rows and break the identity. `dateFormat` carries a
 four-digit year, so the derived period is sound.
+
+**Its four cycle facts read the words, not the raw run: `metadata_text:words`.** The statement date,
+the payment due date, the minimum due and the credit limit sit in one summary block: a label line,
+then a line of five values written with no space between cells. The credit limit comes first and is
+printed as a whole number with no decimals, then the available credit, the two dates and the minimum
+due, which extract as `2000010,950.0005/08/202630/08/2026190.50` in the shape the tests use. The
+dates are fixed width and the minimum due ends the line, so those three could be read from the raw
+run; the credit limit cannot, because nothing marks where it ends and the available credit begins.
+The words can. The producer leaves 60 to 80 points between cells and each value sits under its own
+label, so the quirk points this layout's metadata patterns at the words joined by single spaces.
+That makes `\s+` between values right here, the one place in this directory where it is, while the
+labels keep `\s*`. The balance anchors are untouched: they still read the raw run their six-figure
+segmentation depends on. Measured across the 35 distinct card statements held locally: all four
+facts capture and normalise on every one; the available credit never exceeds the limit, which a
+wrong split would break; the due date falls 25 days after the statement date on every one; and the
+minimum due never exceeds the total payment due. The limit less the available credit equals the
+current balance on only some of them, because pending authorisations sit between the two, so that is
+recorded rather than relied on.
 
 Measured across the card statements held locally: every one of them reconciles `matched`, with
 no row failing to normalize. Those files are git-ignored and never enter this repository, and

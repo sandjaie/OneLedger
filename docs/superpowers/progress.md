@@ -45,12 +45,26 @@ request.
 | --- | --- | --- | --- |
 | 4a1 — the card cycle entity | `feature/p1-4a1-card-statement-schema` | Delivered | [#99](https://github.com/sandjaie/OneLedger/pull/99) |
 | 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
-| 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Not started — local task | [slice 1.4 plan](plans/2026-09-10-slice-1-4-cards-net-worth-and-trends.md) |
+| 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Delivered — the repository half; re-posting it into the working ledger waits on V21 there | this branch |
 | 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) · #102's tests no longer reach the repository a push hook is for, [#106](https://github.com/sandjaie/OneLedger/pull/106) |
 | 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | [#104](https://github.com/sandjaie/OneLedger/pull/104) |
 | 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Delivered | [#105](https://github.com/sandjaie/OneLedger/pull/105) |
-| 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Delivered | this branch |
+| 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Delivered | [#113](https://github.com/sandjaie/OneLedger/pull/113) |
 | the acceptance run | — | Not run | — |
+
+**4a3's deviations, recorded:**
+
+- **The engine changed, because a real file proved the gap.** The card's summary block writes its
+  five values with no space between cells, and the credit limit, a whole number with no decimals,
+  fuses onto the available credit in the raw run metadata was matched against; no pattern can find
+  that seam. A new quirk, `metadata_text:words`, points a layout's metadata patterns at the words
+  joined by single spaces, and the balance anchors keep reading the raw run. The fixture that fails
+  without it ships with it.
+- **The re-post and the re-import wait.** The plan's local validation re-posts the profile as
+  version 2 and re-imports one statement per card, but the working ledger is still at V20, with no
+  `card_statement` table to write a cycle into, and V21 there follows the owner's transfer
+  acceptance. The patterns were measured through the engine against all 35 distinct card statements
+  instead, and `db/seeds/README.md` records what was found.
 
 **4b3's deviations, recorded:**
 

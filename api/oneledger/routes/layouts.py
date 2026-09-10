@@ -46,7 +46,12 @@ COLUMN_FIELDS = frozenset(
     }
 )
 # The small, additive vocabulary (ADR-0012). A third entry is a considered addition, not a reflex.
-QUIRKS_VOCABULARY = frozenset({"filter_script:arabic", "continuation:no_date_and_no_amount"})
+# `metadata_text:words` is that addition: a card's summary block fuses its credit limit onto the
+# available credit in the raw run, and only the words, split on the gap between cells, part them
+# (db/seeds/README.md).
+QUIRKS_VOCABULARY = frozenset(
+    {"filter_script:arabic", "continuation:no_date_and_no_amount", "metadata_text:words"}
+)
 # metadata_patterns keys the pipeline understands itself (plan section 4.4).
 # The card cycle's four facts are reserved too: each is stored as one normalised value, so
 # each must capture exactly one — and they are named once, where they are read. So are the three
