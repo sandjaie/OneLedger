@@ -123,6 +123,10 @@ shape `YYY12500@.03200` ([multi-currency-and-fx](../../docs/design/multi-currenc
 §5). `remit_currency`, `remit_amount` and `remit_rate` are reserved metadata keys that the engine
 reads from each row's joined narration rather than from the statement — the first match in the
 statement at large would stamp one remittance onto every row — and they land in `raw_row`. The
+transfer matcher asks the same question of each ledger row's narration under the newest version
+of the layout that imported it, so a household's stored profile learns the keys only when this
+file is posted again, which makes a new version — and from then on every row that profile ever
+imported is read, the ones committed before it included. The
 rate is written as source units per destination unit: across the statements measured, 30 of the
 307 rows carry the shape, every one a debit, and on every one the stated amount times the stated
 rate reproduces the debit to within 0.005%. The matcher checks that again on every read, because

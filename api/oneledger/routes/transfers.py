@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
+from ..ingest.engine import row_captures
 from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match, stated_remittance
 from ..money import _fixed, _out
 from .transactions import COLUMNS, FIELDS, FROM, TransactionRow, transaction_row
@@ -51,18 +52,20 @@ LEG_COLUMNS = (
     COLUMNS
     + """, a.institution_id, t.reference_raw, t.counterparty_raw,
           COALESCE(r.set_is_transfer_candidate, false), r.set_counterparty_account_id,
-          a.account_type::text, st.raw_row->>'remit_amount', st.raw_row->>'remit_currency',
-          st.raw_row->>'remit_rate'"""
+          a.account_type::text, newest.metadata_patterns"""
 )
-# The staged row an imported ledger row came from, for what its narration stated
-# (`multi-currency-and-fx.html` §5). Staged rows outlive their commit; only a cancelled batch's
-# are deleted, and a cancelled batch committed nothing.
+# The newest version of the layout that imported the row — the one an import would use now
+# (`routes/ingest.py`'s `_profiles`) — for the keys it reads a narration with
+# (`multi-currency-and-fx.html` §5). Newest, not the row's own version: a row imported before
+# its layout learned the keys is read too. A manual row has no layout and reads nothing.
 LEG_FROM = (
     FROM
     + " LEFT JOIN classification_rule r ON r.id = t.classification_rule_id"
-    + " LEFT JOIN staged_transaction st ON st.import_batch_id = t.import_batch_id"
-    + " AND st.source_row_number = t.source_row_number"
-    + " AND st.household_id = t.household_id AND st.status = 'accepted'"
+    + " LEFT JOIN statement_layout sl ON sl.id = t.statement_layout_id"
+    + " AND sl.household_id = t.household_id"
+    + " LEFT JOIN LATERAL (SELECT l.metadata_patterns FROM statement_layout l"
+    + " WHERE l.household_id = sl.household_id AND l.name = sl.name"
+    + " ORDER BY l.version DESC LIMIT 1) newest ON true"
 )
 
 # A row that can be a leg at all: not already linked, not excluded, not a split parent — a
@@ -186,8 +189,9 @@ class _Loaded:
             flagged,
             peer_account,
             account_type,
-            *remittance,
+            patterns,
         ) = values[width:]
+        stated = row_captures(patterns, self.row.descriptionRaw)
         self.is_card = account_type == "credit_card"
         self.leg = Leg(
             transaction_id=self.row.id,
@@ -201,7 +205,9 @@ class _Loaded:
             reference_raw=reference,
             is_transfer_candidate=bool(flagged),
             counterparty_account_id=peer_account,
-            remittance=stated_remittance(*remittance),
+            remittance=stated_remittance(
+                stated.get("remit_amount"), stated.get("remit_currency"), stated.get("remit_rate")
+            ),
         )
 
 

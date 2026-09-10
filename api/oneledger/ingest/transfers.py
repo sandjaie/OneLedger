@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from uuid import UUID
 
 from .normalize import parse_amount
@@ -72,6 +72,11 @@ _REFERENCE_MINIMUM = 4
 
 _TOKEN = re.compile(r"[A-Za-z0-9]+")
 
+_PLAIN_RATE = re.compile(r"\d*\.?\d+")
+# No printed rate runs this long; a capture that does is not a rate, and bounding it keeps the
+# reproduction check's product inside Decimal's range.
+_RATE_WIDTH = 20
+
 # §5. A credit arriving as the source's narration states it — or short by a flat receiving
 # charge — is the same movement; wider than this is a different amount, and the weighted sum
 # decides it. The narration's own two figures must reproduce the debit within the same bound.
@@ -103,14 +108,16 @@ def stated_remittance(
     if amount is None or currency is None or rate is None:
         return None
     parsed_amount = parse_amount(amount)
-    try:
-        parsed_rate = Decimal(rate.strip())
-    except InvalidOperation:
-        return None
     code = currency.strip().upper()
     if parsed_amount is None or parsed_amount <= 0 or len(code) != 3 or not code.isalpha():
         return None
-    if not parsed_rate.is_finite() or parsed_rate <= 0:
+    # Digits and one point, as a statement prints a rate. `Decimal()` alone also reads an
+    # exponent, which overflows the reproduction check into a 500, and `1_0`.
+    text = rate.strip()
+    if len(text) > _RATE_WIDTH or not _PLAIN_RATE.fullmatch(text):
+        return None
+    parsed_rate = Decimal(text)
+    if parsed_rate <= 0:
         return None
     return StatedRemittance(amount=parsed_amount, currency=code, rate=parsed_rate)
 

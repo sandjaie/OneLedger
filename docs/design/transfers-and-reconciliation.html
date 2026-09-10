@@ -497,8 +497,9 @@ Cross-currency: convert the source at the market rate for that date and compare.
 genuine remittance. Below 5% is a plausible transfer, above it is more likely a coincidence.</p>
 <p><strong>Where the source states what arrives.</strong> An outbound remittance's narration can carry
 the destination amount, its currency and the rate achieved
-(<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5), read into
-<code>raw_row</code> by the layout. Where it does and the credit is in that currency, the amount is
+(<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5), read from the row's
+narration under the newest version of the layout that imported it — so a row imported before its
+layout learned to read them is read too. Where it does and the credit is in that currency, the amount is
 compared with the stated figure in one currency, with no market rate between them. A credit that
 arrives as stated, or short of it by at most 1% — a flat receiving charge — inside the kind's
 window is near-certain: its score is lifted into the high band as <code>0.90 + 0.10 × score</code>,

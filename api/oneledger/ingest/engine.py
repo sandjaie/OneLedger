@@ -7,7 +7,7 @@ dataclasses so every geometry and row-assembly rule remains independently testab
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -223,14 +223,18 @@ def _capture(pattern: str | None, text: str) -> str | None:
     return matched.group(1) if matched.re.groups else matched.group(0)
 
 
-def _with_row_captures(row: RawRow, patterns: dict[str, str]) -> RawRow:
-    narration = row.fields.get("description", "")
-    captured = {
+def row_captures(patterns: Mapping[str, str] | None, narration: str) -> dict[str, str]:
+    """What one row's narration states, under a layout's row-capture keys.
+
+    Parse time writes it into `raw_row`. The transfer matcher asks the same question of a ledger
+    row's `description_raw`, which is this same text, so a row imported before its layout
+    learned the keys is read too.
+    """
+    return {
         key: value
-        for key, pattern in patterns.items()
-        if (value := _capture(pattern, narration)) is not None
+        for key, pattern in (patterns or {}).items()
+        if key in ROW_CAPTURE_KEYS and (value := _capture(pattern, narration)) is not None
     }
-    return replace(row, fields={**row.fields, **captured}) if captured else row
 
 
 def _filtered_lines(page: Page, filter_arabic: bool) -> tuple[list[Line], int]:
@@ -372,13 +376,16 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
                 lines_unparsed += 1
 
     # Only once continuation has joined each row: a narration's facts can sit on its second line.
-    row_patterns = {
-        key: pattern
-        for key, pattern in (profile.metadataPatterns or {}).items()
-        if key in ROW_CAPTURE_KEYS
-    }
-    if row_patterns:
-        rows = [_with_row_captures(row, row_patterns) for row in rows]
+    rows = [
+        replace(
+            row,
+            fields={
+                **row.fields,
+                **row_captures(profile.metadataPatterns, row.fields.get("description", "")),
+            },
+        )
+        for row in rows
+    ]
 
     return ExtractionResult(
         rows=rows,

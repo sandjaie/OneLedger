@@ -198,6 +198,12 @@ was checked into a document first.
   cost figure: the owner chose not to take the per-transfer cost analysis §5 also describes.
 - **3b5's lift is bounded at a 1% receiving charge, not §3's 5%.** It is the one signal that
   reaches "high" before any pair history exists, and the transactions screen pre-ticks that band.
+- **3b5's matcher reads each leg's narration, not its staged `raw_row`.** Every current-account
+  statement in the ledger was committed before the layout learned the captures, and `raw_row` is
+  frozen at parse, so reading it would have reached none of them. The matcher applies the same
+  capture to `description_raw` — the text the engine captures from — under the newest version of
+  the layout that imported the row. A household's stored profile learns the keys only when
+  `db/seeds/account-layout.json` is posted again; from then on every row it imported is read.
 
 ### Raised, not fixed here
 

@@ -563,7 +563,8 @@ imported, the spread and total cost are still computable, which is the case §5 
 serve at all.</li>
 </ul>
 <p>The parser extracts <code>remit_amount</code> and <code>remit_rate</code> into <code>raw_row</code>; the matcher uses them as a
-strong direct signal. Where the narration does not carry them, the two-leg derivation above stands
+strong direct signal, reading them from each row's narration under the newest version of the layout
+that imported it, so a row imported before its layout learned them is read too. Where the narration does not carry them, the two-leg derivation above stands
 unchanged as the fallback.</p>
 <hr>
 <h2 id="6-balance-and-net-worth-translation">6. Balance and net worth translation</h2>

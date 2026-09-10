@@ -1,10 +1,10 @@
 """A remittance whose narration states what arrives, from the statement to the candidate list.
 
 `multi-currency-and-fx.html` §5: the source leg of an outbound remittance can carry the amount
-that arrives, its currency and the rate achieved. The seeded current-account profile captures
-them into `raw_row` at parse; the transfer routes read them back through the staged row each
-ledger row came from, and a credit arriving as stated is proposed near-certain — where §3's
-market-rate comparison alone left the same pair below the line.
+that arrives, its currency and the rate achieved. The transfer matcher reads them from each
+ledger row's own narration under the newest version of the layout that imported it — so a
+ledger whose current-account statements were all committed before the layout learned the
+captures is read as soon as a newer version carries them, which is the owner's ledger exactly.
 
 Skipped when no database is reachable. Every figure is invented: 76 at 4.0789 is the 310.00
 debited, and the fixture's rate of 4 would expect 77.50 to arrive.
@@ -16,9 +16,10 @@ import json
 from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
+from uuid import UUID
 
-import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 from oneledger import auth
 from oneledger.main import app
@@ -56,6 +57,9 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Staged]:
         conn.close()
 
 
+NARRATION = "OUTWARD REMITTANCE {currency}76@4.0789"
+
+
 def _remittance_statement(currency: str) -> bytes:
     """One debit taking 1,000.00 to 690.00, whose narration says 76 arrived at 4.0789."""
     return build_pdf(
@@ -68,7 +72,7 @@ def _remittance_statement(currency: str) -> bytes:
             Placement(page=0, x=420, y=700, text="Amount"),
             Placement(page=0, x=500, y=700, text="Balance"),
             Placement(page=0, x=40, y=670, text="01/03/2026"),
-            Placement(page=0, x=140, y=670, text=f"OUTWARD REMITTANCE {currency}76@4.0789"),
+            Placement(page=0, x=140, y=670, text=NARRATION.format(currency=currency)),
             Placement(page=0, x=420, y=670, text="-310.00"),
             Placement(page=0, x=500, y=670, text="690.00"),
             Placement(page=0, x=20, y=600, text="Closing Balance 690.00"),
@@ -76,27 +80,22 @@ def _remittance_statement(currency: str) -> bytes:
     )
 
 
-def test_a_credit_arriving_as_the_narration_states_is_proposed_near_certain(
+def _bands(credit: UUID) -> dict[str, str]:
+    """Each proposed debit's band against this credit, by debit id."""
+    return {c["debit"]["id"]: c["band"] for c in candidates() if c["credit"]["id"] == str(credit)}
+
+
+def test_a_remittance_already_imported_is_near_certain_once_its_layout_reads_the_narration(
     live: Staged,
 ) -> None:
-    # The seed's own captures, so the profile the owner loads is the one proved here.
-    captures = {
-        key: pattern
-        for key, pattern in json.loads(SEED.read_text())["metadataPatterns"].items()
-        if key.startswith("remit_")
-    }
-    with live.conn.cursor() as cur:
-        cur.execute(
-            "UPDATE statement_layout SET metadata_patterns = metadata_patterns || %s WHERE id = %s",
-            (psycopg.types.json.Jsonb(captures), LAYOUT_ID),
-        )
-    live.conn.commit()
-
     batch = live.stage(statement=_remittance_statement(live.secondary))
     decided = live.patch(batch, {"rowIds": _all_row_ids(live, batch), "decision": "accepted"})
     assert decided.status_code == 200, decided.text
     committed = live.commit(batch)
     assert committed.status_code == 200, committed.text
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT id FROM transaction WHERE import_batch_id = %s", (batch,))
+        imported = str(cur.fetchone()[0])  # type: ignore[index]
 
     abroad = an_account(live, account_type="current", currency=live.secondary)
     arrived = a_leg(
@@ -108,7 +107,42 @@ def test_a_credit_arriving_as_the_narration_states_is_proposed_near_certain(
         currency=live.secondary,
         to_base="4",
     )
+    # A manual row saying the same thing: no layout imported it, so nothing reads its narration.
+    manual = a_leg(
+        live,
+        live.account_id,
+        "-310.0000",
+        date(2026, 3, 1),
+        NARRATION.format(currency=live.secondary),
+    )
 
-    [proposed] = [c for c in candidates() if c["credit"]["id"] == str(arrived)]
-    assert proposed["band"] == "high"
-    assert proposed["proposedKind"] == "remittance"
+    # Committed under a layout that reads no narration: §3's market-rate comparison alone.
+    assert "high" not in _bands(arrived).values()
+
+    # The owner posts the seed again — a new version, the old one kept for the rows it imported.
+    captures = {
+        key: pattern
+        for key, pattern in json.loads(SEED.read_text())["metadataPatterns"].items()
+        if key.startswith("remit_")
+    }
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO statement_layout
+                 (household_id, name, version, fingerprints, columns, date_format,
+                  sign_convention, inverts_sign, chronological_order, row_start_rule,
+                  opening_balance_pattern, closing_balance_pattern, has_running_balance,
+                  metadata_patterns)
+               SELECT household_id, name, version + 1, fingerprints, columns, date_format,
+                      sign_convention, inverts_sign, chronological_order, row_start_rule,
+                      opening_balance_pattern, closing_balance_pattern, has_running_balance,
+                      metadata_patterns || %s
+                 FROM statement_layout WHERE id = %s""",
+            (Jsonb(captures), LAYOUT_ID),
+        )
+    live.conn.commit()
+
+    bands = _bands(arrived)
+    assert bands[imported] == "high"
+    assert bands.get(str(manual)) != "high"
+    [kind] = [c["proposedKind"] for c in candidates() if c["debit"]["id"] == imported]
+    assert kind == "remittance"

@@ -787,7 +787,10 @@ the PDF.</p>
 keys <code>remit_currency</code>, <code>remit_amount</code> and <code>remit_rate</code> are captured from each
 row's joined narration rather than from the statement — the first match in the statement at large
 would stamp one remittance onto every row — and land in that row's <code>raw_row</code> as the text the
-statement wrote. The transfer matcher reads them back through the staged row a ledger row came from
+statement wrote. The transfer matcher asks the same question of a ledger row's
+<code>description_raw</code> — the same text — under the newest version of the layout that imported it, so
+a row imported before its layout learned the keys is read too; <code>raw_row</code>, frozen at parse,
+could not reach it
 (<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5,
 <a href="transfers-and-reconciliation.html">transfers-and-reconciliation.html</a> §3).</p>
 <hr>

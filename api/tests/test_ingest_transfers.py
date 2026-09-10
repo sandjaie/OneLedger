@@ -536,6 +536,29 @@ def test_near_certain_needs_the_remittance_window() -> None:
     assert band(score_match(remitted(day=2), arriving(day=20), REMITTANCE)) != "high"
 
 
+def test_exactly_a_one_percent_charge_is_near_certain_and_past_it_is_not() -> None:
+    """The bound the transactions screen's pre-tick rests on, pinned at its edge."""
+    assert band(score_match(remitted(), arriving("99000.0000"), REMITTANCE)) == "high"
+    assert band(score_match(remitted(), arriving("98999.0000"), REMITTANCE)) != "high"
+
+
+def test_a_tenth_of_a_percent_over_is_already_a_different_movement() -> None:
+    """Under the exact tolerance over is rounding; at it, the credit is larger than stated."""
+    assert band(score_match(remitted(), arriving("100099.0000"), REMITTANCE)) == "high"
+    assert band(score_match(remitted(), arriving("100100.0000"), REMITTANCE)) != "high"
+
+
+def test_the_narration_is_read_while_its_figures_reproduce_the_debit_within_a_charge() -> None:
+    """100000 at .0431371 is 4313.71, exactly 1% over the 4271 debited: read. At .043141371
+    it is 4314.1371, just past 1%: the capture describes some other movement."""
+    within = StatedRemittance(amount=Decimal("100000"), currency="YYY", rate=Decimal(".0431371"))
+    beyond = StatedRemittance(amount=Decimal("100000"), currency="YYY", rate=Decimal(".043141371"))
+    assert band(score_match(remitted(remittance=within), arriving(), REMITTANCE)) == "high"
+    assert score_match(remitted(remittance=beyond), arriving(), REMITTANCE) == score_match(
+        remitted(remittance=None), arriving(), REMITTANCE
+    )
+
+
 def test_a_narration_naming_another_currency_says_nothing_about_this_credit() -> None:
     elsewhere = arriving(currency="ZZZ")
     assert score_match(remitted(), elsewhere, REMITTANCE) == score_match(
@@ -567,6 +590,10 @@ def test_the_narration_is_read_from_its_three_captures() -> None:
         ("ABC", "YYY", ".04271"),
         ("100000", "YYY", "x"),
         ("100000", "YYY", "NaN"),
+        # Decimal() reads both, and neither is a figure a statement prints: the first overflows
+        # the reproduction check into a 500 on every candidate request.
+        ("100000", "YYY", "1E+999999"),
+        ("100000", "YYY", "1_0"),
         ("0", "YYY", ".04271"),
         ("-100000", "YYY", ".04271"),
         ("100000", "YYY", "0"),
