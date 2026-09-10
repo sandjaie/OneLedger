@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -1322,3 +1323,162 @@ def test_cancel_is_behind_the_owner(live: Staged) -> None:
     finally:
         app.dependency_overrides[auth.require_owner] = live.owner
     assert live.staged_rows(batch) == 2
+
+
+# ---------------------------------------------------------------------------------------
+# Slice 1.3 task 3a4: a staged batch arrives pre-classified, and the provenance survives the
+# commit. Classification proposes; only the review click commits.
+# ---------------------------------------------------------------------------------------
+
+
+def _rule(live: Fixture, **columns: object) -> UUID:
+    """One rule for this household. Invented patterns; no institution is named."""
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO classification_rule
+                 (household_id, priority, origin, match_description_pattern, set_category_id,
+                  set_txn_type)
+               VALUES (%s, %s, %s, %s, %s, %s::txn_type) RETURNING id""",
+            (
+                live.household_id,
+                columns.get("priority", 100),
+                columns.get("origin", "user_created"),
+                columns.get("pattern", "COFFEE"),
+                columns.get("category_id"),
+                columns.get("txn_type", "expense"),
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    live.conn.commit()
+    return UUID(str(row[0]))
+
+
+def _a_category(live: Fixture, slug: str) -> UUID:
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT id FROM category WHERE slug = %s AND household_id IS NULL", (slug,))
+        row = cur.fetchone()
+        if row is None:
+            pytest.skip("the seeded taxonomy is not loaded")
+    return UUID(str(row[0]))
+
+
+def _staged_classification(live: Fixture) -> list[tuple[Any, ...]]:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT source_row_number, classified_by::text, classification_confidence,
+                      classification_rule_id, proposed_category_id, proposed_txn_type::text
+                 FROM staged_transaction ORDER BY source_row_number"""
+        )
+        return list(cur.fetchall())
+
+
+def test_a_staged_row_matching_a_seed_rule_carries_it(live: Fixture) -> None:
+    groceries = _a_category(live, "groceries")
+    rule_id = _rule(live, origin="seed", priority=500, pattern="COFFEE", category_id=groceries)
+
+    live.post(_dated_statement(), stage="true")
+
+    rows = _staged_classification(live)
+    matched = [row for row in rows if row[1] != "unclassified"]
+    assert matched, "the seed rule matched nothing in the fixture statement"
+    for row in matched:
+        assert row[1] == "seed_rule"
+        assert row[2] == Decimal("0.800")
+        assert row[3] == rule_id
+        assert row[4] == groceries
+
+
+def test_a_user_rule_beats_a_seed_rule_on_a_staged_row(live: Fixture) -> None:
+    groceries = _a_category(live, "groceries")
+    dining = _a_category(live, "food-dining")
+    _rule(live, origin="seed", priority=500, pattern="COFFEE", category_id=groceries)
+    user_rule = _rule(
+        live, origin="user_created", priority=100, pattern="COFFEE", category_id=dining
+    )
+
+    live.post(_dated_statement(), stage="true")
+
+    matched = [row for row in _staged_classification(live) if row[1] != "unclassified"]
+    assert matched
+    for row in matched:
+        assert row[1] == "user_rule"
+        assert row[2] == Decimal("0.980")
+        assert row[3] == user_rule
+        assert row[4] == dining
+
+
+def test_a_staged_row_matching_nothing_is_unclassified_and_names_no_rule(live: Fixture) -> None:
+    live.post(_dated_statement(), stage="true")
+
+    rows = _staged_classification(live)
+    assert rows, "the fixture statement staged no rows"
+    for row in rows:
+        assert (row[1], row[2], row[3], row[4]) == ("unclassified", Decimal("0.000"), None, None)
+
+
+def test_the_classification_survives_the_commit(live: Fixture) -> None:
+    """V14 already carries the three provenance columns staged → committed. Verified, not
+    assumed: the whole point of `classification_rule_id` is that a committed row can answer
+    "why is this Food & Dining?", and a column that stopped at staging could not."""
+    groceries = _a_category(live, "groceries")
+    rule_id = _rule(live, pattern="COFFEE", category_id=groceries)
+
+    staged = live.post(_dated_statement(), stage="true").json()
+    batch = staged["batchId"]
+    review = TestClient(app).get(f"/import/{batch}").json()
+    ids = [row["id"] for group in review["groups"] for row in group["rows"]]
+    TestClient(app).patch(
+        f"/import/{batch}/rows", json={"rowIds": ids, "decision": "accepted"}, headers=ORIGIN
+    )
+    committed = TestClient(app).post(f"/import/{batch}/commit", headers=ORIGIN)
+    assert committed.status_code == 200
+
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT classified_by::text, classification_rule_id, classification_confidence,
+                      category_id
+                 FROM transaction WHERE classified_by <> 'unclassified'"""
+        )
+        carried = list(cur.fetchall())
+    assert carried, "no committed row carried a classification"
+    for row in carried:
+        assert row[0] == "user_rule"
+        assert row[1] == rule_id
+        assert row[2] == Decimal("0.980")
+        assert row[3] == groceries
+
+
+def test_the_review_payload_shows_the_proposal_and_its_confidence(live: Fixture) -> None:
+    groceries = _a_category(live, "groceries")
+    _rule(live, pattern="COFFEE", category_id=groceries)
+
+    batch = live.post(_dated_statement(), stage="true").json()["batchId"]
+    review = TestClient(app).get(f"/import/{batch}").json()
+
+    rows = [row for group in review["groups"] for row in group["rows"]]
+    proposed = [row for row in rows if row["classifiedBy"] != "unclassified"]
+    assert proposed
+    for row in proposed:
+        assert row["proposedCategoryId"] == str(groceries)
+        assert row["proposedCategoryName"] == "Groceries"
+        assert row["classificationConfidence"] == "0.980"
+    # Redaction is unchanged: narration is still screened on the way out.
+    assert all("4111" not in row["descriptionRaw"] for row in rows)
+
+
+def test_the_row_decision_vocabulary_is_unchanged(live: Fixture) -> None:
+    """Categorising inside review is not in this slice: the proposal is shown, and a
+    correction is made on the transactions screen, which already does it."""
+    batch = live.post(_dated_statement(), stage="true").json()["batchId"]
+    review = TestClient(app).get(f"/import/{batch}").json()
+    first = next(row["id"] for group in review["groups"] for row in group["rows"])
+
+    refused = TestClient(app).patch(
+        f"/import/{batch}/rows",
+        json={"rowIds": [first], "decision": "categorised"},
+        headers=ORIGIN,
+    )
+
+    assert refused.status_code == 422
+    assert "accepted" in refused.json()["detail"]

@@ -40,6 +40,12 @@ from ..fxrange import RateSource, ensure_rates
 from ..money import _frozen
 from ..schemas.staging import CENTS, StagedTransaction
 from . import storage
+
+# `Candidate` is aliased: this module already has one, for a layout that might match the
+# statement, and two Candidates in one file is the same trap the cascade's own entry point
+# is named `classify_row` to avoid.
+from .classify import Alias, Knowledge, Prior, Rule, classify_row
+from .classify import Candidate as ClassifiableRow
 from .dedupe import CommittedRow, DedupeVerdict, classify
 from .engine import ExtractionResult, extract_pages, matches
 from .normalize import (
@@ -369,6 +375,103 @@ def _refuse_second_staging(
         )
 
 
+def _knowledge_for(cur: psycopg.Cursor[Any], household_id: UUID) -> Knowledge:
+    """Everything the cascade may consult, read once for the batch.
+
+    `ingest/` may not import from `routes/` (`testing-and-data-quality.html` §2), so the query
+    lives here and the cascade stays a function of values. It is deliberately the same
+    knowledge `POST /classify` gathers: one cascade with one set of inputs means the answer a
+    row gets at import is by construction the answer it gets when the rules screen re-runs it.
+    """
+    cur.execute(
+        """SELECT id, priority, origin, match_description_pattern, match_pattern_kind::text,
+                  match_account_id, match_currency, match_amount_min, match_amount_max,
+                  match_amount_exact, match_direction, match_country, match_reference_pattern,
+                  set_category_id, set_merchant_id, set_txn_type::text,
+                  set_payment_method::text, set_country, set_tags,
+                  set_is_transfer_candidate, set_counterparty_account_id
+             FROM classification_rule
+            WHERE household_id = %s AND is_active
+            ORDER BY priority, id""",
+        (household_id,),
+    )
+    saved = [
+        Rule(
+            id=row[0],
+            priority=row[1],
+            origin=row[2],
+            match_description_pattern=row[3],
+            match_pattern_kind=row[4],
+            match_account_id=row[5],
+            match_currency=row[6],
+            match_amount_min=row[7],
+            match_amount_max=row[8],
+            match_amount_exact=row[9],
+            match_direction=row[10],
+            match_country=row[11],
+            match_reference_pattern=row[12],
+            set_category_id=row[13],
+            set_merchant_id=row[14],
+            set_txn_type=row[15],
+            set_payment_method=row[16],
+            set_country=row[17],
+            set_tags=tuple(row[18] or []),
+            set_is_transfer_candidate=row[19],
+            set_counterparty_account_id=row[20],
+        )
+        for row in cur.fetchall()
+    ]
+
+    cur.execute(
+        """SELECT a.merchant_id, a.pattern, a.pattern_kind::text, a.priority,
+                  m.default_category_id
+             FROM merchant_alias a
+             JOIN merchant m ON m.id = a.merchant_id
+            WHERE a.is_active AND (a.household_id IS NULL OR a.household_id = %s)
+              AND m.household_id = %s""",
+        (household_id, household_id),
+    )
+    aliases = [
+        Alias(
+            merchant_id=row[0],
+            pattern=row[1],
+            pattern_kind=row[2],
+            priority=row[3],
+            category_id=row[4],
+        )
+        for row in cur.fetchall()
+    ]
+
+    # Committed rows that already carry an answer. A row staged in this same batch is not
+    # evidence: it has not been reviewed, and letting the first row of a statement decide the
+    # rest of it would turn one wrong proposal into a page of them.
+    cur.execute(
+        """SELECT account_id, COALESCE(description_clean, description_raw), category_id,
+                  merchant_id, txn_type::text, payment_method::text
+             FROM transaction
+            WHERE household_id = %s AND classified_by <> 'unclassified'""",
+        (household_id,),
+    )
+    priors = [
+        Prior(
+            account_id=row[0],
+            description_clean=row[1],
+            category_id=row[2],
+            merchant_id=row[3],
+            txn_type=row[4],
+            payment_method=row[5],
+        )
+        for row in cur.fetchall()
+    ]
+
+    return Knowledge(
+        user_rules=[rule for rule in saved if rule.origin != "seed"],
+        seed_rules=[rule for rule in saved if rule.origin == "seed"],
+        aliases=aliases,
+        priors=priors,
+    )
+
+
 def _staged(
     cur: psycopg.Cursor[Any],
     analysis: Analysis,
@@ -383,6 +486,10 @@ def _staged(
     (V7's `reporting_pair_is_locked`), and a row whose translation is inconsistent must fail in
     the service where the error names the row, not in Postgres where it names a constraint.
     """
+    # The cascade runs here — after FX freezing, before staging (`statement-ingestion.html`
+    # stages 6-7). It proposes; nothing it decides reaches the ledger without the review click.
+    knowledge = _knowledge_for(cur, household.id)
+
     rows: list[StagedTransaction] = []
     for row, verdict in zip(analysis.rows, analysis.verdicts, strict=True):
         try:
@@ -402,6 +509,16 @@ def _staged(
             raise PipelineError(
                 f"row {row.source_row_number} on {row.booked_date} cannot be priced: {exc.detail}"
             ) from exc
+        proposal = classify_row(
+            ClassifiableRow(
+                account_id=account.id,
+                description_clean=row.description_clean or row.description_raw,
+                amount=row.amount,
+                currency=row.currency,
+                reference_raw=row.reference_raw,
+            ),
+            knowledge,
+        )
         rows.append(
             StagedTransaction(
                 account_id=account.id,
@@ -424,7 +541,17 @@ def _staged(
                 source_page_number=row.source_page_number,
                 source_row_number=row.source_row_number,
                 raw_row=row.raw_row,
-                proposed_txn_type=row.proposed_txn_type,
+                # The cascade's `txn_type` wins over the sign-derived one when it has an
+                # opinion: "INTEREST" is an interest posting whichever way the money went, and
+                # the sign only ever knew income from expense.
+                proposed_txn_type=proposal.txn_type or row.proposed_txn_type,
+                proposed_category_id=proposal.category_id,
+                proposed_merchant_id=proposal.merchant_id,
+                proposed_payment_method=proposal.payment_method,
+                proposed_country=proposal.country,
+                classified_by=proposal.classified_by,
+                classification_rule_id=proposal.classification_rule_id,
+                classification_confidence=proposal.classification_confidence,
                 status=verdict.status,
                 duplicate_of_transaction_id=verdict.duplicate_of_transaction_id,
                 near_duplicate_of_id=verdict.near_duplicate_of_id,
@@ -467,9 +594,13 @@ _STAGED = """INSERT INTO staged_transaction
                 reference_raw, amount, currency, original_amount, original_currency,
                 fx_rate_date, fx_rate_is_carried, fx_rate_to_base, fx_rate_to_secondary,
                 amount_base, amount_secondary, proposed_txn_type, dedupe_hash,
-                duplicate_of_transaction_id, near_duplicate_of_id, status)
-             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                     %s, %s, %s, %s, %s, %s, %s, %s)"""
+                duplicate_of_transaction_id, near_duplicate_of_id, status,
+                proposed_category_id, proposed_merchant_id, proposed_payment_method,
+                proposed_country, classified_by, classification_rule_id,
+                classification_confidence)
+             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::payment_method, %s,
+                     %s::classified_by, %s, %s)"""
 
 
 def parse(
@@ -809,6 +940,13 @@ def _staged_batch(
                     row.duplicate_of_transaction_id,
                     row.near_duplicate_of_id,
                     row.status,
+                    row.proposed_category_id,
+                    row.proposed_merchant_id,
+                    row.proposed_payment_method,
+                    row.proposed_country,
+                    row.classified_by,
+                    row.classification_rule_id,
+                    row.classification_confidence,
                 )
                 for row in rows
             ],

@@ -96,7 +96,11 @@ def _connect() -> psycopg.Connection:
 
 
 def _clean(cur: psycopg.Cursor[Any]) -> None:
+    # `classification_rule` joins the list with slice 1.3: a staged batch now arrives
+    # pre-classified, so a rule left behind by one test decides the rows of the next — which is
+    # exactly how three tests in this file first failed.
     cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
+    cur.execute("DELETE FROM classification_rule")
     cur.execute("DELETE FROM statement_layout")
     cur.execute("DELETE FROM account WHERE name = 'route test'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")

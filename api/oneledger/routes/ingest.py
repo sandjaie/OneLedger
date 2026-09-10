@@ -435,6 +435,14 @@ class ReviewRow(BaseModel):
     status: str
     duplicateOfTransactionId: UUID | None
     nearDuplicateOfId: UUID | None
+    # The cascade's proposal, and which step made it. `classificationConfidence` is a string
+    # for the same reason money is: it is a NUMERIC the screen displays and never computes on.
+    # The name is the category's own, never a merchant string lifted from the document — it
+    # comes from `category.name`, which the owner or the seed taxonomy wrote.
+    proposedCategoryId: UUID | None
+    proposedCategoryName: str | None
+    classifiedBy: str
+    classificationConfidence: str
 
 
 class ReviewGroup(BaseModel):
@@ -527,13 +535,16 @@ _BATCH = """SELECT b.id, b.document_id, b.account_id, b.status, b.statement_layo
               FROM import_batch b
              WHERE b.id = %s AND b.household_id = %s"""
 
-_ROWS = """SELECT id, source_page_number, source_row_number, booked_date, value_date,
-                  description_raw, description_clean, reference_raw, amount, currency,
-                  amount_base, amount_secondary, proposed_txn_type, status,
-                  duplicate_of_transaction_id, near_duplicate_of_id
-             FROM staged_transaction
-            WHERE import_batch_id = %s AND household_id = %s
-            ORDER BY source_row_number"""
+_ROWS = """SELECT s.id, s.source_page_number, s.source_row_number, s.booked_date,
+                  s.value_date, s.description_raw, s.description_clean, s.reference_raw,
+                  s.amount, s.currency, s.amount_base, s.amount_secondary,
+                  s.proposed_txn_type, s.status, s.duplicate_of_transaction_id,
+                  s.near_duplicate_of_id, s.proposed_category_id, c.name,
+                  s.classified_by::text, s.classification_confidence
+             FROM staged_transaction s
+             LEFT JOIN category c ON c.id = s.proposed_category_id
+            WHERE s.import_batch_id = %s AND s.household_id = %s
+            ORDER BY s.source_row_number"""
 
 
 def _batch_row(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> tuple[Any, ...]:
@@ -573,6 +584,10 @@ def _grouped(cur: psycopg.Cursor[Any], batch_id: UUID, household_id: UUID) -> li
                 status=str(row[13]),
                 duplicateOfTransactionId=row[14],
                 nearDuplicateOfId=row[15],
+                proposedCategoryId=row[16],
+                proposedCategoryName=row[17],
+                classifiedBy=row[18],
+                classificationConfidence=str(row[19]),
             )
         )
     return [
@@ -600,6 +615,11 @@ def _screen(groups: list[ReviewGroup]) -> None:
     No capture is passed: the statement's own account number is never stored (never-store list),
     so there is nothing here to match it against beyond the digit-run rule that already catches
     it.
+
+    `proposedCategoryName` is deliberately **not** screened, and that is a statement about where
+    it comes from rather than an omission: it is `category.name`, written by the owner or by the
+    seed taxonomy, and no path puts document text into that column. A merchant name lifted from
+    a statement would be a different field with a different origin, and would be screened.
     """
     redact = _preview_redactor(None)
     for group in groups:

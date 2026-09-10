@@ -81,6 +81,18 @@ class StagedTransaction(BaseModel):
     source_row_number: int
     raw_row: dict[str, Any]
 
+    # The cascade's proposal, carried from staging through to the ledger. V13 created these
+    # columns and V14 already carries the three provenance ones into `transaction`, so a row
+    # can answer "why is this Food & Dining?" from the moment it is staged (classification.html
+    # §1). Nothing here commits: the review click does.
+    proposed_category_id: UUID | None = None
+    proposed_merchant_id: UUID | None = None
+    proposed_payment_method: str | None = Field(default=None, max_length=40)
+    proposed_country: str | None = Field(default=None, min_length=2, max_length=2)
+    classified_by: str = Field(default="unclassified", min_length=1, max_length=40)
+    classification_rule_id: UUID | None = None
+    classification_confidence: Decimal = Decimal("0.000")
+
     # what the staging insert needs beyond the contract's shape
     proposed_txn_type: str = Field(min_length=1, max_length=40)
     status: str = Field(default="new", min_length=1, max_length=40)
