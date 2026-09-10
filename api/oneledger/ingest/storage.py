@@ -149,7 +149,7 @@ def refuse_if_already_imported(cur: psycopg.Cursor[Any], household_id: UUID, sha
 
     A cancelled batch is not an import: it was abandoned before committing anything, so a file
     whose every batch was cancelled passes, and staging reuses its row rather than refusing it
-    (`pipeline._staged_batch`). A document with no batch at all still refuses.
+    (`pipeline._stage`). A document with no batch at all still refuses.
 
     The join carries its own household predicate. Nothing in the schema ties a batch to its
     document's household, and the service connects privileged and bypasses RLS (ADR-0013,

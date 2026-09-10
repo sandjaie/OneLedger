@@ -1008,7 +1008,7 @@ def cancel_import(
     It frees the file too, without deleting it. The document row and its stored original stay —
     the cancelled batch still names them, which is the record of what was attempted — and layer 1
     does not count a cancelled batch, so the same bytes stage again onto the same row
-    (`storage.refuse_if_already_imported`, `pipeline._staged_batch`).
+    (`storage.refuse_if_already_imported`, `pipeline._stage`).
     """
     with connect() as conn, conn.cursor() as cur:
         batch = _batch_row(cur, batch_id, owner.household_id)

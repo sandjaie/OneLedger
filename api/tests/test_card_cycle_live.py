@@ -324,16 +324,26 @@ def test_a_re_imported_card_statement_commits_the_cycle_the_second_parse_read(
     """The reasons an owner cancels: the wrong account, a mapping that missed the summary.
 
     The same bytes are the same document row, and a re-import reuses it — so the row has to
-    describe the second attempt. The commit reads the document type and the cycle's facts back
-    from it, and a row still describing the first commits the rows with no cycle and nothing
-    saying why.
+    describe the second attempt. The commit reads the document type, the cycle's facts and its
+    currency back from it; a row still describing the first commits the rows with no cycle and
+    nothing saying why, or labels the cycle in the wrong account's currency. The wrong account
+    is a bank account in the household's other currency, so each of the three differs.
     """
     with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                                    country, opening_balance_date, current_balance)
+               SELECT household_id, id, 'route test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0
+                 FROM person WHERE household_id = %s LIMIT 1
+               RETURNING id""",
+            (live.secondary, live.household_id),
+        )
+        wrong_account = cur.fetchone()[0]  # type: ignore[index]
         cur.execute(
             "UPDATE statement_layout SET metadata_patterns = NULL WHERE id = %s", (CARD_LAYOUT_ID,)
         )
     live.conn.commit()
-    wrong = live.post(_card_statement(), stage="true")  # into the bank account
+    wrong = live.post(_card_statement(), stage="true", accountId=str(wrong_account))
     assert wrong.status_code == 200, wrong.text
     assert wrong.json()["staged"], wrong.text
     assert live.cancel(wrong.json()["batchId"]).status_code == 200
@@ -353,3 +363,4 @@ def test_a_re_imported_card_statement_commits_the_cycle_the_second_parse_read(
     [cycle] = live.cycles()
     assert cycle["account_id"] == live.card_id
     assert cycle["payment_due_date"] == date(2026, 4, 4)
+    assert cycle["currency"] == live.base
