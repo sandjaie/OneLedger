@@ -110,7 +110,9 @@ ledger's data directory under a second Postgres. Create `<project>_pgdata` and
 
 ### 6. Push — the hooks are the enforcement
 
-`pre-push` runs pytest, vitest, the SQL invariant tests, the generated-type check and
+`pre-push` runs pytest, vitest, the SQL invariant tests — in a throwaway database on the test
+server, migrated from empty with the branch's own migrations and dropped after, never the
+working ledger — the generated-type check and
 `scripts/check-diff-size.sh` (soft 800 / 1,600, hard stop 1,200 / 2,400; the
 `ONELEDGER_SIZE_OVERRIDE` reason exists for what genuinely cannot be split, and it goes in the
 PR). A skill can be skipped by an agent in a hurry; a hook cannot. `--no-verify` is not an

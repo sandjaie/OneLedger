@@ -277,7 +277,7 @@ dependency to review.
 | The diff touches | Run |
 | --- | --- |
 | `api/` | `ruff check .`, `mypy .`, `pytest -q` |
-| a migration or `db/tests/` | `scripts/hooks/db-tests.sh`; migrations from empty only when a migration is added |
+| a migration or `db/tests/` | `scripts/hooks/db-tests.sh` — it migrates a throwaway database from empty on the test server every time, so migrations from empty come with it |
 | `web/` | `api:types:check`, `typecheck`, `vitest run`; `npm run build` only when the bundle could change |
 | `docs/` or any `.md` | `python3 scripts/check-docs.py` |
 | anything | `scripts/check-diff-size.sh` |
