@@ -610,6 +610,23 @@ worked around.
     *after* a newer one can now see a day or two of the newer one's rows. That hazard is V14's
     own and unchanged in kind: it is why the comparison is against the batch's
     `declared_closing_balance` and never the maintained `current_balance` (§4.9).
+16. **`statement_layout.times_used` and `last_used_at` had no writer.** V12 created both, and
+    `GET /layouts` and `POST /layouts` returned them as `timesUsed` and `lastUsedAt`. But no
+    document said who maintains them (`statement-ingestion.html` and this spec are both silent),
+    and no code did: after 67 real imports across four layouts, all four reported
+    `timesUsed: 0`.
+
+    **V22 drops them rather than maintaining them.** Nothing reads them. The only layout picker
+    is the import screen's (`api-contracts.html` §4), and it ranks by fingerprint score. Slice
+    1.7 builds the mapper, the document library and the diagnostics panel, and none of those
+    ranks layouts. If one ever needs to, `import_batch.statement_layout_id` already records the
+    layout row every batch used. A count and the latest `started_at` over that is right for all
+    67 existing imports, while a counter maintained from here on would start 67 short and need a
+    backfill before it stopped being wrong. `LayoutProfile` loses both fields, `web/types/api/`
+    is regenerated, and no screen read either one.
+
+    Decided 10 September 2026 under the owner's delegation. The alternative was incrementing the
+    counter in `ingest/pipeline.py` when a batch stages.
 
 ---
 

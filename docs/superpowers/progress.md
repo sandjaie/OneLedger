@@ -6,7 +6,7 @@ while building a task belongs to the milestone's spec, dated run evidence to `re
 scope and sequence to the roadmap and the plans. Keeping this file to status is what lets it be
 read at a glance and updated at a task boundary without an argument about what to write.
 
-Updated: 9 September 2026.
+Updated: 10 September 2026.
 
 ## Where the work stands
 
@@ -211,7 +211,9 @@ was checked into a document first.
   `origin` as `user_created` and refuses to be told otherwise, so the shipped pack loaded as
   thirty-seven of the owner's own rules — ahead of themselves in the cascade. `POST /rules/pack`
   is the writer that means `seed`; the fix branch above carries it.
-- **`statement_layout.times_used` is never written.** The column exists and no code advances it.
+- **`statement_layout.times_used` was never written.** V22 drops it and `last_used_at`, and
+  usage is counted from `import_batch` instead (M2 spec §7 item 16). `fix/layout-usage-counter`
+  carries it.
 - **`api-contracts.html` §2 lists two routes twice**, with contracts that differ between the
   two entries.
 - **`scripts/seed-household.sh` has no repair path** for the owner it seeded: correcting the

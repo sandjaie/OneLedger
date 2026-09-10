@@ -91,8 +91,6 @@ FETCHED_ROW: tuple[object, ...] = (
     False,
     [],
     None,
-    0,
-    None,
 )
 
 
@@ -818,6 +816,21 @@ def test_a_profile_round_trips_every_field_through_save_and_list(
     for key, value in CREATE_BODY.items():
         assert saved[key] == value, key
     assert listed == [saved]
+
+
+def test_a_layout_carries_no_usage_counter_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """How often a layout was used is `import_batch`'s to say (spec §7 item 16). The counter
+    that used to sit on the layout was never written, and read "never used" after 67 imports."""
+    connection = LayoutsConnection(rows=[FETCHED_ROW])
+    monkeypatch.setattr(layouts, "connect", lambda: connection, raising=False)
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        listed = TestClient(app).get("/layouts").json()
+    finally:
+        app.dependency_overrides.clear()
+    assert not {"timesUsed", "lastUsedAt"} & listed[0].keys()
+    assert "times_used" not in connection.statements[0]
+    assert "last_used_at" not in connection.statements[0]
 
 
 def test_saving_the_same_name_twice_yields_versions_one_and_two_and_never_updates(

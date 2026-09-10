@@ -954,12 +954,14 @@ V18__closing_balance_is_verified_as_of_its_own_last_row.sql
                                       the statement lists (applied)
 V19__classification_rules.sql         + classification_rule, and the two foreign keys
                                       V10 and V13 left bare (applied)
+V20__transfers.sql                    + transfer (applied)
+V21__card_statements.sql              + card_statement (applied)
+V22__statement_layout_usage_is_derived.sql
+                                      drops statement_layout's never-written usage
+                                      counter; import_batch is the count (applied)
 
   then, in this order, numbered as they land:
 
-classification_rules                  + seed rules
-transfers
-card_statements
 investments
 loans
 valuations

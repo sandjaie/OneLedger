@@ -1074,14 +1074,6 @@ export type LayoutProfile = {
     metadataPatterns: {
         [key: string]: string;
     } | null;
-    /**
-     * Timesused
-     */
-    timesUsed: number;
-    /**
-     * Lastusedat
-     */
-    lastUsedAt: string | null;
 };
 
 /**
