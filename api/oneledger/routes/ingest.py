@@ -578,7 +578,10 @@ _CYCLE = """INSERT INTO card_statement
 
 
 def _write_card_cycle(
-    cur: psycopg.Cursor[Any], batch: tuple[Any, ...], household_id: UUID
+    cur: psycopg.Cursor[Any],
+    batch: tuple[Any, ...],
+    household_id: UUID,
+    read: dict[str, str] | None = None,
 ) -> tuple[UUID | None, list[str]]:
     """The cycle a committed card statement describes, inside the commit's own transaction.
 
@@ -587,6 +590,9 @@ def _write_card_cycle(
     zero when in credit, computed in Postgres (ADR-0010; V21 refuses the swap). A refusal here
     raises, and the raise rolls the ledger rows back with it: the cycle and the rows land
     together or not at all (`statement-ingestion.html` §11).
+
+    `read` is the facts when they were read from the original since staging — the backfill's
+    case; otherwise they are the ones staging stored on the document.
     """
     cur.execute(
         """SELECT document_type::text, extracted_metadata, currency FROM document
@@ -596,7 +602,7 @@ def _write_card_cycle(
     document = cur.fetchone()
     if document is None or document[0] != "card_statement":
         return None, []
-    facts: dict[str, str] = document[1] or {}
+    facts: dict[str, str] = (document[1] or {}) if read is None else read
     opening, closing = batch[9], batch[10]
     missing = [key for key in _CYCLE_REQUIRES if key not in facts]
     if opening is None:

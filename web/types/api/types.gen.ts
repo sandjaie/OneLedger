@@ -282,6 +282,20 @@ export type AccountsResponse = {
 };
 
 /**
+ * BackfillResult
+ */
+export type BackfillResult = {
+    /**
+     * Written
+     */
+    written: number;
+    /**
+     * Skipped
+     */
+    skipped: Array<SkippedStatement>;
+};
+
+/**
  * Body_parse_statement_parse_post
  */
 export type BodyParseStatementParsePost = {
@@ -2105,6 +2119,20 @@ export type RuleRow = {
 };
 
 /**
+ * SkippedStatement
+ */
+export type SkippedStatement = {
+    /**
+     * Importbatchid
+     */
+    importBatchId: string;
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
  * TransactionCreate
  */
 export type TransactionCreate = {
@@ -3525,6 +3553,31 @@ export type ReadDashboardDashboardGetResponses = {
 };
 
 export type ReadDashboardDashboardGetResponse = ReadDashboardDashboardGetResponses[keyof ReadDashboardDashboardGetResponses];
+
+export type BackfillCardCyclesCardStatementsBackfillPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/card-statements/backfill';
+};
+
+export type BackfillCardCyclesCardStatementsBackfillPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BackfillCardCyclesCardStatementsBackfillPostError = BackfillCardCyclesCardStatementsBackfillPostErrors[keyof BackfillCardCyclesCardStatementsBackfillPostErrors];
+
+export type BackfillCardCyclesCardStatementsBackfillPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BackfillResult;
+};
+
+export type BackfillCardCyclesCardStatementsBackfillPostResponse = BackfillCardCyclesCardStatementsBackfillPostResponses[keyof BackfillCardCyclesCardStatementsBackfillPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
