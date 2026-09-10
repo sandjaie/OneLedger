@@ -31,7 +31,11 @@ def tree(tmp_path: Path) -> Path:
 
 
 def run(
-    tree: Path, *args: str, dump: str = "echo synthetic-dump", prefix: str | None = None
+    tree: Path,
+    *args: str,
+    dump: str = "echo synthetic-dump",
+    prefix: str | None = None,
+    extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     pg_dump = tree / "bin" / "pg_dump"
     pg_dump.write_text(f"#!/bin/sh\n{dump}\n")
@@ -40,6 +44,7 @@ def run(
         "PATH": f"{tree / 'bin'}:{os.environ['PATH']}",
         "BACKUP_PASSPHRASE": PASSPHRASE,
         "DATABASE_URL": "postgresql://synthetic.invalid/none",
+        **(extra or {}),
     }
     if prefix:
         env["BACKUP_PREFIX"] = prefix
@@ -163,3 +168,24 @@ def test_a_failed_dump_prunes_nothing_and_leaves_nothing(tree: Path) -> None:
 
     assert result.returncode != 0
     assert len(names(tree)) == 31
+
+
+def test_a_project_whose_name_extends_this_one_is_still_another_stack(tree: Path) -> None:
+    # `oneledger-2-…` begins with `oneledger-` and a digit; only a whole stamp is this stack's.
+    backup(tree, "oneledger-20260908T080000Z.dump.enc", 2 * DAY)
+    backup(tree, "oneledger-2-20260910T080000Z.dump.enc", HOUR)
+
+    result = run(tree, "--if-due")
+
+    assert result.returncode == 0, result.stderr
+    assert len([name for name in names(tree) if not name.startswith("oneledger-2-")]) == 2
+
+
+def test_a_hand_run_in_a_scratch_shell_names_its_dump_after_that_project(tree: Path) -> None:
+    # The verify recipe exports COMPOSE_PROJECT_NAME and a scratch DATABASE_URL; a dump taken
+    # there is of the scratch database and must not be filed as the ledger's.
+    result = run(tree, extra={"COMPOSE_PROJECT_NAME": "oneledger-verify"})
+
+    assert result.returncode == 0, result.stderr
+    [taken] = names(tree)
+    assert taken.startswith("oneledger-verify-")

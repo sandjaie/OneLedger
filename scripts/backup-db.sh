@@ -22,9 +22,10 @@ cd "$(dirname "$0")/.."
 dir="${BACKUP_DIR:-backups}"
 # Compose sets the prefix to the project's name, as it names the volumes: a scratch stack run
 # from this checkout writes beside the ledger's backups, and must neither count as one of them
-# nor be pruned as one.
-prefix="${BACKUP_PREFIX:-oneledger}"
-pattern="$prefix-[0-9]*.dump.enc"
+# nor be pruned as one. By hand it follows the project a shell exported, as the verify recipe
+# does. The whole stamp is matched, as GET /doctor matches it: `oneledger-2-…` is not ours.
+prefix="${BACKUP_PREFIX:-${COMPOSE_PROJECT_NAME:-oneledger}}"
+pattern="$prefix-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.dump.enc"
 mkdir -p "$dir"
 
 # Measured against the newest file's own clock rather than a timer, so a laptop asleep all
@@ -59,8 +60,8 @@ ln "$tmp" "$out"
 # Retention (security-and-privacy.html §9): nothing younger than thirty days is pruned, and the
 # thirty newest are kept however old they are. Pruned only here, after a new backup is
 # published, so a job that keeps failing prunes nothing. The count is for the job that
-# succeeds on the wrong database: after a reset, a dump of an empty ledger must not age out
-# every copy of the real one. The stamp in the name sorts in time order.
+# succeeds on the wrong database: after a reset, the real copies survive thirty further dumps
+# of an empty ledger, a month of daily ones, rather than the first. The stamp sorts in time order.
 find "$dir" -maxdepth 1 -name "$pattern" | sort -r | tail -n +31 |
   while IFS= read -r old; do
     find "$old" -maxdepth 0 -mmin +$((30 * 24 * 60)) -delete
