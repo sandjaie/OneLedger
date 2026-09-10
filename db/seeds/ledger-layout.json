@@ -1,0 +1,76 @@
+{
+  "name": "Ledger statement",
+  "fingerprints": [
+    "Chq\\.?\\s*/\\s*Ref\\.?\\s*No",
+    "Withdrawal\\s*Amt",
+    "Statement\\s*From\\s*:"
+  ],
+  "headerRowPattern": "Date\\s*Narration\\s*Chq\\.?/Ref\\.?No\\.?\\s*Value\\s*Dt\\s*Withdrawal\\s*Amt\\.?\\s*Deposit\\s*Amt\\.?\\s*Closing\\s*Balance",
+  "columns": [
+    {
+      "field": "booked_date",
+      "xMin": 20.0,
+      "xMax": 66.0,
+      "label": "Date"
+    },
+    {
+      "field": "description",
+      "xMin": 66.0,
+      "xMax": 285.0,
+      "label": "Narration"
+    },
+    {
+      "field": "reference",
+      "xMin": 285.0,
+      "xMax": 360.0,
+      "label": "Chq./Ref.No."
+    },
+    {
+      "field": "value_date",
+      "xMin": 360.0,
+      "xMax": 400.0,
+      "label": "Value Dt"
+    },
+    {
+      "field": "debit",
+      "xMin": 400.0,
+      "xMax": 478.0,
+      "label": "Withdrawal Amt."
+    },
+    {
+      "field": "credit",
+      "xMin": 478.0,
+      "xMax": 556.0,
+      "label": "Deposit Amt."
+    },
+    {
+      "field": "running_balance",
+      "xMin": 556.0,
+      "xMax": 638.0,
+      "label": "Closing Balance"
+    }
+  ],
+  "dateFormat": "dd/MM/yy",
+  "signConvention": "debit_credit_columns",
+  "invertsSign": false,
+  "chronologicalOrder": "ascending",
+  "rowStartRule": "has_date",
+  "continuationRule": "blank_date_and_money_columns",
+  "skipLinePatterns": [
+    "STATEMENT\\s*SUMMARY",
+    "BANK\\s*LIMITED",
+    "Closing\\s*balance\\s*includes",
+    "Registered\\s*Office\\s*Address",
+    "GSTIN?\\s*number\\s*details",
+    "State\\s*account\\s*branch\\s*GSTN",
+    "Contents\\s*of\\s*this\\s*statement"
+  ],
+  "openingBalancePattern": null,
+  "closingBalancePattern": null,
+  "hasRunningBalance": true,
+  "quirks": [],
+  "metadataPatterns": {
+    "period_start": "Statement\\s*From\\s*:\\s*(\\d{2}/\\d{2}/\\d{4})\\s*To",
+    "period_end": "Statement\\s*From\\s*:\\s*\\d{2}/\\d{2}/\\d{4}\\s*To\\s*:\\s*(\\d{2}/\\d{2}/\\d{4})"
+  }
+}

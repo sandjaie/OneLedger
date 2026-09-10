@@ -306,6 +306,26 @@ def _period_bounds(start_text: str, end_text: str) -> tuple[date, date]:
     return readings.pop()
 
 
+def _covered(
+    period: StatementPeriod, booked_date: date, row: RawRow, profile: NormalizableProfile
+) -> bool:
+    """Whether the statement covers this row (spec §4.4, corrected by §7 item 14).
+
+    `_windowed` states the principle: the period anchors the century, it does not confine the
+    date. A statement that books its year-end interest on 1 January and *values* it on 31
+    December is ordinary, and its own running balance carries the row — so the booked date alone
+    is not proof the row belongs to another statement.
+
+    The row's own value date is what settles it, because the statement wrote both. Nothing is
+    invented and no tolerance is guessed: a row with neither date inside the period still fails,
+    and a layout that maps no value date is unaffected.
+    """
+    if period.start <= booked_date <= period.end:
+        return True
+    valued = _parse_date(_cell(row, "value_date"), profile.dateFormat, period)
+    return valued is not None and period.start <= valued <= period.end
+
+
 def _period(profile: NormalizableProfile, result: ExtractionResult) -> StatementPeriod | None:
     """The captured period is authoritative; it is what the statement itself states."""
     mapped = set(profile.metadataPatterns or {}) & {"period_start", "period_end"}
@@ -605,7 +625,7 @@ def normalize(
         booked_date = booked.get(row.row_number)
         if booked_date is None:
             continue
-        if not (effective.start <= booked_date <= effective.end):
+        if not _covered(effective, booked_date, row, profile):
             failures.append(
                 RowFailure(
                     row.page_number,

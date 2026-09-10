@@ -130,6 +130,97 @@ def test_a_date_outside_the_captured_period_fails_the_row_and_names_the_period()
     assert batch.failures[0].reason == "booked_date is outside the statement period"
 
 
+def test_a_row_booked_past_the_period_is_kept_when_the_statement_values_it_inside() -> None:
+    """M2 spec §7 item 14: the period anchors the century, it does not confine the date.
+
+    A statement that books its year-end interest on 1 January and values it on 31 December is
+    ordinary, and its own running balance carries the row. Failing it drops a money-bearing row
+    from the end of the statement, where the rows before it still walk consistently and the
+    batch reports itself reconciled — which is the outcome §4.6 exists to prevent.
+    """
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            value_date="15/07/2024",
+            description="INSIDE",
+            amount="-10.00",
+        ),
+        row(
+            2,
+            booked_date="01/08/2024",
+            value_date="31/07/2024",
+            description="VALUED INSIDE",
+            amount="-4.00",
+        ),
+    ]
+    layout = profile(
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+        metadataPatterns={
+            "period_start": r"From (\d{2}/\d{2}/\d{4})",
+            "period_end": r"To (\d{2}/\d{2}/\d{4})",
+        },
+    )
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/07/2024", "period_end": "31/07/2024"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert batch.failures == []
+    assert [line.description_raw for line in batch.rows] == ["INSIDE", "VALUED INSIDE"]
+    # The booked date is kept as the statement wrote it; the value date is what vouched for it.
+    assert [line.booked_date for line in batch.rows] == [date(2024, 7, 15), date(2024, 8, 1)]
+
+
+def test_a_row_outside_the_period_on_both_dates_still_fails() -> None:
+    """The gate is narrowed, not removed: with neither date inside, nothing vouches for the row."""
+    rows = [
+        row(
+            1,
+            booked_date="15/07/2024",
+            value_date="15/07/2024",
+            description="INSIDE",
+            amount="-10.00",
+        ),
+        row(
+            2,
+            booked_date="01/08/2024",
+            value_date="01/08/2024",
+            description="OUTSIDE",
+            amount="-4.00",
+        ),
+    ]
+    layout = profile(
+        columns=[
+            {"field": "booked_date", "xMin": 0.0, "xMax": 100.0},
+            {"field": "value_date", "xMin": 100.0, "xMax": 200.0},
+            {"field": "description", "xMin": 200.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 600.0},
+        ],
+        metadataPatterns={
+            "period_start": r"From (\d{2}/\d{2}/\d{4})",
+            "period_end": r"To (\d{2}/\d{2}/\d{4})",
+        },
+    )
+
+    batch = normalize.normalize(
+        layout,
+        extraction(rows, metadata={"period_start": "01/07/2024", "period_end": "31/07/2024"}),
+        account_currency=ACCOUNT_CURRENCY,
+    )
+
+    assert [line.description_raw for line in batch.rows] == ["INSIDE"]
+    assert batch.failures[0].source_row_number == 2
+    assert batch.failures[0].reason == "booked_date is outside the statement period"
+
+
 def test_a_period_derived_from_row_dates_is_labelled_derived_and_excludes_nothing() -> None:
     rows = [
         row(1, booked_date="15/07/2024", description="ALPHA", amount="-10.00"),

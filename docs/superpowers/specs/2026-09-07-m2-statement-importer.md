@@ -568,6 +568,43 @@ worked around.
     Owner decision, 10 September 2026, taken against the alternatives: accepting the six corrupted
     descriptions, or switching the layout to no continuation at all, which costs roughly a
     thousand rows their second narration line.
+14. **§4.4's period gate is stricter than a real statement.** The section says a captured period
+    "gates row dates (a parsed date outside the period fails its row)". Slice 1.2's fourth layout
+    disproves it: its statements book year-end interest and the tax deducted on it on **1 January**
+    — one day after the period they declare — and carry both in their own running balance. Six such
+    rows across four of its six statements failed, and because they sit at the end, dropping them
+    left a consistent prefix that still reconciled `matched`. A statement short two money-bearing
+    rows that reports itself reconciled is the outcome §4.6 exists to prevent, and only
+    `blocks_staging` stopped it.
+
+    The layout cannot express its way out: its rows carry a two-digit year, and §4.4 requires a
+    profile with one to capture both period bounds, so the period cannot simply be left derived
+    the way the card layout leaves it.
+
+    `_windowed` already states the principle the gate contradicts — "the period anchors the
+    century — it does not confine the date: a settlement date days after the statement closes is
+    ordinary". **The gate is corrected to agree with it: a row whose `booked_date` falls outside
+    the captured period is the statement's own when its `value_date` falls inside.** The statement
+    itself is the evidence, so nothing is invented and no tolerance is guessed — a row with
+    neither date inside the period still fails, exactly as before, and a layout that maps no value
+    date is unaffected. Every one of the six rows is valued 31 December.
+15. **V14 verifies a batch as of the wrong date, for the same reason.** Item 14 lets the late
+    rows normalize; the commit path then refuses the whole statement anyway.
+    `commit_import_batch` calls `assert_account_reconciles(account, declared_closing,
+    period_end)`, and with rows booked past `period_end` those rows are outside the sum while
+    the declared closing includes them. Two of the six statements failed at commit, each short
+    by exactly its late rows' total.
+
+    **V18 verifies as of the last booked date the batch itself carries, never earlier than
+    `period_end`.** `GREATEST` is what keeps it never earlier: shrinking the window would
+    exclude rows the statement lists, which is this defect arriving from the other side. For
+    every layout whose rows fall inside their period — the three before this one — the as-of
+    date is `period_end` and nothing changes, which `db/tests/0016` asserts directly.
+
+    The window widens by the days the producer is late by, so an older statement committed
+    *after* a newer one can now see a day or two of the newer one's rows. That hazard is V14's
+    own and unchanged in kind: it is why the comparison is against the batch's
+    `declared_closing_balance` and never the maintained `current_balance` (§4.9).
 
 ---
 
