@@ -12,6 +12,7 @@ from .auth import OwnerSession, require_owner, session_secret
 from .routes import (
     accounts,
     auth,
+    card_cycles,
     categories,
     currencies,
     dashboard,
@@ -91,6 +92,7 @@ app.include_router(layouts.router)
 app.include_router(rules.router)
 app.include_router(transfers.router)
 app.include_router(dashboard.router)
+app.include_router(card_cycles.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
 

@@ -33,8 +33,8 @@ request.
 | --- | --- | --- | --- |
 | 1.1 — statements land in the ledger | `fix/p1-1-card-layout-fitness` · `feature/p1-1a-parse-pipeline` · `feature/p1-1a-parse-route` · `feature/p1-1b-commit-functions` · `feature/p1-1b-review-routes` · `feature/p1-1c-import-screen` · `feature/p1-1b-duplicate-override` · `feature/p1-1d-review-screen` | **Accepted** — the run was made on 9 September 2026; all 38 card statements were handled unaided | [acceptance run](#phase-1--slice-11--the-acceptance-run) |
 | 1.2 — all four bank layouts | `feature/p1-2a-encrypted-statements` · `feature/p1-2b-batch-cancellation` · `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | **Accepted** — the run was made on 10 September 2026; 67 of the 71 gathered files imported and every account reconciles across its period | [acceptance run](#phase-1--slice-12--the-acceptance-run) |
-| 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b5-stated-remittance` | In progress — the classification half is delivered; transfers and the acceptance run remain | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
-| 1.4 — cards, net worth and trends | `feature/p1-4a1-card-statement-schema` … `feature/p1-4b3-overview-screen` | In progress | [slice 1.4](#phase-1--slice-14--cards-net-worth-and-trends) |
+| 1.3 — classification and transfers | `feature/p1-3a1-classification-rules` … `feature/p1-3a5-rules-screen` · `feature/p1-3b1-transfer-schema` … `feature/p1-3b5-stated-remittance` | In progress — every task is delivered; the acceptance run remains, and waits on the owner confirming a remittance and a card payment | [slice 1.3](#phase-1--slice-13--classification-and-transfers) |
+| 1.4 — cards, net worth and trends | `feature/p1-4a1-card-statement-schema` … `feature/p1-4b3-overview-screen` | In progress — every task is delivered; acceptance question 2 passes, questions 1 and 3 wait on the owner | [slice 1.4](#phase-1--slice-14--cards-net-worth-and-trends) |
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
@@ -45,12 +45,23 @@ request.
 | --- | --- | --- | --- |
 | 4a1 — the card cycle entity | `feature/p1-4a1-card-statement-schema` | Delivered | [#99](https://github.com/sandjaie/OneLedger/pull/99) |
 | 4a2 — the statement's own facts, captured and committed | `feature/p1-4a2-card-statement-facts` | Delivered | [#100](https://github.com/sandjaie/OneLedger/pull/100) |
-| 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Delivered — the repository half; re-posting it into the working ledger waits on V21 there | this branch |
+| 4a3 — the card profile learns to read its own summary | `feature/p1-4a3-card-layout-metadata` | Delivered | [#114](https://github.com/sandjaie/OneLedger/pull/114) |
+| 4a4 — card cycles for statements committed before the layout read them | `feature/p1-4a4-card-cycle-backfill` | Delivered | [#115](https://github.com/sandjaie/OneLedger/pull/115) |
 | 4b1 — the two static checks the documents claim exist | `feature/p1-4b1-reporting-static-checks` | Delivered | [#101](https://github.com/sandjaie/OneLedger/pull/101) · the same gap in the other two tree-walking gates, [#102](https://github.com/sandjaie/OneLedger/pull/102) · #102's tests no longer reach the repository a push hook is for, [#106](https://github.com/sandjaie/OneLedger/pull/106) |
 | 4b2a — the dashboard's position: net worth and cards due | `feature/p1-4b2a-dashboard-position` | Delivered | [#104](https://github.com/sandjaie/OneLedger/pull/104) |
 | 4b2b — the dashboard's flows: this month and the trend | `feature/p1-4b2b-dashboard-flows` | Delivered | [#105](https://github.com/sandjaie/OneLedger/pull/105) |
 | 4b3 — the Overview screen | `feature/p1-4b3-overview-screen` | Delivered | [#113](https://github.com/sandjaie/OneLedger/pull/113) |
-| the acceptance run | — | Not run | — |
+| the acceptance run | — | Partly run, 10 Sep 2026: the working ledger migrated to V22, the card layout re-posted as version 2 and 35 cycles backfilled; **question 2 passes**, net worth recomputed independently at the as-of rates matches the dashboard exactly in both currencies. Question 1 (dues against the PDFs, by eye) and question 3 (unlink and re-link a confirmed card payment) wait on the owner | [#115](https://github.com/sandjaie/OneLedger/pull/115) |
+
+**4a4's deviations, recorded:**
+
+- **4a4 is an addition to the plan.** 4a3's local validation re-imports one statement per card, but
+  a statement already committed is refused as a duplicate, so every card statement imported before
+  the layout learned its facts would never have a cycle, and the acceptance run's first question —
+  do the dues match the statement — could not be asked of the ledger. `POST
+  /card-statements/backfill` re-reads each one's stored original with the newest version of its
+  layout and writes the cycle through the commit's own `_write_card_cycle`, naming any it cannot
+  complete.
 
 **4a3's deviations, recorded:**
 
@@ -169,14 +180,14 @@ in another currency would make its balances incomparable with the account's.
 | 3a3a — rules through the app | `feature/p1-3a3a-rules-crud` | Delivered | [#83](https://github.com/sandjaie/OneLedger/pull/83) |
 | 3a3b — preview and backfill | `feature/p1-3a3b-preview-and-backfill` | Delivered | [#84](https://github.com/sandjaie/OneLedger/pull/84) |
 | 3a4 — the seed pack, and import classifies | `feature/p1-3a4-seed-rules-and-import` | Delivered | [#85](https://github.com/sandjaie/OneLedger/pull/85) |
-| 3a4 — a pack loads as seed rules | `fix/p1-3a4-a-seed-pack-loads-as-seed` | Delivered | this branch |
+| 3a4 — a pack loads as seed rules | `fix/p1-3a4-a-seed-pack-loads-as-seed` | Delivered | [#88](https://github.com/sandjaie/OneLedger/pull/88) |
 | 3a5 — the rules screen | `feature/p1-3a5-rules-screen` | Delivered | [#86](https://github.com/sandjaie/OneLedger/pull/86) |
 | 3b1 — the transfer store | `feature/p1-3b1-transfer-schema` | Delivered | [#90](https://github.com/sandjaie/OneLedger/pull/90) |
-| 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | this branch |
+| 3b2 — the matcher, as a function of values | `feature/p1-3b2-transfer-matching` | Delivered | [#93](https://github.com/sandjaie/OneLedger/pull/93) |
 | 3b3a — transfer reads: candidates, peers, the decided list | `feature/p1-3b3a-transfer-reads` | Delivered | [#94](https://github.com/sandjaie/OneLedger/pull/94) |
 | 3b3b — transfer writes: confirm, link by hand, unlink, FX cost | `feature/p1-3b3b-transfer-writes` | Delivered | [#95](https://github.com/sandjaie/OneLedger/pull/95) |
-| 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Delivered | this branch |
-| 3b5 — a remittance's own narration as a matching signal | `feature/p1-3b5-stated-remittance` | Delivered | this branch |
+| 3b4 — link and unlink from the ledger | `feature/p1-3b4-transfer-screen` | Delivered | [#96](https://github.com/sandjaie/OneLedger/pull/96) |
+| 3b5 — a remittance's own narration as a matching signal | `feature/p1-3b5-stated-remittance` | Delivered | [#107](https://github.com/sandjaie/OneLedger/pull/107) |
 | the acceptance run | — | Not run | — |
 
 Two decisions from this slice sit outside it. **ADR-0017** supersedes ADR-0007: a transfer is
@@ -314,7 +325,7 @@ architecture §10's weekly copy was never written, and is its own `scripts/` bra
 | 2a — a password reaches the parse | `feature/p1-2a-encrypted-statements` | Delivered | [#71](https://github.com/sandjaie/OneLedger/pull/71) |
 | 2b — a staged batch can be discarded | `feature/p1-2b-batch-cancellation` | Delivered | [#72](https://github.com/sandjaie/OneLedger/pull/72) |
 | 2c1–2c3 — the three remaining layouts | `feature/p1-2c1-layout-two` · `feature/p1-2c2-layout-three` · `feature/p1-2c3-layout-four` | Delivered | [#75](https://github.com/sandjaie/OneLedger/pull/75) · [#76](https://github.com/sandjaie/OneLedger/pull/76) · [#77](https://github.com/sandjaie/OneLedger/pull/77) |
-| 2b — a cancelled batch releases its file | `fix/cancelled-batch-releases-its-file` | Delivered — layer 1 does not count a cancelled batch, and a re-import reuses the file's row | this branch |
+| 2b — a cancelled batch releases its file | `fix/cancelled-batch-releases-its-file` | Delivered — layer 1 does not count a cancelled batch, and a re-import reuses the file's row | [#110](https://github.com/sandjaie/OneLedger/pull/110) |
 
 The slice's survey found three of its four stated engine capabilities already delivered with M2
 and exercised by slice 1.1; the plan records that and the five-branch split that followed. What
