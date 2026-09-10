@@ -19,7 +19,7 @@ BEGIN
 END $$;
 
 DO $$
-DECLARE h UUID; p UUID; a_sav UUID; a_card UUID;
+DECLARE h UUID; p UUID; a_sav UUID; a_card UUID; tr UUID;
         base CHAR(3); secondary CHAR(3);
         t_parent UUID; t_child UUID; t_lone UUID;
 BEGIN
@@ -147,13 +147,20 @@ BEGIN
 
   -- The reportable view excludes what is not consumption: transfer legs, excluded rows,
   -- balance-sheet movements.
+  -- A real transfer row since V20: `transaction.transfer_id` carries a foreign key now, and
+  -- an invented uuid here would have been a leg pointing at nothing.
+  INSERT INTO transfer (household_id, source_account_id, destination_account_id,
+                        source_amount, source_currency, destination_amount,
+                        destination_currency, transfer_date, transfer_kind, match_method)
+    VALUES (h, a_sav, a_card, 5000.0000, base, 5000.0000, base,
+            '2024-02-04', 'other', 'user_created') RETURNING id INTO tr;
   INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
                            currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                            amount_base, amount_secondary, txn_type, source, dedupe_hash,
                            transfer_id)
     VALUES (h, a_sav, '2024-02-04', 'TT REMITTANCE', -5000.0000, base,
             '2024-02-04', 1, 20, -5000.0000, -100000.0000, 'transfer_out', 'manual', 'd5',
-            gen_random_uuid());
+            tr);
   INSERT INTO transaction (household_id, account_id, booked_date, description_raw, amount,
                            currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
                            amount_base, amount_secondary, txn_type, source, dedupe_hash,
