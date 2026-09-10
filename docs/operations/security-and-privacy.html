@@ -743,11 +743,14 @@ link, advisor delivery or outbound reminder containing financial data is introdu
 <h2 id="9-backups">9. Backups</h2>
 <p>Restated here because data loss is the most likely serious failure and the least exciting to
 prepare for.</p>
-<pre><code>Daily     pg_dump → gzip → encrypted → local disk        30 days retained
+<pre><code>Daily     pg_dump → encrypted → local disk               30 days retained
 Weekly    documents volume → local disk                  4 weeks retained
 Monthly   Both → second physical location                12 months retained
 Quarterly RESTORE TEST → scratch database                verified, not assumed
 </code></pre>
+<p>The daily row is taken by the compose <code>backup</code> service, not by anyone remembering, and
+Settings › Data Quality says when it has not been
+(<a href="../design/architecture.html#10-backups">architecture.html</a> §10).</p>
 <p>The quarterly restore test is a checklist item in
 <a href="./testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
 restored is a hypothesis.</p>

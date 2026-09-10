@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
+import { DataQuality } from "@/app/settings/data-quality";
 import { HouseholdForm } from "@/app/settings/household-form";
 import { RulesManager } from "@/app/settings/rules-manager";
 import { ImportScreen } from "@/app/import/import-screen";
@@ -410,6 +411,18 @@ export function Workspace({
               <h1 className="workspace-title" id="settings-title">Settings</h1>
               <p className="lede">Choose a date to inspect recorded exchange rates, their sources and whether a prior rate was carried forward.</p>
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
+
+              <DataQuality
+                request={async (path, init) => {
+                  try {
+                    return await request(path, init);
+                  } catch (error) {
+                    const next = authDestination(error);
+                    if (next) leaveForAuth(next);
+                    throw error;
+                  }
+                }}
+              />
 
               {currencies && (
                 <HouseholdForm

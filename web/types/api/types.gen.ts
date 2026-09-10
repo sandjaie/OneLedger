@@ -618,6 +618,44 @@ export type DecisionResult = {
 };
 
 /**
+ * DoctorReport
+ */
+export type DoctorReport = {
+    /**
+     * Sections
+     */
+    sections: Array<DoctorSection>;
+};
+
+/**
+ * DoctorSection
+ */
+export type DoctorSection = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Findings
+     */
+    findings: Array<Finding>;
+};
+
+/**
+ * Finding
+ */
+export type Finding = {
+    /**
+     * Level
+     */
+    level: 'ok' | 'warning';
+    /**
+     * Message
+     */
+    message: string;
+};
+
+/**
  * FxRateResponse
  */
 export type FxRateResponse = {
@@ -3632,6 +3670,31 @@ export type CancelImportImportBatchIdCancelPostResponses = {
 };
 
 export type CancelImportImportBatchIdCancelPostResponse = CancelImportImportBatchIdCancelPostResponses[keyof CancelImportImportBatchIdCancelPostResponses];
+
+export type ReportDoctorGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/doctor';
+};
+
+export type ReportDoctorGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportDoctorGetError = ReportDoctorGetErrors[keyof ReportDoctorGetErrors];
+
+export type ReportDoctorGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DoctorReport;
+};
+
+export type ReportDoctorGetResponse = ReportDoctorGetResponses[keyof ReportDoctorGetResponses];
 
 export type HealthHealthGetData = {
     body?: never;
