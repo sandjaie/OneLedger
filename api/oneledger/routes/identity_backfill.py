@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 from dataclasses import dataclass, field
@@ -12,16 +13,17 @@ from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from ..account_resolution import resolve_statement_account
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
-from ..identifiers import CompleteIdentifier, IdentifierValueError
+from ..identifiers import CompleteIdentifier, Identifier, IdentifierValueError
 from ..ingest import engine
 from ..ingest.words import ExtractionError
 from ..institutions import resolve_institution
 from . import layouts
+from .accounts import _replace_account_identifier
 from .description_reparse import _verified_pages as verified_pages
 
 __all__ = ["router", "verified_pages"]
@@ -65,6 +67,7 @@ class DocumentIdentityPreview(BaseModel):
 class AccountIdentityPreview(BaseModel):
     accountId: UUID
     outcome: Outcome
+    eligible: bool
     documents: list[DocumentIdentityPreview]
 
 
@@ -79,8 +82,21 @@ class IdentityBackfillCounts(BaseModel):
 class IdentityBackfillPreview(BaseModel):
     accounts: list[AccountIdentityPreview]
     counts: IdentityBackfillCounts
+    eligibleCount: int
     previewedAt: datetime
     expectedState: str
+
+
+class IdentityBackfillApplyRequest(BaseModel):
+    accountId: UUID
+    password: str | None = Field(default=None, max_length=4096, repr=False)
+    previewedAt: AwareDatetime
+    expectedState: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+
+
+class IdentityBackfillApplyResult(BaseModel):
+    accountId: UUID
+    status: Literal["applied", "unchanged"]
 
 
 @dataclass(frozen=True)
@@ -142,12 +158,15 @@ class Assessed:
     normalized: str | None = field(default=None, repr=False)
     suffix: str | None = field(default=None, repr=False)
     resolver_state: tuple[str, ...] = ()
+    identifier: Identifier | None = field(default=None, repr=False, compare=False)
+    eligible: bool = False
 
     def safe_state(self) -> list[str | None]:
         private = [self.normalized, self.suffix]
         return [
             self.public.outcome,
             self.public.reason,
+            str(self.eligible),
             *(
                 None if value is None else hashlib.sha256(value.encode()).hexdigest()
                 for value in private
@@ -325,6 +344,13 @@ def _assess_for_household(
         else None,
         suffix=identifier.visible_suffix,
         resolver_state=resolver_state,
+        identifier=identifier,
+        eligible=(
+            isinstance(identifier, CompleteIdentifier)
+            and not next(
+                item for item in resolution.candidates if item.id == source.account_id
+            ).can_reveal
+        ),
     )
 
 
@@ -353,27 +379,26 @@ def _account_outcome(items: list[Assessed]) -> Outcome:
     return "mask_only"
 
 
-@router.post("/preview")
-def preview_identity_backfill(
-    body: IdentityBackfillPreviewRequest,
-    owner: Annotated[OwnerSession, Depends(require_owner)],
-) -> IdentityBackfillPreview:
-    previewed_at = _now()
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        sources = _sources(cur, owner.household_id, body.accountId)
-        identifiers = _identifier_state(cur, owner.household_id)
-        grouped: dict[UUID, list[Assessed]] = {}
-        assessed: list[Assessed] = []
-        for source in sources:
-            item = _assess_for_household(cur, source, owner.household_id, body.password)
-            assessed.append(item)
-            grouped.setdefault(source.account_id, []).append(item)
-
+def _preview(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    account_id: UUID | None,
+    password: str | None,
+    previewed_at: datetime,
+) -> tuple[IdentityBackfillPreview, list[Source], list[Assessed]]:
+    sources = _sources(cur, household_id, account_id)
+    identifiers = _identifier_state(cur, household_id)
+    grouped: dict[UUID, list[Assessed]] = {}
+    assessed: list[Assessed] = []
+    for source in sources:
+        item = _assess_for_household(cur, source, household_id, password)
+        assessed.append(item)
+        grouped.setdefault(source.account_id, []).append(item)
     accounts = [
         AccountIdentityPreview(
             accountId=account_id,
             outcome=_account_outcome(items),
+            eligible=_account_outcome(items) == "complete" and any(item.eligible for item in items),
             documents=[item.public for item in items],
         )
         for account_id, items in grouped.items()
@@ -384,9 +409,68 @@ def preview_identity_backfill(
             for outcome in ("complete", "mask_only", "missing", "conflicting", "unsupported")
         }
     )
-    return IdentityBackfillPreview(
-        accounts=accounts,
-        counts=counts,
-        previewedAt=previewed_at,
-        expectedState=_state_digest(previewed_at, sources, identifiers, assessed),
+    return (
+        IdentityBackfillPreview(
+            accounts=accounts,
+            counts=counts,
+            eligibleCount=sum(account.eligible for account in accounts),
+            previewedAt=previewed_at,
+            expectedState=_state_digest(previewed_at, sources, identifiers, assessed),
+        ),
+        sources,
+        assessed,
     )
+
+
+@router.post("/preview")
+def preview_identity_backfill(
+    body: IdentityBackfillPreviewRequest,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> IdentityBackfillPreview:
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        preview, _, _ = _preview(cur, owner.household_id, body.accountId, body.password, _now())
+    return preview
+
+
+@router.post("/apply")
+def apply_identity_backfill(
+    body: IdentityBackfillApplyRequest,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> IdentityBackfillApplyResult:
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        preview, sources, assessed = _preview(
+            cur, owner.household_id, body.accountId, body.password, body.previewedAt
+        )
+        if not hmac.compare_digest(preview.expectedState, body.expectedState):
+            raise HTTPException(status_code=409, detail="identity backfill preview is stale")
+        if len(preview.accounts) != 1 or preview.accounts[0].outcome != "complete":
+            raise HTTPException(
+                status_code=409, detail="identity backfill source documents do not agree"
+            )
+        eligible = [item for item in assessed if item.eligible]
+        if not eligible:
+            return IdentityBackfillApplyResult(accountId=body.accountId, status="unchanged")
+        chosen = eligible[0]
+        identifier = chosen.identifier
+        assert isinstance(identifier, CompleteIdentifier)
+        source = next(item for item in sources if item.document_id == chosen.public.documentId)
+        try:
+            _replace_account_identifier(
+                cur,
+                owner.household_id,
+                body.accountId,
+                identifier.kind,
+                identifier,
+                provenance="statement_backfill",
+                source_sha256=source.sha256,
+                source_document_id=source.document_id,
+                source_layout_id=source.newest_layout_id,
+                source_layout_version=source.newest_layout_version,
+                source_capture_key="account_number",
+            )
+        except psycopg.errors.UniqueViolation:
+            raise HTTPException(status_code=409, detail="account identity already exists") from None
+    return IdentityBackfillApplyResult(accountId=body.accountId, status="applied")

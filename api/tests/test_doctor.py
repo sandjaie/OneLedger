@@ -94,6 +94,16 @@ def test_a_backup_from_today_is_ok_and_still_counts_what_came_after() -> None:
     assert "1 transaction " in finding.message
 
 
+def test_identity_backfill_finding_reports_legacy_and_current_states() -> None:
+    pending = doctor.identity_backfill_finding(2)
+    assert pending.level == "warning"
+    assert pending.message == "2 account identities await statement backfill."
+    assert doctor.identity_backfill_finding(0).model_dump() == {
+        "level": "ok",
+        "message": "Every account identity is on the current local model.",
+    }
+
+
 def test_doctor_is_refused_without_an_owner_session() -> None:
     assert TestClient(app).get("/doctor").status_code == 401
 
@@ -109,6 +119,7 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
     monkeypatch.setenv("BACKUP_PREFIX", "scratch")
     connection = Connection(12)
     monkeypatch.setattr(doctor, "connect", lambda: connection)
+    monkeypatch.setattr(doctor, "identity_backfills_remaining", lambda _: 0)
     app.dependency_overrides[auth.require_owner] = owner
     try:
         response = TestClient(app).get("/doctor")
@@ -116,8 +127,14 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    [section] = response.json()["sections"]
+    section, identity = response.json()["sections"]
     assert section["title"] == "Backups"
     [finding] = section["findings"]
     assert "12 transactions" in finding["message"]
     assert connection.params == (HOUSEHOLD_ID, datetime(2026, 9, 1, tzinfo=UTC))
+    assert identity == {
+        "title": "Account identities",
+        "findings": [
+            {"level": "ok", "message": "Every account identity is on the current local model."}
+        ],
+    }

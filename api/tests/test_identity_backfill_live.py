@@ -20,11 +20,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.db import scope_to_owner
 from oneledger.main import app
 from oneledger.routes import identity_backfill
 
 from .fixtures.synthetic_pdf import Placement, build_encrypted_pdf
 from .live_database import connect_to_test_database
+from .live_database import test_dsn as _test_dsn
 from .test_account_from_statement_live import (
     ACCOUNT_NUMBER,
     LAYOUT_ID,
@@ -123,8 +125,8 @@ class BackfillFixture(Fixture):
         with self.conn.cursor() as cur:
             cur.execute(
                 """SELECT id, kind, masked_value, full_value, normalized_value, provenance,
-                          source_document_id, source_layout_id, source_layout_version
-                     FROM account_identifier WHERE account_id = %s ORDER BY id""",
+                          is_active, source_document_id, source_layout_id, source_layout_version
+                     FROM account_identifier WHERE account_id = %s ORDER BY created_at, id""",
                 (self.account_id,),
             )
             return cur.fetchall()
@@ -144,6 +146,86 @@ class BackfillFixture(Fixture):
             ),
         )
 
+    def apply(
+        self,
+        preview: dict[str, Any],
+        *,
+        account_id: UUID | None = None,
+        password: str | None = None,
+    ) -> httpx.Response:
+        body = {
+            "accountId": str(account_id or self.account_id),
+            "previewedAt": preview["previewedAt"],
+            "expectedState": preview["expectedState"],
+        }
+        if password is not None:
+            body["password"] = password
+        return cast(
+            httpx.Response,
+            TestClient(app).post("/account-identifiers/backfill/apply", json=body, headers=ORIGIN),
+        )
+
+    def ledger_snapshot(self) -> dict[str, list[tuple[Any, ...]]]:
+        tables = (
+            "account",
+            "transaction",
+            "import_batch",
+            "document",
+            "card_statement",
+            "transfer",
+            "v_transaction_reportable",
+        )
+        snapshot: dict[str, list[tuple[Any, ...]]] = {}
+        with self.conn.cursor() as cur:
+            for table in tables:
+                cur.execute(
+                    f"SELECT to_jsonb(row) FROM {table} row WHERE household_id = %s"  # noqa: S608
+                    " ORDER BY id",
+                    (self.household_id,),
+                )
+                snapshot[table] = cur.fetchall()
+        return snapshot
+
+    def populate_ledger_facts(self) -> None:
+        with self.conn.cursor() as cur:
+            cur.execute(
+                """INSERT INTO account
+                       (household_id, owner_person_id, institution_id, name, account_type,
+                        currency, country, opening_balance_date, credit_limit)
+                     VALUES (%s, %s, %s, 'proposal test preservation card', 'credit_card',
+                             %s, 'ZZ', DATE '2026-01-01', 1000) RETURNING id""",
+                (self.household_id, self.person_id, self.institution_id, self.currency),
+            )
+            card_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO transaction
+                       (household_id, account_id, booked_date, description_raw, amount, currency,
+                        fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
+                        amount_secondary, txn_type, source, dedupe_hash)
+                     VALUES (%s, %s, DATE '2026-04-01', 'SYNTHETIC PRESERVATION', -5, %s,
+                             DATE '2026-04-01', 1, 1, -5, -5, 'expense', 'manual', %s)""",
+                (self.household_id, self.account_id, self.currency, uuid4().hex * 2),
+            )
+            cur.execute(
+                """INSERT INTO card_statement
+                       (household_id, account_id, period_start, period_end, statement_date,
+                        payment_due_date, currency, opening_balance, closing_balance,
+                        statement_balance)
+                     VALUES (%s, %s, DATE '2026-04-01', DATE '2026-04-30', DATE '2026-04-30',
+                             DATE '2026-05-20', %s, 0, -20, 20)""",
+                (self.household_id, card_id, self.currency),
+            )
+            cur.execute(
+                """INSERT INTO transfer
+                       (household_id, source_account_id, destination_account_id, source_amount,
+                        source_currency, destination_amount, destination_currency, transfer_date,
+                        transfer_kind, match_method)
+                     VALUES (%s, %s, %s, 7, %s, 7, %s, DATE '2026-04-02',
+                             'internal_same_currency', 'synthetic_preservation')""",
+                (self.household_id, self.account_id, card_id, self.currency, self.currency),
+            )
+        self.conn.commit()
+
 
 @pytest.fixture
 def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[BackfillFixture]:
@@ -158,6 +240,10 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[BackfillFi
         app.dependency_overrides.clear()
         with conn.cursor() as cur:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
+            cur.execute("DELETE FROM transfer WHERE household_id = %s", (fixture.household_id,))
+            cur.execute(
+                "DELETE FROM card_statement WHERE household_id = %s", (fixture.household_id,)
+            )
             cur.execute(
                 """DELETE FROM account_identifier ai USING account a
                      WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
@@ -186,6 +272,7 @@ def test_preview_is_read_only_and_returns_only_safe_identity_state(live: Backfil
         {
             "accountId": str(live.account_id),
             "outcome": "complete",
+            "eligible": True,
             "documents": [
                 {
                     "documentId": document_id,
@@ -203,6 +290,7 @@ def test_preview_is_read_only_and_returns_only_safe_identity_state(live: Backfil
         "unsupported": 0,
     }
     assert len(body["expectedState"]) == 64
+    assert body["eligibleCount"] == 1
     assert body["previewedAt"].endswith("Z")
     assert live.identity_state() == before
     assert ACCOUNT_NUMBER not in response.text
@@ -552,3 +640,165 @@ def test_expected_state_is_stable_and_tracks_account_document_and_layout_state(
     layout_changed = live.preview().json()["expectedState"]
     assert layout_changed != document_changed
     assert live.preview().json()["accounts"][0]["outcome"] == "complete"
+
+
+def test_apply_requires_a_fresh_preview_and_refuses_cross_household_accounts(
+    live: BackfillFixture,
+) -> None:
+    live.completed()
+    before = live.identity_state()
+
+    missing = TestClient(app).post(
+        "/account-identifiers/backfill/apply",
+        json={"accountId": str(live.account_id)},
+        headers=ORIGIN,
+    )
+    assert missing.status_code == 422
+
+    preview = live.preview().json()
+    forged = {**preview, "expectedState": "0" * 64}
+    stale = live.apply(forged)
+    assert stale.status_code == 409
+    assert stale.json() == {"detail": "identity backfill preview is stale"}
+    assert live.identity_state() == before
+
+    foreign = live.apply(preview, account_id=uuid4())
+    assert foreign.status_code == 404
+    assert live.identity_state() == before
+
+
+def test_apply_upgrades_legacy_identity_once_and_preserves_every_ledger_fact(
+    live: BackfillFixture,
+) -> None:
+    _, document_id, _ = live.completed()
+    live.populate_ledger_facts()
+    before_ledger = live.ledger_snapshot()
+    preview = live.preview().json()
+    assert preview["eligibleCount"] == 1
+
+    response = live.apply(preview)
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"accountId": str(live.account_id), "status": "applied"}
+    assert ACCOUNT_NUMBER not in response.text
+    assert live.ledger_snapshot() == before_ledger
+    rows = live.identity_state()
+    assert len(rows) == 2
+    by_provenance = {row[5]: row for row in rows}
+    assert by_provenance["legacy_migration"][6] is False
+    statement = by_provenance["statement_backfill"]
+    assert statement[2] == "****3579"
+    assert statement[3] == ACCOUNT_NUMBER
+    assert statement[4] == ACCOUNT_NUMBER
+    assert statement[6] is True
+    assert str(statement[7]) == document_id
+    assert statement[8] == LAYOUT_ID
+    assert statement[9] == 1
+
+    second = live.preview().json()
+    assert second["eligibleCount"] == 0
+    unchanged = live.apply(second)
+    assert unchanged.status_code == 200
+    assert unchanged.json()["status"] == "unchanged"
+    assert live.identity_state() == rows
+
+    doctor = TestClient(app).get("/doctor").json()
+    identity = next(
+        section for section in doctor["sections"] if section["title"] == "Account identities"
+    )
+    assert identity["findings"] == [
+        {"level": "ok", "message": "Every account identity is on the current local model."}
+    ]
+
+
+def test_apply_refuses_the_whole_account_when_documents_disagree(
+    live: BackfillFixture,
+) -> None:
+    live.completed()
+    live.completed(_statement("9999999999", amount="-11.00"))
+    preview = live.preview().json()
+    before = live.identity_state()
+
+    response = live.apply(preview)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "identity backfill source documents do not agree"}
+    assert live.identity_state() == before
+
+
+def test_apply_unique_race_rolls_back_legacy_deactivation(
+    live: BackfillFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    live.completed()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account
+                   (household_id, owner_person_id, institution_id, name, account_type,
+                    currency, country, opening_balance_date)
+                 VALUES (%s, %s, %s, 'proposal test racing account', 'savings', %s, 'ZZ',
+                         DATE '2026-01-01') RETURNING id""",
+            (live.household_id, live.person_id, live.institution_id, live.currency),
+        )
+        competing_account = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+    preview = live.preview().json()
+    writer = identity_backfill._replace_account_identifier
+
+    def racing_writer(cur: psycopg.Cursor[Any], *args: object, **kwargs: object) -> None:
+        with psycopg.connect(_test_dsn()) as rival, rival.cursor() as rival_cur:
+            scope_to_owner(rival, live.owner().user_id)
+            # Model the privileged out-of-band race the service-level household lock cannot
+            # serialize. Unique indexes remain active while FK trigger lock acquisition is skipped.
+            rival_cur.execute("SET LOCAL session_replication_role = replica")
+            rival_cur.execute(
+                """INSERT INTO account_identifier
+                       (household_id, account_id, kind, masked_value, visible_suffix,
+                        full_value, normalized_value, provenance)
+                     VALUES (%s, %s, 'bank_account', '****3579', '3579', %s, %s,
+                             'owner_entered')""",
+                (live.household_id, competing_account, ACCOUNT_NUMBER, ACCOUNT_NUMBER),
+            )
+        writer(cur, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(identity_backfill, "_replace_account_identifier", racing_writer)
+
+    response = live.apply(preview)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "account identity already exists"}
+    [legacy] = live.identity_state()
+    assert legacy[5] == "legacy_migration"
+    assert legacy[6] is True
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT account_id, normalized_value FROM account_identifier
+                WHERE account_id = %s AND is_active""",
+            (competing_account,),
+        )
+        assert cur.fetchone() == (competing_account, ACCOUNT_NUMBER)
+
+
+def test_apply_rechecks_password_and_concurrent_state_before_writing(
+    live: BackfillFixture,
+) -> None:
+    live.completed(_encrypted_statement("correct synthetic password"))
+    preview = live.preview(password="correct synthetic password").json()
+    before = live.identity_state()
+
+    wrong_password = live.apply(preview, password="wrong synthetic password")
+    assert wrong_password.status_code == 409
+    assert wrong_password.json() == {"detail": "identity backfill preview is stale"}
+    assert live.identity_state() == before
+
+    fresh = live.preview(password="correct synthetic password").json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET updated_at = updated_at + interval '1 second' WHERE id = %s",
+            (live.account_id,),
+        )
+    live.conn.commit()
+
+    concurrent = live.apply(fresh, password="correct synthetic password")
+    assert concurrent.status_code == 409
+    assert concurrent.json() == {"detail": "identity backfill preview is stale"}
+    assert live.identity_state() == before
