@@ -313,6 +313,56 @@ def _starts_row(profile: ProfileLike, fields: dict[str, str]) -> bool:
     return has_date and _has_amount(profile, fields)
 
 
+def _nearest_row_page(
+    profile: ProfileLike,
+    page: Page,
+    page_number: int,
+    continuation: str | None,
+    first_row_number: int,
+) -> tuple[list[RawRow], int]:
+    """Assemble a page whose dates sit vertically centred beside wrapped narration."""
+    prepared: list[tuple[Line, str, dict[str, str]]] = []
+    for line in page.lines:
+        if not line.words:
+            continue
+        assembled = " ".join(word.text for word in sorted(line.words, key=lambda item: item.x0))
+        if any(re.search(pattern, assembled) for pattern in profile.skipLinePatterns):
+            continue
+        raw_text = line.raw_text if line.raw_text is not None else assembled
+        prepared.append((line, raw_text, _cells(profile.columns, line.words)))
+
+    starts = [
+        index for index, (_, _, fields) in enumerate(prepared) if _starts_row(profile, fields)
+    ]
+    fragments: dict[int, list[int]] = {index: [index] for index in starts}
+    lines_unparsed = 0
+    for index, (line, _, fields) in enumerate(prepared):
+        if index in fragments:
+            continue
+        description = fields.get("description", "").strip()
+        if not starts or not description or not _continues(continuation, profile, fields):
+            lines_unparsed += 1
+            continue
+        nearest = min(starts, key=lambda start: (abs(prepared[start][0].top - line.top), start))
+        fragments[nearest].append(index)
+
+    rows: list[RawRow] = []
+    for start in starts:
+        indexes = sorted(fragments[start], key=lambda index: (prepared[index][0].top, index))
+        fields = dict(prepared[start][2])
+        descriptions = [prepared[index][2].get("description", "").strip() for index in indexes]
+        fields["description"] = " ".join(value for value in descriptions if value)
+        rows.append(
+            RawRow(
+                page_number=page_number,
+                row_number=first_row_number + len(rows),
+                raw_text="\n".join(prepared[index][1] for index in indexes),
+                fields=fields,
+            )
+        )
+    return rows, lines_unparsed
+
+
 def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     """Apply a profile to already extracted page words.
 
@@ -343,10 +393,19 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     rows: list[RawRow] = []
     words_filtered = 0
     lines_unparsed = 0
+    nearest_row = "row_assembly:nearest_dated_row" in profile.quirks
 
     for page_number, page in enumerate(pages, start=1):
         lines, dropped = _filtered_lines(page, filter_arabic)
         words_filtered += dropped
+        page = replace(page, lines=lines)
+        if nearest_row:
+            page_rows, page_unparsed = _nearest_row_page(
+                profile, page, page_number, continuation, len(rows) + 1
+            )
+            rows.extend(page_rows)
+            lines_unparsed += page_unparsed
+            continue
         for line in lines:
             if not line.words:
                 continue
