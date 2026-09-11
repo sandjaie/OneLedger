@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from .identifiers import CompleteIdentifier, Identifier, identifier_from_source
-from .institutions import InstitutionResolution
+from .institutions import InstitutionResolution, normalize_institution_name
 
 type ResolutionStatus = Literal["matched", "needs_confirmation", "ambiguous"]
 type InstitutionAction = Literal["reuse", "create", "choose"]
@@ -47,6 +49,49 @@ class AccountCursor(Protocol):
     def execute(self, statement: str, values: tuple[Any, ...]) -> object: ...
 
     def fetchall(self) -> list[tuple[Any, ...]]: ...
+
+
+def proposal_group_key(
+    *,
+    secret: str,
+    household_id: UUID,
+    institution: InstitutionResolution,
+    account_type: str,
+    currency: str | None,
+    identifier: Identifier,
+) -> str:
+    """Return an opaque household-bound correlation key for unresolved PDF evidence."""
+    if not secret:
+        raise ValueError("proposal grouping secret is required")
+    institution_ids = sorted(str(candidate.id) for candidate in institution.candidates)
+    institution_evidence = (
+        institution_ids
+        if institution_ids
+        else [
+            normalize_institution_name(institution.proposed_name or ""),
+            (institution.country or "").strip().upper(),
+        ]
+    )
+    identity_evidence = (
+        identifier.normalized_value
+        if isinstance(identifier, CompleteIdentifier)
+        else f"mask:{identifier.visible_suffix}"
+    )
+    material = json.dumps(
+        [
+            "oneledger-proposal-group-v1",
+            str(household_id),
+            institution.status,
+            institution_evidence,
+            account_type,
+            (currency or "").strip().upper(),
+            identifier.kind,
+            identity_evidence,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode()
+    return "pg1_" + hmac.new(secret.encode(), material, hashlib.sha256).hexdigest()
 
 
 def _candidates(rows: list[tuple[Any, ...]]) -> tuple[AccountCandidate, ...]:

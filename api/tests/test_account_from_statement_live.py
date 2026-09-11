@@ -271,6 +271,9 @@ def test_unknown_account_is_a_read_only_prefilled_proposal(
     body = response.json()
     assert body["accountId"] is None and body["staged"] is False
     assert body["rows"] == []
+    group_key = body["identityResolution"].pop("proposalGroupKey")
+    assert group_key.startswith("pg1_")
+    assert ACCOUNT_NUMBER not in group_key
     assert body["identityResolution"] == {
         "status": "needs_confirmation",
         "institutionAction": "reuse",
@@ -429,6 +432,7 @@ def test_multiple_statement_identity_captures_never_select_or_stage_an_account(
     assert response.json()["staged"] is False
     assert response.json()["accountId"] is None
     assert response.json()["identityResolution"]["status"] == "ambiguous"
+    assert response.json()["identityResolution"]["proposalGroupKey"] is None
     assert ACCOUNT_NUMBER not in response.text
     assert other_number not in response.text
     assert live.counts() == before
@@ -1004,6 +1008,7 @@ def test_confirming_creation_then_resolves_the_same_statement(live: Fixture) -> 
     assert resolved.json()["accountProposal"] is None
     assert resolved.json()["identityResolution"]["status"] == "matched"
     assert resolved.json()["identityResolution"]["accountAction"] == "reuse"
+    assert resolved.json()["identityResolution"]["proposalGroupKey"] is None
 
     duplicate = TestClient(app).post(
         "/parse/account",

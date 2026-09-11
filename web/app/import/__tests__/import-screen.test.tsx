@@ -66,6 +66,7 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
       accountNumberMasked: "****1234",
       candidates: [],
       conflicts: [],
+      proposalGroupKey: null,
     },
     layoutId: "layout-1",
     layoutVersion: 1,

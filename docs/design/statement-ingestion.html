@@ -499,6 +499,14 @@ every selected statement is rechecked. Complete source identifiers are stored lo
 owner reveal under
 <a href="../adr/0021-local-owner-financial-identifiers.html">ADR-0021</a>. The service never guesses,
 because a wrong match corrupts two accounts at once.</p>
+<p><strong>Proposal grouping.</strong> An unresolved result backed by one identifier capture carries a
+transient <code>proposalGroupKey</code>. The service derives this opaque, household-bound value with a
+domain-separated HMAC under the existing session secret over institution resolution evidence,
+account type, currency, identifier kind and normalized complete value or source-mask suffix. It is
+never persisted and reveals neither the complete identifier nor its visible suffix. The browser
+uses only this key to group documents for confirmation; matched results and documents with
+conflicting identifier captures carry <code>null</code>. Rotating the session secret changes future
+proposal keys but cannot affect stored account identifiers or ledger readability.</p>
 <hr>
 <h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
 <h3 id="the-extraction-engine">The extraction engine</h3>
