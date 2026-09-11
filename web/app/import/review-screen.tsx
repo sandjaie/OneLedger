@@ -98,6 +98,14 @@ function staged(batch: ReviewBatch) {
   return batch.groups.reduce((total, group) => total + group.count, 0);
 }
 
+function withoutCategory(batch: ReviewBatch) {
+  return batch.groups.reduce(
+    (total, group) =>
+      total + group.rows.filter((row) => row.classifiedBy === "unclassified").length,
+    0,
+  );
+}
+
 /** The catalogue row for a code, or the household's display currency.
  *
  * From the catalogue, never a union of codes (ADR-0012). The fallback keeps an account the
@@ -244,6 +252,7 @@ export function ReviewScreen({
 
   const open = batch.status === REVIEWABLE;
   const ready = accepted(batch);
+  const unclassified = withoutCategory(batch);
   // The account's own currency, not a row's. The declared opening and closing are the account's
   // figures, and a committed batch carries no groups at all — reading the code off the first
   // row would then fall back to the household's and print the wrong symbol on real money.
@@ -274,6 +283,14 @@ export function ReviewScreen({
       {discarded !== undefined && (
         <p className="import-verdict" role="status">
           {discarded} staged {discarded === 1 ? "row" : "rows"} discarded. Nothing was imported.
+        </p>
+      )}
+      {unclassified > 0 && (
+        <p className="review-hint">
+          {unclassified} {unclassified === 1 ? "row has" : "rows have"} no category. After
+          importing, Transactions → Needs a category will ask how to mark {unclassified === 1
+            ? "it"
+            : "them"}.
         </p>
       )}
 

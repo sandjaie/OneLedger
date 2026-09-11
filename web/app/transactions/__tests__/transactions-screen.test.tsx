@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { formatMoney } from "@/lib/money/format";
-import type { apiFetch } from "@/lib/api/client";
+import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   AccountRow,
   CategoryRow,
@@ -271,6 +271,9 @@ it("round-trips the remaining filter controls", async () => {
   fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "XAE" } });
   fireEvent.change(screen.getByLabelText("Tag"), { target: { value: "trip" } });
   fireEvent.change(screen.getByLabelText("Review state"), { target: { value: "unreviewed" } });
+  fireEvent.change(screen.getByLabelText("Classification"), {
+    target: { value: "unclassified" },
+  });
   fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
   await waitFor(() => expect(request).toHaveBeenCalled());
   const url = (request.mock.calls[0] as Array<string>)[0];
@@ -278,6 +281,7 @@ it("round-trips the remaining filter controls", async () => {
   expect(url).toContain("currency=XAE");
   expect(url).toContain("tag=trip");
   expect(url).toContain("reviewState=unreviewed");
+  expect(url).toContain("classifiedBy=unclassified");
 });
 
 
@@ -375,6 +379,175 @@ it("sends the entry note and edits a row note in place", async () => {
   const body = JSON.parse(String(init.body));
   expect(body.notes).toBe("row note");
   expect(body.categoryId).toBe("cat-food");
+});
+
+describe("asking how to classify an unclassified row", () => {
+  it("previews a digit-free substring before writing anything", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/rules/preview") {
+        return { affected: 3, unclassified: 2, sample: [] };
+      }
+      return {};
+    });
+    renderScreen(
+      [
+        transaction({
+          categoryId: null,
+          categoryName: null,
+          classifiedBy: "unclassified",
+          descriptionRaw: "NOON MINUTES 1234 / ORDER",
+        }),
+      ],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+
+    fireEvent.change(screen.getByLabelText("Category for NOON MINUTES 1234 / ORDER"), {
+      target: { value: "cat-groceries" },
+    });
+
+    const status = await screen.findByRole("status");
+    expect(status.textContent).toContain("3 matching rows");
+    expect(status.textContent).toContain("2 need a category");
+    const preview = request.mock.calls.find(([path]) => path === "/rules/preview") as unknown as
+      | [string, RequestInit]
+      | undefined;
+    const body = JSON.parse(String(preview?.[1].body));
+    expect(body.matchDescriptionPattern).toBe("NOON MINUTES");
+    expect(body.matchPatternKind).toBe("contains");
+    expect(body.setCategoryId).toBe("cat-groceries");
+    expect(request.mock.calls.some(([path]) => path === "/transactions/txn-1")).toBe(false);
+  });
+
+  it("creates and applies the new rule by default, then reloads the ledger", async () => {
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/rules/preview") {
+        return { affected: 2, unclassified: 2, sample: [] };
+      }
+      if (path === "/rules" && init?.method === "POST") return { id: "rule-new" };
+      if (path === "/classify?ruleId=rule-new") {
+        return { considered: 4, changed: 1, applied: true, sample: [] };
+      }
+      if (path.startsWith("/transactions?")) return { transactions: [], total: 0 };
+      return {};
+    });
+    renderScreen(
+      [transaction({ categoryId: null, categoryName: null, classifiedBy: "unclassified" })],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+    fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+      target: { value: "cat-groceries" },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Always mark rows like this" }));
+
+    await waitFor(() =>
+      expect(request.mock.calls.some(([path]) => path === "/classify?ruleId=rule-new")).toBe(true),
+    );
+    expect(request.mock.calls.some(([path]) => path.startsWith("/transactions?"))).toBe(true);
+    expect(screen.getByRole("status").textContent).toContain("1 row categorized");
+    expect(screen.getByRole("status").textContent).toContain(
+      "An earlier rule decided 1 matching row",
+    );
+  });
+
+  it("can apply the category only to the chosen row", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/rules/preview") {
+        return { affected: 2, unclassified: 2, sample: [] };
+      }
+      if (path === "/transactions/txn-1") {
+        return transaction({ categoryId: "cat-groceries", categoryName: "Groceries" });
+      }
+      return {};
+    });
+    renderScreen(
+      [transaction({ categoryId: null, categoryName: null, classifiedBy: "unclassified" })],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+    fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+      target: { value: "cat-groceries" },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Just this one" }));
+
+    await waitFor(() =>
+      expect(request.mock.calls.some(([path]) => path === "/transactions/txn-1")).toBe(true),
+    );
+    expect(request.mock.calls.some(([path]) => path === "/rules")).toBe(false);
+  });
+
+  it("keeps the prompt open with the service sentence when the one-row change is refused", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/rules/preview") {
+        return { affected: 2, unclassified: 2, sample: [] };
+      }
+      if (path === "/transactions/txn-1") {
+        throw new ApiError(409, "this row changed since the prompt opened");
+      }
+      return {};
+    });
+    renderScreen(
+      [transaction({ categoryId: null, categoryName: null, classifiedBy: "unclassified" })],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+    fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+      target: { value: "cat-groceries" },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Just this one" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "this row changed since the prompt opened",
+    );
+    expect(screen.getByRole("button", { name: "Always mark rows like this" })).toBeTruthy();
+  });
+
+  it("disables rule creation when the edited pattern no longer occurs in the row", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/rules/preview") return { affected: 1, unclassified: 1, sample: [] };
+      return {};
+    });
+    renderScreen(
+      [transaction({ categoryId: null, categoryName: null, classifiedBy: "unclassified" })],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+    fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+      target: { value: "cat-groceries" },
+    });
+    await screen.findByRole("status");
+
+    fireEvent.change(screen.getByLabelText("Pattern"), { target: { value: "AIRLINE" } });
+
+    expect(
+      (screen.getByRole("button", { name: "Always mark rows like this" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("shows the service sentence when preview is refused", async () => {
+    const request = vi.fn(async (path: string) => {
+      if (path === "/rules/preview") {
+        throw new ApiError(422, "the proposed rule is too broad");
+      }
+      return {};
+    });
+    renderScreen(
+      [transaction({ categoryId: null, categoryName: null, classifiedBy: "unclassified" })],
+      1,
+      request as unknown as typeof apiFetch,
+    );
+
+    fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
+      target: { value: "cat-groceries" },
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toBe("the proposed rule is too broad");
+  });
 });
 
 describe("transfers on the transactions screen", () => {

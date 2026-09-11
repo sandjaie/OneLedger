@@ -662,6 +662,30 @@ describe("discarding a batch", () => {
 });
 
 describe("the cascade's proposal", () => {
+  it("counts rows that Transactions will ask the owner to categorize", async () => {
+    const request = vi.fn().mockResolvedValue(
+      batch({
+        groups: [
+          group("new", [
+            row(),
+            row({
+              id: "row-2",
+              sourceRowNumber: 2,
+              proposedCategoryId: "cat-groceries",
+              proposedCategoryName: "Groceries",
+              classifiedBy: "seed_rule",
+              classificationConfidence: "0.800",
+            }),
+          ]),
+        ],
+      }),
+    );
+    renderScreen(request);
+
+    expect(await screen.findByText(/1 row has no category/)).toBeTruthy();
+    expect(screen.getByText(/Transactions.*Needs a category/)).toBeTruthy();
+  });
+
   it("shows the proposed category and which step proposed it", async () => {
     const request = vi.fn().mockResolvedValue(
       batch({

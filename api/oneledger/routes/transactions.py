@@ -224,6 +224,15 @@ def list_transactions(
     amountMax: Annotated[str | None, Query(max_length=25)] = None,
     tag: Annotated[str | None, Query(max_length=60)] = None,
     reviewState: Annotated[str | None, Query(pattern="^(reviewed|unreviewed)$")] = None,
+    classifiedBy: Annotated[
+        str | None,
+        Query(
+            pattern=(
+                "^(unclassified|seed_rule|merchant_alias|recurring_series|prior_match|"
+                "user_rule|user_manual|ai)$"
+            )
+        ),
+    ] = None,
     sourceDocumentId: Annotated[UUID | None, Query()] = None,
     sort: Annotated[str, Query(pattern="^(bookedDate|amount|description|account)$")] = "bookedDate",
     direction: Annotated[str, Query(pattern="^(asc|desc)$")] = "desc",
@@ -273,6 +282,9 @@ def list_transactions(
     if reviewState is not None:
         clauses.append("t.is_reviewed = %s")
         params.append(reviewState == "reviewed")
+    if classifiedBy is not None:
+        clauses.append("t.classified_by = %s::classified_by")
+        params.append(classifiedBy)
     if sourceDocumentId is not None:
         clauses.append("t.source_document_id = %s")
         params.append(sourceDocumentId)

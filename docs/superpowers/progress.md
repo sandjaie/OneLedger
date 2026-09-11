@@ -46,7 +46,7 @@ request.
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
-| 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Tasks 8a1–8a3 deliver account proposal, confirmation, the import-screen flow and measured local identity captures; the unclassified prompt remains | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
+| 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Tasks 8a1–8b are delivered and the unclassified-rule acceptance passed; four local institution links and two existing card masks still await owner mapping | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 
 ## Phase 1 · slice 1.8 — the import asks
 
@@ -55,7 +55,7 @@ request.
 | 8a1 — a statement proposes its own account | `feature/p1-8a1-account-from-statement-api` | Delivered — V25 adds the layout product type; an unresolved statement returns a read-only masked proposal, and an owner-only confirmation creates or adopts the account without accepting identity from the browser | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 | 8a2 — the import screen offers the account | `feature/p1-8a2-account-from-statement-screen` | Delivered — the earliest selected statement shows an editable masked account proposal or household suggestion; confirmation re-checks every selected statement with that mask against the one account before Stage is offered, while passwords remain per-file and transient | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 | 8a3 — the layouts read the account identity | `feature/p1-8a3-layout-identity-captures` | Delivered — all four profiles declare their account type and capture the statement's usable masked or hashed identity; 71 local files prove the captures, and an empty isolated stack created seven accounts and committed one matched statement for each without storing a full number; five working-ledger identities resolve, while the four local institution links and two existing card masks await owner mapping | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
-| 8b — an unclassified row asks | `feature/p1-8b-unclassified-asks` | Not started | — |
+| 8b — an unclassified row asks | `feature/p1-8b-unclassified-asks` | Delivered — Transactions filters by classification provenance and asks whether an unclassified category choice applies once or becomes a private rule; the local acceptance previewed and applied an owner-approved merchant rule, the unclassified count fell by exactly the reported change count, and every previously classified row remained unchanged | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 
 ## Phase 1 · slice 1.4 — cards, net worth and trends
 
