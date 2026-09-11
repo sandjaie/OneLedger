@@ -51,6 +51,26 @@ OPENING = r"Opening\s*Balance\s*([0-9,.]+)"
 CLOSING = r"Closing\s*Balance\s*([0-9,.]+)"
 
 
+def _human_readable_response_text(value: object) -> str:
+    """Flatten response text while excluding opaque digests that can match a sentinel by chance."""
+    found: list[str] = []
+
+    def visit(node: object, key: str | None = None) -> None:
+        if key == "dedupeHash":
+            return
+        if isinstance(node, str):
+            found.append(node)
+        elif isinstance(node, dict):
+            for child_key, child in node.items():
+                visit(child, str(child_key))
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(value)
+    return "\n".join(found)
+
+
 def _account_hash(number: str) -> str:
     """The stored account identity: a salted digest, never the number (never-store list)."""
     return hashlib.sha256(f"{SALT}{number}".encode()).hexdigest()
@@ -361,18 +381,34 @@ def test_a_long_digit_run_in_a_description_never_reaches_the_response(live: Fixt
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert "4111" not in response.text
-    assert "1111" not in response.text
+    readable = _human_readable_response_text(body)
+    assert "4111" not in readable
+    assert "1111" not in readable
     assert "[redacted]" in body["rows"][1]["descriptionRaw"]
     assert body["rows"][1]["descriptionRaw"].startswith("PAYMENT CARD")
     # `referenceRaw` is document text too, and it is the field a bank reference lands in. Without
     # a reference band on the fixture layout this is None on every row and dropping its screen
     # would leave the suite green.
     assert body["rows"][0]["referenceRaw"] == "REF-[redacted]", "the reference is screened too"
-    assert "9911" not in response.text, "and its digit run is what went"
+    assert "9911" not in readable, "and its digit run is what went"
     # The figures are typed and are what the preview is for.
     assert [row["amount"] for row in body["rows"]] == ["-10.0000", "500.0000"]
     assert body["rows"][1]["bookedDate"] == "2026-03-02"
+
+
+def test_privacy_scan_ignores_opaque_ids_but_keeps_human_readable_fields() -> None:
+    response = {
+        "rows": [
+            {
+                "descriptionRaw": "PAYMENT CARD [redacted]",
+                "dedupeHash": "opaque-digest-containing-4111-by-chance",
+            }
+        ]
+    }
+
+    assert "4111" not in _human_readable_response_text(response)
+    response["rows"][0]["descriptionRaw"] = "PAYMENT CARD 4111"
+    assert "4111" in _human_readable_response_text(response)
 
 
 def test_the_preview_is_capped_at_fifty_rows(live: Fixture) -> None:
