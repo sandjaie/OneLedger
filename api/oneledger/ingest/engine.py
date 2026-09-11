@@ -179,6 +179,10 @@ class ExtractionResult:
     has_text: bool
     words_filtered: int
     lines_unparsed: int
+    # Issuer evidence is used to resolve the statement before staging. It is deliberately not
+    # generic metadata: a household-authored capture can be wrong, and generic metadata is stored
+    # on `document`. Keeping it separate prevents a mistaken identifier capture from persisting.
+    institution_name_raw: str | None = field(repr=False, default=None)
 
 
 def matches(profile: ProfileLike, page_one_text: str, filename: str) -> float:
@@ -370,19 +374,23 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     """
     source_text = _page_text(pages)
     # The balance anchors always read the raw run; a layout may point its metadata at the words.
-    metadata_text = (
-        _page_text(pages, words=True) if "metadata_text:words" in profile.quirks else source_text
-    )
+    metadata_uses_words = "metadata_text:words" in profile.quirks
+    metadata_text = _page_text(pages, words=metadata_uses_words)
+    institution_text = _page_text(pages[:1], words=metadata_uses_words)
     metadata: dict[str, str] = {}
     account_number_raw: str | None = None
+    institution_name_raw: str | None = None
     for key, pattern in (profile.metadataPatterns or {}).items():
         if key in ROW_CAPTURE_KEYS:
             continue
-        captured = _capture(pattern, metadata_text)
+        capture_text = institution_text if key == "institution_name" else metadata_text
+        captured = _capture(pattern, capture_text)
         if captured is None:
             continue
         if key == "account_number":
             account_number_raw = captured
+        elif key == "institution_name":
+            institution_name_raw = captured
         else:
             metadata[key] = captured
 
@@ -465,6 +473,7 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
         has_text=bool(pages) and all(page.has_text for page in pages),
         words_filtered=words_filtered,
         lines_unparsed=lines_unparsed,
+        institution_name_raw=institution_name_raw,
     )
 
 

@@ -29,7 +29,7 @@ from datetime import date
 from pathlib import Path
 from shutil import copyfileobj
 from tempfile import NamedTemporaryFile
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
@@ -53,6 +53,8 @@ from ..ingest.reconcile import Verdict
 from ..ingest.storage import DuplicateDocument, StorageError
 from ..ingest.words import ExtractionError
 from ..ingest.words import extract_pages as read_pdf_pages
+from ..institutions import InstitutionResolution as ResolvedInstitution
+from ..institutions import resolve_institution
 from ..money import _out
 from .accounts import (
     AccountCreate,
@@ -145,12 +147,28 @@ class SuggestedAccount(BaseModel):
     accountNumberMasked: str
 
 
+class InstitutionCandidate(BaseModel):
+    id: UUID
+    name: str
+    shortName: str | None
+    country: str
+    institutionType: str
+
+
+class InstitutionResolution(BaseModel):
+    status: Literal["matched", "needs_confirmation", "ambiguous"]
+    proposedName: str | None
+    country: str | None
+    candidates: list[InstitutionCandidate]
+
+
 class AccountProposal(BaseModel):
     accountNumberMasked: str
     suggestedAccounts: list[SuggestedAccount]
     name: str
     accountType: str | None
     institutionId: UUID | None
+    institutionResolution: InstitutionResolution
     country: str | None
     currency: str | None
     openingBalance: str | None
@@ -353,20 +371,35 @@ def _proposal(
             status_code=422, detail="this statement states no usable account number"
         )
     cur.execute(
-        """SELECT sl.account_type::text, sl.institution_id, sl.name,
-                  i.short_name, i.name, i.country
+        """SELECT sl.account_type::text
              FROM statement_layout sl
-             LEFT JOIN institution i ON i.id = sl.institution_id
-              AND (i.household_id IS NULL OR i.household_id = sl.household_id)
             WHERE sl.id = %s AND sl.household_id = %s""",
         (result.analysis.layout_id, household_id),
     )
     layout = cur.fetchone()
     if layout is None:  # pragma: no cover - the profile was selected from this household
         raise HTTPException(status_code=404, detail="no such layout")
-    account_type, institution_id, layout_name, short_name, institution_name, country = layout
+    (account_type,) = layout
     if account_type is None:
         raise HTTPException(status_code=422, detail="this layout states no account type")
+    institution = resolve_institution(
+        cur,
+        household_id,
+        result.analysis.institution_name_raw or "",
+        country=result.analysis.metadata.get("institution_country"),
+    )
+    public_proposed_name = (
+        None
+        if institution.proposed_name is None
+        else _preview_redactor(raw)(institution.proposed_name)
+    )
+    matched_institution = institution.candidates[0] if institution.status == "matched" else None
+    institution_id = None if matched_institution is None else matched_institution.id
+    short_name = None if matched_institution is None else matched_institution.short_name
+    institution_name = (
+        public_proposed_name if matched_institution is None else matched_institution.name
+    )
+    country = institution.country if matched_institution is None else matched_institution.country
     try:
         identifier = _statement_identifier(account_type, raw)
     except ValueError:
@@ -409,9 +442,10 @@ def _proposal(
     return AccountProposal(
         accountNumberMasked=masked,
         suggestedAccounts=suggestions,
-        name=short_name or institution_name or layout_name or masked,
+        name=short_name or institution_name or masked,
         accountType=account_type,
         institutionId=institution_id,
+        institutionResolution=_institution_resolution(institution, public_proposed_name),
         country=country,
         currency=currency,
         openingBalance=_out(reconciliation.declared_opening),
@@ -419,6 +453,50 @@ def _proposal(
         openingBalanceDate=opening_date,
         openingBalanceNote=note,
         creditLimit=result.analysis.metadata.get("credit_limit"),
+    )
+
+
+def _institution_account_acceptor(
+    cur: psycopg.Cursor[Any], household_id: UUID
+) -> pipeline.AccountAcceptor:
+    """Require PDF issuer evidence to agree before an account can be used or staged."""
+
+    def accept(analysis: pipeline.Analysis, account: pipeline.AccountContext) -> bool:
+        resolution = resolve_institution(
+            cur,
+            household_id,
+            analysis.institution_name_raw or "",
+            country=analysis.metadata.get("institution_country"),
+        )
+        if resolution.status != "matched":
+            return False
+        cur.execute(
+            "SELECT institution_id FROM account WHERE id = %s AND household_id = %s",
+            (account.id, household_id),
+        )
+        stored = cur.fetchone()
+        return stored is not None and stored[0] == resolution.candidates[0].id
+
+    return accept
+
+
+def _institution_resolution(
+    resolution: ResolvedInstitution, public_proposed_name: str | None
+) -> InstitutionResolution:
+    return InstitutionResolution(
+        status=resolution.status,
+        proposedName=public_proposed_name,
+        country=resolution.country,
+        candidates=[
+            InstitutionCandidate(
+                id=candidate.id,
+                name=candidate.name,
+                shortName=candidate.short_name,
+                country=candidate.country,
+                institutionType=candidate.institution_type,
+            )
+            for candidate in resolution.candidates
+        ],
     )
 
 
@@ -517,6 +595,7 @@ def parse_statement(
                     account=_account(cur, owner.household_id, accountId),
                     resolve_account=_resolver(cur, owner.household_id),
                     stage=stage,
+                    accept_account=_institution_account_acceptor(cur, owner.household_id),
                     # The original encrypted bytes are the durable blob. The password remains
                     # only in this request frame and is never stored.
                     encrypted=password is not None,

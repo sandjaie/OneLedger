@@ -19,9 +19,11 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 
+from oneledger.institutions import resolve_institution
 from oneledger.routes.layouts import LayoutCreate
 
 SEEDS = Path(__file__).resolve().parents[2] / "db" / "seeds"
@@ -43,6 +45,29 @@ CURRENCY_CAPTURE_EXAMPLES = {
     "card-layout": "Currency : XAA",
     "ledger-layout": "Account Currency:XAA",
 }
+INSTITUTION_CAPTURE_EXAMPLES = {
+    "account-layout": ("Emirates NBD", "Emirates"),
+    "card-layout": ("Emirates NBD", "Emirates NBD"),
+    "ledger-layout": ("HDFCBANK Limited", "HDFC"),
+    "passbook-layout": ("AXIS BANK Limited", "AXIS"),
+}
+INSTITUTION_RESOLUTION = {
+    "account-layout": ("Emirates NBD", "ENBD", "AE", "needs_confirmation"),
+    "card-layout": ("Emirates NBD", "ENBD", "AE", "matched"),
+    "ledger-layout": ("HDFC Bank", "HDFC", "IN", "matched"),
+    "passbook-layout": ("Axis Bank", "Axis", "IN", "matched"),
+}
+
+
+class InstitutionCursor:
+    def __init__(self, row: tuple[Any, ...]) -> None:
+        self.row = row
+
+    def execute(self, _statement: str, _values: tuple[Any, ...]) -> None:
+        pass
+
+    def fetchall(self) -> list[tuple[Any, ...]]:
+        return [self.row]
 
 
 def _profile(path: Path) -> dict[str, Any]:
@@ -93,6 +118,29 @@ def test_a_seeded_profile_captures_an_account_identity(path: Path) -> None:
     matched = re.search(pattern, sample, re.IGNORECASE | re.MULTILINE)
     assert matched is not None
     assert matched.group(1) == expected
+
+
+@pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
+def test_a_seeded_profile_captures_only_generic_public_issuer_text(path: Path) -> None:
+    pattern = (_profile(path).get("metadataPatterns") or {}).get("institution_name")
+    assert pattern is not None
+    assert re.compile(pattern).groups == 1
+    sample, expected = INSTITUTION_CAPTURE_EXAMPLES[path.stem]
+    matched = re.search(pattern, sample, re.IGNORECASE | re.MULTILINE)
+    assert matched is not None
+    assert matched.group(1) == expected
+    assert not re.search(r"\d", matched.group(1))
+    name, short_name, country, expected_status = INSTITUTION_RESOLUTION[path.stem]
+    institution_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    resolution = resolve_institution(
+        InstitutionCursor((institution_id, name, short_name, country, "bank", None, None)),
+        UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        matched.group(1),
+    )
+    assert resolution.status == expected_status
+    assert [candidate.id for candidate in resolution.candidates] == (
+        [institution_id] if expected_status == "matched" else []
+    )
 
 
 @pytest.mark.parametrize(

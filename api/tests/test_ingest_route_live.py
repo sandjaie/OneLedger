@@ -121,6 +121,7 @@ def _clean(cur: psycopg.Cursor[Any]) -> None:
              WHERE ai.account_id = a.id AND a.name = 'route test'"""
     )
     cur.execute("DELETE FROM account WHERE name = 'route test'")
+    cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
 
 
@@ -146,11 +147,19 @@ class Fixture:
             self.household_id, self.base, self.secondary = row[0], row[1], row[2]
             person = (row[3],)
             cur.execute(
+                """INSERT INTO institution
+                       (household_id, name, short_name, country, institution_type)
+                     VALUES (%s, 'Acme Bank', 'Acme', 'ZZ', 'bank') RETURNING id""",
+                (self.household_id,),
+            )
+            self.institution_id: UUID = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
                 """INSERT INTO account (household_id, owner_person_id, name, account_type,
-                                        currency, country, opening_balance_date, current_balance)
-                   VALUES (%s, %s, 'route test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0)
+                                        institution_id, currency, country, opening_balance_date,
+                                        current_balance)
+                   VALUES (%s, %s, 'route test', 'savings', %s, %s, 'ZZ', DATE '2026-01-01', 0)
                    RETURNING id""",
-                (self.household_id, person[0], self.base),
+                (self.household_id, person[0], self.institution_id, self.base),
             )
             self.account_id = cur.fetchone()[0]  # type: ignore[index]
             cur.execute(
@@ -178,7 +187,12 @@ class Fixture:
                     psycopg.types.json.Json(COLUMNS),
                     OPENING,
                     CLOSING,
-                    psycopg.types.json.Json({"account_number": ACCOUNT_NUMBER_PATTERN}),
+                    psycopg.types.json.Json(
+                        {
+                            "institution_name": r"(Acme\s*Bank)",
+                            "account_number": ACCOUNT_NUMBER_PATTERN,
+                        }
+                    ),
                 ),
             )
             for on in (date(2026, 3, 1), date(2026, 3, 2)):

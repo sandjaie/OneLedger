@@ -114,6 +114,7 @@ def _footer(page: int, number: str) -> list[Placement]:
 def _placements(rows: tuple[Row, ...] = ROWS) -> list[Placement]:
     """Two pages: the header block, the period line, a repeated column header and four rows."""
     return [
+        Placement(page=0, x=85.0, y=700.0, text="EMIRATES"),
         Placement(page=0, x=85.0, y=668.0, text="Account Statement"),
         Placement(page=0, x=291.0, y=515.0, text="Account Type"),
         Placement(page=0, x=409.0, y=515.0, text="CURRENT ACCOUNT"),
@@ -164,6 +165,8 @@ def test_the_seeded_profile_reads_this_statement_exactly(statement: Path) -> Non
     result, batch, verdict = parsed(statement, account_profile())
 
     assert batch.failures == []
+    assert result.institution_name_raw == "EMIRATES"
+    assert "institution_name" not in result.metadata
     assert [
         (
             row.source_page_number,

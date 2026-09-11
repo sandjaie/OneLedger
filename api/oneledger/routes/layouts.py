@@ -62,7 +62,7 @@ QUIRKS_VOCABULARY = frozenset(
 # each must capture exactly one — and they are named once, where they are read. So are the three
 # a remittance's narration states, which the engine reads per row rather than per statement.
 RESERVED_METADATA_KEYS = (
-    frozenset({"account_number", "currency", "period_start", "period_end"})
+    frozenset({"account_number", "currency", "institution_name", "period_start", "period_end"})
     | normalize.CARD_FACT_KEYS
     | engine.ROW_CAPTURE_KEYS
 )

@@ -21,12 +21,13 @@ that happens to hold that id.
 on every run and refuses one carrying an institution id, so a profile dropped in here needs no
 test of its own.
 
-Every profile does declare its generic `accountType`. Each also captures the account identity its
-statement prints: bank-account numbers are used transiently to derive the salted hash and mask,
-while the card profile deliberately captures only the final four digits from the printed masked
-number. `account_number` and `currency` patterns have exactly one capture group. A profile omits
-`currency` only when that statement does not print one; the owner supplies the missing field while
-confirming the proposed account.
+Every profile does declare its generic `accountType`. Each captures `institution_name` from public
+issuer branding in the PDF and the account identity the statement prints. Complete bank-account
+numbers can then be stored in the owner's local database for exact matching and deliberate reveal;
+the card profile deliberately captures only the final four digits from the source-masked number.
+Reserved patterns such as `institution_name`, `account_number` and `currency` have exactly one
+capture group. A profile omits `currency` only when that statement does not print one; the owner
+supplies the missing field while confirming the proposed account.
 
 ## `card-layout.json`
 
@@ -49,10 +50,9 @@ mapper UI sets it per household when it arrives.
 Four of its values are not obvious, and each is measured rather than assumed.
 
 **The card identity capture keeps only the final four digits.** The producer prints two visible
-four-digit groups around two masked groups. Keeping the whole display would expose more identity
-than OneLedger needs and cannot be hashed consistently with the mask-only card rule. The pattern
-uses the complete generic shape to identify the field, then captures only its final group. The
-statement's currency is printed elsewhere and is captured independently.
+four-digit groups around two masked groups. The source does not contain a complete card number, so
+the pattern uses the complete generic display shape to identify the field and captures only its
+final group. The statement's public issuer branding and currency are captured independently.
 
 **The balance anchors match a line of run-together figures, not a label.** The producer emits no
 space characters between cells, so the statement summary extracts as one line of six figures
@@ -108,10 +108,11 @@ A current account, and the second producer this repository has met. Its statemen
 running balance, wrap their narration over several physical lines, and are the first here to
 state their own period. Six of its values are measured rather than assumed.
 
-**The account header supplies both identity fields.** `account_number` captures the numeric value
-after the generic `Account No.` label, and `currency` captures the three-letter value after its
-label. The number exists only during the request: account confirmation stores its salted hash and
-display mask, never the capture itself.
+**The account header supplies its institution, account and currency evidence.**
+`institution_name` isolates public issuer branding; `account_number` captures the numeric value
+after the generic `Account No.` label; and `currency` captures the three-letter value after its
+label. Account confirmation can retain the complete source number in the owner's local database;
+ordinary responses still carry only its display mask.
 
 **It writes no space character between cells, so every pattern uses `\s*` and never `\s+`.**
 The same producer trait the card layout meets, and the same trap, reached from the other side:
@@ -121,6 +122,14 @@ sit in different cells captures nothing at all. The statement period extracts as
 — run-together in the shape the tests use. Written with `\s+`, the period capture fails on every
 statement measured and the whole file is refused; the fingerprints score zero and the layout is
 never identified at all.
+
+`metadata_text:words` preserves word boundaries for header metadata. Institution capture uses the
+stable public `Emirates` brand token because most measured PDFs do not expose `NBD` in extracted
+page-one text. On first use that exact evidence therefore asks for confirmation; confirming the
+existing Emirates NBD row records the spelling as an alias, so later statements adopt it without
+letting the layout's stored institution decide the result. The quirk changes only metadata capture
+input, not fingerprints, rows or balance anchors; the existing `\s*` patterns accept both the raw
+run-together and word-joined shapes.
 
 **Its rows run newest first.** Nothing on the page says so, and both orders parse every row.
 Read ascending, the running-balance walk breaks on twenty of the twenty-one statements measured;
@@ -188,9 +197,11 @@ A passbook-style account, and the third producer. It is the first here to declar
 balance anchors *and* a running balance, and the first whose statements end in forty lines of
 prose. Four of its values are measured, and one of them cost a change to the engine.
 
-**The statement supplies its account number but not its currency.** The numeric value after the
-generic `Account No.` label is enough to resolve an existing account by salted hash. On an empty
-ledger the import form asks the owner for the currency alongside the other unstated account fields.
+**The statement supplies its institution and account number but not its currency.** The public
+`Axis` brand token resolves the institution through its exact short name, and the numeric value
+after the generic `Account No.`
+label can resolve an existing account by its normalized local identifier. On an empty ledger the
+import form asks the owner for the currency alongside the other unstated account fields.
 
 **The cheque-reference column sits between the date and the narration, and its values print
 left of their own header.** The `Chq No` header prints at x≈92 and its values at x≈86, while the
@@ -246,9 +257,10 @@ and never enter this repository, and no figure from any of them appears in it.
 The fourth producer, and the only one that ships its statements **encrypted**. Four of its
 values are measured, and one of them corrected a rule in the specification.
 
-**The encrypted header still supplies both identity fields after decryption.** The numeric value
-after `Account No.` is captured for transient hash lookup, and the three-letter value after
-`Currency` prefills the account proposal. Neither capture changes the password rule below: the
+**The encrypted header still supplies institution, account and currency evidence after
+decryption.** The public `HDFC` token resolves through the institution's exact short name; the
+numeric value after `Account No.` and the three-letter
+value after `Currency` are captured independently. None changes the password rule below: the
 password remains request-only and is never part of the profile.
 
 **The password comes from the owner, and from nowhere else.** `POST /parse` takes it as a form
@@ -261,6 +273,10 @@ it — a layout says a statement *is* encrypted only by needing one, and
 extracts as `DateNarrationChq./Ref.No.ValueDtWithdrawalAmt.DepositAmt.ClosingBalance` and the
 period as `StatementFrom:01/01/2025To:31/03/2025`, so every pattern is written against the
 run-together form. This is the third producer here to do it and the most thorough about it.
+
+Its metadata now reads the word-joined view so labels keep their word boundaries. The `\s*` forms
+above remain deliberate: they accept that view without changing the raw fingerprint, row or
+balance-anchor inputs.
 
 **Its rows carry a two-digit year, and that forces everything else.** A profile whose
 `date_format` has one must capture both period bounds, because windowing a two-digit year

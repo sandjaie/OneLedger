@@ -126,6 +126,7 @@ def _row(y: float, row: tuple[str | None, ...]) -> list[Placement]:
 
 def _placements() -> list[Placement]:
     header = [
+        Placement(page=0, x=28.0, y=810.0, text="HDFC", size=SIZE),
         Placement(page=0, x=292.0, y=790.0, text="PageNo.:1", size=SIZE),
         Placement(page=0, x=514.0, y=790.0, text="Statementofaccount", size=SIZE),
         # The period, as separate cells with no space character between them — which is what
@@ -215,9 +216,11 @@ def test_it_parses_with_its_password_and_is_refused_without_one(statement: Path)
 
 def test_the_seeded_profile_reads_this_statement_exactly(statement: Path) -> None:
     """The golden output: four rows, their figures and references, the period, the verdict."""
-    _, batch, verdict = parsed(statement, ledger_profile())
+    result, batch, verdict = parsed(statement, ledger_profile())
 
     assert batch.failures == []
+    assert result.institution_name_raw == "HDFC"
+    assert "institution_name" not in result.metadata
     assert [
         (
             row.source_row_number,
