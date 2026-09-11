@@ -11,6 +11,7 @@ import { HouseholdForm } from "@/app/settings/household-form";
 import { RulesManager } from "@/app/settings/rules-manager";
 import { ImportScreen } from "@/app/import/import-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
+import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import type {
@@ -28,7 +29,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "import" | "review";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "import" | "review" | "classification-review";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -67,6 +68,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
   if (window.location.pathname === "/import") return "import";
+  if (window.location.pathname === "/review") return "classification-review";
   return "overview";
 }
 
@@ -137,6 +139,11 @@ export function Workspace({
           setCategories(taxonomy);
           setInventory(nextInventory);
           setCurrencies(catalogue);
+        }
+        if (activeSection === "classification-review") {
+          const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
+          setCategories(taxonomy);
         }
         if (activeSection === "review" || activeSection === "import") {
           // The account list is the override picker's options; the currency catalogue formats
@@ -307,6 +314,7 @@ export function Workspace({
               href="/import"
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
+            <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
             <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
               <span>Plans</span><small>Available after ledger import</small>
             </button>
@@ -406,6 +414,21 @@ export function Workspace({
               }}
               total={ledger.total}
               transactions={ledger.transactions}
+            />
+          )}
+
+          {activeSection === "classification-review" && categories && (
+            <ClassificationReviewScreen
+              categories={categories}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
             />
           )}
 

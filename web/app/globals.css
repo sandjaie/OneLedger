@@ -406,6 +406,98 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   text-align: right; white-space: nowrap;
 }
 
+/* Grouped classification review follows the product mock's dense, calm queue: questions are
+   cards, scope is explicit, and the irreversible-looking action is always preceded by preview. */
+.classification-review { width: min(100%, 1040px); }
+.classification-review-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 28px;
+  padding-bottom: 18px; border-bottom: 1px solid var(--rule);
+}
+.classification-review-head h1 {
+  margin: 0; font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.4rem, 5vw, 4.2rem); font-weight: 400; line-height: 1;
+}
+.classification-review-head p:last-child {
+  max-width: 650px; margin: 13px 0 0; color: var(--muted); line-height: 1.55;
+}
+.classification-kicker,
+.classification-reason,
+.classification-facts dt {
+  margin: 0 0 8px; font-family: "Courier New", Courier, monospace;
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.11em; text-transform: uppercase;
+}
+.classification-kicker { color: var(--green); }
+.classification-summary {
+  display: grid; flex: none; min-width: 160px; padding: 14px 16px;
+  border: 1px solid var(--rule); border-radius: 9px; background: var(--surface);
+}
+.classification-summary strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.8rem; font-weight: 400; }
+.classification-summary span { color: var(--muted); font-size: 0.78rem; }
+.classification-state,
+.classification-empty { margin: 28px 0 0; color: var(--muted); }
+.classification-state .text-action { margin-top: 14px; }
+.classification-list { display: grid; gap: 14px; margin-top: 18px; }
+.classification-card {
+  display: grid; gap: 15px; padding: 18px 20px;
+  border: 1px solid rgba(16, 22, 20, 0.09); border-radius: 10px; background: #fbfcfb;
+}
+.classification-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+}
+.classification-card h2 {
+  margin: 3px 0 0; overflow-wrap: anywhere; font-family: "Courier New", Courier, monospace;
+  font-size: 0.9rem; font-weight: 700; letter-spacing: 0.015em;
+}
+.classification-reason { color: var(--green); }
+.classification-reason-conflicting_knowledge,
+.classification-reason-conflicting_prior,
+.classification-reason-excluded_role,
+.classification-reason-low_confidence,
+.classification-reason-unclassified { color: #a13e35; }
+.classification-count {
+  flex: none; padding: 4px 9px; border-radius: 999px; color: var(--green);
+  background: rgba(20, 115, 94, 0.1); font-family: "Courier New", Courier, monospace; font-size: 0.72rem;
+}
+.classification-explanation { margin: 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+.classification-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px 20px;
+  margin: 0; padding: 13px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+}
+.classification-facts div { min-width: 0; }
+.classification-facts dt { margin-bottom: 4px; color: var(--muted); }
+.classification-facts dd { margin: 0; overflow-wrap: anywhere; font-size: 0.84rem; }
+.classification-answer-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.classification-category { display: grid; gap: 7px; color: var(--muted); font-size: 0.8rem; font-weight: 700; }
+.classification-category select,
+.classification-category input {
+  width: min(100%, 420px); padding: 10px 12px; border: 1px dashed rgba(16, 22, 20, 0.3);
+  border-radius: 6px; color: var(--ink); background: var(--surface);
+}
+.classification-category small { color: var(--muted); font-weight: 400; line-height: 1.4; }
+.classification-warning {
+  margin: 0; padding: 11px 13px; border-left: 3px solid #a13e35;
+  color: #75312a; background: #fff4f2; font-size: 0.84rem; line-height: 1.5;
+}
+.classification-preview,
+.classification-result {
+  margin: 0; padding: 11px 13px; border: 1px solid rgba(20, 115, 94, 0.24);
+  border-radius: 7px; color: var(--green); background: rgba(20, 115, 94, 0.06);
+  font-family: "Courier New", Courier, monospace; font-size: 0.78rem;
+}
+.classification-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.classification-actions .text-action { margin: 0; padding: 8px 12px; border-radius: 7px; font-size: 0.82rem; }
+.classification-primary {
+  padding: 9px 15px; border: 0; border-radius: 7px; color: #eef2f0;
+  background: #101614; cursor: pointer; font-family: "Courier New", Courier, monospace; font-size: 0.8rem;
+}
+.classification-actions button:disabled { cursor: not-allowed; opacity: 0.45; }
+.classification-load-more {
+  display: block; margin: 18px auto 0; padding: 9px 16px;
+  border: 1px solid rgba(16, 22, 20, 0.18); border-radius: 7px;
+  color: var(--ink); background: transparent; cursor: pointer;
+}
+.classification-load-more:disabled { cursor: wait; opacity: 0.5; }
+
 .auth-shell { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
 .auth-card { width: min(100%, 680px); padding: clamp(30px, 7vw, 70px); border: 1px solid var(--rule); border-top: 4px solid var(--blue); background: rgba(255, 255, 255, 0.92); }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
@@ -516,6 +608,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   .import-controls,
   .import-summary dl,
   .review-row,
+  .classification-review-head,
   .fx-result dl { grid-template-columns: 1fr; }
   .currency-toggle { justify-self: start; }
   .format-preview { grid-column: 1; }
@@ -566,3 +659,56 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .overview-table th { padding: 12px 10px 12px 0; border-bottom: 1px solid var(--rule); font-weight: 400; text-align: left; }
 .overview-table thead th { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .overview-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Product-mock application frame. The navigation remains a fixed-width ledger rail at every
+   viewport, matching the supplied artboards; the main pane may scroll horizontally when a dense
+   financial table needs more room. */
+body { background: #eef2f0; }
+.site-shell { position: relative; display: block; min-height: 100vh; padding: 0; }
+.masthead {
+  position: absolute; z-index: 2; top: 0; left: 0; width: 132px;
+  padding: 22px 16px; border: 0; color: #eef2f0; background: #101614;
+}
+.brand {
+  color: #eef2f0; font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px; font-weight: 400; letter-spacing: -0.01em; text-transform: none;
+}
+.brand-mark { display: none; }
+.masthead-actions {
+  position: fixed; z-index: 4; top: 16px; right: 30px;
+  display: flex; align-items: center; gap: 8px;
+}
+.masthead-actions .text-action {
+  position: fixed; bottom: 16px; left: 16px; width: 100px;
+  padding: 7px 10px; border-color: rgba(238, 242, 240, 0.22);
+  color: rgba(238, 242, 240, 0.72); background: transparent; font-size: 0.75rem;
+}
+.masthead-actions .text-action:hover { color: #101614; background: #7fc4a8; }
+.currency-toggle { padding: 2px; border-radius: 7px; background: rgba(16, 22, 20, 0.06); }
+.currency-toggle button { padding: 5px 11px; border: 0; border-radius: 5px; font-size: 0.72rem; background: transparent; }
+.currency-toggle button[aria-pressed="true"] {
+  color: #101614; background: #fbfcfb; box-shadow: 0 1px 2px rgba(16, 22, 20, 0.12);
+}
+.workspace-grid {
+  display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 0;
+  min-height: 100vh; padding: 0;
+}
+.workspace-nav {
+  display: flex; flex-direction: column; gap: 1px; min-height: 100vh;
+  padding: 104px 8px 68px; border: 0; background: #101614;
+}
+.workspace-nav a,
+.workspace-nav button {
+  min-height: 0; padding: 7px 8px; border: 0; border-radius: 6px;
+  color: rgba(238, 242, 240, 0.55); background: transparent;
+  font-size: 0.78rem; font-weight: 400; line-height: 1.2;
+}
+.workspace-nav a[aria-current="page"] { color: #eef2f0; background: rgba(127, 196, 168, 0.16); }
+.workspace-nav a:hover { color: #eef2f0; }
+.workspace-nav button:disabled { color: rgba(238, 242, 240, 0.32); }
+.workspace-nav small { display: none; }
+.workspace-grid > :not(.workspace-nav) { min-width: 880px; padding: 24px 30px 40px; }
+.footer { display: none; }
+.classification-review-head h1 { font-size: 28px; letter-spacing: -0.015em; }
+
+.state-panel { margin-left: 132px; padding: 72px 30px; }
