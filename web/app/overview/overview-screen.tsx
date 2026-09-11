@@ -104,10 +104,15 @@ export function OverviewScreen({ household, currency, currencies, request, child
 
   return (
     <section className="workspace-content overview" aria-labelledby="overview-title">
-      <p className="eyebrow">
-        Overview{state.status === "ready" ? ` · as of ${state.dashboard.netWorth.asOf}` : ""}
-      </p>
-      <h1 className="workspace-title" id="overview-title">Where the household stands</h1>
+      <div className="overview-page-heading visually-hidden">
+        <div>
+          <p className="eyebrow">Owner workspace</p>
+          <h1 className="workspace-title" id="overview-title">Overview</h1>
+        </div>
+        {state.status === "ready" && (
+          <p className="overview-as-of">Position as of {state.dashboard.netWorth.asOf}</p>
+        )}
+      </div>
       {children}
       {state.status === "loading" && <p className="lede" role="status">Loading the household&apos;s figures…</p>}
       {state.status === "failed" && (
@@ -151,37 +156,55 @@ export function OverviewScreen({ household, currency, currencies, request, child
         liquid: worth.liquidSecondary,
       },
     ];
+    const primary = sides.find((side) => side.code === shown) ?? sides[0];
+    const secondary = sides.find((side) => side.code !== shown) ?? sides[1];
     const carried = worth.rates.filter((rate) => rate.carried);
+
+    const detail = (side: (typeof sides)[number], primarySide = false) => {
+      const reasons = worth.missing.filter((missing) => missing.reportingCurrency === side.code);
+      if (side.net === null || side.assets === null || side.liabilities === null || side.liquid === null) {
+        return reasons.length > 0 ? (
+          reasons.map((missing) => (
+            <p className="inline-alert" key={missing.currency}>{missingSentence(missing)}</p>
+          ))
+        ) : (
+          <p className="inline-alert">Net worth in {side.code} cannot be stated for this date.</p>
+        );
+      }
+
+      return (
+        <>
+          {primarySide ? (
+            <h3
+              aria-label={`Net worth in ${side.code}: ${money(side.net, side.code)}`}
+              className="overview-net-worth"
+            >
+              {money(side.net, side.code)}
+            </h3>
+          ) : (
+            <p className="overview-secondary-worth">{money(side.net, side.code)}</p>
+          )}
+          <dl className="overview-position-detail">
+            <div><dt>Assets</dt><dd>{money(side.assets, side.code)}</dd></div>
+            <div><dt>Liabilities</dt><dd>{owed(side.liabilities, side.code)}</dd></div>
+            <div><dt>Liquid</dt><dd>{money(side.liquid, side.code)}</dd></div>
+          </dl>
+        </>
+      );
+    };
 
     return (
       <>
-        <section className="accounts-card" aria-labelledby="worth-title">
-          <h2 id="worth-title">Net worth</h2>
-          <div className="overview-pair">
-            {sides.map((side) => {
-              const reasons = worth.missing.filter((missing) => missing.reportingCurrency === side.code);
-              return (
-                <div key={side.code}>
-                  <p className="section-label">{side.code}</p>
-                  {side.net === null || side.assets === null || side.liabilities === null || side.liquid === null ? (
-                    reasons.length > 0 ? (
-                      reasons.map((missing) => (
-                        <p className="inline-alert" key={missing.currency}>{missingSentence(missing)}</p>
-                      ))
-                    ) : (
-                      <p className="inline-alert">Net worth in {side.code} cannot be stated for this date.</p>
-                    )
-                  ) : (
-                    <dl className="overview-figures">
-                      <div><dt>Net worth</dt><dd>{money(side.net, side.code)}</dd></div>
-                      <div><dt>Assets</dt><dd>{money(side.assets, side.code)}</dd></div>
-                      <div><dt>Liabilities</dt><dd>{owed(side.liabilities, side.code)}</dd></div>
-                      <div><dt>Liquid</dt><dd>{money(side.liquid, side.code)}</dd></div>
-                    </dl>
-                  )}
-                </div>
-              );
-            })}
+        <section className="overview-hero-card" aria-labelledby="worth-title">
+          <h2 className="visually-hidden" id="worth-title">Net worth</h2>
+          <div className="overview-primary-position">
+            <p className="section-label">Primary reporting currency · {primary.code}</p>
+            {detail(primary, true)}
+            <p className="overview-hero-date">As of {worth.asOf}</p>
+          </div>
+          <div className="overview-secondary-position">
+            <p className="section-label">Also shown in {secondary.code}</p>
+            {detail(secondary)}
           </div>
           {carried.length > 0 && (
             <ul className="overview-notes">
@@ -192,9 +215,35 @@ export function OverviewScreen({ household, currency, currencies, request, child
           )}
         </section>
 
-        <section className="accounts-card" aria-labelledby="month-title">
-          <h2 id="month-title">This month</h2>
-          <dl className="overview-figures">
+        {primary.assets !== null && primary.liabilities !== null && primary.liquid !== null && (
+          <section aria-label="Position summary" className="overview-summary-grid">
+            <article>
+              <p className="section-label">Total assets</p>
+              <p className="overview-summary-value">{money(primary.assets, primary.code)}</p>
+              <p>Everything currently included in net worth</p>
+            </article>
+            <article>
+              <p className="section-label">Total liabilities</p>
+              <p className="overview-summary-value liability">{owed(primary.liabilities, primary.code)}</p>
+              <p>Signed balances presented as what is owed</p>
+            </article>
+            <article>
+              <p className="section-label">Liquid net worth</p>
+              <p className="overview-summary-value">{money(primary.liquid, primary.code)}</p>
+              <p>Accounts the owner marks as liquid, net of their signed balances</p>
+            </article>
+            <article>
+              <p className="section-label">Savings rate</p>
+              <p className="overview-summary-value">{percent(now.savings)}</p>
+              <p>Income retained in the current month</p>
+            </article>
+          </section>
+        )}
+
+        <section className="overview-month-card" aria-labelledby="month-title">
+          <h2 className="visually-hidden" id="month-title">This month</h2>
+          <p className="section-label">This month · {monthLabel(dashboard.thisMonth.month)}</p>
+          <dl className="overview-month-figures">
             <div><dt>Income</dt><dd>{money(now.income, shown)}</dd></div>
             <div><dt>Spending</dt><dd>{money(now.spending, shown)}</dd></div>
             <div><dt>Net</dt><dd>{money(now.net, shown)}</dd></div>
@@ -202,7 +251,8 @@ export function OverviewScreen({ household, currency, currencies, request, child
           </dl>
         </section>
 
-        <section className="accounts-card" aria-labelledby="trend-title">
+        <div className="overview-lower-grid">
+        <section className="overview-panel" aria-labelledby="trend-title">
           <h2 id="trend-title">The last twelve months</h2>
           <div className="overview-scroll">
             <table className="account-table overview-table" aria-labelledby="trend-title">
@@ -234,7 +284,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
         </section>
 
         {dashboard.cardsDue.length > 0 && (
-          <section className="accounts-card" aria-labelledby="cards-title">
+          <section className="overview-panel" aria-labelledby="cards-title">
             <h2 id="cards-title">Cards due</h2>
             <div className="overview-scroll">
               <table className="account-table overview-table" aria-labelledby="cards-title">
@@ -262,6 +312,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
             </div>
           </section>
         )}
+        </div>
       </>
     );
   }
