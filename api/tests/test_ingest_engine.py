@@ -381,6 +381,18 @@ def test_account_capture_count_reports_ambiguous_source_evidence() -> None:
     assert result.account_number_capture_count == 2
 
 
+def test_account_capture_count_deduplicates_repeated_identical_page_evidence() -> None:
+    repeated = [page([word(10, 220, "Account: 2468013579")]) for _ in range(3)]
+
+    result = extract_pages(
+        profile(metadataPatterns={"account_number": r"Account:\s*([0-9]+)"}),
+        repeated,
+    )
+
+    assert result.account_number_raw == "2468013579"
+    assert result.account_number_capture_count == 1
+
+
 def test_statement_institution_is_transient_page_one_pdf_evidence() -> None:
     result = extract_pages(
         profile(metadataPatterns={"institution_name": r"Issuer:\s*(Synthetic\s+Bank)"}),

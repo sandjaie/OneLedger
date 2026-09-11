@@ -512,11 +512,14 @@ conflicting identifier captures carry <code>null</code>. Rotating the session se
 proposal keys but cannot affect stored account identifiers or ledger readability.</p>
 <p><strong>Historical identity backfill.</strong> Preview and apply use completed import provenance to
 re-read the original content-addressed PDF, never its filename or transaction narration. Preview is
-read-only and returns safe outcome codes plus a digest bound to the exact assessment. Apply takes the
-household lock, authenticates every source again and replaces a legacy fingerprint only when all
-documents for the account provide one consistent complete identity. A repeated preview then reports
-zero eligible changes. Transaction, import, document, balance, card, transfer and reportable facts
-are not rewritten, and neither an application encryption key nor a backup is a prerequisite.</p>
+read-only and returns safe outcome codes plus a digest bound to the exact assessment. Repeated page
+headers carrying the same captured identity count as one fact; different captures remain a conflict.
+Apply takes the household lock, authenticates every source again and may confirm a safe PDF issuer
+label against the institution already named by the completed import. It replaces a legacy fingerprint
+only when all documents for the account provide one consistent complete identity; mask-only sources
+can apply the alias without inventing missing digits. A repeated preview then reports zero eligible
+changes. Transaction, import, document, balance, card, transfer and reportable facts are not rewritten,
+and neither an application encryption key nor a backup is a prerequisite.</p>
 <hr>
 <h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
 <h3 id="the-extraction-engine">The extraction engine</h3>
