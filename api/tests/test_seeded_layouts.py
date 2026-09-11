@@ -42,7 +42,7 @@ ACCOUNT_CAPTURE_EXAMPLES = {
 }
 CURRENCY_CAPTURE_EXAMPLES = {
     "account-layout": "Account Currency XAA",
-    "card-layout": "Currency : XAA",
+    "card-layout": "Currency ACCOUNT SUMMARY PAYMENT DETAILS XAA",
     "ledger-layout": "Account Currency:XAA",
 }
 INSTITUTION_CAPTURE_EXAMPLES = {
@@ -162,11 +162,15 @@ def test_a_seeded_profile_captures_currency_when_the_statement_prints_it(
     assert matched.group(1) == "XAA"
 
 
-def test_card_layout_captures_the_lowercase_currency_label_used_by_local_statements() -> None:
+def test_card_layout_captures_currency_from_the_statement_word_order() -> None:
     profile = _profile(SEEDS / "card-layout.json")
     pattern = profile["metadataPatterns"]["currency"]
 
-    matched = re.search(pattern, "currency : XAA", re.MULTILINE)
+    matched = re.search(
+        pattern,
+        "currency ACCOUNT SUMMARY PAYMENT DETAILS XAA",
+        re.IGNORECASE | re.MULTILINE,
+    )
 
     assert matched is not None
     assert matched.group(1) == "XAA"
