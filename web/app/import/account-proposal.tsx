@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ACCOUNT_TYPES, LIABILITY_TYPES } from "@/app/accounts/accounts-screen";
 import { ApiError, type apiFetch } from "@/lib/api/client";
@@ -10,22 +10,28 @@ import type {
   AccountProposal,
   AccountRow,
   CurrencyRow,
+  IdentityResolution,
+  InstitutionCreate,
   InstitutionRow,
+  RevealedStatementIdentifier,
+  UnavailableStatementIdentifier,
 } from "@/types/api";
 
 type Props = {
   currencies: Array<CurrencyRow>;
   file: File;
   layoutId?: string;
+  onBusyChange: (busy: boolean) => void;
   onResolved: (account: AccountRow) => void | Promise<void>;
   password?: string;
   proposal: AccountProposal;
+  resolution: IdentityResolution;
   request: typeof apiFetch;
+  screenBusy: boolean;
 };
 
 type Draft = {
   name: string;
-  institutionId: string;
   accountType: string;
   accountSubtype: string;
   currency: string;
@@ -42,7 +48,6 @@ type Draft = {
 function initialDraft(proposal: AccountProposal): Draft {
   return {
     name: proposal.name,
-    institutionId: proposal.institutionId ?? "",
     accountType: proposal.accountType ?? "",
     accountSubtype: "",
     currency: proposal.currency ?? "",
@@ -54,6 +59,35 @@ function initialDraft(proposal: AccountProposal): Draft {
     openingBalanceDate: proposal.openingBalanceDate,
     openingBalanceNote: proposal.openingBalanceNote,
     creditLimit: proposal.creditLimit ?? "",
+  };
+}
+
+const NEW_INSTITUTION = "new";
+const INSTITUTION_TYPES = [
+  "bank",
+  "card_issuer",
+  "broker",
+  "fund_house",
+  "lender",
+  "govt",
+  "insurer",
+  "employer",
+  "exchange_house",
+  "other",
+] as const;
+
+function initialInstitutionChoice(proposal: AccountProposal, resolution: IdentityResolution) {
+  if (resolution.institutionAction === "create") return NEW_INSTITUTION;
+  if (resolution.institutionAction === "choose") return "";
+  return proposal.institutionId ?? resolution.institution.candidates.at(0)?.id ?? "";
+}
+
+function initialInstitutionDraft(resolution: IdentityResolution): InstitutionCreate {
+  return {
+    name: resolution.institution.proposedName ?? "",
+    shortName: null,
+    country: resolution.institution.country ?? "",
+    institutionType: "bank",
   };
 }
 
@@ -115,31 +149,85 @@ function accountContractAllows(draft: Draft) {
   return draft.creditLimit === "";
 }
 
+function decisionHeading(resolution: IdentityResolution, institutionChoice: string) {
+  if (resolution.proposalGroupKey === null) return "Account identity needs review";
+  if (resolution.accountAction === "enrich") return "Confirm this account identity";
+  if (resolution.accountAction === "choose" && resolution.candidates.length > 0) {
+    return "Choose the matching account";
+  }
+  if (resolution.institutionAction === "choose" && !institutionChoice) {
+    return "Choose an institution for this new account";
+  }
+  if (institutionChoice === NEW_INSTITUTION) return "New institution and account";
+  return "New account at an existing institution";
+}
+
+const CONFLICT_TEXT: Record<IdentityResolution["conflicts"][number], string> = {
+  institution: "Institution does not match the stored account.",
+  account_type: "Account type does not match the stored account.",
+  currency: "Currency does not match the stored account.",
+};
+
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.75" />
+      {hidden && <path d="m4 4 16 16" />}
+    </svg>
+  );
+}
+
 export function AccountProposalPanel({
   currencies,
   file,
   layoutId,
+  onBusyChange,
   onResolved,
   password,
   proposal,
+  resolution,
   request,
+  screenBusy,
 }: Props) {
+  const headingId = useId();
   const [draft, setDraft] = useState(() => initialDraft(proposal));
+  const [institutionChoice, setInstitutionChoice] = useState(() =>
+    initialInstitutionChoice(proposal, resolution));
+  const [institutionDraft, setInstitutionDraft] = useState(() =>
+    initialInstitutionDraft(resolution));
   const [institutions, setInstitutions] = useState<Array<InstitutionRow>>([]);
-  const [loadingInstitutions, setLoadingInstitutions] = useState(true);
+  const [loadingInstitutions, setLoadingInstitutions] = useState(
+    resolution.institution.status === "needs_confirmation",
+  );
   const [busy, setBusy] = useState(false);
+  const [revealBusy, setRevealBusy] = useState(false);
+  const [revealed, setRevealed] = useState<string>();
+  const [revealNote, setRevealNote] = useState<string>();
+  const [sourceMaskOnly, setSourceMaskOnly] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const revealController = useRef<AbortController | undefined>(undefined);
 
   useEffect(() => {
+    if (resolution.institution.status !== "needs_confirmation") {
+      return;
+    }
     let current = true;
     request<Array<InstitutionRow>>("/institutions")
       .then((rows) => { if (current) setInstitutions(rows); })
       .catch(() => {
-        if (current) setProblem("Institutions could not be loaded; you can continue without one.");
+        if (current) {
+          setProblem("Institutions could not be loaded. You can still create the one read from this PDF.");
+        }
       })
       .finally(() => { if (current) setLoadingInstitutions(false); });
     return () => { current = false; };
-  }, [request]);
+  }, [request, resolution.institution.status]);
+
+  useEffect(() => () => {
+    revealController.current?.abort();
+    revealController.current = undefined;
+  }, []);
 
   function change<K extends keyof Draft>(field: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -147,6 +235,7 @@ export function AccountProposalPanel({
 
   async function confirm(form: FormData) {
     setBusy(true);
+    onBusyChange(true);
     setProblem(undefined);
     try {
       const account = await request<AccountRow>("/parse/account", {
@@ -158,13 +247,14 @@ export function AccountProposalPanel({
       setProblem(problemText(error, "The account could not be confirmed from this statement."));
     } finally {
       setBusy(false);
+      onBusyChange(false);
     }
   }
 
   function createAccount() {
     const account: AccountCreate = {
       name: draft.name.trim(),
-      institutionId: draft.institutionId || null,
+      institutionId: institutionChoice === NEW_INSTITUTION ? null : institutionChoice,
       accountType: draft.accountType,
       accountSubtype: draft.accountSubtype.trim() || null,
       currency: draft.currency,
@@ -179,6 +269,14 @@ export function AccountProposalPanel({
     };
     const form = statementBody(file, password, layoutId);
     form.append("account", JSON.stringify(account));
+    if (institutionChoice === NEW_INSTITUTION) {
+      form.append("institution", JSON.stringify({
+        ...institutionDraft,
+        name: institutionDraft.name.trim(),
+        shortName: institutionDraft.shortName?.trim() || null,
+        country: institutionDraft.country.trim().toUpperCase(),
+      } satisfies InstitutionCreate));
+    }
     void confirm(form);
   }
 
@@ -188,60 +286,224 @@ export function AccountProposalPanel({
     void confirm(form);
   }
 
-  const ready = accountContractAllows(draft);
+  async function toggleReveal() {
+    if (revealed) {
+      setRevealed(undefined);
+      setRevealNote(undefined);
+      return;
+    }
+    setRevealBusy(true);
+    setRevealNote(undefined);
+    const controller = new AbortController();
+    revealController.current = controller;
+    try {
+      const result = await request<
+        RevealedStatementIdentifier | UnavailableStatementIdentifier
+      >("/parse/identifier/reveal", {
+        method: "POST",
+        body: statementBody(file, password, layoutId),
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || revealController.current !== controller) return;
+      if (result.status === "revealed") {
+        setRevealed(result.value);
+      } else {
+        setRevealed(undefined);
+        setSourceMaskOnly(true);
+        setRevealNote("Statement supplied only a masked value.");
+      }
+    } catch (error) {
+      if (controller.signal.aborted || revealController.current !== controller) return;
+      setRevealed(undefined);
+      setRevealNote(problemText(error, "The account number could not be revealed."));
+    } finally {
+      if (revealController.current === controller) {
+        revealController.current = undefined;
+        setRevealBusy(false);
+      }
+    }
+  }
+
+  const createsInstitution = institutionChoice === NEW_INSTITUTION;
+  const institutionReady = createsInstitution
+    ? institutionDraft.name.trim().length > 0
+      && institutionDraft.name.trim().length <= 120
+      && (institutionDraft.shortName?.trim().length ?? 0) <= 40
+      && institutionDraft.country.trim().length === 2
+    : institutionChoice.length > 0;
+  const ready = accountContractAllows(draft) && institutionReady;
+  const interactionBusy = busy || screenBusy;
   const openingPreview = moneyPreview(draft.openingBalance, draft.currency, currencies);
   const limitPreview = moneyPreview(draft.creditLimit, draft.currency, currencies);
+  const hasSingularIdentity = resolution.proposalGroupKey !== null;
+  const canCreate = hasSingularIdentity && resolution.conflicts.length === 0
+    && (resolution.accountAction === "create"
+      || (resolution.accountAction === "choose" && resolution.candidates.length === 0));
+  const canChooseAccount = hasSingularIdentity && resolution.conflicts.length === 0
+    && resolution.candidates.length > 0;
+  const institutionOptions = resolution.institution.status === "needs_confirmation"
+    ? institutions
+    : resolution.institution.candidates;
 
   return (
-    <section className="account-proposal" aria-labelledby={`account-proposal-${proposal.accountNumberMasked}`}>
+    <section className="account-proposal" aria-labelledby={headingId}>
       <header>
-        <p className="eyebrow">Account found in statement</p>
-        <h3 id={`account-proposal-${proposal.accountNumberMasked}`}>{proposal.accountNumberMasked}</h3>
-        <p>Confirm the statement’s details, or choose an existing account below.</p>
+        <p className="eyebrow">Identity decision</p>
+        <h3 id={headingId}>{decisionHeading(resolution, institutionChoice)}</h3>
+        <p>
+          OneLedger read the institution and account identity from the PDF. Confirm what it should
+          create or reuse before any statement can be staged.
+        </p>
       </header>
+
+      <div className="account-proposal-identity">
+        <span>
+          <small>Account number</small>
+          <strong>{revealed ?? resolution.accountNumberMasked}</strong>
+        </span>
+        <button
+          aria-describedby={revealNote ? `${headingId}-reveal-note` : undefined}
+          aria-label={sourceMaskOnly
+            ? "Full account number unavailable from statement"
+            : `${revealed ? "Hide" : "Show"} account number from statement`}
+          className="account-identifier-reveal"
+          disabled={revealBusy || sourceMaskOnly || !hasSingularIdentity || interactionBusy}
+          onClick={() => void toggleReveal()}
+          type="button"
+        >
+          <EyeIcon hidden={Boolean(revealed)} />
+        </button>
+      </div>
+
+      {revealNote && (
+        <p className="account-proposal-note" id={`${headingId}-reveal-note`}>
+          {revealNote}
+        </p>
+      )}
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
-      {proposal.suggestedAccounts.length > 0 && (
+      {!hasSingularIdentity && (
+        <p className="inline-alert">
+          OneLedger found conflicting account-number captures in this PDF. Review its layout before
+          continuing.
+        </p>
+      )}
+
+      {resolution.conflicts.length > 0 && (
+        <ul className="account-proposal-conflicts" aria-label="Identity conflicts">
+          {resolution.conflicts.map((conflict) => (
+            <li key={conflict}>{CONFLICT_TEXT[conflict]}</li>
+          ))}
+        </ul>
+      )}
+
+      {canChooseAccount && (
         <div className="account-proposal-suggestions" aria-label="Suggested existing accounts">
-          {proposal.suggestedAccounts.map((account) => (
+          {resolution.candidates.map((account) => (
             <button
               className="text-action"
-              disabled={busy}
+              disabled={interactionBusy}
               key={account.id}
               onClick={() => adopt(account.id)}
               type="button"
             >
-              This is {account.name} {account.accountNumberMasked}
+              Use {account.name} {account.accountNumberMasked}
             </button>
           ))}
         </div>
       )}
 
-      <div className="account-proposal-fields">
+      {canCreate && <div className="account-proposal-fields">
         <label>
           Name (required)
           <input required value={draft.name} onChange={(event) => change("name", event.target.value)} />
         </label>
         <label>
-          Institution
+          Institution (required)
           <select
-            disabled={loadingInstitutions}
-            value={draft.institutionId}
+            disabled={loadingInstitutions && resolution.institution.status === "needs_confirmation"}
+            required
+            value={institutionChoice}
             onChange={(event) => {
-              const institution = institutions.find((row) => row.id === event.target.value);
-              change("institutionId", event.target.value);
-              if (institution) change("country", institution.country);
+              const choice = event.target.value;
+              const institution = institutionOptions.find((row) => row.id === choice);
+              setInstitutionChoice(choice);
+              if (choice === NEW_INSTITUTION) {
+                change("country", institutionDraft.country);
+              } else if (institution) {
+                change("country", institution.country);
+              }
             }}
           >
-            <option value="">None stated</option>
-            {institutions.map((institution) => (
+            {resolution.institution.status === "ambiguous" && (
+              <option value="">Choose an institution…</option>
+            )}
+            {resolution.institution.status === "needs_confirmation" && (
+              <option value={NEW_INSTITUTION}>Create a new institution</option>
+            )}
+            {institutionOptions.map((institution) => (
               <option key={institution.id} value={institution.id}>
                 {institution.shortName ?? institution.name}
               </option>
             ))}
           </select>
         </label>
+        {createsInstitution && (
+          <fieldset className="account-proposal-institution account-proposal-wide">
+            <legend>New institution</legend>
+            <label>
+              Institution name (required)
+              <input
+                required
+                value={institutionDraft.name}
+                onChange={(event) => setInstitutionDraft((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))}
+              />
+            </label>
+            <label>
+              Institution short name
+              <input
+                maxLength={40}
+                value={institutionDraft.shortName ?? ""}
+                onChange={(event) => setInstitutionDraft((current) => ({
+                  ...current,
+                  shortName: event.target.value,
+                }))}
+              />
+            </label>
+            <label>
+              Institution country (required)
+              <input
+                maxLength={2}
+                required
+                value={institutionDraft.country}
+                onChange={(event) => {
+                  const country = event.target.value.toUpperCase();
+                  setInstitutionDraft((current) => ({ ...current, country }));
+                  change("country", country);
+                }}
+              />
+            </label>
+            <label>
+              Institution type (required)
+              <select
+                required
+                value={institutionDraft.institutionType}
+                onChange={(event) => setInstitutionDraft((current) => ({
+                  ...current,
+                  institutionType: event.target.value,
+                }))}
+              >
+                {INSTITUTION_TYPES.map((type) => (
+                  <option key={type} value={type}>{label(type)}</option>
+                ))}
+              </select>
+            </label>
+          </fieldset>
+        )}
         <label>
           Account type (required)
           <select required value={draft.accountType} onChange={(event) => change("accountType", event.target.value)}>
@@ -296,7 +558,7 @@ export function AccountProposalPanel({
           <input checked={draft.isLiquid} onChange={(event) => change("isLiquid", event.target.checked)} type="checkbox" />
           Liquid account
         </label>
-      </div>
+      </div>}
 
       {proposal.openingBalanceIsDerived && (
         <p className="account-proposal-note">
@@ -304,14 +566,16 @@ export function AccountProposalPanel({
         </p>
       )}
 
-      <button
-        className="primary-action"
-        disabled={busy || !ready}
-        onClick={createAccount}
-        type="button"
-      >
-        {busy ? "Confirming account…" : "Create account and continue"}
-      </button>
+      {canCreate && (
+        <button
+          className="primary-action"
+          disabled={interactionBusy || !ready}
+          onClick={createAccount}
+          type="button"
+        >
+          {busy ? "Confirming account…" : "Create account and continue"}
+        </button>
+      )}
     </section>
   );
 }

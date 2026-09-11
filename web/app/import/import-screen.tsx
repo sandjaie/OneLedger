@@ -122,10 +122,14 @@ function countsText(parsed: ParseResponse) {
 }
 
 function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
-  const mask = item.parsed?.accountProposal?.accountNumberMasked;
-  if (!mask) return false;
+  const groupKey = item.parsed?.identityResolution.proposalGroupKey;
+  if (!item.parsed?.accountProposal) return false;
   const first = candidates
-    .filter((candidate) => candidate.parsed?.accountProposal?.accountNumberMasked === mask)
+    .filter((candidate) => (
+      groupKey === null
+        ? candidate.key === item.key
+        : candidate.parsed?.identityResolution.proposalGroupKey === groupKey
+    ))
     .toSorted((left, right) => {
       const byPeriod = left.parsed!.period.start.localeCompare(right.parsed!.period.start);
       return byPeriod || left.key.localeCompare(right.key);
@@ -137,6 +141,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
   const [candidates, setCandidates] = useState<Array<Candidate>>([]);
   const [accountId, setAccountId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [checkingAll, setCheckingAll] = useState(false);
 
   function update(key: string, change: Partial<Candidate>) {
     setCandidates((current) =>
@@ -145,12 +150,13 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
   }
 
   function choose(files: FileList | null) {
+    if (busy) return;
     setCandidates(Array.from(files ?? []).map(candidate));
   }
 
   function drop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    if (event.dataTransfer.files.length === 0) {
+    if (busy || event.dataTransfer.files.length === 0) {
       return;
     }
     choose(event.dataTransfer.files);
@@ -158,6 +164,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
 
   async function checkAll() {
     setBusy(true);
+    setCheckingAll(true);
     // Sequential rather than concurrent: each file is a multi-megabyte upload the service
     // parses synchronously, and the staging path takes the household row FOR UPDATE. Firing
     // them together would queue on that lock anyway, with the failures arriving interleaved.
@@ -185,6 +192,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
         update(item.key, { state: "chosen", problem, locked: item.locked || problem === LOCKED });
       }
     }
+    setCheckingAll(false);
     setBusy(false);
   }
 
@@ -227,11 +235,11 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
   }
 
   async function resolveProposal(item: Candidate, account: AccountRow) {
-    const mask = item.parsed?.accountProposal?.accountNumberMasked;
-    if (!mask) return;
+    const groupKey = item.parsed?.identityResolution.proposalGroupKey;
+    if (!item.parsed?.accountProposal || groupKey === null) return;
     setBusy(true);
     const matching = candidates
-      .filter((candidate) => candidate.parsed?.accountProposal?.accountNumberMasked === mask)
+      .filter((candidate) => candidate.parsed?.identityResolution.proposalGroupKey === groupKey)
       .toSorted((left, right) => {
         const byPeriod = left.parsed!.period.start.localeCompare(right.parsed!.period.start);
         return byPeriod || left.key.localeCompare(right.key);
@@ -305,6 +313,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
             <span>Statement files</span>
             <input
               accept="application/pdf,.pdf"
+              disabled={busy}
               multiple
               onChange={(event) => choose(event.target.files)}
               type="file"
@@ -313,7 +322,11 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
 
           <label className="select-field">
             <span>Account</span>
-            <select onChange={(event) => setAccountId(event.target.value)} value={accountId}>
+            <select
+              disabled={busy}
+              onChange={(event) => setAccountId(event.target.value)}
+              value={accountId}
+            >
               <option value="">Detect from the statement</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
@@ -390,21 +403,26 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               />
             )}
 
-            {!busy && item.state === "checked" && item.parsed?.accountProposal && leadsProposal(item, candidates) && (
+            {!checkingAll && item.state === "checked" && item.parsed?.accountProposal && leadsProposal(item, candidates) && (
               <AccountProposalPanel
                 currencies={currencies}
                 file={item.file}
+                key={item.parsed.identityResolution.proposalGroupKey ?? item.key}
                 layoutId={item.parsed.layoutId}
+                onBusyChange={setBusy}
                 onResolved={(account) => resolveProposal(item, account)}
                 password={item.password}
                 proposal={item.parsed.accountProposal}
+                resolution={item.parsed.identityResolution}
                 request={request}
+                screenBusy={busy}
               />
             )}
 
-            {!busy && item.state === "checked" && item.parsed?.accountProposal && !leadsProposal(item, candidates) && (
+            {!checkingAll && item.state === "checked" && item.parsed?.accountProposal && !leadsProposal(item, candidates) && (
               <p className="import-verdict">
-                This account will be confirmed from the earliest selected statement.
+                This account identity will be confirmed from the earliest selected statement in
+                its group.
               </p>
             )}
 
@@ -429,7 +447,11 @@ function stateLabel(item: Candidate) {
   if (item.state === "checking") return "Checking…";
   if (item.state === "staging") return "Staging…";
   if (item.state === "staged") return "Staged";
-  if (item.state === "checked" && item.parsed?.accountProposal) return "Needs account";
+  if (item.state === "checked" && item.parsed?.accountProposal) {
+    return item.parsed.identityResolution.status === "ambiguous"
+      ? "Needs a choice"
+      : "Needs confirmation";
+  }
   if (item.state === "checked") return "Checked";
   return "Ready to check";
 }
@@ -456,6 +478,10 @@ function Summary({
   const code = item.accountCurrency ?? accounts.find(({ id }) => id === parsed.accountId)?.currency;
   const shown = currencies.find(({ code: option }) => option === code) ?? currency;
   const reconciliation = parsed.reconciliation;
+  const identity = parsed.identityResolution;
+  const matchedAccount = identity.candidates.at(0)
+    ?? accounts.find(({ id }) => id === parsed.accountId);
+  const matchedInstitution = identity.institution.candidates.at(0);
 
   return (
     <div className="import-summary">
@@ -475,6 +501,17 @@ function Summary({
           </div>
         )}
       </dl>
+
+      {identity.status === "matched" && (
+        <p className="import-identity-status">
+          <strong>Matched automatically</strong>
+          <span>
+            {[matchedInstitution?.name, matchedAccount?.name, identity.accountNumberMasked]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </p>
+      )}
 
       <p className={reconciles(parsed) ? "import-verdict" : "inline-alert"}>
         {reconciliation.message}
