@@ -48,12 +48,17 @@ DUE_DATE = "04/04/2026"
 # household sees it, negative when owed, so there is no inversion to apply.
 CARD_OPENING = r"Opening\s*Balance\s*(-?[0-9,.]+)"
 CARD_CLOSING = r"Closing\s*Balance\s*(-?[0-9,.]+)"
-CARD_METADATA = {
+CARD_IDENTITY_METADATA = {
+    "institution_name": r"(Acme)\s*Card",
+    "account_number": r"Card\s*Number:\s*[0-9]{4}\s*X{4}\s*X{4}\s*([0-9]{4})",
+}
+CARD_FACT_METADATA = {
     "statement_date": r"Statement\s*Date\s*(\d{2}/\d{2}/\d{4})",
     "payment_due_date": r"Payment\s*Due\s*Date\s*(\d{2}/\d{2}/\d{4})",
     "minimum_due": r"Minimum\s*Due\s*([0-9,.]+)",
     "credit_limit": r"Credit\s*Limit\s*([0-9,.]+)",
 }
+CARD_METADATA = {**CARD_IDENTITY_METADATA, **CARD_FACT_METADATA}
 
 
 def _card_statement(*, due: str | None = DUE_DATE, dated: bool = True) -> bytes:
@@ -62,7 +67,10 @@ def _card_statement(*, due: str | None = DUE_DATE, dated: bool = True) -> bytes:
     The metadata lines sit in the description band, right of the date column, so none of them
     reads as a transaction row.
     """
-    header = [Placement(page=0, x=20, y=770, text="Acme Card Statement")]
+    header = [
+        Placement(page=0, x=20, y=770, text="Acme Card Statement"),
+        Placement(page=0, x=20, y=765, text="Card Number: 1111 XXXX XXXX 2222"),
+    ]
     if dated:
         header.append(Placement(page=0, x=150, y=760, text=f"Statement Date {STATEMENT_DATE}"))
         if due is not None:
@@ -103,21 +111,29 @@ class CardStaged(Staged):
             person = cur.fetchone()[0]  # type: ignore[index]
             cur.execute(
                 """INSERT INTO account (household_id, owner_person_id, name, account_type,
-                                        currency, country, opening_balance_date, opening_balance,
-                                        current_balance, credit_limit)
-                   VALUES (%s, %s, 'route test', 'credit_card', %s, 'ZZ', DATE '2026-01-01', 0,
-                           0, 20000)
+                                        institution_id, currency, country, opening_balance_date,
+                                        opening_balance, current_balance, credit_limit)
+                   VALUES (%s, %s, 'route test', 'credit_card', %s, %s, 'ZZ',
+                           DATE '2026-01-01', 0, 0, 20000)
                    RETURNING id""",
-                (self.household_id, person, self.base),
+                (self.household_id, person, self.institution_id, self.base),
             )
             self.card_id: UUID = cur.fetchone()[0]  # type: ignore[index]
             cur.execute(
+                """INSERT INTO account_identifier
+                       (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                     VALUES (%s, %s, 'card', '****2222', '2222', 'owner_entered')""",
+                (self.household_id, self.card_id),
+            )
+            cur.execute(
                 """INSERT INTO statement_layout
-                     (id, household_id, name, version, fingerprints, columns, date_format,
+                     (id, household_id, account_type, name, version, fingerprints, columns,
+                      date_format,
                       sign_convention, inverts_sign, chronological_order, row_start_rule,
                       opening_balance_pattern, closing_balance_pattern, has_running_balance,
                       metadata_patterns)
-                   VALUES (%s, %s, 'Acme card', 1, %s, %s, 'dd/MM/yyyy', 'signed', false,
+                   VALUES (%s, %s, 'credit_card', 'Acme card', 1, %s, %s, 'dd/MM/yyyy',
+                           'signed', false,
                            'ascending', 'has_date_and_amount', %s, %s, true, %s)""",
                 (
                     CARD_LAYOUT_ID,
@@ -185,6 +201,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CardStaged
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
             cur.execute("DELETE FROM account WHERE name = 'route test'")
+            cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
             cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")
         conn.commit()
@@ -229,7 +246,8 @@ def test_the_facts_are_stored_once_in_canonical_form(live: CardStaged) -> None:
 
     stored = live.extracted(batch)
 
-    assert {key: stored[key] for key in CARD_METADATA} == {
+    assert not set(stored) & set(CARD_IDENTITY_METADATA)
+    assert {key: stored[key] for key in CARD_FACT_METADATA} == {
         "statement_date": "2026-03-15",
         "payment_due_date": "2026-04-04",
         "minimum_due": "40.0000",
@@ -331,16 +349,19 @@ def test_a_re_imported_card_statement_commits_the_cycle_the_second_parse_read(
     """
     with live.conn.cursor() as cur:
         cur.execute(
-            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
-                                    country, opening_balance_date, current_balance)
-               SELECT household_id, id, 'route test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0
+            """INSERT INTO account (household_id, owner_person_id, name, account_type,
+                                    institution_id, currency, country, opening_balance_date,
+                                    current_balance)
+               SELECT household_id, id, 'route test', 'savings', %s, %s, 'ZZ',
+                      DATE '2026-01-01', 0
                  FROM person WHERE household_id = %s LIMIT 1
                RETURNING id""",
-            (live.secondary, live.household_id),
+            (live.institution_id, live.secondary, live.household_id),
         )
         wrong_account = cur.fetchone()[0]  # type: ignore[index]
         cur.execute(
-            "UPDATE statement_layout SET metadata_patterns = NULL WHERE id = %s", (CARD_LAYOUT_ID,)
+            "UPDATE statement_layout SET metadata_patterns = %s WHERE id = %s",
+            (psycopg.types.json.Json(CARD_IDENTITY_METADATA), CARD_LAYOUT_ID),
         )
     live.conn.commit()
     wrong = live.post(_card_statement(), stage="true", accountId=str(wrong_account))

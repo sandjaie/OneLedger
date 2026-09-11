@@ -1164,11 +1164,18 @@ def test_reserved_metadata_keys_need_exactly_one_capture_group() -> None:
         layouts.LayoutCreate.model_validate(
             {**VALID_CREATE, "metadataPatterns": {"currency": r"([A-Z]+)-([A-Z]+)"}}
         )
+    with pytest.raises(ValidationError, match="exactly one capture group"):
+        layouts.LayoutCreate.model_validate(
+            {**VALID_CREATE, "metadataPatterns": {"institution_name": r"Issuer .+"}}
+        )
     assert layouts.LayoutCreate.model_validate(
         {**VALID_CREATE, "metadataPatterns": {"account_number": r"Account (\d+)"}}
     )
     assert layouts.LayoutCreate.model_validate(
         {**VALID_CREATE, "metadataPatterns": {"currency": r"Currency ([A-Z]{3})"}}
+    )
+    assert layouts.LayoutCreate.model_validate(
+        {**VALID_CREATE, "metadataPatterns": {"institution_name": r"Issuer (.+)"}}
     )
     # A non-reserved key may carry any pattern, capture group or not — only the reserved keys
     # are constrained. (This example was `credit_limit` until slice 1.4 made it reserved: a card

@@ -103,7 +103,12 @@ def labelled_summary(opening: str, closing: str) -> list[Line]:
 
 
 def pages(summary: list[Line], extra: list[Line] | None = None) -> list[Page]:
-    return [Page(lines=rows() + summary + (extra or []), has_text=True)]
+    issuer = line(
+        20.0,
+        word(30.0, 90.0, "Emirates", 20.0),
+        word(100.0, 140.0, "NBD", 20.0),
+    )
+    return [Page(lines=[issuer, *rows(), *summary, *(extra or [])], has_text=True)]
 
 
 def verdict_for(profile: LayoutCreate, statement: list[Page]) -> Verdict:
@@ -119,8 +124,13 @@ def verdict_for(profile: LayoutCreate, statement: list[Page]) -> Verdict:
 
 
 def test_a_card_reconciles_when_its_bare_anchors_are_reframed_and_its_rows_are_not() -> None:
-    verdict = verdict_for(card_profile(), pages(run_together_summary()))
+    profile = card_profile()
+    statement = pages(run_together_summary())
+    result = extract_pages(profile, statement)
+    verdict = verdict_for(profile, statement)
 
+    assert result.institution_name_raw == "Emirates NBD"
+    assert "institution_name" not in result.metadata
     assert verdict.status == STATUS_MATCHED
     assert verdict.declared_opening == Decimal("-4500.0000")
     assert verdict.declared_closing == Decimal("-3810.0000")
@@ -238,16 +248,20 @@ def test_the_seeded_card_layout_is_a_body_the_endpoint_accepts() -> None:
 
 
 def test_the_seeded_layout_names_no_institution_and_captures_no_period() -> None:
-    # ADR-0012: a layout is data, and no institution name belongs in a file this repository
-    # tracks. The fingerprints are what the statement prints about itself. The period is
+    # ADR-0012: the layout carries no environment-specific institution UUID. Its public issuer
+    # capture is data, like the fingerprints the statement prints about itself. The period is
     # derived rather than captured, because an installment block prints each plan's original
     # purchase date and those rows are part of the total the anchors reconcile against.
     profile = card_profile()
 
     assert profile.name == "Card statement"
     assert profile.fingerprints == ["Credit Card Statement", "Card Type:"]
-    # It captures the four cycle facts plus the account identity fields, and still no period.
-    assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS | {"account_number", "currency"}
+    # It captures the four cycle facts plus issuer/account identity fields, and still no period.
+    assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS | {
+        "institution_name",
+        "account_number",
+        "currency",
+    }
 
 
 def test_the_seeded_layout_drops_a_trailing_line_instead_of_absorbing_it() -> None:
@@ -260,7 +274,7 @@ def test_the_seeded_layout_drops_a_trailing_line_instead_of_absorbing_it() -> No
     result = extract_pages(profile, pages(run_together_summary(), extra=furniture))
 
     assert profile.continuationRule is None
-    assert result.lines_unparsed == 2  # the summary line and the furniture line
+    assert result.lines_unparsed == 3  # issuer, summary and furniture lines
     assert result.rows[-1].fields["description"] == "SUBSCRIPTION RENEWAL"
 
 

@@ -87,6 +87,12 @@ function accountProposal(overrides: Partial<AccountProposal> = {}): ParseRespons
       name: "Example savings",
       accountType: "savings",
       institutionId: null,
+      institutionResolution: {
+        status: "needs_confirmation",
+        proposedName: "Example Institution",
+        country: "XY",
+        candidates: [],
+      },
       country: "XY",
       currency: "XAE",
       openingBalance: "1490.0000",

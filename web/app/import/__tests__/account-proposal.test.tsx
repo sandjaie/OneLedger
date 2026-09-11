@@ -39,6 +39,12 @@ function proposal(overrides: Partial<AccountProposal> = {}): AccountProposal {
     name: "Example savings",
     accountType: "savings",
     institutionId: "institution-1",
+    institutionResolution: {
+      status: "matched",
+      proposedName: "Example Institution",
+      country: "XY",
+      candidates: [institutions[0]],
+    },
     country: "XY",
     currency: "XAE",
     openingBalance: "1490.0000",

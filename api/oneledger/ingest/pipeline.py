@@ -149,6 +149,9 @@ class Analysis:
     # same reason `ExtractionResult` keeps it out of its own: spec §5.6 forbids it reaching any
     # log line, and a dataclass repr is how it would get there.
     account_number_raw: str | None = field(repr=False, default=None)
+    # Like account identity, issuer text is transient source evidence. It must not enter the
+    # generic metadata mapping persisted on `document`.
+    institution_name_raw: str | None = field(repr=False, default=None)
     # Reported, never gating: `blocks_staging` does not read these. A due date that will not
     # read is not worth the statement's transactions.
     metadata_failures: list[MetadataFailure] = field(default_factory=list)
@@ -163,6 +166,9 @@ class ParseResult:
     staged: bool
     batch_id: UUID | None = None
     document_id: UUID | None = None
+
+
+AccountAcceptor = Callable[[Analysis, AccountContext], bool]
 
 
 def _page_one_text(pages: Sequence[Page]) -> str:
@@ -293,6 +299,7 @@ def _analysed(
         page_count=extraction.page_count,
         metadata=facts,
         account_number_raw=extraction.account_number_raw,
+        institution_name_raw=extraction.institution_name_raw,
         metadata_failures=metadata_failures,
     )
 
@@ -531,6 +538,7 @@ def parse(
     account: AccountContext | None,
     resolve_account: AccountResolver,
     stage: bool,
+    accept_account: AccountAcceptor | None = None,
     encrypted: bool = False,
     documents_root: Path | None = None,
     rate_source: RateSource | None = None,
@@ -587,6 +595,13 @@ def parse(
         )
 
     if resolved is None:
+        conn.rollback()
+        return ParseResult(analysis=analysis, account=None, staged=False)
+
+    # Account-number evidence does not override issuer evidence. The route owns institution
+    # lookup, so it supplies this read-only acceptance boundary; a refusal becomes a proposal
+    # and therefore cannot reach FX, blob storage or the staging transaction.
+    if accept_account is not None and not accept_account(analysis, resolved):
         conn.rollback()
         return ParseResult(analysis=analysis, account=None, staged=False)
 

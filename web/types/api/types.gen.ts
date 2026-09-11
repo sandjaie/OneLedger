@@ -142,6 +142,7 @@ export type AccountProposal = {
      * Institutionid
      */
     institutionId: string | null;
+    institutionResolution: InstitutionResolution;
     /**
      * Country
      */
@@ -1197,6 +1198,32 @@ export type HouseholdUpdate = {
 export type IdentifierKind = 'bank_account' | 'iban' | 'card';
 
 /**
+ * InstitutionCandidate
+ */
+export type InstitutionCandidate = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Shortname
+     */
+    shortName: string | null;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Institutiontype
+     */
+    institutionType: string;
+};
+
+/**
  * InstitutionCreate
  */
 export type InstitutionCreate = {
@@ -1216,6 +1243,28 @@ export type InstitutionCreate = {
      * Institutiontype
      */
     institutionType: string;
+};
+
+/**
+ * InstitutionResolution
+ */
+export type InstitutionResolution = {
+    /**
+     * Status
+     */
+    status: 'matched' | 'needs_confirmation' | 'ambiguous';
+    /**
+     * Proposedname
+     */
+    proposedName: string | null;
+    /**
+     * Country
+     */
+    country: string | null;
+    /**
+     * Candidates
+     */
+    candidates: Array<InstitutionCandidate>;
 };
 
 /**

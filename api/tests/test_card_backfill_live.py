@@ -25,7 +25,13 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
-from .test_card_cycle_live import CARD_LAYOUT_ID, CARD_METADATA, CardStaged, _card_statement
+from .test_card_cycle_live import (
+    CARD_IDENTITY_METADATA,
+    CARD_LAYOUT_ID,
+    CARD_METADATA,
+    CardStaged,
+    _card_statement,
+)
 from .test_import_review_live import _connect
 from .test_ingest_route_live import ORIGIN, SALT
 
@@ -38,8 +44,8 @@ class Earlier(CardStaged):
         super().__init__(conn)
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE statement_layout SET metadata_patterns = NULL WHERE id = %s",
-                (CARD_LAYOUT_ID,),
+                "UPDATE statement_layout SET metadata_patterns = %s WHERE id = %s",
+                (psycopg.types.json.Json(CARD_IDENTITY_METADATA), CARD_LAYOUT_ID),
             )
         conn.commit()
 
@@ -95,6 +101,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Earlier]:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
             cur.execute("DELETE FROM account WHERE name = 'route test'")
+            cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
             cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")
         conn.commit()

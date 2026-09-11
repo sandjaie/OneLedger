@@ -69,8 +69,11 @@
   "openingBalancePattern": null,
   "closingBalancePattern": null,
   "hasRunningBalance": true,
-  "quirks": [],
+  "quirks": [
+    "metadata_text:words"
+  ],
   "metadataPatterns": {
+    "institution_name": "(HDFC)",
     "account_number": "Account\\s*No\\.?\\s*:?\\s*([0-9]+)",
     "currency": "Currency\\s*:?\\s*([A-Z]{3})",
     "period_start": "Statement\\s*From\\s*:\\s*(\\d{2}/\\d{2}/\\d{4})\\s*To",

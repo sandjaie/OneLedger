@@ -33,10 +33,12 @@ def _statement(
     *,
     amount: str = "-10.00",
     description: str = "SYNTHETIC PURCHASE",
+    institution: str = "Proposal Test Institution",
 ) -> bytes:
     return build_pdf(
         [
             Placement(page=0, x=20, y=760, text="Synthetic Account Statement"),
+            Placement(page=0, x=20, y=775, text=f"Issuer {institution}"),
             Placement(page=0, x=20, y=745, text=f"Account Number {number}"),
             Placement(page=0, x=20, y=730, text="Currency AED"),
             Placement(page=0, x=20, y=715, text="Opening Balance 100.00"),
@@ -112,6 +114,10 @@ class Fixture:
                     r"Closing\s*Balance\s*([0-9,.]+)",
                     psycopg.types.json.Json(
                         {
+                            "institution_name": (
+                                r"Issuer\s*(Proposal Test Institution|"
+                                r"Unseen Test Institution)"
+                            ),
                             "account_number": r"Account\s*Number\s*([0-9]+)",
                             "currency": r"Currency\s*([A-Z]{3})",
                             "period_start": r"Period\s*([0-9/]+)\s*to",
@@ -130,13 +136,22 @@ class Fixture:
             email="owner@example.test",
         )
 
-    def post_parse(self, *, stage: bool = False) -> Response:
+    def post_parse(
+        self,
+        *,
+        stage: bool = False,
+        institution: str = "Proposal Test Institution",
+        account_id: UUID | None = None,
+    ) -> Response:
+        form = {"stage": str(stage).lower()}
+        if account_id is not None:
+            form["accountId"] = str(account_id)
         return cast(
             Response,
             TestClient(app).post(
                 "/parse",
-                files={"file": ("statement.pdf", _statement())},
-                data={"stage": str(stage).lower()},
+                files={"file": ("statement.pdf", _statement(institution=institution))},
+                data=form,
                 headers=ORIGIN,
             ),
         )
@@ -179,8 +194,35 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
             )
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute("DELETE FROM institution WHERE id = %s", (fixture.institution_id,))
+            cur.execute("DELETE FROM fx_rate")
         conn.commit()
         conn.close()
+
+
+def _create_confirmed_account(live: Fixture, name: str) -> Response:
+    proposal = live.post_parse().json()["accountProposal"]
+    return cast(
+        Response,
+        TestClient(app).post(
+            "/parse/account",
+            files={"file": ("statement.pdf", _statement())},
+            data={
+                "account": json.dumps(
+                    {
+                        "name": name,
+                        "institutionId": proposal["institutionId"],
+                        "accountType": proposal["accountType"],
+                        "currency": proposal["currency"],
+                        "country": proposal["country"],
+                        "openingBalance": proposal["openingBalance"],
+                        "openingBalanceDate": proposal["openingBalanceDate"],
+                        "openingBalanceNote": proposal["openingBalanceNote"],
+                    }
+                )
+            },
+            headers=ORIGIN,
+        ),
+    )
 
 
 @pytest.mark.parametrize("stage", [False, True])
@@ -200,6 +242,20 @@ def test_unknown_account_is_a_read_only_prefilled_proposal(
         "name": "Proposal Test",
         "accountType": "savings",
         "institutionId": str(live.institution_id),
+        "institutionResolution": {
+            "status": "matched",
+            "proposedName": "Proposal Test Institution",
+            "country": None,
+            "candidates": [
+                {
+                    "id": str(live.institution_id),
+                    "name": "Proposal Test Institution",
+                    "shortName": "Proposal Test",
+                    "country": "ZZ",
+                    "institutionType": "bank",
+                }
+            ],
+        },
         "country": "ZZ",
         "currency": "AED",
         "openingBalance": "100.0000",
@@ -213,6 +269,140 @@ def test_unknown_account_is_a_read_only_prefilled_proposal(
     assert ACCOUNT_NUMBER not in response.text
     assert all(ACCOUNT_NUMBER not in message for message in caplog.messages)
     assert live.counts() == before
+
+
+def test_statement_issuer_no_match_proposes_confirmation_without_using_layout_institution(
+    live: Fixture,
+) -> None:
+    before = live.counts()
+
+    response = live.post_parse(institution="Unseen Test Institution")
+
+    assert response.status_code == 200, response.text
+    proposal = response.json()["accountProposal"]
+    assert proposal["institutionId"] is None
+    assert proposal["name"] == "Unseen Test Institution"
+    assert proposal["institutionResolution"] == {
+        "status": "needs_confirmation",
+        "proposedName": "Unseen Test Institution",
+        "country": None,
+        "candidates": [],
+    }
+    assert live.counts() == before
+
+
+@pytest.mark.parametrize("explicit_account", [False, True])
+def test_conflicting_issuer_blocks_an_existing_account_before_staging(
+    live: Fixture, explicit_account: bool
+) -> None:
+    created = _create_confirmed_account(live, "proposal test issuer conflict")
+    assert created.status_code == 201, created.text
+    before = live.counts()
+
+    response = live.post_parse(
+        stage=True,
+        institution="Unseen Test Institution",
+        account_id=UUID(created.json()["id"]) if explicit_account else None,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["staged"] is False
+    assert body["accountId"] is None
+    assert body["accountProposal"]["institutionResolution"]["status"] == "needs_confirmation"
+    assert live.counts() == before
+
+
+def test_page_one_issuer_evidence_is_never_persisted_as_document_metadata(live: Fixture) -> None:
+    created = _create_confirmed_account(live, "proposal test transient issuer")
+    assert created.status_code == 201, created.text
+
+    response = live.post_parse(stage=True)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["staged"] is True
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT extracted_metadata FROM document WHERE id = %s",
+            (response.json()["documentId"],),
+        )
+        stored = cur.fetchone()
+    assert stored is not None
+    assert "institution_name" not in stored[0]
+    assert "Proposal Test Institution" not in json.dumps(stored[0])
+
+
+@pytest.mark.parametrize(
+    ("pattern", "institution", "private_value"),
+    [
+        (r"Account\s*Number\s*([0-9]+)", "Proposal Test Institution", ACCOUNT_NUMBER),
+        (r"Issuer\s*(.+)", "٤١١١‑١١١١‑١١١١‑١١١١", "٤١١١‑١١١١‑١١١١‑١١١١"),
+    ],
+)
+def test_an_accidental_private_institution_capture_is_redacted_from_the_proposal(
+    live: Fixture, pattern: str, institution: str, private_value: str
+) -> None:
+    created = _create_confirmed_account(live, "proposal test hostile issuer capture")
+    assert created.status_code == 201, created.text
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = jsonb_set(
+                    metadata_patterns,
+                    '{institution_name}',
+                    to_jsonb(%s::text)
+                  )
+                WHERE id = %s""",
+            (pattern, LAYOUT_ID),
+        )
+    live.conn.commit()
+    before = live.counts()
+
+    response = live.post_parse(stage=True, institution=institution)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["staged"] is False
+    assert private_value not in response.text
+    assert "4111111111111111" not in response.text
+    proposal = response.json()["accountProposal"]
+    assert proposal["name"] == "[redacted]"
+    assert proposal["institutionResolution"]["proposedName"] == "[redacted]"
+    assert live.counts() == before
+
+
+def test_conflicting_institution_matches_are_returned_as_ambiguous_without_writing(
+    live: Fixture,
+) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO institution
+                   (household_id, name, short_name, country, institution_type)
+                 VALUES (%s, 'Proposal Test Institution', 'Proposal Test Other', 'ZY', 'bank')
+                 RETURNING id""",
+            (live.household_id,),
+        )
+        created = cur.fetchone()
+        assert created is not None
+        other_id = created[0]
+    live.conn.commit()
+    before = live.counts()
+    try:
+        response = live.post_parse()
+
+        assert response.status_code == 200, response.text
+        proposal = response.json()["accountProposal"]
+        assert proposal["institutionId"] is None
+        resolution = proposal["institutionResolution"]
+        assert resolution["status"] == "ambiguous"
+        assert {candidate["id"] for candidate in resolution["candidates"]} == {
+            str(live.institution_id),
+            str(other_id),
+        }
+        assert live.counts() == before
+    finally:
+        with live.conn.cursor() as cur:
+            cur.execute("DELETE FROM institution WHERE id = %s", (other_id,))
+        live.conn.commit()
 
 
 def test_an_all_failed_row_set_still_returns_the_proposal(live: Fixture) -> None:
@@ -292,11 +482,11 @@ def test_a_matching_hashless_account_is_suggested_and_can_adopt(live: Fixture) -
     with live.conn.cursor() as cur:
         cur.execute(
             """INSERT INTO account
-                   (household_id, owner_person_id, name, account_type, currency, country,
-                    opening_balance_date)
-                 VALUES (%s, %s, 'proposal test adopted', 'savings', %s, 'ZZ',
+                   (household_id, owner_person_id, name, account_type, institution_id,
+                    currency, country, opening_balance_date)
+                 VALUES (%s, %s, 'proposal test adopted', 'savings', %s, %s, 'ZZ',
                          DATE '2026-01-01') RETURNING id""",
-            (live.household_id, live.person_id, live.currency),
+            (live.household_id, live.person_id, live.institution_id, live.currency),
         )
         created = cur.fetchone()
         assert created is not None

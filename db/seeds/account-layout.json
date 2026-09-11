@@ -26,8 +26,11 @@
   "openingBalancePattern": null,
   "closingBalancePattern": null,
   "hasRunningBalance": true,
-  "quirks": [],
+  "quirks": [
+    "metadata_text:words"
+  ],
   "metadataPatterns": {
+    "institution_name": "(Emirates)",
     "account_number": "Account\\s*No\\.?\\s*:?\\s*([0-9]+)",
     "currency": "Currency\\s*:?\\s*([A-Z]{3})",
     "period_start": "PERIOD\\s*OF\\s*(\\d{2} \\w{3} \\d{4})\\s*to",

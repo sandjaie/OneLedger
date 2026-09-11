@@ -114,6 +114,7 @@ def _closing_block(page: int) -> list[Placement]:
 
 def _placements() -> list[Placement]:
     header = [
+        Placement(page=0, x=95.0, y=610.0, text="Axis", size=SIZE),
         # One run of text, as the producer sets it — including the double space before "To",
         # which is why the capture patterns spell the gaps `\s*` rather than a literal space.
         Placement(
@@ -168,9 +169,11 @@ def parsed(
 
 def test_the_seeded_profile_reads_this_statement_exactly(statement: Path) -> None:
     """The golden output: three rows, their figures and references, the period, the verdict."""
-    _, batch, verdict = parsed(statement, passbook_profile())
+    result, batch, verdict = parsed(statement, passbook_profile())
 
     assert batch.failures == []
+    assert result.institution_name_raw == "Axis"
+    assert "institution_name" not in result.metadata
     assert [
         (
             row.source_row_number,

@@ -359,6 +359,26 @@ def test_reserved_account_capture_is_transient_and_other_metadata_is_returned() 
     assert "account_number" not in result.metadata
 
 
+def test_statement_institution_is_transient_page_one_pdf_evidence() -> None:
+    result = extract_pages(
+        profile(metadataPatterns={"institution_name": r"Issuer:\s*(Synthetic\s+Bank)"}),
+        [page([word(20, 90, "Issuer:"), word(95, 160, "Synthetic"), word(165, 210, "Bank")])],
+    )
+
+    assert result.institution_name_raw == "Synthetic Bank"
+    assert "institution_name" not in result.metadata
+
+    later_page_only = extract_pages(
+        profile(metadataPatterns={"institution_name": r"Issuer:\s*(Synthetic\s+Bank)"}),
+        [
+            page([word(20, 90, "ACCOUNT SUMMARY")]),
+            page([word(20, 90, "Issuer:"), word(95, 160, "Synthetic"), word(165, 210, "Bank")]),
+        ],
+    )
+    assert later_page_only.institution_name_raw is None
+    assert "institution_name" not in later_page_only.metadata
+
+
 def test_extract_refuses_a_pdf_with_zero_text_objects(tmp_path: Path) -> None:
     pdf_path = tmp_path / "empty.pdf"
     pdf_path.write_bytes(build_pdf([], page_count=1))
