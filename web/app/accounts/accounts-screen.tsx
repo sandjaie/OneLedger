@@ -157,6 +157,14 @@ function asOfFor(rows: Array<AccountRow>, currency: string) {
   return ` as of ${formatDay(dates[0])}–${formatDay(dates[dates.length - 1])}`;
 }
 
+function latestBalanceDate(rows: Array<AccountRow>) {
+  const dates = rows
+    .map((row) => row.currentBalanceAsOf?.slice(0, 10))
+    .filter((date): date is string => Boolean(date))
+    .sort();
+  return dates.length > 0 ? formatDay(dates[dates.length - 1]) : null;
+}
+
 function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
   return (
     currencies.find((row) => row.code === code) ?? {
@@ -290,6 +298,7 @@ export function AccountsScreen({
 
   const active = accounts.filter((row) => row.isActive);
   const closed = accounts.filter((row) => !row.isActive);
+  const latestBalance = latestBalanceDate(active);
   const groups = [...new Set(active.map((row) => `${row.accountClass}\0${row.country}`))].sort((left, right) => {
     const [leftClass, leftCountry] = left.split("\0");
     const [rightClass, rightCountry] = right.split("\0");
@@ -646,22 +655,22 @@ export function AccountsScreen({
   function renderRow(account: AccountRow) {
     const meta = [account.institutionName, account.accountSubtype, account.currency].filter(Boolean).join(" · ");
     return (
-      <tr key={account.id}>
+      <tr className="account-card" key={account.id}>
         <td className="account-mark">{markFor(account, institutions)}</td>
-        <td>{account.name}</td>
-        <td>{meta}</td>
-        <td>{account.accountNumberMasked}</td>
+        <td className="account-card-name">{account.name}</td>
+        <td className="account-card-detail">{meta}</td>
+        <td className="account-card-mask">{account.accountNumberMasked}</td>
         <td
           aria-label={`${account.name} balance ${balanceLabel(account)}`}
           className={
             account.accountClass === "liability" && account.currentBalance.startsWith("-")
-              ? "account-owed"
-              : undefined
+              ? "account-card-balance account-owed"
+              : "account-card-balance"
           }
         >
           {balanceLabel(account)}
         </td>
-        <td>
+        <td className="account-card-status">
           {[
             account.isActive
               ? account.currentBalanceAsOf
@@ -673,28 +682,48 @@ export function AccountsScreen({
             account.includeInNetWorth ? null : "Excluded from totals",
           ].filter(Boolean).join(" · ")}
         </td>
-        <td>
+        <td className="account-card-evidence">
           {!account.openingBalanceConfirmedAt && (
             <div className="opening-evidence">
               <span>Opening balance not acknowledged</span>
-              <button disabled={locked} onClick={() => void acknowledge(account)} type="button">
-                Acknowledge {account.name}
+              <button
+                aria-label={`Acknowledge ${account.name}`}
+                disabled={locked}
+                onClick={() => void acknowledge(account)}
+                type="button"
+              >
+                Acknowledge
               </button>
             </div>
           )}
         </td>
-        <td>
+        <td className="account-card-actions">
           <div className="account-row-actions">
-            <button disabled={locked} onClick={() => openEdit(account)} type="button">
-              Edit {account.name}
+            <button
+              aria-label={`Edit ${account.name}`}
+              disabled={locked}
+              onClick={() => openEdit(account)}
+              type="button"
+            >
+              Edit
             </button>
             {account.isActive ? (
-              <button disabled={locked} onClick={() => void closeAccount(account)} type="button">
-                Close {account.name}
+              <button
+                aria-label={`Close ${account.name}`}
+                disabled={locked}
+                onClick={() => void closeAccount(account)}
+                type="button"
+              >
+                Close
               </button>
             ) : (
-              <button disabled={locked} onClick={() => void reopenAccount(account)} type="button">
-                Reopen {account.name}
+              <button
+                aria-label={`Reopen ${account.name}`}
+                disabled={locked}
+                onClick={() => void reopenAccount(account)}
+                type="button"
+              >
+                Reopen
               </button>
             )}
           </div>
@@ -721,11 +750,10 @@ export function AccountsScreen({
     <section className="accounts-card" aria-labelledby="accounts-title">
       <div className="accounts-heading">
         <div>
-          <p className="section-label">Accounts</p>
-          <h2 className="workspace-title" id="accounts-title">Account inventory</h2>
-          <p className="lede">
-            Native balances, grouped by class then country. An unacknowledged opening balance is
-            stated, not verified.
+          <h2 className="workspace-title" id="accounts-title">Accounts</h2>
+          <p className="accounts-summary">
+            {active.length} active {active.length === 1 ? "account" : "accounts"}
+            {latestBalance ? ` · latest balance ${latestBalance}` : ""}
           </p>
         </div>
         {mode === "view" && (
@@ -764,7 +792,7 @@ export function AccountsScreen({
             <table className="account-table">
               <caption className="visually-hidden">{title}</caption>
               <AccountTableHead />
-              <tbody>{rows.map(renderRow)}</tbody>
+              <tbody className="account-card-grid">{rows.map(renderRow)}</tbody>
             </table>
           </section>
         );
@@ -775,7 +803,7 @@ export function AccountsScreen({
           <table className="account-table">
             <caption className="visually-hidden">Closed accounts</caption>
             <AccountTableHead />
-            <tbody>{closed.map(renderRow)}</tbody>
+            <tbody className="account-card-grid">{closed.map(renderRow)}</tbody>
           </table>
         </section>
       )}

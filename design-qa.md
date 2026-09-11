@@ -81,4 +81,33 @@ The comparison found no P0, P1 or P2 mismatch within the delivered Overview
 contract. Unsupported mock capabilities remain absent rather than decorative or
 fed with invented financial facts.
 
+## Accounts — Screen set 01
+
+- Primary source: the Accounts artboard in
+  `docs/product/mockups/OneLedger.dc.html`, captured from the same published,
+  byte-checked source as Overview.
+- Source and implementation captures: full-width selected in-app browser views
+  retained in task evidence and not persisted because the implementation shows
+  private balances and masked account identifiers.
+- Comparison method: the source and `http://localhost:3000/accounts` captures
+  were emitted together in one visual comparison input after the account data
+  completed loading.
+- Matched structure: compact serif page title, muted sync summary, monospaced
+  section labels and totals, three-column responsive card grid, pale bordered
+  cards, institution marks, native balance hierarchy, masks and update dates.
+- Contract-preserving differences: the implementation groups first by asset or
+  liability and then country, as product UI §6 requires over the raw artboard.
+  It shows only supported ledger accounts, not invented investment or loan
+  products, and keeps owner actions plus unacknowledged-opening evidence visible
+  within each card.
+- Interaction and accessibility check: semantic tables retain named columns and
+  rows while CSS presents their rows as cards; add, edit, acknowledge,
+  close/reopen and empty-inventory flows remain reachable and covered.
+- Runtime check: the authenticated route loaded the real inventory without a
+  compile or runtime error. No clipped balance, metadata, group total or action
+  was visible in the full-width comparison.
+
+The final comparison found no P0, P1 or P2 mismatch within the supported
+Accounts contract.
+
 final result: passed

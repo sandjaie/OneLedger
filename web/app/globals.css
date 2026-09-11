@@ -541,18 +541,30 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .auth-card .brand { margin-bottom: clamp(55px, 10vh, 100px); }
 .accounts-card {
   display: grid;
-  gap: 28px;
-  margin-top: 12px;
+  gap: 32px;
 }
 .accounts-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 24px;
-  align-items: start;
+  align-items: end;
+}
+.accounts-heading .workspace-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(2.15rem, 3.2vw, 2.8rem);
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+.accounts-summary {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 .accounts-heading .primary-action,
 .accounts-card .primary-action { justify-self: start; margin-top: 0; }
-.account-group { display: grid; gap: 14px; }
+.account-group { display: grid; gap: 12px; }
 .account-group-head {
   display: flex;
   flex-wrap: wrap;
@@ -562,23 +574,90 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .account-group-head h3 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.35rem;
-  font-weight: 400;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
-.account-group-head p { margin: 0; color: var(--muted); }
+.account-group-head p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+}
 .account-table { width: 100%; border-collapse: collapse; }
-.account-table td {
-  padding: 14px 10px 14px 0;
-  border-bottom: 1px solid var(--rule);
+.account-group .account-table { display: block; }
+.account-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 14px;
+}
+.account-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-areas:
+    "mark name actions"
+    "mark detail actions"
+    "balance balance balance"
+    "mask status status"
+    "evidence evidence evidence";
+  align-content: start;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.account-card td {
+  min-width: 0;
+  padding: 0;
+  border: 0;
   vertical-align: top;
 }
 .account-mark {
-  width: 42px;
-  font-weight: 700;
+  display: grid;
+  grid-area: mark;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--surface);
+  background: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.67rem;
+  font-weight: 500;
   letter-spacing: 0.06em;
 }
-.account-owed { font-weight: 700; }
+.account-card-name { grid-area: name; font-weight: 500; line-height: 1.25; }
+.account-card-detail {
+  grid-area: detail;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+.account-card-balance {
+  grid-area: balance;
+  margin-top: 22px;
+  font-family: var(--serif);
+  font-size: clamp(1.7rem, 2.4vw, 2.25rem);
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+.account-owed { font-weight: 400; }
+.account-card-mask,
+.account-card-status {
+  margin-top: 8px;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.67rem;
+  line-height: 1.4;
+}
+.account-card-mask { grid-area: mask; }
+.account-card-status { grid-area: status; justify-self: end; padding-left: 12px; text-align: right; }
+.account-card-evidence { grid-area: evidence; }
+.account-card-actions { grid-area: actions; }
 .opening-evidence,
 .account-row-actions,
 .account-form-actions {
@@ -587,6 +666,33 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   gap: 10px;
   align-items: center;
 }
+.account-card .opening-evidence {
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 9px 10px;
+  border-left: 3px solid #a65318;
+  background: #fff4e9;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.account-card .account-row-actions {
+  justify-content: flex-end;
+  gap: 9px;
+  padding-left: 12px;
+}
+.account-card button {
+  padding: 0;
+  border: 0;
+  color: var(--green);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-align: left;
+}
+.account-card button:hover { text-decoration: underline; }
+.account-card button:disabled { cursor: not-allowed; opacity: 0.48; }
 .account-form {
   display: grid;
   gap: 16px;

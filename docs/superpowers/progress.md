@@ -53,8 +53,8 @@ request.
 | Screen | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | Shared frame and Overview | `feature/product-mock-overview` | Delivered — Screen set 01 now supplies the persistent frame and Overview composition; unsupported mock figures and controls remain absent rather than invented | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
-| Accounts | `feature/product-mock-accounts` | Next | [plan](plans/2026-09-11-product-mock-ui.md) |
-| Transactions | `feature/product-mock-transactions` | Planned | [plan](plans/2026-09-11-product-mock-ui.md) |
+| Accounts | `feature/product-mock-accounts` | Delivered — the real inventory now follows the primary Accounts artboard with compact responsive cards while preserving class-then-country grouping and every owner action | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
+| Transactions | `feature/product-mock-transactions` | Next | [plan](plans/2026-09-11-product-mock-ui.md) |
 | Statement import | `feature/product-mock-import` | Planned | [plan](plans/2026-09-11-product-mock-ui.md) |
 
 ## Phase 1 · slice 1.8 — the import asks
