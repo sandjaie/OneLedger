@@ -146,10 +146,10 @@ def _transaction(
                  (household_id, account_id, booked_date, description_raw, amount, currency,
                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
                   amount_secondary, txn_type, source, dedupe_hash, classified_by,
-                  classification_confidence, is_excluded)
+                  classification_confidence, is_reviewed, is_excluded)
                VALUES (%s, %s, DATE '2026-04-01', 'SYNTHETIC WRONG CLASSIFICATION', %s, %s,
                        DATE '2026-04-01', 1, 1, %s, %s, %s::txn_type, 'manual', %s,
-                       %s::classified_by, 0.700, true) RETURNING id""",
+                       %s::classified_by, 0.700, %s, true) RETURNING id""",
             (
                 live.household_id,
                 account_id or live.account_id,
@@ -160,6 +160,7 @@ def _transaction(
                 txn_type,
                 dedupe,
                 classified_by,
+                classified_by == "user_manual",
             ),
         )
         transaction_id = cur.fetchone()[0]  # type: ignore[index]
@@ -738,6 +739,28 @@ def test_manual_decisions_are_unresolved_and_never_enter_the_run_scope(
             "SELECT count(*) FROM classification_run_item WHERE run_id = %s", (body["runId"],)
         )
         assert cur.fetchone()[0] == 0  # type: ignore[index]
+
+
+def test_an_unreviewed_manual_decision_can_be_repaired_through_the_guarded_run(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live, classified_by="user_manual")
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE transaction SET is_reviewed = false WHERE id = %s", (transaction_id,))
+    live.conn.commit()
+
+    preview = _preview(live, [transaction_id])
+
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert (body["changed"], body["unresolved"]) == (1, 0)
+    applied = TestClient(app).post(
+        f"/classification-runs/{body['runId']}/apply",
+        json={"idempotencyKey": "requeued-manual-description-repair"},
+        headers=ORIGIN,
+    )
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["changed"] == 1
 
 
 def test_another_households_transaction_is_indistinguishable_from_missing(
