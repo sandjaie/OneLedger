@@ -503,7 +503,7 @@ def test_a_number_matching_no_account_is_proposed_without_echoing_it(live: Fixtu
 
     assert response.status_code == 200, response.text
     assert response.json()["accountId"] is None
-    assert response.json()["accountProposal"]["accountNumberMasked"] == "****3210"
+    assert response.json()["identityResolution"]["accountNumberMasked"] == "****3210"
     assert response.json()["rows"] == []
     assert "9876543210" not in response.text
 

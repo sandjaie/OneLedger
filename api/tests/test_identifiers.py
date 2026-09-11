@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -17,6 +18,43 @@ from oneledger.identifiers import (
     identifier_from_source,
     masked_identifier,
 )
+
+ROOT = Path(__file__).parents[2]
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "obsolete_contract"),
+    [
+        ("docs/product/prd.html", "a hash of the full number for statement matching"),
+        (
+            "docs/design/architecture.html",
+            "Rotated — it would invalidate every stored hash",
+        ),
+        (
+            "docs/operations/security-and-privacy.html",
+            "re-hashing every account number",
+        ),
+        (
+            "web/app/import/import-screen.tsx",
+            "statement's own number by salted hash",
+        ),
+        (
+            "api/oneledger/routes/ingest.py",
+            "statement's own account number is never stored",
+        ),
+        (
+            "api/oneledger/ingest/pipeline.py",
+            "the hashing that lookup needs stays in the route",
+        ),
+    ],
+)
+def test_active_contract_sources_do_not_describe_the_retired_hash_only_identity_model(
+    relative_path: str,
+    obsolete_contract: str,
+) -> None:
+    text = " ".join((ROOT / relative_path).read_text().split())
+
+    assert obsolete_contract not in text
 
 
 @pytest.mark.parametrize(

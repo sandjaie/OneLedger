@@ -114,7 +114,7 @@ state their own period. Six of its values are measured rather than assumed.
 `institution_name` isolates public issuer branding; `account_number` captures the numeric value
 after the generic `Account No.` label; and `currency` captures the three-letter value after its
 label. Account confirmation can retain the complete source number in the owner's local database;
-ordinary responses still carry only its display mask.
+ordinary account responses still carry only `identifiers[].masked`.
 
 **It writes no space character between cells, so every pattern uses `\s*` and never `\s+`.**
 The same producer trait the card layout meets, and the same trap, reached from the other side:

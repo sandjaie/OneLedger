@@ -143,12 +143,6 @@ class ParsePeriod(BaseModel):
     isDerived: bool
 
 
-class SuggestedAccount(BaseModel):
-    id: UUID
-    name: str
-    accountNumberMasked: str
-
-
 class InstitutionCandidate(BaseModel):
     id: UUID
     name: str
@@ -162,22 +156,6 @@ class InstitutionResolution(BaseModel):
     proposedName: str | None
     country: str | None
     candidates: list[InstitutionCandidate]
-
-
-class AccountProposal(BaseModel):
-    accountNumberMasked: str
-    suggestedAccounts: list[SuggestedAccount]
-    name: str
-    accountType: str | None
-    institutionId: UUID | None
-    institutionResolution: InstitutionResolution
-    country: str | None
-    currency: str | None
-    openingBalance: str | None
-    openingBalanceIsDerived: bool
-    openingBalanceDate: date
-    openingBalanceNote: str
-    creditLimit: str | None
 
 
 class AccountResolutionCandidate(BaseModel):
@@ -199,6 +177,15 @@ class IdentityResolution(BaseModel):
     candidates: list[AccountResolutionCandidate]
     conflicts: list[Literal["institution", "account_type", "currency"]]
     proposalGroupKey: str | None
+    name: str
+    accountType: str
+    country: str | None
+    currency: str | None
+    openingBalance: str | None
+    openingBalanceIsDerived: bool
+    openingBalanceDate: date
+    openingBalanceNote: str
+    creditLimit: str | None
 
 
 class ParseResponse(BaseModel):
@@ -206,7 +193,6 @@ class ParseResponse(BaseModel):
     batchId: UUID | None
     documentId: UUID | None
     accountId: UUID | None
-    accountProposal: AccountProposal | None = None
     identityResolution: IdentityResolution
     layoutId: UUID
     layoutVersion: int
@@ -384,102 +370,6 @@ def _reconciliation(verdict: Verdict) -> Reconciliation:
     )
 
 
-def _proposal(
-    cur: psycopg.Cursor[Any], result: pipeline.ParseResult, household_id: UUID
-) -> AccountProposal:
-    raw = result.analysis.account_number_raw
-    if raw is None:
-        raise HTTPException(
-            status_code=422, detail="this statement states no usable account number"
-        )
-    cur.execute(
-        """SELECT sl.account_type::text
-             FROM statement_layout sl
-            WHERE sl.id = %s AND sl.household_id = %s""",
-        (result.analysis.layout_id, household_id),
-    )
-    layout = cur.fetchone()
-    if layout is None:  # pragma: no cover - the profile was selected from this household
-        raise HTTPException(status_code=404, detail="no such layout")
-    (account_type,) = layout
-    if account_type is None:
-        raise HTTPException(status_code=422, detail="this layout states no account type")
-    institution = resolve_institution(
-        cur,
-        household_id,
-        result.analysis.institution_name_raw or "",
-        country=result.analysis.metadata.get("institution_country"),
-    )
-    public_proposed_name = (
-        None
-        if institution.proposed_name is None
-        else _preview_redactor(raw)(institution.proposed_name)
-    )
-    matched_institution = institution.candidates[0] if institution.status == "matched" else None
-    institution_id = None if matched_institution is None else matched_institution.id
-    short_name = None if matched_institution is None else matched_institution.short_name
-    institution_name = (
-        public_proposed_name if matched_institution is None else matched_institution.name
-    )
-    country = institution.country if matched_institution is None else matched_institution.country
-    try:
-        identifier = _statement_identifier(
-            account_type, raw, source_is_masked=result.analysis.account_number_is_masked
-        )
-    except ValueError:
-        raise HTTPException(
-            status_code=422, detail="this statement states no usable account number"
-        ) from None
-    masked = identifier.masked_value
-    currency = result.analysis.metadata.get("currency", "").strip().upper() or None
-    if currency is not None:
-        cur.execute("SELECT code FROM currency WHERE code = %s", (currency,))
-        if cur.fetchone() is None:
-            currency = None
-    last_four = masked[-4:]
-    cur.execute(
-        """SELECT DISTINCT a.id, a.name, ai.masked_value
-             FROM account a
-             JOIN account_identifier ai
-               ON ai.household_id = a.household_id AND ai.account_id = a.id
-            WHERE a.household_id = %s AND ai.is_active
-              AND ai.kind = %s
-              AND COALESCE(ai.visible_suffix, right(ai.masked_value, 4)) = %s
-            ORDER BY a.name, a.id""",
-        (household_id, identifier.kind, last_four),
-    )
-    suggestions = [
-        SuggestedAccount(id=row[0], name=row[1], accountNumberMasked=row[2])
-        for row in cur.fetchall()
-    ]
-    reconciliation = result.analysis.reconciliation
-    opening_date = min(
-        [result.analysis.period.start, *(row.booked_date for row in result.analysis.rows)]
-    )
-    period = result.analysis.period
-    source = (
-        "Derived from the first row's running balance"
-        if reconciliation.opening_is_derived
-        else "Declared opening balance of the statement"
-    )
-    note = f"{source} for {period.start} to {period.end}"
-    return AccountProposal(
-        accountNumberMasked=masked,
-        suggestedAccounts=suggestions,
-        name=short_name or institution_name or masked,
-        accountType=account_type,
-        institutionId=institution_id,
-        institutionResolution=_institution_resolution(institution, public_proposed_name),
-        country=country,
-        currency=currency,
-        openingBalance=_out(reconciliation.declared_opening),
-        openingBalanceIsDerived=reconciliation.opening_is_derived,
-        openingBalanceDate=opening_date,
-        openingBalanceNote=note,
-        creditLimit=result.analysis.metadata.get("credit_limit"),
-    )
-
-
 def _institution_account_acceptor(household_id: UUID) -> pipeline.AccountAcceptor:
     """Require every PDF identity fact to agree before an account can be used or staged."""
 
@@ -544,7 +434,7 @@ def _institution_resolution(
 
 def _resolved_identity(
     cur: psycopg.Cursor[Any], result: pipeline.ParseResult, household_id: UUID
-) -> tuple[ResolvedInstitution, ResolvedAccount, str | None]:
+) -> tuple[ResolvedInstitution, ResolvedAccount, str, str | None]:
     raw = result.analysis.account_number_raw
     if raw is None:
         raise HTTPException(
@@ -595,12 +485,15 @@ def _resolved_identity(
             currency=result.analysis.metadata.get("currency"),
             identifier=account.identifier,
         )
-    return institution, account, group_key
+    return institution, account, account_type, group_key
 
 
 def _identity_resolution(
+    cur: psycopg.Cursor[Any],
+    result: pipeline.ParseResult,
     institution: ResolvedInstitution,
     account: ResolvedAccount,
+    account_type: str,
     raw: str,
     group_key: str | None,
 ) -> IdentityResolution:
@@ -608,6 +501,25 @@ def _identity_resolution(
         None
         if institution.proposed_name is None
         else _preview_redactor(raw)(institution.proposed_name)
+    )
+    matched_institution = institution.candidates[0] if institution.status == "matched" else None
+    institution_name = proposed if matched_institution is None else matched_institution.name
+    short_name = None if matched_institution is None else matched_institution.short_name
+    country = institution.country if matched_institution is None else matched_institution.country
+    currency = result.analysis.metadata.get("currency", "").strip().upper() or None
+    if currency is not None:
+        cur.execute("SELECT code FROM currency WHERE code = %s", (currency,))
+        if cur.fetchone() is None:
+            currency = None
+    reconciliation = result.analysis.reconciliation
+    opening_date = min(
+        [result.analysis.period.start, *(row.booked_date for row in result.analysis.rows)]
+    )
+    period = result.analysis.period
+    source = (
+        "Derived from the first row's running balance"
+        if reconciliation.opening_is_derived
+        else "Declared opening balance of the statement"
     )
     return IdentityResolution(
         status=account.status,
@@ -629,13 +541,21 @@ def _identity_resolution(
         ],
         conflicts=list(account.conflicts),
         proposalGroupKey=group_key,
+        name=short_name or institution_name or account.account_number_masked,
+        accountType=account_type,
+        country=country,
+        currency=currency,
+        openingBalance=_out(reconciliation.declared_opening),
+        openingBalanceIsDerived=reconciliation.opening_is_derived,
+        openingBalanceDate=opening_date,
+        openingBalanceNote=f"{source} for {period.start} to {period.end}",
+        creditLimit=result.analysis.metadata.get("credit_limit"),
     )
 
 
 def _response(
     result: pipeline.ParseResult,
     identity: IdentityResolution,
-    proposal: AccountProposal | None = None,
 ) -> ParseResponse:
     analysis = result.analysis
     return ParseResponse(
@@ -643,7 +563,6 @@ def _response(
         batchId=result.batch_id,
         documentId=result.document_id,
         accountId=None if result.account is None else result.account.id,
-        accountProposal=proposal,
         identityResolution=identity,
         layoutId=analysis.layout_id,
         layoutVersion=analysis.layout_version,
@@ -655,7 +574,7 @@ def _response(
         rowsExtracted=analysis.rows_extracted,
         counts=analysis.counts,
         reconciliation=_reconciliation(analysis.reconciliation),
-        rows=[] if proposal is not None else _rows(result),
+        rows=[] if result.account is None else _rows(result),
         failures=[
             ParseFailure(
                 sourcePageNumber=failure.source_page_number,
@@ -735,19 +654,19 @@ def parse_statement(
                     # only in this request frame and is never stored.
                     encrypted=password is not None,
                 )
-                proposal = (
-                    _proposal(cur, result, owner.household_id) if result.account is None else None
-                )
-                institution, account_resolution, group_key = _resolved_identity(
+                institution, account_resolution, account_type, group_key = _resolved_identity(
                     cur, result, owner.household_id
                 )
                 identity = _identity_resolution(
+                    cur,
+                    result,
                     institution,
                     account_resolution,
+                    account_type,
                     result.analysis.account_number_raw or "",
                     group_key,
                 )
-        return _response(result, identity, proposal)
+        return _response(result, identity)
     except DuplicateDocument as exc:
         # Already carries the date it first arrived and the batch that imported it, which is
         # what the screen links to.
@@ -767,7 +686,7 @@ def _account_body(value: str) -> AccountCreate:
         raw = json.loads(value)
         if not isinstance(raw, dict):
             raise ValueError
-        if {"accountNumber", "accountNumberMasked"} & raw.keys():
+        if "accountNumber" in raw:
             raise HTTPException(
                 status_code=422,
                 detail="account identity comes from the statement and must not be submitted",
@@ -1586,9 +1505,9 @@ def _screen(groups: list[ReviewGroup]) -> None:
     not put a card number in a response body. Same redactor as the parse preview, so the two
     routes cannot drift apart on what a digit run is.
 
-    No capture is passed: the statement's own account number is never stored (never-store list),
-    so there is nothing here to match it against beyond the digit-run rule that already catches
-    it.
+    No capture is passed: although a complete statement identifier may be stored in its typed
+    private relation, it must not exempt matching narration text from redaction. The general
+    digit-run rule already catches it.
 
     `proposedCategoryName` is deliberately **not** screened, and that is a statement about where
     it comes from rather than an omission: it is `category.name`, written by the owner or by the

@@ -224,7 +224,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
 
 
 def _create_confirmed_account(live: Fixture, name: str) -> Response:
-    proposal = live.post_parse().json()["accountProposal"]
+    proposal = live.post_parse().json()["identityResolution"]
     return cast(
         Response,
         TestClient(app).post(
@@ -234,7 +234,7 @@ def _create_confirmed_account(live: Fixture, name: str) -> Response:
                 "account": json.dumps(
                     {
                         "name": name,
-                        "institutionId": proposal["institutionId"],
+                        "institutionId": proposal["institution"]["candidates"][0]["id"],
                         "accountType": proposal["accountType"],
                         "currency": proposal["currency"],
                         "country": proposal["country"],
@@ -274,6 +274,7 @@ def test_unknown_account_is_a_read_only_prefilled_proposal(
     group_key = body["identityResolution"].pop("proposalGroupKey")
     assert group_key.startswith("pg1_")
     assert ACCOUNT_NUMBER not in group_key
+    assert "accountProposal" not in body
     assert body["identityResolution"] == {
         "status": "needs_confirmation",
         "institutionAction": "reuse",
@@ -295,27 +296,8 @@ def test_unknown_account_is_a_read_only_prefilled_proposal(
         "accountNumberMasked": "****3579",
         "candidates": [],
         "conflicts": [],
-    }
-    assert body["accountProposal"] == {
-        "accountNumberMasked": "****3579",
-        "suggestedAccounts": [],
         "name": "Proposal Test",
         "accountType": "savings",
-        "institutionId": str(live.institution_id),
-        "institutionResolution": {
-            "status": "matched",
-            "proposedName": "Proposal Test Institution",
-            "country": None,
-            "candidates": [
-                {
-                    "id": str(live.institution_id),
-                    "name": "Proposal Test Institution",
-                    "shortName": "Proposal Test",
-                    "country": "ZZ",
-                    "institutionType": "bank",
-                }
-            ],
-        },
         "country": "ZZ",
         "currency": "AED",
         "openingBalance": "100.0000",
@@ -446,10 +428,10 @@ def test_statement_issuer_no_match_proposes_confirmation_without_using_layout_in
     response = live.post_parse(institution="Unseen Test Institution")
 
     assert response.status_code == 200, response.text
-    proposal = response.json()["accountProposal"]
-    assert proposal["institutionId"] is None
+    proposal = response.json()["identityResolution"]
+    assert proposal["institution"]["candidates"] == []
     assert proposal["name"] == "Unseen Test Institution"
-    assert proposal["institutionResolution"] == {
+    assert proposal["institution"] == {
         "status": "needs_confirmation",
         "proposedName": "Unseen Test Institution",
         "country": None,
@@ -597,7 +579,7 @@ def test_conflicting_issuer_blocks_an_existing_account_before_staging(
     body = response.json()
     assert body["staged"] is False
     assert body["accountId"] is None
-    assert body["accountProposal"]["institutionResolution"]["status"] == "needs_confirmation"
+    assert body["identityResolution"]["institution"]["status"] == "needs_confirmation"
     assert live.counts() == before
 
 
@@ -833,9 +815,9 @@ def test_an_accidental_private_institution_capture_is_redacted_from_the_proposal
     assert response.json()["staged"] is False
     assert private_value not in response.text
     assert "4111111111111111" not in response.text
-    proposal = response.json()["accountProposal"]
+    proposal = response.json()["identityResolution"]
     assert proposal["name"] == "[redacted]"
-    assert proposal["institutionResolution"]["proposedName"] == "[redacted]"
+    assert proposal["institution"]["proposedName"] == "[redacted]"
     assert live.counts() == before
 
 
@@ -859,9 +841,8 @@ def test_conflicting_institution_matches_are_returned_as_ambiguous_without_writi
         response = live.post_parse()
 
         assert response.status_code == 200, response.text
-        proposal = response.json()["accountProposal"]
-        assert proposal["institutionId"] is None
-        resolution = proposal["institutionResolution"]
+        proposal = response.json()["identityResolution"]
+        resolution = proposal["institution"]
         assert resolution["status"] == "ambiguous"
         assert {candidate["id"] for candidate in resolution["candidates"]} == {
             str(live.institution_id),
@@ -889,10 +870,10 @@ def test_confirmation_can_choose_one_current_ambiguous_institution_candidate(
         other_id, unrelated_id = (row[0] for row in cur.fetchall())
     live.conn.commit()
     try:
-        proposal = live.post_parse().json()["accountProposal"]
-        assert proposal["institutionResolution"]["status"] == "ambiguous"
+        proposal = live.post_parse().json()["identityResolution"]
+        assert proposal["institution"]["status"] == "ambiguous"
         assert str(live.institution_id) in {
-            candidate["id"] for candidate in proposal["institutionResolution"]["candidates"]
+            candidate["id"] for candidate in proposal["institution"]["candidates"]
         }
         body = {
             "name": "proposal test chosen institution",
@@ -957,17 +938,17 @@ def test_an_all_failed_row_set_still_returns_the_proposal(live: Fixture) -> None
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["accountProposal"] is not None
+    assert response.json()["identityResolution"]["status"] != "matched"
     assert response.json()["rows"] == []
     assert response.json()["failures"]
     assert live.counts() == before
 
 
 def test_confirming_creation_then_resolves_the_same_statement(live: Fixture) -> None:
-    proposal = live.post_parse().json()["accountProposal"]
+    proposal = live.post_parse().json()["identityResolution"]
     account = {
         "name": "proposal test savings",
-        "institutionId": proposal["institutionId"],
+        "institutionId": proposal["institution"]["candidates"][0]["id"],
         "accountType": proposal["accountType"],
         "currency": proposal["currency"],
         "country": proposal["country"],
@@ -983,7 +964,7 @@ def test_confirming_creation_then_resolves_the_same_statement(live: Fixture) -> 
     )
 
     assert created.status_code == 201, created.text
-    assert created.json()["accountNumberMasked"] == "****3579"
+    assert created.json()["identifiers"][0]["masked"] == "****3579"
     assert ACCOUNT_NUMBER not in created.text
     with live.conn.cursor() as cur:
         cur.execute(
@@ -1005,7 +986,7 @@ def test_confirming_creation_then_resolves_the_same_statement(live: Fixture) -> 
     resolved = live.post_parse()
     assert resolved.status_code == 200, resolved.text
     assert resolved.json()["accountId"] == created.json()["id"]
-    assert resolved.json()["accountProposal"] is None
+    assert "accountProposal" not in resolved.json()
     assert resolved.json()["identityResolution"]["status"] == "matched"
     assert resolved.json()["identityResolution"]["accountAction"] == "reuse"
     assert resolved.json()["identityResolution"]["proposalGroupKey"] is None
@@ -1042,7 +1023,7 @@ def test_same_institution_savings_then_current_stays_two_accounts_and_reuses_eac
     assert identity["institutionAction"] == "reuse"
     assert identity["accountAction"] == "create"
 
-    proposal = proposed.json()["accountProposal"]
+    proposal = proposed.json()["identityResolution"]
     current = TestClient(app).post(
         "/parse/account",
         files={"file": ("statement.pdf", _statement(current_number))},
@@ -1050,7 +1031,7 @@ def test_same_institution_savings_then_current_stays_two_accounts_and_reuses_eac
             "account": json.dumps(
                 {
                     "name": "proposal test current identity",
-                    "institutionId": proposal["institutionId"],
+                    "institutionId": proposal["institution"]["candidates"][0]["id"],
                     "accountType": "current",
                     "currency": proposal["currency"],
                     "country": proposal["country"],
@@ -1102,14 +1083,11 @@ def test_a_matching_hashless_account_is_suggested_and_can_adopt(live: Fixture) -
         )
     live.conn.commit()
 
-    proposal = live.post_parse().json()["accountProposal"]
-    assert proposal["suggestedAccounts"] == [
-        {
-            "id": str(account_id),
-            "name": "proposal test adopted",
-            "accountNumberMasked": "****3579",
-        }
-    ]
+    proposal = live.post_parse().json()["identityResolution"]
+    assert [
+        (candidate["id"], candidate["name"], candidate["accountNumberMasked"])
+        for candidate in proposal["candidates"]
+    ] == [(str(account_id), "proposal test adopted", "****3579")]
     adopted = TestClient(app).post(
         "/parse/account",
         files={"file": ("statement.pdf", _statement())},
@@ -1164,7 +1142,7 @@ def test_card_creation_and_adoption_store_the_mask_only(live: Fixture) -> None:
     )
 
     assert created.status_code == 201, created.text
-    assert created.json()["accountNumberMasked"] == "****3579"
+    assert created.json()["identifiers"][0]["masked"] == "****3579"
     adopted = TestClient(app).post(
         "/parse",
         files={"file": ("statement.pdf", _statement("3579"))},
@@ -1287,7 +1265,7 @@ def test_custom_layout_complete_card_capture_stores_revealable_source_identity(
     )
 
     assert created.status_code == 201, created.text
-    assert created.json()["accountNumberMasked"] == "****1111"
+    assert created.json()["identifiers"][0]["masked"] == "****1111"
     assert created.json()["identifiers"][0]["canReveal"] is True
     assert complete_card not in created.text
     with live.conn.cursor() as cur:

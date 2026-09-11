@@ -504,8 +504,10 @@ Other             crypto · receivable · payable
 <li>Native currency per account. An account has exactly one currency.</li>
 <li>Opening balance with an opening-balance date — the anchor for all derived balances.</li>
 <li><code>include_in_net_worth</code> toggle (for tracking something without it counting).</li>
-<li>Masked account number for display; a hash of the full number for statement matching. The full
-number is never stored. See <a href="../operations/security-and-privacy.html">security-and-privacy.html</a>.</li>
+<li>Complete account, IBAN or card identifiers supplied by a source are stored in the owner&#39;s
+local database for exact statement matching. Ordinary views are masked; an explicit owner action
+reveals a complete stored value. A source-masked identifier remains mask-only. See
+<a href="../operations/security-and-privacy.html">security-and-privacy.html</a>.</li>
 <li>Active/closed lifecycle. Closed accounts keep their history and drop out of current views.</li>
 </ul>
 <p><strong>Deferred:</strong> multi-currency accounts (rare, and modelable as two accounts); account groups.</p>

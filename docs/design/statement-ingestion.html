@@ -499,6 +499,9 @@ every selected statement is rechecked. Complete source identifiers are stored lo
 owner reveal under
 <a href="../adr/0021-local-owner-financial-identifiers.html">ADR-0021</a>. The service never guesses,
 because a wrong match corrupts two accounts at once.</p>
+<p><code>POST /parse</code> returns this state and the correctable non-identity account prefill in
+one <code>identityResolution</code> object. Matched, confirmation and ambiguity flows therefore read
+one contract; no second compatibility proposal is serialized.</p>
 <p><strong>Proposal grouping.</strong> An unresolved result backed by one identifier capture carries a
 transient <code>proposalGroupKey</code>. The service derives this opaque, household-bound value with a
 domain-separated HMAC under the existing session secret over institution resolution evidence,
