@@ -22,6 +22,7 @@ from .routes import (
     doctor,
     fx,
     household,
+    identity_backfill,
     ingest,
     layouts,
     merchant_knowledge,
@@ -102,6 +103,7 @@ app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
 app.include_router(description_reparse.router)
+app.include_router(identity_backfill.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
 

@@ -28,6 +28,14 @@ class ExtractionError(ValueError):
     """Expected, sanitized extraction refusal suitable for an API response."""
 
 
+class PdfPasswordError(ExtractionError):
+    """The PDF is encrypted or its supplied password cannot open it."""
+
+
+class MalformedPdfError(ExtractionError):
+    """The bytes are not a supported, structurally valid PDF."""
+
+
 @dataclass(frozen=True)
 class Word:
     x0: float
@@ -91,14 +99,14 @@ def extract_pages(
         # Only documented parse/encryption failures are an expected upload refusal.
         cause = exc.args[0] if exc.args else exc.__context__
         if isinstance(cause, PDFEncryptionError):
-            raise ExtractionError("PDF is encrypted or the password is incorrect") from None
+            raise PdfPasswordError("PDF is encrypted or the password is incorrect") from None
         if isinstance(cause, (PDFSyntaxError, PSEOF, PSSyntaxError)):
-            raise ExtractionError("PDF is malformed or unsupported") from None
+            raise MalformedPdfError("PDF is malformed or unsupported") from None
         raise
     except PDFEncryptionError:
-        raise ExtractionError("PDF is encrypted or the password is incorrect") from None
+        raise PdfPasswordError("PDF is encrypted or the password is incorrect") from None
     except PDFSyntaxError, PSEOF, PSSyntaxError:
-        raise ExtractionError("PDF is malformed or unsupported") from None
+        raise MalformedPdfError("PDF is malformed or unsupported") from None
 
 
 def _extract_pages(
