@@ -96,6 +96,29 @@ export type AccountGroupTotal = {
 };
 
 /**
+ * AccountIdentifierRow
+ */
+export type AccountIdentifierRow = {
+    /**
+     * Id
+     */
+    id: string;
+    kind: IdentifierKind;
+    /**
+     * Masked
+     */
+    masked: string;
+    /**
+     * Canreveal
+     */
+    canReveal: boolean;
+    /**
+     * Isactive
+     */
+    isActive: boolean;
+};
+
+/**
  * AccountProposal
  */
 export type AccountProposal = {
@@ -241,6 +264,10 @@ export type AccountRow = {
      * Creditlimit
      */
     creditLimit: string | null;
+    /**
+     * Identifiers
+     */
+    identifiers: Array<AccountIdentifierRow>;
 };
 
 /**
@@ -1166,6 +1193,8 @@ export type HouseholdUpdate = {
      */
     secondaryCurrency: string;
 };
+
+export type IdentifierKind = 'bank_account' | 'iban' | 'card';
 
 /**
  * InstitutionCreate
@@ -2349,6 +2378,21 @@ export type ResultItem = {
 };
 
 /**
+ * RevealedAccountIdentifier
+ */
+export type RevealedAccountIdentifier = {
+    /**
+     * Status
+     */
+    status: 'revealed';
+    /**
+     * Value
+     */
+    value: string;
+    kind: IdentifierKind;
+};
+
+/**
  * ReviewBatch
  */
 export type ReviewBatch = {
@@ -3149,6 +3193,20 @@ export type TransfersResponse = {
 };
 
 /**
+ * UnavailableAccountIdentifier
+ */
+export type UnavailableAccountIdentifier = {
+    /**
+     * Status
+     */
+    status: 'unavailable';
+    /**
+     * Reason
+     */
+    reason: 'source_mask_only';
+};
+
+/**
  * UndoBody
  */
 export type UndoBody = {
@@ -3517,6 +3575,42 @@ export type CreateAccountAccountsPostResponses = {
 };
 
 export type CreateAccountAccountsPostResponse = CreateAccountAccountsPostResponses[keyof CreateAccountAccountsPostResponses];
+
+export type RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostData = {
+    body?: never;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+        /**
+         * Identifier Id
+         */
+        identifier_id: string;
+    };
+    query?: never;
+    url: '/accounts/{account_id}/identifiers/{identifier_id}/reveal';
+};
+
+export type RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostError = RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostErrors[keyof RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostErrors];
+
+export type RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostResponses = {
+    /**
+     * Response Reveal Account Identifier Accounts  Account Id  Identifiers  Identifier Id  Reveal Post
+     *
+     * Successful Response
+     */
+    200: RevealedAccountIdentifier | UnavailableAccountIdentifier;
+};
+
+export type RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostResponse = RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostResponses[keyof RevealAccountIdentifierAccountsAccountIdIdentifiersIdentifierIdRevealPostResponses];
 
 export type UpdateAccountAccountsAccountIdPatchData = {
     body: AccountUpdate;

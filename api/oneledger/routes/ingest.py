@@ -19,7 +19,10 @@ Nothing here echoes the uploaded filename, and no message carries a digit run fr
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import date
@@ -36,6 +39,14 @@ from pydantic import BaseModel, Field, ValidationError
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
 from ..fxrange import FxCoverageError
+from ..identifiers import (
+    CompleteIdentifier,
+    Identifier,
+    IdentifierValueError,
+    complete_identifier,
+    identifier_from_source,
+    masked_identifier,
+)
 from ..ingest import pipeline
 from ..ingest.dedupe import OCCURRENCE, fingerprint
 from ..ingest.reconcile import Verdict
@@ -49,9 +60,10 @@ from .accounts import (
     _account_write_error,
     _insert_account,
     _one,
-    resolve_account_by_hash,
+    _replace_account_identifier,
+    resolve_account_by_identifier,
+    resolve_account_by_legacy_fingerprint,
 )
-from .accounts import _statement_account_identity as statement_account_identity
 from .layouts import COLUMNS, _preview_redactor, _row_to_profile
 
 router = APIRouter(tags=["ingest"])
@@ -220,35 +232,55 @@ def _account(
 
 
 def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountResolver:
-    """Hash the statement's own account number and look the account up by it.
-
-    This closure is why `ingest/` needs no import from `routes/`: the salted hash is the account
-    identity `routes/accounts.py` already defines, and the never-store list forbids the number
-    itself ever being stored or compared in the clear (`security-and-privacy.html` §1).
-    """
+    """Resolve current normalized identities, then temporary pre-V29 fingerprints."""
 
     def resolve(account_number_raw: str) -> pipeline.AccountContext | None:
-        # `account_number_identity` is the one rule that decides what gets hashed, shared with
-        # account creation rather than re-derived. A second spelling of it — `str.isdigit()`,
-        # say, which keeps non-ASCII digits and silently drops the letters account creation
-        # refuses — hashes a different string from the one stored, and the lookup then misses
-        # for a reason no message could explain. It also raises 503 naming ACCOUNT_HASH_SALT
-        # when the salt is unset, which is the refusal that condition is owed: returning None
-        # here would report a misconfigured deployment as "you do not hold this account".
         try:
-            _, digest = statement_account_identity(account_number_raw)
-        except ValueError:
-            # Not an account number at all — a capture that matched something else on the page.
-            # The number itself is never echoed (spec §5.6).
+            identifier = complete_identifier("bank_account", account_number_raw)
+        except IdentifierValueError:
             return None
-        if digest is None:
-            return None
-        found = resolve_account_by_hash(cur, digest, household_id)
+        found = resolve_account_by_identifier(
+            cur, identifier.kind, identifier.normalized_value, household_id
+        )
+        if found is None:
+            salt = os.environ.get("ACCOUNT_HASH_SALT", "").strip()
+            if salt and identifier.normalized_value.isdigit():
+                digest = hashlib.sha256(f"{salt}{identifier.normalized_value}".encode()).hexdigest()
+                found = resolve_account_by_legacy_fingerprint(cur, digest, household_id)
         if found is None:
             return None
         return pipeline.AccountContext(id=found.id, currency=found.currency)
 
     return resolve
+
+
+def _statement_identifier(account_type: str, value: str) -> Identifier:
+    """Preserve the pre-8c3 capture-shape contract until layouts declare completeness.
+
+    Existing layouts accepted complete ASCII digit runs with visual separators, a four-digit
+    suffix, or a mask spelling with exactly four visible ASCII digits. Cards retained only the
+    resulting mask even when their capture was complete. Task 8c6 replaces this compatibility
+    classifier with explicit source evidence so legal identifier letters such as X need no guess.
+    """
+    kind = "card" if account_type == "credit_card" else "bank_account"
+    numeric = re.fullmatch(r"[0-9\s–./-]+", value) and re.search(r"[0-9]", value)
+    if numeric:
+        digits = re.sub(r"[\s–./-]", "", value)
+        if len(digits) < 4:
+            raise ValueError("the statement does not state a usable account identity")
+        source_is_masked = len(digits) == 4
+    else:
+        visible = "".join(character for character in value if character in "0123456789")
+        if len(visible) != 4 or not re.fullmatch(r"[xX*•\s–./0-9-]+", value):
+            raise ValueError("the statement does not state a usable account identity")
+        source_is_masked = True
+    try:
+        identifier = identifier_from_source(kind, value, source_is_masked=source_is_masked)
+    except IdentifierValueError:
+        raise ValueError("the statement does not state a usable account identity") from None
+    if kind == "card" and isinstance(identifier, CompleteIdentifier):
+        return masked_identifier(kind, identifier.visible_suffix)
+    return identifier
 
 
 def _rows(result: pipeline.ParseResult) -> list[ParseRow]:
@@ -320,12 +352,6 @@ def _proposal(
         raise HTTPException(
             status_code=422, detail="this statement states no usable account number"
         )
-    try:
-        masked, _digest = statement_account_identity(raw)
-    except ValueError:
-        raise HTTPException(
-            status_code=422, detail="this statement states no usable account number"
-        ) from None
     cur.execute(
         """SELECT sl.account_type::text, sl.institution_id, sl.name,
                   i.short_name, i.name, i.country
@@ -339,6 +365,15 @@ def _proposal(
     if layout is None:  # pragma: no cover - the profile was selected from this household
         raise HTTPException(status_code=404, detail="no such layout")
     account_type, institution_id, layout_name, short_name, institution_name, country = layout
+    if account_type is None:
+        raise HTTPException(status_code=422, detail="this layout states no account type")
+    try:
+        identifier = _statement_identifier(account_type, raw)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, detail="this statement states no usable account number"
+        ) from None
+    masked = identifier.masked_value
     currency = result.analysis.metadata.get("currency", "").strip().upper() or None
     if currency is not None:
         cur.execute("SELECT code FROM currency WHERE code = %s", (currency,))
@@ -346,13 +381,15 @@ def _proposal(
             currency = None
     last_four = masked[-4:]
     cur.execute(
-        """SELECT id, name, account_number_masked
-             FROM account
-            WHERE household_id = %s AND account_number_hash IS NULL
-              AND account_number_masked IS NOT NULL
-              AND right(account_number_masked, 4) = %s
-            ORDER BY name, id""",
-        (household_id, last_four),
+        """SELECT DISTINCT a.id, a.name, ai.masked_value
+             FROM account a
+             JOIN account_identifier ai
+               ON ai.household_id = a.household_id AND ai.account_id = a.id
+            WHERE a.household_id = %s AND ai.is_active
+              AND ai.kind = %s
+              AND COALESCE(ai.visible_suffix, right(ai.masked_value, 4)) = %s
+            ORDER BY a.name, a.id""",
+        (household_id, identifier.kind, last_four),
     )
     suggestions = [
         SuggestedAccount(id=row[0], name=row[1], accountNumberMasked=row[2])
@@ -563,12 +600,9 @@ def confirm_statement_account(
                     raise HTTPException(
                         status_code=422, detail="this statement states no usable account number"
                     )
-                try:
-                    masked, digest = statement_account_identity(captured)
-                except ValueError:
-                    raise HTTPException(
-                        status_code=422, detail="this statement states no usable account number"
-                    ) from None
+                source_sha256 = hashlib.sha256(data).hexdigest()
+                source_layout_id = result.analysis.layout_id
+                source_layout_version = result.analysis.layout_version
 
                 # Serialize every statement-confirmation decision in this household. This keeps
                 # a mask-only create's check adjacent to its insert and uses the same lock order
@@ -580,19 +614,44 @@ def confirm_statement_account(
 
                 if account is not None:
                     body = _account_body(account)
-                    stored_digest = None if body.accountType == "credit_card" else digest
-                    if stored_digest is not None:
+                    try:
+                        identifier = _statement_identifier(body.accountType, captured)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="this statement states no usable account number",
+                        ) from None
+                    if isinstance(identifier, CompleteIdentifier):
                         cur.execute(
-                            """SELECT name FROM account
-                                WHERE household_id = %s AND account_number_hash = %s""",
-                            (owner.household_id, stored_digest),
+                            """SELECT a.name
+                                 FROM account a
+                                 JOIN account_identifier ai
+                                   ON ai.household_id = a.household_id AND ai.account_id = a.id
+                                WHERE a.household_id = %s AND ai.kind = %s
+                                  AND ai.normalized_value = %s AND ai.is_active""",
+                            (
+                                owner.household_id,
+                                identifier.kind,
+                                identifier.normalized_value,
+                            ),
                         )
                     else:
                         cur.execute(
-                            """SELECT name FROM account
-                                WHERE household_id = %s AND account_type = %s::account_type
-                                  AND account_number_masked = %s""",
-                            (owner.household_id, body.accountType, masked),
+                            """SELECT a.name
+                                 FROM account a
+                                 JOIN account_identifier ai
+                                   ON ai.household_id = a.household_id AND ai.account_id = a.id
+                                WHERE a.household_id = %s
+                                  AND a.account_type = %s::account_type
+                                  AND ai.kind = %s AND ai.is_active
+                                  AND COALESCE(ai.visible_suffix,
+                                               right(ai.masked_value, 4)) = %s""",
+                            (
+                                owner.household_id,
+                                body.accountType,
+                                identifier.kind,
+                                identifier.visible_suffix,
+                            ),
                         )
                     duplicate = cur.fetchone()
                     if duplicate is not None:
@@ -603,43 +662,66 @@ def confirm_statement_account(
                         cur,
                         body,
                         owner.household_id,
-                        account_number_masked=masked,
-                        account_number_hash=stored_digest,
+                        identifier=identifier,
+                        identifier_provenance="statement",
+                        source_sha256=source_sha256,
+                        source_layout_id=source_layout_id,
+                        source_layout_version=source_layout_version,
+                        source_capture_key="account_number",
                     )
 
                 assert accountId is not None
                 cur.execute(
-                    """SELECT account_type::text, account_number_masked, account_number_hash
+                    """SELECT account_type::text
                          FROM account WHERE id = %s AND household_id = %s FOR UPDATE""",
                     (accountId, owner.household_id),
                 )
                 target = cur.fetchone()
                 if target is None:
                     raise HTTPException(status_code=404, detail="no such account")
-                account_type, existing_mask, existing_digest = target
-                if existing_mask is None or existing_mask[-4:] != masked[-4:]:
+                account_type = target[0]
+                try:
+                    identifier = _statement_identifier(account_type, captured)
+                except ValueError:
+                    raise HTTPException(
+                        status_code=422, detail="this statement states no usable account number"
+                    ) from None
+                cur.execute(
+                    """SELECT masked_value, normalized_value
+                         FROM account_identifier
+                        WHERE household_id = %s AND account_id = %s AND kind = %s AND is_active
+                        ORDER BY created_at, id FOR UPDATE""",
+                    (owner.household_id, accountId, identifier.kind),
+                )
+                existing_identifiers = cur.fetchall()
+                if not existing_identifiers or all(
+                    row[0][-4:] != identifier.visible_suffix for row in existing_identifiers
+                ):
                     raise HTTPException(
                         status_code=409, detail="the statement and account masks do not match"
                     )
-                if existing_digest is not None:
+                if isinstance(identifier, CompleteIdentifier) and any(
+                    row[1] is not None and row[1] != identifier.normalized_value
+                    for row in existing_identifiers
+                ):
                     raise HTTPException(
                         status_code=409, detail="this account already has a different identity"
                     )
-                if account_type != "credit_card" and digest is not None:
-                    cur.execute(
-                        """UPDATE account SET account_number_masked = %s,
-                                              account_number_hash = %s
-                              WHERE id = %s AND household_id = %s
-                                AND account_type <> 'credit_card'::account_type
-                                AND account_number_hash IS NULL
-                          RETURNING id""",
-                        (masked, digest, accountId, owner.household_id),
+                if isinstance(identifier, CompleteIdentifier) and not any(
+                    row[1] == identifier.normalized_value for row in existing_identifiers
+                ):
+                    _replace_account_identifier(
+                        cur,
+                        owner.household_id,
+                        accountId,
+                        identifier.kind,
+                        identifier,
+                        provenance="statement",
+                        source_sha256=source_sha256,
+                        source_layout_id=source_layout_id,
+                        source_layout_version=source_layout_version,
+                        source_capture_key="account_number",
                     )
-                    if cur.fetchone() is None:  # pragma: no cover - household + row locks guard it
-                        raise HTTPException(
-                            status_code=409,
-                            detail="the account identity changed before it could be confirmed",
-                        )
                 response.status_code = 200
                 return _one(cur, accountId, owner.household_id)
     except DuplicateDocument as exc:

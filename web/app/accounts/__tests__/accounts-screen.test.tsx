@@ -19,6 +19,7 @@ const institutions: Array<InstitutionRow> = [
 ];
 
 function account(overrides: Partial<AccountRow>): AccountRow {
+  const { identifiers = [], ...rest } = overrides;
   return {
     id: "acct-savings",
     name: "Inventory Savings",
@@ -42,7 +43,8 @@ function account(overrides: Partial<AccountRow>): AccountRow {
     currentBalance: "250000.0000",
     currentBalanceAsOf: "2026-01-15T00:00:00Z",
     creditLimit: null,
-    ...overrides,
+    identifiers,
+    ...rest,
   };
 }
 

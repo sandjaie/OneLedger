@@ -133,10 +133,6 @@ CREATE TABLE account (
   country                CHAR(2) NOT NULL,
   tax_residency_context  CHAR(2),
 
-  account_number_masked  TEXT,                    -- 'XXXX4821' — display only
-  account_number_hash    TEXT,                    -- sha256(normalised full) — statement matching
-  iban_masked            TEXT,
-
   opened_on              DATE,
   closed_on              DATE,
   is_active              BOOLEAN NOT NULL DEFAULT true,
@@ -168,19 +164,15 @@ CREATE TABLE account (
 
   CONSTRAINT closed_after_opened CHECK (closed_on IS NULL OR opened_on IS NULL OR closed_on >= opened_on),
   CONSTRAINT closed_account_has_a_date CHECK (is_active OR closed_on IS NOT NULL),
-  CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL),
-  CONSTRAINT card_has_no_account_number_hash
-    CHECK (account_type <> 'credit_card' OR account_number_hash IS NULL)
+  CONSTRAINT card_has_limit CHECK (account_type <> 'credit_card' OR credit_limit IS NOT NULL)
 );
 
 CREATE INDEX idx_account_household ON account (household_id, is_active);
-CREATE UNIQUE INDEX idx_account_number_hash
-  ON account (household_id, account_number_hash) WHERE account_number_hash IS NOT NULL;
 ```
 
-V28 copies these three legacy identity columns into `account_identifier`. They remain on
-`account` only until V29 moves every application reader/writer and drops them; no migration claims
-that a legacy digest contains recoverable plaintext.
+V28 copied the three former identity columns into `account_identifier`; V29 moved every application
+reader/writer to that relation and dropped the columns, their index and their transitional
+constraints. No migration claims that a legacy digest contains recoverable plaintext.
 
 ---
 
@@ -677,6 +669,18 @@ How often a layout was used is counted from `import_batch.statement_layout_id` a
 `started_at`. That count is right for every batch ever staged, where a counter maintained from
 here on would start short by every import before it. The M2 spec's §7 item 16 records the
 decision.
+
+---
+
+## `V29` (applied)
+
+Applied as `db/migrations/V29__retire_legacy_account_identity_columns.sql`. The account API and
+statement resolver now use `account_identifier` exclusively, so V29 drops
+`account.account_number_masked`, `account.account_number_hash`, `account.iban_masked`,
+`idx_account_number_hash`, `account_legacy_identity_is_migratable` and
+`card_has_no_account_number_hash`. A migrated `legacy_fingerprint` remains readable during the
+planned backfill window; new and updated identities use the complete local source value,
+normalized exact-match value and safe mask in `account_identifier`.
 
 ---
 
