@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..money import RATE, _frozen, _money, _out, translate
+from .layouts import _preview_redactor
 
 router = APIRouter(tags=["transactions"])
 
@@ -27,6 +28,7 @@ router = APIRouter(tags=["transactions"])
 # their owning features, and opening_balance/adjustment are derivations, not entries. The web
 # dropdown mirrors this list; the API is the boundary.
 MANUAL_TYPES = frozenset({"expense", "income", "fee", "interest", "tax", "refund"})
+_DESCRIPTION_REDACTOR = _preview_redactor(None)
 
 
 def _first_line(exc: Exception) -> str:
@@ -167,6 +169,20 @@ def transaction_row(values: tuple[Any, ...]) -> TransactionRow:
     return TransactionRow(**fields)
 
 
+def public_transaction_row(row: TransactionRow) -> TransactionRow:
+    """Screen the wire copy while retaining original audit/scoring text in memory."""
+    return row.model_copy(
+        update={
+            "descriptionRaw": _DESCRIPTION_REDACTOR(row.descriptionRaw),
+            "descriptionClean": (
+                None
+                if row.descriptionClean is None
+                else _DESCRIPTION_REDACTOR(row.descriptionClean)
+            ),
+        }
+    )
+
+
 def _one(cur: psycopg.Cursor[Any], txn_id: UUID, household_id: UUID) -> TransactionRow:
     cur.execute(
         f"SELECT {COLUMNS} {FROM} WHERE t.id = %s AND t.household_id = %s",
@@ -175,7 +191,7 @@ def _one(cur: psycopg.Cursor[Any], txn_id: UUID, household_id: UUID) -> Transact
     row = cur.fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail="no such transaction")
-    return transaction_row(row)
+    return public_transaction_row(transaction_row(row))
 
 
 def _money_query(value: str | None) -> Decimal | None:
@@ -314,7 +330,7 @@ def list_transactions(
                      LIMIT %s OFFSET %s""",
                 (*params, limit, offset),
             )
-            rows = [transaction_row(row) for row in cur.fetchall()]
+            rows = [public_transaction_row(transaction_row(row)) for row in cur.fetchall()]
     except psycopg.errors.InvalidTextRepresentation as exc:
         raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
     return TransactionsResponse(transactions=rows, total=total)

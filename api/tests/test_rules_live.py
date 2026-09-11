@@ -310,6 +310,30 @@ def test_preview_counts_what_a_rule_would_match_and_writes_nothing(live: Fixture
         assert cur.fetchone()[0] == 0  # type: ignore[index]
 
 
+def test_rule_and_classification_samples_redact_identifiers_without_changing_matches(
+    live: Fixture,
+) -> None:
+    private_identifier = "1234-٥٦٧٨-9012-3456"
+    a_transaction(live, f"GROCER PAYMENT {private_identifier}")
+
+    rule_preview = client().post("/rules/preview", json=rule_body(), headers=ORIGIN)
+    created = client().post("/rules", json=rule_body(), headers=ORIGIN)
+    classify_preview = client().post("/classify?preview=true", headers=ORIGIN)
+    classified = client().post("/classify", headers=ORIGIN)
+
+    assert rule_preview.status_code == 200
+    assert created.status_code == 201
+    assert classify_preview.status_code == 200
+    assert classified.status_code == 200
+    assert rule_preview.json()["affected"] == 1
+    assert classify_preview.json()["changed"] == 1
+    assert classified.json()["changed"] == 1
+    for response in (rule_preview, classify_preview, classified):
+        assert private_identifier not in response.text
+        assert "1234567890123456" not in response.text
+        assert response.json()["sample"][0]["descriptionRaw"] == "GROCER PAYMENT [redacted]"
+
+
 def test_preview_counts_rows_that_already_have_an_answer_too(live: Fixture) -> None:
     """Preview answers "what does this match", not "what would change". A rule the owner is
     writing to cover a card payment must not read as matching nothing because the row it was

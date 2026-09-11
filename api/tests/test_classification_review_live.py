@@ -92,7 +92,8 @@ def _transaction(
 
 def test_groups_are_household_scoped_date_filtered_and_contain_no_money() -> None:
     conn = connect_to_test_database()
-    marker = f"SYNTHETIC REVIEW {uuid4()}".upper()
+    letters = uuid4().hex.translate(str.maketrans("0123456789", "abcdefghij"))
+    marker = f"SYNTHETIC REVIEW {letters}".upper()
     with conn.cursor() as cur:
         cur.execute("SELECT min(code), max(code) FROM currency")
         currencies = cur.fetchone()
@@ -166,3 +167,65 @@ def test_groups_are_household_scoped_date_filtered_and_contain_no_money() -> Non
     )
     assert filtered_group["occurrences"] == 1
     assert filtered_group["transactionIds"] == [str(second)]
+
+
+def test_group_labels_redact_identifiers_without_changing_grouping() -> None:
+    conn = connect_to_test_database()
+    private_identifier = "1234-٥٦٧٨-9012-3456"
+    marker = f"SYNTHETIC REVIEW {private_identifier}"
+    with conn.cursor() as cur:
+        cur.execute("SELECT min(code), max(code) FROM currency")
+        currencies = cur.fetchone()
+        assert currencies is not None
+        base, secondary = (str(value).strip() for value in currencies)
+        household_id, user_id, account_id = _household(cur, base, secondary, "privacy")
+        first = _transaction(
+            cur,
+            household_id,
+            account_id,
+            base,
+            date(2026, 7, 1),
+            Decimal("-12.0000"),
+            marker,
+        )
+        second = _transaction(
+            cur,
+            household_id,
+            account_id,
+            base,
+            date(2026, 8, 1),
+            Decimal("-13.0000"),
+            marker,
+        )
+    conn.commit()
+
+    def owner() -> auth.OwnerSession:
+        return auth.OwnerSession(
+            user_id=user_id,
+            household_id=household_id,
+            session_id=uuid4(),
+            email="privacy-owner@example.invalid",
+        )
+
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).get("/classification-review/groups")
+    finally:
+        app.dependency_overrides.clear()
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM transaction WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM app_user WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
+        conn.commit()
+        conn.close()
+
+    assert response.status_code == 200
+    assert response.json()["totalGroups"] == 1
+    [group] = response.json()["groups"]
+    assert group["description"] == "SYNTHETIC REVIEW [redacted]"
+    assert group["occurrences"] == 2
+    assert set(group["transactionIds"]) == {str(first), str(second)}
+    assert private_identifier not in response.text
+    assert "1234567890123456" not in response.text

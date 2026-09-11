@@ -31,6 +31,7 @@ from ..ingest.classify import (
     validate_pattern,
 )
 from ..ingest.knowledge import load_knowledge
+from .layouts import _preview_redactor
 
 router = APIRouter(tags=["rules"])
 
@@ -475,6 +476,7 @@ def delete_rule(rule_id: UUID, owner: Annotated[OwnerSession, Depends(require_ow
 # A sample, not a page. The count is the answer; the rows are there so the owner can see the
 # rule is matching what they meant, and twenty is enough to tell that.
 SAMPLE_ROWS = 20
+_DESCRIPTION_REDACTOR = _preview_redactor(None)
 
 
 class MatchedRow(BaseModel):
@@ -509,7 +511,7 @@ def _matched_row(values: tuple[Any, ...]) -> MatchedRow:
     return MatchedRow(
         id=values[0],
         bookedDate=values[1].isoformat(),
-        descriptionRaw=values[2],
+        descriptionRaw=_DESCRIPTION_REDACTOR(values[2]),
         amount=str(values[3]),
         currency=values[4],
         classifiedBy=values[5],
