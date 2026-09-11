@@ -649,7 +649,7 @@ from the two leg amounts; the gap to mid-market is a recorded cost (§5.6).</li>
 4. Recurring series match                       → stop
 5. Prior classification of an identical description on the same account
 6. Seed rule (ships with the product)
-7. Unclassified → review queue
+7. Unclassified → Transactions → Needs a category
 </code></pre>
 <p><strong>Category taxonomy:</strong> a curated two-level tree shipping with the product so reports work on
 the first import. The tree is universal — Housing, Utilities, Groceries, Transport, Health,
@@ -659,9 +659,11 @@ Talabat do). The user adds, renames and merges freely.</p>
 <p><strong>Every category carries a bucket:</strong> <code>need | want | investment | debt_service | income | ignore</code>.
 This gives the Needs/Wants/Investments/Debt view for free from a single classification pass,
 rather than asking for the same judgement twice.</p>
-<p><strong>Learning from corrections is explicit, not implicit.</strong> Recategorizing a transaction offers to
-create a rule, showing exactly how many past and future transactions it would affect. The user
-accepts or declines. Nothing changes behaviour behind their back.</p>
+<p><strong>Learning is explicit, not implicit.</strong> Choosing a category for an unclassified row offers
+a private rule, showing both how many ledger rows match and how many still need a category before
+anything is written; the owner chooses &ldquo;Always mark rows like this&rdquo; or &ldquo;Just this one&rdquo;.
+Re-categorizing a row that already has an answer stays one-off until Phase 2&#39;s learn-from-correction
+flow. Nothing changes behaviour behind the owner&#39;s back.</p>
 <p><strong>Acceptance</strong></p>
 <ul>
 <li>Seed rules classify ≥ 70% of a first real import without any user rules existing.</li>

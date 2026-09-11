@@ -389,7 +389,7 @@ problem, not a language problem.</p>
 5  Prior classification, same account + text     →  classified_by = prior_match
 6  Seed rule                                     →  classified_by = seed_rule
 7  No match                                      →  classified_by = unclassified
-                                                     → review queue
+                                                     → Transactions → Needs a category
 </code></pre>
 <p>Private knowledge is household-only and carries its evidence, economic role, direction and
 optional account scope. Within this step, lower priority wins; then exact beats prefix, prefix
@@ -406,6 +406,11 @@ abstain. Those meanings require explicit knowledge or review.</p>
 <p><code>classified_by</code> and <code>classification_rule_id</code> are stored on every transaction, so the UI can always
 answer <em>&quot;why is this Food &amp; Dining?&quot;</em> — which is what makes the engine trustworthy enough to
 rely on.</p>
+<p>An unclassified row asks in the Transactions ledger, not while it is still staged. Choosing a
+category shows an editable, digit-free contains pattern and the rule&#39;s total and unclassified
+match counts before any write. The owner either creates the household-private rule and applies it
+only where the complete cascade decides with that rule, or changes just this row. An existing
+classification is never overwritten by this flow.</p>
 <p><strong>Where the cascade runs.</strong> In the Python service
 (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>) — <code>classify.py</code>, called at stage 10
 of the import pipeline and again by the rules screen for retroactive application and affected counts. Both

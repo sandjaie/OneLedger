@@ -475,9 +475,7 @@ The ledger portion targets twenty minutes; planning time is measured separately.
 │  ☑ 15 Sep  CREDIT CARD PAYMENT       −3,900.00  → ENBD Card  +3,900.00   │
 │            0.99 · card_payment                                           │
 │                                                                          │
-│  ❓ UNCLASSIFIED  (11)                                                    │
-│  ▸ 07 Sep  NOON.COM DUBAI              −284.00   [ category… ]           │
-│  ▸ 09 Sep  AL MAYA SUPERMARKET         −162.50   [ category… ]           │
+│  ❓ UNCLASSIFIED  (11)               resolve after import in Transactions │
 │                                                                          │
 │  ⚡ LOW CONFIDENCE  (6)                                                   │
 │  ▸ 12 Sep  CAREEM DUBAI              −1,240.00   Transport → Taxi  0.62  │
@@ -502,8 +500,9 @@ entirely (Invariant I8).</li>
 what a remittance actually cost.</li>
 <li><strong>Correct rows collapse.</strong> They are shown as a count, expandable, not as 183 lines to scroll.</li>
 <li><strong>Anomaly hints</strong> where an amount is out of pattern for a merchant.</li>
-<li>Categorizing offers rule creation inline, with an affected count
-(<a href="../design/classification.html">classification.html</a> §4).</li>
+<li>The review screen counts rows with no category and points to Transactions → Needs a category.
+Staged review stays about accepting or rejecting ledger facts; rule creation acts on committed
+transactions and therefore happens after import.</li>
 </ul>
 <hr>
 <h2 id="4-transactions--the-ledger">4. Transactions — the ledger</h2>
@@ -527,7 +526,11 @@ what a remittance actually cost.</li>
 <li><code>🔗</code> marks a transfer leg, linking to its peer. Transfer rows are visually distinct because
 they are not spending.</li>
 <li>Filters: account, date, category, merchant, amount range, currency, country, type, tag, review
-state, source document.</li>
+state, classification provenance and source document. &ldquo;Needs a category&rdquo; is the
+<code>unclassified</code> queue.</li>
+<li>Choosing a category on an unclassified row asks inline whether to save and apply a private
+contains rule or change only that row. The editable, digit-free pattern and both affected counts
+appear before a write; a row that already has a classification keeps the ordinary one-off edit.</li>
 <li>Bulk select for recategorization, tagging and exclusion.</li>
 <li>Each row links to its source document at the correct page.</li>
 </ul>

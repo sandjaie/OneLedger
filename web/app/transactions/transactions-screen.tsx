@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { type apiFetch } from "@/lib/api/client";
+import { ClassifyPrompt } from "@/app/transactions/classify-prompt";
 import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
 import { formatMoney } from "@/lib/money/format";
 import type {
@@ -62,6 +63,7 @@ type Filters = {
   country: string;
   tag: string;
   reviewState: string;
+  classifiedBy: string;
   merchantId: string;
   sourceDocumentId: string;
 };
@@ -81,6 +83,7 @@ const NO_FILTERS: Filters = {
   country: "",
   tag: "",
   reviewState: "",
+  classifiedBy: "",
   merchantId: "",
   sourceDocumentId: "",
 };
@@ -99,6 +102,7 @@ function query(filters: Filters, offset: number) {
   if (filters.country.trim()) parameters.set("country", filters.country.trim());
   if (filters.tag.trim()) parameters.set("tag", filters.tag.trim());
   if (filters.reviewState) parameters.set("reviewState", filters.reviewState);
+  if (filters.classifiedBy) parameters.set("classifiedBy", filters.classifiedBy);
   if (filters.merchantId.trim()) parameters.set("merchantId", filters.merchantId.trim());
   if (filters.sourceDocumentId.trim())
     parameters.set("sourceDocumentId", filters.sourceDocumentId.trim());
@@ -130,6 +134,10 @@ export function TransactionsScreen({
   const [problem, setProblem] = useState<string>();
   // The row whose peers are open for manual linking, if any.
   const [linking, setLinking] = useState<TransactionRow>();
+  const [classifying, setClassifying] = useState<{
+    row: TransactionRow;
+    categoryId: string;
+  }>();
   const [draft, setDraft] = useState({
     accountId: "",
     bookedDate: "",
@@ -199,7 +207,12 @@ export function TransactionsScreen({
     onChanged();
   }
 
-  async function patchRow(row: TransactionRow, categoryId: string | null, notes: string | null) {
+  async function patchRow(
+    row: TransactionRow,
+    categoryId: string | null,
+    notes: string | null,
+    bubbleError = false,
+  ) {
     setBusy(true);
     setProblem(undefined);
     try {
@@ -208,7 +221,7 @@ export function TransactionsScreen({
         body: JSON.stringify({ categoryId, notes }),
         headers: { "Content-Type": "application/json" },
       });
-      if (applied.categoryId || applied.reviewState) {
+      if (applied.categoryId || applied.reviewState || applied.classifiedBy) {
         // The row may no longer match the applied category filter — and every PATCH marks the
         // row reviewed, so an unreviewed filter goes stale the same way. A stale local
         // replacement would also make the next page's offset skip a real match.
@@ -216,7 +229,8 @@ export function TransactionsScreen({
       } else {
         setRows((current) => current.map((one) => (one.id === updated.id ? updated : one)));
       }
-    } catch {
+    } catch (error) {
+      if (bubbleError) throw error;
       setProblem("The change was not saved. Retry.");
     } finally {
       setBusy(false);
@@ -224,6 +238,10 @@ export function TransactionsScreen({
   }
 
   function recategorize(row: TransactionRow, categoryId: string) {
+    if (row.classifiedBy === "unclassified" && categoryId) {
+      setClassifying({ row, categoryId });
+      return Promise.resolve();
+    }
     return patchRow(row, categoryId || null, row.notes);
   }
 
@@ -497,6 +515,16 @@ export function TransactionsScreen({
           </select>
         </label>
         <label className="select-field">
+          <span>Classification</span>
+          <select
+            onChange={(event) => setFilters({ ...filters, classifiedBy: event.target.value })}
+            value={filters.classifiedBy}
+          >
+            <option value="">All rows</option>
+            <option value="unclassified">Needs a category</option>
+          </select>
+        </label>
+        <label className="select-field">
           <span>Sort by</span>
           <select
             onChange={(event) => setFilters({ ...filters, sort: event.target.value })}
@@ -600,7 +628,11 @@ export function TransactionsScreen({
                           : undefined
                       }
                       onChange={(event) => void recategorize(row, event.target.value)}
-                      value={row.categoryId ?? ""}
+                      value={
+                        classifying?.row.id === row.id
+                          ? classifying.categoryId
+                          : (row.categoryId ?? "")
+                      }
                     >
                       <option value="">Unclassified</option>
                       {categories.filter((one) => one.isActive || one.id === row.categoryId).map(
@@ -628,6 +660,23 @@ export function TransactionsScreen({
             ))}
           </tbody>
         </table>
+      )}
+
+      {classifying && (
+        <ClassifyPrompt
+          categoryId={classifying.categoryId}
+          categoryName={categoryName.get(classifying.categoryId) ?? "this category"}
+          onApplied={async () => {
+            await reload(applied, 0, false);
+            onChanged();
+          }}
+          onClose={() => setClassifying(undefined)}
+          onJustOne={() =>
+            patchRow(classifying.row, classifying.categoryId, classifying.row.notes, true)
+          }
+          request={request}
+          row={classifying.row}
+        />
       )}
 
       {rows.length < count && (

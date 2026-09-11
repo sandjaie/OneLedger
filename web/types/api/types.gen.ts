@@ -3237,6 +3237,10 @@ export type OneledgerRoutesRulesPreviewResult = {
      */
     affected: number;
     /**
+     * Unclassified
+     */
+    unclassified: number;
+    /**
      * Sample
      */
     sample: Array<MatchedRow>;
@@ -3652,6 +3656,10 @@ export type ListTransactionsTransactionsGetData = {
          * Reviewstate
          */
         reviewState?: string | null;
+        /**
+         * Classifiedby
+         */
+        classifiedBy?: string | null;
         /**
          * Sourcedocumentid
          */
@@ -4329,6 +4337,10 @@ export type ClassifyUnclassifiedClassifyPostData = {
          * Preview
          */
         preview?: boolean;
+        /**
+         * Ruleid
+         */
+        ruleId?: string | null;
     };
     url: '/classify';
 };

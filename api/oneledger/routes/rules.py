@@ -490,6 +490,7 @@ class MatchedRow(BaseModel):
 
 class PreviewResult(BaseModel):
     affected: int
+    unclassified: int
     sample: list[MatchedRow]
 
 
@@ -571,7 +572,9 @@ def preview_rule(
             if rule_matches(draft, _as_candidate(row))
         ]
     return PreviewResult(
-        affected=len(matched), sample=[_matched_row(row) for row in matched[:SAMPLE_ROWS]]
+        affected=len(matched),
+        unclassified=sum(row[5] == "unclassified" for row in matched),
+        sample=[_matched_row(row) for row in matched[:SAMPLE_ROWS]],
     )
 
 
@@ -581,7 +584,9 @@ def _decimal(value: str | None) -> Decimal | None:
 
 @router.post("/classify")
 def classify_unclassified(
-    owner: Annotated[OwnerSession, Depends(require_owner)], preview: bool = False
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    preview: bool = False,
+    ruleId: UUID | None = None,
 ) -> ClassifyResult:
     """Run the cascade over the rows that have no answer, and over nothing else.
 
@@ -591,15 +596,26 @@ def classify_unclassified(
     rule over rows that already have an answer is Phase 2's learn-from-correction.
     """
     with connect() as conn, conn.cursor() as cur:
+        if ruleId is not None:
+            cur.execute(
+                """SELECT 1 FROM classification_rule
+                    WHERE id = %s AND household_id = %s AND is_active""",
+                (ruleId, owner.household_id),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="no such active rule")
         knowledge = load_knowledge(cur, owner.household_id)
         rows = _candidates(cur, owner.household_id, unclassified_only=True)
 
         decided: list[tuple[tuple[Any, ...], Any]] = []
         for row in rows:
             answer = classify_row(_as_candidate(row), knowledge)
-            if answer.classified_by != "unclassified":
+            if answer.classified_by != "unclassified" and (
+                ruleId is None or answer.classification_rule_id == ruleId
+            ):
                 decided.append((row, answer))
 
+        written: list[tuple[tuple[Any, ...], Any]] = []
         if not preview:
             for row, answer in decided:
                 cur.execute(
@@ -625,11 +641,13 @@ def classify_unclassified(
                         owner.household_id,
                     ),
                 )
+                if cur.rowcount == 1:
+                    written.append((row, answer))
             # The counters V19 marks as the cascade's to maintain. Written once per rule per
             # run, not once per row, so a run over four thousand rows is not four thousand
             # updates to one rule.
             applied: dict[UUID, int] = {}
-            for _, answer in decided:
+            for _, answer in written:
                 if answer.classification_rule_id is not None:
                     applied[answer.classification_rule_id] = (
                         applied.get(answer.classification_rule_id, 0) + 1
@@ -642,9 +660,10 @@ def classify_unclassified(
                     (count, rule_id, owner.household_id),
                 )
 
+    changed = decided if preview else written
     return ClassifyResult(
         considered=len(rows),
-        changed=len(decided),
-        sample=[_matched_row(row) for row, _ in decided[:SAMPLE_ROWS]],
+        changed=len(changed),
+        sample=[_matched_row(row) for row, _ in changed[:SAMPLE_ROWS]],
         applied=not preview,
     )

@@ -16,12 +16,16 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.ingest.classify import Candidate, Classification, Knowledge, classify_row
 from oneledger.main import app
+from oneledger.routes import rules as rule_routes
 
+from .live_database import test_dsn as _test_dsn
 from .test_ingest_route_live import ORIGIN, Fixture, _clean, _connect
 
 CLASSIFIABLE = (
@@ -295,6 +299,7 @@ def test_preview_counts_what_a_rule_would_match_and_writes_nothing(live: Fixture
 
     assert previewed.status_code == 200
     assert previewed.json()["affected"] == 2
+    assert previewed.json()["unclassified"] == 2
     assert {row["descriptionRaw"] for row in previewed.json()["sample"]} == {
         "GROCER MARKET",
         "GROCER MARKET TOO",
@@ -314,7 +319,106 @@ def test_preview_counts_rows_that_already_have_an_answer_too(live: Fixture) -> N
         live, "GROCER MARKET TOO", classified_by="user_manual", classification_confidence=1
     )
 
-    assert client().post("/rules/preview", json=rule_body(), headers=ORIGIN).json()["affected"] == 2
+    result = client().post("/rules/preview", json=rule_body(), headers=ORIGIN).json()
+    assert (result["affected"], result["unclassified"]) == (2, 1)
+
+
+def test_a_scoped_classify_writes_only_rows_decided_by_that_rule(live: Fixture) -> None:
+    """The prompt applies the rule it just created, not another rule backlog in the ledger."""
+    claimed_by_earlier = a_transaction(live, "GROCER MARKET")
+    claimed_by_new = a_transaction(live, "GROCER SHOP")
+    unrelated = a_transaction(live, "AIRLINE TICKET")
+    earlier = (
+        client()
+        .post(
+            "/rules",
+            json=rule_body(matchDescriptionPattern="MARKET", priority=10, setTxnType="fee"),
+            headers=ORIGIN,
+        )
+        .json()
+    )
+    created = (
+        client()
+        .post("/rules", json=rule_body(priority=100, setTxnType="income"), headers=ORIGIN)
+        .json()
+    )
+
+    result = client().post(f"/classify?ruleId={created['id']}", headers=ORIGIN)
+
+    assert result.status_code == 200
+    assert (result.json()["considered"], result.json()["changed"]) == (3, 1)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, classified_by::text, txn_type::text, classification_rule_id"
+            " FROM transaction ORDER BY id"
+        )
+        answers = {row[0]: (row[1], row[2], row[3]) for row in cur.fetchall()}
+    assert answers[claimed_by_new] == ("user_rule", "income", UUID(created["id"]))
+    assert answers[claimed_by_earlier] == ("unclassified", "expense", None)
+    assert answers[unrelated] == ("unclassified", "expense", None)
+    listed = {row["id"]: row for row in client().get("/rules").json()}
+    assert listed[created["id"]]["timesApplied"] == 1
+    assert listed[earlier["id"]]["timesApplied"] == 0
+
+
+def test_a_scoped_classify_hides_foreign_and_inactive_rules(live: Fixture) -> None:
+    inactive = client().post("/rules", json=rule_body(isActive=False), headers=ORIGIN).json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('scoped elsewhere', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        other = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO classification_rule (household_id, match_description_pattern,
+                                                set_txn_type, origin)
+               VALUES (%s, 'FOREIGN', 'expense', 'user_created') RETURNING id""",
+            (other,),
+        )
+        foreign = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+
+    assert client().post(f"/classify?ruleId={inactive['id']}", headers=ORIGIN).status_code == 404
+    assert client().post(f"/classify?ruleId={foreign}", headers=ORIGIN).status_code == 404
+
+
+def test_a_scoped_classify_counts_only_rows_it_actually_writes(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A concurrent owner decision wins; the stale run must not report or count that row."""
+    transaction_id = a_transaction(live, "GROCER MARKET")
+    created = client().post("/rules", json=rule_body(), headers=ORIGIN).json()
+    raced = False
+
+    def decide_after_owner(row: Candidate, knowledge: Knowledge) -> Classification:
+        nonlocal raced
+        if not raced:
+            raced = True
+            concurrent = psycopg.connect(_test_dsn())
+            try:
+                with concurrent.cursor() as cur:
+                    cur.execute(
+                        """UPDATE transaction
+                              SET classified_by = 'user_manual',
+                                  classification_confidence = 1,
+                                  classification_rule_id = NULL
+                            WHERE id = %s""",
+                        (transaction_id,),
+                    )
+                concurrent.commit()
+            finally:
+                concurrent.close()
+        return classify_row(row, knowledge)
+
+    monkeypatch.setattr(rule_routes, "classify_row", decide_after_owner)
+
+    result = client().post(f"/classify?ruleId={created['id']}", headers=ORIGIN)
+
+    assert result.status_code == 200
+    assert (result.json()["considered"], result.json()["changed"]) == (1, 0)
+    listed = {row["id"]: row for row in client().get("/rules").json()}
+    assert listed[created["id"]]["timesApplied"] == 0
 
 
 def test_classify_with_preview_writes_nothing(live: Fixture) -> None:

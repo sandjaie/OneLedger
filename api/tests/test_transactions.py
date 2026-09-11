@@ -348,6 +348,41 @@ def test_filters_round_trip_as_parameters(monkeypatch: MonkeyPatch) -> None:
     )
 
 
+@pytest.mark.parametrize("classified_by", ["unclassified", "recurring_series", "ai"])
+def test_the_ledger_filters_every_known_classification_provenance(
+    classified_by: str, monkeypatch: MonkeyPatch
+) -> None:
+    """A known enum member must not become an invalid filter when later cascade steps arrive."""
+    connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
+    try:
+        response = _client(connection, monkeypatch).get(
+            "/transactions", params={"classifiedBy": classified_by}
+        )
+    finally:
+        _teardown()
+
+    assert response.status_code == 200
+    listing = next(s for s in connection.statements if "ORDER BY" in s)
+    index = connection.statements.index(listing)
+    assert "t.classified_by = %s::classified_by" in listing
+    assert classified_by in connection.params[index]
+
+
+def test_an_unknown_classified_by_filter_is_refused_before_querying(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
+    try:
+        response = _client(connection, monkeypatch).get(
+            "/transactions", params={"classifiedBy": "guessed"}
+        )
+    finally:
+        _teardown()
+
+    assert response.status_code == 422
+    assert connection.statements == []
+
+
 def test_a_foreign_household_category_is_refused(monkeypatch: MonkeyPatch) -> None:
     """The category foreign key is not tenant-aware; the route predicate is the boundary."""
     connection = LedgerConnection(rows=[FETCHED_ROW], category_ok=None)
