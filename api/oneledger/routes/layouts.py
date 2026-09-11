@@ -50,7 +50,12 @@ COLUMN_FIELDS = frozenset(
 # available credit in the raw run, and only the words, split on the gap between cells, part them
 # (db/seeds/README.md).
 QUIRKS_VOCABULARY = frozenset(
-    {"filter_script:arabic", "continuation:no_date_and_no_amount", "metadata_text:words"}
+    {
+        "filter_script:arabic",
+        "continuation:no_date_and_no_amount",
+        "metadata_text:words",
+        "row_assembly:nearest_dated_row",
+    }
 )
 # metadata_patterns keys the pipeline understands itself (plan section 4.4).
 # The card cycle's four facts are reserved too: each is stored as one normalised value, so

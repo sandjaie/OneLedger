@@ -1118,7 +1118,11 @@ def test_quirks_are_restricted_to_the_small_vocabulary() -> None:
     assert layouts.LayoutCreate.model_validate(
         {
             **VALID_CREATE,
-            "quirks": ["filter_script:arabic", "continuation:no_date_and_no_amount"],
+            "quirks": [
+                "filter_script:arabic",
+                "continuation:no_date_and_no_amount",
+                "row_assembly:nearest_dated_row",
+            ],
         }
     )
 

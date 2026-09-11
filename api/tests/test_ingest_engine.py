@@ -200,6 +200,74 @@ def test_continuation_joins_description_fragments_in_physical_order() -> None:
     assert dropped.lines_unparsed == 2
 
 
+def test_nearest_dated_row_owns_leading_description_fragments() -> None:
+    centered_cells = page(
+        [
+            word(20, 76, "01/02/2024", top=10.0),
+            word(130, 170, "FIRST", top=10.0),
+            word(445, 482, "17.25", top=10.0),
+        ],
+        [word(130, 180, "LEADING", top=29.0)],
+        [word(130, 180, "DETAIL", top=32.0)],
+        [
+            word(20, 76, "02/02/2024", top=40.0),
+            word(130, 180, "TRAILING", top=40.0),
+            word(445, 482, "9.00", top=40.0),
+        ],
+    )
+
+    nearest = extract_pages(
+        profile(
+            rowStartRule="has_date",
+            continuationRule="blank_date_and_money_columns",
+            quirks=["row_assembly:nearest_dated_row"],
+        ),
+        [centered_cells],
+    )
+    legacy = extract_pages(
+        profile(rowStartRule="has_date", continuationRule="blank_date_and_money_columns"),
+        [centered_cells],
+    )
+
+    assert [row.fields["description"] for row in nearest.rows] == [
+        "FIRST",
+        "LEADING DETAIL TRAILING",
+    ]
+    assert [row.fields["description"] for row in legacy.rows] == [
+        "FIRST LEADING DETAIL",
+        "TRAILING",
+    ]
+    assert nearest.rows[1].raw_text == ("LEADING\nDETAIL\n02/02/2024 TRAILING 9.00")
+    assert nearest.lines_unparsed == legacy.lines_unparsed == 0
+
+
+def test_nearest_dated_row_tie_stays_with_the_earlier_row() -> None:
+    tied = page(
+        [
+            word(20, 76, "01/02/2024", top=10.0),
+            word(130, 170, "FIRST", top=10.0),
+            word(445, 482, "17.25", top=10.0),
+        ],
+        [word(130, 180, "TIED", top=30.0)],
+        [
+            word(20, 76, "02/02/2024", top=50.0),
+            word(130, 180, "SECOND", top=50.0),
+            word(445, 482, "9.00", top=50.0),
+        ],
+    )
+
+    result = extract_pages(
+        profile(
+            rowStartRule="has_date",
+            continuationRule="blank_date_and_money_columns",
+            quirks=["row_assembly:nearest_dated_row"],
+        ),
+        [tied],
+    )
+
+    assert [row.fields["description"] for row in result.rows] == ["FIRST TIED", "SECOND"]
+
+
 def test_the_stricter_continuation_rule_separates_wrapped_narration_from_a_paragraph() -> None:
     """M2 spec §7 item 13: "no date" and "the date column is blank" are different questions.
 
