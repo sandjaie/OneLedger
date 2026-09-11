@@ -76,7 +76,9 @@
       layout rather than replaced with unrelated browser text.</p>
     <p>Existing imported documents already identify their account, layout and source through ledger
       provenance. A guarded application operation may re-read those documents to backfill issuer and
-      complete identity onto the same account, previewing conflicts before any write. It must not
+      complete identity, or correct a legacy source mask, onto the same account while previewing
+      conflicts before any write. A corrected source mask remains unrevealable and never acquires
+      invented digits. It must not
       infer identity from a filename, narration, balance or transaction description, and direct SQL
       is not an acceptance path.</p>
 

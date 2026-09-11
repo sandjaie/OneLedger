@@ -772,6 +772,127 @@ def test_apply_can_confirm_an_issuer_alias_when_the_source_identity_is_mask_only
     assert live.preview().json()["eligibleCount"] == 0
 
 
+def _configure_historical_card_mask(live: BackfillFixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE account
+                  SET account_type = 'credit_card', credit_limit = 1000
+                WHERE id = %s""",
+            (live.account_id,),
+        )
+        cur.execute(
+            """UPDATE account_identifier
+                  SET kind = 'card', masked_value = '****0000', visible_suffix = '0000',
+                      legacy_fingerprint = NULL, legacy_fingerprint_scheme = NULL
+                WHERE account_id = %s""",
+            (live.account_id,),
+        )
+        cur.execute(
+            """UPDATE statement_layout
+                  SET account_type = 'credit_card',
+                      metadata_patterns =
+                          (metadata_patterns - 'account_number') || %s::jsonb
+                WHERE id = %s""",
+            (
+                psycopg.types.json.Json(
+                    {"account_number_masked": r"Account\s*Number\s*[0-9]{6}([0-9]{4})"}
+                ),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+    live.completed(_statement("1234562468"))
+
+
+def test_apply_adopts_a_different_source_mask_for_its_historical_card_account(
+    live: BackfillFixture,
+) -> None:
+    _configure_historical_card_mask(live)
+    before = live.identity_state()
+
+    preview = live.preview().json()
+
+    assert preview["accounts"][0]["outcome"] == "mask_only"
+    assert preview["accounts"][0]["eligible"] is True
+    assert preview["eligibleCount"] == 1
+    response = live.apply(preview)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+    rows = live.identity_state()
+    assert len(rows) == 2
+    legacy, statement = rows
+    assert legacy[6] is False
+    assert statement[1:7] == (
+        "card",
+        "****2468",
+        None,
+        None,
+        "statement_backfill",
+        True,
+    )
+    assert statement[7] is not None
+    assert statement[8:10] == (LAYOUT_ID, 1)
+    assert live.preview().json()["eligibleCount"] == 0
+    assert before != rows
+
+
+def test_mask_adoption_refuses_when_another_account_already_uses_the_source_suffix(
+    live: BackfillFixture,
+) -> None:
+    _configure_historical_card_mask(live)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account
+                   (household_id, owner_person_id, institution_id, name, account_type,
+                    currency, country, opening_balance_date, credit_limit)
+                 VALUES (%s, %s, %s, 'proposal test competing card', 'credit_card',
+                         %s, 'ZZ', DATE '2026-01-01', 1000) RETURNING id""",
+            (live.household_id, live.person_id, live.institution_id, live.currency),
+        )
+        competing_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                 VALUES (%s, %s, 'card', '****2468', '2468', 'owner_entered')""",
+            (live.household_id, competing_id),
+        )
+    live.conn.commit()
+    before = live.identity_state()
+
+    preview = live.preview().json()
+
+    assert preview["accounts"][0]["outcome"] == "conflicting"
+    assert preview["accounts"][0]["documents"][0]["reason"] == "account_mismatch"
+    assert preview["eligibleCount"] == 0
+    response = live.apply(preview)
+    assert response.status_code == 409
+    assert live.identity_state() == before
+
+
+def test_mask_adoption_refuses_when_the_pdf_has_no_currency_evidence(
+    live: BackfillFixture,
+) -> None:
+    _configure_historical_card_mask(live)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = metadata_patterns - 'currency'
+                WHERE id = %s""",
+            (LAYOUT_ID,),
+        )
+    live.conn.commit()
+    before = live.identity_state()
+
+    preview = live.preview().json()
+
+    assert preview["accounts"][0]["outcome"] == "conflicting"
+    assert preview["accounts"][0]["documents"][0]["reason"] == "account_mismatch"
+    assert preview["eligibleCount"] == 0
+    response = live.apply(preview)
+    assert response.status_code == 409
+    assert live.identity_state() == before
+
+
 @pytest.mark.parametrize(
     ("source", "normalized"),
     [

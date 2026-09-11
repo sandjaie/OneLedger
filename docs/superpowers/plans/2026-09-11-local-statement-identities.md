@@ -370,6 +370,10 @@ the digest to reproduce exactly, refuses stale state or any disagreement for the
 atomically creates or updates aliases and identifiers. It replaces legacy hashes with complete local
 values only from authenticated source evidence and is idempotent. It does not gate the operation on
 an application key or backup; backups remain the owner's operational choice.
+For a historical source mask that differs from its account's legacy mask, completed-import
+provenance remains the selection boundary: adopt the captured mask only when issuer, account type
+and currency agree, no different account matches the suffix, and all usable documents for that
+account agree. Persist only the source mask and its provenance, never fabricated missing digits.
 
 **Tests/validation.** Fail first for no-preview/stale-state refusal, whole-account
 conflict rollback, cross-household denial, idempotence, concurrent changes and exact before/after
