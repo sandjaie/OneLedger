@@ -119,6 +119,21 @@ export type AccountIdentifierRow = {
 };
 
 /**
+ * AccountIdentityPreview
+ */
+export type AccountIdentityPreview = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    outcome: Outcome;
+    /**
+     * Documents
+     */
+    documents: Array<DocumentIdentityPreview>;
+};
+
+/**
  * AccountProposal
  */
 export type AccountProposal = {
@@ -1112,6 +1127,18 @@ export type DoctorSection = {
 };
 
 /**
+ * DocumentIdentityPreview
+ */
+export type DocumentIdentityPreview = {
+    /**
+     * Documentid
+     */
+    documentId: string;
+    outcome: Outcome;
+    reason: Reason;
+};
+
+/**
  * Finding
  */
 export type Finding = {
@@ -1252,6 +1279,65 @@ export type HouseholdUpdate = {
 };
 
 export type IdentifierKind = 'bank_account' | 'iban' | 'card';
+
+/**
+ * IdentityBackfillCounts
+ */
+export type IdentityBackfillCounts = {
+    /**
+     * Complete
+     */
+    complete: number;
+    /**
+     * Mask Only
+     */
+    mask_only: number;
+    /**
+     * Missing
+     */
+    missing: number;
+    /**
+     * Conflicting
+     */
+    conflicting: number;
+    /**
+     * Unsupported
+     */
+    unsupported: number;
+};
+
+/**
+ * IdentityBackfillPreview
+ */
+export type IdentityBackfillPreview = {
+    /**
+     * Accounts
+     */
+    accounts: Array<AccountIdentityPreview>;
+    counts: IdentityBackfillCounts;
+    /**
+     * Previewedat
+     */
+    previewedAt: string;
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+};
+
+/**
+ * IdentityBackfillPreviewRequest
+ */
+export type IdentityBackfillPreviewRequest = {
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+};
 
 /**
  * IdentityResolution
@@ -2043,6 +2129,8 @@ export type NetWorth = {
     missing: Array<MissingRate>;
 };
 
+export type Outcome = 'complete' | 'mask_only' | 'missing' | 'conflicting' | 'unsupported';
+
 /**
  * Pack
  */
@@ -2443,6 +2531,8 @@ export type RateUsed = {
      */
     carried: boolean;
 };
+
+export type Reason = 'complete_identity' | 'source_mask_only' | 'identity_missing' | 'capture_conflict' | 'institution_unresolved' | 'account_mismatch' | 'layout_provenance_missing' | 'layout_unsupported' | 'storage_unsupported' | 'source_path_invalid' | 'source_unreadable' | 'source_hash_mismatch' | 'password_required_or_invalid';
 
 /**
  * Reconciliation
@@ -4883,6 +4973,31 @@ export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses = {
 };
 
 export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponse = ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses[keyof ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses];
+
+export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostData = {
+    body: IdentityBackfillPreviewRequest;
+    path?: never;
+    query?: never;
+    url: '/account-identifiers/backfill/preview';
+};
+
+export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostError = PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostErrors[keyof PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostErrors];
+
+export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityBackfillPreview;
+};
+
+export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponse = PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponses[keyof PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

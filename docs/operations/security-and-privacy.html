@@ -396,6 +396,11 @@ Local private application data when a source supplies it:
 example enters source control, a fixture, screenshot or published report. Complete identifiers are
 stored as plaintext in local PostgreSQL so they remain readable without a separate application key.
 The database and its backups must therefore be treated as private financial data.</p>
+<p>Historical identity backfill previews are owner-only and read-only. They select stored PDFs only
+through completed import provenance, reject an original that fails its local path, symlink or
+SHA-256 check, and hold an optional PDF password in the request frame only. Their ordinary response
+contains safe UUIDs, fixed reason codes, counts and a stale-state digest; it contains no filename,
+storage path, statement capture, narration, amount, institution name or complete identifier.</p>
 <p><strong>Even a full application compromise must not provide a password, PIN, CVV or OTP capable of
 moving an asset.</strong> Read exposure is still serious, which is why ordinary views remain masked and
 reveal is an explicit owner-only operation.</p>

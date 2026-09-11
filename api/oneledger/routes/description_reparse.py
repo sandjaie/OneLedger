@@ -23,7 +23,7 @@ from ..db import connect
 from ..ingest import engine, normalize, reconcile
 from ..ingest.normalize import NormalizedRow
 from ..ingest.storage import _documents_root
-from ..ingest.words import ExtractionError
+from ..ingest.words import ExtractionError, PdfPasswordError
 from ..ingest.words import extract_pages as read_pdf_pages
 from . import layouts
 
@@ -121,10 +121,14 @@ def _verified_pages(
             temp.write(data)
         try:
             yield read_pdf_pages(temporary_path, password=password)
-        except ExtractionError:
+        except PdfPasswordError:
             raise HTTPException(
                 status_code=422,
                 detail="the stored original could not be parsed with the supplied password",
+            ) from None
+        except ExtractionError:
+            raise HTTPException(
+                status_code=422, detail="the stored original is malformed or unsupported"
             ) from None
     finally:
         if temporary_path is not None:
