@@ -18,6 +18,7 @@ from .routes import (
     classification_review,
     currencies,
     dashboard,
+    description_reparse,
     doctor,
     fx,
     household,
@@ -100,6 +101,7 @@ app.include_router(rules.router)
 app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
+app.include_router(description_reparse.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
 

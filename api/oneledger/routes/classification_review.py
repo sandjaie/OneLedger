@@ -93,6 +93,7 @@ class ReviewCandidate:
     is_excluded: bool
     classified_by: str
     classification_confidence: Decimal | None
+    is_reviewed: bool
     transfer_id: UUID | None
     is_split_parent: bool
 
@@ -156,7 +157,11 @@ class _GroupAccumulator:
 
 
 def _question(row: ReviewCandidate, answer: Classification) -> ReviewReason | None:
-    if row.classified_by == "user_manual" or row.transfer_id is not None or row.is_split_parent:
+    if (
+        (row.classified_by == "user_manual" and row.is_reviewed)
+        or row.transfer_id is not None
+        or row.is_split_parent
+    ):
         return None
     if answer.unresolved_reason == "conflicting highest-priority knowledge":
         return "conflicting_knowledge"
@@ -331,8 +336,9 @@ def _row(values: tuple[Any, ...]) -> ReviewCandidate:
         is_excluded=values[14],
         classified_by=values[15],
         classification_confidence=values[16],
-        transfer_id=values[17],
-        is_split_parent=values[18],
+        is_reviewed=values[17],
+        transfer_id=values[18],
+        is_split_parent=values[19],
     )
 
 
@@ -350,7 +356,6 @@ def review_groups(
     clauses = [
         "t.household_id = %s",
         "NOT t.is_reviewed",
-        "t.classified_by <> 'user_manual'",
         "t.transfer_id IS NULL",
         "NOT EXISTS (SELECT 1 FROM transaction child WHERE child.parent_transaction_id = t.id)",
     ]
@@ -370,7 +375,7 @@ def review_groups(
                        t.reference_raw, t.country, t.txn_type::text, t.category_id, c.name,
                        t.merchant_id, t.payment_method::text, t.is_excluded,
                        t.classified_by::text,
-                       t.classification_confidence, t.transfer_id, false
+                       t.classification_confidence, t.is_reviewed, t.transfer_id, false
                   FROM transaction t
                   JOIN account a ON a.id = t.account_id AND a.household_id = t.household_id
              LEFT JOIN category c ON c.id = t.category_id

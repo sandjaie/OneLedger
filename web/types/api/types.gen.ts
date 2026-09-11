@@ -960,6 +960,50 @@ export type DerivedChanges = {
 };
 
 /**
+ * DescriptionReparseRequest
+ */
+export type DescriptionReparseRequest = {
+    /**
+     * Layoutid
+     */
+    layoutId: string;
+    /**
+     * Apply
+     */
+    apply?: boolean;
+    /**
+     * Password
+     */
+    password?: string | null;
+};
+
+/**
+ * DescriptionReparseResult
+ */
+export type DescriptionReparseResult = {
+    /**
+     * Batchid
+     */
+    batchId: string;
+    /**
+     * Applied
+     */
+    applied: boolean;
+    /**
+     * Rowscompared
+     */
+    rowsCompared: number;
+    /**
+     * Descriptionschanged
+     */
+    descriptionsChanged: number;
+    /**
+     * Rowsqueuedforreview
+     */
+    rowsQueuedForReview: number;
+};
+
+/**
  * DoctorReport
  */
 export type DoctorReport = {
@@ -4530,6 +4574,36 @@ export type BackfillCardCyclesCardStatementsBackfillPostResponses = {
 };
 
 export type BackfillCardCyclesCardStatementsBackfillPostResponse = BackfillCardCyclesCardStatementsBackfillPostResponses[keyof BackfillCardCyclesCardStatementsBackfillPostResponses];
+
+export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostData = {
+    body: DescriptionReparseRequest;
+    path: {
+        /**
+         * Batch Id
+         */
+        batch_id: string;
+    };
+    query?: never;
+    url: '/import/{batch_id}/reparse-descriptions';
+};
+
+export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostError = ReparseDescriptionsImportBatchIdReparseDescriptionsPostErrors[keyof ReparseDescriptionsImportBatchIdReparseDescriptionsPostErrors];
+
+export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DescriptionReparseResult;
+};
+
+export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponse = ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses[keyof ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

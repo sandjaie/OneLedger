@@ -389,7 +389,7 @@ def preview(
             else:
                 updated_at, source_key, transfer_id, current = row
                 proposed = _proposed_state(current, requested.changes)
-                if current["classified_by"] == "user_manual":
+                if current["classified_by"] == "user_manual" and current["is_reviewed"]:
                     refusal = "manual classification is protected"
                 elif transfer_id is not None:
                     refusal = "confirmed transfer leg is protected"

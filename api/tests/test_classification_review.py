@@ -44,6 +44,7 @@ def candidate(**changes: object) -> ReviewCandidate:
         "is_excluded": False,
         "classified_by": "unclassified",
         "classification_confidence": Decimal("0.000"),
+        "is_reviewed": True,
         "transfer_id": None,
         "is_split_parent": False,
     }
@@ -273,6 +274,18 @@ def test_manual_overrides_linked_legs_and_split_parents_are_not_questions() -> N
     ]
 
     assert build_review_groups(HOUSEHOLD_ID, rows, Knowledge(), category_names={}) == []
+
+
+def test_a_manual_row_explicitly_requeued_after_description_repair_is_a_question() -> None:
+    [group] = build_review_groups(
+        HOUSEHOLD_ID,
+        [candidate(classified_by="user_manual", is_reviewed=False)],
+        Knowledge(),
+        category_names={},
+    )
+
+    assert group.reason == "unclassified"
+    assert group.currentClassifiedBy == "user_manual"
 
 
 def test_group_identity_separates_account_direction_and_question() -> None:
