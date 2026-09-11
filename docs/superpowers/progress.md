@@ -55,7 +55,7 @@ request.
 | Shared frame and Overview | `feature/product-mock-overview` | Delivered — Screen set 01 now supplies the persistent frame and Overview composition; unsupported mock figures and controls remain absent rather than invented | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
 | Accounts | `feature/product-mock-accounts` | Delivered — the real inventory now follows the primary Accounts artboard with compact responsive cards while preserving class-then-country grouping and every owner action | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
 | Transactions | `feature/product-mock-transactions` | Delivered — the real ledger now follows the primary Transactions artboard with compact filters and dense rows while preserving manual entry, advanced filtering, transfer tools, inline category and note edits, frozen FX evidence, and pagination | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
-| Statement import | `feature/product-mock-import` | Next | [plan](plans/2026-09-11-product-mock-ui.md) |
+| Statement import | `feature/product-mock-import` | Delivered — the guarded PDF workflow now follows the primary Statement import artboard with a compact provenance-first header, functional drop workspace, and per-file progress cards while retaining detection, password, proposal, reconciliation, staging, and review behavior | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
 
 ## Phase 1 · slice 1.8 — the import asks
 
