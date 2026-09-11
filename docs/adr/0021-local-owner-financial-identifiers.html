@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ADR-0021 — Encrypted owner financial identifiers — OneLedger</title>
+  <title>ADR-0021 — Local owner financial identifiers — OneLedger</title>
   <style>
     :root { color-scheme: light; --ink: #1b211e; --muted: #5e6862; --line: #d5dbd4; --accent: #0b6b58; }
     * { box-sizing: border-box; }
@@ -21,7 +21,7 @@
 <body>
   <header><a href="./index.html">OneLedger architecture decisions</a></header>
   <main>
-    <h1>ADR-0021 — Encrypted owner financial identifiers</h1>
+    <h1>ADR-0021 — Local owner financial identifiers</h1>
     <p class="meta"><strong>Status:</strong> Accepted — owner direction, 11 September 2026 ·
       <strong>Refines:</strong> <a href="./0012-statement-layouts-as-data.html">ADR-0012</a>,
       <a href="./0019-separate-local-production-stack.html">ADR-0019</a> ·
@@ -38,24 +38,22 @@
     <p>The policy that must remain absolute is different: real financial data, identifiers,
       credentials, statement text and documents never enter source control, fixtures, screenshots
       or published evidence. Application data may live in the owner's database and document store.
-      Local-first deployment does not justify plaintext backups or broad API disclosure, so a
-      revealable identifier still needs a deliberate storage and access boundary.</p>
+      For this owner-controlled local deployment, application-level encryption creates a more
+      important risk: loss of a separate key could make the owner's own financial history
+      unreadable.</p>
 
     <h2>Decision</h2>
-    <p><strong>A source identifier is private application data, encrypted at rest and revealable to
-      the authenticated owner.</strong> When a supported PDF states a complete bank-account, IBAN or
-      card identifier, the service normalises it, stores an authenticated-encryption envelope and
-      derives a separate keyed fingerprint for exact matching. The ordinary account representation
-      remains masked. An explicit owner-only reveal operation returns the decrypted value with
-      no-store cache controls; the browser keeps it only in the active view.</p>
-    <p>Encryption and matching use independent keys from the private environment. Development reads
-      them from <code>.env</code>; the isolated local-production stack reads them from
-      <code>.env.production</code> and generates independent values on initialization. Empty
-      placeholders and setup instructions may be committed; key values may not. Envelopes carry a
-      key version so rotation can be planned without changing account identity. Authenticated
-      encryption binds the ciphertext to its household, account, identifier and kind so an envelope
-      cannot be transplanted to another row. It protects a database dump without its environment;
-      it cannot protect a machine compromised while the application and its keys are running.</p>
+    <p><strong>A complete source identifier is private application data stored as plaintext in the
+      owner's local PostgreSQL database.</strong> When a supported PDF states a complete bank-account,
+      IBAN or card identifier, the service retains its source spelling and stores a kind-normalized
+      value for exact matching. OneLedger introduces no application encryption key, key rotation
+      workflow or key-dependent startup. Losing an environment file must never make the ledger
+      unreadable.</p>
+    <p>The ordinary account representation remains masked. An explicit eye action in the existing
+      owner session returns one stored full value with no-store cache controls; it needs no second
+      password and the browser keeps it only in the active view. The database and its backups can
+      therefore contain readable identifiers. Operating-system disk and backup encryption remain an
+      optional infrastructure choice rather than an application requirement.</p>
     <p>A PDF that prints only a mask produces only a mask. The application never invents missing
       digits and the reveal control explains that the complete value was not supplied. A mask may
       resolve an existing account automatically only when institution, account type and visible
@@ -66,7 +64,7 @@
       issuer branding from the PDF, and household/public alias data resolves that evidence to an
       institution row. The filename is never evidence. A new account at a known institution is a
       new account UUID under the existing institution UUID; the institution is not duplicated.</p>
-    <p>For a complete identifier, its keyed fingerprint is the primary account-resolution signal.
+    <p>For a complete identifier, its kind-normalized stored value is the primary account-resolution signal.
       For a source mask, the unique composite above is a weaker but sufficient signal. A new or
       conflicting institution/account is shown as one statement-derived confirmation before any
       record is created or enriched. Editable institution, type, currency and country fields let
@@ -74,7 +72,7 @@
       layout rather than replaced with unrelated browser text.</p>
     <p>Existing imported documents already identify their account, layout and source through ledger
       provenance. A guarded application operation may re-read those documents to backfill issuer and
-      encrypted identity onto the same account, previewing conflicts before any write. It must not
+      complete identity onto the same account, previewing conflicts before any write. It must not
       infer identity from a filename, narration, balance or transaction description, and direct SQL
       is not an acceptance path.</p>
 
@@ -86,8 +84,8 @@
       that time. Once that layout is supported, the same institution, matching and reveal boundary
       applies without a schema redesign.</p>
     <p>The detailed implementation boundary is the
-      <a href="../superpowers/specs/2026-09-11-encrypted-statement-identities.md">encrypted
-      statement identities specification</a>.</p>
+      <a href="../superpowers/specs/2026-09-11-local-statement-identities.md">local statement
+      identities specification</a>.</p>
 
     <h2>Consequences and rejected alternatives</h2>
     <p>The account schema gains a separately scoped identifier store and institution aliases. The
@@ -95,8 +93,9 @@
       the implementation; the earlier slice 1.8 mask-only contract is superseded where it conflicts
       with this decision. Logs, ordinary payloads, URLs, analytics and browser persistence remain
       identifier-free. Synthetic tests include formatted and Unicode digit variants.</p>
-    <p><strong>Store plaintext identifiers.</strong> Rejected because every database dump or accidental
-      broad query would expose immediately usable numbers. <strong>Re-read the source PDF for every
+    <p><strong>Application-level encryption.</strong> Rejected because it adds key generation, storage,
+      rotation, recovery and deployment failure modes to a single-owner local application; losing
+      the key could destroy practical access to the ledger. <strong>Re-read the source PDF for every
       reveal.</strong> Rejected because reveal would depend on a retained document, its password and
       the continued availability of an old layout. <strong>Keep mask and hash only.</strong> Rejected
       because it prevents the owner from viewing source data the application exists to manage.</p>

@@ -178,6 +178,10 @@ CREATE UNIQUE INDEX idx_account_number_hash
   ON account (household_id, account_number_hash) WHERE account_number_hash IS NOT NULL;
 ```
 
+V28 copies these three legacy identity columns into `account_identifier`. They remain on
+`account` only until V29 moves every application reader/writer and drops them; no migration claims
+that a legacy digest contains recoverable plaintext.
+
 ---
 
 ## `0004`
@@ -673,6 +677,156 @@ How often a layout was used is counted from `import_batch.statement_layout_id` a
 `started_at`. That count is right for every batch ever staged, where a counter maintained from
 here on would start short by every import before it. The M2 spec's §7 item 16 records the
 decision.
+
+---
+
+## `V28` (applied)
+
+### Institution aliases and account identifiers
+
+Applied as `db/migrations/V28__institution_and_account_identifiers.sql`. Institution and account
+UUIDs remain canonical. The alias relation holds exact normalized PDF branding; the identifier
+relation separates the full local source value, deterministic matching and safe display. V28 copies
+legacy evidence into the new relation but cannot manufacture a full value from a digest or missing
+digits from a mask.
+
+```sql
+CREATE TABLE institution_alias (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id     UUID REFERENCES household(id),
+  institution_id   UUID NOT NULL REFERENCES institution(id) ON DELETE RESTRICT,
+  alias            TEXT NOT NULL,
+  alias_normalized TEXT NOT NULL,
+  country          CHAR(2) NOT NULL,
+  provenance       TEXT NOT NULL,       -- public_seed | owner_confirmed
+  is_active        BOOLEAN NOT NULL DEFAULT true,
+  deactivated_at   TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT institution_alias_text_is_bounded CHECK (
+    length(alias) BETWEEN 1 AND 200 AND octet_length(alias) <= 800
+    AND length(alias_normalized) BETWEEN 1 AND 200
+    AND octet_length(alias_normalized) <= 800),
+  CONSTRAINT institution_alias_provenance_is_scoped CHECK (
+    (household_id IS NULL AND provenance = 'public_seed')
+    OR (household_id IS NOT NULL AND provenance = 'owner_confirmed')),
+  CONSTRAINT institution_alias_lifecycle_agrees CHECK (
+    (is_active AND deactivated_at IS NULL)
+    OR (NOT is_active AND deactivated_at IS NOT NULL))
+);
+
+CREATE UNIQUE INDEX idx_institution_alias_one_active_spelling
+  ON institution_alias (household_id, institution_id, country, alias_normalized)
+  NULLS NOT DISTINCT WHERE is_active;
+CREATE INDEX idx_institution_alias_lookup
+  ON institution_alias (country, alias_normalized) WHERE is_active;
+
+CREATE TABLE account_identifier (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id            UUID NOT NULL REFERENCES household(id),
+  account_id              UUID NOT NULL,
+  kind                    TEXT NOT NULL,       -- bank_account | iban | card
+  masked_value            TEXT NOT NULL,
+  visible_suffix          TEXT,
+
+  full_value                TEXT,
+  normalized_value          TEXT,
+  legacy_fingerprint        BYTEA,
+  legacy_fingerprint_scheme TEXT,              -- legacy_sha256_v1
+
+  provenance              TEXT NOT NULL,
+                            -- legacy_migration | owner_entered | statement | statement_backfill
+  source_document_id      UUID,
+  source_sha256           TEXT,
+  source_layout_id        UUID,
+  source_layout_version   SMALLINT,
+  source_capture_key      TEXT,
+
+  is_active               BOOLEAN NOT NULL DEFAULT true,
+  deactivated_at          TIMESTAMPTZ,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT fk_account_identifier_account_household
+    FOREIGN KEY (household_id, account_id)
+    REFERENCES account(household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_account_identifier_document_household
+    FOREIGN KEY (household_id, source_document_id)
+    REFERENCES document(household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_account_identifier_layout_household
+    FOREIGN KEY (household_id, source_layout_id)
+    REFERENCES statement_layout(household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT account_identifier_kind_is_known CHECK (
+    kind IN ('bank_account', 'iban', 'card')),
+  CONSTRAINT account_identifier_mask_is_bounded CHECK (
+    length(masked_value) BETWEEN 1 AND 64 AND octet_length(masked_value) <= 256
+    AND (visible_suffix IS NULL OR (
+      length(visible_suffix) BETWEEN 1 AND 8 AND octet_length(visible_suffix) <= 32))),
+  CONSTRAINT account_identifier_complete_value_is_complete CHECK (
+    num_nonnulls(full_value, normalized_value) IN (0, 2)
+    AND (full_value IS NULL OR (
+      length(full_value) BETWEEN 1 AND 128 AND octet_length(full_value) <= 512
+      AND normalized_value IS NOT NULL
+      AND length(normalized_value) BETWEEN 1 AND 128
+      AND octet_length(normalized_value) <= 512))),
+  CONSTRAINT account_identifier_legacy_fingerprint_is_complete CHECK (
+    num_nonnulls(legacy_fingerprint, legacy_fingerprint_scheme) IN (0, 2)
+    AND (legacy_fingerprint IS NULL OR (
+      octet_length(legacy_fingerprint) = 32
+      AND legacy_fingerprint_scheme = 'legacy_sha256_v1'
+      AND provenance = 'legacy_migration'))),
+  CONSTRAINT account_identifier_identity_evidence_is_distinct CHECK (
+    normalized_value IS NULL OR legacy_fingerprint IS NULL),
+  CONSTRAINT account_identifier_provenance_is_complete CHECK (
+    (provenance = 'legacy_migration'
+      AND full_value IS NULL AND normalized_value IS NULL
+      AND source_document_id IS NULL AND source_sha256 IS NULL
+      AND source_layout_id IS NULL AND source_layout_version IS NULL
+      AND source_capture_key IS NULL)
+    OR (provenance = 'owner_entered'
+      AND source_document_id IS NULL AND source_sha256 IS NULL
+      AND source_layout_id IS NULL AND source_layout_version IS NULL
+      AND source_capture_key IS NULL)
+    OR (provenance = 'statement'
+      AND source_sha256 IS NOT NULL AND source_sha256 ~ '^[[:xdigit:]]{64}$'
+      AND source_layout_id IS NOT NULL
+      AND source_layout_version IS NOT NULL AND source_layout_version > 0
+      AND source_capture_key IS NOT NULL
+      AND length(source_capture_key) BETWEEN 1 AND 80)
+    OR (provenance = 'statement_backfill'
+      AND source_document_id IS NOT NULL
+      AND source_sha256 IS NOT NULL AND source_sha256 ~ '^[[:xdigit:]]{64}$'
+      AND source_layout_id IS NOT NULL
+      AND source_layout_version IS NOT NULL AND source_layout_version > 0
+      AND source_capture_key IS NOT NULL
+      AND length(source_capture_key) BETWEEN 1 AND 80)),
+  CONSTRAINT account_identifier_lifecycle_agrees CHECK (
+    (is_active AND deactivated_at IS NULL)
+    OR (NOT is_active AND deactivated_at IS NOT NULL))
+);
+
+CREATE UNIQUE INDEX idx_account_identifier_active_normalized_value
+  ON account_identifier (household_id, kind, normalized_value)
+  WHERE is_active AND normalized_value IS NOT NULL;
+CREATE INDEX idx_account_identifier_account
+  ON account_identifier (household_id, account_id, is_active);
+CREATE INDEX idx_account_identifier_mask_fallback
+  ON account_identifier (household_id, kind, visible_suffix) WHERE is_active;
+
+ALTER TABLE account
+  ADD CONSTRAINT account_legacy_identity_is_migratable CHECK (
+    account_number_hash IS NULL OR (
+      account_number_masked IS NOT NULL
+      AND account_number_hash ~ '^[[:xdigit:]]{64}$'));
+```
+
+V28 also gives `document` and `statement_layout` household-leading candidate keys for the two
+composite source foreign keys. `institution_alias` uses the same shared-read/private-write RLS
+shape as `institution`; `account_identifier` uses ordinary household isolation. A trigger enforces
+the shared/private institution alternative that a composite foreign key cannot express, and
+institution tenancy becomes immutable so that scope cannot be invalidated later. The validated
+legacy-account constraint makes V28 fail atomically rather than silently omit a pre-existing hash
+whose display mask is absent or whose digest shape is unknown.
 
 ---
 
