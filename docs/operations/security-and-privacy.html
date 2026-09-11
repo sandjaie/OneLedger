@@ -592,17 +592,17 @@ logs because callback request targets contain authorization codes. Use
 <p>Statements must be matched to accounts and the owner must be able to inspect the source identity.
 Under ADR-0021, a complete identifier retains its source value and a normalized exact-match value
 in the local database. A mask remains the ordinary display value.</p>
-<pre><code class="language-python"># Conceptual `account_identifier` boundary; see schema.md.
-full_value       = &quot;ABCD 0000 4821&quot;   # local private application data
-normalised_value = normalise(full_value)  # exact statement matching
-masked_value     = &quot;XXXX4821&quot;         # ordinary display
-
-def normalise(n: str) -&gt; str:
-    return re.sub(r&quot;[\s\-]&quot;, &quot;&quot;, n).upper()
-</code></pre>
+<p><code>api/oneledger/identifiers.py</code> is the sole value boundary. It validates each identifier
+kind, retains the trimmed source spelling when complete, converts Unicode decimal digits to ASCII,
+removes permitted visual separators, uppercases ASCII letters for matching, and derives only the
+safe mask and visible suffix from explicitly declared mask-only evidence. Capture completeness is
+not guessed from letters such as <code>X</code>, because those are also legal identifier characters.
+General serialization of a complete value exposes only its safe presentation; its value object,
+representation and validation errors do not render the complete identifier. The module performs no
+database I/O and reads no environment state.</p>
 <p>No identifier encryption key exists. Ordinary account payloads return only the mask; an explicit
 owner-authenticated, no-store reveal may return one complete stored source identifier. A source that
-printed only a mask remains mask-only.</p>
+printed only a mask remains mask-only; OneLedger never manufactures its missing characters.</p>
 <p>The same treatment applies to PAN, Emirates ID and passport numbers — last four for human
 recognition, nothing more.</p>
 <hr>
