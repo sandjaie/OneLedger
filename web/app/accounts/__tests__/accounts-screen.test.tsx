@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
@@ -87,6 +88,42 @@ afterEach(() => {
 });
 
 describe("Accounts", () => {
+  it("presents the inventory as the compact account-card grid from the primary artboard", () => {
+    render(<AccountsScreen {...props} />);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Accounts" })).toBeTruthy();
+    expect(screen.getByText("2 active accounts · latest balance 15 Jan 2026")).toBeTruthy();
+
+    const assetGroup = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group");
+    expect(assetGroup?.querySelector("tbody")?.classList.contains("account-card-grid")).toBe(true);
+    expect(assetGroup?.querySelector("tbody tr")?.classList.contains("account-card")).toBe(true);
+  });
+
+  it("labels the newest balance date without implying that every account was synced", () => {
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[
+          savings,
+          account({
+            id: "acct-older",
+            name: "Older balance",
+            currentBalanceAsOf: "2025-12-01T00:00:00Z",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("2 active accounts · latest balance 15 Jan 2026")).toBeTruthy();
+    expect(screen.queryByText(/last synced/i)).toBeNull();
+  });
+
+  it("scopes the card-table display override to account groups", () => {
+    const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
+    expect(css).not.toMatch(/(?:^|\n)\.account-table\s*\{\s*display:\s*block/);
+    expect(css).toMatch(/\.account-group \.account-table\s*\{\s*display:\s*block/);
+  });
+
   it("groups by class then country, as UI §6 specifies over the artboard", () => {
     render(<AccountsScreen {...props} />);
     expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent))
