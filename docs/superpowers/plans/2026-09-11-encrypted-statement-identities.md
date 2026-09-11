@@ -1,0 +1,387 @@
+# Encrypted statement identities implementation plan
+
+> **For the implementation agent:** Execute this plan sequentially in the active checkout. Use
+> `superpowers:test-driven-development` for every behavior change and
+> `superpowers:verification-before-completion` before claiming a task complete.
+
+**Goal:** Make each supported PDF identify its institution and account, reuse exact existing
+records, confirm genuinely new identities once, and let the owner reveal source-complete account
+identifiers without exposing them through ordinary application surfaces.
+
+**Architecture:** UUIDs remain the canonical institution/account identities. PDF evidence resolves
+through household-aware institution aliases and a separate encrypted `account_identifier` store.
+AES-256-GCM protects revealable values; an independently keyed HMAC-SHA-256 fingerprint performs
+exact matching; mask-only evidence uses a deliberately narrower unique-candidate fallback. The
+approved behavior and security boundary live in the [spec](../specs/2026-09-11-encrypted-statement-identities.md)
+and [ADR-0021](../../adr/0021-encrypted-owner-financial-identifiers.html); this document only maps
+that design into reviewable tasks.
+
+**Stack:** PostgreSQL 18/Flyway, Python 3.14/FastAPI/Pydantic/psycopg/cryptography, Next.js/React/
+TypeScript, pytest and Vitest.
+
+## Delivery and dependency map
+
+All tasks use `/Users/sandjaieravi/dev/OneLedger`, branch from current `develop`, target `develop`,
+and receive one focused review after `/verify` and before their first push. The orchestrator owns
+branch switching, rebases immediately before push and merge, and does not create worktrees. The
+next free migration number is V28 today; if another migration lands first, renumber before writing
+the test. PR titles carry `[P1.8]`.
+
+| Task | Branch | Forecast production / test lines | Depends on |
+| --- | --- | ---: | --- |
+| 8c1 — identifier relations | `feature/p1-8c1-identifier-schema` | 260 / 360 | none |
+| 8c2 — cryptographic boundary | `feature/p1-8c2-identifier-crypto` | 230 / 380 | 8c1 |
+| 8c3 — account identifier API | `feature/p1-8c3-account-identifier-api` | 540 / 900 | 8c2 |
+| 8c4 — account reveal screen | `feature/p1-8c4-account-reveal-screen` | 180 / 270 | 8c3 |
+| 8c5 — PDF institution resolution | `feature/p1-8c5-statement-institution-resolution` | 390 / 650 | 8c3 |
+| 8c6 — PDF account resolution | `feature/p1-8c6-statement-account-resolution` | 500 / 800 | 8c5 |
+| 8c7 — import confirmation UI | `feature/p1-8c7-import-identity-confirmation` | 300 / 480 | 8c6 |
+| 8c8 — identity backfill preview | `feature/p1-8c8-identity-backfill-preview` | 280 / 440 | 8c6 |
+| 8c9 — guarded identity backfill | `feature/p1-8c9-identity-backfill-apply` | 260 / 460 | 8c8 |
+| 8c10 — transition cleanup | `fix/p1-8c10-identity-contract-cleanup` | 170 / 280 | 8c4, 8c7, 8c9 |
+
+No forecast reaches the 800 production / 1,600 combined soft budget. If discovery raises either
+estimate above its budget, split before implementation and update this plan plus `progress.md`.
+Configuration, documentation and generated API types do not count toward the size gate.
+
+## Cross-task contracts
+
+- Identifier kinds are `bank_account`, `iban` and `card`; kinds do not match across one another.
+- A complete identifier is normalised by its kind, HMACed for lookup, and encrypted from its
+  source spelling. A source mask never acquires invented digits, ciphertext or a fingerprint.
+- `ACCOUNT_IDENTIFIER_ENCRYPTION_KEY_V1` and `ACCOUNT_IDENTIFIER_FINGERPRINT_KEY_V1` are independent
+  64-hex-character environment values decoded to 32 bytes. Envelopes record scheme/key version;
+  AES-GCM uses a fresh 12-byte nonce and AAD containing household, account, identifier and kind.
+- Institution text is Unicode-NFKC/casefolded, surrounding/collapsed whitespace is normalised,
+  and matching is exact after that transform. No filename, narration, amount or display name is
+  evidence. Multiple scoped matches are `ambiguous`, never resolved by score or row order.
+- Ordinary responses carry only identifier UUID, kind, safe mask, `canReveal` and active state.
+  Plaintext is permitted only in the two owner-only reveal responses, both with
+  `Cache-Control: no-store`; it is forbidden from errors, logs and serialized model reprs.
+- All new financial routes use `require_owner()` and the existing Origin protection. SQL joins,
+  composite references and RLS enforce household ownership even when application checks regress.
+- Money remains `NUMERIC(20,4)`/`Decimal`/decimal string. No report query changes, and no LLM call is
+  introduced. Real documents, values, screenshots and extracted text never enter a branch.
+
+---
+
+## Task 8c1 — identifier relations
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c1-identifier-schema`  
+**Base and PR target:** `develop`  
+**Migration:** `V28__institution_and_account_identifiers.sql`. **Depends on:** nothing unmerged.
+
+**Outcome.** PostgreSQL holds household-aware issuer aliases and multiple typed identifiers per
+account without pretending legacy hashes or masks contain recoverable plaintext.
+
+**Files.** Create V28 and `db/tests/0025_account_identifiers.sql`; update
+`docs/superpowers/schema.md` and `docs/design/data-model.html`.
+
+**Schema contract.** `institution_alias` carries UUID, nullable household UUID, institution UUID,
+original bounded public alias, normalised alias, country, provenance, active/deactivated dates and
+timestamps. `account_identifier` carries UUID, household/account UUIDs, kind, mask, visible suffix,
+nullable ciphertext/nonce/scheme/key version, nullable fingerprint/scheme, nullable source document,
+source SHA-256, layout/version/capture provenance, active/deactivated dates and timestamps. Composite
+foreign keys and scope checks prevent
+cross-household parents. Active fingerprint uniqueness is `(household, kind, scheme, fingerprint)`;
+mask-only rows are intentionally non-unique. Ciphertext envelope columns and fingerprint columns
+are each all-present or all-null. Both tables have RLS; shared aliases are read-only to households.
+
+**Migration behavior.** Copy each legacy account mask/hash into typed rows: valid legacy hashes are
+`legacy_sha256_v1` fingerprints with no ciphertext; hashless values remain mask-only; cards become
+`card`, other account masks become `bank_account`, and `iban_masked` becomes a separate `iban` row.
+Keep the three legacy columns until 8c3. Do not synthesize ciphertext, fingerprints or suffixes.
+
+**Tests/validation.** Fail first on RLS, parent scope, envelope completeness, active exact-identity
+collision, allowed duplicate masks, multi-kind accounts, deactivation and lossless legacy copying.
+Run `scripts/test-db.sh reset`, `scripts/test-db.sh test`, then `/verify`.
+
+**Acceptance.** An upgraded copy preserves every account and safe mask while exposing no new full
+value; a fresh database enforces the same ownership and uniqueness rules.
+
+## Task 8c2 — cryptographic boundary
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c2-identifier-crypto`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c1 merged.
+
+**Outcome.** One small service is the sole normalise/mask/fingerprint/encrypt/decrypt boundary and
+both local stacks supply independent private keys.
+
+**Files.** Create `api/oneledger/identifiers.py` and `api/tests/test_identifiers.py`; modify
+`api/pyproject.toml`, `api/uv.lock`, `.env.example`, `.env.production.example`,
+`scripts/production-stack.sh`, `docker-compose.yml`, `docker-compose.production.yml`, and
+`api/tests/test_production_stack.py`; update the environment section of
+`docs/operations/security-and-privacy.html`.
+
+**Interfaces.** Typed value objects distinguish complete from masked captures. The service accepts
+an identifier kind plus source spelling, returns safe storage fields, and decrypts only after the
+caller supplies all four AAD UUID/kind values. Add `cryptography` as a direct dependency. Missing,
+blank, malformed, unknown-version or authentication-failed keys raise one generic service error
+that never contains inputs, key material or ciphertext.
+
+**Tests/validation.** Fail first for kind-specific normalisation; ASCII, formatted and Unicode
+digits; round-trip source spelling; different nonces for equal values; stable HMAC only under the
+same key/kind; AAD transplant failure; mask-only refusal; key/version failures; safe repr/errors;
+and independent generated development/production values not reaching the web container. Run the
+focused pytest files, production compose-config test, lock check, then `/verify`.
+
+**Acceptance.** Synthetic full values encrypt and match deterministically while database-like
+output contains no plaintext and a wrong key or moved envelope fails closed.
+
+## Task 8c3 — account identifier API
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c3-account-identifier-api`  
+**Base and PR target:** `develop`  
+**Migration:** `V29__retire_legacy_account_identity_columns.sql`. **Depends on:** 8c2 merged.
+
+**Outcome.** Account create/update/list use `account_identifier` as the only identity store, and an
+owner can deliberately reveal one source-complete identifier.
+
+**Files.** Modify `api/oneledger/routes/{accounts,ingest}.py`,
+`api/tests/{test_accounts,test_ingest_route_live,test_account_from_statement_live}.py` and
+`scripts/openapi.py`; create V29 and `db/tests/0026_retired_account_identity_columns.sql`;
+regenerate `web/types/api/{types.gen,index}.ts`; update API, schema/data-model and security docs.
+
+**API contract.** `AccountRow.identifiers` is a list of `{id, kind, masked, canReveal, isActive}`.
+Temporarily retain `accountNumberMasked` derived from the preferred active identifier. Existing
+`accountNumber` input is stored with `owner_entered` provenance through the shared service.
+`POST /accounts/{accountId}/identifiers/{identifierId}/reveal` returns the discriminated union
+`revealed(value, kind)` or `unavailable(source_mask_only)`, always `no-store`.
+
+**Transition.** Account routes and the importer's existing resolver/confirmation path stop touching
+legacy columns before V29 drops `account_number_masked`, `account_number_hash`, `iban_masked`, their
+index and V27 constraint. This task preserves the current exact-match/proposal semantics; 8c5–8c6
+change the evidence and decisions. Legacy fingerprints remain readable for later backfill; new
+complete writes use HMAC v1 plus an encrypted envelope. Database errors map to stable service-owned
+messages.
+
+**Tests/validation.** Fail first for create/update/statement-confirmation encryption, existing parse
+matching after the column drop, safe list serialization, duplicate exact identity, multi-kind and
+mask-only rows, reveal/no-store, 401/403/404 cross-household paths, wrong-key refusal, and raw plus
+serialized Unicode/formatted leak scans. Run focused account/ingest/SQL tests, API type generation
+and check, then `/verify`.
+
+**Acceptance.** Account APIs retain current behavior, ordinary reads never disclose full values,
+and only the authenticated single-identifier reveal returns a decryptable source value.
+
+## Task 8c4 — account reveal screen
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c4-account-reveal-screen`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c3 merged.
+
+**Outcome.** Every account identifier is masked by default and has an accessible eye control when
+its complete source value is available.
+
+**Files.** Modify `web/app/accounts/accounts-screen.tsx`, its test and relevant account styles.
+
+**Behavior.** The eye posts to the one-identifier reveal route, replaces only that rendered mask,
+toggles closed without a request, and clears plaintext on account/card unmount, edit transition,
+navigation and failure. Mask-only rows disable the eye and explain that the statement supplied no
+complete value. No URL, storage, form default, analytics or screen-wide state receives plaintext.
+
+**Tests/validation.** Fail first for masked default, deliberate reveal, no prefetch, close/cleanup,
+one identifier not revealing siblings, unavailable/error states, keyboard name/focus and absence
+from browser persistence. Run the focused Vitest file, `npm --prefix web run build`, then `/verify`.
+
+**Acceptance.** The owner can inspect and re-mask a complete synthetic identifier; a mask-only card
+honestly remains mask-only.
+
+## Task 8c5 — PDF institution resolution
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c5-statement-institution-resolution`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c3 merged.
+
+**Outcome.** The four supported layouts extract issuer branding from page-one PDF content and map
+it exactly to a permitted institution UUID or an explicit confirmation state.
+
+**Files.** Create `api/oneledger/institutions.py` and its tests; modify
+`api/oneledger/{ingest/engine.py,routes/layouts.py,routes/ingest.py}` and focused tests; update the
+four `db/seeds/*-layout.json` files, `db/seeds/README.md` and statement-ingestion/API docs.
+
+**Contract.** Add reserved capture `institution_name` with exactly one group. Resolution considers
+canonical name, short name and active shared/household aliases after the cross-task normalisation,
+then country when evidence supplies it. Return exactly `matched`, `needs_confirmation` or
+`ambiguous` with public institution candidates. `statement_layout.institution_id` may remain layout
+catalogue metadata but cannot decide the statement's institution. This task returns prospective
+reuse/create/ambiguous evidence without writing; 8c6 owns atomic confirmation.
+
+**Tests/validation.** Fail first for filename independence, canonical/short/alias matches, country
+scoping, shared plus household visibility, ambiguity/no-write, no-match proposal and
+literal-private-data rejection in seeds. Each current seed must validate and capture only generic
+public issuer text. Run focused layout/ingest tests and `/verify`.
+
+**Acceptance.** Synthetic versions of all four formats derive their institution from PDF text;
+renaming a file changes nothing and conflicting issuer evidence never auto-selects.
+
+## Task 8c6 — PDF account resolution
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c6-statement-account-resolution`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c5 merged.
+
+**Outcome.** A complete or masked statement identity reuses one exact account, proposes a distinct
+new account under an existing institution, or asks on ambiguity/conflict.
+
+**Files.** Create `api/oneledger/account_resolution.py` and its tests; modify
+`api/oneledger/routes/ingest.py`, `api/tests/{test_ingest_engine,test_ingest_route_live,
+test_account_from_statement_live}.py`; regenerate API types and update API/ingestion docs.
+
+**API contract.** `ParseResponse.identityResolution` distinguishes `matched`,
+`needs_confirmation`, `ambiguous` and includes safe institution/account actions (`reuse`, `enrich`,
+`create`, `choose`), candidates and masks. Complete evidence matches active HMAC first, then the
+temporary legacy digest. Mask fallback requires one active account with the resolved institution,
+captured account type and visible suffix. Type/currency/issuer conflicts write nothing.
+`POST /parse/account` re-reads the PDF and accepts corrected non-identity fields plus an explicit
+institution reuse/create decision; it never accepts a replacement identifier. Because confirmation
+precedes staging, its identifier records the source content hash and layout/version/capture key with
+a null document UUID; a later successful stage attaches the household document UUID only when that
+hash and capture provenance agree. Institution/alias, account and identifier reuse or creation is
+one database transaction; corrected reuse and a new institution plus its first alias are tested
+here. `POST /parse/identifier/reveal` is the separate owner-authenticated multipart preview
+reveal. It
+re-runs layout detection/extraction against the submitted PDF/password and returns only
+`revealed(value, kind)` or `unavailable(source_mask_only)` with `no-store`; it accepts no identifier
+text, persists nothing and is never confirmation input.
+
+**Tests/validation.** Fail first for exact full match, unique/zero/multiple mask results, same bank
+savings versus new current account, reuse/enrichment without duplicate rows, conflicting selected
+account, atomic confirmation, concurrent duplicate refusal, unsupported layout and raw/serialized
+privacy; preview-reveal authentication/origin/no-store/no-write behavior; and reveal refusal when
+layout or capture is ambiguous. Preserve reconciliation/staging gates. Run focused unit/live tests,
+generated-types check, then `/verify`.
+
+**Acceptance.** The approved Axis savings/current scenario produces one institution and two account
+UUIDs, while a later statement for either resolves with no confirmation.
+
+## Task 8c7 — import identity confirmation
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c7-import-identity-confirmation`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c6 merged.
+
+**Outcome.** The import screen explains automatic reuse/new/ambiguous states, asks once for a new
+identity, and rechecks all selected documents that share it.
+
+**Files.** Modify `web/app/import/{account-proposal,import-screen}.tsx`, their tests and styles.
+
+**Behavior.** Group proposal leaders by the service's safe proposed-identity key, not filename or
+mask alone. The form shows reuse/create actions, correctable institution/type/country/currency and
+mask. Its eye uses `POST /parse/identifier/reveal` with the still-selected multipart PDF and
+password; the route re-reads the capture and returns `revealed` or `source_mask_only` with
+`no-store`. Confirmation never reuses that response as write input. Success rechecks every group
+member independently before Stage appears; ambiguity requires an explicit existing choice.
+
+**Tests/validation.** Fail first for all resolution states, one confirmation per identity group,
+same institution/different account groups, multipart reveal and cleanup, mask-only explanation,
+password re-send/clear, corrected non-identity fields, conflict display, and per-file
+reconciliation failure after confirmation. Run focused Vitest, web build, then `/verify`.
+
+**Acceptance.** Multiple synthetic statements for one new account need one confirmation, while a
+second account at that bank gets its own; every file earns Stage independently.
+
+## Task 8c8 — identity backfill preview
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c8-identity-backfill-preview`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c6 merged.
+
+**Outcome.** The owner can safely see which existing accounts can be upgraded by re-reading their
+stored source documents, with no write and no private value in the response.
+
+**Files.** Create `api/oneledger/routes/identity_backfill.py` and
+`api/tests/test_identity_backfill_live.py`; register the router; update API/security docs and
+generated types.
+
+**Contract.** `POST /account-identifiers/backfill/preview` accepts one optional household account
+UUID and request-only password. It selects documents only through completed `import_batch`
+provenance, verifies storage path and SHA-256, and uses the newest layout version with the same
+household and name as the batch's recorded immutable layout. It reuses the current resolver and
+groups complete/mask-only/missing/conflicting/unsupported outcomes per account. The response
+contains safe account/document UUIDs, reason codes, counts, `previewedAt` and an `expectedState`
+digest over that timestamp plus the ordered safe provenance/version state—never names, storage
+paths, captures or amounts.
+
+**Tests/validation.** Fail first for read-only behavior, owner scope, path/symlink/hash guards,
+password handling, per-account agreement/conflict, unsupported sources, safe serialization and a
+stable digest that changes with any relevant row/layout/document state. Run the focused live test,
+API type check, then `/verify`.
+
+**Acceptance.** Preview can classify every synthetic historical source without changing any table
+or document and gives apply enough state to detect staleness.
+
+## Task 8c9 — guarded identity backfill
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `feature/p1-8c9-identity-backfill-apply`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c8 merged.
+
+**Outcome.** A confirmed, fresh preview upgrades only internally consistent historical identities
+through the same alias/encryption writer as a new import.
+
+**Files.** Modify the backfill route/live test and `api/oneledger/routes/doctor.py`; update API,
+security and ingestion docs.
+
+**Contract.** `POST /account-identifiers/backfill/apply` accepts account UUID, request-only password,
+`previewedAt` and `expectedState`. Under the household lock it re-runs every preview guard, requires
+the digest to reproduce exactly, refuses stale state or any disagreement for the whole account,
+requires this stack's encrypted backup to be newer than `previewedAt`, and atomically creates/updates
+aliases and identifiers. It upgrades legacy hashes to HMAC/encrypted rows only from authenticated
+source evidence and is idempotent.
+
+**Tests/validation.** Fail first for no-preview/stale-state/stale-backup refusal, whole-account
+conflict rollback, cross-household denial, idempotence, concurrent changes and exact before/after
+equality of transaction/batch/document/balance/card-cycle/transfer/reportable facts. Run focused
+doctor/backfill tests and `/verify`.
+
+**Acceptance.** A second preview reports zero eligible changes, and only permitted alias/identifier
+records differ from the pre-run snapshot.
+
+## Task 8c10 — transition cleanup
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
+**Branch:** `fix/p1-8c10-identity-contract-cleanup`  
+**Base and PR target:** `develop`  
+**Migration:** none. **Depends on:** 8c4, 8c7 and 8c9 merged.
+
+**Outcome.** Temporary mask/hash-era compatibility is removed and active documentation describes
+one identity contract.
+
+**Files.** Remove `AccountRow.accountNumberMasked`, the old `accountProposal` response and dead hash
+helpers/tests from account/ingest APIs and generated web types; update callers and reconcile
+`docs/design/{api-contracts,data-model,statement-ingestion}.html`, `docs/superpowers/schema.md`,
+`docs/operations/security-and-privacy.html`, `.env.example` and seed notes.
+
+**Tests/validation.** Static searches must find no product read/write of retired columns, old
+mask-only claims, legacy proposal shape or filename identity hints. `ACCOUNT_HASH_SALT` remains a
+deprecated upgrade-only secret used solely to compare `legacy_sha256_v1` rows and by guarded
+backfill; no new row uses it. Removing it needs a later migration strategy that is safe for clones
+which have not yet reprocessed their sources. Run focused API/web tests, generated-type check,
+`git diff --check`, docs checks and `/verify`.
+
+**Acceptance.** Fresh and upgraded installations expose one documented encrypted-identifier model;
+the only retained legacy path is read-only matching/backfill for pre-V28 fingerprints.
+
+## Local acceptance and stop boundary
+
+After 8c10 merges, create a fresh encrypted backup and use only authenticated application/API
+operations on the active local stack. Re-check a representative real statement for each affected
+account and all selected same-identity statements. Record only pass/fail and aggregate counts while
+verifying: all four institutions came from PDF content; existing institution/account UUIDs were
+reused; the second account at one bank remained distinct; complete source identifiers reveal and
+re-mask; source-masked cards stay unrevealable; no duplicate institution/account appeared; no full
+identifier entered logs or ordinary responses; and ledger facts/reportable totals did not change.
+
+If every check passes, update only `docs/superpowers/progress.md` and deliver that acceptance record
+through a documentation-only PR. Stop for the owner's roadmap discussion. Do not start slice 1.5.
