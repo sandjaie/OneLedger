@@ -21,12 +21,14 @@ def owner_row() -> Iterator[tuple[psycopg.Connection[Any], tuple[object, ...]]]:
     connection = connect_to_test_database()
     connection.rollback()
     connection.autocommit = True
+    suppressed_owner_ids: list[object] = []
     with connection.cursor() as cur:
         cur.execute(
             """SELECT id, household_id, person_id, email, role, created_at
-                 FROM app_user WHERE role = 'owner'"""
+                 FROM app_user WHERE role = 'owner' ORDER BY created_at, id"""
         )
-        original = cur.fetchone()
+        owners = cur.fetchall()
+        original = owners[0] if owners else None
         created = original is None
         if created:
             cur.execute("SELECT id, household_id FROM person WHERE is_self")
@@ -41,6 +43,13 @@ def owner_row() -> Iterator[tuple[psycopg.Connection[Any], tuple[object, ...]]]:
                 (uuid4(), person[1], person[0], "initial-owner@example.invalid"),
             )
             original = cur.fetchone()
+        else:
+            suppressed_owner_ids = [owner[0] for owner in owners[1:]]
+            if suppressed_owner_ids:
+                cur.execute(
+                    "UPDATE app_user SET role = 'member' WHERE id = ANY(%s)",
+                    (suppressed_owner_ids,),
+                )
     if original is None:
         connection.close()
         pytest.fail("owner fixture was not created")
@@ -53,6 +62,11 @@ def owner_row() -> Iterator[tuple[psycopg.Connection[Any], tuple[object, ...]]]:
             else:
                 cur.execute(
                     "UPDATE app_user SET email = %s WHERE id = %s", (original[3], original[0])
+                )
+            if suppressed_owner_ids:
+                cur.execute(
+                    "UPDATE app_user SET role = 'owner' WHERE id = ANY(%s)",
+                    (suppressed_owner_ids,),
                 )
         connection.close()
 

@@ -19,30 +19,28 @@ def _connect() -> psycopg.Connection:
 
 
 def _fixture(cur: psycopg.Cursor[Any]) -> tuple[Any, Any, str, str, tuple[Any, ...]]:
-    cur.execute("SELECT id, name, base_currency, secondary_currency FROM household LIMIT 1")
-    household = cur.fetchone()
-    if household is None:
-        pytest.skip("no seeded household")
-    cur.execute("SELECT id FROM app_user LIMIT 1")
-    user = cur.fetchone()
-    if user is None:
-        pytest.skip("no bound owner yet — live identity setup pending")
     cur.execute(
-        "SELECT display_name, tax_residency FROM person WHERE household_id = %s AND is_self",
-        (household[0],),
+        """SELECT h.id, u.id, h.base_currency, h.secondary_currency,
+                  h.name, p.display_name, p.tax_residency
+             FROM household h
+             JOIN person p ON p.household_id = h.id AND p.is_self
+             JOIN app_user u ON u.household_id = h.id AND u.person_id = p.id
+            WHERE u.role = 'owner'
+            ORDER BY h.created_at, h.id
+            LIMIT 1"""
     )
-    person = cur.fetchone()
-    if person is None:
-        pytest.skip("no self person")
+    fixture = cur.fetchone()
+    if fixture is None:
+        pytest.skip("no bound owner yet — live identity setup pending")
     return (
-        household[0],
-        user[0],
-        str(household[2]).strip(),
-        str(household[3]).strip(),
+        fixture[0],
+        fixture[1],
+        str(fixture[2]).strip(),
+        str(fixture[3]).strip(),
         (
-            household[1],
-            person[0],
-            person[1],
+            fixture[4],
+            fixture[5],
+            fixture[6],
         ),
     )
 
