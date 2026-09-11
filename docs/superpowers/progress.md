@@ -48,6 +48,15 @@ request.
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
 | 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Tasks 8a1–8b are delivered and the unclassified-rule acceptance passed; four local institution links and two existing card masks still await owner mapping | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 
+## Phase 1 — product mock implementation
+
+| Screen | Branch | Status | Evidence |
+| --- | --- | --- | --- |
+| Shared frame and Overview | `feature/product-mock-overview` | Delivered — Screen set 01 now supplies the persistent frame and Overview composition; unsupported mock figures and controls remain absent rather than invented | [plan](plans/2026-09-11-product-mock-ui.md) · [`design-qa.md`](../../design-qa.md) |
+| Accounts | `feature/product-mock-accounts` | Next | [plan](plans/2026-09-11-product-mock-ui.md) |
+| Transactions | `feature/product-mock-transactions` | Planned | [plan](plans/2026-09-11-product-mock-ui.md) |
+| Statement import | `feature/product-mock-import` | Planned | [plan](plans/2026-09-11-product-mock-ui.md) |
+
 ## Phase 1 · slice 1.8 — the import asks
 
 | Task | Branch | Status | Evidence |

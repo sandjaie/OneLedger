@@ -268,7 +268,7 @@ export function Workspace({
 
   return (
     <div className="site-shell">
-      <header className="masthead">
+      <header className="masthead app-toolbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">OL</span>
           <span>OneLedger</span>
@@ -285,6 +285,13 @@ export function Workspace({
                 >{option.code}</button>
               ))}
             </div>
+            <span
+              aria-label={`${household.ownerDisplayName} account`}
+              className="owner-badge"
+              title={household.ownerDisplayName}
+            >
+              {household.ownerDisplayName.trim().slice(0, 1).toUpperCase()}
+            </span>
             <button className="text-action" disabled={signingOut} onClick={logout} type="button">
               {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
             </button>

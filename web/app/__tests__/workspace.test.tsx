@@ -169,6 +169,15 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole<HTMLButtonElement>("button", { name: /Plans.*unavailable/i }).disabled).toBe(true);
   });
 
+  it("identifies the owner in the persistent product-mock toolbar", async () => {
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
+
+    const owner = await screen.findByLabelText("Owner account");
+    expect(owner.textContent).toBe("O");
+    expect(owner.closest("header")?.classList.contains("app-toolbar")).toBe(true);
+    expect(screen.getAllByRole("banner")).toHaveLength(1);
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("routes a protected %i response to %s", async (status, destination) => {

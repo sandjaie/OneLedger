@@ -1,4 +1,4 @@
-# Design QA — grouped classification review
+# Design QA — product mock UI
 
 - Focused Review source: `docs/product/mockups/Review.dc.html`, captured from the
   selected in-app browser at 479 × 585 CSS pixels.
@@ -44,5 +44,41 @@
 Focused-region comparison was not needed: the narrow full-view capture rendered
 the rail, heading, reason label, card typography, facts, category control and
 action row large enough to judge.
+
+## Overview — Screen set 01
+
+- Primary source: `docs/product/mockups/OneLedger.dc.html`, whose published copy
+  was byte-checked against the checked-in file before capture.
+- Source screenshot: selected in-app browser capture at 1269 × 713 CSS pixels;
+  retained in task evidence and not persisted in the repository.
+- Implementation: `http://localhost:3000/`, captured in the selected in-app
+  browser at 1280 × 720 CSS pixels after the dashboard completed loading.
+- Implementation screenshot: retained in task evidence and not persisted because
+  it contains private household figures.
+- Comparison method: source and implementation full-view captures were inspected
+  together. The product mock is primary; `Review.dc.html` remains supplemental
+  for the grouped review screen only.
+- Matched structure: fixed 132-pixel dark rail, pale neutral canvas, white sticky
+  toolbar, compact reporting-currency toggle, owner badge, large serif net-worth
+  hero, four position cards, current-month strip and lower reporting panels.
+- Truth-preserving differences: the implementation shows the second reporting
+  currency and carried-rate labels instead of an invented net-worth sparkline;
+  it omits mock-only investment/property breakdowns, global search and a month
+  selector until their data or interaction contracts exist. The twelve-month
+  data stays in its semantic table and card obligations remain conditional.
+- Interaction and accessibility check: currency selection remains functional,
+  the owner session can sign out, navigation state is exposed, headings and
+  regions name the financial surfaces, tables retain headers and visible focus
+  treatment remains in the shared stylesheet.
+- Automated coverage: selected-currency headline, both-currency position facts,
+  position summary, month and trend currency switching, carried/missing rates,
+  card dues, empty ledger, service failure and owner-toolbar identity.
+- Runtime check: the screen completed its loading transition in the selected
+  browser and the Next.js development server reported no compile or runtime
+  error.
+
+The comparison found no P0, P1 or P2 mismatch within the delivered Overview
+contract. Unsupported mock capabilities remain absent rather than decorative or
+fed with invented financial facts.
 
 final result: passed

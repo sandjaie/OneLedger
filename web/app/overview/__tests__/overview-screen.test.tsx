@@ -110,6 +110,23 @@ function renderWith(body: DashboardResponse | Error, currency = household.curren
 describe("overview screen", () => {
   afterEach(() => cleanup());
 
+  it("presents the selected reporting currency as a glanceable net-worth headline", async () => {
+    renderWith(payload());
+
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeTruthy();
+    const worth = screen.getByRole("region", { name: "Net worth" });
+    expect(within(worth).getByText("Primary reporting currency · XIN")).toBeTruthy();
+    expect(
+      within(worth).getByRole("heading", { name: "Net worth in XIN: -₹39,04,500.00" }),
+    ).toBeTruthy();
+
+    const summary = screen.getByRole("region", { name: "Position summary" });
+    for (const label of ["Total assets", "Total liabilities", "Liquid net worth", "Savings rate"]) {
+      expect(within(summary).getByText(label)).toBeTruthy();
+    }
+    expect(within(summary).queryByText("Cash available")).toBeNull();
+  });
+
   it("renders net worth in both currencies, flipping a liability in presentation only", async () => {
     const request = renderWith(payload());
     const worth = await screen.findByRole("region", { name: "Net worth" });
