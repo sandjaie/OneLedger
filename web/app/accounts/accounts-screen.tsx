@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney, formatOwed } from "@/lib/money/format";
 import type {
   AccountCreate,
   AccountGroupTotal,
+  AccountIdentifierRow,
   AccountRow,
   AccountUpdate,
   CurrencyRow,
   InstitutionCreate,
   InstitutionRow,
+  RevealedAccountIdentifier,
+  UnavailableAccountIdentifier,
 } from "@/types/api";
 
 type Props = {
@@ -257,6 +260,131 @@ function AccountTableHead() {
 
 function isAuthError(error: unknown) {
   return error instanceof ApiError && (error.status === 401 || error.status === 403);
+}
+
+function identifierName(kind: AccountIdentifierRow["kind"]) {
+  if (kind === "iban") return "IBAN";
+  if (kind === "card") return "card number";
+  return "bank account number";
+}
+
+function identifierHeading(kind: AccountIdentifierRow["kind"]) {
+  if (kind === "iban") return "IBAN";
+  if (kind === "card") return "Card";
+  return "Account";
+}
+
+function revealFailure(kind: AccountIdentifierRow["kind"]) {
+  if (kind === "iban") return "The IBAN could not be revealed.";
+  if (kind === "card") return "The card number could not be revealed.";
+  return "The account number could not be revealed.";
+}
+
+function EyeIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.75" />
+      {hidden && <path d="m4 4 16 16" />}
+    </svg>
+  );
+}
+
+function AccountIdentifierValue({
+  accountId,
+  accountName,
+  identifier,
+  request,
+}: {
+  accountId: string;
+  accountName: string;
+  identifier: AccountIdentifierRow;
+  request: typeof apiFetch;
+}) {
+  const [revealed, setRevealed] = useState<string>();
+  const [note, setNote] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const revealController = useRef<AbortController | undefined>(undefined);
+  const name = identifierName(identifier.kind);
+
+  useEffect(() => () => {
+    revealController.current?.abort();
+    revealController.current = undefined;
+  }, []);
+
+  async function reveal() {
+    if (revealed) {
+      setRevealed(undefined);
+      setNote(undefined);
+      return;
+    }
+    setBusy(true);
+    setNote(undefined);
+    const controller = new AbortController();
+    revealController.current = controller;
+    try {
+      const result = await request<RevealedAccountIdentifier | UnavailableAccountIdentifier>(
+        `/accounts/${accountId}/identifiers/${identifier.id}/reveal`,
+        { method: "POST", signal: controller.signal },
+      );
+      if (controller.signal.aborted || revealController.current !== controller) return;
+      if (result.status === "revealed") {
+        setRevealed(result.value);
+      } else {
+        setRevealed(undefined);
+        setNote("Statement supplied only a masked value.");
+      }
+    } catch (error) {
+      if (controller.signal.aborted || revealController.current !== controller) return;
+      setRevealed(undefined);
+      if (!isAuthError(error)) {
+        setNote(revealFailure(identifier.kind));
+      }
+    } finally {
+      if (revealController.current === controller) {
+        revealController.current = undefined;
+        setBusy(false);
+      }
+    }
+  }
+
+  const explanationId = `identifier-note-${identifier.id}`;
+  const canReveal = identifier.canReveal;
+  const action = revealed ? "Hide" : "Show";
+  const accessibleName = canReveal
+    ? `${action} ${name} for ${accountName}`
+    : `Full ${name} unavailable for ${accountName}`;
+
+  return (
+    <div className="account-identifier">
+      <span className="account-identifier-kind">
+        {identifierHeading(identifier.kind)}{identifier.isActive ? "" : " · Previous"}
+      </span>
+      <span className="account-identifier-line">
+        <span className="account-identifier-value">{revealed ?? identifier.masked}</span>
+        <button
+          aria-describedby={!canReveal || note ? explanationId : undefined}
+          aria-label={accessibleName}
+          className="account-identifier-reveal"
+          disabled={!canReveal || busy}
+          onClick={() => void reveal()}
+          type="button"
+        >
+          <EyeIcon hidden={Boolean(revealed)} />
+        </button>
+      </span>
+      {!canReveal && (
+        <span className="account-identifier-note" id={explanationId}>
+          Statement supplied only a masked value.
+        </span>
+      )}
+      {note && (
+        <span className="account-identifier-note" id={explanationId} role={note.startsWith("The ") ? "alert" : undefined}>
+          {note}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function today() {
@@ -659,7 +787,21 @@ export function AccountsScreen({
         <td className="account-mark">{markFor(account, institutions)}</td>
         <td className="account-card-name">{account.name}</td>
         <td className="account-card-detail">{meta}</td>
-        <td className="account-card-mask">{account.accountNumberMasked}</td>
+        <td className="account-card-mask">
+          {mode === "view" && account.identifiers.length > 0 ? (
+            <span className="account-identifier-list">
+              {account.identifiers.map((identifier) => (
+                <AccountIdentifierValue
+                  accountId={account.id}
+                  accountName={account.name}
+                  identifier={identifier}
+                  key={identifier.id}
+                  request={request}
+                />
+              ))}
+            </span>
+          ) : account.accountNumberMasked}
+        </td>
         <td
           aria-label={`${account.name} balance ${balanceLabel(account)}`}
           className={
