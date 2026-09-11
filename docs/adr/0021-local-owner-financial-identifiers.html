@@ -64,6 +64,10 @@
       issuer branding from the PDF, and household/public alias data resolves that evidence to an
       institution row. The filename is never evidence. A new account at a known institution is a
       new account UUID under the existing institution UUID; the institution is not duplicated.</p>
+    <p>An exact household owner-confirmed alias takes precedence over generic catalogue names and
+      shared aliases for that household. This makes an explicit choice durable without deleting
+      shared evidence; multiple matches within the winning precedence tier remain ambiguous and
+      stop for confirmation.</p>
     <p>For a complete identifier, its kind-normalized stored value is the primary account-resolution signal.
       For a source mask, the unique composite above is a weaker but sufficient signal. A new or
       conflicting institution/account is shown as one statement-derived confirmation before any

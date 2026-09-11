@@ -355,8 +355,30 @@ def test_reserved_account_capture_is_transient_and_other_metadata_is_returned() 
     )
 
     assert result.account_number_raw == "1234-5678"
+    assert result.account_number_is_masked is False
     assert result.metadata == {"owner_label": "PRIMARY"}
     assert "account_number" not in result.metadata
+
+
+def test_masked_account_capture_declares_its_source_shape_without_guessing() -> None:
+    result = extract_pages(
+        profile(metadataPatterns={"account_number_masked": r"Card:\s*([X0-9 ]+)"}),
+        [page([word(10, 70, "Card:"), word(80, 190, "XXXX XXXX 3579")])],
+    )
+
+    assert result.account_number_raw == "XXXX XXXX 3579"
+    assert result.account_number_is_masked is True
+    assert result.account_number_capture_count == 1
+    assert "account_number_masked" not in result.metadata
+
+
+def test_account_capture_count_reports_ambiguous_source_evidence() -> None:
+    result = extract_pages(
+        profile(metadataPatterns={"account_number": r"Account:\s*([0-9]+)"}),
+        [page([word(10, 450, "Account: 2468013579 Account: 1357924680")])],
+    )
+
+    assert result.account_number_capture_count == 2
 
 
 def test_statement_institution_is_transient_page_one_pdf_evidence() -> None:

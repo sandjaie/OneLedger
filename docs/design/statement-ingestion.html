@@ -490,10 +490,13 @@ issuer or changed PDF format receives a focused layout PR with a synthetic fixtu
 evidence; the application does not claim universal format inference.</p>
 <p><strong>Account resolution.</strong> Once a supported layout captures the issuer, aliases resolve that PDF
 evidence to an institution UUID. A complete account identifier matches its normalized local value. A
-source mask may match only one account with the same institution, account type and visible suffix;
-zero proposes a new account and more than one asks. One owner confirmation creates or enriches a
-new institution/account, then every selected statement is rechecked. Complete source identifiers
-are stored locally for deliberate owner reveal under
+source mask may match only one active account with the same institution, account type and visible
+suffix; zero proposes a new account and more than one asks. Layouts state the source shape explicitly
+with <code>account_number</code> or <code>account_number_masked</code>. A complete capture may enrich one
+compatible mask-only account, but never matches a different complete value by suffix. One owner
+confirmation atomically creates or reuses the institution and alias, account and identifier, then
+every selected statement is rechecked. Complete source identifiers are stored locally for deliberate
+owner reveal under
 <a href="../adr/0021-local-owner-financial-identifiers.html">ADR-0021</a>. The service never guesses,
 because a wrong match corrupts two accounts at once.</p>
 <hr>

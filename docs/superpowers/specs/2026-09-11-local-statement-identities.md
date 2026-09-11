@@ -63,7 +63,9 @@ values, owner names, amounts and statement text may not.
 Add a household-aware `institution_alias` relation. Each row references an institution UUID and
 holds a bounded normalised public alias, country and provenance. Shared starter aliases may
 reference shared institutions; owner-confirmed aliases are household-private. Resolution is exact
-after explicit Unicode/case/space normalisation, not fuzzy. No match proposes; more than one match
+after explicit Unicode/case/space normalisation, not fuzzy. An exact household owner-confirmed
+alias takes precedence over generic catalogue names and shared aliases for that household, so an
+explicit choice is durable. No match proposes; more than one match in the winning precedence tier
 after country scoping asks rather than resolving by UUID order. Deactivation preserves history.
 
 Aliases are lookup evidence, not alternate institution identities. Creating a newly confirmed

@@ -174,6 +174,40 @@ export type AccountProposal = {
 };
 
 /**
+ * AccountResolutionCandidate
+ */
+export type AccountResolutionCandidate = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Institutionid
+     */
+    institutionId: string | null;
+    /**
+     * Accounttype
+     */
+    accountType: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string;
+    /**
+     * Canreveal
+     */
+    canReveal: boolean;
+};
+
+/**
  * AccountRow
  */
 export type AccountRow = {
@@ -411,6 +445,10 @@ export type BodyConfirmStatementAccountParseAccountPost = {
      * Accountid
      */
     accountId?: string | null;
+    /**
+     * Institution
+     */
+    institution?: string | null;
 };
 
 /**
@@ -455,6 +493,24 @@ export type BodyProposeLayoutLayoutsProposePost = {
      * Draft
      */
     draft?: string | null;
+};
+
+/**
+ * Body_reveal_statement_identifier_parse_identifier_reveal_post
+ */
+export type BodyRevealStatementIdentifierParseIdentifierRevealPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Layoutid
+     */
+    layoutId?: string | null;
 };
 
 /**
@@ -1196,6 +1252,37 @@ export type HouseholdUpdate = {
 };
 
 export type IdentifierKind = 'bank_account' | 'iban' | 'card';
+
+/**
+ * IdentityResolution
+ */
+export type IdentityResolution = {
+    /**
+     * Status
+     */
+    status: 'matched' | 'needs_confirmation' | 'ambiguous';
+    /**
+     * Institutionaction
+     */
+    institutionAction: 'reuse' | 'create' | 'choose';
+    /**
+     * Accountaction
+     */
+    accountAction: 'reuse' | 'enrich' | 'create' | 'choose';
+    institution: InstitutionResolution;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string;
+    /**
+     * Candidates
+     */
+    candidates: Array<AccountResolutionCandidate>;
+    /**
+     * Conflicts
+     */
+    conflicts: Array<'institution' | 'account_type' | 'currency'>;
+};
 
 /**
  * InstitutionCandidate
@@ -2139,6 +2226,7 @@ export type ParseResponse = {
      */
     accountId: string | null;
     accountProposal?: AccountProposal | null;
+    identityResolution: IdentityResolution;
     /**
      * Layoutid
      */
@@ -2439,6 +2527,24 @@ export type RevealedAccountIdentifier = {
      */
     value: string;
     kind: IdentifierKind;
+};
+
+/**
+ * RevealedStatementIdentifier
+ */
+export type RevealedStatementIdentifier = {
+    /**
+     * Status
+     */
+    status: 'revealed';
+    /**
+     * Value
+     */
+    value: string;
+    /**
+     * Kind
+     */
+    kind: 'bank_account' | 'iban' | 'card';
 };
 
 /**
@@ -3245,6 +3351,20 @@ export type TransfersResponse = {
  * UnavailableAccountIdentifier
  */
 export type UnavailableAccountIdentifier = {
+    /**
+     * Status
+     */
+    status: 'unavailable';
+    /**
+     * Reason
+     */
+    reason: 'source_mask_only';
+};
+
+/**
+ * UnavailableStatementIdentifier
+ */
+export type UnavailableStatementIdentifier = {
     /**
      * Status
      */
@@ -4784,6 +4904,33 @@ export type ParseStatementParsePostResponses = {
 };
 
 export type ParseStatementParsePostResponse = ParseStatementParsePostResponses[keyof ParseStatementParsePostResponses];
+
+export type RevealStatementIdentifierParseIdentifierRevealPostData = {
+    body: BodyRevealStatementIdentifierParseIdentifierRevealPost;
+    path?: never;
+    query?: never;
+    url: '/parse/identifier/reveal';
+};
+
+export type RevealStatementIdentifierParseIdentifierRevealPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RevealStatementIdentifierParseIdentifierRevealPostError = RevealStatementIdentifierParseIdentifierRevealPostErrors[keyof RevealStatementIdentifierParseIdentifierRevealPostErrors];
+
+export type RevealStatementIdentifierParseIdentifierRevealPostResponses = {
+    /**
+     * Response Reveal Statement Identifier Parse Identifier Reveal Post
+     *
+     * Successful Response
+     */
+    200: RevealedStatementIdentifier | UnavailableStatementIdentifier;
+};
+
+export type RevealStatementIdentifierParseIdentifierRevealPostResponse = RevealStatementIdentifierParseIdentifierRevealPostResponses[keyof RevealStatementIdentifierParseIdentifierRevealPostResponses];
 
 export type ConfirmStatementAccountParseAccountPostData = {
     body: BodyConfirmStatementAccountParseAccountPost;

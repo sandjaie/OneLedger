@@ -175,6 +175,8 @@ class ExtractionResult:
     declared_closing: str | None
     metadata: dict[str, str]
     account_number_raw: str | None = field(repr=False)
+    account_number_is_masked: bool
+    account_number_capture_count: int
     page_count: int
     has_text: bool
     words_filtered: int
@@ -379,6 +381,8 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
     institution_text = _page_text(pages[:1], words=metadata_uses_words)
     metadata: dict[str, str] = {}
     account_number_raw: str | None = None
+    account_number_is_masked = False
+    account_number_capture_count = 0
     institution_name_raw: str | None = None
     for key, pattern in (profile.metadataPatterns or {}).items():
         if key in ROW_CAPTURE_KEYS:
@@ -387,8 +391,12 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
         captured = _capture(pattern, capture_text)
         if captured is None:
             continue
-        if key == "account_number":
+        if key in {"account_number", "account_number_masked"}:
             account_number_raw = captured
+            account_number_is_masked = key == "account_number_masked"
+            account_number_capture_count += sum(
+                1 for _ in re.finditer(pattern, capture_text, flags=re.IGNORECASE | re.MULTILINE)
+            )
         elif key == "institution_name":
             institution_name_raw = captured
         else:
@@ -469,6 +477,8 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
         declared_closing=_capture(profile.closingBalancePattern, source_text),
         metadata=metadata,
         account_number_raw=account_number_raw,
+        account_number_is_masked=account_number_is_masked,
+        account_number_capture_count=account_number_capture_count,
         page_count=len(pages),
         has_text=bool(pages) and all(page.has_text for page in pages),
         words_filtered=words_filtered,

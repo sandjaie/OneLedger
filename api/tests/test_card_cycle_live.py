@@ -50,7 +50,7 @@ CARD_OPENING = r"Opening\s*Balance\s*(-?[0-9,.]+)"
 CARD_CLOSING = r"Closing\s*Balance\s*(-?[0-9,.]+)"
 CARD_IDENTITY_METADATA = {
     "institution_name": r"(Acme)\s*Card",
-    "account_number": r"Card\s*Number:\s*[0-9]{4}\s*X{4}\s*X{4}\s*([0-9]{4})",
+    "account_number_masked": r"Card\s*Number:\s*[0-9]{4}\s*X{4}\s*X{4}\s*([0-9]{4})",
 }
 CARD_FACT_METADATA = {
     "statement_date": r"Statement\s*Date\s*(\d{2}/\d{2}/\d{4})",
@@ -339,35 +339,23 @@ def test_a_capture_that_will_not_read_is_reported_and_does_not_block(live: CardS
 def test_a_re_imported_card_statement_commits_the_cycle_the_second_parse_read(
     live: CardStaged,
 ) -> None:
-    """The reasons an owner cancels: the wrong account, a mapping that missed the summary.
+    """An owner may cancel because the mapping missed the summary.
 
     The same bytes are the same document row, and a re-import reuses it — so the row has to
     describe the second attempt. The commit reads the document type, the cycle's facts and its
     currency back from it; a row still describing the first commits the rows with no cycle and
-    nothing saying why, or labels the cycle in the wrong account's currency. The wrong account
-    is a bank account in the household's other currency, so each of the three differs.
+    nothing saying why. Statement-derived identity now refuses a wrong account before staging.
     """
     with live.conn.cursor() as cur:
-        cur.execute(
-            """INSERT INTO account (household_id, owner_person_id, name, account_type,
-                                    institution_id, currency, country, opening_balance_date,
-                                    current_balance)
-               SELECT household_id, id, 'route test', 'savings', %s, %s, 'ZZ',
-                      DATE '2026-01-01', 0
-                 FROM person WHERE household_id = %s LIMIT 1
-               RETURNING id""",
-            (live.institution_id, live.secondary, live.household_id),
-        )
-        wrong_account = cur.fetchone()[0]  # type: ignore[index]
         cur.execute(
             "UPDATE statement_layout SET metadata_patterns = %s WHERE id = %s",
             (psycopg.types.json.Json(CARD_IDENTITY_METADATA), CARD_LAYOUT_ID),
         )
     live.conn.commit()
-    wrong = live.post(_card_statement(), stage="true", accountId=str(wrong_account))
-    assert wrong.status_code == 200, wrong.text
-    assert wrong.json()["staged"], wrong.text
-    assert live.cancel(wrong.json()["batchId"]).status_code == 200
+    first = live.post(_card_statement(), stage="true", accountId=str(live.card_id))
+    assert first.status_code == 200, first.text
+    assert first.json()["staged"], first.text
+    assert live.cancel(first.json()["batchId"]).status_code == 200
     with live.conn.cursor() as cur:
         cur.execute(
             "UPDATE statement_layout SET metadata_patterns = %s WHERE id = %s",

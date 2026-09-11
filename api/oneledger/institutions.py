@@ -62,7 +62,7 @@ def resolve_institution(
     """
     cur.execute(
         """SELECT i.id, i.name, i.short_name, i.country, i.institution_type,
-                  ia.alias, ia.country
+                  ia.alias, ia.country, ia.household_id, ia.provenance
              FROM institution i
              LEFT JOIN institution_alias ia
                ON ia.institution_id = i.id AND ia.is_active
@@ -74,6 +74,7 @@ def resolve_institution(
     expected = normalize_institution_name(evidence)
     expected_country = country.strip().upper() if country and country.strip() else None
     matched: dict[UUID, InstitutionCandidate] = {}
+    owner_confirmed: dict[UUID, InstitutionCandidate] = {}
     for row in cur.fetchall():
         (
             identifier,
@@ -83,6 +84,8 @@ def resolve_institution(
             institution_type,
             alias,
             alias_country,
+            alias_household_id,
+            alias_provenance,
         ) = row
         candidate = InstitutionCandidate(
             id=identifier,
@@ -96,6 +99,17 @@ def resolve_institution(
             names.append((short_name, institution_country))
         if alias:
             names.append((alias, alias_country))
+        alias_matches = bool(
+            alias
+            and normalize_institution_name(alias) == expected
+            and (expected_country is None or alias_country == expected_country)
+        )
+        if (
+            alias_matches
+            and alias_household_id == household_id
+            and alias_provenance == "owner_confirmed"
+        ):
+            owner_confirmed[identifier] = candidate
         if any(
             normalize_institution_name(value) == expected
             and (expected_country is None or name_country == expected_country)
@@ -105,7 +119,7 @@ def resolve_institution(
 
     candidates = tuple(
         sorted(
-            matched.values(),
+            (owner_confirmed or matched).values(),
             key=lambda item: (
                 normalize_institution_name(item.name),
                 item.country,

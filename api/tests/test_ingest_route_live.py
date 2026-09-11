@@ -337,13 +337,14 @@ def _many_rows(count: int) -> bytes:
     """
     placements = [
         Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
-        Placement(page=0, x=20, y=755, text="Opening Balance 1,000.00"),
-        Placement(page=0, x=40, y=740, text="Date"),
-        Placement(page=0, x=140, y=740, text="Description"),
-        Placement(page=0, x=420, y=740, text="Amount"),
-        Placement(page=0, x=500, y=740, text="Balance"),
+        Placement(page=0, x=20, y=750, text="Account Number 1234567890"),
+        Placement(page=0, x=20, y=740, text="Opening Balance 1,000.00"),
+        Placement(page=0, x=40, y=720, text="Date"),
+        Placement(page=0, x=140, y=720, text="Description"),
+        Placement(page=0, x=420, y=720, text="Amount"),
+        Placement(page=0, x=500, y=720, text="Balance"),
     ]
-    top = 730.0
+    top = 710.0
     for index in range(count):
         top -= 10.0
         placements += [
@@ -515,13 +516,25 @@ def test_the_statements_own_account_number_is_screened_by_its_capture(live: Fixt
     leaves it alone — only the capture the pipeline extracted removes it. That is what stops a
     statement quoting its own account number in a narration line from returning it.
     """
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = (metadata_patterns - 'account_number') || %s::jsonb
+                WHERE id = %s""",
+            (
+                psycopg.types.json.Json({"account_number_masked": r"Account\s*Number\s*([X0-9]+)"}),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+
     response = TestClient(app).post(
         "/parse",
         files={
             "file": (
                 "s.pdf",
-                _statement(description="TRANSFER TO 4021 THANKS").replace(
-                    b"Account Number 1234567890", b"Account Number 4021      "
+                _statement(description="TRANSFER TO 7890 THANKS").replace(
+                    b"Account Number 1234567890", b"Account Number 7890      "
                 ),
             )
         },
@@ -532,7 +545,7 @@ def test_the_statements_own_account_number_is_screened_by_its_capture(live: Fixt
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["accountId"] == str(live.account_id), "resolved by the short number"
-    assert "4021" not in body["rows"][1]["descriptionRaw"], "the capture screened it"
+    assert "7890" not in body["rows"][1]["descriptionRaw"], "the capture screened it"
     assert "[redacted]" in body["rows"][1]["descriptionRaw"]
 
 

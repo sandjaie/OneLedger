@@ -52,6 +52,8 @@ def extraction(
         declared_closing=declared_closing,
         metadata=metadata or {},
         account_number_raw=None,
+        account_number_is_masked=False,
+        account_number_capture_count=0,
         page_count=1,
         has_text=True,
         words_filtered=0,

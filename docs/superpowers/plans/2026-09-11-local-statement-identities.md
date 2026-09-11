@@ -243,8 +243,10 @@ institution reuse/create decision; it never accepts a replacement identifier. Be
 precedes staging, its identifier records the source content hash and layout/version/capture key with
 a null document UUID; a later successful stage attaches the household document UUID only when that
 hash and capture provenance agree. Institution/alias, account and identifier reuse or creation is
-one database transaction; corrected reuse and a new institution plus its first alias are tested
-here. `POST /parse/identifier/reveal` is the separate owner-authenticated multipart preview
+one database transaction; an explicit candidate choice persists as a household owner-confirmed
+alias which wins over generic catalogue matches on later parses. Corrected reuse and a new
+institution plus its first alias are tested here. `POST /parse/identifier/reveal` is the separate
+owner-authenticated multipart preview
 reveal. It
 re-runs layout detection/extraction against the submitted PDF/password and returns only
 `revealed(value, kind)` or `unavailable(source_mask_only)` with `no-store`; it accepts no identifier
