@@ -517,7 +517,9 @@ headers carrying the same captured identity count as one fact; different capture
 Apply takes the household lock, authenticates every source again and may confirm a safe PDF issuer
 label against the institution already named by the completed import. It replaces a legacy fingerprint
 only when all documents for the account provide one consistent complete identity; mask-only sources
-can apply the alias without inventing missing digits. A repeated preview then reports zero eligible
+can apply the alias without inventing missing digits. A differing historical card mask may also be
+corrected on that provenance-bound account when issuer, type and currency agree, no other account
+matches the suffix and all of its source documents agree; it remains unrevealable. A repeated preview then reports zero eligible
 changes. Transaction, import, document, balance, card, transfer and reportable facts are not rewritten,
 and neither an application encryption key nor a backup is a prerequisite.</p>
 <hr>

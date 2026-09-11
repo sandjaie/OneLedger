@@ -22,6 +22,7 @@ from ..identifiers import (
     CompleteIdentifier,
     Identifier,
     IdentifierValueError,
+    MaskedIdentifier,
     identifier_from_source,
 )
 from ..ingest import engine
@@ -431,9 +432,25 @@ def _assess_for_household(
     except IdentifierValueError:
         return _result(source.document_id, "missing", "identity_missing")
     candidates = {candidate.id for candidate in resolution.candidates}
-    if source.account_id not in candidates or resolution.conflicts:
+    statement_currency = extraction.metadata.get("currency")
+    historical_mask_adoption = (
+        isinstance(resolution.identifier, MaskedIdentifier)
+        and resolution.status == "needs_confirmation"
+        and not resolution.candidates
+        and not resolution.conflicts
+        and len(institution.candidates) == 1
+        and institution.candidates[0].id == source.institution_id
+        and profile.accountType == source.account_type
+        and statement_currency is not None
+        and statement_currency.strip().upper() == source.currency.strip().upper()
+    )
+    if (
+        source.account_id not in candidates and not historical_mask_adoption
+    ) or resolution.conflicts:
         result = _result(source.document_id, "conflicting", "account_mismatch")
         return Assessed(result.public, resolver_state=resolver_state)
+    if historical_mask_adoption:
+        resolver_state += ("historical_source_account", str(source.account_id))
     identifier = resolution.identifier
     outcome: Outcome = "complete" if isinstance(identifier, CompleteIdentifier) else "mask_only"
     reason: Reason = "complete_identity" if outcome == "complete" else "source_mask_only"
@@ -442,7 +459,7 @@ def _assess_for_household(
         and not next(
             item for item in resolution.candidates if item.id == source.account_id
         ).can_reveal
-    )
+    ) or historical_mask_adoption
     return Assessed(
         DocumentIdentityPreview(documentId=source.document_id, outcome=outcome, reason=reason),
         normalized=identifier.normalized_value
@@ -585,7 +602,7 @@ def apply_identity_backfill(
             chosen = next((item for item in eligible if item.replace_identifier), None)
             if chosen is not None:
                 identifier = chosen.identifier
-                assert isinstance(identifier, CompleteIdentifier)
+                assert identifier is not None
                 source = next(
                     item for item in sources if item.document_id == chosen.public.documentId
                 )
@@ -600,7 +617,11 @@ def apply_identity_backfill(
                     source_document_id=source.document_id,
                     source_layout_id=source.newest_layout_id,
                     source_layout_version=source.newest_layout_version,
-                    source_capture_key="account_number",
+                    source_capture_key=(
+                        "account_number"
+                        if isinstance(identifier, CompleteIdentifier)
+                        else "account_number_masked"
+                    ),
                 )
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="account identity already exists") from None

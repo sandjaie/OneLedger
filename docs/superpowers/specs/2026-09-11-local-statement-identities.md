@@ -212,6 +212,11 @@ Preview groups documents per account, reports complete/mask-only/missing/conflic
 shows the institution resolution without full values. Apply authenticates each source and updates
 an account only when all usable documents agree. It does not impose a backup or encryption-key gate;
 backups remain an owner-operated safeguard.
+For a source-masked historical card whose legacy mask differs, the completed import relation may
+select that same account only when the PDF issuer, account type and currency agree, no other account
+matches the captured suffix, and every stored statement for the account supplies one suffix. Apply
+then replaces only the active mask through the statement-provenance writer; it never invents or
+stores missing digits.
 Password-protected sources use credentials supplied through the existing private request/environment
 boundary and never persist those passwords.
 
