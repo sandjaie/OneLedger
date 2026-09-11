@@ -400,7 +400,10 @@ The database and its backups must therefore be treated as private financial data
 through completed import provenance, reject an original that fails its local path, symlink or
 SHA-256 check, and hold an optional PDF password in the request frame only. Their ordinary response
 contains safe UUIDs, fixed reason codes, counts and a stale-state digest; it contains no filename,
-storage path, statement capture, narration, amount, institution name or complete identifier.</p>
+storage path, statement capture, narration, amount, institution name or complete identifier. Apply
+takes the household lock, reproduces that exact preview from the stored sources and refuses stale or
+disagreeing evidence before writing. It stores a complete identifier only through the shared
+statement-provenance writer; no backup or encryption-key check gates the owner's local data.</p>
 <p><strong>Even a full application compromise must not provide a password, PIN, CVV or OTP capable of
 moving an asset.</strong> Read exposure is still serious, which is why ordinary views remain masked and
 reveal is an explicit owner-only operation.</p>

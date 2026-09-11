@@ -128,6 +128,10 @@ export type AccountIdentityPreview = {
     accountId: string;
     outcome: Outcome;
     /**
+     * Eligible
+     */
+    eligible: boolean;
+    /**
      * Documents
      */
     documents: Array<DocumentIdentityPreview>;
@@ -1281,6 +1285,42 @@ export type HouseholdUpdate = {
 export type IdentifierKind = 'bank_account' | 'iban' | 'card';
 
 /**
+ * IdentityBackfillApplyRequest
+ */
+export type IdentityBackfillApplyRequest = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Previewedat
+     */
+    previewedAt: string;
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+};
+
+/**
+ * IdentityBackfillApplyResult
+ */
+export type IdentityBackfillApplyResult = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Status
+     */
+    status: 'applied' | 'unchanged';
+};
+
+/**
  * IdentityBackfillCounts
  */
 export type IdentityBackfillCounts = {
@@ -1315,6 +1355,10 @@ export type IdentityBackfillPreview = {
      */
     accounts: Array<AccountIdentityPreview>;
     counts: IdentityBackfillCounts;
+    /**
+     * Eligiblecount
+     */
+    eligibleCount: number;
     /**
      * Previewedat
      */
@@ -4998,6 +5042,31 @@ export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponse
 };
 
 export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponse = PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponses[keyof PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostResponses];
+
+export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostData = {
+    body: IdentityBackfillApplyRequest;
+    path?: never;
+    query?: never;
+    url: '/account-identifiers/backfill/apply';
+};
+
+export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostError = ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostErrors[keyof ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostErrors];
+
+export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: IdentityBackfillApplyResult;
+};
+
+export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponse = ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses[keyof ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

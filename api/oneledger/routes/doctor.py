@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, scope_to_owner
 
 router = APIRouter(tags=["doctor"])
 
@@ -105,10 +105,41 @@ def backup_finding(newest: datetime | None, not_held: int, now: datetime) -> Fin
     )
 
 
+def identity_backfills_remaining(owner: OwnerSession) -> int:
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        cur.execute(
+            """SELECT count(DISTINCT account_id) FROM account_identifier
+                WHERE household_id = %s AND is_active
+                  AND legacy_fingerprint IS NOT NULL AND normalized_value IS NULL""",
+            (owner.household_id,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else 0
+
+
+def identity_backfill_finding(remaining: int) -> Finding:
+    if remaining:
+        noun = "identity" if remaining == 1 else "identities"
+        return Finding(
+            level="warning",
+            message=f"{remaining:,} account {noun} await statement backfill.",
+        )
+    return Finding(level="ok", message="Every account identity is on the current local model.")
+
+
 @router.get("/doctor")
 def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorReport:
     newest = newest_backup(backup_dir(), os.environ.get("BACKUP_PREFIX") or "oneledger")
     finding = backup_finding(
         newest, transactions_since(owner.household_id, newest), datetime.now(UTC)
     )
-    return DoctorReport(sections=[DoctorSection(title="Backups", findings=[finding])])
+    return DoctorReport(
+        sections=[
+            DoctorSection(title="Backups", findings=[finding]),
+            DoctorSection(
+                title="Account identities",
+                findings=[identity_backfill_finding(identity_backfills_remaining(owner))],
+            ),
+        ]
+    )

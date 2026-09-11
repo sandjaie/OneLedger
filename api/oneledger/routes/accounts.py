@@ -393,8 +393,9 @@ def _insert_account_identifier(
     account_id: UUID,
     identifier: Identifier,
     *,
-    provenance: Literal["owner_entered", "statement"],
+    provenance: Literal["owner_entered", "statement", "statement_backfill"],
     source_sha256: str | None = None,
+    source_document_id: UUID | None = None,
     source_layout_id: UUID | None = None,
     source_layout_version: int | None = None,
     source_capture_key: str | None = None,
@@ -404,8 +405,8 @@ def _insert_account_identifier(
         """INSERT INTO account_identifier (
                household_id, account_id, kind, masked_value, visible_suffix,
                full_value, normalized_value, provenance, source_sha256,
-               source_layout_id, source_layout_version, source_capture_key)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               source_document_id, source_layout_id, source_layout_version, source_capture_key)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (
             household_id,
@@ -417,6 +418,7 @@ def _insert_account_identifier(
             None if complete is None else complete.normalized_value,
             provenance,
             source_sha256,
+            source_document_id,
             source_layout_id,
             source_layout_version,
             source_capture_key,
@@ -434,8 +436,11 @@ def _insert_account(
     household_id: UUID,
     *,
     identifier: Identifier | None,
-    identifier_provenance: Literal["owner_entered", "statement"] = "owner_entered",
+    identifier_provenance: Literal[
+        "owner_entered", "statement", "statement_backfill"
+    ] = "owner_entered",
     source_sha256: str | None = None,
+    source_document_id: UUID | None = None,
     source_layout_id: UUID | None = None,
     source_layout_version: int | None = None,
     source_capture_key: str | None = None,
@@ -490,6 +495,7 @@ def _insert_account(
             identifier,
             provenance=identifier_provenance,
             source_sha256=source_sha256,
+            source_document_id=source_document_id,
             source_layout_id=source_layout_id,
             source_layout_version=source_layout_version,
             source_capture_key=source_capture_key,
@@ -504,8 +510,9 @@ def _replace_account_identifier(
     kind: IdentifierKind,
     identifier: Identifier | None,
     *,
-    provenance: Literal["owner_entered", "statement"] = "owner_entered",
+    provenance: Literal["owner_entered", "statement", "statement_backfill"] = "owner_entered",
     source_sha256: str | None = None,
+    source_document_id: UUID | None = None,
     source_layout_id: UUID | None = None,
     source_layout_version: int | None = None,
     source_capture_key: str | None = None,
@@ -553,6 +560,7 @@ def _replace_account_identifier(
             identifier,
             provenance=provenance,
             source_sha256=source_sha256,
+            source_document_id=source_document_id,
             source_layout_id=source_layout_id,
             source_layout_version=source_layout_version,
             source_capture_key=source_capture_key,
