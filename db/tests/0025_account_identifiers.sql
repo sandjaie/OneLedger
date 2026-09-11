@@ -274,16 +274,6 @@ BEGIN
   END;
 
   BEGIN
-    UPDATE account
-       SET account_number_hash = repeat('d', 64), account_number_masked = NULL
-     WHERE id = f.a1;
-    RAISE EXCEPTION 'a legacy hash without its display mask was accepted';
-  EXCEPTION WHEN check_violation THEN
-    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
-    ASSERT refusal LIKE '%account_legacy_identity_is_migratable%', refusal;
-  END;
-
-  BEGIN
     INSERT INTO account_identifier (
       household_id, account_id, kind, masked_value, visible_suffix, provenance,
       source_sha256, source_layout_id, source_layout_version, source_capture_key
@@ -434,7 +424,15 @@ DROP FUNCTION preserve_institution_household();
 DROP FUNCTION assert_institution_alias_scope();
 ALTER TABLE document DROP CONSTRAINT uq_document_household_id;
 ALTER TABLE statement_layout DROP CONSTRAINT uq_statement_layout_household_id;
-ALTER TABLE account DROP CONSTRAINT account_legacy_identity_is_migratable;
+ALTER TABLE account DROP CONSTRAINT IF EXISTS account_legacy_identity_is_migratable;
+ALTER TABLE account
+  ADD COLUMN account_number_masked TEXT,
+  ADD COLUMN account_number_hash TEXT,
+  ADD COLUMN iban_masked TEXT;
+CREATE UNIQUE INDEX idx_account_number_hash
+  ON account (household_id, account_number_hash) WHERE account_number_hash IS NOT NULL;
+ALTER TABLE account ADD CONSTRAINT card_has_no_account_number_hash
+  CHECK (account_type <> 'credit_card' OR account_number_hash IS NULL);
 
 DO $$
 DECLARE h UUID; p UUID; base CHAR(3); secondary CHAR(3);

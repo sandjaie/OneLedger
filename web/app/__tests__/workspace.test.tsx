@@ -477,6 +477,7 @@ describe("authenticated workspace", () => {
         currentBalance: "250000.0000",
         currentBalanceAsOf: null,
         creditLimit: null,
+        identifiers: [],
       }],
       totals: [{ accountClass: "asset", country: "XB", currency: "XIN", total: "250000.0000" }],
     };
@@ -587,6 +588,7 @@ describe("authenticated workspace", () => {
         currentBalance: "250000.0000",
         currentBalanceAsOf: null,
         creditLimit: null,
+        identifiers: [],
       }],
       totals: [],
     };

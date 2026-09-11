@@ -1,12 +1,12 @@
 ---
 name: oneledger-code-review
-description: Senior-level review of OneLedger work before it is pushed or merged into develop —
-correctness, edge cases, money handling, the never-store list and identifier leakage, the
-authorization boundary, reporting views, migrations, invariants, test sufficiency and diff size. It
-produces findings for the implementing agent to patch and does not modify code. Run it unprompted
-the moment implementation is finished — before the branch is pushed at all, not after — and again
-before any later push, including a patch answering a review finding; also whenever asked to review a
-branch, a task, or work about to ship.
+description: >-
+  Senior-level review of OneLedger work before it is pushed or merged into develop — correctness,
+  edge cases, money handling, private-data boundaries, identifier leakage, authorization,
+  reporting views, migrations, invariants, test sufficiency and diff size. It produces findings
+  for the implementing agent to patch and does not modify code. Run it unprompted when
+  implementation is finished, before any push, and again after a patch answering a finding; also
+  use it whenever asked to review a branch, task, or work about to ship.
 ---
 
 # OneLedger Code Review
@@ -162,8 +162,11 @@ being written inherits the reasoning that produced the bug.
 
 The pass that would have saved eight rounds on PR #34.
 
-- **Never-store list** (`security-and-privacy.html` §1): full account or card number, CVV, PIN,
-  OTP, password, full tax or national ID. Masked value plus salted hash, nothing else.
+- **Identifier storage boundary** (`security-and-privacy.html` §4; ADR-0021): complete account,
+  card and IBAN source values may exist only in the household-scoped `account_identifier` relation
+  for local matching and deliberate owner reveal. They remain forbidden in ordinary responses,
+  logs, errors, fixtures, screenshots, code and arbitrary text fields. CVV, PIN, OTP, passwords and
+  full tax or national IDs remain never-store data.
 - **Follow every value derived from an identifier to every place it can surface**: a response
   body, a log line, an exception message, a 422 `detail`, a validation echo, a preview payload, a
   filename, a stack trace, a `repr()` on a dataclass, a test fixture's expected output. That is
@@ -171,8 +174,9 @@ The pass that would have saved eight rounds on PR #34.
 - `require_owner()` on every financial route. `/health`, `/auth/login` and `/auth/callback` are the
   complete public set (ADR-0013, ADR-0016). The UI is never the boundary.
 - Every `SECURITY DEFINER` function calls `assert_is_owner()` first.
-- A missing salt or secret **refuses the operation naming the variable** rather than proceeding
-  with an empty value.
+- Current normalized identifier matching and reveal require no application secret. A missing
+  `ACCOUNT_HASH_SALT` disables only the explicitly transitional comparison with
+  `legacy_sha256_v1` fingerprints; it must not gate current identities or cause an empty-salt hash.
 - No secret behind `NEXT_PUBLIC_`. No string-interpolated SQL. No real financial data, no
   `pdf-statements/` path, no `.env`, on any branch.
 - No LLM call (ADR-0003).

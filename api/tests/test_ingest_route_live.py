@@ -116,6 +116,10 @@ def _clean(cur: psycopg.Cursor[Any]) -> None:
     cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
     cur.execute("DELETE FROM classification_rule")
     cur.execute("DELETE FROM statement_layout")
+    cur.execute(
+        """DELETE FROM account_identifier ai USING account a
+             WHERE ai.account_id = a.id AND a.name = 'route test'"""
+    )
     cur.execute("DELETE FROM account WHERE name = 'route test'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
 
@@ -143,22 +147,30 @@ class Fixture:
             person = (row[3],)
             cur.execute(
                 """INSERT INTO account (household_id, owner_person_id, name, account_type,
-                                        currency, country, opening_balance_date, current_balance,
-                                        account_number_hash)
-                   VALUES (%s, %s, 'route test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0, %s)
+                                        currency, country, opening_balance_date, current_balance)
+                   VALUES (%s, %s, 'route test', 'savings', %s, 'ZZ', DATE '2026-01-01', 0)
                    RETURNING id""",
-                (self.household_id, person[0], self.base, _account_hash(ACCOUNT_NUMBER)),
+                (self.household_id, person[0], self.base),
             )
             self.account_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO account_identifier
+                       (household_id, account_id, kind, masked_value, visible_suffix,
+                        full_value, normalized_value, provenance)
+                     VALUES (%s, %s, 'bank_account', '****7890', '7890', %s, %s,
+                             'owner_entered')""",
+                (self.household_id, self.account_id, ACCOUNT_NUMBER, ACCOUNT_NUMBER),
+            )
 
             cur.execute(
                 """INSERT INTO statement_layout
-                     (id, household_id, name, version, fingerprints, columns, date_format,
-                      sign_convention, inverts_sign, chronological_order, row_start_rule,
-                      opening_balance_pattern, closing_balance_pattern, has_running_balance,
-                      metadata_patterns)
-                   VALUES (%s, %s, 'Acme current account', 1, %s, %s, 'dd/MM/yyyy', 'signed',
-                           false, 'ascending', 'has_date_and_amount', %s, %s, true, %s)""",
+                     (id, household_id, account_type, name, version, fingerprints, columns,
+                      date_format, sign_convention, inverts_sign, chronological_order,
+                      row_start_rule, opening_balance_pattern, closing_balance_pattern,
+                      has_running_balance, metadata_patterns)
+                   VALUES (%s, %s, 'savings', 'Acme current account', 1, %s, %s,
+                           'dd/MM/yyyy', 'signed', false, 'ascending', 'has_date_and_amount',
+                           %s, %s, true, %s)""",
                 (
                     LAYOUT_ID,
                     self.household_id,
@@ -346,16 +358,10 @@ def test_an_unauthenticated_parse_is_refused(live: Fixture) -> None:
     assert response.status_code == 401
 
 
-def test_a_missing_account_hash_salt_refuses_naming_the_variable(
+def test_a_missing_legacy_hash_salt_does_not_gate_normalized_matching(
     live: Fixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """CLAUDE.md: a missing salt refuses the operation naming the variable rather than
-    proceeding with an empty value.
-
-    Returning "no account matched" instead would report a misconfigured deployment as a fact
-    about the owner's data — and send them to create an account they already hold, which is the
-    one action that cannot help.
-    """
+    """Current normalized identities remain usable without the transitional legacy salt."""
     monkeypatch.delenv("ACCOUNT_HASH_SALT", raising=False)
 
     response = TestClient(app).post(
@@ -365,8 +371,8 @@ def test_a_missing_account_hash_salt_refuses_naming_the_variable(
         headers=ORIGIN,
     )
 
-    assert response.status_code == 503
-    assert "ACCOUNT_HASH_SALT" in response.json()["detail"]
+    assert response.status_code == 200, response.text
+    assert response.json()["accountId"] == str(live.account_id)
 
 
 def test_a_long_digit_run_in_a_description_never_reaches_the_response(live: Fixture) -> None:
@@ -438,10 +444,9 @@ def test_the_duplicate_refusal_names_the_batch_the_screen_links_to(live: Fixture
 def test_a_statements_own_account_number_resolves_the_account(live: Fixture) -> None:
     """The whole reason the account lookup is inverted through a resolver (spec §8).
 
-    With no `accountId` the statement's own capture is hashed with `ACCOUNT_HASH_SALT` and
-    matched against `account.account_number_hash` — the salted digest is the stored identity,
-    and the number itself is on the never-store list. Every other test supplies `accountId`,
-    so without this one the path the inversion exists for is never executed at all.
+    With no `accountId` the statement's complete capture is normalized and matched against the
+    active typed identifier. Every other test supplies `accountId`, so without this one the path
+    the inversion exists for is never executed at all.
     """
     response = TestClient(app).post(
         "/parse", files={"file": ("s.pdf", _statement())}, headers=ORIGIN
@@ -453,13 +458,35 @@ def test_a_statements_own_account_number_resolves_the_account(live: Fixture) -> 
     assert ACCOUNT_NUMBER not in response.text, "and the number itself never comes back"
 
 
+def test_a_migrated_legacy_fingerprint_remains_resolvable_until_backfill(live: Fixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE account_identifier
+                  SET full_value = NULL, normalized_value = NULL,
+                      legacy_fingerprint = decode(%s, 'hex'),
+                      legacy_fingerprint_scheme = 'legacy_sha256_v1',
+                      provenance = 'legacy_migration'
+                WHERE account_id = %s""",
+            (_account_hash(ACCOUNT_NUMBER), live.account_id),
+        )
+    live.conn.commit()
+
+    response = TestClient(app).post(
+        "/parse", files={"file": ("s.pdf", _statement())}, headers=ORIGIN
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["accountId"] == str(live.account_id)
+    assert ACCOUNT_NUMBER not in response.text
+
+
 def test_a_number_matching_no_account_is_proposed_without_echoing_it(live: Fixture) -> None:
     """A genuine miss is a read-only masked proposal, distinct from a missing salt."""
     other = _statement().replace(b"1234567890", b"9876543210")
 
     response = TestClient(app).post("/parse", files={"file": ("s.pdf", other)}, headers=ORIGIN)
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert response.json()["accountId"] is None
     assert response.json()["accountProposal"]["accountNumberMasked"] == "****3210"
     assert response.json()["rows"] == []
@@ -474,13 +501,6 @@ def test_the_statements_own_account_number_is_screened_by_its_capture(live: Fixt
     leaves it alone — only the capture the pipeline extracted removes it. That is what stops a
     statement quoting its own account number in a narration line from returning it.
     """
-    with live.conn.cursor() as cur:
-        cur.execute(
-            "UPDATE account SET account_number_hash = %s WHERE id = %s",
-            (_account_hash("4021"), live.account_id),
-        )
-    live.conn.commit()
-
     response = TestClient(app).post(
         "/parse",
         files={

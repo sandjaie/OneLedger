@@ -600,9 +600,11 @@ not guessed from letters such as <code>X</code>, because those are also legal id
 General serialization of a complete value exposes only its safe presentation; its value object,
 representation and validation errors do not render the complete identifier. The module performs no
 database I/O and reads no environment state.</p>
-<p>No identifier encryption key exists. Ordinary account payloads return only the mask; an explicit
-owner-authenticated, no-store reveal may return one complete stored source identifier. A source that
-printed only a mask remains mask-only; OneLedger never manufactures its missing characters.</p>
+<p>No identifier encryption key exists. Ordinary account payloads return only the mask; the explicit
+owner-authenticated <code>POST /accounts/{accountId}/identifiers/{identifierId}/reveal</code> route
+may return one complete stored source identifier. Its successful responses carry
+<code>Cache-Control: no-store</code> and <code>Pragma: no-cache</code>. A source that printed only a
+mask returns <code>source_mask_only</code>; OneLedger never manufactures its missing characters.</p>
 <p>The same treatment applies to PAN, Emirates ID and passport numbers — last four for human
 recognition, nothing more.</p>
 <hr>

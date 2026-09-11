@@ -74,6 +74,7 @@ function account(): AccountRow {
     currentBalance: "-1490.0000",
     currentBalanceAsOf: "2026-03-01",
     isActive: true,
+    identifiers: [],
   };
 }
 

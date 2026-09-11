@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -59,6 +60,10 @@ class Fixture:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout WHERE id = %s", (LAYOUT_ID,))
+            cur.execute(
+                """DELETE FROM account_identifier ai USING account a
+                     WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
+            )
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute("DELETE FROM institution WHERE name = 'Proposal Test Institution'")
             cur.execute(
@@ -168,6 +173,10 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout WHERE id = %s", (LAYOUT_ID,))
+            cur.execute(
+                """DELETE FROM account_identifier ai USING account a
+                     WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
+            )
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute("DELETE FROM institution WHERE id = %s", (fixture.institution_id,))
         conn.commit()
@@ -247,6 +256,23 @@ def test_confirming_creation_then_resolves_the_same_statement(live: Fixture) -> 
     assert created.status_code == 201, created.text
     assert created.json()["accountNumberMasked"] == "****3579"
     assert ACCOUNT_NUMBER not in created.text
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT full_value, normalized_value, provenance, source_sha256,
+                      source_layout_id, source_layout_version, source_capture_key
+                 FROM account_identifier
+                WHERE account_id = %s AND is_active""",
+            (created.json()["id"],),
+        )
+        assert cur.fetchone() == (
+            ACCOUNT_NUMBER,
+            ACCOUNT_NUMBER,
+            "statement",
+            hashlib.sha256(_statement()).hexdigest(),
+            LAYOUT_ID,
+            1,
+            "account_number",
+        )
     resolved = live.post_parse()
     assert resolved.status_code == 200, resolved.text
     assert resolved.json()["accountId"] == created.json()["id"]
@@ -267,14 +293,20 @@ def test_a_matching_hashless_account_is_suggested_and_can_adopt(live: Fixture) -
         cur.execute(
             """INSERT INTO account
                    (household_id, owner_person_id, name, account_type, currency, country,
-                    account_number_masked, opening_balance_date)
+                    opening_balance_date)
                  VALUES (%s, %s, 'proposal test adopted', 'savings', %s, 'ZZ',
-                         '****3579', DATE '2026-01-01') RETURNING id""",
+                         DATE '2026-01-01') RETURNING id""",
             (live.household_id, live.person_id, live.currency),
         )
         created = cur.fetchone()
         assert created is not None
         account_id = created[0]
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                 VALUES (%s, %s, 'bank_account', '****3579', '3579', 'owner_entered')""",
+            (live.household_id, account_id),
+        )
     live.conn.commit()
 
     proposal = live.post_parse().json()["accountProposal"]
@@ -293,9 +325,23 @@ def test_a_matching_hashless_account_is_suggested_and_can_adopt(live: Fixture) -
     )
     assert adopted.status_code == 200, adopted.text
     with live.conn.cursor() as cur:
-        cur.execute("SELECT account_number_hash FROM account WHERE id = %s", (account_id,))
+        cur.execute(
+            """SELECT full_value, normalized_value, provenance, source_sha256,
+                      source_layout_id, source_layout_version, source_capture_key
+                 FROM account_identifier
+                WHERE account_id = %s AND is_active""",
+            (account_id,),
+        )
         identity = cur.fetchone()
-        assert identity is not None and identity[0] is not None
+        assert identity == (
+            ACCOUNT_NUMBER,
+            ACCOUNT_NUMBER,
+            "statement",
+            hashlib.sha256(_statement()).hexdigest(),
+            LAYOUT_ID,
+            1,
+            "account_number",
+        )
     assert live.post_parse().json()["accountId"] == str(account_id)
 
 
@@ -334,11 +380,155 @@ def test_card_creation_and_adoption_store_the_mask_only(live: Fixture) -> None:
     assert adopted.status_code == 200, adopted.text
     with live.conn.cursor() as cur:
         cur.execute(
-            "SELECT account_number_masked, account_number_hash FROM account WHERE id = %s",
+            """SELECT masked_value, full_value FROM account_identifier
+                WHERE account_id = %s AND is_active""",
             (created.json()["id"],),
         )
         identity = cur.fetchone()
         assert identity == ("****3579", None)
+
+
+def test_custom_layout_masked_bank_capture_remains_mask_only(live: Fixture) -> None:
+    masked_source = "XXXX3579"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = jsonb_set(
+                        metadata_patterns, '{account_number}', to_jsonb(%s::text))
+                WHERE id = %s""",
+            (r"Account\s*Number\s*([X0-9]+)", LAYOUT_ID),
+        )
+    live.conn.commit()
+    account = {
+        "name": "proposal test masked savings",
+        "institutionId": str(live.institution_id),
+        "accountType": "savings",
+        "currency": "AED",
+        "country": "ZZ",
+        "openingBalance": "100.00",
+        "openingBalanceDate": "2026-04-01",
+    }
+
+    created = TestClient(app).post(
+        "/parse/account",
+        files={"file": ("statement.pdf", _statement(masked_source))},
+        data={"account": json.dumps(account)},
+        headers=ORIGIN,
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["identifiers"][0]["canReveal"] is False
+    assert masked_source not in created.text
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT masked_value, full_value, normalized_value
+                 FROM account_identifier WHERE account_id = %s AND is_active""",
+            (created.json()["id"],),
+        )
+        assert cur.fetchone() == ("****3579", None, None)
+
+
+def test_custom_layout_complete_card_capture_keeps_pre_8c3_mask_only_behavior(
+    live: Fixture,
+) -> None:
+    complete_card = "4111111111111111"
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE statement_layout SET account_type = 'credit_card' WHERE id = %s",
+            (LAYOUT_ID,),
+        )
+    live.conn.commit()
+    account = {
+        "name": "proposal test complete card",
+        "institutionId": str(live.institution_id),
+        "accountType": "credit_card",
+        "currency": "AED",
+        "country": "ZZ",
+        "openingBalance": "-100.00",
+        "openingBalanceDate": "2026-04-01",
+        "creditLimit": "1000.00",
+    }
+
+    created = TestClient(app).post(
+        "/parse/account",
+        files={"file": ("statement.pdf", _statement(complete_card))},
+        data={"account": json.dumps(account)},
+        headers=ORIGIN,
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["accountNumberMasked"] == "****1111"
+    assert created.json()["identifiers"][0]["canReveal"] is False
+    assert complete_card not in created.text
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT masked_value, full_value, normalized_value
+                 FROM account_identifier WHERE account_id = %s AND is_active""",
+            (created.json()["id"],),
+        )
+        assert cur.fetchone() == ("****1111", None, None)
+
+
+def test_v28_card_mask_is_suggested_and_blocks_a_duplicate_create(live: Fixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE statement_layout SET account_type = 'credit_card' WHERE id = %s",
+            (LAYOUT_ID,),
+        )
+        cur.execute(
+            """INSERT INTO account
+                   (household_id, owner_person_id, name, account_type, currency, country,
+                    opening_balance_date, credit_limit)
+                 VALUES (%s, %s, 'proposal test legacy card', 'credit_card', %s, 'ZZ',
+                         DATE '2026-01-01', 1000) RETURNING id""",
+            (live.household_id, live.person_id, live.currency),
+        )
+        created = cur.fetchone()
+        assert created is not None
+        account_id = created[0]
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, provenance)
+                 VALUES (%s, %s, 'card', 'XXXX3579', 'legacy_migration')""",
+            (live.household_id, account_id),
+        )
+    live.conn.commit()
+
+    parsed = TestClient(app).post(
+        "/parse",
+        files={"file": ("statement.pdf", _statement("3579"))},
+        headers=ORIGIN,
+    )
+    assert parsed.status_code == 200, parsed.text
+    proposal = parsed.json()["accountProposal"]
+    assert proposal["suggestedAccounts"] == [
+        {
+            "id": str(account_id),
+            "name": "proposal test legacy card",
+            "accountNumberMasked": "XXXX3579",
+        }
+    ]
+    duplicate = TestClient(app).post(
+        "/parse/account",
+        files={"file": ("statement.pdf", _statement("3579"))},
+        data={
+            "account": json.dumps(
+                {
+                    "name": "proposal test duplicate card",
+                    "institutionId": str(live.institution_id),
+                    "accountType": "credit_card",
+                    "currency": "AED",
+                    "country": "ZZ",
+                    "openingBalance": "-100.00",
+                    "openingBalanceDate": "2026-04-01",
+                    "creditLimit": "1000.00",
+                }
+            )
+        },
+        headers=ORIGIN,
+    )
+    assert duplicate.status_code == 409
+    assert "proposal test legacy card" in duplicate.json()["detail"]
 
 
 def test_concurrent_mask_only_creates_make_one_account(live: Fixture) -> None:
@@ -402,27 +592,19 @@ def test_concurrent_adoption_cannot_overwrite_a_confirmed_identity(live: Fixture
         cur.execute(
             """INSERT INTO account
                    (household_id, owner_person_id, name, account_type, currency, country,
-                    account_number_masked, opening_balance_date)
+                    opening_balance_date)
                  VALUES (%s, %s, 'proposal test adoption race', 'savings', %s, 'ZZ',
-                         '****3579', DATE '2026-01-01') RETURNING id""",
+                         DATE '2026-01-01') RETURNING id""",
             (live.household_id, live.person_id, live.currency),
         )
         created = cur.fetchone()
         assert created is not None
         account_id = created[0]
         cur.execute(
-            """CREATE OR REPLACE FUNCTION proposal_test_delay_account_update()
-                 RETURNS trigger LANGUAGE plpgsql AS $$
-                 BEGIN PERFORM pg_sleep(0.2); RETURN NEW; END $$"""
-        )
-        cur.execute("DROP TRIGGER IF EXISTS proposal_test_delay_update ON account")
-        cur.execute(
-            """CREATE TRIGGER proposal_test_delay_update
-                 BEFORE UPDATE OF account_number_hash ON account
-                 FOR EACH ROW WHEN (
-                   OLD.name = 'proposal test adoption race'
-                   AND NEW.account_number_hash IS NOT NULL
-                 ) EXECUTE FUNCTION proposal_test_delay_account_update()"""
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                 VALUES (%s, %s, 'bank_account', '****3579', '3579', 'owner_entered')""",
+            (live.household_id, account_id),
         )
     live.conn.commit()
     rendezvous = Barrier(2)
@@ -439,22 +621,20 @@ def test_concurrent_adoption_cannot_overwrite_a_confirmed_identity(live: Fixture
             ),
         )
 
-    try:
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            responses = [
-                future.result()
-                for future in [pool.submit(adopt, "1111113579"), pool.submit(adopt, "2222223579")]
-            ]
-        assert sorted(response.status_code for response in responses) == [200, 409]
-        with live.conn.cursor() as cur:
-            cur.execute("SELECT account_number_hash FROM account WHERE id = %s", (account_id,))
-            stored = cur.fetchone()
-            assert stored is not None and stored[0] is not None
-    finally:
-        with live.conn.cursor() as cur:
-            cur.execute("DROP TRIGGER IF EXISTS proposal_test_delay_update ON account")
-            cur.execute("DROP FUNCTION IF EXISTS proposal_test_delay_account_update()")
-        live.conn.commit()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = [
+            future.result()
+            for future in [pool.submit(adopt, "1111113579"), pool.submit(adopt, "2222223579")]
+        ]
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT full_value FROM account_identifier
+                WHERE account_id = %s AND is_active""",
+            (account_id,),
+        )
+        stored = cur.fetchone()
+        assert stored is not None and stored[0] is not None
 
 
 def test_confirmation_maps_an_unknown_account_type_to_422(live: Fixture) -> None:

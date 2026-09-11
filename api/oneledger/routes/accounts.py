@@ -4,8 +4,6 @@ rate and a coverage label, which is M9a's contract (multi-currency-and-fx.html s
 
 from __future__ import annotations
 
-import hashlib
-import os
 import re
 from datetime import date, datetime
 from decimal import Decimal
@@ -13,11 +11,19 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
+from ..identifiers import (
+    CompleteIdentifier,
+    Identifier,
+    IdentifierKind,
+    IdentifierValueError,
+    complete_identifier,
+    masked_identifier,
+)
 
 router = APIRouter(tags=["accounts"])
 
@@ -48,9 +54,7 @@ def _money(value: str | None) -> str | None:
 
 
 def _masked(value: str | None) -> str | None:
-    """At most the last four digits may be visible. A fifth digit makes the value an account
-    number, and no full number is ever accepted, transmitted or logged
-    (security-and-privacy.html section 1)."""
+    """Validate the compatibility display-mask field; complete values use accountNumber."""
     if value is not None and sum(ch.isdigit() for ch in value) > 4:
         raise ValueError(
             "accountNumberMasked takes a mask, not an account number: "
@@ -59,56 +63,20 @@ def _masked(value: str | None) -> str | None:
     return value
 
 
-def _account_digits(value: str) -> str:
-    # Only ASCII digits and the statement separator vocabulary are supported; letters and other
-    # punctuation are not silently removed to turn different identifiers into one.
-    if not re.fullmatch(r"[0-9\s–./-]+", value) or not re.search(r"[0-9]", value):
-        raise ValueError("accountNumber requires ASCII digits with optional separators")
-    return re.sub(r"[\s–./-]", "", value)
+def _identifier_kind(account_type: str) -> IdentifierKind:
+    return "card" if account_type == "credit_card" else "bank_account"
 
 
-def _account_number_identity(value: str) -> tuple[str, str]:
-    digits = _account_digits(value)
-    salt = os.environ.get("ACCOUNT_HASH_SALT", "").strip()
-    if not salt:
-        raise HTTPException(status_code=503, detail="ACCOUNT_HASH_SALT is not configured")
-    masked = _masked(f"****{digits[-4:]}")
-    assert masked is not None
-    digest = hashlib.sha256(f"{salt}{digits}".encode()).hexdigest()
-    return masked, digest
-
-
-def _stored_account_identity(account_type: str, value: str) -> tuple[str, str | None]:
-    """Reduce a browser-supplied identity to what this account type may retain."""
-    if account_type == "credit_card":
-        digits = _account_digits(value)
-        masked = _masked(f"****{digits[-4:]}")
-        assert masked is not None
-        return masked, None
-    return _account_number_identity(value)
-
-
-def _statement_account_identity(value: str) -> tuple[str, str | None]:
-    """Reduce a statement capture to the only identity facts storage may hold.
-
-    A full bank-account number may be salted and hashed. A four-digit capture, or a masked
-    capture exposing exactly four ASCII digits, is display identity only and never produces a
-    hash. No captured spelling is included in a refusal.
-    """
+def _body_identifier(body: AccountCreate | AccountUpdate) -> Identifier | None:
+    kind = _identifier_kind(body.accountType)
     try:
-        digits = _account_digits(value)
-    except ValueError:
-        visible = "".join(character for character in value if character in "0123456789")
-        if len(visible) != 4 or not re.fullmatch(r"[xX*•\s–./0-9-]+", value):
-            raise ValueError("the statement does not state a usable account identity") from None
-        digits = visible
-    if len(digits) < 4:
-        raise ValueError("the statement does not state a usable account identity")
-    if len(digits) == 4:
-        masked = _masked(f"****{digits}")
-        assert masked is not None
-        return masked, None
-    return _account_number_identity(value)
+        if body.accountNumber is not None:
+            return complete_identifier(kind, body.accountNumber)
+        if body.accountNumberMasked is not None:
+            return masked_identifier(kind, body.accountNumberMasked)
+    except IdentifierValueError as exc:
+        raise ValueError(str(exc)) from None
+    return None
 
 
 def _out(value: Decimal | None) -> str | None:
@@ -122,8 +90,8 @@ def _first_line(exc: Exception) -> str:
 def _account_write_error(exc: psycopg.Error) -> str:
     # Database exception text may echo rejected parameters. Return only stable
     # service-owned descriptions, including the established duplicate constraint.
-    if exc.diag.constraint_name == "idx_account_number_hash":
-        return "account identity already exists (idx_account_number_hash)"
+    if exc.diag.constraint_name == "idx_account_identifier_active_normalized_value":
+        return "account identity already exists (idx_account_identifier_active_normalized_value)"
     return "account fields violate a type, relationship or balance constraint"
 
 
@@ -139,6 +107,14 @@ def _credit_card_needs_a_limit(account_type: str, credit_limit: str | None) -> N
         raise ValueError("a credit limit must be positive")
     if account_type != "credit_card" and credit_limit is not None:
         raise ValueError("only a credit card carries a credit limit")
+
+
+class AccountIdentifierRow(BaseModel):
+    id: UUID
+    kind: IdentifierKind
+    masked: str
+    canReveal: bool
+    isActive: bool
 
 
 class AccountRow(BaseModel):
@@ -164,6 +140,18 @@ class AccountRow(BaseModel):
     currentBalance: str
     currentBalanceAsOf: datetime | None
     creditLimit: str | None
+    identifiers: list[AccountIdentifierRow]
+
+
+class RevealedAccountIdentifier(BaseModel):
+    status: Literal["revealed"]
+    value: str = Field(repr=False)
+    kind: IdentifierKind
+
+
+class UnavailableAccountIdentifier(BaseModel):
+    status: Literal["unavailable"]
+    reason: Literal["source_mask_only"]
 
 
 class AccountGroupTotal(BaseModel):
@@ -212,17 +200,11 @@ class AccountCreate(BaseModel):
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
 
-    @field_validator("accountNumber")
-    @classmethod
-    def numeric_account_number(cls, value: str | None) -> str | None:
-        if value is not None:
-            _account_digits(value)
-        return value
-
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountCreate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
         _credit_card_needs_a_limit(self.accountType, self.creditLimit)
+        _body_identifier(self)
         return self
 
 
@@ -259,17 +241,11 @@ class AccountUpdate(BaseModel):
     def masked_never_full(cls, value: str | None) -> str | None:
         return _masked(value)
 
-    @field_validator("accountNumber")
-    @classmethod
-    def numeric_account_number(cls, value: str | None) -> str | None:
-        if value is not None:
-            _account_digits(value)
-        return value
-
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountUpdate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
         _credit_card_needs_a_limit(self.accountType, self.creditLimit)
+        _body_identifier(self)
         return self
 
 
@@ -289,10 +265,26 @@ class InstitutionRow(BaseModel):
 
 
 COLUMNS = """a.id, a.name, a.institution_id, i.name, a.account_type::text, a.account_class::text,
-             a.account_subtype, a.currency, a.country, a.account_number_masked, a.opened_on,
+             a.account_subtype, a.currency, a.country,
+             (SELECT ai.masked_value
+                FROM account_identifier ai
+               WHERE ai.household_id = a.household_id AND ai.account_id = a.id AND ai.is_active
+               ORDER BY (ai.kind = CASE WHEN a.account_type = 'credit_card'::account_type
+                                        THEN 'card' ELSE 'bank_account' END) DESC,
+                        ai.created_at, ai.id
+               LIMIT 1),
+             a.opened_on,
              a.closed_on, a.is_active, a.include_in_net_worth, a.is_liquid, a.opening_balance,
              a.opening_balance_date, a.opening_balance_note, a.opening_balance_confirmed_at,
-             a.current_balance, a.current_balance_as_of, a.credit_limit"""
+             a.current_balance, a.current_balance_as_of, a.credit_limit,
+             (SELECT COALESCE(
+                       jsonb_agg(jsonb_build_object(
+                         'id', ai.id, 'kind', ai.kind, 'masked', ai.masked_value,
+                         'canReveal', ai.full_value IS NOT NULL, 'isActive', ai.is_active)
+                         ORDER BY ai.is_active DESC, ai.created_at, ai.id),
+                       '[]'::jsonb)
+                FROM account_identifier ai
+               WHERE ai.household_id = a.household_id AND ai.account_id = a.id)"""
 
 FROM = (
     "FROM account a LEFT JOIN institution i ON i.id = a.institution_id"
@@ -322,11 +314,14 @@ FIELDS = [
     "currentBalance",
     "currentBalanceAsOf",
     "creditLimit",
+    "identifiers",
 ]
 MONEY_FIELDS = {"openingBalance", "currentBalance", "creditLimit"}
 
 
 def account_row(values: tuple[Any, ...]) -> AccountRow:
+    if len(values) == len(FIELDS) - 1:
+        values = (*values, [])
     fields = dict(zip(FIELDS, values, strict=True))
     for name in MONEY_FIELDS:
         fields[name] = _out(fields[name])
@@ -360,16 +355,77 @@ def _one(cur: psycopg.Cursor[Any], account_id: UUID, household_id: UUID) -> Acco
     return account_row(row)
 
 
-def resolve_account_by_hash(
-    cur: psycopg.Cursor[Any], account_number_hash: str, household_id: UUID
+def resolve_account_by_identifier(
+    cur: psycopg.Cursor[Any], kind: IdentifierKind, normalized_value: str, household_id: UUID
 ) -> AccountRow | None:
     cur.execute(
         f"""SELECT {COLUMNS} {FROM}
-              WHERE a.account_number_hash = %s AND a.household_id = %s""",
-        (account_number_hash, household_id),
+              WHERE a.household_id = %s
+                AND EXISTS (
+                  SELECT FROM account_identifier ai
+                   WHERE ai.household_id = a.household_id AND ai.account_id = a.id
+                     AND ai.kind = %s AND ai.normalized_value = %s AND ai.is_active)""",
+        (household_id, kind, normalized_value),
     )
     row = cur.fetchone()
     return None if row is None else account_row(row)
+
+
+def resolve_account_by_legacy_fingerprint(
+    cur: psycopg.Cursor[Any], digest: str, household_id: UUID
+) -> AccountRow | None:
+    cur.execute(
+        f"""SELECT {COLUMNS} {FROM}
+              WHERE a.household_id = %s
+                AND EXISTS (
+                  SELECT FROM account_identifier ai
+                   WHERE ai.household_id = a.household_id AND ai.account_id = a.id
+                     AND ai.legacy_fingerprint = decode(%s, 'hex') AND ai.is_active)""",
+        (household_id, digest),
+    )
+    row = cur.fetchone()
+    return None if row is None else account_row(row)
+
+
+def _insert_account_identifier(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    account_id: UUID,
+    identifier: Identifier,
+    *,
+    provenance: Literal["owner_entered", "statement"],
+    source_sha256: str | None = None,
+    source_layout_id: UUID | None = None,
+    source_layout_version: int | None = None,
+    source_capture_key: str | None = None,
+) -> UUID:
+    complete = identifier if isinstance(identifier, CompleteIdentifier) else None
+    cur.execute(
+        """INSERT INTO account_identifier (
+               household_id, account_id, kind, masked_value, visible_suffix,
+               full_value, normalized_value, provenance, source_sha256,
+               source_layout_id, source_layout_version, source_capture_key)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+           RETURNING id""",
+        (
+            household_id,
+            account_id,
+            identifier.kind,
+            identifier.masked_value,
+            identifier.visible_suffix,
+            None if complete is None else complete.full_value,
+            None if complete is None else complete.normalized_value,
+            provenance,
+            source_sha256,
+            source_layout_id,
+            source_layout_version,
+            source_capture_key,
+        ),
+    )
+    created = cur.fetchone()
+    if created is None:  # pragma: no cover - INSERT RETURNING always yields or raises
+        raise HTTPException(status_code=500, detail="the account identifier could not be created")
+    return UUID(str(created[0]))
 
 
 def _insert_account(
@@ -377,8 +433,12 @@ def _insert_account(
     body: AccountCreate,
     household_id: UUID,
     *,
-    account_number_masked: str | None,
-    account_number_hash: str | None,
+    identifier: Identifier | None,
+    identifier_provenance: Literal["owner_entered", "statement"] = "owner_entered",
+    source_sha256: str | None = None,
+    source_layout_id: UUID | None = None,
+    source_layout_version: int | None = None,
+    source_capture_key: str | None = None,
 ) -> AccountRow:
     """The account insert shared by the ordinary form and statement confirmation."""
     _assert_institution_allowed(cur, body.institutionId, household_id)
@@ -394,11 +454,10 @@ def _insert_account(
     cur.execute(
         """INSERT INTO account (
                household_id, owner_person_id, institution_id, name, account_type,
-               account_subtype, currency, country, account_number_masked,
-               account_number_hash, opened_on,
+               account_subtype, currency, country, opened_on,
                include_in_net_worth, is_liquid, opening_balance, opening_balance_date,
                opening_balance_note, credit_limit)
-           VALUES (%s, %s, %s, %s, %s::account_type, %s, %s, %s, %s, %s, %s, %s,
+           VALUES (%s, %s, %s, %s, %s::account_type, %s, %s, %s, %s, %s,
                    %s, %s, %s, %s, %s)
            RETURNING id""",
         (
@@ -410,8 +469,6 @@ def _insert_account(
             body.accountSubtype,
             body.currency,
             body.country,
-            account_number_masked,
-            account_number_hash,
             body.openedOn,
             body.includeInNetWorth,
             body.isLiquid,
@@ -424,7 +481,82 @@ def _insert_account(
     created = cur.fetchone()
     if created is None:
         raise HTTPException(status_code=500, detail="the account could not be created")
-    return _one(cur, UUID(str(created[0])), household_id)
+    account_id = UUID(str(created[0]))
+    if identifier is not None:
+        _insert_account_identifier(
+            cur,
+            household_id,
+            account_id,
+            identifier,
+            provenance=identifier_provenance,
+            source_sha256=source_sha256,
+            source_layout_id=source_layout_id,
+            source_layout_version=source_layout_version,
+            source_capture_key=source_capture_key,
+        )
+    return _one(cur, account_id, household_id)
+
+
+def _replace_account_identifier(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    account_id: UUID,
+    kind: IdentifierKind,
+    identifier: Identifier | None,
+    *,
+    provenance: Literal["owner_entered", "statement"] = "owner_entered",
+    source_sha256: str | None = None,
+    source_layout_id: UUID | None = None,
+    source_layout_version: int | None = None,
+    source_capture_key: str | None = None,
+) -> None:
+    cur.execute(
+        """SELECT masked_value, full_value, normalized_value, visible_suffix
+             FROM account_identifier
+            WHERE household_id = %s AND account_id = %s AND kind = %s AND is_active
+            ORDER BY created_at, id
+            FOR UPDATE""",
+        (household_id, account_id, kind),
+    )
+    existing = cur.fetchall()
+    if identifier is not None and not isinstance(identifier, CompleteIdentifier):
+        complete_suffixes = {(row[3] or row[0][-4:]) for row in existing if row[1] is not None}
+        if complete_suffixes:
+            if identifier.visible_suffix not in complete_suffixes:
+                raise HTTPException(
+                    status_code=409,
+                    detail=("provide accountNumber to change a mask linked to an account identity"),
+                )
+            return
+    if identifier is not None and any(
+        (isinstance(identifier, CompleteIdentifier) and row[2] == identifier.normalized_value)
+        or (
+            not isinstance(identifier, CompleteIdentifier)
+            and row[1] is None
+            and (row[3] or row[0][-4:]) == identifier.visible_suffix
+        )
+        for row in existing
+    ):
+        return
+    if existing:
+        cur.execute(
+            """UPDATE account_identifier
+                  SET is_active = false, deactivated_at = now(), updated_at = now()
+                WHERE household_id = %s AND account_id = %s AND kind = %s AND is_active""",
+            (household_id, account_id, kind),
+        )
+    if identifier is not None:
+        _insert_account_identifier(
+            cur,
+            household_id,
+            account_id,
+            identifier,
+            provenance=provenance,
+            source_sha256=source_sha256,
+            source_layout_id=source_layout_id,
+            source_layout_version=source_layout_version,
+            source_capture_key=source_capture_key,
+        )
 
 
 @router.get("/accounts")
@@ -459,20 +591,14 @@ def list_accounts(owner: Annotated[OwnerSession, Depends(require_owner)]) -> Acc
 def create_account(
     body: AccountCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> AccountRow:
-    account_number_masked = body.accountNumberMasked
-    account_number_hash = None
-    if body.accountNumber is not None:
-        account_number_masked, account_number_hash = _stored_account_identity(
-            body.accountType, body.accountNumber
-        )
+    identifier = _body_identifier(body)
     try:
         with connect() as conn, conn.cursor() as cur:
             return _insert_account(
                 cur,
                 body,
                 owner.household_id,
-                account_number_masked=account_number_masked,
-                account_number_hash=account_number_hash,
+                identifier=identifier,
             )
     except (
         psycopg.errors.InvalidTextRepresentation,
@@ -483,25 +609,49 @@ def create_account(
         raise HTTPException(status_code=422, detail=_account_write_error(exc)) from None
 
 
+@router.post(
+    "/accounts/{account_id}/identifiers/{identifier_id}/reveal",
+    response_model=RevealedAccountIdentifier | UnavailableAccountIdentifier,
+)
+def reveal_account_identifier(
+    account_id: UUID,
+    identifier_id: UUID,
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> RevealedAccountIdentifier | UnavailableAccountIdentifier:
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT ai.kind, ai.full_value
+                 FROM account_identifier ai
+                 JOIN account a ON a.household_id = ai.household_id AND a.id = ai.account_id
+                WHERE ai.id = %s AND ai.account_id = %s AND ai.household_id = %s""",
+            (identifier_id, account_id, owner.household_id),
+        )
+        found = cur.fetchone()
+    if found is None:
+        raise HTTPException(
+            status_code=404,
+            detail="no such account identifier",
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+    kind, full_value = found
+    if full_value is None:
+        return UnavailableAccountIdentifier(status="unavailable", reason="source_mask_only")
+    return RevealedAccountIdentifier(status="revealed", value=full_value, kind=kind)
+
+
 @router.patch("/accounts/{account_id}")
 def update_account(
     account_id: UUID,
     body: AccountUpdate,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
-    replace_account_identity = "accountNumber" in body.model_fields_set
-    replace_account_hash = replace_account_identity or body.accountType == "credit_card"
-    replace_account_mask = (
-        replace_account_identity or "accountNumberMasked" in body.model_fields_set
+    replace_account_identity = bool(
+        {"accountNumber", "accountNumberMasked"} & body.model_fields_set
     )
-    account_number_masked: str | None = None
-    account_number_hash: str | None = None
-    if body.accountNumber is not None:
-        account_number_masked, account_number_hash = _stored_account_identity(
-            body.accountType, body.accountNumber
-        )
-    elif not replace_account_identity:
-        account_number_masked = body.accountNumberMasked
+    identifier = _body_identifier(body) if replace_account_identity else None
     # Changing the opening anchor recomputes the materialised balance from the ledger:
     # opening_balance + the sum of the account's posting rows (split children move nothing).
     # Postgres does the arithmetic; before M1b's ledger existed the sum was empty and this
@@ -518,28 +668,6 @@ def update_account(
             # POST /transactions, so the two paths cannot deadlock.
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             _assert_institution_allowed(cur, body.institutionId, owner.household_id)
-            if (
-                replace_account_mask
-                and not replace_account_identity
-                and body.accountType != "credit_card"
-            ):
-                cur.execute(
-                    """SELECT account_number_masked, account_number_hash FROM account
-                       WHERE id = %s AND household_id = %s""",
-                    (account_id, owner.household_id),
-                )
-                identity = cur.fetchone()
-                if (
-                    identity is not None
-                    and identity[1] is not None
-                    and identity[0] != account_number_masked
-                ):
-                    raise HTTPException(
-                        status_code=409,
-                        detail=(
-                            "provide accountNumber to change a mask linked to an account identity"
-                        ),
-                    )
             # An account's currency is fixed once ledger rows exist: the rows' native amounts
             # are immutable facts in that denomination, and relabelling the account would mix
             # denominations in one balance. A wrong currency with history is a migration
@@ -605,10 +733,6 @@ def update_account(
                 """UPDATE account
                       SET name = %s, institution_id = %s, account_type = %s::account_type,
                           account_subtype = %s, currency = %s, country = %s,
-                          account_number_masked = CASE WHEN %s THEN %s
-                                                       ELSE account_number_masked END,
-                          account_number_hash = CASE WHEN %s THEN %s
-                                                     ELSE account_number_hash END,
                           opened_on = %s, closed_on = %s,
                           is_active = (%s::date IS NULL),
                           include_in_net_worth = %s, is_liquid = %s,
@@ -646,10 +770,6 @@ def update_account(
                     body.accountSubtype,
                     body.currency,
                     body.country,
-                    replace_account_mask,
-                    account_number_masked,
-                    replace_account_hash,
-                    account_number_hash,
                     body.openedOn,
                     body.closedOn,
                     body.closedOn,
@@ -674,6 +794,14 @@ def update_account(
             )
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="no such account")
+            if replace_account_identity:
+                _replace_account_identifier(
+                    cur,
+                    owner.household_id,
+                    account_id,
+                    _identifier_kind(body.accountType),
+                    identifier,
+                )
             return _one(cur, account_id, owner.household_id)
     except (
         psycopg.errors.InvalidTextRepresentation,
