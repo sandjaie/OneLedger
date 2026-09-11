@@ -378,12 +378,37 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .account-proposal header { display: grid; gap: 6px; }
 .account-proposal header h3 {
-  margin: 0; font-family: Georgia, "Times New Roman", serif;
+  margin: 0; font-family: var(--serif);
   font-size: 1.7rem; font-weight: 400; letter-spacing: 0.02em;
 }
 .account-proposal header p:last-child { margin: 0; color: var(--muted); line-height: 1.5; }
+.account-proposal-identity {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 16px; border: 1px solid var(--rule); border-radius: 7px; background: var(--paper);
+}
+.account-proposal-identity > span { display: grid; gap: 4px; min-width: 0; }
+.account-proposal-identity small {
+  color: var(--muted); font-family: var(--mono); font-size: 0.58rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.account-proposal-identity strong {
+  overflow-wrap: anywhere; font-family: var(--mono); font-size: 0.9rem; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.account-proposal-identity .account-identifier-reveal {
+  display: inline-grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center;
+  border: 1px solid var(--rule); border-radius: 50%; color: var(--muted); background: var(--surface);
+}
+.account-proposal-identity .account-identifier-reveal:hover:not(:disabled) {
+  color: var(--green); background: rgba(47, 122, 92, 0.08); text-decoration: none;
+}
 .account-proposal-suggestions { display: flex; flex-wrap: wrap; gap: 10px; }
 .account-proposal-suggestions .text-action { margin: 0; }
+.account-proposal-conflicts {
+  display: grid; gap: 6px; margin: 0; padding: 13px 16px 13px 34px;
+  border-left: 3px solid var(--danger); color: var(--ink); background: rgba(177, 69, 58, 0.07);
+  font-size: 0.82rem;
+}
 .account-proposal-fields {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px;
   padding: 18px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
@@ -400,6 +425,14 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .account-proposal-fields small { color: var(--green); font-weight: 400; }
 .account-proposal-wide { grid-column: 1 / -1; }
+.account-proposal-institution {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 18px;
+  margin: 0; padding: 16px; border: 1px solid var(--rule); border-radius: 7px;
+}
+.account-proposal-institution legend {
+  padding: 0 7px; color: var(--green); font-family: var(--mono); font-size: 0.62rem;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
 .account-proposal-note {
   margin: 0; padding: 11px 13px; border-left: 3px solid var(--blue);
   color: var(--muted); background: rgba(255, 255, 255, 0.62); line-height: 1.5;
@@ -1437,6 +1470,12 @@ body { background: #eef2f0; }
 .statement-import-file-card .import-summary dl { gap: 12px 22px; }
 .statement-import-file-card .import-summary dt { font-family: var(--mono); font-size: 0.58rem; }
 .statement-import-file-card .import-summary dd { font-size: 0.78rem; }
+.import-identity-status {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px;
+  margin: 0; color: var(--muted); font-size: 0.74rem;
+}
+.import-identity-status strong { color: var(--green); font-weight: 600; }
+.import-identity-status span { font-family: var(--mono); }
 .statement-import-file-card .import-verdict { border-left-width: 3px; font-size: 0.76rem; }
 .statement-import-file-card .primary-action,
 .statement-import-file-card .text-action { padding: 9px 13px; }

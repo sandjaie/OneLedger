@@ -93,9 +93,28 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
   };
 }
 
-function accountProposal(overrides: Partial<AccountProposal> = {}): ParseResponse {
+function accountProposal(
+  overrides: Partial<AccountProposal> = {},
+  resolution: Partial<ParseResponse["identityResolution"]> = {},
+): ParseResponse {
   return parsed({
     accountId: null,
+    identityResolution: {
+      status: "needs_confirmation",
+      institutionAction: "create",
+      accountAction: "create",
+      institution: {
+        status: "needs_confirmation",
+        proposedName: "Example Institution",
+        country: "XY",
+        candidates: [],
+      },
+      accountNumberMasked: "****1234",
+      candidates: [],
+      conflicts: [],
+      proposalGroupKey: "pg1-example",
+      ...resolution,
+    },
     accountProposal: {
       accountNumberMasked: "****1234",
       suggestedAccounts: [],
@@ -649,6 +668,189 @@ describe("an account proposed by a statement", () => {
     ]);
   });
 
+  it("groups by the service proposal key even when display masks differ", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          return accountProposal(
+            { accountNumberMasked: "****1111", openingBalanceDate: "2026-04-01" },
+            { accountNumberMasked: "****1111", proposalGroupKey: "pg1-shared" },
+          );
+        }
+        return {
+          ...accountProposal(
+            { accountNumberMasked: "••••1111", openingBalanceDate: "2026-03-01" },
+            { accountNumberMasked: "••••1111", proposalGroupKey: "pg1-shared" },
+          ),
+          period: { start: "2026-03-01", end: "2026-03-31", isDerived: false },
+        };
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("later.pdf"), pdf("earlier.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const later = await screen.findByRole("listitem", { name: /later\.pdf/ });
+    const earlier = await screen.findByRole("listitem", { name: /earlier\.pdf/ });
+    expect(
+      await within(earlier).findByRole("button", { name: "Create account and continue" }),
+    ).toBeTruthy();
+    expect(
+      within(later).queryByRole("button", { name: "Create account and continue" }),
+    ).toBeNull();
+  });
+
+  it("keeps two accounts at one institution separate even when their masks match", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse") {
+        parseCalls += 1;
+        return accountProposal(
+          { openingBalanceDate: parseCalls === 1 ? "2026-03-01" : "2026-04-01" },
+          {
+            institutionAction: "reuse",
+            institution: {
+              status: "matched",
+              proposedName: "Example Institution",
+              country: "XY",
+              candidates: [],
+            },
+            proposalGroupKey: `pg1-account-${parseCalls}`,
+        },
+        );
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("savings.pdf"), pdf("current.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const savings = await screen.findByRole("listitem", { name: /savings\.pdf/ });
+    const current = await screen.findByRole("listitem", { name: /current\.pdf/ });
+    expect(
+      await within(savings).findByRole("button", { name: "Create account and continue" }),
+    ).toBeTruthy();
+    expect(
+      within(current).getByRole("button", { name: "Create account and continue" }),
+    ).toBeTruthy();
+  });
+
+  it("reconciles every grouped file independently after confirmation", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") return createdAccount();
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls <= 2) {
+          return {
+            ...accountProposal(),
+            period: parseCalls === 1
+              ? { start: "2026-03-01", end: "2026-03-31", isDerived: false }
+              : { start: "2026-04-01", end: "2026-04-30", isDerived: false },
+          };
+        }
+        if (parseCalls === 3) return parsed({ accountId: "acct-created" });
+        return parsed({
+          accountId: "acct-created",
+          reconciliation: {
+            ...parsed().reconciliation,
+            status: "mismatched",
+            message: "this statement does not reconcile",
+          },
+        });
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("march.pdf"), pdf("april.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
+    fireEvent.click(
+      await within(march).findByRole("button", { name: "Create account and continue" }),
+    );
+
+    expect(await within(march).findByRole("button", { name: "Stage batch" })).toBeTruthy();
+    expect(await within(april).findByText("this statement does not reconcile")).toBeTruthy();
+    expect(within(april).queryByRole("button", { name: "Stage batch" })).toBeNull();
+  });
+
+  it("serializes account confirmation with global checks and file replacement", async () => {
+    let finishConfirmation!: (value: AccountRow) => void;
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") {
+        return new Promise<AccountRow>((resolve) => { finishConfirmation = resolve; });
+      }
+      if (path === "/parse") {
+        parseCalls += 1;
+        return parseCalls === 1
+          ? accountProposal()
+          : parsed({ accountId: "acct-created" });
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(
+      await within(march).findByRole("button", { name: "Create account and continue" }),
+    );
+    await waitFor(() => expect(request.mock.calls.some(([path]) => path === "/parse/account")).toBe(true));
+
+    const check = screen.getByRole<HTMLButtonElement>("button", { name: /checking/i });
+    const picker = screen.getByLabelText<HTMLInputElement>("Statement files");
+    expect(check.disabled).toBe(true);
+    expect(picker.disabled).toBe(true);
+    fireEvent.click(check);
+    fireEvent.change(picker, { target: { files: [pdf("replacement.pdf")] } });
+    expect(parseCalls).toBe(1);
+    expect(screen.getByRole("listitem", { name: /march\.pdf/ })).toBeTruthy();
+    expect(screen.queryByRole("listitem", { name: /replacement\.pdf/ })).toBeNull();
+
+    finishConfirmation(createdAccount());
+    expect(await within(march).findByRole("button", { name: "Stage batch" })).toBeTruthy();
+    expect(parseCalls).toBe(2);
+  });
+
+  it("keeps a rejected account confirmation visible and retryable", async () => {
+    let accountCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") {
+        accountCalls += 1;
+        throw new ApiError(409, "That account identity is already assigned elsewhere.");
+      }
+      if (path === "/parse") return accountProposal();
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    fireEvent.click(
+      await within(march).findByRole("button", { name: "Create account and continue" }),
+    );
+
+    expect((await within(march).findByRole("alert")).textContent).toBe(
+      "That account identity is already assigned elsewhere.",
+    );
+    const retry = within(march).getByRole<HTMLButtonElement>("button", {
+      name: "Create account and continue",
+    });
+    expect(retry.disabled).toBe(false);
+    fireEvent.click(retry);
+    await waitFor(() => expect(accountCalls).toBe(2));
+  });
+
   it("waits for the whole selection before offering the earliest statement's form", async () => {
     let finishEarlier!: (value: ParseResponse) => void;
     let parseCalls = 0;
@@ -748,6 +950,44 @@ describe("what the screen announces", () => {
 });
 
 describe("what the summary says", () => {
+  it("names the institution and account that were matched automatically", async () => {
+    const request = vi.fn().mockResolvedValue(parsed({
+      identityResolution: {
+        ...parsed().identityResolution,
+        institution: {
+          status: "matched",
+          proposedName: "Synthetic Institution",
+          country: "ZZ",
+          candidates: [{
+            id: "institution-1",
+            name: "Synthetic Institution",
+            shortName: "Synthetic",
+            country: "ZZ",
+            institutionType: "bank",
+          }],
+        },
+        candidates: [{
+          id: "acct-card",
+          name: "Synthetic Card",
+          institutionId: "institution-1",
+          accountType: "credit_card",
+          currency: "XAE",
+          accountNumberMasked: "****1234",
+          canReveal: true,
+        }],
+      },
+    }));
+    renderScreen(request);
+    choose([pdf("march.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    expect(within(march).getByText("Matched automatically")).toBeTruthy();
+    expect(within(march).getByText(
+      "Synthetic Institution · Synthetic Card · ****1234",
+    )).toBeTruthy();
+  });
+
   it("formats the statement's own figures and derives none of them", async () => {
     const request = vi.fn().mockResolvedValue(parsed());
     renderScreen(request);
