@@ -123,7 +123,7 @@ def test_an_unknown_captured_account_returns_analysis_without_staging() -> None:
         ),
         profiles=[profile(metadataPatterns={"account_number": r"Account Number ([0-9]+)"})],
         account=None,
-        resolve_account=lambda _number: None,
+        resolve_account=lambda _extraction, _profile: None,
         stage=True,
     )
 

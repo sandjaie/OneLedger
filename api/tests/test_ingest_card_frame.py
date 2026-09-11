@@ -259,7 +259,7 @@ def test_the_seeded_layout_names_no_institution_and_captures_no_period() -> None
     # It captures the four cycle facts plus issuer/account identity fields, and still no period.
     assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS | {
         "institution_name",
-        "account_number",
+        "account_number_masked",
         "currency",
     }
 

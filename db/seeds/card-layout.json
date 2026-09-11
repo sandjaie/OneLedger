@@ -48,7 +48,7 @@
   ],
   "metadataPatterns": {
     "institution_name": "(Emirates\\s*NBD)",
-    "account_number": "Card\\s*Number\\s*:\\s*\\d{4}\\s+[Xx*]{4}\\s+[Xx*]{4}\\s+(\\d{4})",
+    "account_number_masked": "Card\\s*Number\\s*:\\s*\\d{4}\\s+[Xx*]{4}\\s+[Xx*]{4}\\s+(\\d{4})",
     "currency": "Currency\\s*:?\\s*([A-Z]{3})",
     "credit_limit": "Minimum\\s*Payment\\s*Due\\n(\\d[\\d,]*(?:\\.\\d{2})?)\\s+\\d[\\d,]*\\.\\d{2}\\s+\\d{2}/\\d{2}/\\d{4}\\s+\\d{2}/\\d{2}/\\d{4}\\s+\\d[\\d,]*\\.\\d{2}$",
     "statement_date": "Minimum\\s*Payment\\s*Due\\n\\d[\\d,]*(?:\\.\\d{2})?\\s+\\d[\\d,]*\\.\\d{2}\\s+(\\d{2}/\\d{2}/\\d{4})\\s+\\d{2}/\\d{2}/\\d{4}\\s+\\d[\\d,]*\\.\\d{2}$",

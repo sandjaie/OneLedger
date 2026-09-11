@@ -33,8 +33,20 @@ def row(
     country: str = "XZ",
     alias: str | None = None,
     alias_country: str | None = None,
+    alias_household_id: UUID | None = None,
+    alias_provenance: str | None = None,
 ) -> tuple[Any, ...]:
-    return (identifier, name, short_name, country, "bank", alias, alias_country)
+    return (
+        identifier,
+        name,
+        short_name,
+        country,
+        "bank",
+        alias,
+        alias_country,
+        alias_household_id,
+        alias_provenance,
+    )
 
 
 def test_institution_normalization_is_nfkc_casefolded_and_whitespace_stable() -> None:
@@ -103,6 +115,27 @@ def test_multiple_matching_spellings_for_one_uuid_are_one_candidate() -> None:
 
     assert result.status == "matched"
     assert len(result.candidates) == 1
+
+
+def test_household_owner_confirmed_alias_wins_over_catalogue_name_matches() -> None:
+    household_id = UUID(int=99)
+    cursor = Cursor(
+        [
+            row(FIRST),
+            row(
+                SECOND,
+                alias="Synthetic Bank",
+                alias_country="XZ",
+                alias_household_id=household_id,
+                alias_provenance="owner_confirmed",
+            ),
+        ]
+    )
+
+    result = resolve_institution(cursor, household_id, "Synthetic Bank")
+
+    assert result.status == "matched"
+    assert [candidate.id for candidate in result.candidates] == [SECOND]
 
 
 def test_query_reads_only_visible_shared_or_household_rows_and_never_writes() -> None:

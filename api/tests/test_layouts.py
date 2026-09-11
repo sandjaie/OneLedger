@@ -1172,6 +1172,22 @@ def test_reserved_metadata_keys_need_exactly_one_capture_group() -> None:
         {**VALID_CREATE, "metadataPatterns": {"account_number": r"Account (\d+)"}}
     )
     assert layouts.LayoutCreate.model_validate(
+        {
+            **VALID_CREATE,
+            "metadataPatterns": {"account_number_masked": r"Account ([X0-9]+)"},
+        }
+    )
+    with pytest.raises(ValidationError, match="either account_number"):
+        layouts.LayoutCreate.model_validate(
+            {
+                **VALID_CREATE,
+                "metadataPatterns": {
+                    "account_number": r"Account (\d+)",
+                    "account_number_masked": r"Masked ([X0-9]+)",
+                },
+            }
+        )
+    assert layouts.LayoutCreate.model_validate(
         {**VALID_CREATE, "metadataPatterns": {"currency": r"Currency ([A-Z]{3})"}}
     )
     assert layouts.LayoutCreate.model_validate(

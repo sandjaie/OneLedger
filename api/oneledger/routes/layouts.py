@@ -62,7 +62,16 @@ QUIRKS_VOCABULARY = frozenset(
 # each must capture exactly one — and they are named once, where they are read. So are the three
 # a remittance's narration states, which the engine reads per row rather than per statement.
 RESERVED_METADATA_KEYS = (
-    frozenset({"account_number", "currency", "institution_name", "period_start", "period_end"})
+    frozenset(
+        {
+            "account_number",
+            "account_number_masked",
+            "currency",
+            "institution_name",
+            "period_start",
+            "period_end",
+        }
+    )
     | normalize.CARD_FACT_KEYS
     | engine.ROW_CAPTURE_KEYS
 )
@@ -196,6 +205,11 @@ class LayoutCreate(BaseModel):
     def metadata_patterns_are_valid(cls, value: dict[str, str] | None) -> dict[str, str] | None:
         if value is None:
             return value
+        if {"account_number", "account_number_masked"} <= value.keys():
+            raise ValueError(
+                "metadataPatterns must declare either account_number or "
+                "account_number_masked, not both"
+            )
         for key, pattern in value.items():
             compiled = _compiled(pattern)
             if key in RESERVED_METADATA_KEYS and compiled.groups != 1:

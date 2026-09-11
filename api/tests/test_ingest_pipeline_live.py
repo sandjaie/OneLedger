@@ -169,7 +169,7 @@ class Fixture:
             household=self.household,
             profiles=[profile()],
             account=self.account,
-            resolve_account=lambda _: None,
+            resolve_account=lambda _extraction, _profile: None,
             stage=stage,
             encrypted=bool(changes.pop("encrypted", False)),
             documents_root=self.root,
@@ -386,7 +386,7 @@ def test_a_rival_re_import_of_a_cancelled_file_is_refused_inside_the_staging(
                         account=pipeline.AccountContext(
                             id=other, currency=live.household.base_currency
                         ),
-                        resolve_account=lambda _: None,
+                        resolve_account=lambda _extraction, _profile: None,
                         stage=True,
                         documents_root=live.root,
                         rate_source=cast("RateSource", NeverCalled()),
@@ -507,7 +507,7 @@ def test_a_derived_opening_is_not_stored_as_a_declared_one(live: Fixture) -> Non
         household=live.household,
         profiles=[bare],
         account=live.account,
-        resolve_account=lambda _: None,
+        resolve_account=lambda _extraction, _profile: None,
         stage=True,
         documents_root=live.root,
         rate_source=NeverCalled(),

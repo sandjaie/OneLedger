@@ -22,9 +22,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from shutil import copyfileobj
@@ -36,6 +36,8 @@ import psycopg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field, ValidationError
 
+from ..account_resolution import AccountResolution as ResolvedAccount
+from ..account_resolution import resolve_statement_account
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
 from ..fxrange import FxCoverageError
@@ -43,28 +45,28 @@ from ..identifiers import (
     CompleteIdentifier,
     Identifier,
     IdentifierValueError,
-    complete_identifier,
     identifier_from_source,
-    masked_identifier,
 )
-from ..ingest import pipeline
+from ..ingest import engine, pipeline
 from ..ingest.dedupe import OCCURRENCE, fingerprint
+from ..ingest.engine import ExtractionResult
 from ..ingest.reconcile import Verdict
 from ..ingest.storage import DuplicateDocument, StorageError
 from ..ingest.words import ExtractionError
 from ..ingest.words import extract_pages as read_pdf_pages
+from ..institutions import InstitutionCandidate as ResolvedInstitutionCandidate
 from ..institutions import InstitutionResolution as ResolvedInstitution
-from ..institutions import resolve_institution
+from ..institutions import normalize_institution_name, resolve_institution
 from ..money import _out
 from .accounts import (
     AccountCreate,
     AccountRow,
+    InstitutionCreate,
     _account_write_error,
+    _assert_institution_allowed,
     _insert_account,
     _one,
     _replace_account_identifier,
-    resolve_account_by_identifier,
-    resolve_account_by_legacy_fingerprint,
 )
 from .layouts import COLUMNS, _preview_redactor, _row_to_profile
 
@@ -178,12 +180,33 @@ class AccountProposal(BaseModel):
     creditLimit: str | None
 
 
+class AccountResolutionCandidate(BaseModel):
+    id: UUID
+    name: str
+    institutionId: UUID | None
+    accountType: str
+    currency: str
+    accountNumberMasked: str
+    canReveal: bool
+
+
+class IdentityResolution(BaseModel):
+    status: Literal["matched", "needs_confirmation", "ambiguous"]
+    institutionAction: Literal["reuse", "create", "choose"]
+    accountAction: Literal["reuse", "enrich", "create", "choose"]
+    institution: InstitutionResolution
+    accountNumberMasked: str
+    candidates: list[AccountResolutionCandidate]
+    conflicts: list[Literal["institution", "account_type", "currency"]]
+
+
 class ParseResponse(BaseModel):
     staged: bool
     batchId: UUID | None
     documentId: UUID | None
     accountId: UUID | None
     accountProposal: AccountProposal | None = None
+    identityResolution: IdentityResolution
     layoutId: UUID
     layoutVersion: int
     period: ParsePeriod
@@ -252,52 +275,50 @@ def _account(
 def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountResolver:
     """Resolve current normalized identities, then temporary pre-V29 fingerprints."""
 
-    def resolve(account_number_raw: str) -> pipeline.AccountContext | None:
+    def resolve(
+        extraction: ExtractionResult, profile: pipeline.ImportableProfile
+    ) -> pipeline.AccountContext | None:
+        account_number_raw = extraction.account_number_raw
+        if (
+            account_number_raw is None
+            or extraction.account_number_capture_count != 1
+            or profile.accountType is None
+        ):
+            return None
+        institution = resolve_institution(
+            cur,
+            household_id,
+            extraction.institution_name_raw or "",
+            country=extraction.metadata.get("institution_country"),
+        )
         try:
-            identifier = complete_identifier("bank_account", account_number_raw)
+            resolved = resolve_statement_account(
+                cur,
+                household_id=household_id,
+                institution=institution,
+                account_type=profile.accountType,
+                currency=extraction.metadata.get("currency"),
+                captured_value=account_number_raw,
+                source_is_masked=extraction.account_number_is_masked,
+                legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+            )
         except IdentifierValueError:
             return None
-        found = resolve_account_by_identifier(
-            cur, identifier.kind, identifier.normalized_value, household_id
-        )
-        if found is None:
-            salt = os.environ.get("ACCOUNT_HASH_SALT", "").strip()
-            if salt and identifier.normalized_value.isdigit():
-                digest = hashlib.sha256(f"{salt}{identifier.normalized_value}".encode()).hexdigest()
-                found = resolve_account_by_legacy_fingerprint(cur, digest, household_id)
-        if found is None:
+        if resolved.account_id is None:
             return None
-        return pipeline.AccountContext(id=found.id, currency=found.currency)
+        candidate = resolved.candidates[0]
+        return pipeline.AccountContext(id=candidate.id, currency=candidate.currency)
 
     return resolve
 
 
-def _statement_identifier(account_type: str, value: str) -> Identifier:
-    """Preserve the pre-8c3 capture-shape contract until layouts declare completeness.
-
-    Existing layouts accepted complete ASCII digit runs with visual separators, a four-digit
-    suffix, or a mask spelling with exactly four visible ASCII digits. Cards retained only the
-    resulting mask even when their capture was complete. Task 8c6 replaces this compatibility
-    classifier with explicit source evidence so legal identifier letters such as X need no guess.
-    """
+def _statement_identifier(account_type: str, value: str, *, source_is_masked: bool) -> Identifier:
+    """Build the identity using the layout's explicit complete-versus-mask declaration."""
     kind = "card" if account_type == "credit_card" else "bank_account"
-    numeric = re.fullmatch(r"[0-9\s–./-]+", value) and re.search(r"[0-9]", value)
-    if numeric:
-        digits = re.sub(r"[\s–./-]", "", value)
-        if len(digits) < 4:
-            raise ValueError("the statement does not state a usable account identity")
-        source_is_masked = len(digits) == 4
-    else:
-        visible = "".join(character for character in value if character in "0123456789")
-        if len(visible) != 4 or not re.fullmatch(r"[xX*•\s–./0-9-]+", value):
-            raise ValueError("the statement does not state a usable account identity")
-        source_is_masked = True
     try:
         identifier = identifier_from_source(kind, value, source_is_masked=source_is_masked)
     except IdentifierValueError:
         raise ValueError("the statement does not state a usable account identity") from None
-    if kind == "card" and isinstance(identifier, CompleteIdentifier):
-        return masked_identifier(kind, identifier.visible_suffix)
     return identifier
 
 
@@ -401,7 +422,9 @@ def _proposal(
     )
     country = institution.country if matched_institution is None else matched_institution.country
     try:
-        identifier = _statement_identifier(account_type, raw)
+        identifier = _statement_identifier(
+            account_type, raw, source_is_masked=result.analysis.account_number_is_masked
+        )
     except ValueError:
         raise HTTPException(
             status_code=422, detail="this statement states no usable account number"
@@ -456,26 +479,44 @@ def _proposal(
     )
 
 
-def _institution_account_acceptor(
-    cur: psycopg.Cursor[Any], household_id: UUID
-) -> pipeline.AccountAcceptor:
-    """Require PDF issuer evidence to agree before an account can be used or staged."""
+def _institution_account_acceptor(household_id: UUID) -> pipeline.AccountAcceptor:
+    """Require every PDF identity fact to agree before an account can be used or staged."""
 
-    def accept(analysis: pipeline.Analysis, account: pipeline.AccountContext) -> bool:
-        resolution = resolve_institution(
+    def accept(
+        cur: psycopg.Cursor[Any], analysis: pipeline.Analysis, account: pipeline.AccountContext
+    ) -> bool:
+        raw = analysis.account_number_raw
+        if raw is None or analysis.account_number_capture_count != 1:
+            return False
+        cur.execute(
+            """SELECT account_type::text
+                 FROM statement_layout
+                WHERE id = %s AND household_id = %s""",
+            (analysis.layout_id, household_id),
+        )
+        layout = cur.fetchone()
+        if layout is None or layout[0] is None:
+            return False
+        institution = resolve_institution(
             cur,
             household_id,
             analysis.institution_name_raw or "",
             country=analysis.metadata.get("institution_country"),
         )
-        if resolution.status != "matched":
+        try:
+            resolution = resolve_statement_account(
+                cur,
+                household_id=household_id,
+                institution=institution,
+                account_type=layout[0],
+                currency=analysis.metadata.get("currency"),
+                captured_value=raw,
+                source_is_masked=analysis.account_number_is_masked,
+                legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+            )
+        except IdentifierValueError:
             return False
-        cur.execute(
-            "SELECT institution_id FROM account WHERE id = %s AND household_id = %s",
-            (account.id, household_id),
-        )
-        stored = cur.fetchone()
-        return stored is not None and stored[0] == resolution.candidates[0].id
+        return resolution.account_id == account.id
 
     return accept
 
@@ -500,8 +541,88 @@ def _institution_resolution(
     )
 
 
+def _resolved_identity(
+    cur: psycopg.Cursor[Any], result: pipeline.ParseResult, household_id: UUID
+) -> tuple[ResolvedInstitution, ResolvedAccount]:
+    raw = result.analysis.account_number_raw
+    if raw is None:
+        raise HTTPException(
+            status_code=422, detail="this statement states no usable account number"
+        )
+    cur.execute(
+        """SELECT account_type::text
+             FROM statement_layout
+            WHERE id = %s AND household_id = %s""",
+        (result.analysis.layout_id, household_id),
+    )
+    layout = cur.fetchone()
+    if layout is None:  # pragma: no cover - selected from this household
+        raise HTTPException(status_code=404, detail="no such layout")
+    account_type = layout[0]
+    if account_type is None:
+        raise HTTPException(status_code=422, detail="this layout states no account type")
+    institution = resolve_institution(
+        cur,
+        household_id,
+        result.analysis.institution_name_raw or "",
+        country=result.analysis.metadata.get("institution_country"),
+    )
+    try:
+        account = resolve_statement_account(
+            cur,
+            household_id=household_id,
+            institution=institution,
+            account_type=account_type,
+            currency=result.analysis.metadata.get("currency"),
+            captured_value=raw,
+            source_is_masked=result.analysis.account_number_is_masked,
+            legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+        )
+    except IdentifierValueError:
+        raise HTTPException(
+            status_code=422, detail="this statement states no usable account number"
+        ) from None
+    if result.analysis.account_number_capture_count != 1:
+        account = replace(account, status="ambiguous", account_action="choose")
+    return institution, account
+
+
+def _identity_resolution(
+    institution: ResolvedInstitution,
+    account: ResolvedAccount,
+    raw: str,
+) -> IdentityResolution:
+    proposed = (
+        None
+        if institution.proposed_name is None
+        else _preview_redactor(raw)(institution.proposed_name)
+    )
+    return IdentityResolution(
+        status=account.status,
+        institutionAction=account.institution_action,
+        accountAction=account.account_action,
+        institution=_institution_resolution(institution, proposed),
+        accountNumberMasked=account.account_number_masked,
+        candidates=[
+            AccountResolutionCandidate(
+                id=candidate.id,
+                name=candidate.name,
+                institutionId=candidate.institution_id,
+                accountType=candidate.account_type,
+                currency=candidate.currency,
+                accountNumberMasked=candidate.account_number_masked,
+                canReveal=candidate.can_reveal,
+            )
+            for candidate in account.candidates
+        ],
+        conflicts=list(account.conflicts),
+    )
+
+
 def _response(
-    result: pipeline.ParseResult, proposal: AccountProposal | None = None
+    result: pipeline.ParseResult,
+    identity: IdentityResolution,
+    proposal: AccountProposal | None = None,
 ) -> ParseResponse:
     analysis = result.analysis
     return ParseResponse(
@@ -510,6 +631,7 @@ def _response(
         documentId=result.document_id,
         accountId=None if result.account is None else result.account.id,
         accountProposal=proposal,
+        identityResolution=identity,
         layoutId=analysis.layout_id,
         layoutVersion=analysis.layout_version,
         period=ParsePeriod(
@@ -595,7 +717,7 @@ def parse_statement(
                     account=_account(cur, owner.household_id, accountId),
                     resolve_account=_resolver(cur, owner.household_id),
                     stage=stage,
-                    accept_account=_institution_account_acceptor(cur, owner.household_id),
+                    accept_account=_institution_account_acceptor(owner.household_id),
                     # The original encrypted bytes are the durable blob. The password remains
                     # only in this request frame and is never stored.
                     encrypted=password is not None,
@@ -603,7 +725,13 @@ def parse_statement(
                 proposal = (
                     _proposal(cur, result, owner.household_id) if result.account is None else None
                 )
-        return _response(result, proposal)
+                institution, account_resolution = _resolved_identity(
+                    cur, result, owner.household_id
+                )
+                identity = _identity_resolution(
+                    institution, account_resolution, result.analysis.account_number_raw or ""
+                )
+        return _response(result, identity, proposal)
     except DuplicateDocument as exc:
         # Already carries the date it first arrived and the batch that imported it, which is
         # what the screen links to.
@@ -635,6 +763,209 @@ def _account_body(value: str) -> AccountCreate:
         raise HTTPException(status_code=422, detail="account fields are invalid") from None
 
 
+def _institution_body(value: str) -> InstitutionCreate:
+    try:
+        raw = json.loads(value)
+        if not isinstance(raw, dict):
+            raise ValueError
+        return InstitutionCreate.model_validate(raw)
+    except json.JSONDecodeError, ValidationError, ValueError, TypeError:
+        raise HTTPException(status_code=422, detail="institution fields are invalid") from None
+
+
+def _confirm_statement_institution(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    analysis: pipeline.Analysis,
+    *,
+    reuse_id: UUID | None,
+    create: InstitutionCreate | None,
+) -> UUID:
+    """Apply one explicit reuse/create decision and retain the PDF issuer as its alias."""
+    issuer = analysis.institution_name_raw or ""
+    if not issuer or _preview_redactor(None)(issuer) != issuer:
+        raise HTTPException(status_code=422, detail="the statement issuer is not safe to confirm")
+    if (reuse_id is None) == (create is None):
+        raise HTTPException(
+            status_code=422,
+            detail="provide exactly one institution reuse or create decision",
+        )
+    resolution = resolve_institution(
+        cur,
+        household_id,
+        issuer,
+        country=analysis.metadata.get("institution_country"),
+    )
+    if resolution.status == "ambiguous" and (
+        create is not None or reuse_id not in {candidate.id for candidate in resolution.candidates}
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="choose one of the statement issuer candidates",
+        )
+
+    if create is not None:
+        if resolution.status == "matched":
+            raise HTTPException(status_code=409, detail="this statement institution already exists")
+        cur.execute(
+            """INSERT INTO institution (
+                   household_id, name, short_name, country, institution_type)
+               VALUES (%s, %s, %s, %s, %s)
+               RETURNING id""",
+            (
+                household_id,
+                create.name,
+                create.shortName,
+                create.country,
+                create.institutionType,
+            ),
+        )
+        created = cur.fetchone()
+        if created is None:  # pragma: no cover - INSERT RETURNING yields or raises
+            raise HTTPException(status_code=500, detail="the institution could not be created")
+        institution_id = UUID(str(created[0]))
+        country = create.country
+    else:
+        assert reuse_id is not None
+        _assert_institution_allowed(cur, reuse_id, household_id)
+        if resolution.status == "matched" and resolution.candidates[0].id != reuse_id:
+            raise HTTPException(
+                status_code=409, detail="the statement issuer conflicts with that institution"
+            )
+        cur.execute(
+            """SELECT country FROM institution
+                WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+            (reuse_id, household_id),
+        )
+        found = cur.fetchone()
+        if found is None:  # pragma: no cover - allowed check above owns this case
+            raise HTTPException(status_code=404, detail="no such institution")
+        institution_id = reuse_id
+        country = str(found[0]).strip()
+
+    if resolution.status != "matched":
+        cur.execute(
+            """INSERT INTO institution_alias (
+                   household_id, institution_id, alias, alias_normalized, country, provenance)
+               VALUES (%s, %s, %s, %s, %s, 'owner_confirmed')
+               ON CONFLICT (household_id, institution_id, country, alias_normalized)
+                 WHERE is_active DO NOTHING""",
+            (
+                household_id,
+                institution_id,
+                issuer,
+                normalize_institution_name(issuer),
+                country,
+            ),
+        )
+    return institution_id
+
+
+def _confirmed_institution_resolution(
+    cur: psycopg.Cursor[Any], household_id: UUID, institution_id: UUID
+) -> ResolvedInstitution:
+    """Represent the owner's explicit institution choice as the one matched candidate."""
+    cur.execute(
+        """SELECT id, name, short_name, country, institution_type
+             FROM institution
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (institution_id, household_id),
+    )
+    row = cur.fetchone()
+    if row is None:  # pragma: no cover - confirmation validated this row in the same transaction
+        raise HTTPException(status_code=404, detail="no such institution")
+    candidate = ResolvedInstitutionCandidate(
+        id=row[0],
+        name=row[1],
+        short_name=row[2],
+        country=row[3],
+        institution_type=row[4],
+    )
+    return ResolvedInstitution(
+        status="matched",
+        proposed_name=None,
+        country=candidate.country,
+        candidates=(candidate,),
+    )
+
+
+class RevealedStatementIdentifier(BaseModel):
+    status: Literal["revealed"]
+    value: str = Field(repr=False)
+    kind: Literal["bank_account", "iban", "card"]
+
+
+class UnavailableStatementIdentifier(BaseModel):
+    status: Literal["unavailable"]
+    reason: Literal["source_mask_only"]
+
+
+@router.post(
+    "/parse/identifier/reveal",
+    response_model=RevealedStatementIdentifier | UnavailableStatementIdentifier,
+)
+def reveal_statement_identifier(
+    response: Response,
+    file: Annotated[UploadFile, File()],
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    password: Annotated[str | None, Form()] = None,
+    layoutId: Annotated[UUID | None, Form()] = None,
+) -> RevealedStatementIdentifier | UnavailableStatementIdentifier:
+    """Reveal one source-complete capture without storing it or trusting it for confirmation."""
+    no_store = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+    response.headers.update(no_store)
+    try:
+        with _uploaded_pages(file, password) as (_data, pages):
+            with connect() as conn, conn.cursor() as cur:
+                profiles = _profiles(cur, owner.household_id, layoutId)
+                identification = pipeline.identify(
+                    profiles, pages, file.filename or "statement.pdf"
+                )
+                if identification.chosen is None:
+                    refusal = _unidentified(pipeline.LayoutNotIdentified(identification.candidates))
+                    refusal.headers = no_store
+                    raise refusal
+                extraction = engine.extract_pages(identification.chosen, list(pages))
+                if not extraction.has_text:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="this file is scanned rather than text, so no identity can be read",
+                        headers=no_store,
+                    )
+                if extraction.account_number_capture_count != 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the statement account identity is missing or ambiguous",
+                        headers=no_store,
+                    )
+                raw = extraction.account_number_raw
+                account_type = identification.chosen.accountType
+                if raw is None or account_type is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="this statement states no usable account number",
+                        headers=no_store,
+                    )
+                identifier = _statement_identifier(
+                    account_type,
+                    raw,
+                    source_is_masked=extraction.account_number_is_masked,
+                )
+        if not isinstance(identifier, CompleteIdentifier):
+            return UnavailableStatementIdentifier(status="unavailable", reason="source_mask_only")
+        return RevealedStatementIdentifier(
+            status="revealed", value=identifier.full_value, kind=identifier.kind
+        )
+    except ExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc), headers=no_store) from None
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail="this statement states no usable account number",
+            headers=no_store,
+        ) from None
+
+
 @router.post(
     "/parse/account",
     response_model=AccountRow,
@@ -649,10 +980,16 @@ def confirm_statement_account(
     layoutId: Annotated[UUID | None, Form()] = None,
     account: Annotated[str | None, Form()] = None,
     accountId: Annotated[UUID | None, Form()] = None,
+    institution: Annotated[str | None, Form()] = None,
 ) -> AccountRow:
     """Create or adopt the account identity captured from one confirmed statement."""
     if (account is None) == (accountId is None):
         raise HTTPException(status_code=422, detail="provide exactly one of account or accountId")
+    if accountId is not None and institution is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="an existing account supplies its institution reuse decision",
+        )
     try:
         with _uploaded_pages(file, password) as (data, pages):
             with connect() as conn, conn.cursor() as cur:
@@ -679,6 +1016,11 @@ def confirm_statement_account(
                     raise HTTPException(
                         status_code=422, detail="this statement states no usable account number"
                     )
+                if result.analysis.account_number_capture_count != 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the statement account identity is ambiguous",
+                    )
                 source_sha256 = hashlib.sha256(data).hexdigest()
                 source_layout_id = result.analysis.layout_id
                 source_layout_version = result.analysis.layout_version
@@ -693,49 +1035,71 @@ def confirm_statement_account(
 
                 if account is not None:
                     body = _account_body(account)
+                    cur.execute("SELECT %s::account_type::text", (body.accountType,))
+                    cur.execute(
+                        """SELECT account_type::text
+                             FROM statement_layout
+                            WHERE id = %s AND household_id = %s""",
+                        (source_layout_id, owner.household_id),
+                    )
+                    declared_layout = cur.fetchone()
+                    if declared_layout is None or declared_layout[0] != body.accountType:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="the statement account type conflicts with the confirmation",
+                        )
+                    captured_currency = result.analysis.metadata.get("currency")
+                    if (
+                        captured_currency
+                        and captured_currency.strip().upper() != body.currency.strip().upper()
+                    ):
+                        raise HTTPException(
+                            status_code=409,
+                            detail="the statement currency conflicts with the confirmation",
+                        )
+                    create_institution = (
+                        None if institution is None else _institution_body(institution)
+                    )
+                    institution_id = _confirm_statement_institution(
+                        cur,
+                        owner.household_id,
+                        result.analysis,
+                        reuse_id=body.institutionId,
+                        create=create_institution,
+                    )
+                    body = body.model_copy(update={"institutionId": institution_id})
                     try:
-                        identifier = _statement_identifier(body.accountType, captured)
+                        identifier = _statement_identifier(
+                            body.accountType,
+                            captured,
+                            source_is_masked=result.analysis.account_number_is_masked,
+                        )
                     except ValueError:
                         raise HTTPException(
                             status_code=422,
                             detail="this statement states no usable account number",
                         ) from None
-                    if isinstance(identifier, CompleteIdentifier):
-                        cur.execute(
-                            """SELECT a.name
-                                 FROM account a
-                                 JOIN account_identifier ai
-                                   ON ai.household_id = a.household_id AND ai.account_id = a.id
-                                WHERE a.household_id = %s AND ai.kind = %s
-                                  AND ai.normalized_value = %s AND ai.is_active""",
-                            (
-                                owner.household_id,
-                                identifier.kind,
-                                identifier.normalized_value,
-                            ),
+                    confirmed_institution = _confirmed_institution_resolution(
+                        cur, owner.household_id, institution_id
+                    )
+                    duplicate = resolve_statement_account(
+                        cur,
+                        household_id=owner.household_id,
+                        institution=confirmed_institution,
+                        account_type=body.accountType,
+                        currency=body.currency,
+                        captured_value=captured,
+                        source_is_masked=result.analysis.account_number_is_masked,
+                        legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                    )
+                    if duplicate.account_action != "create":
+                        name = (
+                            duplicate.candidates[0].name
+                            if duplicate.candidates
+                            else "another account"
                         )
-                    else:
-                        cur.execute(
-                            """SELECT a.name
-                                 FROM account a
-                                 JOIN account_identifier ai
-                                   ON ai.household_id = a.household_id AND ai.account_id = a.id
-                                WHERE a.household_id = %s
-                                  AND a.account_type = %s::account_type
-                                  AND ai.kind = %s AND ai.is_active
-                                  AND COALESCE(ai.visible_suffix,
-                                               right(ai.masked_value, 4)) = %s""",
-                            (
-                                owner.household_id,
-                                body.accountType,
-                                identifier.kind,
-                                identifier.visible_suffix,
-                            ),
-                        )
-                    duplicate = cur.fetchone()
-                    if duplicate is not None:
                         raise HTTPException(
-                            status_code=409, detail=f"this statement belongs to {duplicate[0]}"
+                            status_code=409, detail=f"this statement belongs to {name}"
                         )
                     return _insert_account(
                         cur,
@@ -746,25 +1110,84 @@ def confirm_statement_account(
                         source_sha256=source_sha256,
                         source_layout_id=source_layout_id,
                         source_layout_version=source_layout_version,
-                        source_capture_key="account_number",
+                        source_capture_key=(
+                            "account_number_masked"
+                            if result.analysis.account_number_is_masked
+                            else "account_number"
+                        ),
                     )
 
                 assert accountId is not None
                 cur.execute(
-                    """SELECT account_type::text
+                    """SELECT account_type::text, currency, institution_id
                          FROM account WHERE id = %s AND household_id = %s FOR UPDATE""",
                     (accountId, owner.household_id),
                 )
                 target = cur.fetchone()
                 if target is None:
                     raise HTTPException(status_code=404, detail="no such account")
-                account_type = target[0]
+                account_type, account_currency, institution_id = target
+                cur.execute(
+                    """SELECT account_type::text
+                         FROM statement_layout
+                        WHERE id = %s AND household_id = %s""",
+                    (source_layout_id, owner.household_id),
+                )
+                declared_layout = cur.fetchone()
+                if declared_layout is None or declared_layout[0] != account_type:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the statement account type conflicts with the selected account",
+                    )
+                captured_currency = result.analysis.metadata.get("currency")
+                if (
+                    captured_currency
+                    and captured_currency.strip().upper() != str(account_currency).strip().upper()
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the statement currency conflicts with the selected account",
+                    )
+                if institution_id is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the selected account has no institution to confirm",
+                    )
+                _confirm_statement_institution(
+                    cur,
+                    owner.household_id,
+                    result.analysis,
+                    reuse_id=institution_id,
+                    create=None,
+                )
                 try:
-                    identifier = _statement_identifier(account_type, captured)
+                    identifier = _statement_identifier(
+                        account_type,
+                        captured,
+                        source_is_masked=result.analysis.account_number_is_masked,
+                    )
                 except ValueError:
                     raise HTTPException(
                         status_code=422, detail="this statement states no usable account number"
                     ) from None
+                confirmed_institution = _confirmed_institution_resolution(
+                    cur, owner.household_id, institution_id
+                )
+                adoption = resolve_statement_account(
+                    cur,
+                    household_id=owner.household_id,
+                    institution=confirmed_institution,
+                    account_type=account_type,
+                    currency=str(account_currency).strip(),
+                    captured_value=captured,
+                    source_is_masked=result.analysis.account_number_is_masked,
+                    legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                )
+                if accountId not in {candidate.id for candidate in adoption.candidates}:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="the statement identity does not match the selected account",
+                    )
                 cur.execute(
                     """SELECT masked_value, normalized_value
                          FROM account_identifier
@@ -799,7 +1222,11 @@ def confirm_statement_account(
                         source_sha256=source_sha256,
                         source_layout_id=source_layout_id,
                         source_layout_version=source_layout_version,
-                        source_capture_key="account_number",
+                        source_capture_key=(
+                            "account_number_masked"
+                            if result.analysis.account_number_is_masked
+                            else "account_number"
+                        ),
                     )
                 response.status_code = 200
                 return _one(cur, accountId, owner.household_id)

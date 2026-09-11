@@ -111,7 +111,10 @@ def test_a_seeded_profile_declares_its_account_type(path: Path) -> None:
 
 @pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
 def test_a_seeded_profile_captures_an_account_identity(path: Path) -> None:
-    pattern = (_profile(path).get("metadataPatterns") or {}).get("account_number")
+    patterns = _profile(path).get("metadataPatterns") or {}
+    expected_key = "account_number_masked" if path.stem == "card-layout" else "account_number"
+    assert set(patterns) & {"account_number", "account_number_masked"} == {expected_key}
+    pattern = patterns.get(expected_key)
     assert pattern is not None
     assert re.compile(pattern).groups == 1
     sample, expected = ACCOUNT_CAPTURE_EXAMPLES[path.stem]
@@ -133,7 +136,9 @@ def test_a_seeded_profile_captures_only_generic_public_issuer_text(path: Path) -
     name, short_name, country, expected_status = INSTITUTION_RESOLUTION[path.stem]
     institution_id = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     resolution = resolve_institution(
-        InstitutionCursor((institution_id, name, short_name, country, "bank", None, None)),
+        InstitutionCursor(
+            (institution_id, name, short_name, country, "bank", None, None, None, None)
+        ),
         UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         matched.group(1),
     )

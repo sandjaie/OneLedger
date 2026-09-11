@@ -25,9 +25,11 @@ Every profile does declare its generic `accountType`. Each captures `institution
 issuer branding in the PDF and the account identity the statement prints. Complete bank-account
 numbers can then be stored in the owner's local database for exact matching and deliberate reveal;
 the card profile deliberately captures only the final four digits from the source-masked number.
-Reserved patterns such as `institution_name`, `account_number` and `currency` have exactly one
-capture group. A profile omits `currency` only when that statement does not print one; the owner
-supplies the missing field while confirming the proposed account.
+Reserved patterns such as `institution_name`, `account_number`, `account_number_masked` and
+`currency` have exactly one capture group. A layout uses `account_number` for a complete source
+value or `account_number_masked` when the PDF exposes only a suffix, never both. A profile omits
+`currency` only when that statement does not print one; the owner supplies the missing field while
+confirming the proposed account.
 
 ## `card-layout.json`
 

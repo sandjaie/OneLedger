@@ -9,7 +9,7 @@ from oneledger.institutions import resolve_institution
 from .live_database import connect_to_test_database
 
 
-def test_shared_and_own_aliases_are_visible_but_another_households_are_not() -> None:
+def test_each_households_confirmed_alias_wins_over_the_shared_alias() -> None:
     conn = connect_to_test_database()
     try:
         with conn.cursor() as cur:
@@ -59,15 +59,9 @@ def test_shared_and_own_aliases_are_visible_but_another_households_are_not() -> 
             owner_result = resolve_institution(cur, owner_id, "Resolver Alias")
             other_result = resolve_institution(cur, other_id, "Resolver Alias")
 
-        assert owner_result.status == other_result.status == "ambiguous"
-        assert {candidate.id for candidate in owner_result.candidates} == {
-            institution_ids[0],
-            institution_ids[1],
-        }
-        assert {candidate.id for candidate in other_result.candidates} == {
-            institution_ids[0],
-            institution_ids[2],
-        }
+        assert owner_result.status == other_result.status == "matched"
+        assert [candidate.id for candidate in owner_result.candidates] == [institution_ids[1]]
+        assert [candidate.id for candidate in other_result.candidates] == [institution_ids[2]]
     finally:
         conn.rollback()
         conn.close()

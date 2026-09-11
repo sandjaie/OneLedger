@@ -93,6 +93,9 @@ class ImportableProfile(NormalizableProfile, ReconcilableProfile, Protocol):
     @property
     def name(self) -> str: ...
 
+    @property
+    def accountType(self) -> str | None: ...
+
 
 @dataclass(frozen=True)
 class AccountContext:
@@ -149,6 +152,8 @@ class Analysis:
     # same reason `ExtractionResult` keeps it out of its own: spec §5.6 forbids it reaching any
     # log line, and a dataclass repr is how it would get there.
     account_number_raw: str | None = field(repr=False, default=None)
+    account_number_is_masked: bool = False
+    account_number_capture_count: int = 0
     # Like account identity, issuer text is transient source evidence. It must not enter the
     # generic metadata mapping persisted on `document`.
     institution_name_raw: str | None = field(repr=False, default=None)
@@ -168,7 +173,7 @@ class ParseResult:
     document_id: UUID | None = None
 
 
-AccountAcceptor = Callable[[Analysis, AccountContext], bool]
+AccountAcceptor = Callable[[psycopg.Cursor[Any], Analysis, AccountContext], bool]
 
 
 def _page_one_text(pages: Sequence[Page]) -> str:
@@ -299,6 +304,8 @@ def _analysed(
         page_count=extraction.page_count,
         metadata=facts,
         account_number_raw=extraction.account_number_raw,
+        account_number_is_masked=extraction.account_number_is_masked,
+        account_number_capture_count=extraction.account_number_capture_count,
         institution_name_raw=extraction.institution_name_raw,
         metadata_failures=metadata_failures,
     )
@@ -478,7 +485,7 @@ def _staged(
     return rows
 
 
-AccountResolver = Callable[[str], AccountContext | None]
+AccountResolver = Callable[[ExtractionResult, ImportableProfile], AccountContext | None]
 
 # The conflict is only ever a file whose every batch was cancelled: layer 1 has refused any other
 # by the time this runs (`_stage`). That file keeps its one row, and the re-import
@@ -580,7 +587,7 @@ def parse(
     profile = identification.chosen
 
     extraction = _extracted(profile, pages)
-    resolved = account if account is not None else _resolved(extraction, resolve_account)
+    resolved = account if account is not None else _resolved(extraction, profile, resolve_account)
     analysis_account = resolved or AccountContext(id=UUID(int=0), currency=household.base_currency)
 
     with conn.cursor() as cur:
@@ -601,9 +608,12 @@ def parse(
     # Account-number evidence does not override issuer evidence. The route owns institution
     # lookup, so it supplies this read-only acceptance boundary; a refusal becomes a proposal
     # and therefore cannot reach FX, blob storage or the staging transaction.
-    if accept_account is not None and not accept_account(analysis, resolved):
-        conn.rollback()
-        return ParseResult(analysis=analysis, account=None, staged=False)
+    if accept_account is not None:
+        with conn.cursor() as cur:
+            accepted = accept_account(cur, analysis, resolved)
+        if not accepted:
+            conn.rollback()
+            return ParseResult(analysis=analysis, account=None, staged=False)
 
     if not stage or blocks_staging(analysis):
         # Nothing above this line wrote anything, and the FX step below is the only stage that
@@ -640,6 +650,7 @@ def parse(
         household=household,
         profile=profile,
         encrypted=encrypted,
+        accept_account=accept_account,
     )
 
 
@@ -654,13 +665,17 @@ def blocks_staging(analysis: Analysis) -> bool:
     return analysis.reconciliation.status != STATUS_MATCHED or bool(analysis.failures)
 
 
-def _resolved(extraction: ExtractionResult, resolve: AccountResolver) -> AccountContext | None:
+def _resolved(
+    extraction: ExtractionResult,
+    profile: ImportableProfile,
+    resolve: AccountResolver,
+) -> AccountContext | None:
     number = extraction.account_number_raw
     if not number:
         raise AccountNotResolved(
             "this statement states no account number, so choose the account to import it into"
         )
-    account = resolve(number)
+    account = resolve(extraction, profile)
     return account
 
 
@@ -720,6 +735,7 @@ def _stage(
     household: HouseholdContext,
     profile: ImportableProfile,
     encrypted: bool,
+    accept_account: AccountAcceptor | None,
 ) -> ParseResult:
     """`document`, `import_batch` and every staged row, in one transaction (§5.4).
 
@@ -736,12 +752,21 @@ def _stage(
         # statement, seconds apart through the FX fetch, would both find nothing and both
         # stage. The account row is the rendezvous because a batch belongs to one account.
         cur.execute(
-            "SELECT account_type FROM account WHERE id = %s AND household_id = %s FOR UPDATE",
+            "SELECT account_type, currency FROM account "
+            "WHERE id = %s AND household_id = %s FOR UPDATE",
             (account.id, household.id),
         )
         held = cur.fetchone()
         if held is None:
             raise PipelineError("the account this statement imports into no longer exists")
+        if str(held[1]).strip() != account.currency:
+            raise PipelineError(
+                "the account currency changed while this statement was being parsed; parse it again"
+            )
+        if accept_account is not None and not accept_account(cur, analysis, account):
+            raise PipelineError(
+                "the account identity changed while this statement was being parsed; parse it again"
+            )
 
         _refuse_second_staging(cur, household.id, account.id, analysis.period)
         rows = _staged(cur, analysis, account=account, household=pair)
@@ -776,6 +801,28 @@ def _stage(
             ),
         )
         document_id = _returned(cur)
+
+        # Confirmation precedes staging, so statement provenance initially names the immutable
+        # content hash and capture coordinates without a document UUID. Attach only the exact
+        # active evidence that produced this staged document; a stale or corrected capture stays
+        # unattached for backfill/review rather than being silently rebound.
+        cur.execute(
+            """UPDATE account_identifier
+                  SET source_document_id = %s, updated_at = now()
+                WHERE household_id = %s AND account_id = %s AND is_active
+                  AND provenance = 'statement' AND source_document_id IS NULL
+                  AND source_sha256 = %s AND source_layout_id = %s
+                  AND source_layout_version = %s AND source_capture_key = %s""",
+            (
+                document_id,
+                household.id,
+                account.id,
+                stored.sha256,
+                profile.id,
+                profile.version,
+                "account_number_masked" if analysis.account_number_is_masked else "account_number",
+            ),
+        )
 
         cur.execute(
             _BATCH,
