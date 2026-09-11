@@ -1,5 +1,6 @@
 {
   "name": "Passbook statement",
+  "accountType": "savings",
   "fingerprints": [
     "Tran\\s*Date\\s*Chq\\s*No\\s*Particulars",
     "OPENING\\s*BALANCE",
@@ -59,6 +60,7 @@
   "hasRunningBalance": true,
   "quirks": [],
   "metadataPatterns": {
+    "account_number": "Account\\s*No\\.?\\s*:?\\s*([0-9]+)",
     "period_start": "\\(From\\s*:\\s*(\\d{2}-\\d{2}-\\d{4})\\s*To\\s*:",
     "period_end": "\\(From\\s*:\\s*\\d{2}-\\d{2}-\\d{4}\\s*To\\s*:\\s*(\\d{2}-\\d{2}-\\d{4})\\)"
   }
