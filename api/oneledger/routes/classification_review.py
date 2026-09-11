@@ -23,11 +23,13 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..ingest.classify import Candidate, Classification, Knowledge, classify_row
 from ..ingest.knowledge import load_knowledge
+from .layouts import _preview_redactor
 
 router = APIRouter(prefix="/classification-review", tags=["classification"])
 
 MAX_CANDIDATES = 5000
 MAX_GROUP_TRANSACTION_IDS = 200
+_DESCRIPTION_REDACTOR = _preview_redactor(None)
 
 ReviewReason = Literal[
     "conflicting_knowledge",
@@ -270,7 +272,7 @@ def build_review_groups(
                 accountId=row.account_id,
                 accountName=row.account_name,
                 direction="debit" if row.amount < 0 else "credit",
-                description=row.description,
+                description=_DESCRIPTION_REDACTOR(row.description),
                 occurrences=group.occurrences,
                 firstBookedDate=group.first_date,
                 lastBookedDate=group.last_date,

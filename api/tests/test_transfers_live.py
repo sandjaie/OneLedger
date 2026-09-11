@@ -205,6 +205,40 @@ def test_listing_candidates_writes_nothing(live: Fixture) -> None:
     assert ledger_state(live) == before
 
 
+def test_candidate_payloads_redact_identifiers_without_changing_scoring(live: Fixture) -> None:
+    other = an_account(live)
+    private_identifier = "1234-٥٦٧٨-9012-3456"
+    debit = a_leg(
+        live,
+        live.account_id,
+        "-500.0000",
+        MARCH,
+        f"OUTWARD TRANSFER {private_identifier}",
+    )
+    a_leg(
+        live,
+        other,
+        "500.0000",
+        MARCH,
+        f"INWARD TRANSFER {private_identifier}",
+    )
+
+    response = client().get(
+        "/transfers/candidates",
+        params={"dateFrom": str(MARCH), "dateTo": str(MARCH + timedelta(days=30))},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 200
+    [candidate] = [
+        item for item in response.json()["candidates"] if item["debit"]["id"] == str(debit)
+    ]
+    assert candidate["score"] > 0
+    assert private_identifier not in response.text
+    assert "1234567890123456" not in response.text
+    assert candidate["debit"]["descriptionRaw"] == "OUTWARD TRANSFER [redacted]"
+
+
 def test_an_internal_move_is_proposed_and_names_its_kind(live: Fixture) -> None:
     other = an_account(live)
     debit = a_leg(live, live.account_id, "-500.0000", MARCH, "OUTWARD TRANSFER")

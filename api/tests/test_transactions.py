@@ -311,6 +311,27 @@ def test_the_ledger_lists_transfer_legs_and_reads_the_base_table(
     assert "v_transaction_reportable" not in listing
 
 
+def test_the_ledger_redacts_formatted_unicode_identifiers_only_on_serialization(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    private_identifier = "1234-٥٦٧٨-9012-3456"
+    selected = list(FETCHED_ROW)
+    selected[4] = f"TRANSFER TO {private_identifier}"
+    selected[5] = f"Transfer to {private_identifier}"
+    connection = LedgerConnection(rows=[tuple(selected)], total=1)
+
+    try:
+        response = _client(connection, monkeypatch).get("/transactions")
+    finally:
+        _teardown()
+
+    assert response.status_code == 200
+    assert private_identifier not in response.text
+    assert "1234567890123456" not in response.text
+    assert response.json()["transactions"][0]["descriptionRaw"] == "TRANSFER TO [redacted]"
+    assert connection.rows[0][4] == f"TRANSFER TO {private_identifier}"
+
+
 def test_every_statement_is_scoped_to_the_resolved_household(monkeypatch: MonkeyPatch) -> None:
     connection = LedgerConnection(rows=[FETCHED_ROW], total=1)
     try:

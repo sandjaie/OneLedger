@@ -30,7 +30,14 @@ from ..db import connect, scope_to_owner
 from ..ingest.engine import row_captures
 from ..ingest.transfers import Evidence, Leg, band, propose_kind, score_match, stated_remittance
 from ..money import _fixed, _out
-from .transactions import COLUMNS, FIELDS, FROM, TransactionRow, transaction_row
+from .transactions import (
+    COLUMNS,
+    FIELDS,
+    FROM,
+    TransactionRow,
+    public_transaction_row,
+    transaction_row,
+)
 
 router = APIRouter(tags=["transfers"])
 
@@ -288,6 +295,15 @@ def _ranked(found: list[Candidate]) -> list[Candidate]:
     )
 
 
+def _public_candidate(candidate: Candidate) -> Candidate:
+    return candidate.model_copy(
+        update={
+            "debit": public_transaction_row(candidate.debit),
+            "credit": public_transaction_row(candidate.credit),
+        }
+    )
+
+
 def _window(
     cur: psycopg.Cursor[Any], household_id: UUID, date_from: date | None, date_to: date | None
 ) -> tuple[date, date] | None:
@@ -352,7 +368,10 @@ def list_candidates(
         scorer = _Scorer(cur, owner.household_id, list(loaded.values()))
         scored = [scorer.score(loaded[d], loaded[c]) for d, c in pair_ids]
     shown = _ranked([candidate for candidate in scored if candidate.band in SHOWN])
-    return CandidatesResponse(candidates=shown[offset : offset + limit], total=len(shown))
+    return CandidatesResponse(
+        candidates=[_public_candidate(item) for item in shown[offset : offset + limit]],
+        total=len(shown),
+    )
 
 
 @router.get("/transactions/{transaction_id}/transfer-candidates")
@@ -398,7 +417,12 @@ def list_peers(
             scorer.score(subject, item) if is_debit else scorer.score(item, subject)
             for item in loaded.values()
         ]
-    return PeersResponse(peers=_ranked([c for c in scored if c.score > 0])[:PEERS_LIMIT])
+    return PeersResponse(
+        peers=[
+            _public_candidate(item)
+            for item in _ranked([c for c in scored if c.score > 0])[:PEERS_LIMIT]
+        ]
+    )
 
 
 @router.get("/transfers")
