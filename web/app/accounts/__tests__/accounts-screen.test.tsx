@@ -19,7 +19,7 @@ const institutions: Array<InstitutionRow> = [
 ];
 
 function account(overrides: Partial<AccountRow>): AccountRow {
-  const { identifiers = [], ...rest } = overrides;
+  const { identifiers, ...rest } = overrides;
   return {
     id: "acct-savings",
     name: "Inventory Savings",
@@ -43,7 +43,15 @@ function account(overrides: Partial<AccountRow>): AccountRow {
     currentBalance: "250000.0000",
     currentBalanceAsOf: "2026-01-15T00:00:00Z",
     creditLimit: null,
-    identifiers,
+    identifiers: identifiers ?? [
+      {
+        id: "identifier-bank",
+        kind: "bank_account",
+        masked: "****1234",
+        canReveal: true,
+        isActive: true,
+      },
+    ],
     ...rest,
   };
 }
@@ -61,6 +69,15 @@ const card = account({
   currentBalance: "-4500.0000",
   openingBalanceConfirmedAt: "2026-01-01T00:00:00Z",
   creditLimit: "20000.0000",
+  identifiers: [
+    {
+      id: "identifier-card",
+      kind: "card",
+      masked: "****4321",
+      canReveal: false,
+      isActive: true,
+    },
+  ],
 });
 const closed = account({
   id: "acct-old",
@@ -90,6 +107,167 @@ afterEach(() => {
 });
 
 describe("Accounts", () => {
+  it("keeps identifiers masked and never prefetches a reveal", () => {
+    const request = vi.fn();
+    render(<AccountsScreen {...props} request={request} />);
+
+    expect(screen.getAllByText("****1234").length).toBeGreaterThan(0);
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("reveals one identifier deliberately and hides it without another request", async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: "revealed",
+      value: "SYN 0000 1234",
+      kind: "bank_account",
+    });
+    render(<AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />);
+    const show = screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    });
+    show.focus();
+
+    fireEvent.click(show);
+
+    expect(await screen.findByText("SYN 0000 1234")).toBeTruthy();
+    expect(request).toHaveBeenCalledWith(
+      "/accounts/acct-savings/identifiers/identifier-bank/reveal",
+      expect.objectContaining({ method: "POST", signal: expect.any(AbortSignal) }),
+    );
+    const hide = screen.getByRole("button", {
+      name: "Hide bank account number for Inventory Savings",
+    });
+    expect(document.activeElement).toBe(hide);
+    fireEvent.click(hide);
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+    expect(screen.getByText("****1234")).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("reveals only the selected identifier and clears it on edit", async () => {
+    const accountWithIban = account({
+      identifiers: [
+        {
+          id: "identifier-bank",
+          kind: "bank_account",
+          masked: "****1234",
+          canReveal: true,
+          isActive: true,
+        },
+        {
+          id: "identifier-iban",
+          kind: "iban",
+          masked: "****5678",
+          canReveal: true,
+          isActive: true,
+        },
+      ],
+    });
+    const request = vi.fn().mockResolvedValue({
+      status: "revealed",
+      value: "SYN 0000 1234",
+      kind: "bank_account",
+    });
+    render(<AccountsScreen {...props} accounts={[accountWithIban]} request={request} totals={[]} />);
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    }));
+
+    expect(await screen.findByText("SYN 0000 1234")).toBeTruthy();
+    expect(screen.getByText("****5678")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Savings" }));
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+  });
+
+  it("cancels an in-flight reveal when edit tears down the identifier view", async () => {
+    let finishReveal: ((value: unknown) => void) | undefined;
+    const request = vi.fn().mockImplementation(() => new Promise((resolve) => {
+      finishReveal = resolve;
+    }));
+    render(<AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />);
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    }));
+    const init = request.mock.calls[0]?.[1] as RequestInit;
+    expect(init.signal?.aborted).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Inventory Savings" }));
+    expect(init.signal?.aborted).toBe(true);
+    finishReveal?.({ status: "revealed", value: "SYN 0000 1234", kind: "bank_account" });
+
+    await waitFor(() => expect(screen.queryByText("SYN 0000 1234")).toBeNull());
+  });
+
+  it("explains a source-masked identifier and disables its eye", () => {
+    render(<AccountsScreen {...props} accounts={[card]} totals={[]} />);
+
+    const unavailable = screen.getByRole("button", {
+      name: "Full card number unavailable for Inventory Card",
+    }) as HTMLButtonElement;
+    expect(unavailable.disabled).toBe(true);
+    expect(screen.getByText("Statement supplied only a masked value.")).toBeTruthy();
+  });
+
+  it("handles unavailable and failed reveals without retaining plaintext", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ status: "unavailable", reason: "source_mask_only" })
+      .mockRejectedValueOnce(new Error("synthetic failure"));
+    const { rerender } = render(
+      <AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />,
+    );
+    fireEvent.click(screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    }));
+    expect(await screen.findByText("Statement supplied only a masked value.")).toBeTruthy();
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+
+    rerender(
+      <AccountsScreen
+        {...props}
+        accounts={[account({ identifiers: [{
+          ...savings.identifiers[0],
+          id: "identifier-retry",
+        }] })]}
+        request={request}
+        totals={[]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    }));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "The account number could not be revealed.",
+    );
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+  });
+
+  it("does not put a revealed value in browser persistence or navigation state", async () => {
+    const storage = vi.spyOn(Storage.prototype, "setItem");
+    const pushState = vi.spyOn(window.history, "pushState");
+    const replaceState = vi.spyOn(window.history, "replaceState");
+    const request = vi.fn().mockResolvedValue({
+      status: "revealed",
+      value: "SYN 0000 1234",
+      kind: "bank_account",
+    });
+    const view = render(
+      <AccountsScreen {...props} accounts={[savings]} request={request} totals={[]} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Show bank account number for Inventory Savings",
+    }));
+    expect(await screen.findByText("SYN 0000 1234")).toBeTruthy();
+    expect(storage).not.toHaveBeenCalled();
+    expect(pushState).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
+    view.unmount();
+    expect(screen.queryByText("SYN 0000 1234")).toBeNull();
+  });
+
   it("presents the inventory as the compact account-card grid from the primary artboard", () => {
     render(<AccountsScreen {...props} />);
 
