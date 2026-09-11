@@ -141,4 +141,35 @@ Accounts contract.
 The final comparison found no P0, P1 or P2 mismatch within the supported
 Transactions contract.
 
+## Statement import — Screen set 01
+
+- Primary source: the Statement import artboard in
+  `docs/product/mockups/OneLedger.dc.html`; its Documents navigation item opens
+  this screen. `Review.dc.html` remains supplemental to the separate Review
+  route only.
+- Source and implementation captures: selected in-app browser views retained in
+  task evidence. No statement, statement image, filename or household figure
+  was persisted in the repository.
+- Comparison method: the source and `http://localhost:3000/import` captures were
+  emitted together after applying the same desktop viewport override, which was
+  reset immediately after the comparison.
+- Matched structure: compact serif title, provenance-first summary, large dashed
+  upload workspace, centred statement guidance, restrained format label and
+  bordered file-result cards with progress and status treatment.
+- Contract-preserving differences: the real screen advertises PDF only because
+  that is the implemented import contract; mock-only CSV and XLSX labels remain
+  absent. The account override and Check statements action remain in the upload
+  workspace because they drive the existing guarded parse flow. No processed
+  count or example statement is invented for the empty state.
+- Interaction and accessibility check: the file picker and PDF drop target feed
+  the same multi-file candidate path; account detection or override, per-file
+  password, parse verdict, account proposal, staging and review link remain
+  functional and covered. A rejected file stays attached to its own result card.
+- Runtime check: the authenticated empty state loaded without a browser-console
+  error. Candidate-card states were exercised with synthetic component fixtures
+  rather than uploading a private statement during visual QA.
+
+The final comparison found no P0, P1 or P2 mismatch within the delivered PDF
+statement-import contract.
+
 final result: passed

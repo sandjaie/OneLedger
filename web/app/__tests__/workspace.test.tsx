@@ -506,7 +506,7 @@ describe("authenticated workspace", () => {
     );
 
     expect((await screen.findByRole("link", { name: "Import" })).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("heading", { name: "Import" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Statement import" })).toBeTruthy();
     expect(screen.getByLabelText("Statement files")).toBeTruthy();
   });
 

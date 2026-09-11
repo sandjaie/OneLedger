@@ -134,6 +134,22 @@ function renderScreen(request: ReturnType<typeof vi.fn>) {
 afterEach(cleanup);
 
 describe("choosing files", () => {
+  it("starts with the compact statement-import workspace from the product mock", async () => {
+    const request = vi.fn();
+    renderScreen(request);
+
+    expect(screen.getByRole("heading", { name: "Statement import" })).toBeTruthy();
+    expect(screen.getByLabelText("Upload statement files").className).toContain(
+      "statement-import-dropzone",
+    );
+    expect(screen.getByText("PDF", { selector: ".statement-import-format" })).toBeTruthy();
+    expect(screen.queryByText("CSV", { selector: ".statement-import-format" })).toBeNull();
+
+    choose([pdf("march.pdf")]);
+    const chosen = await screen.findByRole("listitem", { name: /march\.pdf/ });
+    expect(chosen.className).toContain("statement-import-file-card");
+  });
+
   it("lists every chosen file independently and uploads none of them", async () => {
     const request = vi.fn();
     renderScreen(request);
@@ -143,6 +159,31 @@ describe("choosing files", () => {
     expect(await screen.findByText("march.pdf")).toBeTruthy();
     expect(screen.getByText("april.pdf")).toBeTruthy();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("accepts dropped PDFs through the same local candidate path", async () => {
+    const request = vi.fn();
+    renderScreen(request);
+
+    fireEvent.drop(screen.getByLabelText("Upload statement files"), {
+      dataTransfer: { files: [pdf("dropped.pdf")] },
+    });
+
+    expect(await screen.findByRole("listitem", { name: /dropped\.pdf/ })).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("ignores a non-file drop without erasing the current candidates", async () => {
+    const request = vi.fn();
+    renderScreen(request);
+    choose([pdf("kept.pdf")]);
+    expect(await screen.findByRole("listitem", { name: /kept\.pdf/ })).toBeTruthy();
+
+    fireEvent.drop(screen.getByLabelText("Upload statement files"), {
+      dataTransfer: { files: [] },
+    });
+
+    expect(screen.getByRole("listitem", { name: /kept\.pdf/ })).toBeTruthy();
   });
 
   it("refuses a file that is not a PDF, and says why, without asking the API", async () => {

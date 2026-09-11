@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { ApiError, type apiFetch } from "@/lib/api/client";
@@ -148,6 +148,14 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
     setCandidates(Array.from(files ?? []).map(candidate));
   }
 
+  function drop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (event.dataTransfer.files.length === 0) {
+      return;
+    }
+    choose(event.dataTransfer.files);
+  }
+
   async function checkAll() {
     setBusy(true);
     // Sequential rather than concurrent: each file is a multi-megabyte upload the service
@@ -267,52 +275,87 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
   );
 
   return (
-    <section className="workspace-content" aria-labelledby="import-title">
-      <p className="eyebrow">Statements</p>
-      <h1 className="workspace-title" id="import-title">Import</h1>
-      <p className="lede">
-        Choose one or more statement PDFs. Nothing is uploaded until you ask for a check, and
-        nothing reaches the ledger until you stage a batch and review it.
-      </p>
+    <section className="workspace-content statement-import-screen" aria-labelledby="import-title">
+      <header className="statement-import-header">
+        <h1 className="workspace-title" id="import-title">Statement import</h1>
+        <p>
+          Originals stay attached to their ledger rows. Nothing is uploaded until you ask for a
+          check, and nothing reaches the ledger until you stage and review it.
+        </p>
+      </header>
 
-      <div className="import-controls">
-        <label className="file-field">
-          <span>Statement files</span>
-          <input
-            accept="application/pdf,.pdf"
-            multiple
-            onChange={(event) => choose(event.target.files)}
-            type="file"
-          />
-        </label>
+      <div
+        aria-label="Upload statement files"
+        className="statement-import-dropzone"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={drop}
+      >
+        <div className="statement-import-intro">
+          <span aria-hidden="true" className="statement-import-filemark">PDF</span>
+          <h2>Upload a financial statement</h2>
+          <p>
+            Choose or drop bank and card statement PDFs. OneLedger detects the layout, account,
+            period and currency before anything can be staged.
+          </p>
+          <span className="statement-import-format">PDF</span>
+        </div>
 
-        <label className="select-field">
-          <span>Account</span>
-          <select onChange={(event) => setAccountId(event.target.value)} value={accountId}>
-            <option value="">Detect from the statement</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>{account.name}</option>
-            ))}
-          </select>
-        </label>
+        <div className="import-controls">
+          <label className="file-field statement-import-picker">
+            <span>Statement files</span>
+            <input
+              accept="application/pdf,.pdf"
+              multiple
+              onChange={(event) => choose(event.target.files)}
+              type="file"
+            />
+          </label>
 
-        <button
-          className="primary-action"
-          disabled={!checkable || busy}
-          onClick={checkAll}
-          type="button"
-        >{busy ? "Checking…" : "Check statements"}</button>
+          <label className="select-field">
+            <span>Account</span>
+            <select onChange={(event) => setAccountId(event.target.value)} value={accountId}>
+              <option value="">Detect from the statement</option>
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>{account.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            className="primary-action"
+            disabled={!checkable || busy}
+            onClick={checkAll}
+            type="button"
+          >{busy ? "Checking…" : "Check statements"}</button>
+        </div>
       </div>
 
       <ul className="import-list">
         {candidates.map((item) => (
-          <li aria-label={item.file.name} className="import-file" key={item.key}>
+          <li
+            aria-label={item.file.name}
+            className="import-file statement-import-file-card"
+            key={item.key}
+          >
             <div className="import-file-head">
-              <strong>{item.file.name}</strong>
+              <div className="statement-import-file-identity">
+                <span aria-hidden="true" className="statement-import-filemark">PDF</span>
+                <div>
+                  <strong>{item.file.name}</strong>
+                  <small>Selected locally · checked only when you ask</small>
+                </div>
+              </div>
               <span aria-live="polite" className="section-label" role="status">
                 {stateLabel(item)}
               </span>
             </div>
+
+            <ol aria-label={`${item.file.name} import progress`} className="statement-import-progress">
+              <li className="complete">Selected</li>
+              <li className={item.parsed ? "complete" : undefined}>Checked</li>
+              <li className={item.state === "staged" ? "complete" : undefined}>Staged</li>
+              <li className={item.state === "staged" ? "current" : undefined}>Review</li>
+            </ol>
 
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
 
