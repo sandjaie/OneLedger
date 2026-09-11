@@ -162,6 +162,16 @@ def test_a_seeded_profile_captures_currency_when_the_statement_prints_it(
     assert matched.group(1) == "XAA"
 
 
+def test_card_layout_captures_the_lowercase_currency_label_used_by_local_statements() -> None:
+    profile = _profile(SEEDS / "card-layout.json")
+    pattern = profile["metadataPatterns"]["currency"]
+
+    matched = re.search(pattern, "currency : XAA", re.MULTILINE)
+
+    assert matched is not None
+    assert matched.group(1) == "XAA"
+
+
 @pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
 def test_no_seeded_pattern_contains_a_literal_identifier(path: Path) -> None:
     profile = _profile(path)
