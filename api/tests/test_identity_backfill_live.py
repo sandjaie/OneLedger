@@ -742,7 +742,7 @@ def test_apply_unique_race_rolls_back_legacy_deactivation(
         competing_account = cur.fetchone()[0]  # type: ignore[index]
     live.conn.commit()
     preview = live.preview().json()
-    writer = identity_backfill._replace_account_identifier
+    writer = cast(Any, vars(identity_backfill)["_replace_account_identifier"])
 
     def racing_writer(cur: psycopg.Cursor[Any], *args: object, **kwargs: object) -> None:
         with psycopg.connect(_test_dsn()) as rival, rival.cursor() as rival_cur:
@@ -758,7 +758,7 @@ def test_apply_unique_race_rolls_back_legacy_deactivation(
                              'owner_entered')""",
                 (live.household_id, competing_account, ACCOUNT_NUMBER, ACCOUNT_NUMBER),
             )
-        writer(cur, *args, **kwargs)  # type: ignore[arg-type]
+        writer(cur, *args, **kwargs)
 
     monkeypatch.setattr(identity_backfill, "_replace_account_identifier", racing_writer)
 
