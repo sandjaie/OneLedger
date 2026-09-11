@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ImportScreen } from "@/app/import/import-screen";
 import { ApiError } from "@/lib/api/client";
-import type { AccountRow, CurrencyRow, HouseholdCurrency, ParseResponse } from "@/types/api";
+import type {
+  AccountProposal,
+  AccountRow,
+  CurrencyRow,
+  HouseholdCurrency,
+  ParseResponse,
+} from "@/types/api";
 
 // `CurrencyRow` is the catalogue row and carries a display name; `HouseholdCurrency` is the
 // subset the formatter reads. Deriving one from the other keeps them from drifting in the
@@ -70,6 +76,39 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
     metadataFailures: [],
     ...overrides,
   };
+}
+
+function accountProposal(overrides: Partial<AccountProposal> = {}): ParseResponse {
+  return parsed({
+    accountId: null,
+    accountProposal: {
+      accountNumberMasked: "****1234",
+      suggestedAccounts: [],
+      name: "Example savings",
+      accountType: "savings",
+      institutionId: null,
+      country: "XY",
+      currency: "XAE",
+      openingBalance: "1490.0000",
+      openingBalanceIsDerived: false,
+      openingBalanceDate: "2026-03-01",
+      openingBalanceNote: "Declared opening balance for the statement period",
+      creditLimit: null,
+      ...overrides,
+    },
+  });
+}
+
+function createdAccount(id = "acct-created"): AccountRow {
+  return {
+    ...accounts[0],
+    id,
+    name: "Example savings",
+    accountNumberMasked: "****1234",
+    accountType: "savings",
+    country: "XY",
+    currency: "XAE",
+  } as AccountRow;
 }
 
 function pdf(name: string) {
@@ -464,6 +503,167 @@ describe("staging", () => {
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
     expect((request.mock.calls[1][1].body as FormData).get("accountId")).toBe("acct-savings");
+  });
+});
+
+describe("an account proposed by a statement", () => {
+  it("creates the account, re-checks with its id, and then offers the ordinary Stage action", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") return createdAccount();
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) return accountProposal();
+        if (parseCalls === 2) return parsed({ accountId: "acct-created" });
+        return parsed({ staged: true, batchId: "batch-created", accountId: "acct-created" });
+      }
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("unknown.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const item = await screen.findByRole("listitem", { name: /unknown\.pdf/ });
+
+    fireEvent.click(
+      await within(item).findByRole("button", { name: "Create account and continue" }),
+    );
+    const stage = await within(item).findByRole("button", { name: "Stage batch" });
+
+    const accountCall = request.mock.calls.find(([path]) => path === "/parse/account");
+    const accountBody = JSON.parse((accountCall?.[1]?.body as FormData).get("account") as string);
+    expect(accountBody).not.toHaveProperty("accountNumberMasked");
+    const recheck = request.mock.calls.filter(([path]) => path === "/parse")[1]![1]!.body as FormData;
+    expect(recheck.get("accountId")).toBe("acct-created");
+
+    fireEvent.click(stage);
+    await within(item).findByRole("link", { name: /review/i });
+    const staging = request.mock.calls.filter(([path]) => path === "/parse")[2]![1]!.body as FormData;
+    expect(staging.get("accountId")).toBe("acct-created");
+  });
+
+  it("puts one form on the earliest statement and resolves every file sharing its mask", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") return createdAccount();
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          return {
+            ...accountProposal({ openingBalanceDate: "2026-04-01" }),
+            period: { start: "2026-04-01", end: "2026-04-30", isDerived: false },
+          };
+        }
+        if (parseCalls === 2) {
+          return {
+            ...accountProposal({ openingBalanceDate: "2026-03-01" }),
+            period: { start: "2026-03-01", end: "2026-03-31", isDerived: false },
+          };
+        }
+        return parsed({ accountId: "acct-created" });
+      }
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("later.pdf"), pdf("earlier.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const later = await screen.findByRole("listitem", { name: /later\.pdf/ });
+    const earlier = await screen.findByRole("listitem", { name: /earlier\.pdf/ });
+
+    expect(within(later).queryByRole("button", { name: "Create account and continue" })).toBeNull();
+    fireEvent.click(
+      await within(earlier).findByRole("button", { name: "Create account and continue" }),
+    );
+
+    await within(later).findByRole("button", { name: "Stage batch" });
+    await within(earlier).findByRole("button", { name: "Stage batch" });
+    expect(request.mock.calls.filter(([path]) => path === "/parse/account")).toHaveLength(1);
+    const rechecks = request.mock.calls.filter(([path]) => path === "/parse").slice(2);
+    expect(rechecks).toHaveLength(2);
+    expect(rechecks.map(([, init]) => (init!.body as FormData).get("accountId"))).toEqual([
+      "acct-created",
+      "acct-created",
+    ]);
+  });
+
+  it("waits for the whole selection before offering the earliest statement's form", async () => {
+    let finishEarlier!: (value: ParseResponse) => void;
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          return {
+            ...accountProposal({ openingBalanceDate: "2026-04-01" }),
+            period: { start: "2026-04-01", end: "2026-04-30", isDerived: false },
+          };
+        }
+        return new Promise<ParseResponse>((resolve) => { finishEarlier = resolve; });
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    renderScreen(request);
+    choose([pdf("later.pdf"), pdf("earlier.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const later = await screen.findByRole("listitem", { name: /later\.pdf/ });
+
+    expect(
+      within(later).queryByRole("button", { name: "Create account and continue" }),
+    ).toBeNull();
+    finishEarlier({
+      ...accountProposal({ openingBalanceDate: "2026-03-01" }),
+      period: { start: "2026-03-01", end: "2026-03-31", isDerived: false },
+    });
+
+    const earlier = await screen.findByRole("listitem", { name: /earlier\.pdf/ });
+    expect(
+      await within(earlier).findByRole("button", { name: "Create account and continue" }),
+    ).toBeTruthy();
+    expect(
+      within(later).queryByRole("button", { name: "Create account and continue" }),
+    ).toBeNull();
+  });
+
+  it("re-sends the file password through confirmation, re-check and staging, then clears it", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/institutions") return [];
+      if (path === "/parse/account") return createdAccount();
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) throw new ApiError(422, "PDF is encrypted or the password is incorrect");
+        if (parseCalls === 2) return accountProposal();
+        if (parseCalls === 3) return parsed({ accountId: "acct-created" });
+        return parsed({ staged: true, batchId: "batch-created", accountId: "acct-created" });
+      }
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("locked.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    const item = await screen.findByRole("listitem", { name: /locked\.pdf/ });
+    fireEvent.change(await within(item).findByLabelText(/password/i), {
+      target: { value: "statement-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+    fireEvent.click(
+      await within(item).findByRole("button", { name: "Create account and continue" }),
+    );
+    fireEvent.click(await within(item).findByRole("button", { name: "Stage batch" }));
+    await within(item).findByRole("link", { name: /review/i });
+
+    const carryingPassword = request.mock.calls.filter(([path]) => (
+      path === "/parse" || path === "/parse/account"
+    )).slice(1);
+    expect(carryingPassword.map(([, init]) => (init!.body as FormData).get("password"))).toEqual([
+      "statement-secret",
+      "statement-secret",
+      "statement-secret",
+      "statement-secret",
+    ]);
+    expect(within(item).queryByLabelText(/password/i)).toBeNull();
   });
 });
 

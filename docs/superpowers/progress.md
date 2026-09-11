@@ -46,14 +46,14 @@ request.
 | 1.5 — investments | `feature/p1-5a-investment-schema-api` · `feature/p1-5b-nav-and-imports` · `feature/p1-5c-portfolio-screen` | Not started | — |
 | 1.6 — salary and a thin forecast | `feature/p1-6a-payslips` · `feature/p1-6b-commitments-forecast` | Not started | — |
 | 1.7 — the layout mapper and documents | `feature/p1-7a-layout-mapper` · `feature/p1-7b-documents-diagnostics` | Not started | — |
-| 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Task 8a1 delivers the account-proposal and confirmation API; the screen, local layout captures and unclassified prompt remain | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
+| 1.8 — the import asks | `feature/p1-8a1-account-from-statement-api` · `feature/p1-8a2-account-from-statement-screen` · `feature/p1-8a3-layout-identity-captures` · `feature/p1-8b-unclassified-asks` | **Active** — Tasks 8a1–8a2 deliver the account proposal, confirmation API and import-screen flow; local layout captures and the unclassified prompt remain | [spec](specs/2026-09-10-slice-1-8-the-import-asks.md) · [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 
 ## Phase 1 · slice 1.8 — the import asks
 
 | Task | Branch | Status | Evidence |
 | --- | --- | --- | --- |
 | 8a1 — a statement proposes its own account | `feature/p1-8a1-account-from-statement-api` | Delivered — V25 adds the layout product type; an unresolved statement returns a read-only masked proposal, and an owner-only confirmation creates or adopts the account without accepting identity from the browser | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
-| 8a2 — the import screen offers the account | `feature/p1-8a2-account-from-statement-screen` | Not started | — |
+| 8a2 — the import screen offers the account | `feature/p1-8a2-account-from-statement-screen` | Delivered — the earliest selected statement shows an editable masked account proposal or household suggestion; confirmation re-checks every selected statement with that mask against the one account before Stage is offered, while passwords remain per-file and transient | [plan](plans/2026-09-10-slice-1-8-the-import-asks.md) |
 | 8a3 — the layouts read the account identity | `feature/p1-8a3-layout-identity-captures` | Not started | — |
 | 8b — an unclassified row asks | `feature/p1-8b-unclassified-asks` | Not started | — |
 

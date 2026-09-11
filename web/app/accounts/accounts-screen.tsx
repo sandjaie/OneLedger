@@ -53,7 +53,7 @@ const INSTITUTION_TYPES = [
   "other",
 ] as const;
 
-const ACCOUNT_TYPES = [
+export const ACCOUNT_TYPES = [
   "cash",
   "current",
   "savings",
@@ -78,7 +78,7 @@ const ACCOUNT_TYPES = [
   "payable",
 ] as const;
 
-const LIABILITY_TYPES = new Set([
+export const LIABILITY_TYPES: ReadonlySet<string> = new Set([
   "credit_card",
   "personal_loan",
   "home_loan",

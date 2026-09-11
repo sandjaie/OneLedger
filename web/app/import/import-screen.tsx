@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type { AccountRow, CurrencyRow, HouseholdCurrency, ParseResponse } from "@/types/api";
@@ -29,6 +30,10 @@ type Candidate = {
   state: "chosen" | "checking" | "checked" | "refused" | "staging" | "staged";
   parsed?: ParseResponse;
   batchId?: string;
+  /** Once one file resolves an account, every later request for it keeps that exact account. */
+  accountId?: string;
+  /** The new account is not yet in the workspace prop; retain its catalogue key for formatting. */
+  accountCurrency?: string;
   problem?: string;
   /** True once the service has said this file is encrypted, so it is offered a password field. */
   locked?: boolean;
@@ -96,7 +101,8 @@ function body(item: Candidate, stage: boolean, accountId: string) {
   form.append("stage", stage ? "true" : "false");
   // Sent only when the owner overrode it. Absent, the pipeline resolves the account from the
   // statement's own number by salted hash, which is the path that needs no picker at all.
-  if (accountId) form.append("accountId", accountId);
+  const resolvedAccountId = item.accountId ?? accountId;
+  if (resolvedAccountId) form.append("accountId", resolvedAccountId);
   // This file's own password, never another's. The service holds none between requests — the
   // blob it stores is the original and stays encrypted — so staging re-sends it.
   if (item.password) form.append("password", item.password);
@@ -113,6 +119,18 @@ function countsText(parsed: ParseResponse) {
   const entries = Object.entries(parsed.counts);
   if (!entries.length) return "";
   return entries.map(([status, count]) => `${count} ${status}`).join(" · ");
+}
+
+function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
+  const mask = item.parsed?.accountProposal?.accountNumberMasked;
+  if (!mask) return false;
+  const first = candidates
+    .filter((candidate) => candidate.parsed?.accountProposal?.accountNumberMasked === mask)
+    .toSorted((left, right) => {
+      const byPeriod = left.parsed!.period.start.localeCompare(right.parsed!.period.start);
+      return byPeriod || left.key.localeCompare(right.key);
+    })[0];
+  return first?.key === item.key;
 }
 
 export function ImportScreen({ accounts, currencies, currency, request }: Props) {
@@ -145,7 +163,13 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
           method: "POST",
           body: body(item, false, accountId),
         });
-        update(item.key, { state: "checked", parsed });
+        const resolved = accounts.find((account) => account.id === parsed.accountId);
+        update(item.key, {
+          state: "checked",
+          parsed,
+          accountId: item.accountId,
+          accountCurrency: resolved?.currency ?? item.accountCurrency,
+        });
       } catch (error) {
         const problem = detail(error, "This file could not be checked. Try again.");
         // `locked` is sticky: a wrong password answers with the same sentence, and the field has
@@ -192,6 +216,48 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
         problem: detail(error, "This file could not be staged. Try again."),
       });
     }
+  }
+
+  async function resolveProposal(item: Candidate, account: AccountRow) {
+    const mask = item.parsed?.accountProposal?.accountNumberMasked;
+    if (!mask) return;
+    setBusy(true);
+    const matching = candidates
+      .filter((candidate) => candidate.parsed?.accountProposal?.accountNumberMasked === mask)
+      .toSorted((left, right) => {
+        const byPeriod = left.parsed!.period.start.localeCompare(right.parsed!.period.start);
+        return byPeriod || left.key.localeCompare(right.key);
+      });
+    for (const candidate of matching) {
+      const withAccount = { ...candidate, accountId: account.id, accountCurrency: account.currency };
+      update(candidate.key, {
+        state: "checking",
+        accountId: account.id,
+        accountCurrency: account.currency,
+        problem: undefined,
+      });
+      try {
+        const parsed = await request<ParseResponse>("/parse", {
+          method: "POST",
+          body: body(withAccount, false, ""),
+        });
+        update(candidate.key, {
+          state: "checked",
+          parsed,
+          accountId: account.id,
+          accountCurrency: account.currency,
+        });
+      } catch (error) {
+        update(candidate.key, {
+          state: "chosen",
+          parsed: undefined,
+          accountId: account.id,
+          accountCurrency: account.currency,
+          problem: detail(error, "This file could not be re-checked with its account."),
+        });
+      }
+    }
+    setBusy(false);
   }
 
   // The same two exclusions the loop makes, so the button is not offered for a pass that would
@@ -281,8 +347,26 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               />
             )}
 
-            {item.state === "checked" && item.parsed && canStage(item.parsed) && (
-              <button className="primary-action" onClick={() => stage(item)} type="button">
+            {!busy && item.state === "checked" && item.parsed?.accountProposal && leadsProposal(item, candidates) && (
+              <AccountProposalPanel
+                currencies={currencies}
+                file={item.file}
+                layoutId={item.parsed.layoutId}
+                onResolved={(account) => resolveProposal(item, account)}
+                password={item.password}
+                proposal={item.parsed.accountProposal}
+                request={request}
+              />
+            )}
+
+            {!busy && item.state === "checked" && item.parsed?.accountProposal && !leadsProposal(item, candidates) && (
+              <p className="import-verdict">
+                This account will be confirmed from the earliest selected statement.
+              </p>
+            )}
+
+            {item.state === "checked" && item.parsed && !item.parsed.accountProposal && canStage(item.parsed) && (
+              <button className="primary-action" disabled={busy} onClick={() => stage(item)} type="button">
                 Stage batch
               </button>
             )}
@@ -302,6 +386,7 @@ function stateLabel(item: Candidate) {
   if (item.state === "checking") return "Checking…";
   if (item.state === "staging") return "Staging…";
   if (item.state === "staged") return "Staged";
+  if (item.state === "checked" && item.parsed?.accountProposal) return "Needs account";
   if (item.state === "checked") return "Checked";
   return "Ready to check";
 }
@@ -325,7 +410,7 @@ function Summary({
   // and a statement whose rows all failed to normalize still declares a closing balance.
   // Falling back to the household's display currency means an account the catalogue does not
   // cover still formats with real grouping rather than printing raw.
-  const code = accounts.find(({ id }) => id === parsed.accountId)?.currency;
+  const code = item.accountCurrency ?? accounts.find(({ id }) => id === parsed.accountId)?.currency;
   const shown = currencies.find(({ code: option }) => option === code) ?? currency;
   const reconciliation = parsed.reconciliation;
 

@@ -367,6 +367,40 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
    a palette stops meaning anything. */
 .import-verdict { margin: 0; padding: 12px 14px; border-left: 4px solid var(--blue); background: rgba(255, 255, 255, 0.6); line-height: 1.5; }
 .import-failures { display: grid; gap: 8px; margin: 0; padding-left: 20px; color: var(--muted); font-size: 0.9rem; }
+.account-proposal {
+  display: grid; gap: 18px; padding: clamp(18px, 3vw, 28px);
+  border: 1px solid rgba(16, 22, 20, 0.13); border-top: 4px solid var(--green);
+  border-radius: 9px; background: rgba(255, 255, 255, 0.78);
+}
+.account-proposal header { display: grid; gap: 6px; }
+.account-proposal header h3 {
+  margin: 0; font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.7rem; font-weight: 400; letter-spacing: 0.02em;
+}
+.account-proposal header p:last-child { margin: 0; color: var(--muted); line-height: 1.5; }
+.account-proposal-suggestions { display: flex; flex-wrap: wrap; gap: 10px; }
+.account-proposal-suggestions .text-action { margin: 0; }
+.account-proposal-fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px 18px;
+  padding: 18px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+}
+.account-proposal-fields label:not(.check-field) {
+  display: grid; align-content: start; gap: 7px;
+  color: var(--muted); font-size: 0.78rem; font-weight: 700;
+}
+.account-proposal-fields input:not([type="checkbox"]),
+.account-proposal-fields select {
+  width: 100%; min-width: 0; padding: 10px 11px;
+  border: 1px dashed rgba(16, 22, 20, 0.3); border-radius: 6px;
+  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
+}
+.account-proposal-fields small { color: var(--green); font-weight: 400; }
+.account-proposal-wide { grid-column: 1 / -1; }
+.account-proposal-note {
+  margin: 0; padding: 11px 13px; border-left: 3px solid var(--blue);
+  color: var(--muted); background: rgba(255, 255, 255, 0.62); line-height: 1.5;
+}
+.account-proposal > .primary-action { justify-self: start; margin-top: 0; }
 
 /* Review — grouped by attention needed, not chronologically. The groups arrive in that order
    from the API; the screen renders them as sent rather than sorting again. */
