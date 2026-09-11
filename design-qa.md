@@ -110,4 +110,35 @@ fed with invented financial facts.
 The final comparison found no P0, P1 or P2 mismatch within the supported
 Accounts contract.
 
+## Transactions — Screen set 01
+
+- Primary source: the Transactions artboard in
+  `docs/product/mockups/OneLedger.dc.html`; `Review.dc.html` was not used as the
+  visual source for this screen.
+- Source and implementation captures: selected in-app browser views retained in
+  task evidence and not persisted because the implementation contains private
+  transaction descriptions and household figures.
+- Comparison method: the source and `http://localhost:3000/transactions`
+  captures were emitted together in one visual comparison input after the real
+  ledger completed loading.
+- Matched structure: compact serif title and ledger summary, shallow filter
+  controls, restrained transfer action, and a dense five-column ledger with
+  muted metadata and right-aligned amounts.
+- Contract-preserving differences: filters supported by the real ledger remain
+  available, with less-common controls behind More filters. Manual entry is a
+  working disclosure rather than a permanent first-viewport form. The table
+  retains inline category editing, notes, provenance, transfer linking, frozen
+  FX evidence and pagination instead of replacing those capabilities with the
+  mock's static rows.
+- Interaction and accessibility check: the manual-entry toggle, primary and
+  advanced filters, transfer discovery, semantic ledger table, inline category
+  controls and pagination all remain reachable. The focused transaction-screen
+  suite covers the disclosure state and existing ledger workflows.
+- Runtime check: the authenticated route loaded the real ledger without a
+  compile or runtime error; the first rows remained visible in the full-width
+  comparison without clipping the date, account or amount columns.
+
+The final comparison found no P0, P1 or P2 mismatch within the supported
+Transactions contract.
+
 final result: passed

@@ -177,7 +177,7 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
   }
 
   return (
-    <section aria-labelledby="transfers-title" className="account-form">
+    <section aria-labelledby="transfers-title" className="account-form transaction-transfer-panel">
       <h2 id="transfers-title">Transfers</h2>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       <button className="text-action" disabled={busy} onClick={() => void find()} type="button">
@@ -311,7 +311,10 @@ export function PeerPicker({
   }
 
   return (
-    <section aria-label={`Link ${transaction.descriptionRaw} as a transfer`} className="account-form">
+    <section
+      aria-label={`Link ${transaction.descriptionRaw} as a transfer`}
+      className="account-form transaction-peer-panel"
+    >
       <h2>Link as a transfer</h2>
       <p className="lede">{describeLeg(transaction, legAmount)}</p>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
