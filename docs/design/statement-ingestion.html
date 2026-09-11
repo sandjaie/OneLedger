@@ -469,20 +469,21 @@ from the statement header. Profiles are rows in <code>statement_layout</code>, c
   &quot;quirks&quot;: [&quot;filter_script:arabic&quot;]
 }
 </code></pre>
-<p><strong>2. Filename hint.</strong> Users name files predictably (<code>ENBD_Sep2026.pdf</code>). Used as a tiebreaker
-only, never on its own — a filename is a claim, not evidence.</p>
-<p><strong>3. Ask, and offer to map.</strong> If no saved profile matches, the import screen offers the existing
-profiles <em>and</em> a <strong>Map a new layout</strong> action. Mapping auto-proposes column bands from the header
-row and shows the parsed result live; the user confirms or drags. The saved profile matches
-automatically from then on — including for statements from an account that has since been closed.</p>
-<p><strong>This is the path for every future bank.</strong> No code change, no deploy.</p>
-<p><strong>Account resolution.</strong> Once the institution is known, the account is resolved by hashing the
-full bank-account number found in the statement and matching <code>account.account_number_hash</code>.
-If no account matches, the import screen stops and asks — offering an account prefilled from the
-statement, or a hashless existing account with the same last-four mask to adopt its identity. A
-credit card is last-four only and is never hashed. One owner confirmation is required; the service
-never guesses which account a statement belongs to, because a wrong guess corrupts two accounts at
-once.</p>
+<p><strong>2. Filename ignored.</strong> A filename is owner- or download-site-chosen, can contain a private
+identifier and is not statement evidence. It contributes nothing to layout, institution or account
+resolution.</p>
+<p><strong>3. Stop on an unsupported format.</strong> If no saved profile matches, the import screen names the
+format as unsupported and writes nothing. The four current producer formats are supported. A future
+issuer or changed PDF format receives a focused layout PR with a synthetic fixture and regression
+evidence; the application does not claim universal format inference.</p>
+<p><strong>Account resolution.</strong> Once a supported layout captures the issuer, aliases resolve that PDF
+evidence to an institution UUID. A complete account identifier matches a keyed fingerprint. A
+source mask may match only one account with the same institution, account type and visible suffix;
+zero proposes a new account and more than one asks. One owner confirmation creates or enriches a
+new institution/account, then every selected statement is rechecked. Complete source identifiers
+are encrypted for deliberate owner reveal under
+<a href="../adr/0021-encrypted-owner-financial-identifiers.html">ADR-0021</a>. The service never guesses,
+because a wrong match corrupts two accounts at once.</p>
 <hr>
 <h2 id="4-stage-3--extraction">4. Stage 3 — Extraction</h2>
 <h3 id="the-extraction-engine">The extraction engine</h3>
