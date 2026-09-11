@@ -60,7 +60,6 @@ FETCHED_ROW = (
     None,
     "XIN",
     "XB",
-    "****1234",
     date(2024, 1, 1),
     None,
     True,
@@ -85,7 +84,6 @@ CLOSED_ROW = (
     None,
     "XIN",
     "XB",
-    None,
     date(2020, 1, 1),
     date(2026, 6, 30),
     False,
@@ -246,7 +244,7 @@ class AccountsCursor:
             self._many = list(self.connection.institutions or [])
         elif "EXISTS (SELECT FROM transaction" in sql:
             self._one = self.connection.ledger_state
-        elif "ai.normalized_value = %s" in sql or "ai.legacy_fingerprint" in sql:
+        elif "ai.normalized_value = %s" in sql:
             self._one = self.connection.rows[0] if self.connection.rows else None
         elif "WHERE a.id =" in sql:
             self._one = self.connection.rows[0] if self.connection.rows else None
@@ -332,22 +330,21 @@ def test_a_credit_limit_belongs_only_on_a_credit_card() -> None:
         accounts.AccountUpdate.model_validate({**UPDATE, "creditLimit": "1.0000"})
 
 
-def test_the_compatibility_mask_field_never_accepts_a_full_identifier() -> None:
-    full_numbers = [
+def test_the_retired_compatibility_mask_field_is_rejected() -> None:
+    legacy_values = [
         "4111111111111111",
         "4111-1111-1111-1111",
         "AE07 0331 2345 6789 0123 456",
         "12345",
         "¹²³⁴⁵",
         "፩፪፫፬፭",
+        "****1234",
     ]
-    for bad in full_numbers:
+    for bad in legacy_values:
         with pytest.raises(ValidationError):
             accounts.AccountCreate.model_validate({**CREATE, "accountNumberMasked": bad})
         with pytest.raises(ValidationError):
             accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": bad})
-    assert accounts.AccountCreate.model_validate({**CREATE, "accountNumberMasked": "****1234"})
-    assert accounts.AccountUpdate.model_validate({**UPDATE, "accountNumberMasked": "****1234"})
 
 
 @pytest.mark.parametrize("method,payload", [("post", CREATE), ("patch", UPDATE)])
@@ -427,45 +424,6 @@ def test_account_database_validation_cannot_echo_identifier(
     assert "999988887777" not in response.text
 
 
-@pytest.mark.parametrize("hashed", [False, True])
-def test_patch_mask_edits_require_consistent_identity(
-    live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
-    monkeypatch: MonkeyPatch,
-    hashed: bool,
-) -> None:
-    monkeypatch.setenv("ACCOUNT_HASH_SALT", "test-account-hash-salt")
-    client = TestClient(app)
-    created = client.post(
-        "/accounts",
-        json={
-            **CREATE,
-            "institutionId": None,
-            "currency": "USD",
-            "country": "XA",
-            **(
-                {"accountNumber": "7234-5600-9812"}
-                if hashed
-                else {"accountNumberMasked": "****9812"}
-            ),
-        },
-        headers=ORIGIN,
-    )
-    assert created.status_code == 201
-    response = client.patch(
-        f"/accounts/{created.json()['id']}",
-        json={
-            **UPDATE,
-            "currency": "USD",
-            "country": "XA",
-            "accountNumberMasked": "****1234",
-        },
-        headers=ORIGIN,
-    )
-    assert response.status_code == (409 if hashed else 200)
-    stored = stored_identifiers(live_accounts[0], UUID(created.json()["id"]))
-    assert [row[1] for row in stored if row[5]] == ["****9812" if hashed else "****1234"]
-
-
 def test_create_stores_and_masks_the_account_number_without_exposing_it(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
     monkeypatch: MonkeyPatch,
@@ -490,7 +448,7 @@ def test_create_stores_and_masks_the_account_number_without_exposing_it(
     assert stored == [
         ("bank_account", "****9812", full_number, "723456009812", "owner_entered", True)
     ]
-    assert response.json()["accountNumberMasked"] == "****9812"
+    assert "accountNumberMasked" not in response.json()
     assert response.json()["identifiers"][0]["masked"] == "****9812"
     assert response.json()["identifiers"][0]["canReveal"] is True
     assert "accountNumber" not in response.json()
@@ -563,7 +521,8 @@ def test_complete_identifier_is_masked_on_reads_and_revealed_only_by_its_route(
 
     assert created.status_code == 201
     ordinary = created.json()
-    assert ordinary["accountNumberMasked"] == "****9812"
+    assert "accountNumberMasked" not in ordinary
+    assert ordinary["identifiers"][0]["masked"] == "****9812"
     assert ordinary["identifiers"][0]["canReveal"] is True
     assert source not in created.text
     assert normalized not in created.text
@@ -633,6 +592,7 @@ def test_account_list_returns_multiple_typed_identifiers_without_complete_values
 def test_mask_only_identifier_reveal_is_unavailable_and_owner_scoped(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
 ) -> None:
+    admin, request_owner = live_accounts
     client = TestClient(app)
     created = client.post(
         "/accounts",
@@ -641,11 +601,19 @@ def test_mask_only_identifier_reveal_is_unavailable_and_owner_scoped(
             "institutionId": None,
             "currency": "USD",
             "country": "XA",
-            "accountNumberMasked": "****9812",
         },
         headers=ORIGIN,
     ).json()
-    identifier_id = created["identifiers"][0]["id"]
+    with admin.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                 VALUES (%s, %s, 'bank_account', '****9812', '9812', 'legacy_migration')
+                 RETURNING id""",
+            (request_owner.household_id, created["id"]),
+        )
+        identifier_id = cur.fetchone()[0]  # type: ignore[index]
+    admin.commit()
 
     unavailable = client.post(
         f"/accounts/{created['id']}/identifiers/{identifier_id}/reveal", headers=ORIGIN
@@ -799,13 +767,20 @@ def test_patch_card_replaces_the_active_card_identifier_and_needs_no_key(
             "accountType": "credit_card",
             "currency": "USD",
             "country": "XA",
-            "accountNumberMasked": "****9812",
             "openingBalance": "-1.0000",
             "creditLimit": "100.0000",
         },
         headers=ORIGIN,
     )
     account_id = UUID(created.json()["id"])
+    with live_accounts[0].cursor() as cur:
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix, provenance)
+                 VALUES (%s, %s, 'card', '****9812', '9812', 'legacy_migration')""",
+            (live_accounts[1].household_id, account_id),
+        )
+    live_accounts[0].commit()
 
     response = client.patch(
         f"/accounts/{account_id}",
@@ -947,11 +922,12 @@ def test_patch_omitting_account_number_preserves_the_stored_identity(
     ]
 
 
-def test_patch_repeating_the_display_mask_preserves_the_complete_identity(
+def test_patch_null_account_number_preserves_the_stored_identity(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
 ) -> None:
-    admin, request_owner = live_accounts
-    created = TestClient(app).post(
+    admin, _request_owner = live_accounts
+    client = TestClient(app)
+    created = client.post(
         "/accounts",
         json={
             **CREATE,
@@ -964,25 +940,24 @@ def test_patch_repeating_the_display_mask_preserves_the_complete_identity(
     )
     account_id = UUID(created.json()["id"])
 
-    response = TestClient(app).patch(
+    response = client.patch(
         f"/accounts/{account_id}",
         json={
             **UPDATE,
             "currency": "USD",
             "country": "XA",
-            "accountNumberMasked": "****9812",
+            "accountNumber": None,
         },
         headers=ORIGIN,
     )
 
     assert response.status_code == 200
-    stored = stored_identifiers(admin, account_id)
-    assert [(row[1], row[2], row[3], row[5]) for row in stored] == [
-        ("****9812", "7234-5600-9812", "723456009812", True)
+    assert stored_identifiers(admin, account_id) == [
+        ("bank_account", "****9812", "7234-5600-9812", "723456009812", "owner_entered", True)
     ]
 
 
-def test_patch_round_trip_preserves_a_v28_legacy_mask_and_fingerprint(
+def test_patch_omitting_identity_preserves_a_v28_legacy_mask_and_fingerprint(
     live_accounts: tuple[psycopg.Connection, auth.OwnerSession],
 ) -> None:
     admin, _owner = live_accounts
@@ -1012,15 +987,12 @@ def test_patch_round_trip_preserves_a_v28_legacy_mask_and_fingerprint(
             (fingerprint, identifier_id),
         )
     admin.commit()
-    ordinary = client.get("/accounts").json()["accounts"][0]
-
     response = client.patch(
         f"/accounts/{created['id']}",
         json={
             **UPDATE,
             "currency": "USD",
             "country": "XA",
-            "accountNumberMasked": ordinary["accountNumberMasked"],
         },
         headers=ORIGIN,
     )

@@ -99,8 +99,9 @@ function body(item: Candidate, stage: boolean, accountId: string) {
   const form = new FormData();
   form.append("file", item.file);
   form.append("stage", stage ? "true" : "false");
-  // Sent only when the owner overrode it. Absent, the pipeline resolves the account from the
-  // statement's own number by salted hash, which is the path that needs no picker at all.
+  // Sent only when the owner overrode it. Otherwise identity resolution uses the statement's
+  // typed normalized identifier; the salted fingerprint is only a fallback for legacy rows that
+  // have not yet been upgraded from their verified statement source.
   const resolvedAccountId = item.accountId ?? accountId;
   if (resolvedAccountId) form.append("accountId", resolvedAccountId);
   // This file's own password, never another's. The service holds none between requests — the
@@ -123,7 +124,7 @@ function countsText(parsed: ParseResponse) {
 
 function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
   const groupKey = item.parsed?.identityResolution.proposalGroupKey;
-  if (!item.parsed?.accountProposal) return false;
+  if (!item.parsed || item.parsed.identityResolution.status === "matched") return false;
   const first = candidates
     .filter((candidate) => (
       groupKey === null
@@ -236,10 +237,14 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
 
   async function resolveProposal(item: Candidate, account: AccountRow) {
     const groupKey = item.parsed?.identityResolution.proposalGroupKey;
-    if (!item.parsed?.accountProposal || groupKey === null) return;
+    if (!item.parsed || item.parsed.identityResolution.status === "matched") return;
     setBusy(true);
     const matching = candidates
-      .filter((candidate) => candidate.parsed?.identityResolution.proposalGroupKey === groupKey)
+      .filter((candidate) => (
+        groupKey === null
+          ? candidate.key === item.key
+          : candidate.parsed?.identityResolution.proposalGroupKey === groupKey
+      ))
       .toSorted((left, right) => {
         const byPeriod = left.parsed!.period.start.localeCompare(right.parsed!.period.start);
         return byPeriod || left.key.localeCompare(right.key);
@@ -403,7 +408,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               />
             )}
 
-            {!checkingAll && item.state === "checked" && item.parsed?.accountProposal && leadsProposal(item, candidates) && (
+            {!checkingAll && item.state === "checked" && item.parsed && item.parsed.identityResolution.status !== "matched" && leadsProposal(item, candidates) && (
               <AccountProposalPanel
                 currencies={currencies}
                 file={item.file}
@@ -412,21 +417,20 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
                 onBusyChange={setBusy}
                 onResolved={(account) => resolveProposal(item, account)}
                 password={item.password}
-                proposal={item.parsed.accountProposal}
                 resolution={item.parsed.identityResolution}
                 request={request}
                 screenBusy={busy}
               />
             )}
 
-            {!checkingAll && item.state === "checked" && item.parsed?.accountProposal && !leadsProposal(item, candidates) && (
+            {!checkingAll && item.state === "checked" && item.parsed && item.parsed.identityResolution.status !== "matched" && !leadsProposal(item, candidates) && (
               <p className="import-verdict">
                 This account identity will be confirmed from the earliest selected statement in
                 its group.
               </p>
             )}
 
-            {item.state === "checked" && item.parsed && !item.parsed.accountProposal && canStage(item.parsed) && (
+            {item.state === "checked" && item.parsed?.identityResolution.status === "matched" && canStage(item.parsed) && (
               <button className="primary-action" disabled={busy} onClick={() => stage(item)} type="button">
                 Stage batch
               </button>
@@ -447,7 +451,7 @@ function stateLabel(item: Candidate) {
   if (item.state === "checking") return "Checking…";
   if (item.state === "staging") return "Staging…";
   if (item.state === "staged") return "Staged";
-  if (item.state === "checked" && item.parsed?.accountProposal) {
+  if (item.state === "checked" && item.parsed && item.parsed.identityResolution.status !== "matched") {
     return item.parsed.identityResolution.status === "ambiguous"
       ? "Needs a choice"
       : "Needs confirmation";

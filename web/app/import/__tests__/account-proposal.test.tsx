@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { ApiError } from "@/lib/api/client";
 import type {
-  AccountProposal,
   AccountRow,
   CurrencyRow,
   IdentityResolution,
@@ -33,30 +32,6 @@ const institutions: Array<InstitutionRow> = [
   },
 ];
 
-function proposal(overrides: Partial<AccountProposal> = {}): AccountProposal {
-  return {
-    accountNumberMasked: "****1234",
-    suggestedAccounts: [],
-    name: "Example savings",
-    accountType: "savings",
-    institutionId: "institution-1",
-    institutionResolution: {
-      status: "matched",
-      proposedName: "Example Institution",
-      country: "XY",
-      candidates: [institutions[0]],
-    },
-    country: "XY",
-    currency: "XAE",
-    openingBalance: "1490.0000",
-    openingBalanceIsDerived: false,
-    openingBalanceDate: "2026-03-01",
-    openingBalanceNote: "Declared opening balance for the statement period",
-    creditLimit: null,
-    ...overrides,
-  };
-}
-
 function account(): AccountRow {
   return {
     id: "account-created",
@@ -68,7 +43,6 @@ function account(): AccountRow {
     accountClass: "liability",
     currency: "XAE",
     country: "XY",
-    accountNumberMasked: "****1234",
     openedOn: null,
     closedOn: null,
     includeInNetWorth: true,
@@ -100,6 +74,15 @@ function resolution(overrides: Partial<IdentityResolution> = {}): IdentityResolu
     candidates: [],
     conflicts: [],
     proposalGroupKey: "pg1-example",
+    name: "Example savings",
+    accountType: "savings",
+    country: "XY",
+    currency: "XAE",
+    openingBalance: "1490.0000",
+    openingBalanceIsDerived: false,
+    openingBalanceDate: "2026-03-01",
+    openingBalanceNote: "Declared opening balance for the statement period",
+    creditLimit: null,
     ...overrides,
   };
 }
@@ -122,12 +105,11 @@ describe("an account proposed by a statement", () => {
         onBusyChange={vi.fn()}
         onResolved={onResolved}
         password="secret"
-        proposal={proposal({
+        resolution={resolution({
           accountType: "credit_card",
           openingBalance: "-1490.0000",
           creditLimit: "5000.0000",
         })}
-        resolution={resolution()}
         request={request as never}
         screenBusy={false}
       />,
@@ -163,7 +145,7 @@ describe("an account proposed by a statement", () => {
     expect(sent).not.toHaveProperty("accountNumberMasked");
   });
 
-  it("keeps create disabled until every required null prefill is supplied", async () => {
+  it("keeps create disabled until every nullable required prefill is supplied", async () => {
     const request = vi.fn(async (path: string) => {
       if (path === "/institutions") return institutions;
       throw new Error(`Unexpected path ${path}`);
@@ -174,8 +156,7 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({ accountType: null, country: null, currency: null, openingBalance: null })}
-        resolution={resolution()}
+        resolution={resolution({ country: null, currency: null, openingBalance: null })}
         request={request as never}
         screenBusy={false}
       />,
@@ -185,9 +166,6 @@ describe("an account proposed by a statement", () => {
       name: "Create account and continue",
     });
     expect(create.disabled).toBe(true);
-    fireEvent.change(screen.getByLabelText("Account type (required)"), {
-      target: { value: "savings" },
-    });
     fireEvent.change(screen.getByLabelText("Currency (required)"), {
       target: { value: "XAE" },
     });
@@ -211,12 +189,11 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({
+        resolution={resolution({
           accountType: "credit_card",
           openingBalance: "1490.0000",
           creditLimit: null,
         })}
-        resolution={resolution()}
         request={request as never}
         screenBusy={false}
       />,
@@ -259,11 +236,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({
-          suggestedAccounts: [
-            { id: "account-existing", name: "Existing savings", accountNumberMasked: "****1234" },
-          ],
-        })}
         resolution={resolution({
           status: "ambiguous",
           accountAction: "choose",
@@ -306,7 +278,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({ institutionId: null })}
         resolution={resolution({
           institutionAction: "create",
           institution: {
@@ -351,7 +322,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({ institutionId: null })}
         resolution={resolution({
           institutionAction: "create",
           institution: {
@@ -390,7 +360,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({ institutionId: null })}
         resolution={resolution({
           institutionAction: "create",
           institution: {
@@ -434,7 +403,6 @@ describe("an account proposed by a statement", () => {
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
         password="statement-secret"
-        proposal={proposal()}
         resolution={resolution()}
         request={request as never}
         screenBusy={false}
@@ -468,7 +436,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal()}
         resolution={resolution()}
         request={request as never}
         screenBusy={false}
@@ -498,7 +465,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal()}
         resolution={resolution()}
         request={request as never}
         screenBusy={false}
@@ -525,7 +491,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal()}
         resolution={resolution({
           status: "ambiguous",
           accountAction: "choose",
@@ -564,7 +529,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal()}
         resolution={resolution({
           status: "ambiguous",
           accountAction: "choose",
@@ -603,7 +567,6 @@ describe("an account proposed by a statement", () => {
         file={new File(["pdf"], "statement.pdf", { type: "application/pdf" })}
         onBusyChange={vi.fn()}
         onResolved={vi.fn()}
-        proposal={proposal({ institutionId: null })}
         resolution={resolution({
           status: "ambiguous",
           institutionAction: "choose",

@@ -7,7 +7,6 @@ import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
   AccountCreate,
-  AccountProposal,
   AccountRow,
   CurrencyRow,
   IdentityResolution,
@@ -24,7 +23,6 @@ type Props = {
   onBusyChange: (busy: boolean) => void;
   onResolved: (account: AccountRow) => void | Promise<void>;
   password?: string;
-  proposal: AccountProposal;
   resolution: IdentityResolution;
   request: typeof apiFetch;
   screenBusy: boolean;
@@ -45,20 +43,20 @@ type Draft = {
   creditLimit: string;
 };
 
-function initialDraft(proposal: AccountProposal): Draft {
+function initialDraft(resolution: IdentityResolution): Draft {
   return {
-    name: proposal.name,
-    accountType: proposal.accountType ?? "",
+    name: resolution.name,
+    accountType: resolution.accountType,
     accountSubtype: "",
-    currency: proposal.currency ?? "",
-    country: proposal.country ?? "",
+    currency: resolution.currency ?? "",
+    country: resolution.country ?? "",
     openedOn: "",
     includeInNetWorth: true,
     isLiquid: true,
-    openingBalance: proposal.openingBalance ?? "",
-    openingBalanceDate: proposal.openingBalanceDate,
-    openingBalanceNote: proposal.openingBalanceNote,
-    creditLimit: proposal.creditLimit ?? "",
+    openingBalance: resolution.openingBalance ?? "",
+    openingBalanceDate: resolution.openingBalanceDate,
+    openingBalanceNote: resolution.openingBalanceNote,
+    creditLimit: resolution.creditLimit ?? "",
   };
 }
 
@@ -76,10 +74,10 @@ const INSTITUTION_TYPES = [
   "other",
 ] as const;
 
-function initialInstitutionChoice(proposal: AccountProposal, resolution: IdentityResolution) {
+function initialInstitutionChoice(resolution: IdentityResolution) {
   if (resolution.institutionAction === "create") return NEW_INSTITUTION;
   if (resolution.institutionAction === "choose") return "";
-  return proposal.institutionId ?? resolution.institution.candidates.at(0)?.id ?? "";
+  return resolution.institution.candidates.at(0)?.id ?? "";
 }
 
 function initialInstitutionDraft(resolution: IdentityResolution): InstitutionCreate {
@@ -185,15 +183,14 @@ export function AccountProposalPanel({
   onBusyChange,
   onResolved,
   password,
-  proposal,
   resolution,
   request,
   screenBusy,
 }: Props) {
   const headingId = useId();
-  const [draft, setDraft] = useState(() => initialDraft(proposal));
+  const [draft, setDraft] = useState(() => initialDraft(resolution));
   const [institutionChoice, setInstitutionChoice] = useState(() =>
-    initialInstitutionChoice(proposal, resolution));
+    initialInstitutionChoice(resolution));
   const [institutionDraft, setInstitutionDraft] = useState(() =>
     initialInstitutionDraft(resolution));
   const [institutions, setInstitutions] = useState<Array<InstitutionRow>>([]);
@@ -560,7 +557,7 @@ export function AccountProposalPanel({
         </label>
       </div>}
 
-      {proposal.openingBalanceIsDerived && (
+      {resolution.openingBalanceIsDerived && (
         <p className="account-proposal-note">
           The opening balance was derived from the first row rather than stated by the document.
         </p>

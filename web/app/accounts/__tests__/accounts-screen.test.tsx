@@ -30,7 +30,6 @@ function account(overrides: Partial<AccountRow>): AccountRow {
     accountSubtype: "NRE",
     currency: "XIN",
     country: "XB",
-    accountNumberMasked: "****1234",
     openedOn: "2024-01-01",
     closedOn: null,
     isActive: true,
@@ -504,60 +503,31 @@ describe("Accounts", () => {
     expect(head?.textContent).toContain("I 2,50,000.00 as of 15 Jan 2026 · A 1,000.00");
   });
 
-  it("does not transmit a full account number", async () => {
-    const request = vi.fn();
-    render(<AccountsScreen {...props} request={request} />);
+  it("submits an owner-entered complete identifier only as accountNumber", async () => {
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      void path;
+      void init;
+      return savings;
+    });
+    render(
+      <AccountsScreen
+        {...props}
+        request={request as unknown as typeof props.request}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
     fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "4111111111111111" } });
+    fireEvent.change(screen.getByLabelText("Account or card number"), {
+      target: { value: "4111 1111 1111 1111" },
+    });
     fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
     fireEvent.change(screen.getByLabelText("Opening balance date"),
       { target: { value: "2024-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Create account" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("does not transmit a full number written with Unicode digits", async () => {
-    const request = vi.fn();
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "٤١١١١١١١١١١١١١١١" } });
-    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
-    fireEvent.change(screen.getByLabelText("Opening balance date"),
-      { target: { value: "2024-01-01" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("does not transmit a full number written with compatibility digits", async () => {
-    const request = vi.fn();
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "፩፪፫፬፭" } });
-    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
-    fireEvent.change(screen.getByLabelText("Opening balance date"),
-      { target: { value: "2024-01-01" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
-    expect(request).not.toHaveBeenCalled();
-  });
-
-  it("does not transmit a full number written with Ethiopic digits", async () => {
-    const request = vi.fn();
-    render(<AccountsScreen {...props} request={request} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
-    fireEvent.change(screen.getByLabelText("Account name"), { target: { value: "New" } });
-    fireEvent.change(screen.getByLabelText("Masked number"), { target: { value: "፩፪፫፬፭" } });
-    fireEvent.change(screen.getByLabelText("Opening balance"), { target: { value: "10.00" } });
-    fireEvent.change(screen.getByLabelText("Opening balance date"),
-      { target: { value: "2024-01-01" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/mask/i));
-    expect(request).not.toHaveBeenCalled();
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const payload = JSON.parse(request.mock.calls[0][1]?.body as string);
+    expect(payload.accountNumber).toBe("4111 1111 1111 1111");
+    expect(payload).not.toHaveProperty("accountNumberMasked");
   });
 
   it("disables edit while a row mutation is pending", async () => {

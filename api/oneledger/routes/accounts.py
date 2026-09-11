@@ -12,7 +12,7 @@ from uuid import UUID
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
@@ -22,7 +22,6 @@ from ..identifiers import (
     IdentifierKind,
     IdentifierValueError,
     complete_identifier,
-    masked_identifier,
 )
 
 router = APIRouter(tags=["accounts"])
@@ -53,16 +52,6 @@ def _money(value: str | None) -> str | None:
     return value
 
 
-def _masked(value: str | None) -> str | None:
-    """Validate the compatibility display-mask field; complete values use accountNumber."""
-    if value is not None and sum(ch.isdigit() for ch in value) > 4:
-        raise ValueError(
-            "accountNumberMasked takes a mask, not an account number: "
-            "at most four digits may be visible"
-        )
-    return value
-
-
 def _identifier_kind(account_type: str) -> IdentifierKind:
     return "card" if account_type == "credit_card" else "bank_account"
 
@@ -72,8 +61,6 @@ def _body_identifier(body: AccountCreate | AccountUpdate) -> Identifier | None:
     try:
         if body.accountNumber is not None:
             return complete_identifier(kind, body.accountNumber)
-        if body.accountNumberMasked is not None:
-            return masked_identifier(kind, body.accountNumberMasked)
     except IdentifierValueError as exc:
         raise ValueError(str(exc)) from None
     return None
@@ -127,7 +114,6 @@ class AccountRow(BaseModel):
     accountSubtype: str | None
     currency: str = Field(min_length=3, max_length=3)
     country: str = Field(min_length=2, max_length=2)
-    accountNumberMasked: str | None
     openedOn: date | None
     closedOn: date | None
     isActive: bool
@@ -170,6 +156,8 @@ class AccountsResponse(BaseModel):
 
 
 class AccountCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=120)
     institutionId: UUID | None = None
     # Validated by the account_type enum in the database rather than a second copy here that
@@ -178,9 +166,8 @@ class AccountCreate(BaseModel):
     accountSubtype: str | None = Field(default=None, max_length=40)
     currency: str = Field(min_length=3, max_length=3)
     country: str = Field(min_length=2, max_length=2)
-    # The display mask remains accepted for existing clients. accountNumber is transient:
-    # create/update derive the only two values that may cross into storage.
-    accountNumberMasked: str | None = Field(default=None, max_length=32)
+    # Complete owner-entered identity is local application data. Ordinary responses expose only
+    # the derived mask; deliberate reveal reads the identifier row.
     accountNumber: str | None = Field(default=None, repr=False)
     openedOn: date | None = None
     includeInNetWorth: bool = True
@@ -195,11 +182,6 @@ class AccountCreate(BaseModel):
     def exact_decimal_string(cls, value: str | None) -> str | None:
         return _money(value)
 
-    @field_validator("accountNumberMasked")
-    @classmethod
-    def masked_never_full(cls, value: str | None) -> str | None:
-        return _masked(value)
-
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountCreate:
         _liability_opening_must_not_increase_net_worth(self.accountType, self.openingBalance)
@@ -209,9 +191,11 @@ class AccountCreate(BaseModel):
 
 
 class AccountUpdate(BaseModel):
-    """Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
-    and the client always holds the whole row. Spec C2 requires type, currency, country, the
-    opening anchor and credit limit to be correctable; account_class stays trigger-derived."""
+    """Every non-identity editable field is a full replacement. A non-null account number
+    deliberately replaces the active identifier; omission or null preserves it. Identifier
+    deletion requires a future explicit operation. Account class stays trigger-derived."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
     institutionId: UUID | None = None
@@ -219,7 +203,6 @@ class AccountUpdate(BaseModel):
     accountSubtype: str | None = Field(default=None, max_length=40)
     currency: str = Field(min_length=3, max_length=3)
     country: str = Field(min_length=2, max_length=2)
-    accountNumberMasked: str | None = Field(default=None, max_length=32)
     accountNumber: str | None = Field(default=None, repr=False)
     openedOn: date | None = None
     closedOn: date | None = None
@@ -235,11 +218,6 @@ class AccountUpdate(BaseModel):
     @classmethod
     def exact_decimal_string(cls, value: str | None) -> str | None:
         return _money(value)
-
-    @field_validator("accountNumberMasked")
-    @classmethod
-    def masked_never_full(cls, value: str | None) -> str | None:
-        return _masked(value)
 
     @model_validator(mode="after")
     def liability_opening_is_signed(self) -> AccountUpdate:
@@ -265,15 +243,7 @@ class InstitutionRow(BaseModel):
 
 
 COLUMNS = """a.id, a.name, a.institution_id, i.name, a.account_type::text, a.account_class::text,
-             a.account_subtype, a.currency, a.country,
-             (SELECT ai.masked_value
-                FROM account_identifier ai
-               WHERE ai.household_id = a.household_id AND ai.account_id = a.id AND ai.is_active
-               ORDER BY (ai.kind = CASE WHEN a.account_type = 'credit_card'::account_type
-                                        THEN 'card' ELSE 'bank_account' END) DESC,
-                        ai.created_at, ai.id
-               LIMIT 1),
-             a.opened_on,
+             a.account_subtype, a.currency, a.country, a.opened_on,
              a.closed_on, a.is_active, a.include_in_net_worth, a.is_liquid, a.opening_balance,
              a.opening_balance_date, a.opening_balance_note, a.opening_balance_confirmed_at,
              a.current_balance, a.current_balance_as_of, a.credit_limit,
@@ -301,7 +271,6 @@ FIELDS = [
     "accountSubtype",
     "currency",
     "country",
-    "accountNumberMasked",
     "openedOn",
     "closedOn",
     "isActive",
@@ -366,22 +335,6 @@ def resolve_account_by_identifier(
                    WHERE ai.household_id = a.household_id AND ai.account_id = a.id
                      AND ai.kind = %s AND ai.normalized_value = %s AND ai.is_active)""",
         (household_id, kind, normalized_value),
-    )
-    row = cur.fetchone()
-    return None if row is None else account_row(row)
-
-
-def resolve_account_by_legacy_fingerprint(
-    cur: psycopg.Cursor[Any], digest: str, household_id: UUID
-) -> AccountRow | None:
-    cur.execute(
-        f"""SELECT {COLUMNS} {FROM}
-              WHERE a.household_id = %s
-                AND EXISTS (
-                  SELECT FROM account_identifier ai
-                   WHERE ai.household_id = a.household_id AND ai.account_id = a.id
-                     AND ai.legacy_fingerprint = decode(%s, 'hex') AND ai.is_active)""",
-        (household_id, digest),
     )
     row = cur.fetchone()
     return None if row is None else account_row(row)
@@ -656,9 +609,7 @@ def update_account(
     body: AccountUpdate,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> AccountRow:
-    replace_account_identity = bool(
-        {"accountNumber", "accountNumberMasked"} & body.model_fields_set
-    )
+    replace_account_identity = body.accountNumber is not None
     identifier = _body_identifier(body) if replace_account_identity else None
     # Changing the opening anchor recomputes the materialised balance from the ledger:
     # opening_balance + the sum of the account's posting rows (split children move nothing).

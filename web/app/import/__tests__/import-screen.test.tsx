@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ImportScreen } from "@/app/import/import-screen";
 import { ApiError } from "@/lib/api/client";
 import type {
-  AccountProposal,
   AccountRow,
   CurrencyRow,
   HouseholdCurrency,
@@ -67,6 +66,15 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
       candidates: [],
       conflicts: [],
       proposalGroupKey: null,
+      name: "Synthetic Card",
+      accountType: "credit_card",
+      country: "ZZ",
+      currency: "XAE",
+      openingBalance: "1000.0000",
+      openingBalanceIsDerived: false,
+      openingBalanceDate: "2026-03-01",
+      openingBalanceNote: "Declared opening balance for the statement period",
+      creditLimit: "5000.0000",
     },
     layoutId: "layout-1",
     layoutVersion: 1,
@@ -94,7 +102,7 @@ function parsed(overrides: Partial<ParseResponse> = {}): ParseResponse {
 }
 
 function accountProposal(
-  overrides: Partial<AccountProposal> = {},
+  overrides: Partial<ParseResponse["identityResolution"]> = {},
   resolution: Partial<ParseResponse["identityResolution"]> = {},
 ): ParseResponse {
   return parsed({
@@ -113,20 +121,8 @@ function accountProposal(
       candidates: [],
       conflicts: [],
       proposalGroupKey: "pg1-example",
-      ...resolution,
-    },
-    accountProposal: {
-      accountNumberMasked: "****1234",
-      suggestedAccounts: [],
       name: "Example savings",
       accountType: "savings",
-      institutionId: null,
-      institutionResolution: {
-        status: "needs_confirmation",
-        proposedName: "Example Institution",
-        country: "XY",
-        candidates: [],
-      },
       country: "XY",
       currency: "XAE",
       openingBalance: "1490.0000",
@@ -135,6 +131,7 @@ function accountProposal(
       openingBalanceNote: "Declared opening balance for the statement period",
       creditLimit: null,
       ...overrides,
+      ...resolution,
     },
   });
 }
@@ -144,7 +141,6 @@ function createdAccount(id = "acct-created"): AccountRow {
     ...accounts[0],
     id,
     name: "Example savings",
-    accountNumberMasked: "****1234",
     accountType: "savings",
     country: "XY",
     currency: "XAE",

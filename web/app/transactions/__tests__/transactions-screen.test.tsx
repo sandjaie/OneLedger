@@ -49,7 +49,6 @@ const account = {
   accountSubtype: null,
   currency: "XAE",
   country: "XA",
-  accountNumberMasked: null,
   openedOn: null,
   closedOn: null,
   isActive: true,

@@ -33,10 +33,6 @@ export type AccountCreate = {
      */
     country: string;
     /**
-     * Accountnumbermasked
-     */
-    accountNumberMasked?: string | null;
-    /**
      * Accountnumber
      */
     accountNumber?: string | null;
@@ -138,61 +134,6 @@ export type AccountIdentityPreview = {
 };
 
 /**
- * AccountProposal
- */
-export type AccountProposal = {
-    /**
-     * Accountnumbermasked
-     */
-    accountNumberMasked: string;
-    /**
-     * Suggestedaccounts
-     */
-    suggestedAccounts: Array<SuggestedAccount>;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Accounttype
-     */
-    accountType: string | null;
-    /**
-     * Institutionid
-     */
-    institutionId: string | null;
-    institutionResolution: InstitutionResolution;
-    /**
-     * Country
-     */
-    country: string | null;
-    /**
-     * Currency
-     */
-    currency: string | null;
-    /**
-     * Openingbalance
-     */
-    openingBalance: string | null;
-    /**
-     * Openingbalanceisderived
-     */
-    openingBalanceIsDerived: boolean;
-    /**
-     * Openingbalancedate
-     */
-    openingBalanceDate: string;
-    /**
-     * Openingbalancenote
-     */
-    openingBalanceNote: string;
-    /**
-     * Creditlimit
-     */
-    creditLimit: string | null;
-};
-
-/**
  * AccountResolutionCandidate
  */
 export type AccountResolutionCandidate = {
@@ -267,10 +208,6 @@ export type AccountRow = {
      */
     country: string;
     /**
-     * Accountnumbermasked
-     */
-    accountNumberMasked: string | null;
-    /**
      * Openedon
      */
     openedOn: string | null;
@@ -327,9 +264,9 @@ export type AccountRow = {
 /**
  * AccountUpdate
  *
- * Every editable field, always sent: a full replacement has no absent-versus-null ambiguity
- * and the client always holds the whole row. Spec C2 requires type, currency, country, the
- * opening anchor and credit limit to be correctable; account_class stays trigger-derived.
+ * Every non-identity editable field is a full replacement. A non-null account number
+ * deliberately replaces the active identifier; omission or null preserves it. Identifier
+ * deletion requires a future explicit operation. Account class stays trigger-derived.
  */
 export type AccountUpdate = {
     /**
@@ -356,10 +293,6 @@ export type AccountUpdate = {
      * Country
      */
     country: string;
-    /**
-     * Accountnumbermasked
-     */
-    accountNumberMasked?: string | null;
     /**
      * Accountnumber
      */
@@ -1416,6 +1349,42 @@ export type IdentityResolution = {
      * Proposalgroupkey
      */
     proposalGroupKey: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Accounttype
+     */
+    accountType: string;
+    /**
+     * Country
+     */
+    country: string | null;
+    /**
+     * Currency
+     */
+    currency: string | null;
+    /**
+     * Openingbalance
+     */
+    openingBalance: string | null;
+    /**
+     * Openingbalanceisderived
+     */
+    openingBalanceIsDerived: boolean;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string;
+    /**
+     * Openingbalancenote
+     */
+    openingBalanceNote: string;
+    /**
+     * Creditlimit
+     */
+    creditLimit: string | null;
 };
 
 /**
@@ -2361,7 +2330,6 @@ export type ParseResponse = {
      * Accountid
      */
     accountId: string | null;
-    accountProposal?: AccountProposal | null;
     identityResolution: IdentityResolution;
     /**
      * Layoutid
@@ -3135,24 +3103,6 @@ export type SkippedStatement = {
      * Reason
      */
     reason: string;
-};
-
-/**
- * SuggestedAccount
- */
-export type SuggestedAccount = {
-    /**
-     * Id
-     */
-    id: string;
-    /**
-     * Name
-     */
-    name: string;
-    /**
-     * Accountnumbermasked
-     */
-    accountNumberMasked: string;
 };
 
 /**

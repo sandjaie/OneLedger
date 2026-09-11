@@ -838,8 +838,9 @@ whose display mask is absent or whose digest shape is unknown.
 
 Applied as `db/migrations/V27__card_accounts_store_mask_only.sql`. Existing credit-card account
 hashes are cleared and `card_has_no_account_number_hash` prevents every database writer from
-storing another. Card identity is its display mask only; non-card statement matching keeps the
-salted hash.
+storing another in the retired V3 columns. This historical constraint was superseded by V28 and
+V29: current card identities live in `account_identifier`, where a complete statement source is
+stored locally and revealable while a source-masked card remains mask-only.
 
 ---
 

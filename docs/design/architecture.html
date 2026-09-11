@@ -585,7 +585,7 @@ would cost more attention than it saves.</p>
 <tr><td><code>DATABASE_URL</code> · <code>POSTGRES_PASSWORD</code></td><td><strong>The API service's local <code>.env</code></strong>; local production has a separately generated <code>.env.production</code></td><td>In the browser bundle. In any <code>NEXT_PUBLIC_</code> variable. Committed</td></tr>
 <tr><td><code>SESSION_SECRET</code></td><td>The service's environment file — it signs the session cookie; each project has its own</td><td>In the browser. Committed. Shared between deployments</td></tr>
 <tr><td>Google OAuth client secret</td><td>The service's <code>.env</code></td><td>In the repository. In the browser</td></tr>
-<tr><td>Account-number hash salt</td><td>The API service's <code>.env</code></td><td>Rotated — it would invalidate every stored hash</td></tr>
+<tr><td>Legacy account-fingerprint salt</td><td>The API service's <code>.env</code>, only while pre-ADR-0021 fingerprints remain</td><td>Used for new identifiers, or removed before guarded statement backfill has upgraded every legacy fingerprint</td></tr>
 <tr><td>PDF passwords</td><td>Posted with the file, held in memory for the parse</td><td>Written to disk, a keychain, the database or a log</td></tr>
 </tbody></table>
 <p><strong>A privileged database connection is back, and that is a real loss.</strong>

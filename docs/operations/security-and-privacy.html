@@ -703,8 +703,8 @@ across forty tables.</li>
 </tr>
 <tr>
 <td><code>ACCOUNT_HASH_SALT</code></td>
-<td>The service's <code>.env</code>, with a copy in a password manager — losing it is unrecoverable</td>
-<td>Never — rotation invalidates all hashes</td>
+<td>Deprecated upgrade-only value retained while <code>legacy_sha256_v1</code> rows need read-only matching or guarded statement backfill. New identifiers do not use it; losing it does not make complete local identifiers unreadable</td>
+<td>Remove only after every legacy fingerprint has been upgraded through its statement source</td>
 </tr>
 <tr>
 <td>PDF passwords</td>
@@ -801,8 +801,10 @@ keeping parsers deterministic and versioned.</p>
 <li>Rotate the database password and the session secret immediately.</li>
 <li>Update the .env on the box and restart the stack.</li>
 <li>Review <code>audit_log</code> for unfamiliar activity.</li>
-<li>Rotate the account-hash salt only if the database itself was accessed (this requires
-re-hashing every account number).</li>
+<li>If the deprecated <code>ACCOUNT_HASH_SALT</code> was exposed separately, keep it only long enough
+to upgrade remaining legacy fingerprints from verified original statements through the guarded
+backfill, then remove it. New identifiers do not use that salt, and database access already exposes
+the complete identifiers intentionally stored under ADR-0021.</li>
 </ol>
 <p><strong>Laptop lost or stolen</strong></p>
 <ol>

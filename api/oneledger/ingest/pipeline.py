@@ -18,8 +18,9 @@ owner's own retry after they re-mapped the layout.
 
 This is the only module under `ingest/` that may open a database connection, and none of them
 may import from `routes/` (`testing-and-data-quality.html` §2). The account lookup is therefore
-inverted: the caller passes a resolver, and the hashing that lookup needs stays in the route
-that already owns `ACCOUNT_HASH_SALT`.
+inverted: the caller passes a resolver. Typed normalized identifiers are the primary match; the
+route owns the deprecated `ACCOUNT_HASH_SALT` fallback for legacy fingerprints awaiting guarded
+statement backfill.
 """
 
 from __future__ import annotations

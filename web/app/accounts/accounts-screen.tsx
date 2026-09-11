@@ -33,7 +33,7 @@ type Draft = {
   accountSubtype: string;
   currency: string;
   country: string;
-  accountNumberMasked: string;
+  accountNumber: string;
   openedOn: string;
   includeInNetWorth: boolean;
   isLiquid: boolean;
@@ -115,7 +115,7 @@ function emptyDraft(currencies: Array<CurrencyRow>, institutions: Array<Institut
     accountSubtype: "",
     currency: currencies[0]?.code ?? "",
     country: institutions[0]?.country ?? "",
-    accountNumberMasked: "",
+    accountNumber: "",
     openedOn: "",
     includeInNetWorth: true,
     isLiquid: true,
@@ -134,7 +134,7 @@ function draftFrom(account: AccountRow): Draft {
     accountSubtype: account.accountSubtype ?? "",
     currency: account.currency,
     country: account.country,
-    accountNumberMasked: account.accountNumberMasked ?? "",
+    accountNumber: "",
     openedOn: account.openedOn ?? "",
     includeInNetWorth: account.includeInNetWorth,
     isLiquid: account.isLiquid,
@@ -184,10 +184,6 @@ function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
 }
 
-function isMask(value: string) {
-  return [...value].reduce((count, ch) => count + (/\p{N}/u.test(ch) ? 1 : 0), 0) <= 4;
-}
-
 function signedOpening(accountType: string, value: string) {
   if (!LIABILITY_TYPES.has(accountType) || value === "" || value.startsWith("-")) {
     return value;
@@ -209,7 +205,7 @@ function toCreate(draft: Draft): AccountCreate {
     accountSubtype: draft.accountSubtype || null,
     currency: draft.currency,
     country: draft.country,
-    accountNumberMasked: draft.accountNumberMasked || null,
+    accountNumber: draft.accountNumber || null,
     openedOn: draft.openedOn || null,
     includeInNetWorth: draft.includeInNetWorth,
     isLiquid: draft.isLiquid,
@@ -228,7 +224,6 @@ function toUpdate(draft: Draft, closedOn: string | null, acknowledge: boolean): 
     accountSubtype: draft.accountSubtype || null,
     currency: draft.currency,
     country: draft.country,
-    accountNumberMasked: draft.accountNumberMasked || null,
     openedOn: draft.openedOn || null,
     closedOn,
     includeInNetWorth: draft.includeInNetWorth,
@@ -453,10 +448,6 @@ export function AccountsScreen({
   }
 
   async function saveCreate() {
-    if (!isMask(draft.accountNumberMasked)) {
-      setProblem("Masked number takes a mask, not an account number: at most four digits may be visible.");
-      return;
-    }
     setBusy(true);
     setProblem(undefined);
     try {
@@ -466,6 +457,7 @@ export function AccountsScreen({
         body: JSON.stringify(toCreate(draft)),
       });
       setMode("view");
+      setDraft(emptyDraft(currencies, institutions));
       holdUntilRefresh();
       onChanged();
     } catch (error) {
@@ -478,10 +470,6 @@ export function AccountsScreen({
 
   async function saveEdit() {
     if (!editing) return;
-    if (!isMask(draft.accountNumberMasked)) {
-      setProblem("Masked number takes a mask, not an account number: at most four digits may be visible.");
-      return;
-    }
     setBusy(true);
     setProblem(undefined);
     try {
@@ -492,6 +480,7 @@ export function AccountsScreen({
       });
       setMode("view");
       setEditing(undefined);
+      setDraft(emptyDraft(currencies, institutions));
       holdUntilRefresh();
       onChanged();
     } catch (error) {
@@ -696,14 +685,16 @@ export function AccountsScreen({
             value={draft.country}
           />
         </label>
-        <label className="text-field">
-          <span>Masked number</span>
-          <input
-            maxLength={32}
-            onChange={(event) => field("accountNumberMasked", event.target.value)}
-            value={draft.accountNumberMasked}
-          />
-        </label>
+        {creating && (
+          <label className="text-field">
+            <span>Account or card number</span>
+            <input
+              autoComplete="off"
+              onChange={(event) => field("accountNumber", event.target.value)}
+              value={draft.accountNumber}
+            />
+          </label>
+        )}
         <label className="date-field">
           <span>Opened on</span>
           <input onChange={(event) => field("openedOn", event.target.value)} type="date" value={draft.openedOn} />
@@ -774,7 +765,14 @@ export function AccountsScreen({
           <button className="primary-action" disabled={locked} type="submit">
             {creating ? "Create account" : "Save account"}
           </button>
-          <button onClick={() => { setMode("view"); setEditing(undefined); }} type="button">Cancel</button>
+          <button
+            onClick={() => {
+              setMode("view");
+              setEditing(undefined);
+              setDraft(emptyDraft(currencies, institutions));
+            }}
+            type="button"
+          >Cancel</button>
         </div>
       </form>
     );
@@ -800,7 +798,7 @@ export function AccountsScreen({
                 />
               ))}
             </span>
-          ) : account.accountNumberMasked}
+          ) : "—"}
         </td>
         <td
           aria-label={`${account.name} balance ${balanceLabel(account)}`}
