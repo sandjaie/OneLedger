@@ -246,8 +246,8 @@ def test_the_seeded_layout_names_no_institution_and_captures_no_period() -> None
 
     assert profile.name == "Card statement"
     assert profile.fingerprints == ["Credit Card Statement", "Card Type:"]
-    # It captures the card cycle's four facts and nothing else: no period.
-    assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS
+    # It captures the four cycle facts plus the account identity fields, and still no period.
+    assert set(profile.metadataPatterns or {}) == CARD_FACT_KEYS | {"account_number", "currency"}
 
 
 def test_the_seeded_layout_drops_a_trailing_line_instead_of_absorbing_it() -> None:

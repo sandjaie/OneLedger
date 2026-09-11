@@ -16,6 +16,7 @@ than on the day someone remembers.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,23 @@ from oneledger.routes.layouts import LayoutCreate
 
 SEEDS = Path(__file__).resolve().parents[2] / "db" / "seeds"
 PROFILES = sorted(SEEDS.glob("*.json"))
+EXPECTED_ACCOUNT_TYPES = {
+    "account-layout": "current",
+    "card-layout": "credit_card",
+    "ledger-layout": "savings",
+    "passbook-layout": "savings",
+}
+ACCOUNT_CAPTURE_EXAMPLES = {
+    "account-layout": ("Account No. 1111222233334", "1111222233334"),
+    "card-layout": ("Card Number: 1111 XXXX XXXX 2222", "2222"),
+    "ledger-layout": ("Account No.:11112222333344", "11112222333344"),
+    "passbook-layout": ("Statement for Account No :1111222233", "1111222233"),
+}
+CURRENCY_CAPTURE_EXAMPLES = {
+    "account-layout": "Account Currency XAA",
+    "card-layout": "Currency : XAA",
+    "ledger-layout": "Account Currency:XAA",
+}
 
 
 def _profile(path: Path) -> dict[str, Any]:
@@ -59,3 +77,47 @@ def test_a_seeded_profile_names_no_institution(path: Path) -> None:
     when it arrives (slice 1.7).
     """
     assert _profile(path).get("institutionId") is None
+
+
+@pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
+def test_a_seeded_profile_declares_its_account_type(path: Path) -> None:
+    assert _profile(path).get("accountType") == EXPECTED_ACCOUNT_TYPES[path.stem]
+
+
+@pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
+def test_a_seeded_profile_captures_an_account_identity(path: Path) -> None:
+    pattern = (_profile(path).get("metadataPatterns") or {}).get("account_number")
+    assert pattern is not None
+    assert re.compile(pattern).groups == 1
+    sample, expected = ACCOUNT_CAPTURE_EXAMPLES[path.stem]
+    matched = re.search(pattern, sample, re.IGNORECASE | re.MULTILINE)
+    assert matched is not None
+    assert matched.group(1) == expected
+
+
+@pytest.mark.parametrize(
+    "profile_name,sample", CURRENCY_CAPTURE_EXAMPLES.items(), ids=CURRENCY_CAPTURE_EXAMPLES
+)
+def test_a_seeded_profile_captures_currency_when_the_statement_prints_it(
+    profile_name: str, sample: str
+) -> None:
+    profile = _profile(SEEDS / f"{profile_name}.json")
+    pattern = (profile.get("metadataPatterns") or {}).get("currency")
+    assert pattern is not None
+    matched = re.search(pattern, sample, re.IGNORECASE | re.MULTILINE)
+    assert matched is not None
+    assert matched.group(1) == "XAA"
+
+
+@pytest.mark.parametrize("path", PROFILES, ids=lambda path: path.stem)
+def test_no_seeded_pattern_contains_a_literal_identifier(path: Path) -> None:
+    profile = _profile(path)
+    patterns = [
+        *profile["fingerprints"],
+        *(profile.get("skipLinePatterns") or []),
+        *(profile.get("metadataPatterns") or {}).values(),
+        profile.get("headerRowPattern"),
+        profile.get("openingBalancePattern"),
+        profile.get("closingBalancePattern"),
+    ]
+    assert not any(re.search(r"\d{5,}", pattern) for pattern in patterns if pattern is not None)

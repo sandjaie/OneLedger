@@ -1,5 +1,6 @@
 {
   "name": "Account statement",
+  "accountType": "current",
   "fingerprints": [
     "Statement\\s*of\\s*Account",
     "Debits\\s*Credits\\s*Balance",
@@ -27,6 +28,8 @@
   "hasRunningBalance": true,
   "quirks": [],
   "metadataPatterns": {
+    "account_number": "Account\\s*No\\.?\\s*:?\\s*([0-9]+)",
+    "currency": "Currency\\s*:?\\s*([A-Z]{3})",
     "period_start": "PERIOD\\s*OF\\s*(\\d{2} \\w{3} \\d{4})\\s*to",
     "period_end": "PERIOD\\s*OF\\s*\\d{2} \\w{3} \\d{4}\\s*to\\s*(\\d{2} \\w{3} \\d{4})",
     "remit_currency": "([A-Z]{3})\\s*[\\d,]+(?:\\.\\d+)?\\s*@\\s*\\d*\\.\\d+",

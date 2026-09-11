@@ -1,5 +1,6 @@
 {
   "name": "Ledger statement",
+  "accountType": "savings",
   "fingerprints": [
     "Chq\\.?\\s*/\\s*Ref\\.?\\s*No",
     "Withdrawal\\s*Amt",
@@ -70,6 +71,8 @@
   "hasRunningBalance": true,
   "quirks": [],
   "metadataPatterns": {
+    "account_number": "Account\\s*No\\.?\\s*:?\\s*([0-9]+)",
+    "currency": "Currency\\s*:?\\s*([A-Z]{3})",
     "period_start": "Statement\\s*From\\s*:\\s*(\\d{2}/\\d{2}/\\d{4})\\s*To",
     "period_end": "Statement\\s*From\\s*:\\s*\\d{2}/\\d{2}/\\d{4}\\s*To\\s*:\\s*(\\d{2}/\\d{2}/\\d{4})"
   }
