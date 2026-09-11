@@ -533,6 +533,24 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("link", { name: "Import" }).getAttribute("aria-current")).toBe("page");
   });
 
+  it("renders grouped classification review as its own destination", async () => {
+    render(
+      <Workspace
+        section="classification-review"
+        request={requestThat(
+          household,
+          [],
+          { groups: [], totalGroups: 0, totalOccurrences: 0, candidatesScanned: 0, candidateLimitReached: false },
+        )}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Review" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Review" })).toBeTruthy();
+    expect(await screen.findByText("Nothing needs classification review.")).toBeTruthy();
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("clears Accounts when create returns %i", async (status, destination) => {
