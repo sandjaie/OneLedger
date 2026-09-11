@@ -394,8 +394,9 @@ def extract_pages(profile: ProfileLike, pages: list[Page]) -> ExtractionResult:
         if key in {"account_number", "account_number_masked"}:
             account_number_raw = captured
             account_number_is_masked = key == "account_number_masked"
-            account_number_capture_count += sum(
-                1 for _ in re.finditer(pattern, capture_text, flags=re.IGNORECASE | re.MULTILINE)
+            matches = re.finditer(pattern, capture_text, flags=re.IGNORECASE | re.MULTILINE)
+            account_number_capture_count += len(
+                {match.group(1) if match.re.groups else match.group(0) for match in matches}
             )
         elif key == "institution_name":
             institution_name_raw = captured

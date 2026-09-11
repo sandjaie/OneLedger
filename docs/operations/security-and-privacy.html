@@ -403,7 +403,10 @@ contains safe UUIDs, fixed reason codes, counts and a stale-state digest; it con
 storage path, statement capture, narration, amount, institution name or complete identifier. Apply
 takes the household lock, reproduces that exact preview from the stored sources and refuses stale or
 disagreeing evidence before writing. It stores a complete identifier only through the shared
-statement-provenance writer; no backup or encryption-key check gates the owner's local data.</p>
+statement-provenance writer. The same confirmed apply may retain a redaction-safe public issuer
+label as a household alias for the institution already bound by that completed import; the digest
+binds that private assessment without returning the label. No backup or encryption-key check gates
+the owner's local data.</p>
 <p><strong>Even a full application compromise must not provide a password, PIN, CVV or OTP capable of
 moving an asset.</strong> Read exposure is still serious, which is why ordinary views remain masked and
 reveal is an explicit owner-only operation.</p>

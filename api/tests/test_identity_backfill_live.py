@@ -7,6 +7,7 @@ and return no statement value that could identify the account.
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -253,6 +254,10 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[BackfillFi
                 "DELETE FROM statement_layout WHERE household_id = %s"
                 " AND name = 'proposal test layout'",
                 (fixture.household_id,),
+            )
+            cur.execute(
+                "DELETE FROM institution_alias WHERE institution_id = %s",
+                (fixture.institution_id,),
             )
             cur.execute("DELETE FROM institution WHERE id = %s", (fixture.institution_id,))
             cur.execute("DELETE FROM fx_rate")
@@ -709,6 +714,122 @@ def test_apply_upgrades_legacy_identity_once_and_preserves_every_ledger_fact(
     assert identity["findings"] == [
         {"level": "ok", "message": "Every account identity is on the current local model."}
     ]
+
+
+def test_apply_confirms_unmatched_pdf_issuer_for_the_imported_account(
+    live: BackfillFixture,
+) -> None:
+    live.completed(_statement(institution="Unseen Test Institution"))
+
+    preview = live.preview().json()
+
+    assert preview["accounts"][0]["outcome"] == "complete"
+    assert preview["eligibleCount"] == 1
+    response = live.apply(preview)
+    assert response.status_code == 200, response.text
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT institution_id, alias, provenance FROM institution_alias
+                WHERE household_id = %s AND alias_normalized = 'unseen test institution'""",
+            (live.household_id,),
+        )
+        assert cur.fetchone() == (
+            live.institution_id,
+            "Unseen Test Institution",
+            "owner_confirmed",
+        )
+    assert live.preview().json()["eligibleCount"] == 0
+
+
+def test_apply_can_confirm_an_issuer_alias_when_the_source_identity_is_mask_only(
+    live: BackfillFixture,
+) -> None:
+    live.completed(_statement(institution="Unseen Test Institution"))
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns =
+                      (metadata_patterns - 'account_number') || %s::jsonb
+                WHERE id = %s""",
+            (
+                psycopg.types.json.Json(
+                    {"account_number_masked": r"Account\s*Number\s*[0-9]{6}([0-9]{4})"}
+                ),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+    before = live.identity_state()
+
+    preview = live.preview().json()
+
+    assert preview["accounts"][0]["outcome"] == "mask_only"
+    assert preview["eligibleCount"] == 1
+    response = live.apply(preview)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "applied"
+    assert live.identity_state() == before
+    assert live.preview().json()["eligibleCount"] == 0
+
+
+@pytest.mark.parametrize(
+    ("source", "normalized"),
+    [
+        ("AB12-CD34-EF56", "AB12CD34EF56"),
+        ("AB١٢-CD٣٤-EF٥٦", "AB12CD34EF56"),
+    ],
+)
+def test_backfill_never_stores_a_complete_account_identifier_as_an_issuer_alias(
+    live: BackfillFixture,
+    caplog: pytest.LogCaptureFixture,
+    source: str,
+    normalized: str,
+) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute("DELETE FROM account_identifier WHERE account_id = %s", (live.account_id,))
+        cur.execute(
+            """INSERT INTO account_identifier
+                   (household_id, account_id, kind, masked_value, visible_suffix,
+                    full_value, normalized_value, provenance)
+                 VALUES (%s, %s, 'bank_account', '****EF56', 'EF56', %s, %s,
+                         'owner_entered')""",
+            (live.household_id, live.account_id, source, normalized),
+        )
+        cur.execute(
+            """UPDATE statement_layout
+                  SET metadata_patterns = metadata_patterns || %s::jsonb
+                WHERE id = %s""",
+            (
+                psycopg.types.json.Json(
+                    {
+                        "institution_name": rf"Issuer\s*({re.escape(source)})",
+                        "account_number": rf"Account\s*Number\s*({re.escape(source)})",
+                    }
+                ),
+                LAYOUT_ID,
+            ),
+        )
+    live.conn.commit()
+    live.completed(_statement(number=source, institution=source))
+
+    preview_response = live.preview()
+    preview = preview_response.json()
+
+    assert preview["accounts"][0]["outcome"] == "conflicting"
+    assert preview["accounts"][0]["documents"][0]["reason"] == "institution_unresolved"
+    assert preview["eligibleCount"] == 0
+    refused = live.apply(preview)
+    assert refused.status_code == 409
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM institution_alias WHERE household_id = %s",
+            (live.household_id,),
+        )
+        assert cur.fetchone() == (0,)
+    for private_value in {source, normalized}:
+        assert private_value not in preview_response.text
+        assert private_value not in refused.text
+        assert private_value not in caplog.text
 
 
 def test_apply_refuses_the_whole_account_when_documents_disagree(

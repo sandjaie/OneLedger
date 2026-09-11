@@ -18,10 +18,20 @@ from pydantic import AwareDatetime, BaseModel, Field
 from ..account_resolution import resolve_statement_account
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
-from ..identifiers import CompleteIdentifier, Identifier, IdentifierValueError
+from ..identifiers import (
+    CompleteIdentifier,
+    Identifier,
+    IdentifierValueError,
+    identifier_from_source,
+)
 from ..ingest import engine
 from ..ingest.words import ExtractionError
-from ..institutions import resolve_institution
+from ..institutions import (
+    InstitutionCandidate,
+    InstitutionResolution,
+    normalize_institution_name,
+    resolve_institution,
+)
 from . import layouts
 from .accounts import _replace_account_identifier
 from .description_reparse import _verified_pages as verified_pages
@@ -159,18 +169,27 @@ class Assessed:
     suffix: str | None = field(default=None, repr=False)
     resolver_state: tuple[str, ...] = ()
     identifier: Identifier | None = field(default=None, repr=False, compare=False)
+    pending_alias: str | None = field(default=None, repr=False, compare=False)
+    pending_alias_institution_id: UUID | None = None
+    pending_alias_country: str | None = None
+    replace_identifier: bool = False
     eligible: bool = False
 
     def safe_state(self) -> list[str | None]:
-        private = [self.normalized, self.suffix]
+        private = [self.normalized, self.suffix, self.pending_alias]
         return [
             self.public.outcome,
             self.public.reason,
             str(self.eligible),
+            str(self.replace_identifier),
             *(
                 None if value is None else hashlib.sha256(value.encode()).hexdigest()
                 for value in private
             ),
+            None
+            if self.pending_alias_institution_id is None
+            else str(self.pending_alias_institution_id),
+            self.pending_alias_country,
             *self.resolver_state,
         ]
 
@@ -278,6 +297,58 @@ def _source_failure(document_id: UUID, detail: str) -> Assessed:
     return _result(document_id, "unsupported", reason)
 
 
+def _account_institution_resolution(
+    cur: psycopg.Cursor[Any],
+    source: Source,
+    household_id: UUID,
+    alias: str | None,
+    expected_country: str | None,
+    sensitive_captures: tuple[str, ...],
+) -> tuple[InstitutionResolution, str, str] | None:
+    """Use completed-import provenance only as the target of this explicit backfill decision."""
+    if (
+        source.institution_id is None
+        or alias is None
+        or not alias
+        or layouts._preview_redactor(None)(alias) != alias
+        or any(
+            layouts._preview_redactor(capture)(alias) != alias
+            or layouts._preview_redactor(capture.casefold())(alias.casefold()) != alias.casefold()
+            for capture in sensitive_captures
+        )
+    ):
+        return None
+    cur.execute(
+        """SELECT id, name, short_name, country, institution_type
+             FROM institution
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (source.institution_id, household_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    country = str(row[3]).strip()
+    if expected_country and expected_country.strip().upper() != country:
+        return None
+    candidate = InstitutionCandidate(
+        id=row[0],
+        name=row[1],
+        short_name=row[2],
+        country=country,
+        institution_type=row[4],
+    )
+    return (
+        InstitutionResolution(
+            status="matched",
+            proposed_name=None,
+            country=country,
+            candidates=(candidate,),
+        ),
+        alias,
+        country,
+    )
+
+
 def _assess_for_household(
     cur: psycopg.Cursor[Any], source: Source, household_id: UUID, password: str | None
 ) -> Assessed:
@@ -307,6 +378,18 @@ def _assess_for_household(
         return _result(source.document_id, "missing", "identity_missing")
     if extraction.account_number_capture_count != 1:
         return _result(source.document_id, "conflicting", "capture_conflict")
+    identifier_kind = "card" if profile.accountType == "credit_card" else "bank_account"
+    try:
+        captured_identifier = identifier_from_source(
+            identifier_kind,
+            raw,
+            source_is_masked=extraction.account_number_is_masked,
+        )
+    except IdentifierValueError:
+        return _result(source.document_id, "missing", "identity_missing")
+    sensitive_captures: tuple[str, ...] = (raw,)
+    if isinstance(captured_identifier, CompleteIdentifier):
+        sensitive_captures += (captured_identifier.normalized_value,)
     institution = resolve_institution(
         cur,
         household_id,
@@ -314,6 +397,23 @@ def _assess_for_household(
         country=extraction.metadata.get("institution_country"),
     )
     resolver_state = (institution.status, *(str(item.id) for item in institution.candidates))
+    pending_alias: str | None = None
+    pending_alias_country: str | None = None
+    if institution.status == "needs_confirmation":
+        source_resolution = _account_institution_resolution(
+            cur,
+            source,
+            household_id,
+            institution.proposed_name,
+            extraction.metadata.get("institution_country"),
+            sensitive_captures,
+        )
+        if source_resolution is not None:
+            institution, pending_alias, pending_alias_country = source_resolution
+            resolver_state = (
+                "source_account_institution",
+                str(source.institution_id),
+            )
     if institution.status != "matched":
         result = _result(source.document_id, "conflicting", "institution_unresolved")
         return Assessed(result.public, resolver_state=resolver_state)
@@ -337,6 +437,12 @@ def _assess_for_household(
     identifier = resolution.identifier
     outcome: Outcome = "complete" if isinstance(identifier, CompleteIdentifier) else "mask_only"
     reason: Reason = "complete_identity" if outcome == "complete" else "source_mask_only"
+    replace_identifier = (
+        isinstance(identifier, CompleteIdentifier)
+        and not next(
+            item for item in resolution.candidates if item.id == source.account_id
+        ).can_reveal
+    )
     return Assessed(
         DocumentIdentityPreview(documentId=source.document_id, outcome=outcome, reason=reason),
         normalized=identifier.normalized_value
@@ -345,12 +451,11 @@ def _assess_for_household(
         suffix=identifier.visible_suffix,
         resolver_state=resolver_state,
         identifier=identifier,
-        eligible=(
-            isinstance(identifier, CompleteIdentifier)
-            and not next(
-                item for item in resolution.candidates if item.id == source.account_id
-            ).can_reveal
-        ),
+        pending_alias=pending_alias,
+        pending_alias_institution_id=(source.institution_id if pending_alias is not None else None),
+        pending_alias_country=pending_alias_country,
+        replace_identifier=replace_identifier,
+        eligible=replace_identifier or pending_alias is not None,
     )
 
 
@@ -398,7 +503,8 @@ def _preview(
         AccountIdentityPreview(
             accountId=account_id,
             outcome=_account_outcome(items),
-            eligible=_account_outcome(items) == "complete" and any(item.eligible for item in items),
+            eligible=_account_outcome(items) in {"complete", "mask_only"}
+            and any(item.eligible for item in items),
             documents=[item.public for item in items],
         )
         for account_id, items in grouped.items()
@@ -446,31 +552,56 @@ def apply_identity_backfill(
         )
         if not hmac.compare_digest(preview.expectedState, body.expectedState):
             raise HTTPException(status_code=409, detail="identity backfill preview is stale")
-        if len(preview.accounts) != 1 or preview.accounts[0].outcome != "complete":
+        if len(preview.accounts) != 1 or preview.accounts[0].outcome not in {
+            "complete",
+            "mask_only",
+        }:
             raise HTTPException(
                 status_code=409, detail="identity backfill source documents do not agree"
             )
         eligible = [item for item in assessed if item.eligible]
         if not eligible:
             return IdentityBackfillApplyResult(accountId=body.accountId, status="unchanged")
-        chosen = eligible[0]
-        identifier = chosen.identifier
-        assert isinstance(identifier, CompleteIdentifier)
-        source = next(item for item in sources if item.document_id == chosen.public.documentId)
         try:
-            _replace_account_identifier(
-                cur,
-                owner.household_id,
-                body.accountId,
-                identifier.kind,
-                identifier,
-                provenance="statement_backfill",
-                source_sha256=source.sha256,
-                source_document_id=source.document_id,
-                source_layout_id=source.newest_layout_id,
-                source_layout_version=source.newest_layout_version,
-                source_capture_key="account_number",
-            )
+            for item in eligible:
+                if item.pending_alias is not None:
+                    assert item.pending_alias_institution_id is not None
+                    assert item.pending_alias_country is not None
+                    cur.execute(
+                        """INSERT INTO institution_alias (
+                               household_id, institution_id, alias, alias_normalized, country,
+                               provenance)
+                           VALUES (%s, %s, %s, %s, %s, 'owner_confirmed')
+                           ON CONFLICT (household_id, institution_id, country, alias_normalized)
+                             WHERE is_active DO NOTHING""",
+                        (
+                            owner.household_id,
+                            item.pending_alias_institution_id,
+                            item.pending_alias,
+                            normalize_institution_name(item.pending_alias),
+                            item.pending_alias_country,
+                        ),
+                    )
+            chosen = next((item for item in eligible if item.replace_identifier), None)
+            if chosen is not None:
+                identifier = chosen.identifier
+                assert isinstance(identifier, CompleteIdentifier)
+                source = next(
+                    item for item in sources if item.document_id == chosen.public.documentId
+                )
+                _replace_account_identifier(
+                    cur,
+                    owner.household_id,
+                    body.accountId,
+                    identifier.kind,
+                    identifier,
+                    provenance="statement_backfill",
+                    source_sha256=source.sha256,
+                    source_document_id=source.document_id,
+                    source_layout_id=source.newest_layout_id,
+                    source_layout_version=source.newest_layout_version,
+                    source_capture_key="account_number",
+                )
         except psycopg.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="account identity already exists") from None
     return IdentityBackfillApplyResult(accountId=body.accountId, status="applied")
