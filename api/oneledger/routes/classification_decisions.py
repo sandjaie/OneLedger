@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -196,6 +198,18 @@ _STATE_COLUMNS = """jsonb_build_object(
     'tags', {alias}.tags, 'is_excluded', {alias}.is_excluded)"""
 _RESULT_ITEMS = 3
 _JSONB_BYTES = 4096
+_REVIEW_RESET_REASON = "Classification review state was reset outside correction history."
+
+
+@dataclass(frozen=True)
+class _ReviewReset:
+    transaction_id: UUID
+    knowledge_version_id: UUID
+    prior_decision_id: UUID
+    prior_state: dict[str, Any]
+    current_state: dict[str, Any]
+    updated_at: datetime
+    source_key: str
 
 
 def _state_sql(alias: str = "t") -> str:
@@ -345,6 +359,85 @@ def _lock_household(cur: psycopg.Cursor[Any], household_id: UUID) -> None:
         raise HTTPException(status_code=404, detail="household not found")
 
 
+def _is_review_reset(prior: dict[str, Any], current: dict[str, Any]) -> bool:
+    """Recognise the one derived-state drift created by source-description repair."""
+    if prior.get("is_reviewed") is not True or current.get("is_reviewed") is not False:
+        return False
+    bridged = dict(prior)
+    bridged["is_reviewed"] = False
+    return bridged == current
+
+
+def _bridge_review_resets(
+    cur: psycopg.Cursor[Any], owner: OwnerSession, resets: list[_ReviewReset]
+) -> dict[UUID, UUID]:
+    """Append audit events for review resets before a new guarded correction supersedes them."""
+    by_evidence: dict[UUID, list[_ReviewReset]] = defaultdict(list)
+    for reset in resets:
+        by_evidence[reset.knowledge_version_id].append(reset)
+
+    heads: dict[UUID, UUID] = {}
+    for knowledge_version_id, items in by_evidence.items():
+        cur.execute(
+            """INSERT INTO classification_run
+                 (household_id, knowledge_version_id, actor_user_id, state, reason, result,
+                  expires_at, resolved_at)
+               VALUES (%s, %s, %s, 'applied', %s, '{}'::jsonb, %s, now())
+               RETURNING id""",
+            (
+                owner.household_id,
+                knowledge_version_id,
+                owner.user_id,
+                _REVIEW_RESET_REASON,
+                datetime.now(UTC) + timedelta(hours=1),
+            ),
+        )
+        bridge_run_id = cur.fetchone()[0]  # type: ignore[index]
+        for item in items:
+            cur.execute(
+                """INSERT INTO classification_run_item
+                     (household_id, run_id, transaction_id, expected_transaction_updated_at,
+                      expected_source_key, expected_state, proposed_state, reason)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    owner.household_id,
+                    bridge_run_id,
+                    item.transaction_id,
+                    item.updated_at,
+                    item.source_key,
+                    Jsonb(item.prior_state),
+                    Jsonb(item.current_state),
+                    _REVIEW_RESET_REASON,
+                ),
+            )
+            cur.execute(
+                """INSERT INTO classification_decision
+                     (household_id, run_id, transaction_id, knowledge_version_id,
+                      actor_user_id, before_state, after_state, reason,
+                      supersedes_decision_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   RETURNING id""",
+                (
+                    owner.household_id,
+                    bridge_run_id,
+                    item.transaction_id,
+                    knowledge_version_id,
+                    owner.user_id,
+                    Jsonb(item.prior_state),
+                    Jsonb(item.current_state),
+                    _REVIEW_RESET_REASON,
+                    item.prior_decision_id,
+                ),
+            )
+            heads[item.transaction_id] = cur.fetchone()[0]  # type: ignore[index]
+        result = _summary(cur, bridge_run_id, "applied", changed=len(items))
+        cur.execute(
+            "UPDATE classification_run SET result = %s WHERE id = %s",
+            (Jsonb(_payload(result)), bridge_run_id),
+        )
+    return heads
+
+
 @router.post("/preview")
 def preview(
     body: PreviewBody, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -487,12 +580,14 @@ def apply(
             f"""SELECT i.transaction_id, i.expected_transaction_updated_at,
                        i.expected_source_key, i.expected_state, i.proposed_state, i.reason,
                        t.updated_at, t.dedupe_hash, t.transfer_id, {state_sql},
-                       latest.id, latest.after_state, latest.head_count
+                       latest.id, latest.knowledge_version_id, latest.after_state,
+                       latest.head_count
                   FROM classification_run_item i
                   JOIN transaction t ON t.id = i.transaction_id
                                     AND t.household_id = i.household_id
                   LEFT JOIN LATERAL (
-                    SELECT d.id, d.after_state, count(*) OVER () AS head_count
+                    SELECT d.id, d.knowledge_version_id, d.after_state,
+                           count(*) OVER () AS head_count
                       FROM classification_decision d
                      WHERE d.household_id = i.household_id
                        AND d.transaction_id = i.transaction_id
@@ -520,6 +615,7 @@ def apply(
 
         conflicts: list[ResultItem] = []
         supersedes: dict[UUID, UUID | None] = {}
+        review_resets: list[_ReviewReset] = []
         for row in rows:
             (
                 transaction_id,
@@ -533,6 +629,7 @@ def apply(
                 transfer_id,
                 actual_state,
                 latest_id,
+                latest_knowledge_version_id,
                 latest_after,
                 head_count,
             ) = row
@@ -550,7 +647,20 @@ def apply(
             elif head_count is not None and head_count != 1:
                 conflict = "classification correction history has multiple heads"
             elif latest_id is not None and latest_after != expected_state:
-                conflict = "later classification correction exists"
+                if _is_review_reset(latest_after, expected_state):
+                    review_resets.append(
+                        _ReviewReset(
+                            transaction_id=transaction_id,
+                            knowledge_version_id=latest_knowledge_version_id,
+                            prior_decision_id=latest_id,
+                            prior_state=latest_after,
+                            current_state=expected_state,
+                            updated_at=actual_updated_at,
+                            source_key=actual_source,
+                        )
+                    )
+                else:
+                    conflict = "later classification correction exists"
             if conflict is not None:
                 conflicts.append(
                     ResultItem(transactionId=transaction_id, status="conflicted", reason=conflict)
@@ -560,6 +670,8 @@ def apply(
             result = _summary(cur, run_id, "conflict", conflicted=len(conflicts), items=conflicts)
             _finish_run(cur, run_id, result, body.idempotencyKey)
             return result
+
+        supersedes.update(_bridge_review_resets(cur, owner, review_resets))
 
         changed: list[ResultItem] = []
         for row in rows:

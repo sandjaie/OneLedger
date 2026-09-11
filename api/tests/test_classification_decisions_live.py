@@ -763,6 +763,48 @@ def test_an_unreviewed_manual_decision_can_be_repaired_through_the_guarded_run(
     assert applied.json()["changed"] == 1
 
 
+def test_a_review_reset_after_an_earlier_correction_keeps_one_continuous_history(
+    live: RepairFixture,
+) -> None:
+    transaction_id = _transaction(live)
+    first = _preview(live, [transaction_id]).json()
+    applied_first = TestClient(app).post(
+        f"/classification-runs/{first['runId']}/apply",
+        json={"idempotencyKey": "synthetic-before-review-reset"},
+        headers=ORIGIN,
+    )
+    assert applied_first.json()["state"] == "applied"
+
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE transaction SET is_reviewed = false WHERE id = %s", (transaction_id,))
+    live.conn.commit()
+
+    second = _preview(live, [transaction_id]).json()
+    applied_second = TestClient(app).post(
+        f"/classification-runs/{second['runId']}/apply",
+        json={"idempotencyKey": "synthetic-after-review-reset"},
+        headers=ORIGIN,
+    )
+
+    assert applied_second.status_code == 200, applied_second.text
+    assert (applied_second.json()["state"], applied_second.json()["changed"]) == ("applied", 1)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """SELECT count(*), count(supersedes_decision_id), count(DISTINCT run_id)
+                 FROM classification_decision WHERE transaction_id = %s""",
+            (transaction_id,),
+        )
+        assert cur.fetchone() == (3, 2, 3)
+        cur.execute(
+            """SELECT before_state->>'is_reviewed', after_state->>'is_reviewed'
+                 FROM classification_decision
+                WHERE transaction_id = %s
+                  AND reason = %s""",
+            (transaction_id, classification_decisions._REVIEW_RESET_REASON),
+        )
+        assert cur.fetchone() == ("true", "false")
+
+
 def test_another_households_transaction_is_indistinguishable_from_missing(
     live: RepairFixture,
 ) -> None:
