@@ -36,10 +36,11 @@ the test. PR titles carry `[P1.8]`.
 | 8c4 — account reveal screen | `feature/p1-8c4-account-reveal-screen` | 180 / 270 | 8c3 |
 | 8c5 — PDF institution resolution | `feature/p1-8c5-statement-institution-resolution` | 390 / 650 | 8c3 |
 | 8c6 — PDF account resolution | `feature/p1-8c6-statement-account-resolution` | 500 / 800 | 8c5 |
-| 8c7 — import confirmation UI | `feature/p1-8c7-import-identity-confirmation` | 300 / 480 | 8c6 |
+| 8c7a — safe proposal grouping contract | `feature/p1-8c7a-proposal-group-key` | 100 / 160 | 8c6 |
+| 8c7b — import confirmation UI | `feature/p1-8c7b-import-identity-confirmation` | 460 / 600 | 8c7a |
 | 8c8 — identity backfill preview | `feature/p1-8c8-identity-backfill-preview` | 280 / 440 | 8c6 |
 | 8c9 — guarded identity backfill | `feature/p1-8c9-identity-backfill-apply` | 260 / 460 | 8c8 |
-| 8c10 — transition cleanup | `fix/p1-8c10-identity-contract-cleanup` | 170 / 280 | 8c4, 8c7, 8c9 |
+| 8c10 — transition cleanup | `fix/p1-8c10-identity-contract-cleanup` | 170 / 280 | 8c4, 8c7b, 8c9 |
 
 No forecast reaches the 800 production / 1,600 combined soft budget. If discovery raises either
 estimate above its budget, split before implementation and update this plan plus `progress.md`.
@@ -262,19 +263,49 @@ generated-types check, then `/verify`.
 **Acceptance.** The approved Axis savings/current scenario produces one institution and two account
 UUIDs, while a later statement for either resolves with no confirmation.
 
-## Task 8c7 — import identity confirmation
+## Task 8c7a — safe proposal grouping contract
 
 **Workspace:** `/Users/sandjaieravi/dev/OneLedger`  
-**Branch:** `feature/p1-8c7-import-identity-confirmation`  
+**Branch:** `feature/p1-8c7a-proposal-group-key`
 **Base and PR target:** `develop`  
 **Migration:** none. **Depends on:** 8c6 merged.
+
+**Outcome.** Every unresolved identity carries an opaque service-owned key which lets the browser
+group the same proposed identity without seeing or reconstructing complete identifiers.
+
+**Files.** Modify `api/oneledger/account_resolution.py`, `api/oneledger/routes/ingest.py` and their
+focused tests; regenerate API types and update the API/ingestion docs.
+
+**Contract.** Add nullable `proposalGroupKey` to `IdentityResolution`: it carries a key only for an
+unresolved result backed by exactly one identifier capture, and is `null` for `matched` results or
+documents with conflicting identifier captures. The service computes a domain-separated
+HMAC-SHA256 with the already-required session secret over household UUID, resolved/proposed
+institution evidence, account type, captured currency, identifier kind and either the complete
+normalized value or source-mask suffix. It is stable for equivalent evidence while that server
+configuration remains active, differs across households and distinct complete values sharing a
+suffix, is never persisted, and contains no identifier text. This adds no encryption key or stored
+data dependency; rotating the session secret only changes future proposal keys.
+
+**Tests/validation.** Fail first for equivalent complete formatting, distinct complete values with
+the same suffix, mask composites, household separation, matched nullability and raw/serialized
+privacy. Regenerate API types, run focused API tests, then `/verify`.
+
+**Acceptance.** Two selected statements for one complete identity receive the same opaque key,
+while two complete identities sharing the displayed suffix do not.
+
+## Task 8c7b — import identity confirmation
+
+**Workspace:** `/Users/sandjaieravi/dev/OneLedger`
+**Branch:** `feature/p1-8c7b-import-identity-confirmation`
+**Base and PR target:** `develop`
+**Migration:** none. **Depends on:** 8c7a merged.
 
 **Outcome.** The import screen explains automatic reuse/new/ambiguous states, asks once for a new
 identity, and rechecks all selected documents that share it.
 
 **Files.** Modify `web/app/import/{account-proposal,import-screen}.tsx`, their tests and styles.
 
-**Behavior.** Group proposal leaders by the service's safe proposed-identity key, not filename or
+**Behavior.** Group proposal leaders by the service's opaque `proposalGroupKey`, not filename or
 mask alone. The form shows reuse/create actions, correctable institution/type/country/currency and
 mask. Its eye uses `POST /parse/identifier/reveal` with the still-selected multipart PDF and
 password; the route re-reads the capture and returns `revealed` or `source_mask_only` with

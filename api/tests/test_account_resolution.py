@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from oneledger.account_resolution import AccountResolution, resolve_statement_account
+from oneledger.account_resolution import (
+    AccountResolution,
+    proposal_group_key,
+    resolve_statement_account,
+)
+from oneledger.identifiers import identifier_from_source
 from oneledger.institutions import InstitutionCandidate, InstitutionResolution
 
 HOUSEHOLD = UUID("11111111-1111-1111-1111-111111111111")
@@ -174,3 +179,59 @@ def test_unicode_formatted_source_is_normalized_but_only_its_ascii_mask_is_prese
 
     assert result.account_number_masked == "****3579"
     assert source not in repr(result)
+
+
+def group_key(
+    value: str,
+    *,
+    household_id: UUID = HOUSEHOLD,
+    masked: bool = False,
+) -> str:
+    return proposal_group_key(
+        secret="proposal-group-test-secret",
+        household_id=household_id,
+        institution=institution(),
+        account_type="savings",
+        currency="AED",
+        identifier=identifier_from_source("bank_account", value, source_is_masked=masked),
+    )
+
+
+def test_equivalent_complete_source_formatting_has_one_opaque_group_key() -> None:
+    plain = group_key("2468013579")
+    formatted = group_key("٢٤٦٨-٠١٣٥٧٩")
+
+    assert plain == formatted
+    assert plain.startswith("pg1_")
+    assert "2468013579" not in plain
+    assert "3579" not in plain
+
+
+def test_complete_values_sharing_a_suffix_have_distinct_group_keys() -> None:
+    assert group_key("2468013579") != group_key("9753103579")
+
+
+def test_group_keys_are_household_bound() -> None:
+    assert group_key("2468013579") != group_key("2468013579", household_id=UUID(int=99))
+
+
+def test_equivalent_source_masks_share_the_composite_group_key() -> None:
+    assert group_key("****3579", masked=True) == group_key("XXXX-3579", masked=True)
+
+
+def test_mask_group_key_includes_account_type_and_currency() -> None:
+    identifier = identifier_from_source("bank_account", "****3579", source_is_masked=True)
+
+    def key(*, account_type: str, currency: str) -> str:
+        return proposal_group_key(
+            secret="proposal-group-test-secret",
+            household_id=HOUSEHOLD,
+            institution=institution(),
+            account_type=account_type,
+            currency=currency,
+            identifier=identifier,
+        )
+
+    baseline = key(account_type="savings", currency="AED")
+    assert baseline != key(account_type="current", currency="AED")
+    assert baseline != key(account_type="savings", currency="USD")

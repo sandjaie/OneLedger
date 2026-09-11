@@ -37,8 +37,8 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, Field, ValidationError
 
 from ..account_resolution import AccountResolution as ResolvedAccount
-from ..account_resolution import resolve_statement_account
-from ..auth import OwnerSession, require_owner
+from ..account_resolution import proposal_group_key, resolve_statement_account
+from ..auth import OwnerSession, require_owner, session_secret
 from ..db import connect, scope_to_owner
 from ..fxrange import FxCoverageError
 from ..identifiers import (
@@ -198,6 +198,7 @@ class IdentityResolution(BaseModel):
     accountNumberMasked: str
     candidates: list[AccountResolutionCandidate]
     conflicts: list[Literal["institution", "account_type", "currency"]]
+    proposalGroupKey: str | None
 
 
 class ParseResponse(BaseModel):
@@ -543,7 +544,7 @@ def _institution_resolution(
 
 def _resolved_identity(
     cur: psycopg.Cursor[Any], result: pipeline.ParseResult, household_id: UUID
-) -> tuple[ResolvedInstitution, ResolvedAccount]:
+) -> tuple[ResolvedInstitution, ResolvedAccount, str | None]:
     raw = result.analysis.account_number_raw
     if raw is None:
         raise HTTPException(
@@ -584,13 +585,24 @@ def _resolved_identity(
         ) from None
     if result.analysis.account_number_capture_count != 1:
         account = replace(account, status="ambiguous", account_action="choose")
-    return institution, account
+    group_key = None
+    if account.status != "matched" and result.analysis.account_number_capture_count == 1:
+        group_key = proposal_group_key(
+            secret=session_secret(),
+            household_id=household_id,
+            institution=institution,
+            account_type=account_type,
+            currency=result.analysis.metadata.get("currency"),
+            identifier=account.identifier,
+        )
+    return institution, account, group_key
 
 
 def _identity_resolution(
     institution: ResolvedInstitution,
     account: ResolvedAccount,
     raw: str,
+    group_key: str | None,
 ) -> IdentityResolution:
     proposed = (
         None
@@ -616,6 +628,7 @@ def _identity_resolution(
             for candidate in account.candidates
         ],
         conflicts=list(account.conflicts),
+        proposalGroupKey=group_key,
     )
 
 
@@ -725,11 +738,14 @@ def parse_statement(
                 proposal = (
                     _proposal(cur, result, owner.household_id) if result.account is None else None
                 )
-                institution, account_resolution = _resolved_identity(
+                institution, account_resolution, group_key = _resolved_identity(
                     cur, result, owner.household_id
                 )
                 identity = _identity_resolution(
-                    institution, account_resolution, result.analysis.account_number_raw or ""
+                    institution,
+                    account_resolution,
+                    result.analysis.account_number_raw or "",
+                    group_key,
                 )
         return _response(result, identity, proposal)
     except DuplicateDocument as exc:

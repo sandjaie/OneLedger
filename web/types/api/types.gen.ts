@@ -1282,6 +1282,10 @@ export type IdentityResolution = {
      * Conflicts
      */
     conflicts: Array<'institution' | 'account_type' | 'currency'>;
+    /**
+     * Proposalgroupkey
+     */
+    proposalGroupKey: string | null;
 };
 
 /**

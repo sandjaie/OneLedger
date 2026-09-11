@@ -171,6 +171,15 @@ the reveal response is never trusted as write input.
 
 `POST /parse` continues to own supported-layout analysis. Its resolution result distinguishes
 `matched`, `needs_confirmation` and `ambiguous`, and names safe institution/account candidates only.
+An unresolved result backed by exactly one identifier capture also carries an opaque
+`proposalGroupKey` produced with a domain-separated HMAC under the already-required session secret
+over household and normalized resolution evidence. Matched results and documents with conflicting
+identifier captures carry `null` because they have no singular proposal identity.
+The key lets the browser group proposals without receiving or reconstructing a complete identifier,
+differs for complete identifiers that share a displayed suffix and across households, and is never
+persisted. This is transient correlation, not encryption of
+stored application data: rotating the session secret only changes future proposal keys and cannot
+make any ledger data unreadable.
 The confirmation operation re-reads the uploaded file and accepts corrected non-identity account
 fields; it never accepts a client-supplied replacement full identifier.
 
