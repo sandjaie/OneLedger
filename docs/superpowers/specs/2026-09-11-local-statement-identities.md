@@ -1,12 +1,12 @@
-# Encrypted statement identities and automatic account resolution
+# Local statement identities and automatic account resolution
 
 Owner-approved design, 11 September 2026. This extends slice 1.8 after Tasks 8a1–8b were
 delivered. It replaces the remaining manual institution/card mapping acceptance with
 statement-derived institution and account resolution, and adds masked-by-default owner reveal.
-[ADR-0021](../../adr/0021-encrypted-owner-financial-identifiers.html) owns the policy decision.
+[ADR-0021](../../adr/0021-local-owner-financial-identifiers.html) owns the policy decision.
 
-Workspace: `/Users/sandjaieravi/dev/OneLedger`. Design branch:
-`docs/p1-8-encrypted-account-identifiers`. Base and PR target: `develop`.
+Workspace: `/Users/sandjaieravi/dev/OneLedger`. The owner replaced the encryption design before
+application implementation on 11 September 2026. Base and PR target: `develop`.
 
 ## Product outcome
 
@@ -35,8 +35,8 @@ an unsupported-format result. Supporting it is a later focused PR carrying a dat
 fixture and regression evidence.
 
 A new account at a currently supported issuer needs no code change when its statement still fits a
-supported layout. The identity resolver and encrypted store are format-independent once extraction
-has produced typed evidence.
+supported layout. The identity resolver and local identifier store are format-independent once
+extraction has produced typed evidence.
 
 ## Canonical identities and evidence
 
@@ -46,9 +46,9 @@ has produced typed evidence.
   institution UUID; a bank name is not used as a primary or foreign key.
 - A filename, path, transaction narration, amount, balance or account display name is never
   institution/account identity evidence.
-- A complete identifier captured from a PDF is normalised once for matching and encrypted from the
-  source spelling for owner reveal. Formatting may be preserved for display while matching ignores
-  the separators the identifier kind defines.
+- A complete identifier captured from a PDF is stored in the local database using its source
+  spelling and normalised once for matching. Formatting may be preserved for reveal while matching
+  ignores the separators the identifier kind defines.
 - A source mask contains only what the PDF exposed. Missing digits are unknown, not null characters
   to reconstruct.
 
@@ -78,9 +78,8 @@ replaced card does not rewrite ledger history. Each row carries:
 
 - its UUID, household/account UUIDs, kind and active state;
 - a safe mask and visible suffix;
-- an authenticated-encryption envelope, nonce/parameters and key version when the full value is
-  known;
-- a keyed matching fingerprint and fingerprint scheme when exact matching is possible;
+- the full source value and normalized matching value when the statement supplied all digits;
+- a legacy one-way fingerprint only while an existing pre-V28 account awaits source backfill;
 - source document and capture provenance; and
 - creation/deactivation timestamps.
 
@@ -88,33 +87,25 @@ The authoritative final state lives in this relation. Existing `account_number_m
 `account_number_hash` values need a forward-only migration path: copy their safe evidence into
 identifier rows, keep the legacy hash usable during guarded backfill, move all product reads/writes
 to the new boundary, then remove or mechanically prevent new use of the legacy columns in the task
-that completes the transition. No migration can manufacture an encrypted value from a hash.
+that completes the transition. No migration can manufacture a full value from a hash.
 
-A unique active keyed fingerprint per household and kind prevents duplicate exact identities.
+A unique active normalized value per household and kind prevents duplicate exact identities.
 Mask-only rows are not globally unique; ambiguity is a valid state handled by the resolver.
 
-## Cryptographic boundary
+## Local storage and disclosure boundary
 
-Use authenticated encryption with an independent 256-bit environment key and a unique nonce for
-every stored value. Use HMAC-SHA-256 under a separate 256-bit environment key for deterministic
-matching fingerprints. Bind authenticated additional data to household UUID, account UUID,
-identifier UUID and kind so ciphertext moved to another row cannot authenticate. The encryption
-envelope and fingerprint record a scheme/key version; no code silently tries an unrelated key.
+OneLedger stores complete source identifiers as plaintext application data in the owner's local
+PostgreSQL database. It introduces no application encryption key, key version, rotation workflow or
+startup dependency. Losing an environment file must never make the owner's ledger unreadable.
 
-Development keys live in `.env`. The isolated local-production stack generates independent keys
-in `.env.production`. `.env.example` and production examples contain empty placeholders and setup
-instructions only. Keys never live in PostgreSQL, responses, logs, backups beside their encrypted
-payloads, fixtures or Git.
+Masking is a presentation choice, not a storage limitation. Ordinary account responses and screens
+show the stored mask; an explicit eye action in the existing owner session returns the stored full
+value with `Cache-Control: no-store`. The reveal needs no second password and does not re-read a PDF.
 
-If a required key is missing, malformed or the wrong version, the API fails closed with a generic
-configuration/decryption refusal. A dry parse may still show a safe mask, but no response may claim
-that a complete identifier was stored or revealed. Rotation is a separately guarded operation:
-preview, decrypt/authenticate with the old version, re-encrypt with the new version, verify, then
-retire the old key only after zero old envelopes remain.
-
-This encryption limits a database-only or backup-only disclosure when the private environment is
-absent. It does not claim to protect identifiers from an attacker controlling the running process
-or the owner's unlocked machine.
+The database, its backups and an unlocked local machine can therefore contain readable financial
+identifiers. That is an accepted consequence of the local, owner-controlled deployment model.
+Operating-system disk or backup encryption remains the owner's infrastructure choice, outside the
+OneLedger application contract.
 
 ## Statement resolution
 
@@ -126,8 +117,8 @@ Resolution order is deterministic:
 1. Identify one supported layout from page-one PDF content. A filename contributes nothing.
 2. Resolve captured issuer branding through institution aliases. One best match selects its UUID;
    no match proposes a new institution; conflicting matches ask.
-3. For a complete identifier, compute the keyed fingerprint and seek one active household
-   identifier of that kind. One exact match selects its account regardless of its display name.
+3. For a complete identifier, normalize it by kind and seek one active household identifier with
+   that kind and normalized value. One exact match selects its account regardless of display name.
 4. For a source mask, seek an active household account with the resolved institution UUID, captured
    account type and visible suffix. Exactly one selects it; zero proposes a new account; more than
    one asks.
@@ -144,7 +135,7 @@ A dry parse writes nothing. A proposal shows:
 - whether the institution will be reused or created;
 - whether the account will be reused, enriched or created;
 - institution, type, country and currency, all correctable;
-- the safe identifier mask and a source-backed reveal when a full value exists;
+- the safe identifier mask and a deliberate reveal when a full value exists;
 - opening-balance and card facts already defined by slice 1.8; and
 - the number of selected documents that appear to share the proposed identity.
 
@@ -160,21 +151,21 @@ documents resolve without another click.
 
 ## API boundary
 
-Ordinary account lists/details return identifier IDs, kinds, safe masks and `canReveal`; they never
-return ciphertext, fingerprints, nonces or full values. Preserve the existing masked field during
-client migration only as a compatibility representation sourced from the identifier relation.
+Ordinary account lists/details return identifier IDs, kinds, safe masks and `canReveal`; they do not
+return full values. Preserve the existing masked field during client migration only as a
+compatibility representation sourced from the identifier relation.
 
 An owner-authenticated reveal operation addresses one account and one identifier, verifies both
-household links, decrypts exactly that value and returns it with `Cache-Control: no-store`. It is a
-deliberate operation rather than a query parameter on `GET /accounts`, so caches, prefetch and list
-rendering cannot reveal every account. A mask-only row returns a typed unavailable result rather
-than pretending its suffix is complete.
+household links, reads exactly that stored value and returns it with `Cache-Control: no-store`.
+It is a deliberate operation rather than a query parameter on `GET /accounts`, so caches, prefetch
+and list rendering cannot reveal every account. A mask-only row returns a typed unavailable result
+rather than pretending its suffix is complete.
 
 The first-time proposal's eye control uses a separate owner-authenticated multipart reveal
 operation that re-reads the still-selected PDF and returns only the captured identifier with the
 same no-store boundary. It does not accept a client-supplied identifier or create a server-side
-plaintext draft. Confirmation independently re-reads the file before encryption, so the reveal
-response is never trusted as write input.
+plaintext draft. Confirmation independently re-reads the file before storing its source value, so
+the reveal response is never trusted as write input.
 
 `POST /parse` continues to own supported-layout analysis. Its resolution result distinguishes
 `matched`, `needs_confirmation` and `ambiguous`, and names safe institution/account candidates only.
@@ -183,7 +174,7 @@ fields; it never accepts a client-supplied replacement full identifier.
 
 Backfill exposes preview/apply operations over the owner's stored source documents. Preview lists
 only safe document/account identifiers and outcome/reason codes. Apply rechecks the same expected
-state, is idempotent, writes through the same resolver/encryption service as a new import and
+state, is idempotent, writes through the same resolver/identifier service as a new import and
 refuses the entire account's update when its source documents disagree.
 
 ## User interface
@@ -207,8 +198,9 @@ each stored PDF. This makes the historical account relation the selection bounda
 supplies issuer and identifier evidence.
 
 Preview groups documents per account, reports complete/mask-only/missing/conflicting captures and
-shows the institution resolution without full values. Apply requires a fresh encrypted database
-backup, authenticates each source, and updates an account only when all usable documents agree.
+shows the institution resolution without full values. Apply authenticates each source and updates
+an account only when all usable documents agree. It does not impose a backup or encryption-key gate;
+backups remain an owner-operated safeguard.
 Password-protected sources use credentials supplied through the existing private request/environment
 boundary and never persist those passwords.
 
@@ -222,8 +214,7 @@ and identifier records may change.
 - No full identifier appears in ordinary/raw serialized responses, exception text, logs, tracing,
   URLs, screenshots, public evidence or browser persistence.
 - Reveal is the sole general API response allowed to contain a complete identifier.
-- Redaction covers ASCII, formatted identifiers and all Unicode decimal digit scripts; opaque
-  ciphertext and digests are not mistaken for plaintext identifier leaks.
+- Redaction covers ASCII, formatted identifiers and all Unicode decimal digit scripts.
 - Cross-household institution aliases, accounts, identifiers, documents and reveals are refused.
 - A statement that cannot identify, normalise or reconcile does not become stageable merely because
   its account identity matched.
@@ -233,9 +224,10 @@ and identifier records may change.
 Synthetic tests fail first for: exact full-identifier matching; unique and ambiguous mask matching;
 same institution with a second account type; new-account confirmation without institution
 duplication; conflicting issuer/type/currency; unsupported layouts; multi-file one-confirmation
-behaviour; encryption round trips and nonce uniqueness; missing/wrong/versioned keys; reveal
-authorization and no-store headers; mask-only reveal refusal; cross-household isolation; idempotent
-backfill and conflict refusal; and raw plus serialized Unicode/formatted identifier leakage.
+behaviour; normalized plaintext matching; masked ordinary responses; reveal authorization and
+no-store headers; mask-only reveal refusal; cross-household isolation; idempotent backfill and
+conflict refusal; and raw plus serialized Unicode/formatted identifier leakage outside the explicit
+reveal boundary.
 
 The local acceptance run reprocesses representative real statements for every affected account
 through supported authenticated application operations. It verifies that the current four layouts
@@ -250,12 +242,12 @@ sequence and priority discussion; do not start slice 1.5.
 
 ## Documents the implementation must reconcile
 
-The implementation updates `security-and-privacy.html` (application data versus source control,
-identifier encryption and reveal), `data-model.html` and `schema.md` (identifier/alias relations),
+The implementation updates `security-and-privacy.html` (application data versus source control and
+masked-by-default reveal), `data-model.html` and `schema.md` (identifier/alias relations),
 `api-contracts.html` (parse, confirmation, account representation, reveal and backfill),
-`statement-ingestion.html` (issuer/account resolution), `.env.example` and local-production setup,
-the four seed-layout notes, ADR index and `progress.md`. Existing text saying complete identifiers
-are never stored or returned is superseded by ADR-0021 and must not survive as an active rule.
+`statement-ingestion.html` (issuer/account resolution), the four seed-layout notes, ADR index and
+`progress.md`. Existing text saying complete identifiers are never stored, must be encrypted or
+require application keys is superseded by ADR-0021 and must not survive as an active rule.
 
 The earlier slice 1.8 spec remains the record of Tasks 8a1–8b. Its mask/hash-only storage clauses
 and manual mapping acceptance are superseded by this design; its dry-run, reconciliation,

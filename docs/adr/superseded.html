@@ -367,16 +367,16 @@ body {
       <main id="document" class="ledger">
         <article class="prose">
           <h1 id="changed-decisions">Decisions we changed before building</h1>
-<p><strong>Nothing on this page is part of the system.</strong> These four decisions were made and then
-replaced, all of it before a line of application code existed. They are summarised here rather than
-kept as four separate documents, because a repository where half the decision pages describe an
-architecture that was abandoned is a repository that misleads on sight.</p>
+<p><strong>Nothing on this page is part of the system.</strong> These five decisions were made and then
+replaced before application code depended on them. They are summarised here rather than kept as
+five separate documents, because a repository where half the decision pages describe an architecture
+that was abandoned is a repository that misleads on sight.</p>
 <p>They are kept at all because a decision with no visible history looks arbitrary, and an arbitrary
 decision gets re-litigated. If someone asks &quot;why not just use Supabase&quot;, the answer should be
 findable. What follows, for each: what was decided, what replaced it, and the part of the reasoning
 that is still worth having.</p>
-<p>Once implementation starts, this stops being the right shape. A decision reversed after code
-depends on it needs its own record, with its own migration story — the way
+<p>Once implementation of a decision starts, this stops being the right shape. A decision reversed
+after code depends on it needs its own record, with its own migration story — the way
 <a href="./index.html">the ADRs</a> in force are written.</p>
 <table>
 <thead>
@@ -395,6 +395,9 @@ depends on it needs its own record, with its own migration story — the way
 <tr><td><a href="#parse-in-the-browser">Parse statements in the browser</a></td>
 <td><a href="./0013-python-backend-service.html">0013</a></td>
 <td>05 Sep 2026, hours</td></tr>
+<tr><td><a href="#encrypt-financial-identifiers">Encrypt stored financial identifiers</a></td>
+<td><a href="./0021-local-owner-financial-identifiers.html">0021</a></td>
+<td>11 Sep 2026, hours</td></tr>
 </tbody>
 </table>
 <hr>
@@ -475,6 +478,22 @@ x-position, which is language-neutral and is what
 <a href="./0013-python-backend-service.html">ADR-0013</a> does not claim <code>pdfplumber</code> as a
 parsing-capability win. The honest advantages of Python here are spreadsheet parsing, OCR and
 <code>extract_table()</code> for ruled tables — none of which this product needs.</p>
+<hr>
+<h2 id="encrypt-financial-identifiers">Encrypt stored financial identifiers</h2>
+<p><strong>Decided and replaced</strong> 11 September 2026. <strong>Replaced by</strong>
+<a href="./0021-local-owner-financial-identifiers.html">ADR-0021</a> before application code was
+committed.</p>
+<p>The proposed design stored complete account, card and IBAN values in authenticated-encryption
+envelopes and used a separate keyed fingerprint for matching. Its goal was to limit what a database
+dump alone exposed.</p>
+<p><strong>Why it went:</strong> OneLedger is a single-owner application whose database runs locally.
+Application encryption introduced keys, rotation and recovery as mandatory dependencies; losing a
+key could make the owner's financial history unreadable. The owner explicitly chose reliable local
+access instead. Full values now live in the local database, while ordinary screens remain masked
+until the owner uses an eye control.</p>
+<p><strong>What survived:</strong> real identifiers remain application data, never source-code or test
+data. Ordinary API payloads, logs, URLs, analytics and public evidence do not expose them, and a PDF
+that contains only a mask never becomes a fabricated complete value.</p>
         </article>
       </main>
     </div>

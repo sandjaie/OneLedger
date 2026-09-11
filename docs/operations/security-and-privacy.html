@@ -371,14 +371,14 @@ body {
 institution, net worth, salary. Security is a product requirement, specified before auth is
 wired — not hardened later.</p>
 <p>The strongest control available is also the simplest: <strong>the system never holds credentials
-that can authorise a financial action, and encrypts source identifiers it needs to show the
-owner.</strong></p>
+that can authorise a financial action, and real financial data never enters source control or
+published evidence.</strong></p>
 <hr>
 <h2 id="1-the-never-store-list">1. The storage boundary</h2>
 <p>The distinction is between credentials that can control an asset and private application data
-the owner expects OneLedger to manage. The first list is absolute. The second is permitted only
-through the encrypted identifier boundary accepted by
-<a href="../adr/0021-encrypted-owner-financial-identifiers.html">ADR-0021</a>.</p>
+the owner expects OneLedger to manage. The first list is absolute. The second is permitted in the
+owner's local database under
+<a href="../adr/0021-local-owner-financial-identifiers.html">ADR-0021</a>.</p>
 <pre><code>✗  Bank passwords or PINs
 ✗  Internet banking credentials
 ✗  Card CVV                            — never, in any form
@@ -387,16 +387,15 @@ through the encrypted identifier boundary accepted by
 ✗  Full PAN / Emirates ID / passport   — last 4 only, for reference
 ✗  Statement PDF passwords in database — private environment/request only
 
-Encrypted private application data when a source supplies it:
+Local private application data when a source supplies it:
 ✓  Bank account number                 — masked by default; owner-revealable
 ✓  IBAN                                — masked by default; owner-revealable
 ✓  Credit card number                  — only the digits the source actually provides
 </code></pre>
 <p>No account/card identifier, statement text, transaction, amount, credential or real financial
-example enters source control, a fixture, screenshot or published report. Encryption keys live in
-the private application environment, outside PostgreSQL. Encryption limits a database-only or
-backup-only disclosure; it does not protect an unlocked machine whose running process can use the
-key.</p>
+example enters source control, a fixture, screenshot or published report. Complete identifiers are
+stored as plaintext in local PostgreSQL so they remain readable without a separate application key.
+The database and its backups must therefore be treated as private financial data.</p>
 <p><strong>Even a full application compromise must not provide a password, PIN, CVV or OTP capable of
 moving an asset.</strong> Read exposure is still serious, which is why ordinary views remain masked and
 reveal is an explicit owner-only operation.</p>
@@ -428,7 +427,7 @@ reveal is an explicit owner-only operation.</p>
 <td>VPS or provider compromise</td>
 <td>Very low</td>
 <td>High</td>
-<td>Encrypted volumes and backups; source financial identifiers have their own authenticated-encryption envelope whose key is outside PostgreSQL; financial-action credentials are absent</td>
+<td>Owner-controlled host, optional encrypted volumes/backups, strict source-control boundary; financial-action credentials are absent</td>
 </tr>
 <tr>
 <td>Provider-level compromise</td>
@@ -440,7 +439,7 @@ reveal is an explicit owner-only operation.</p>
 <td>Laptop theft</td>
 <td><strong>Medium</strong></td>
 <td>Medium</td>
-<td>Full-disk encryption; <code>~/statements/</code> on the encrypted volume. No privileged key is stored locally, so theft exposes downloaded statements, not the database</td>
+<td>OS login and device controls; optional full-disk encryption. The local database and statement folder both contain readable private financial data</td>
 </tr>
 <tr>
 <td>Statement folder in a synced cloud drive</td>
@@ -591,23 +590,19 @@ logs because callback request targets contain authorization codes. Use
 <hr>
 <h2 id="4-account-number-handling">4. Account number handling</h2>
 <p>Statements must be matched to accounts and the owner must be able to inspect the source identity.
-Complete identifiers therefore use two independent representations under ADR-0021: authenticated
-encryption for reveal and a keyed fingerprint for exact matching. A mask remains the ordinary
-display value.</p>
-<pre><code class="language-python"># Stored on `account`
-# Conceptual `account_identifier` boundary; see schema.md once its migration lands.
-masked_value      = &quot;XXXX4821&quot;                    # ordinary display
-ciphertext        = aead_encrypt(key, nonce, full, aad)  # explicit reveal
-match_fingerprint = hmac_sha256(match_key, normalise(full))
+Under ADR-0021, a complete identifier retains its source value and a normalized exact-match value
+in the local database. A mask remains the ordinary display value.</p>
+<pre><code class="language-python"># Conceptual `account_identifier` boundary; see schema.md.
+full_value       = &quot;ABCD 0000 4821&quot;   # local private application data
+normalised_value = normalise(full_value)  # exact statement matching
+masked_value     = &quot;XXXX4821&quot;         # ordinary display
 
 def normalise(n: str) -&gt; str:
     return re.sub(r&quot;[\s\-]&quot;, &quot;&quot;, n).upper()
 </code></pre>
-<p>The encryption and fingerprint keys are independent per-installation secrets held in
-<code>.env</code> or <code>.env.production</code>, outside the database. Authenticated additional data
-binds an envelope to its household, account, identifier and kind. Ordinary account payloads return
-only the mask; an explicit owner-authenticated, no-store reveal may return one complete source
-identifier. A source that printed only a mask remains mask-only.</p>
+<p>No identifier encryption key exists. Ordinary account payloads return only the mask; an explicit
+owner-authenticated, no-store reveal may return one complete stored source identifier. A source that
+printed only a mask remains mask-only.</p>
 <p>The same treatment applies to PAN, Emirates ID and passport numbers — last four for human
 recognition, nothing more.</p>
 <hr>
@@ -625,7 +620,7 @@ recognition, nothing more.</p>
 </tr>
 <tr>
 <td><strong>At rest — database</strong></td>
-<td>Full-disk encryption on the VPS; Postgres data on an encrypted volume</td>
+<td>Owner-selected host controls; volume encryption is recommended but not required by OneLedger</td>
 </tr>
 <tr>
 <td><strong>At rest — storage</strong></td>
@@ -633,7 +628,7 @@ recognition, nothing more.</p>
 </tr>
 <tr>
 <td><strong>At rest — local</strong></td>
-<td>Full-disk encryption required (FileVault / LUKS / BitLocker). <code>~/statements/</code> on the encrypted volume</td>
+<td>Owner-controlled machine; FileVault / LUKS / BitLocker is recommended but is not an application gate</td>
 </tr>
 <tr>
 <td><strong>Access</strong></td>
@@ -645,7 +640,7 @@ recognition, nothing more.</p>
 </tr>
 <tr>
 <td><strong>Backups</strong></td>
-<td>Encrypted at rest wherever they are stored, including the off-machine copy</td>
+<td>Treated as private financial data; encryption is recommended but remains the owner's choice</td>
 </tr>
 </tbody></table>
 <h3 id="row-level-security">Row Level Security</h3>
@@ -707,9 +702,9 @@ across forty tables.</li>
 <td>Never stored, so never rotated</td>
 </tr>
 <tr>
-<td>Backup encryption key</td>
-<td>Password manager, offline</td>
-<td>Annually</td>
+<td>Optional backup encryption key</td>
+<td>Owner-selected storage when backup encryption is enabled</td>
+<td>According to the owner's backup policy</td>
 </tr>
 </tbody></table>
 <p><strong>Controls</strong></p>
@@ -762,7 +757,7 @@ decision is not made in this document, and not made implicitly by shipping a fea
 data and use the same owner authorization and log-redaction rules as the ledger. Store only metadata
 allowed by the storage boundary; a policy register does not justify a financial-action credential.
 A complete source financial identifier is stored only when the product needs to match or show it,
-through ADR-0021's encrypted identifier relation rather than an arbitrary text field.</p>
+through ADR-0021's household-scoped identifier relation rather than an arbitrary text field.</p>
 <p>Owner exports are delivered through authorized routes, contain only selected records and documents,
 and omit secrets. Temporary archives must not be publicly served and must be removed after a bounded
 retrieval period. Record the export event without logging financial contents. A downloaded archive
@@ -803,7 +798,7 @@ re-hashing every account number).</li>
 <ol>
 <li>Invalidate all sessions by rotating SESSION_SECRET.</li>
 <li>Rotate the database password.</li>
-<li>Full-disk encryption means data at rest is protected; the key is the exposure.</li>
+<li>If full-disk encryption is enabled, follow the operating system's recovery process.</li>
 <li>Change the Google account password and review its active sessions.</li>
 </ol>
 <p><strong>Repository accidentally made public</strong></p>
@@ -833,7 +828,7 @@ than editing history.</li>
 ☐  No NEXT_PUBLIC_ variable holds a secret
 ☐  .env git-ignored; .env.example current
 ☐  Pre-commit secret scan active and tested with a fake key
-☐  Full-disk encryption on any machine holding downloaded statements
+☐  Full-disk encryption choice reviewed for machines holding statements
 ☐  ~/statements/ excluded from any cloud sync
 ☐  Backup ran in the last 24 hours
 ☐  Restore tested in the last 90 days
