@@ -132,6 +132,7 @@ export function TransactionsScreen({
   const [applied, setApplied] = useState<Filters>(NO_FILTERS);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const [entryOpen, setEntryOpen] = useState(false);
   // The row whose peers are open for manual linking, if any.
   const [linking, setLinking] = useState<TransactionRow>();
   const [classifying, setClassifying] = useState<{
@@ -178,6 +179,21 @@ export function TransactionsScreen({
     if (row.currency === currency.code) return undefined;
     const value = currency.code === household.baseCurrency ? row.amountBase : row.amountSecondary;
     return formatMoney(value, currency);
+  }
+
+  const transferLegs = new Map<string, Array<TransactionRow>>();
+  for (const row of rows) {
+    if (!row.transferId) continue;
+    transferLegs.set(row.transferId, [...(transferLegs.get(row.transferId) ?? []), row]);
+  }
+
+  function transferMovement(row: TransactionRow) {
+    if (!row.transferId) return undefined;
+    const pair = transferLegs.get(row.transferId);
+    if (!pair || pair.length !== 2) return undefined;
+    const source = pair.find((leg) => leg.amount.startsWith("-")) ?? pair[0];
+    const destination = pair.find((leg) => leg.id !== source.id);
+    return destination && source.id === row.id ? { source, destination } : undefined;
   }
 
   // The frozen rate the displayed conversion actually used: rate, date and carried status
@@ -285,17 +301,33 @@ export function TransactionsScreen({
   }
 
   return (
-    <section className="workspace-content" aria-labelledby="transactions-title">
-      <p className="eyebrow">The ledger</p>
-      <h1 className="workspace-title" id="transactions-title">Transactions</h1>
-      <p className="lede">
-        {count === 0
-          ? "No transactions yet."
-          : `${count} ${count === 1 ? "row" : "rows"} · original currency first, converted second.`}
-      </p>
+    <section className="workspace-content transactions-screen" aria-labelledby="transactions-title">
+      <header className="transaction-page-head">
+        <div>
+          <h1 className="workspace-title" id="transactions-title">Transactions</h1>
+          <p className="transaction-summary">
+            {count} {count === 1 ? "transaction" : "transactions"} · {active.length} active{" "}
+            {active.length === 1 ? "account" : "accounts"}
+          </p>
+        </div>
+        <button
+          aria-controls="manual-transaction-entry"
+          aria-expanded={entryOpen}
+          className="text-action"
+          onClick={() => setEntryOpen((open) => !open)}
+          type="button"
+        >
+          {entryOpen ? "Close manual entry" : "Record a transaction"}
+        </button>
+      </header>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
-      <form aria-label="Record a transaction" className="account-form" onSubmit={record}>
+      {entryOpen && <form
+        aria-label="Record a transaction"
+        className="account-form transaction-entry-form"
+        id="manual-transaction-entry"
+        onSubmit={record}
+      >
         <label className="select-field">
           <span>Account</span>
           <select
@@ -374,17 +406,18 @@ export function TransactionsScreen({
             {busy ? "Saving…" : "Record transaction"}
           </button>
         </div>
-      </form>
+      </form>}
 
       <form
         aria-label="Filter the ledger"
-        className="account-form"
+        className="transaction-filters"
         onSubmit={(event) => {
           event.preventDefault();
           setApplied(filters);
           void reload(filters, 0, false);
         }}
       >
+        <div className="transaction-filter-main">
         <label className="text-field">
           <span>Search descriptions</span>
           <input
@@ -480,6 +513,10 @@ export function TransactionsScreen({
             value={filters.country}
           />
         </label>
+        </div>
+        <details className="transaction-filter-advanced">
+          <summary>More filters</summary>
+          <div className="transaction-filter-advanced-fields">
         <label className="text-field">
           <span>Tag</span>
           <input
@@ -546,6 +583,8 @@ export function TransactionsScreen({
             <option value="asc">Oldest / smallest first</option>
           </select>
         </label>
+          </div>
+        </details>
         <div className="account-form-actions">
           <button className="primary-action" disabled={busy} type="submit">Apply filters</button>
         </div>
@@ -570,11 +609,11 @@ export function TransactionsScreen({
 
       {rows.length === 0 ? (
         <p className="lede">
-          The ledger is empty for this view. Record your first transaction with the form above;
-          statement import arrives with M2.
+          The ledger is empty for this view. Use Record a transaction for a manual entry, or import
+          a statement.
         </p>
       ) : (
-        <table className="account-table">
+        <table className="account-table transaction-ledger">
           <caption className="visually-hidden">The transaction ledger</caption>
           <thead>
             <tr>
@@ -586,14 +625,44 @@ export function TransactionsScreen({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td>{row.bookedDate}</td>
-                <td>
-                  {row.descriptionRaw}
-                  {row.transferId && (
-                    <span aria-label="Transfer leg, linked to its peer" role="img"> 🔗</span>
-                  )}
+            {rows.map((row) => {
+              const movement = transferMovement(row);
+              return (
+              <tr className={row.transferId ? "transaction-transfer-row" : undefined} key={row.id}>
+                <td className="transaction-date">{row.bookedDate}</td>
+                <td className="transaction-description">
+                  {movement ? (
+                    <div
+                      aria-label={`Confirmed transfer from ${movement.source.accountName} to ${movement.destination.accountName}`}
+                      className="transaction-transfer-movement"
+                    >
+                      <span
+                        aria-label="Transfer leg, linked to its peer"
+                        className="transaction-transfer-badge"
+                        role="img"
+                      >
+                        TRANSFER
+                      </span>
+                      <span className="transaction-transfer-stop">
+                        <strong>{movement.source.accountName}</strong>
+                        <small>{original(movement.source)}</small>
+                      </span>
+                      <span className="transaction-transfer-to">to</span>
+                      <span className="transaction-transfer-stop destination">
+                        <strong>{movement.destination.accountName}</strong>
+                        <small>{original(movement.destination)}</small>
+                      </span>
+                    </div>
+                  ) : row.transferId ? (
+                    <span
+                      aria-label="Transfer leg, linked to its peer"
+                      className="transaction-transfer-badge"
+                      role="img"
+                    >
+                      TRANSFER
+                    </span>
+                  ) : null}
+                  <span className="transaction-description-raw">{row.descriptionRaw}</span>
                   {!row.transferId && !row.isSplitParent && (
                     <button
                       aria-label={`Link ${row.descriptionRaw} as a transfer`}
@@ -617,7 +686,7 @@ export function TransactionsScreen({
                     />
                   </label>
                 </td>
-                <td>
+                <td className="transaction-category">
                   <label className="select-field">
                     <span className="visually-hidden">Category for {row.descriptionRaw}</span>
                     <select
@@ -646,8 +715,8 @@ export function TransactionsScreen({
                     <small>Category no longer listed</small>
                   )}
                 </td>
-                <td>{row.accountName}</td>
-                <td>
+                <td className="transaction-account">{row.accountName}</td>
+                <td className={row.amount.startsWith("-") ? "transaction-amount" : "transaction-amount positive"}>
                   <span>{original(row)}</span>
                   {bankOriginal(row) && <small> · originally {bankOriginal(row)}</small>}
                   {converted(row) && <small> · {converted(row)}</small>}
@@ -657,7 +726,8 @@ export function TransactionsScreen({
                   </small>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}

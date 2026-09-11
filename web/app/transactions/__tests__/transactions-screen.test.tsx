@@ -141,6 +141,28 @@ function renderScreen(
 afterEach(cleanup);
 
 describe("the transactions screen", () => {
+  it("keeps the compact filters and ledger ahead of optional manual entry", () => {
+    renderScreen([transaction({})], 1);
+
+    expect(screen.getByText("1 transaction · 1 active account")).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Record a transaction" })).toBeNull();
+    expect(screen.getByRole("form", { name: "Filter the ledger" }).className).toContain(
+      "transaction-filters",
+    );
+    expect(screen.getByRole("table", { name: "The transaction ledger" }).className).toContain(
+      "transaction-ledger",
+    );
+
+    const entryToggle = screen.getByRole("button", { name: "Record a transaction" });
+    expect(entryToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(entryToggle.getAttribute("aria-controls")).toBe("manual-transaction-entry");
+
+    fireEvent.click(entryToggle);
+    expect(screen.getByRole("form", { name: "Record a transaction" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Close manual entry" }).getAttribute("aria-expanded"))
+      .toBe("true");
+  });
+
   it("renders money exactly as sent, original first and converted second", () => {
     renderScreen([transaction({})], 1);
     const row = screen.getByText("COFFEE").closest("tr");
@@ -206,7 +228,7 @@ describe("the transactions screen", () => {
 
   it("teaches the first action when the ledger is empty", () => {
     renderScreen([], 0);
-    expect(screen.getByText(/Record your first transaction/)).toBeDefined();
+    expect(screen.getByText(/Use Record a transaction for a manual entry/)).toBeDefined();
   });
 
   it("marks a transfer leg with its peer link", () => {
@@ -323,6 +345,7 @@ it("filters offer every ledger type while entry stays manual-only", () => {
   const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
   const filterType = within(filterForm).getByLabelText("Type");
   expect(within(filterType).queryByRole("option", { name: "transfer_out" })).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Record a transaction" }));
   const entryForm = screen.getByRole("form", { name: "Record a transaction" });
   const entryType = within(entryForm).getByLabelText("Type");
   expect(within(entryType).queryByRole("option", { name: "transfer_out" })).toBeNull();
@@ -339,6 +362,7 @@ it("disables category editing on a split container", () => {
 
 it("labels a subcategory with its parent path", () => {
   renderScreen([transaction({})], 1);
+  fireEvent.click(screen.getByRole("button", { name: "Record a transaction" }));
   const entryForm = screen.getByRole("form", { name: "Record a transaction" });
   const entryCategory = within(entryForm).getByLabelText("Category");
   expect(
@@ -601,6 +625,29 @@ describe("transfers on the transactions screen", () => {
   function legs() {
     return screen.queryAllByRole("img", { name: "Transfer leg, linked to its peer" });
   }
+
+  it("presents both confirmed legs as one connected transfer movement", () => {
+    const outgoing = linked("txn-out", "tr-1");
+    const incoming = {
+      ...linked("txn-in", "tr-1"),
+      accountId: "acct-card-2",
+      accountName: "Savings account",
+      amount: "6210.0000",
+      currency: "XIN",
+    };
+
+    renderScreen([outgoing, incoming], 2);
+
+    const movement = screen.getByLabelText(
+      "Confirmed transfer from Ledger Card to Savings account",
+    );
+    expect(movement.textContent).toContain("TRANSFER");
+    expect(movement.textContent).toContain("-A 310.50");
+    expect(movement.textContent).toContain("I 6,210.00");
+    expect(screen.getAllByRole("row").filter((row) =>
+      row.className.includes("transaction-transfer-row"),
+    )).toHaveLength(2);
+  });
 
   it("offers Link as transfer only on a row that is not already a leg", () => {
     // A leg already linked cannot be linked again; offering it would lead only to a refusal.
