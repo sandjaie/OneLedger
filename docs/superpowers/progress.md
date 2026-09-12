@@ -6,7 +6,7 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 12 September 2026.
+Updated: 13 September 2026.
 
 ## Current position
 
@@ -15,8 +15,8 @@ Updated: 12 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Land the reviewed Task 3 PR into `develop`; Task 4 remains blocked until that merge | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-3--import-groups-evidence-checkpoints-and-reviews) |
-| Implementation branch | Task 3 is active on `feature/p1-6c-investment-evidence` from `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-3--import-groups-evidence-checkpoints-and-reviews) |
+| Next product action | Dispatch Task 4 — allocations and legacy-link removal — from the updated `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-4--allocations-and-legacy-link-removal) |
+| Implementation branch | None — Task 3 is merged and Task 4 has not begun | [PR #167](https://github.com/sandjaie/OneLedger/pull/167) |
 
 ## Canonical phase status
 
@@ -69,7 +69,7 @@ requires a separate owner request.
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Phase 1.6 Task 1 | **Complete via PR #165** after full `/verify`, all ten local-review findings resolved, confirmation approval and green pre-push gates; 1,351 API tests ran with live database paths enabled | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
 | Phase 1.6 Task 2 | **Complete via PR #166** — immutable events, rebuildable holdings and acquisition-origin lots are on `develop` | [PR #166](https://github.com/sandjaie/OneLedger/pull/166) |
-| Phase 1.6 Task 3 | **Delivery branch complete** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and the branch is awaiting confirmation review before its first push | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-3--import-groups-evidence-checkpoints-and-reviews) |
+| Phase 1.6 Task 3 | **Complete via PR #167** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and confirmation review found no remaining issues | [PR #167](https://github.com/sandjaie/OneLedger/pull/167) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
