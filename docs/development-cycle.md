@@ -19,7 +19,7 @@ and reports on a tree that no longer matches the one it reviewed.
 
 | Skill | Reads | Produces | Never |
 |---|---|---|---|
-| `/oneledger-plan-review` | a plan or spec, the ADRs and design documents, the current tree | findings, a size forecast per slice, a revised slice and branch table | edits the plan, dispatches a task |
+| `/oneledger-plan-review` | a plan or spec, the ADRs and design documents, the current tree | findings, a size forecast per outcome, a revised task and branch table | edits the plan, dispatches a task |
 | `/oneledger-code-review` | the branch diff against `develop`, the tree around it | findings triaged blocking / non-blocking, with file and line | edits code, fixes a finding, pushes, opens a PR |
 | `/oneledger-code-hygiene` | the whole tree at a phase boundary | findings grouped mechanical / judgement, and a proposed `chore/` branch | deletes anything, edits a migration, touches a test |
 
@@ -30,19 +30,20 @@ nothing.
 
 ### 1. Plan the phase
 
-The phase's dated execution-map plan goes in `docs/superpowers/plans/`, shaped per `CLAUDE.md`.
-The master sequence is the current phase delivery plan; each later phase gets its own dated plan
-written immediately before its implementation, against the tree at that time.
+The Phase N.M outcome's dated execution-map plan goes in `docs/superpowers/plans/`, shaped per
+`CLAUDE.md`. The canonical sequence lives in
+`docs/product/master-implementation-plan.html`; each unimplemented outcome gets its dated plan
+written immediately before implementation, against the tree at that time.
 
 ### 2. Gate — `/oneledger-plan-review`, once per new plan
 
 **Trigger: a phase plan or spec has just been written, or materially changed, and nothing has
 been dispatched from it yet.** One pass: apply the findings, then dispatch. It does not re-run
-per slice, and it does not run at all for work an existing reviewed plan already covers.
+per task, and it does not run at all for work an existing reviewed plan already covers.
 
-### 3. Implement the slice
+### 3. Implement the planned outcome
 
-One implementation agent at a time, on the slice's declared branch, TDD in the plan's order. A
+One implementation agent at a time, on the plan's declared branch, TDD in the plan's order. A
 deviation from the plan is legitimate where repository reality requires it, and is recorded in
 the PR and `progress.md` — never by editing the plan after dispatch.
 

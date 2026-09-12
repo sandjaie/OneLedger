@@ -63,3 +63,17 @@ def test_delivery_terminology_allows_crosswalk_and_excludes_history(
     problems = check_docs.check_delivery_terminology([master])
 
     assert problems == []
+
+
+def test_delivery_terminology_ignores_historical_link_targets(
+    tmp_path: pathlib.Path,
+) -> None:
+    canonical = tmp_path / "progress.md"
+    canonical.write_text(
+        "[Phase 1.1 evidence](reports/2026-09-09-slice-1.1-handoff.md)\n"
+        '<a href="reports/2026-09-08-m2-evidence.html">import evidence</a>\n'
+    )
+
+    problems = check_docs.check_delivery_terminology([canonical])
+
+    assert problems == []

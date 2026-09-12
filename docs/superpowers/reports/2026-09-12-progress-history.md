@@ -13,14 +13,16 @@ Snapshot date: 12 September 2026.
 
 ## Where the work stands
 
-Delivery follows the [phase delivery plan](../plans/2026-09-09-phase-delivery-plan.md) — six
-phases, one term; the plan maps the old phase/milestone names. Sections further down record
-delivered work under its old numbering and are not renamed.
+Delivery now follows the
+[canonical master plan](../../product/master-implementation-plan.html#historical-numbering-crosswalk).
+This snapshot preserves the earlier six-phase wording and maps its former names through that
+crosswalk. Sections further down record delivered work under their original numbering and are not
+renamed.
 
 | Phase | Status | Plan |
 | --- | --- | --- |
-| 0 — foundations and manual ledger (old Phase 0, M1a, M1b, M2 tasks 1–5c) | Delivered; live Google identity gates still open | [phase plan](../plans/2026-09-09-phase-delivery-plan.md) |
-| 1 — the complete application | **Active** — the current delivery | [phase plan](../plans/2026-09-09-phase-delivery-plan.md) |
+| 0 — foundations and manual ledger (old Phase 0, M1a, M1b, M2 tasks 1–5c) | Delivered; live Google identity gates still open | [current crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk) |
+| 1 — the complete application | **Active** — the current delivery | [current crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk) |
 | 2 — trust and depth | Not started | planned when it starts |
 | 3 — planning and resilience | Not started | planned when it starts |
 | 4 — analysis | Not started | planned when it starts |
@@ -532,7 +534,7 @@ Entry criterion satisfied: the FX backfill reaches the 01 Jan 2024 anchor (ADR-0
 | 5c — document storage | `feature/m2-t5c-document-storage` | Complete | [PR #49](https://github.com/sandjaie/OneLedger/pull/49), merged as `953faf6`; branch deleted |
 
 Tasks 5d–9c were re-planned before dispatch into Phase 1 slices 1.1–1.7 of the
-[phase delivery plan](../plans/2026-09-09-phase-delivery-plan.md) (9 September 2026); their scope
+[current historical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk); their scope
 ships there, none of it dropped.
 
 ## Phase 1 · M1b — manual transactions and taxonomy
@@ -634,4 +636,5 @@ tests do not substitute for a live Google identity check.
 | Phase 2C — deeper analysis | Not started |
 | V2 | Not started |
 
-Scope and sequencing remain in the [master plan](../plans/implementation-plan.md).
+Current scope and sequencing live in the
+[master implementation plan](../../product/master-implementation-plan.html).

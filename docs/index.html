@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./product/prd.html">Product requirements</a></li>
 <li><a href="./product/roadmap.html">Roadmap</a></li>
+<li><a href="./product/master-implementation-plan.html">Master implementation plan</a></li>
 <li><a href="./product/finance-os.html">Finance OS requirements</a></li>
 <li><a href="./product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
@@ -330,8 +331,7 @@ body {
     </div>
 <div class="register-section">
       <h2>Plans and references</h2>
-      <ul><li><a href="./superpowers/plans/implementation-plan.md">Implementation plan</a></li>
-<li><a href="./superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+      <ul><li><a href="./superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="./superpowers/phase-0-pull-requests.md">Phase 0 pull requests</a></li>
 <li><a href="./superpowers/progress.md">Implementation progress</a></li>
 <li><a href="./superpowers/schema.md">Schema reference</a></li>
@@ -351,7 +351,7 @@ body {
 <li><a href="#" aria-current="page">ADR index</a></li>
 <li><a href="./adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
 <li><a href="./adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
-<li><a href="./adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="./adr/0003-defer-ai-to-v2.html">0003 Defer AI</a></li>
 <li><a href="./adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
 <li><a href="./adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
 <li><a href="./adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
@@ -376,7 +376,7 @@ body {
 <hr>
 <h2 id="layout">Layout</h2>
 <pre><code>docs/
-├── product/       what it does and when      01 PRD · 08 Roadmap · 11 UI
+├── product/       what it does and when      PRD · Roadmap · Master plan · UI
 ├── design/        how it works               02 Architecture · 03 Data model · 04 FX
 │                                             05 Ingestion · 06 Classification
 │                                             07 Transfers · 10 API contracts
@@ -387,8 +387,10 @@ body {
 </code></pre>
 <hr>
 <h2 id="reading-order">Reading order</h2>
-<p><strong>If you have 10 minutes</strong> — read <a href="./product/prd.html">prd.html</a> §1–§3 and <a href="./product/roadmap.html">roadmap.html</a>.
-That is the what and the when.</p>
+<p><strong>If you have 10 minutes</strong> — read <a href="./product/prd.html">prd.html</a> §1–§3,
+<a href="./product/roadmap.html">roadmap.html</a>, and the
+<a href="./product/master-implementation-plan.html">master implementation plan</a>. These are the
+product intent, approved outcomes, and canonical delivery order.</p>
 <p><strong>If you are about to write code</strong> — read in this order:</p>
 <table>
 <thead>
@@ -456,10 +458,15 @@ That is the what and the when.</p>
 <tr>
 <td>12</td>
 <td><a href="./product/roadmap.html">roadmap.html</a></td>
-<td>Milestones with acceptance criteria</td>
+<td>Approved Phase N.M outcomes with acceptance criteria</td>
 </tr>
 <tr>
 <td>13</td>
+<td><a href="./product/master-implementation-plan.html">master-implementation-plan.html</a></td>
+<td>The canonical delivery sequence, dependencies, and planning boundaries</td>
+</tr>
+<tr>
+<td>14</td>
 <td><a href="./reference/glossary.html">glossary.html</a></td>
 <td>Keep open in a tab; the vocabulary is used precisely</td>
 </tr>
@@ -538,7 +545,7 @@ here in one place:</p>
 </tr>
 <tr>
 <td>Reporting year</td>
-<td>Calendar year for everything; tax-year views in V2</td>
+<td>Calendar year for everything; tax-year views begin at Phase 5.6</td>
 <td>Q20</td>
 </tr>
 <tr>
@@ -578,7 +585,7 @@ here in one place:</p>
 </tr>
 <tr>
 <td>AI</td>
-<td><strong>Entirely deferred to V2.</strong> No LLM calls in Phase 1 or 2</td>
+<td><strong>Requires Phase 5.1.</strong> Earlier phases contain no model calls</td>
 <td><a href="./adr/0003-defer-ai-to-v2.html">0003</a></td>
 </tr>
 <tr>
@@ -588,39 +595,16 @@ here in one place:</p>
 </tr>
 </tbody></table>
 <hr>
-<h2 id="open-questions">Open questions</h2>
-<p><strong>→ <a href="./superpowers/questions.html">questions.html</a></strong> — <strong>17 of 24 answered.</strong> The remainder are downstream of
-milestones that are not yet scheduled.</p>
+<h2 id="delivery-documents">Delivery documents</h2>
 <table>
-<thead>
-<tr>
-<th>Still open</th>
-<th>Blocks</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Q8 — bulk statement download</td>
-<td>Nothing. Practical only</td>
-</tr>
-<tr>
-<td>Q17 — PPF / EPF / NPS</td>
-<td>M7 completion, not its start</td>
-</tr>
-<tr>
-<td>Q18, Q19 — loans</td>
-<td>M8, which is descheduled because no loan is evidenced</td>
-</tr>
-<tr>
-<td>Q21 — property valuation</td>
-<td>M9&#39;s net-worth completeness, if a property exists</td>
-</tr>
-<tr>
-<td>Q23, Q24 — payslips</td>
-<td>Phase 2</td>
-</tr>
+<thead><tr><th>Document</th><th>Responsibility</th></tr></thead>
+<tbody>
+<tr><td><a href="./product/roadmap.html">Roadmap</a></td><td>Approved product outcomes and success criteria</td></tr>
+<tr><td><a href="./product/master-implementation-plan.html">Master implementation plan</a></td><td>Canonical Phase N.M order and dependencies</td></tr>
+<tr><td><a href="./superpowers/progress.md">Implementation progress</a></td><td>Live status, next action, active gates, and evidence</td></tr>
+<tr><td><a href="./superpowers/project-register.md">Project register</a></td><td>Deferred work, discoveries, unresolved decisions, and risks</td></tr>
+<tr><td><a href="./superpowers/questions.html">Questions</a></td><td>The detailed historical scoping-question record</td></tr>
 </tbody></table>
-<p><strong>→ <a href="./superpowers/plans/implementation-plan.md">implementation-plan.md</a></strong> — the milestone-by-milestone build
-order, derived from these answers.</p>
 <h2 id="how-to-change-these-documents">How to change these documents</h2>
 <p>The specs are version-controlled prose, and they are expected to change — but deliberately.</p>
 <ul>
@@ -628,8 +612,9 @@ order, derived from these answers.</p>
 Do not silently edit the old ADR; mark it <code>Superseded by ADR-XXXX</code>.</li>
 <li>A change to the schema updates <a href="./design/data-model.html">data-model.html</a> <strong>and</strong> ships a migration
 in the same commit.</li>
-<li>A change that moves work between phases updates <a href="./product/roadmap.html">roadmap.html</a>
-and records its scope tradeoff.</li>
+<li>A new idea enters the <a href="./superpowers/project-register.md">project register</a>. Owner
+approval updates <a href="./product/roadmap.html">roadmap.html</a> and the
+<a href="./product/master-implementation-plan.html">master implementation plan</a> together.</li>
 <li>All new implementation plans go in <code>docs/superpowers/plans/</code>, and all new
 specifications go in <code>docs/superpowers/specs/</code>. Existing Phase 0 plans and references
 live directly in <code>docs/superpowers/</code>.</li>

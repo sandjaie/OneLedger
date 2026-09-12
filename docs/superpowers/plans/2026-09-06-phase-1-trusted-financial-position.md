@@ -1,5 +1,9 @@
 # Phase 1 — Trusted Financial Position Implementation Plan
 
+> **Historical numbering:** This delivered plan retains the identifiers used at review time. Use
+> the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for current Phase N.M identifiers.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Execution status is maintained only in
@@ -22,7 +26,7 @@ TypeScript, Tailwind and Vitest, Docker Compose.
 **Spec:** [Phase 1 specification](../specs/2026-09-06-phase-1-trusted-financial-position.md).
 Read it with this plan; it carries the verbatim Codex findings, the reporting-pair rule, the
 mockup rulings and the milestone entry criteria. Supporting sources:
-[master implementation plan](implementation-plan.md), [roadmap](../../product/roadmap.html),
+[master implementation plan](../../product/master-implementation-plan.html), [roadmap](../../product/roadmap.html),
 [finance OS requirements](../../product/finance-os.html),
 [UI and information architecture](../../product/ui-information-architecture.html),
 [data model](../../design/data-model.html),

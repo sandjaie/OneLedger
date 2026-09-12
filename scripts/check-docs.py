@@ -34,6 +34,7 @@ HISTORICAL_CROSSWALK = re.compile(
     r"(?ms)<!-- historical-numbering-crosswalk:start -->.*?"
     r"<!-- historical-numbering-crosswalk:end -->"
 )
+DELIVERY_LINK_TARGETS = re.compile(r'href="[^"]*"|\]\([^)]*\)')
 RETIRED_DELIVERY_TERMS = (
     ("M-number", re.compile(r"\bM\d+[a-z]?\b")),
     ("lettered Phase 2", re.compile(r"\bPhase\s+2[ABC]\b")),
@@ -186,6 +187,9 @@ def check_delivery_terminology(
             continue
         text = HISTORICAL_CROSSWALK.sub(
             lambda match: "\n" * match.group(0).count("\n"), path.read_text()
+        )
+        text = DELIVERY_LINK_TARGETS.sub(
+            lambda match: re.sub(r"[^\n]", " ", match.group(0)), text
         )
         for label, pattern in RETIRED_DELIVERY_TERMS:
             for match in pattern.finditer(text):

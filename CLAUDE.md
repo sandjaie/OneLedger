@@ -5,10 +5,11 @@
 | Need | Open |
 |---|---|
 | What is complete and what to do next | `docs/superpowers/progress.md` — the single maintained implementation tracker |
-| What ships in which phase | the master phase plan — `docs/superpowers/progress.md` names the current one at its top; one term, "phase", with the old phase/milestone names mapped |
+| What ships in which phase | `docs/product/master-implementation-plan.html` — the single canonical Phase N.M sequence and dependency map |
 | What to ship, and when | `docs/git-workflow.md` — the delivery cycle, the diff budget and the review gates |
 | How Phase 0 was decomposed | `docs/superpowers/phase-0-pull-requests.md` — its PR breakdown, kept as the record |
-| Global constraints | `docs/superpowers/plans/implementation-plan.md` — its sequencing is superseded by the phase plan; its constraints stand |
+| Product scope and acceptance | `docs/product/roadmap.html` — approved outcomes and success criteria |
+| Deferred items and new discoveries | `docs/superpowers/project-register.md` — controlled intake pending review or approval |
 | How branches, phases and releases flow | `docs/git-workflow.md` — the single branching and release reference |
 | **When to run which gate, and what it may do** | `docs/development-cycle.md` — the ordered cycle; the gates report and do not modify code |
 | Product-review requirements | `docs/product/finance-os.html` — financial meaning, planning, resilience and actions |
@@ -17,9 +18,9 @@
 | Decisions in force | `docs/adr/index.html`; replaced ones kept apart in `superseded.html` |
 
 **When documents disagree**, and they do: ADRs decide, `docs/design/` and `docs/operations/`
-specify, `docs/superpowers/` executes. A plan contradicting a design document is a bug in one of
-them —
-say which, in the PR, and fix it there rather than working around it.
+specify, the roadmap owns product scope, the master implementation plan owns delivery order, and
+`docs/superpowers/` owns detailed execution and live progress. A plan contradicting an owning
+document is a bug — say which in the PR and fix it there rather than working around it.
 
 `docs/superpowers/schema.md` is the table reference. It carries no trigger, function, view or RLS
 policy,
@@ -27,32 +28,34 @@ so a migration having *more* than it shows is expected; a migration *disagreeing
 
 ## Planning location and progress ownership
 
-All new implementation plans go in `docs/superpowers/plans/`; use dated filenames per feature.
-All new specifications go in `docs/superpowers/specs/`. The current master plan is whichever
-one `docs/superpowers/progress.md` names at its top — the tracker owns that pointer, so a
-re-plan edits the tracker, not this file. The existing Phase 0 plans and references live
-directly in `docs/superpowers/`.
+The canonical delivery order lives permanently in
+`docs/product/master-implementation-plan.html`. All new implementation plans go in
+`docs/superpowers/plans/`; use dated filenames per Phase N.M outcome. All new specifications go in
+`docs/superpowers/specs/`. New discoveries, deferred work, unresolved decisions, and longer-term
+risks enter `docs/superpowers/project-register.md`; only owner-approved product outcomes move into
+the roadmap and master plan. Existing Phase 0 plans and references remain historical records under
+`docs/superpowers/`.
 
-### Plans are execution maps (every plan and spec written after Phase 1's)
+### Plans are execution maps
 
 An implementation plan is an execution map, not a pre-written patch. Do not include complete
 production implementations or complete test implementations unless the task is a trivial
-deterministic repair. This owner rule overrides skill defaults that require full embedded code
-in plan steps; Phase 1's existing plan and spec predate it and stay as delivered.
+deterministic repair. This owner rule overrides skill defaults that require full embedded code in
+plan steps; historical plans and specifications stay as delivered.
 
 For feature work, a task specifies: outcome; affected files/modules; dependencies;
 interfaces/contracts; invariants; security requirements; required test behaviours; validation
 commands; acceptance criteria; and `Workspace`, `Branch`, `Base and PR target`.
 
 **A task block runs to about 40 lines, and a plan's non-task sections to about 400.** The budget is
-per block, not per document: a milestone sliced into twenty task-sized branches needs twenty
-blocks, and capping the total would only push the slicing back the way it came. Past those limits
+per block, not per document: an outcome requiring twenty task-sized branches needs twenty blocks,
+and capping the total would only push the decomposition back the way it came. Past those limits
 the plan is carrying something that belongs elsewhere: architecture decisions and table semantics go
 to
 `docs/superpowers/specs/`, `docs/design/` or an ADR, which are reviewed once rather than on every
 task. **Each task must also fit the diff budget** ([docs/git-workflow.md](docs/git-workflow.md))
-— a task that cannot is split before dispatch, or ships as more than one PR under the same slice
-number. `/oneledger-plan-review` checks both and does the splitting.
+— a task that cannot is split before dispatch, or ships as more than one PR under the same Phase
+N.M identifier. `/oneledger-plan-review` checks both and does the splitting.
 
 Use code snippets only when they define:
 
@@ -77,7 +80,9 @@ publish task state elsewhere. Private Superpowers recovery notes may support res
 are not another published tracker.
 
 The documentation index is a navigation page. The README introduces the project; the roadmap
-defines scope, sequence and acceptance criteria; plans/specs define work and contracts. Keep PR
+defines approved outcomes and acceptance criteria; the master implementation plan defines sequence
+and dependencies; dated plans/specs define work and contracts; the project register holds deferred
+or unapproved information. Keep PR
 merge lists, current-phase banners, test-run summaries and pending-work recaps out of those files.
 Use a neutral link to the progress file where needed. Dated verification reports and PR reviews
 are historical evidence, not live trackers; retain their results without refreshing them as status.

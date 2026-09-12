@@ -1,5 +1,10 @@
 # Local statement identities and automatic account resolution
 
+> **Historical numbering:** This delivered specification completed work now mapped to Phase 1.5.
+> Use the
+> [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for the current sequence.
+
 Owner-approved design, 11 September 2026. This extends slice 1.8 after Tasks 8a1–8b were
 delivered. It replaces the remaining manual institution/card mapping acceptance with
 statement-derived institution and account resolution, and adds masked-by-default owner reveal.

@@ -314,6 +314,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="../product/prd.html">Product requirements</a></li>
 <li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/master-implementation-plan.html">Master implementation plan</a></li>
 <li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -337,8 +338,7 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+      <ul><li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="../superpowers/questions.html">Questions</a></li></ul>
     </div>
 <div class="register-section">
@@ -354,7 +354,7 @@ body {
 <li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
 <li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI</a></li>
 <li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
 <li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
 <li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
@@ -596,7 +596,7 @@ CREATE POLICY household_isolation ON &lt;table&gt;
 <p><strong>Tables that carry system seed rows need a wider read policy.</strong> <code>institution</code>, <code>category</code>,
 <code>merchant</code> and <code>security</code> use a nullable <code>household_id</code>, where <code>NULL</code> means &quot;shipped with the
 product&quot;. <code>NULL = &lt;uuid&gt;</code> evaluates to <code>NULL</code>, not <code>true</code>, so the policy above would hide every
-seeded institution and the entire seed taxonomy — breaking M1 and M4 outright:</p>
+seeded institution and the entire seed taxonomy — breaking Phase 0.4 and Phase 1.3 outright:</p>
 <pre><code class="language-sql">-- read: own rows plus the shared seed set
 CREATE POLICY household_read ON &lt;seeded_table&gt; FOR SELECT
   USING (household_id IS NULL OR household_id = current_household_id());
@@ -888,7 +888,7 @@ broader planned <code>audit_log</code>, and V23 adds no mutation API or backgrou
 <p>Method in <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7. <code>unexplained_base</code> is
 displayed in the UI (Invariant I7) — a non-trivial residual indicates missing data, which is
 exactly what the user needs to know.</p>
-<p>The unapplied attribution table in <a href="../superpowers/schema.md">schema.md</a> is an earlier reference shape. Align it with F03 during M9b design before writing its migration; preserve applied V1–V5.</p>
+<p>The unapplied attribution table in <a href="../superpowers/schema.md">schema.md</a> is an earlier reference shape. Align it with F03 during Phase 2.2 design before writing its migration; preserve applied V1–V5.</p>
 <h3 id="phase-2-tables">Phase 2 tables</h3>
 <p><strong>Planning boundary:</strong> Phase 0 applies V1–V5. The table shapes below describe later
 work, not already-applied migrations. The accepted <a href="../product/finance-os.html">finance OS
@@ -1047,7 +1047,7 @@ targets do not exist yet.</p>
 that creates its target</strong> — not earlier, and not all together in a trailing migration. V12 already
 did this for the four whose targets it creates (<code>source_document_id</code>, <code>receipt_document_id</code>,
 <code>import_batch_id</code>, <code>statement_layout_id</code>); <code>classification_rule_id</code> gains its foreign key with
-M4&#39;s migration. The clauses below are the remaining eventual set (<code>schema.md</code> section
+Phase 1.3's migration. The clauses below are the remaining eventual set (<code>schema.md</code> section
 <code>0018</code>), each added by the migration that creates the table it points at:</p>
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),

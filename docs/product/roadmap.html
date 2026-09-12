@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./prd.html">Product requirements</a></li>
 <li><a href="#" aria-current="page">Roadmap</a></li>
+<li><a href="./master-implementation-plan.html">Master implementation plan</a></li>
 <li><a href="./finance-os.html">Finance OS requirements</a></li>
 <li><a href="./ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
@@ -330,8 +331,7 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+      <ul><li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="../superpowers/schema.md">Schema reference</a></li>
 <li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
 <li><a href="../superpowers/questions.html">Questions</a></li></ul>
@@ -349,7 +349,7 @@ body {
 <li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
 <li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI</a></li>
 <li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
 <li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
 <li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
@@ -367,470 +367,210 @@ body {
       </nav>
       <main id="document" class="ledger">
         <article class="prose">
-          <h1 id="08--roadmap">08 — Roadmap</h1>
-<p>Phase 0 (foundations) → Phase 1 (trusted position) → Phase 2A (next month)
-→ Phase 2B (resilience) → Phase 2C (deeper analysis) → V2.</p>
-<p><strong>Product review accepted 6 September 2026.</strong> The
-<a href="./finance-os.html">finance OS requirements</a> add planning and follow-through while
-preserving Phase 0 scope. M9 is delivered in two slices so a useful overview arrives sooner.
-New implementation plans live in <a href="../superpowers/plans/implementation-plan.md">docs/superpowers/plans/</a>.</p>
-<p><strong>Sequencing principle: usefulness early.</strong> The milestones are ordered so the tool becomes worth
-opening at M2, not at M10. A personal project that only pays off at the end usually doesn&#39;t reach
-the end.</p>
-<p><strong>No time estimates.</strong> They would be fiction for a project built in evenings around a job. Each
-milestone instead has a <strong>definition of done</strong> that is objectively checkable, and milestones are
-sized so that one is completable in a small number of sessions.</p>
-<hr>
-<h2 id="dependency-graph">Dependency graph</h2>
-<pre><code>Phase 0 — finish the existing foundations
-  → M1 Accounts → M2 First PDF import → M3 Layouts + M4 Classification
-  → M5 Transfers and household outflows
-  → M9a Basic verified overview and monthly review
-  → M6 Cards / M7 Investments / M10 Documents and owner export
-  → M9b Full net worth, history and attribution
-  → Phase 2A Commitments, cash forecast and actions
-  → Phase 2B Emergency reserve, goals and protection
-  → Phase 2C Budgets, discovery and deeper analytics
-  → V2 Optional intelligence and tax reporting
 
-M8 Loans: conditional on Q18; never blocks unrelated work.
-</code></pre>
-<p>M6, M7 and M10 are independent of one another and can be done in any order, or interleaved
-according to which is most useful at the time.</p>
-<p><strong>M8 (Loans) is descheduled.</strong> No loan appears in any of the 71 statements gathered, and Q18 is
-unanswered. Building an amortisation engine for a loan that may not exist is the clearest possible
-case of speculative work. The milestone stays specified below, ready to be scheduled when a loan is confirmed.
-Phase 0 applies V1–V5 only; loan schema and any required references belong to later forward migrations.</p>
+          <h1 id="08--roadmap">08 — Roadmap</h1>
+<p>OneLedger grows through six capability groups: foundations, the daily-use financial core,
+verified history, planning and resilience, analysis, and optional private intelligence. Every
+approved product outcome has one permanent <strong>Phase N.M</strong> identifier.</p>
+<p>This roadmap owns <strong>what the product must deliver and how success is judged</strong>. The
+<a href="./master-implementation-plan.html">master implementation plan</a> owns build order and
+dependencies. Current state and the next action live only in
+<a href="../superpowers/progress.md">implementation progress</a>. Discoveries and deferred work
+live in the <a href="../superpowers/project-register.md">project register</a> until approved.</p>
+<p><strong>Sequencing principle: usefulness early.</strong> Each outcome must leave the product
+more useful on its own. No calendar estimates are implied; acceptance is based on observable
+financial behavior and evidence.</p>
 <hr>
-<h2 id="phase-0--foundations">Phase 0 — Foundations</h2>
-<p>Everything needed before feature work has somewhere to land.</p>
-<p><strong>Deliberately lean.</strong> CI, the VPS deployment and the backup script are
-<em>not</em> here — there is nothing yet to regress, deploy or lose. They land in M1 and M2, where they
-start earning their keep. Nothing is dropped; it is sequenced.</p>
-<p><strong>Deliverables</strong></p>
-<ul>
-<li>Monorepo skeleton per <a href="../design/architecture.html">architecture.html</a> §3.</li>
-<li>The full <code>docker compose</code> stack — <code>web</code>, <code>api</code>, <code>db</code> — running locally. The same file deploys later (<a href="../adr/0014-one-vps-one-compose-file.html">ADR-0014</a>).</li>
-<li>Migrations <code>V1</code>–<code>V5</code>: extensions, reference data, identity, RLS, accounts, FX rates and revocable owner sessions.</li>
-<li>Google OIDC in the service with a pinned, verified subject; a signed 12-hour session backed by revocable server-side state; one seeded owner.</li>
-<li>RLS enabled on every household-scoped table, with a test proving isolation.</li>
-<li>FX backfill: <strong>36 months</strong> of USD/INR from ECB back to 01 Jan 2024, AED/INR derived through the
-peg (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
-<li>Next.js app shell: layout, navigation, auth guard, currency toggle in the header.</li>
-<li><strong>The Python service skeleton</strong> — FastAPI, <code>uv</code>, <code>ruff</code>, <code>mypy --strict</code>, <code>pytest</code>, and the <code>require_owner()</code> dependency protecting every financial route; only health and OIDC bootstrap are public (<a href="../adr/0013-python-backend-service.html">ADR-0013</a>).</li>
-<li><code>.gitignore</code> excluding <code>pdf-statements/</code>, <code>*.pdf</code> and <code>.env</code>; pre-commit secret scan.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li><code>docker compose up</code> gives the whole stack — web, api, db — with no network dependency.</li>
-<li>Google sign-in works locally; a non-permitted account is rejected by the service, not just the UI.</li>
-<li>Settings › FX shows a rate for 2026-09-03 with its source and carry-forward status.</li>
-<li>Settings › FX shows a rate for 2024-01-01 — the backfill reaches the anchor.</li>
-<li>A query as an unauthenticated role returns zero rows from every table.</li>
-<li>No real statement is reachable from <code>git status</code>.</li>
-</ul>
-<hr>
-<h2 id="phase-1--the-ledger">Phase 1 — The Ledger</h2>
-<p>The release described in the brief: <em>Accounts → Statement Import → Transactions → Categories →
-Credit Cards → Monthly Cash Flow → Investments → Loans → Net Worth.</em></p>
-<h3 id="m1--accounts-and-manual-transactions">M1 — Accounts and manual transactions</h3>
-<p>The skeleton everything else hangs from.</p>
-<p><strong>Build</strong></p>
-<ul>
-<li>Account CRUD across all types; institution picker; currency and country.</li>
-<li>Opening balance with date. Computed balance = opening + Σ transactions.</li>
-<li>Signed-balance convention implemented and tested for asset <strong>and</strong> liability accounts.</li>
-<li>Manual transaction entry with the FX freeze applied on save.</li>
-<li>Transaction list: filter, sort, search, inline category edit.</li>
-<li>Seed taxonomy loaded; category management screen.</li>
-<li>Accounts overview grouped by class, showing totals in both currencies.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Every account type creates and lands in the correct net-worth bucket.</li>
-<li>A liability account&#39;s balance moves the right way for a purchase and for a payment.</li>
-<li>Balance equals <code>opening + Σ(amount)</code> to 4 dp for both classes.</li>
-<li>A manually entered AED transaction shows the correct frozen INR value.</li>
-<li>100 manual transactions can be entered and filtered without noticeable lag.</li>
-</ul>
-<h3 id="m2--importer-uae-card-statements-end-to-end">M2 — Importer, UAE card statements, end-to-end</h3>
-<p><strong>The first milestone that makes the tool genuinely useful.</strong> Deliberately narrow: one layout, all
-the way through, rather than four layouts half-done.</p>
-<blockquote>
-<p><strong>Re-planned twice.</strong> It originally read &quot;CSV/Excel, one institution&quot;; Q7 established that <strong>no
-institution provides CSV or Excel</strong> — every layout is PDF. Then
-<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a> made layouts data rather than code, so this
-milestone&#39;s deliverable is the <strong>generic engine plus the mapping UI</strong>, proven by mapping one
-layout. The card statements are that layout: cleanest of the four, they declare their own
-reconciliation anchors in a header block, and one profile covers both cards — 38 of the 71 files.</p>
-</blockquote>
-<p><strong>Build</strong></p>
-<ul>
-<li><strong>The generic extraction engine</strong>, driven by a <code>statement_layout</code> row
-(<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>). No bank name in code.</li>
-<li><strong>The layout mapping UI</strong>: find the header row, auto-propose column bands from its x-positions,
-show the parsed result live, let the user drag and relabel, save the profile.</li>
-<li>Field-name synonyms so auto-proposal works across layouts (<code>Narration</code>/<code>Particulars</code>/
-<code>Description</code>, <code>Withdrawal</code>/<code>Debit</code>).</li>
-<li><code>pdfplumber</code> extraction — columns by x-position, never regex over flattened text.</li>
-<li><strong>One layout mapped end-to-end</strong> — the credit-card statements, being the cleanest and covering
-the most files. Mapped through the UI like any future bank, not written as code.</li>
-<li>The first two quirk handlers: <code>filter_script:arabic</code> and <code>continuation:no_date_and_no_amount</code>.</li>
-<li>Normalization: dates, signs (<code>CR</code> suffix, <code>inverts_sign = True</code>), currency, description cleanup.</li>
-<li>Dedupe: document checksum + transaction fingerprint.</li>
-<li>FX enrichment with fetch-on-missing.</li>
-<li><strong>Reconciliation, blocking on mismatch (I8).</strong></li>
-<li>Original stored on the documents volume; <code>document</code>, <code>import_batch</code>, <code>staged_transaction</code> written.</li>
-<li>Review screen: list, categorize, accept, reject, import.</li>
-<li>Commit in a single database transaction with post-commit balance verification.</li>
-<li>The /import screen: multi-file drop, per-file status, nothing written until Stage batch.</li>
-<li><strong>Deferred in from Phase 0:</strong> CI (lint, type-check, test, migrations-from-empty) and
-<code>scripts/backup-db.sh</code>. Real data lands in the ledger here, so this is where losing it starts to
-matter.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>A layout can be mapped through the UI, saved, and reused with no code change.</li>
-<li>Auto-proposal identifies the header row and proposes usable column bands without hand-editing.</li>
-<li>All 38 card statements import end-to-end with no manual correction of dates or amounts.</li>
-<li>Reconciliation passes for every one.</li>
-<li>Re-importing the same file imports zero rows and names the earlier import.</li>
-<li>An overlapping statement imports only the new rows.</li>
-<li>A deliberately corrupted amount blocks the batch and names the divergent row.</li>
-<li>The commit is atomic — an induced failure mid-import leaves zero rows.</li>
-<li>A backup has run and been restored into a scratch database.</li>
-</ul>
-<h3 id="m3--the-remaining-layouts">M3 — The remaining layouts</h3>
-<p><strong>Mostly a mapping exercise, not a coding one.</strong> If M2 built the engine correctly, this is three
-passes through the mapping UI plus whatever quirks the real statements expose. Layouts are
-described here by their <em>characteristics</em>, because that is what the engine reacts to — the bank
-names are the user&#39;s data, not the product&#39;s.</p>
-<p><strong>Build</strong></p>
-<ul>
-<li>Coordinate extraction hardened for the space-less layout — measured: word grouping does not rescue it in any language, column banding does.</li>
-<li>Multi-line description handling as a <strong>profile rule</strong>, not per-layout code.</li>
-<li>Password-protected PDF support; the import screen prompts per file, nothing persisted.</li>
-<li>Map the remaining three layouts, in ascending difficulty:<ol>
-<li><strong>Declares <code>OPENING BALANCE</code></strong> — reconciliation is straightforward. 2 accounts.</li>
-<li><strong>Running balance only</strong> — reconciliation asserts row-to-row continuity instead.
-Reverse-chronological, two physical lines per transaction. Extracts the embedded remittance
-INR amount and rate into <code>raw_row</code> (<a href="../design/multi-currency-and-fx.html">04</a> §5).</li>
-<li><strong>Encrypted, and extracts with no spaces</strong> — column bands are the only workable approach.
-Hardest of the four; done last deliberately.</li>
-</ol>
-</li>
-<li>Redacted fixtures for each, with a golden-output test.</li>
-<li>Diagnostics panel: extracted rows beside the computed running balance, divergence highlighted.</li>
-<li>Scanned-PDF detection with a clear &quot;not supported&quot; message rather than garbage output.</li>
-<li><strong>Each new quirk is a considered addition to the vocabulary</strong>, not a reflex. If the list starts
-growing per-bank, <a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a> has failed and needs
-revisiting with a superseding ADR.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>All four layouts import a real statement and reconcile — <strong>none of them named in code</strong>.</li>
-<li>Each has a fixture test that fails if the engine or a saved profile regresses.</li>
-<li>An encrypted statement imports without the password touching disk.</li>
-<li>All 71 gathered statements import; every account reconciles across its full period.</li>
-<li>A layout invented for the test — a synthetic statement in an unseen format — can be mapped and
-imported without touching the codebase. <strong>This is the real acceptance test for ADR-0012.</strong></li>
-</ul>
-<h3 id="m4--classification-engine">M4 — Classification engine</h3>
-<p><strong>Build</strong></p>
-<ul>
-<li>The full cascade (override → user rule → merchant alias → prior match → seed rule).</li>
-<li>Rule CRUD with a live preview of affected transactions.</li>
-<li>~120 seed rules for UAE, India and global merchants.</li>
-<li>Merchant normalization with aliases.</li>
-<li>Learn-from-correction prompt with affected count and opt-in retroactive apply.</li>
-<li>Confidence scoring driving review-queue grouping.</li>
-<li>Bulk recategorization.</li>
-<li>Settings › Rules: coverage, hit counts, override counts, top unclassified descriptions.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Seed rules classify ≥ 70% of a real first import.</li>
-<li>Every classified transaction can name the rule that classified it.</li>
-<li>Creating a rule from a correction shows an accurate affected count and applies correctly.</li>
-<li>Rules never silently change past data.</li>
-</ul>
-<h3 id="m5--transfers">M5 — Transfers</h3>
-<p><strong>The point at which the numbers become trustworthy.</strong> Before this, every spending figure is
-wrong.</p>
-<p><strong>Build</strong></p>
-<ul>
-<li>Matching engine with the weighted scoring in
-<a href="../design/transfers-and-reconciliation.html">transfers-and-reconciliation.html</a> §3.</li>
-<li>FX-aware amount matching with a 5% remittance tolerance.</li>
-<li>Kind-specific date windows.</li>
-<li>Transfer confirmation in the review queue; nothing auto-links.</li>
-<li>Manual linking and unlinking from the transactions screen.</li>
-<li>Pending (one-sided) transfers, re-matched on later imports.</li>
-<li>FX spread and total cost computed per transfer.</li>
-<li><code>v_transaction_reportable</code> enforced; static check that reports never read the base table.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>A real remittance is detected above 0.90 and appears in neither spending nor income.</li>
-<li>A card payment is detected and excluded.</li>
-<li>Two unrelated same-day similar amounts are not linked.</li>
-<li>Unlinking a remittance increases reported spending by exactly the source amount.</li>
-<li>Monthly spending, after transfer exclusion, matches a hand-tallied figure for one real month.</li>
-</ul>
-<h3 id="m6--credit-cards">M6 — Credit cards</h3>
-<p><strong>Build</strong></p>
-<ul>
-<li>Card statement parsing into <code>card_statement</code> records.</li>
-<li>Statement balance, minimum due, due date, credit limit, utilisation.</li>
-<li>Card payment reconciled against the statement balance; paid-in-full detection.</li>
-<li>Card detail view: current outstanding, cycle spending, utilisation, what&#39;s due when.</li>
-<li>Upcoming-payment surfacing on the dashboard.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Utilisation matches the card statement.</li>
-<li>A payment appears in neither spending nor income.</li>
-<li>Cycle spending equals the statement&#39;s declared total debits.</li>
-<li>A card carrying a revolving balance is visually distinct from one paid in full.</li>
-</ul>
-<h3 id="m7--investments">M7 — Investments</h3>
-<p><strong>Build</strong></p>
-<ul>
-<li><code>security</code>, <code>holding</code>, <code>investment_transaction</code>, <code>price_snapshot</code>.</li>
-<li>Indian mutual fund support keyed on AMFI scheme code; daily NAV import from the AMFI file.</li>
-<li>CAS (CAMS/KFintech) parser if one is available — otherwise manual and broker-statement entry.</li>
-<li>Equity and ETF holdings, Indian and international.</li>
-<li><strong>XIRR</strong> by Newton–Raphson with bisection fallback.</li>
-<li>Asset allocation aggregation across the seven classes.</li>
-<li>Investment purchase linked to its funding bank debit; dividends, reinvestment, partial sales, charges, security splits and platform transfers preserve continuity for the holdings owned (F06).</li>
-<li>Portfolio screen: holdings, allocation, returns, XIRR.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>XIRR for a known SIP series matches a spreadsheet <code>XIRR()</code> within 0.01%.</li>
-<li>Allocation sums to 100% and reconciles to total portfolio value.</li>
-<li>A USD holding contributes correctly to both INR and AED views.</li>
-<li>Σ investment transaction units equals holding units for every holding.</li>
-<li>Buying a fund shows as one linked event, not two unrelated rows.</li>
-</ul>
-<h3 id="m8--loans--descheduled-pending-q18">M8 — Loans — <em>descheduled, pending Q18</em></h3>
-<p>Kept fully specified so it can be picked up unchanged. Not scheduled: no loan is evidenced in the
-gathered statements.</p>
-<p><strong>Build</strong></p>
-<ul>
-<li><code>loan</code>, <code>loan_schedule_entry</code>, <code>loan_event</code>.</li>
-<li>Amortisation generation from terms; versioned regeneration on any event.</li>
-<li>EMI transactions matched to schedule entries; actual principal/interest split recorded.</li>
-<li>Prepayment handling with schedule regeneration.</li>
-<li>Floating rate changes as events.</li>
-<li>Loan detail: outstanding, paid to date, interest paid, remaining tenure, payoff date.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Generated schedule matches the lender&#39;s amortisation table within rounding.</li>
-<li>Interest paid in a period equals the sum of interest components of actual EMIs.</li>
-<li>A prepayment regenerates the schedule and shows the revised payoff date.</li>
-<li>Outstanding principal matches the lender&#39;s statement.</li>
-</ul>
-<h3 id="m9--net-worth-and-the-dashboard">M9 — Net worth and the dashboard</h3>
-<p><strong>M9a follows M5.</strong> Deliver a basic verified overview, monthly spending and external
-outflows, account as-of dates, missing coverage and the existing review/quality items. Manually
-valued assets carry explicit dates; do not require full M7 or the M10 library. One complete recent
-month with acknowledged opening balances is the early usability checkpoint.</p>
-<p><strong>M9b follows M7 and the relevant valuation work.</strong> Deliver full consolidated
-history, allocation and attribution. M6 supplies card-due items when ready. The requirements below
-are the completed M9 outcome; forecasting and emergency coverage remain Phase 2.</p>
-<p><strong>Build</strong></p>
-<ul>
-<li>Signed-balance net worth across all accounts, both currencies.</li>
-<li>Liquid net worth follows Q22 user-selected account toggles; it is distinct from uncommitted cash and the Phase 2 emergency reserve.</li>
-<li>Month-end snapshots with the rates used, stored.</li>
-<li>Net worth trend chart.</li>
-<li><strong>Attribution</strong> per <a href="../design/multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7, including
-the FX translation line and a visible residual.</li>
-<li>Monthly cash flow: income, spending, net, 12-month trend.</li>
-<li>Savings rate and investment rate, tracked separately.</li>
-<li>Need / Want / Investment / Debt split.</li>
-<li>The dashboard: net worth, liquid, investments, debt, month income, month spending, savings
-rate, investment rate, 12-month chart.</li>
-<li>Manual valuation snapshots with staleness indicators.</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Net worth on any past date equals the sum of signed balances on that date, in both currencies.</li>
-<li>Attribution components plus residual equal the actual change exactly.</li>
-<li>Internal investment funding and principal repayments cancel their cash legs. Complete synthetic scenarios have zero residual; real discrepancies and valuation uncertainty are separately identified.</li>
-<li>Spending for a month equals the sum of reportable transactions, exactly.</li>
-<li>Dashboard is interactive in under 2 seconds cold.</li>
-</ul>
-<h3 id="m10--documents-vault">M10 — Documents vault</h3>
-<p><strong>Build</strong></p>
-<ul>
-<li>Document library: filter by institution, type, period, account.</li>
-<li>Bidirectional traceability — document ↔ transactions.</li>
-<li>Non-statement uploads: insurance, property, tax, FD certificates.</li>
-<li>Checksum-based duplicate prevention at upload.</li>
-<li>Deletion blocked while transactions reference a document.</li>
-<li>Receipt attachment on transactions; owner export of records and selected originals with currency, provenance and coverage metadata (F12).</li>
-</ul>
-<p><strong>Done when</strong></p>
-<ul>
-<li>Every document is retrievable and openable.</li>
-<li>Every imported transaction links back to document, page and row.</li>
-<li>Re-uploading a stored file is detected before parsing.</li>
-<li>Disk usage on the box is visible, documents and database separately.</li>
-</ul>
-<h3 id="phase-1-exit-criteria">Phase 1 exit criteria</h3>
-<p>All scheduled milestones done (M8 excepted while descheduled), plus:</p>
-<ol>
-<li><strong>36 months</strong> of real statements across all four layouts, imported and reconciled — back to the
-01 Jan 2024 anchor (<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>).</li>
-<li>Monthly import + review completed in under 20 minutes.</li>
-<li>Every included native account balance reconciles to its evidence; the consolidated tally agrees at the chosen rates. Missing coverage, valuation uncertainty and unexplained differences are separately disclosed, not absorbed into a 1% tolerance.</li>
-<li>Monthly spending agrees with a hand-checked month, exactly.</li>
-<li>Zero infrastructure spend while local; hosting follows the single-VPS decision if chosen.</li>
-<li>Restore from backup verified against a scratch database.</li>
-</ol>
-<hr>
-<h2 id="phase-2--analysis">Phase 2 — Planning, resilience and analysis</h2>
-<p>Phase 2 turns a trusted position into decisions and follow-up. Deliver the slices below in order;
-Phase 2C analytics must not block manually entered commitments or basic goals. The existing schema
-reference covers only part of this scope. Add forward migrations when each feature is designed;
-no future-feature tables are added to Phase 0 just to avoid a later migration.</p>
-<table><thead><tr><th>Slice</th><th>Outcome</th><th>Acceptance gate</th></tr></thead><tbody>
-<tr><td><strong>2A — Next month</strong></td><td>Confirmed commitments, 30/60/90-day forecast by account
-and currency, lowest projected balance, linked actions and monthly planning review</td>
-<td>Card settlement counted once; a shortage appears in the paying account; matched commitments
-stop forecasting; actions resolve and recurring items retain their next occurrence (P05, P06, P10).</td></tr>
-<tr><td><strong>2B — Resilience</strong></td><td>Emergency resources and essential-spend baseline;
-goal earmarking in the goal currency; insurance, maturities, claims and administration</td>
-<td>No resource is reserved twice; reserve coverage uses only eligible funds; partial reimbursements
-settle correctly; renewals surface actions (P07–P10).</td></tr>
-<tr><td><strong>2C — Deeper analysis</strong></td><td>Budgets, recurring discovery, salary analysis,
-benchmarks, allocation drift, remittance analysis and optional email ingestion</td>
-<td>Preserve the module-specific requirements below; automatic discovery proposes changes for confirmation.</td></tr>
-</tbody></table>
-<p>Definitions and scenarios: <a href="./finance-os.html#acceptance">finance OS acceptance requirements</a>.
-Planning is deterministic. Retirement/inflation scenarios remain later analysis with explicit assumptions;
-emergency handover remains an unresolved scope decision.</p>
+<h2 id="outcome-map">Outcome map</h2>
 <table>
-<thead>
-<tr>
-<th>Module</th>
-<th>Content</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>Budgets</strong></td>
-<td>Budget vs actual by category and by bucket; rollover; variance alerts</td>
-</tr>
-<tr>
-<td><strong>Recurring expenses</strong></td>
-<td>Automatic discovery from amount/merchant/cadence patterns; &quot;committed spend before discretionary&quot; for the month ahead; price-increase and zombie-subscription detection</td>
-</tr>
-<tr>
-<td><strong>Salary analytics</strong></td>
-<td>Payslip parsing into line items; annual compensation vs actual cash received; bonus and increment history</td>
-</tr>
-<tr>
-<td><strong>Investment analytics</strong></td>
-<td>Portfolio XIRR, per-class returns, allocation drift vs target, SIP performance, benchmark comparison</td>
-</tr>
-<tr>
-<td><strong>FX &amp; remittance analytics</strong></td>
-<td>Annual cost by provider, effective-rate history, cheapest-channel comparison</td>
-</tr>
-<tr>
-<td><strong>Goals</strong></td>
-<td>Delivered in 2B: target currency, date and priority; linked resources, exclusive earmarking, contribution progress, required run rate and shortfall. Separate contributions from market/FX changes.</td>
-</tr>
-<tr>
-<td><strong>Loan simulator</strong></td>
-<td><em>&quot;If I prepay AED 50k: new payoff date, interest saved, liquidity after.&quot;</em> Built on M8&#39;s schedule engine</td>
-</tr>
-<tr>
-<td><strong>Email ingestion</strong></td>
-<td>Auto-fetch statement attachments from a dedicated mailbox</td>
-</tr>
-</tbody></table>
-<p><strong>Entry condition:</strong> Phase 1 exit criteria met and the ledger maintained for at least
-two months. Forecasts still identify dated inputs, incomplete coverage and assumptions; a forecast is
-not bank-confirmed cash. Phase 2B follows a working 2A cash/commitment view, and 2C enriches both.</p>
+<thead><tr><th>Group</th><th>Product result</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 0.x</strong></td><td>A private, exact-money ledger foundation with accounts,
+manual entry, owner authentication, FX history, and safe document storage.</td></tr>
+<tr><td><strong>Phase 1.x</strong></td><td>A complete daily-use financial core: statements,
+classification, transfers, cards, positions, investments, income, forecast, and documents.</td></tr>
+<tr><td><strong>Phase 2.x</strong></td><td>Full historical coverage, explainable wealth history,
+classification learning, and visible data quality.</td></tr>
+<tr><td><strong>Phase 3.x</strong></td><td>Commitments, cash planning, goals, emergency resilience,
+and protection administration.</td></tr>
+<tr><td><strong>Phase 4.x</strong></td><td>Budget, recurring, salary, investment, and remittance
+analysis, with optional source automation.</td></tr>
+<tr><td><strong>Phase 5.x</strong></td><td>Optional intelligence introduced only after an explicit
+privacy and safety decision.</td></tr>
+</tbody>
+</table>
 <hr>
-<h2 id="v2--intelligence">V2 — Intelligence</h2>
-<p><strong>Everything AI lives here</strong> (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>). The privacy decision is
-explicitly deferred and must be made before any of this starts.</p>
+<h2 id="phase-0">Phase 0.x — foundations and manual ledger</h2>
 <table>
-<thead>
-<tr>
-<th>Module</th>
-<th>Content</th>
-<th>Prerequisite</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><strong>Ask My Finances</strong></td>
-<td>Natural language → SQL against the normalized ledger. Never reads raw statements</td>
-<td>Stable schema; query safety layer; privacy decision</td>
-</tr>
-<tr>
-<td><strong>AI classification fallback</strong></td>
-<td>Step 7 of the cascade, after everything deterministic abstains. Evaluate a local-only model
-on held-out exceptions before selecting a runtime; constrained proposals, not direct ledger writes.
-See the <a href="../superpowers/specs/2026-09-10-classification-knowledge.md">classification knowledge design</a>.</td>
-<td>Rule engine ≥ 90%; redaction/privacy decision; precision, abstention, memory and latency measured;
-offline inference and no transaction-data telemetry</td>
-</tr>
-<tr>
-<td><strong>Financial insights</strong></td>
-<td>Anomaly detection, trend narration, proactive observations</td>
-<td>≥ 12 months of clean data</td>
-</tr>
-<tr>
-<td><strong>Scenario simulator</strong></td>
-<td>Multi-variable what-ifs across loans, investments and cash flow</td>
-<td>Phase 2 loan simulator working</td>
-</tr>
-<tr>
-<td><strong>Tax reporting</strong></td>
-<td>India ITR support: capital gains, foreign asset schedules. UAE context</td>
-<td>Investment lot tracking (M7) proven over a full year</td>
-</tr>
-<tr>
-<td><strong>Portfolio rebalancing</strong></td>
-<td>Target allocation, drift alerts, tax-aware rebalancing suggestions</td>
-<td>Phase 2 investment analytics</td>
-</tr>
-<tr>
-<td><strong>Automated imports</strong></td>
-<td>Account aggregator (India), open banking (UAE) where available, still token-based</td>
-<td>Never credential storage</td>
-</tr>
-</tbody></table>
-<p><strong>Ask My Finances is the payoff for Phase 1&#39;s discipline.</strong> It is feasible <em>only</em> because the
-ledger is normalized — the model writes a query against a clean schema rather than reading
-thousands of statement pages. Attempting it before Phase 1 would be both expensive and
-unreliable.</p>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 0.1</strong></td><td>Local runtime and repository safeguards</td>
+<td>The web, API, and database run locally; secrets and real statements are excluded; migrations
+apply from an empty database.</td></tr>
+<tr><td><strong>Phase 0.2</strong></td><td>Household data and authorization boundary</td>
+<td>Household-scoped data is isolated; every financial route requires the owner; unauthenticated
+queries reveal no household rows.</td></tr>
+<tr><td><strong>Phase 0.3</strong></td><td>FX and reporting foundation</td>
+<td>The configured reporting pair has dated history back to the approved anchor; carried rates and
+sources are visible; money remains exact across database, API, and UI.</td></tr>
+<tr><td><strong>Phase 0.4</strong></td><td>Accounts and manual ledger</td>
+<td>Every supported account class follows the signed-balance convention; opening balances and manual
+transactions reconcile; historical values remain frozen.</td></tr>
+<tr><td><strong>Phase 0.5</strong></td><td>Import and document foundation</td>
+<td>Originals are stored privately under content identity; extraction layouts are data; stored
+documents remain traceable without exposing source identifiers.</td></tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-1">Phase 1.x — daily-use financial core</h2>
+<table>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 1.1</strong></td><td>Statements land in the ledger</td>
+<td>A supported statement parses, normalizes, deduplicates, reconciles, enters review, and commits
+atomically. A mismatch blocks import and an induced failure leaves no partial rows.</td></tr>
+<tr><td><strong>Phase 1.2</strong></td><td>All supported statement layouts</td>
+<td>Every gathered statement format, including encrypted and irregular layouts, imports and
+reconciles; unsupported scanned input fails clearly; passwords never persist.</td></tr>
+<tr><td><strong>Phase 1.3</strong></td><td>Classification and transfers</td>
+<td>Deterministic rules explain their result; owner-confirmed transfers and card payments appear in
+neither income nor spending; one hand-checked month agrees exactly.</td></tr>
+<tr><td><strong>Phase 1.4</strong></td><td>Cards, net worth, and trends</td>
+<td>Card dues agree with statement evidence; signed balances produce net worth in both reporting
+currencies; monthly flows and trends preserve transfer exclusions.</td></tr>
+<tr><td><strong>Phase 1.5</strong></td><td>Statement-guided onboarding and owner decisions</td>
+<td>An unknown account is proposed once from masked statement evidence, subsequent statements
+resolve to it, and unresolved classifications are reachable and safely reusable.</td></tr>
+<tr><td><strong>Phase 1.6</strong></td><td>Investments</td>
+<td>Holdings reconcile to transaction units; purchases link to funding; allocation totals correctly;
+a known cash-flow series matches independent XIRR evidence within 0.01%.</td></tr>
+<tr><td><strong>Phase 1.7</strong></td><td>Salary and a thin forecast</td>
+<td>Payslip income reconciles to the ledger; confirmed commitments move an assumption-labelled
+30/60/90-day projection; a forecast never posts a transaction.</td></tr>
+<tr><td><strong>Phase 1.8</strong></td><td>Layout mapper and documents</td>
+<td>A synthetic unseen statement can be mapped and imported without code changes; documents are
+searchable; every imported row links back to its document, page, and row.</td></tr>
+</tbody>
+</table>
+<p><strong>Group exit:</strong> all supported accounts and statements are represented, the owner can
+complete the monthly import and review flow, positions and flows reconcile to evidence, and the
+application supports daily use without hidden coverage gaps.</p>
+<hr>
+<h2 id="phase-2">Phase 2.x — verified history and data quality</h2>
+<table>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 2.1</strong></td><td>Complete historical coverage</td>
+<td>All available statements back to the approved history anchor import and reconcile; missing
+periods and unsupported evidence remain explicit.</td></tr>
+<tr><td><strong>Phase 2.2</strong></td><td>Wealth history and attribution</td>
+<td>Month-end positions store their evidence dates and rates; the attribution waterfall separates
+flows, market movement, FX translation, other external changes, and visible residuals.</td></tr>
+<tr><td><strong>Phase 2.3</strong></td><td>Classification learning and review depth</td>
+<td>Corrections propose narrow rules with accurate affected counts; confidence and coverage are
+visible; past data never changes silently.</td></tr>
+<tr><td><strong>Phase 2.4</strong></td><td>Data quality and recovery</td>
+<td>A diagnostics view identifies coverage and reconciliation gaps; current backups restore into an
+isolated database and reproduce recorded structural evidence.</td></tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-3">Phase 3.x — planning and resilience</h2>
+<table>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 3.1</strong></td><td>Commitments and actions</td>
+<td>Dated and recurring obligations have a source-linked lifecycle; actual settlement clears the
+obligation once; recurring obligations retain only their next occurrence.</td></tr>
+<tr><td><strong>Phase 3.2</strong></td><td>Cash forecast and monthly review</td>
+<td>Account-and-currency projections show the lowest balance and date, incomplete coverage, and
+assumptions; card settlement is counted once and shortages appear in the paying account.</td></tr>
+<tr><td><strong>Phase 3.3</strong></td><td>Goals and emergency reserve</td>
+<td>Eligible resources cannot be reserved twice; goal progress separates contributions from
+market/FX movement; reserve coverage uses an explicit essential-spend baseline.</td></tr>
+<tr><td><strong>Phase 3.4</strong></td><td>Protection and administration</td>
+<td>Policies, maturities, claims, reimbursements, renewals, and owner-entered deadlines reuse the
+document and action system; partial settlements retain the correct remainder.</td></tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-4">Phase 4.x — analysis and optimisation</h2>
+<table>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 4.1</strong></td><td>Budgets and recurring discovery</td>
+<td>Budget versus actual supports category, bucket, rollover, and variance; discovered cadence or
+price changes remain proposals until confirmed.</td></tr>
+<tr><td><strong>Phase 4.2</strong></td><td>Salary analysis</td>
+<td>Compensation, cash received, bonuses, and increment history reconcile to payslip and ledger
+evidence without inventing missing periods.</td></tr>
+<tr><td><strong>Phase 4.3</strong></td><td>Investment analysis</td>
+<td>Returns, benchmarks, allocation drift, and contribution effects reconcile to transaction-level
+holdings and dated prices.</td></tr>
+<tr><td><strong>Phase 4.4</strong></td><td>FX and remittance analysis</td>
+<td>Provider cost and effective-rate history use evidenced amounts and dates; internal transfers
+remain outside spending.</td></tr>
+<tr><td><strong>Phase 4.5</strong></td><td>Optional email ingestion</td>
+<td>A dedicated mailbox can supply statement attachments without broad mailbox access or stored
+bank credentials; every import retains the normal review boundary.</td></tr>
+<tr><td><strong>Phase 4.6</strong></td><td>Conditional loan support</td>
+<td>Activated only when the owner confirms a real loan. Schedules reconcile to lender evidence;
+events regenerate future terms; prepayment analysis states liquidity and interest assumptions.</td></tr>
+</tbody>
+</table>
+<hr>
+<h2 id="phase-5">Phase 5.x — optional private intelligence</h2>
+<p>Deterministic product capabilities do not depend on this group. No model receives financial data
+until the explicit privacy and safety gate in Phase 5.1 is accepted.</p>
+<table>
+<thead><tr><th>Phase</th><th>Outcome</th><th>Success criteria</th></tr></thead>
+<tbody>
+<tr><td><strong>Phase 5.1</strong></td><td>Privacy, safety, and runtime decision</td>
+<td>Permitted data, redaction, local-versus-remote execution, telemetry, abstention, and query safety
+are approved and tested before any intelligent feature is enabled.</td></tr>
+<tr><td><strong>Phase 5.2</strong></td><td>Ask My Finances</td>
+<td>Natural-language questions compile to constrained queries against the normalized ledger, never
+raw statements, with visible sources and safe failure.</td></tr>
+<tr><td><strong>Phase 5.3</strong></td><td>Classification fallback</td>
+<td>The deterministic engine has priority; the fallback proposes bounded classifications, abstains
+when uncertain, and cannot write directly to the ledger.</td></tr>
+<tr><td><strong>Phase 5.4</strong></td><td>Financial insights</td>
+<td>Anomalies and trends cite clean historical evidence, distinguish observation from advice, and
+remain silent when coverage is inadequate.</td></tr>
+<tr><td><strong>Phase 5.5</strong></td><td>Scenario simulator</td>
+<td>Multi-variable projections identify every assumption and never alter recorded financial
+history.</td></tr>
+<tr><td><strong>Phase 5.6</strong></td><td>Tax reporting</td>
+<td>Reports derive from proven investment-lot and residency evidence, expose their period and
+assumptions, and remain exportable for independent review.</td></tr>
+<tr><td><strong>Phase 5.7</strong></td><td>Portfolio rebalancing</td>
+<td>Target allocation, drift, and tax-aware suggestions are advisory only and reconcile to the
+owner's holdings.</td></tr>
+<tr><td><strong>Phase 5.8</strong></td><td>Automated imports</td>
+<td>Supported aggregators or open-banking sources use revocable tokens, never stored banking
+credentials, and preserve dedupe, reconciliation, and review.</td></tr>
+</tbody>
+</table>
 <hr>
 <h2 id="scope-control">Scope control</h2>
-<p>Phase 0 is unchanged. This accepted review explicitly extends the product roadmap: M9a brings forward part of existing M9; M10 adds owner export; new planning capabilities are sequenced as Phase 2A–2C. Further additions require an explicit scope tradeoff.</p>
-<p><strong>Rules</strong></p>
 <ol>
-<li>A new Phase 1 idea goes to Phase 2 by default. Promoting it requires demoting something.</li>
-<li>AI in Phase 1 or 2 is blocked by ADR-0003. Not a judgement call during the build.</li>
-<li>A new institution parser is always allowed — it is additive and doesn&#39;t touch shared code.</li>
-<li>Anything requiring paid infrastructure goes to a &quot;when hosted&quot; list, not into a phase.</li>
-<li>If a milestone hasn&#39;t finished after three sessions, it was too large. Split it rather than
-pushing through.</li>
+<li>New ideas enter the project register. They reach this roadmap only after owner approval.</li>
+<li>Approval requires an explicit scope and sequencing decision; implementation does not begin from
+a note alone.</li>
+<li>A new institution layout remains data and must not introduce institution-specific code.</li>
+<li>Paid infrastructure is considered only when its owning outcome needs it.</li>
+<li>Work that does not fit a reviewable branch is decomposed before implementation.</li>
 </ol>
-<p><strong>Explicitly parked</strong> — reconsidered only after Phase 2:</p>
-<p>Mobile apps · multi-user · bank API integration · receipt OCR · shared/collaborative features ·
-export to advisors · crypto beyond manual valuation · options and derivatives · business
-accounting.</p>
+<p><strong>Outside the approved roadmap:</strong> mobile applications, multi-user collaboration,
+stored bank credentials, automatic payments or trades, receipt OCR, advisor access, business
+accounting, and unsupported complex instruments. Any promotion follows the same register and owner
+approval path.</p>
 <hr>
 <h2 id="progress-tracking">Implementation progress</h2>
-<p>This roadmap defines scope, sequence and acceptance criteria. Execution status is maintained
-in <a href="../superpowers/progress.md">the Superpowers progress file</a>.</p>
+<p>This roadmap contains no live completion claims. Read
+<a href="../superpowers/progress.md">implementation progress</a> for current state and
+<a href="../superpowers/project-register.md">the project register</a> for deferred or unapproved
+items.</p>
 
         </article>
       </main>

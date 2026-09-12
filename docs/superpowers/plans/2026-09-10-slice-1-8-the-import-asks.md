@@ -1,5 +1,9 @@
 # Slice 1.8 — the import asks: accounts from statements, and unclassified rows
 
+> **Historical numbering:** This delivered plan is now mapped to Phase 1.5. Use the
+> [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for the current sequence.
+
 Execution map, written against `develop` at `a3cf13a` on 10 September 2026, for two owner
 requests made that day while the ledger was being rebuilt from statements (`progress.md`, "What
 the second rebuild cost"): **an import can create the account it needs**, and **an unclassified
