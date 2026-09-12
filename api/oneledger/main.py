@@ -60,13 +60,17 @@ async def private_validation_error(request: Request, exc: RequestValidationError
             "detail": [
                 {
                     "type": error["type"],
-                    "loc": [
-                        component
-                        if isinstance(component, int)
-                        or component in {"body", "path", "query", "header", "cookie"}
-                        else "field"
-                        for component in error["loc"]
-                    ],
+                    "loc": (
+                        [
+                            component
+                            if isinstance(component, int)
+                            or component in {"body", "path", "query", "header", "cookie"}
+                            else "field"
+                            for component in error["loc"]
+                        ]
+                        if error["type"] == "extra_forbidden"
+                        else error["loc"]
+                    ),
                     "msg": error["msg"],
                 }
                 for error in exc.errors()

@@ -120,6 +120,25 @@ def test_catalogue_validation_never_echoes_hostile_extra_keys(
         app.dependency_overrides.clear()
     assert response.status_code == 422
     assert unsafe_key not in response.text
+    assert response.json()["detail"][0]["loc"] == ["body", "field"]
+
+
+def test_catalogue_validation_keeps_declared_field_locations() -> None:
+    """Replacing every component with field makes distinct owner corrections indistinguishable."""
+    app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
+        user_id=uuid4(), household_id=uuid4(), session_id=uuid4(), email="owner@example.invalid"
+    )
+    try:
+        response = TestClient(app).post(
+            "/investment-catalogue/securities/00000000-0000-0000-0000-000000000000/manual-prices",
+            json={"price": "not-a-decimal"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    locations = {tuple(error["loc"]) for error in response.json()["detail"]}
+    assert ("body", "priceDate") in locations
+    assert ("body", "price") in locations
 
 
 def test_exact_resolution_hides_other_household_rows_and_name_ambiguity_abstains(
@@ -127,7 +146,7 @@ def test_exact_resolution_hides_other_household_rows_and_name_ambiguity_abstains
 ) -> None:
     connection, owner = live_catalogue
     private = _security(connection, owner.household_id, name="Same synthetic name")
-    _security(connection, None, name="Same synthetic name")
+    shared = _security(connection, None, name="Same synthetic name")
     other_household_id = uuid4()
     other_person_id = uuid4()
     with connection.cursor() as cur:
@@ -157,9 +176,7 @@ def test_exact_resolution_hides_other_household_rows_and_name_ambiguity_abstains
 
     assert ambiguous.status_code == 200
     assert ambiguous.json()["status"] == "ambiguous"
-    assert {item["id"] for item in ambiguous.json()["candidates"]} == {str(private)} | {
-        item["id"] for item in ambiguous.json()["candidates"] if item["id"] != str(private)
-    }
+    assert {item["id"] for item in ambiguous.json()["candidates"]} == {str(private), str(shared)}
     assert hidden.json() == {
         "status": "needs_confirmation",
         "reason": "no_exact_identity",
