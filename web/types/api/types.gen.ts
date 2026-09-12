@@ -350,6 +350,148 @@ export type AccountsResponse = {
 };
 
 /**
+ * AcquisitionCorrectionCreate
+ */
+export type AcquisitionCorrectionCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'purchase' | 'recurring_purchase';
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Grossamount
+     */
+    grossAmount: string;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * AcquisitionCreate
+ */
+export type AcquisitionCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'purchase' | 'recurring_purchase';
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Grossamount
+     */
+    grossAmount: string;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * AcquisitionLotRow
+ */
+export type AcquisitionLotRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Acquisitiondate
+     */
+    acquisitionDate: string;
+    /**
+     * Acquiredunits
+     */
+    acquiredUnits: string;
+    /**
+     * Costbasisnative
+     */
+    costBasisNative: string;
+    /**
+     * Currency
+     */
+    currency: string;
+};
+
+/**
  * ApplyBody
  */
 export type ApplyBody = {
@@ -1481,6 +1623,101 @@ export type InstitutionRow = {
      * Institutiontype
      */
     institutionType: string;
+};
+
+/**
+ * InvestmentEventRow
+ */
+export type InvestmentEventRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'purchase' | 'recurring_purchase';
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Grossamount
+     */
+    grossAmount: string;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string;
+    /**
+     * Fxratetobase
+     */
+    fxRateToBase: string;
+    /**
+     * Fxratetosecondary
+     */
+    fxRateToSecondary: string;
+    /**
+     * Netamountbase
+     */
+    netAmountBase: string;
+    /**
+     * Netamountsecondary
+     */
+    netAmountSecondary: string;
+    /**
+     * Sourcekind
+     */
+    sourceKind: 'owner_entered';
+    /**
+     * Correctseventid
+     */
+    correctsEventId: string | null;
+    /**
+     * Correctionstate
+     */
+    correctionState: 'uncorrected' | 'corrected';
+    /**
+     * Currentunits
+     */
+    currentUnits: string;
+    lot: AcquisitionLotRow;
 };
 
 /**
@@ -5209,6 +5446,69 @@ export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPrices
 };
 
 export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponse = AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponses[keyof AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponses];
+
+export type AppendAcquisitionInvestmentEventsAcquisitionsPostData = {
+    body: AcquisitionCreate;
+    path?: never;
+    query?: never;
+    url: '/investment-events/acquisitions';
+};
+
+export type AppendAcquisitionInvestmentEventsAcquisitionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendAcquisitionInvestmentEventsAcquisitionsPostError = AppendAcquisitionInvestmentEventsAcquisitionsPostErrors[keyof AppendAcquisitionInvestmentEventsAcquisitionsPostErrors];
+
+export type AppendAcquisitionInvestmentEventsAcquisitionsPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: InvestmentEventRow;
+    /**
+     * Successful Response
+     */
+    201: InvestmentEventRow;
+};
+
+export type AppendAcquisitionInvestmentEventsAcquisitionsPostResponse = AppendAcquisitionInvestmentEventsAcquisitionsPostResponses[keyof AppendAcquisitionInvestmentEventsAcquisitionsPostResponses];
+
+export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostData = {
+    body: AcquisitionCorrectionCreate;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: string;
+    };
+    query?: never;
+    url: '/investment-events/{event_id}/corrections';
+};
+
+export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostError = AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostErrors[keyof AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostErrors];
+
+export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: InvestmentEventRow;
+    /**
+     * Successful Response
+     */
+    201: InvestmentEventRow;
+};
+
+export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponse = AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses[keyof AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
