@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +12,7 @@ import psycopg
 
 from ..auth import OwnerSession
 from ..db import connect, scope_to_owner
+from ..ingest.engine import CONTEXTUAL_SECRET
 from ..money import _frozen, translate
 from .schemas import (
     AcquisitionCorrectionCreate,
@@ -110,17 +111,32 @@ def _lock_reporting_pair(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[
 def _derive_frozen_flow(
     cur: psycopg.Cursor[Any], body: AcquisitionCreate, reporting_pair: tuple[str, str]
 ) -> FrozenFlow:
-    rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
-        cur, body.eventDate, body.currency, *reporting_pair
-    )
-    native_amount = Decimal(body.netAmount)
-    return (
-        rate_date,
-        rate_to_base,
-        rate_to_secondary,
-        translate(native_amount, rate_to_base),
-        translate(native_amount, rate_to_secondary),
-    )
+    try:
+        rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
+            cur, body.eventDate, body.currency, *reporting_pair
+        )
+        native_amount = Decimal(body.netAmount)
+        return (
+            rate_date,
+            rate_to_base,
+            rate_to_secondary,
+            translate(native_amount, rate_to_base),
+            translate(native_amount, rate_to_secondary),
+        )
+    except DecimalException:
+        raise InvestmentCommandError(
+            422, "investment reporting amount exceeds the exact range"
+        ) from None
+
+
+def _screen_correction_reason(cur: psycopg.Cursor[Any], reason: str) -> None:
+    private = CONTEXTUAL_SECRET.search(reason) is not None
+    if not private:
+        cur.execute("SELECT counterparty_text_has_private_identifier(%s)", (reason,))
+        found = cur.fetchone()
+        private = found is not None and bool(found[0])
+    if private:
+        raise InvestmentCommandError(422, "correction reason must not contain private information")
 
 
 def _stored_frozen_flow(cur: psycopg.Cursor[Any], household_id: UUID, event_id: UUID) -> FrozenFlow:
@@ -240,6 +256,7 @@ def correct_acquisition(
                 raise InvestmentCommandError(404, "investment event not found")
             if original[0] not in {"purchase", "recurring_purchase"}:
                 raise InvestmentCommandError(422, "only acquisition events can be corrected here")
+            _screen_correction_reason(cur, body.correctionReason)
             existing = _existing_key(
                 cur, owner.household_id, _CORRECTION_SOURCE, body.idempotencyKey
             )

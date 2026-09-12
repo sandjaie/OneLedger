@@ -122,3 +122,52 @@ def test_correction_requires_full_replacement_and_stale_state_guard(
 
     assert response.status_code == 422
     assert ["body", "price"] in [error["loc"] for error in response.json()["detail"]]
+
+
+@pytest.mark.parametrize(
+    "invalid_date",
+    [1767225600, 1767225600.0, "2026-02-01T00:00:00", "2026-2-1", "20260201"],
+)
+def test_event_dates_require_canonical_calendar_date_strings(
+    owner_override: None, invalid_date: object
+) -> None:
+    """Pydantic date coercion must not admit epochs, datetimes, or alternate spellings."""
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={**_body(), "eventDate": invalid_date},
+    )
+    correction = TestClient(app).post(
+        f"/investment-events/{uuid4()}/corrections",
+        json={
+            **_body(),
+            "eventDate": invalid_date,
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic replacement",
+        },
+    )
+
+    assert acquisition.status_code == 422
+    assert correction.status_code == 422
+    assert all(error["loc"] == ["body", "eventDate"] for error in acquisition.json()["detail"])
+    assert all(error["loc"] == ["body", "eventDate"] for error in correction.json()["detail"])
+
+
+def test_correction_reason_is_normalized_and_cannot_be_blank(owner_override: None) -> None:
+    """A whitespace-only reason must not satisfy append-only correction provenance."""
+    response = TestClient(app).post(
+        f"/investment-events/{uuid4()}/corrections",
+        json={
+            **_body(),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": " \t \n ",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "correctionReason"],
+            "msg": "Value error, must not be blank",
+        }
+    ]

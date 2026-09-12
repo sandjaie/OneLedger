@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from datetime import date
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 
 AcquisitionKind = Literal["purchase", "recurring_purchase"]
 
@@ -15,6 +17,7 @@ _UNITS_PATTERN = r"^\d{1,20}(?:\.\d{1,8})?$"
 _PRICE_PATTERN = r"^\d{1,14}(?:\.\d{1,6})?$"
 _MONEY_PATTERN = r"^\d{1,16}(?:\.\d{1,4})?$"
 _NEGATIVE_MONEY_PATTERN = r"^-\d{1,16}(?:\.\d{1,4})?$"
+_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _decimal(value: str) -> Decimal:
@@ -38,6 +41,19 @@ class AcquisitionCreate(BaseModel):
     currency: StrictStr = Field(pattern=r"^[A-Z]{3}$")
     idempotencyKey: UUID
 
+    @field_validator("eventDate", mode="before")
+    @classmethod
+    def canonical_event_date(cls, value: object) -> date:
+        try:
+            if not isinstance(value, str) or _DATE_PATTERN.fullmatch(value) is None:
+                raise ValueError
+            parsed = date.fromisoformat(value)
+            if parsed.isoformat() != value:
+                raise ValueError
+        except ValueError:
+            raise ValueError("must be a canonical YYYY-MM-DD date string") from None
+        return parsed
+
     @model_validator(mode="after")
     def acquisition_fields_agree(self) -> AcquisitionCreate:
         units = _decimal(self.units)
@@ -58,6 +74,14 @@ class AcquisitionCreate(BaseModel):
 class AcquisitionCorrectionCreate(AcquisitionCreate):
     expectedCorrectionState: Literal["uncorrected"]
     correctionReason: StrictStr = Field(min_length=1, max_length=500)
+
+    @field_validator("correctionReason")
+    @classmethod
+    def normalized_correction_reason(cls, value: str) -> str:
+        normalized = " ".join(unicodedata.normalize("NFKC", value).split())
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
 
 
 class AcquisitionLotRow(BaseModel):

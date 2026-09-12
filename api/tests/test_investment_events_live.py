@@ -21,6 +21,7 @@ from .live_database import connect_to_test_database
 class EventFixture:
     connection: psycopg.Connection
     owner: auth.OwnerSession
+    other_owner: auth.OwnerSession
     account_id: UUID
     security_id: UUID
     other_account_id: UUID
@@ -40,6 +41,12 @@ def live_events(monkeypatch: pytest.MonkeyPatch) -> Iterator[EventFixture]:
         household_id=household_id,
         session_id=uuid4(),
         email="event-owner@example.invalid",
+    )
+    other_owner = auth.OwnerSession(
+        user_id=other_user_id,
+        household_id=other_household_id,
+        session_id=uuid4(),
+        email="other-event-owner@example.invalid",
     )
     with connection.cursor() as cur:
         cur.execute("SELECT min(code), max(code) FROM currency")
@@ -124,6 +131,7 @@ def live_events(monkeypatch: pytest.MonkeyPatch) -> Iterator[EventFixture]:
         yield EventFixture(
             connection=connection,
             owner=owner,
+            other_owner=other_owner,
             account_id=account_ids[0],
             security_id=security_ids[0],
             other_account_id=account_ids[1],
@@ -175,6 +183,7 @@ def test_acquisition_creates_one_event_effect_lot_and_identical_retry(
     assert retried.json() == created.json()
     payload = created.json()
     assert payload["units"] == "4.00000000"
+    assert payload["eventDate"] == "2026-02-01"
     assert payload["price"] == "5.000000"
     assert payload["grossAmount"] == "20.0000"
     assert payload["fxRateDate"] == "2026-02-01"
@@ -216,12 +225,20 @@ def test_correction_is_idempotent_preserves_original_and_refuses_stale_second_wr
         "charges": "0.0000",
         "netAmount": "-15.0000",
         "expectedCorrectionState": "uncorrected",
-        "correctionReason": "Synthetic exact replacement",
+        "correctionReason": "  Synthetic   exact replacement  ",
     }
-    with TestClient(app) as client:
-        corrected = client.post(
-            f"/investment-events/{original_id}/corrections", json=correction_body
+    corrected = TestClient(app).post(
+        f"/investment-events/{original_id}/corrections", json=correction_body
+    )
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """UPDATE fx_rate SET rate = 0.2500000000
+                 WHERE rate_date = '2026-02-01'
+                   AND base_currency = %s AND quote_currency = %s""",
+            (live_events.secondary_currency, live_events.currency),
         )
+    live_events.connection.commit()
+    with TestClient(app) as client:
         retried = client.post(f"/investment-events/{original_id}/corrections", json=correction_body)
         stale = client.post(
             f"/investment-events/{original_id}/corrections",
@@ -234,6 +251,7 @@ def test_correction_is_idempotent_preserves_original_and_refuses_stale_second_wr
     assert stale.status_code == 409
     assert stale.json()["detail"] == "investment event correction state changed"
     assert corrected.json()["correctsEventId"] == original_id
+    assert corrected.json()["eventDate"] == "2026-02-01"
     assert corrected.json()["currentUnits"] == "3.00000000"
     assert corrected.json()["lot"]["costBasisNative"] == "15.0000"
     with live_events.connection.cursor() as cur:
@@ -243,6 +261,11 @@ def test_correction_is_idempotent_preserves_original_and_refuses_stale_second_wr
             (original_id,),
         )
         assert cur.fetchone() == ("4.00000000", "20.0000", "-21.0000")
+        cur.execute(
+            "SELECT correction_reason FROM investment_transaction WHERE id = %s",
+            (corrected.json()["id"],),
+        )
+        assert cur.fetchone() == ("Synthetic exact replacement",)
         cur.execute(
             """SELECT count(*), count(DISTINCT origin_transaction_id)
                  FROM acquisition_lot WHERE household_id = %s""",
@@ -261,6 +284,29 @@ def test_cross_household_references_and_foreign_correction_are_hidden(
     live_events: EventFixture,
 ) -> None:
     """Dropping a household predicate would allow writes into foreign investment history."""
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            "SELECT set_config('app.user_id', %s, true)",
+            (str(live_events.other_owner.user_id),),
+        )
+        cur.execute(
+            """SELECT append_investment_transaction(
+                 %s, %s, '2026-02-01', 'purchase',
+                 4.00000000, 5.000000, 20.0000, 1.0000, 0.0000, -21.0000, %s,
+                 '2026-02-01', 1.0000000000, 2.0000000000, -21.0000, -42.0000,
+                 'owner_entered', 'owner_acquisition_v1', %s,
+                 NULL, NULL, NULL, NULL)""",
+            (
+                live_events.other_account_id,
+                live_events.other_security_id,
+                live_events.currency,
+                str(uuid4()),
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        foreign_event_id = UUID(str(row[0]))
+    live_events.connection.commit()
     with TestClient(app) as client:
         foreign_account = client.post(
             "/investment-events/acquisitions",
@@ -271,7 +317,7 @@ def test_cross_household_references_and_foreign_correction_are_hidden(
             json={**_body(live_events), "securityId": str(live_events.other_security_id)},
         )
         foreign_correction = client.post(
-            f"/investment-events/{uuid4()}/corrections",
+            f"/investment-events/{foreign_event_id}/corrections",
             json={
                 **_body(live_events),
                 "expectedCorrectionState": "uncorrected",
@@ -284,10 +330,167 @@ def test_cross_household_references_and_foreign_correction_are_hidden(
     assert foreign_correction.status_code == 404
     with live_events.connection.cursor() as cur:
         cur.execute(
-            "SELECT count(*) FROM investment_transaction WHERE household_id = %s",
-            (live_events.owner.household_id,),
+            """SELECT
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id = %s)""",
+            (
+                live_events.owner.household_id,
+                live_events.owner.household_id,
+                live_events.owner.household_id,
+                live_events.other_owner.household_id,
+                live_events.other_owner.household_id,
+                live_events.other_owner.household_id,
+                foreign_event_id,
+            ),
         )
-        assert cur.fetchone() == (0,)
+        assert cur.fetchone() == (0, 0, 0, 1, 1, 1, 0)
+
+
+def test_recurring_purchase_creates_an_acquisition_projection(live_events: EventFixture) -> None:
+    """Removing recurring_purchase support would strand a planned acquisition input kind."""
+    response = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={**_body(live_events), "eventKind": "recurring_purchase"},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["eventKind"] == "recurring_purchase"
+    assert payload["currentUnits"] == "4.00000000"
+    assert payload["lot"]["acquiredUnits"] == "4.00000000"
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """SELECT event.event_kind::text, effect.signed_units::text, lot.acquired_units::text
+                 FROM investment_transaction event
+                 JOIN investment_unit_effect effect
+                   ON effect.investment_transaction_id = event.id
+                 JOIN acquisition_lot lot ON lot.origin_transaction_id = event.id
+                WHERE event.id = %s""",
+            (payload["id"],),
+        )
+        assert cur.fetchone() == ("recurring_purchase", "4.00000000", "4.00000000")
+
+
+def test_private_correction_reasons_are_refused_atomically(live_events: EventFixture) -> None:
+    """Correction provenance must not become a durable private-identifier or secret channel."""
+    created = TestClient(app).post("/investment-events/acquisitions", json=_body(live_events))
+    assert created.status_code == 201, created.text
+    original_id = created.json()["id"]
+    reasons = (
+        "Reference " + "".join(("123", "456", "7")),
+        "Reference " + "-".join(("1234", "5678", "9012")),
+        "Reference " + "‑".join(("١٢٣٤", "٥٦٧٨", "٩٠١٢")),
+        "Tax ID " + "".join(("ABCDE", "1234", "F")),
+        "OTP " + "".join(("123", "456")),
+        "PIN " + "1234",
+        "CVV " + "123",
+        "password " + "synthetic-secret",
+    )
+
+    for reason in reasons:
+        response = TestClient(app).post(
+            f"/investment-events/{original_id}/corrections",
+            json={
+                **_body(live_events),
+                "expectedCorrectionState": "uncorrected",
+                "correctionReason": reason,
+            },
+        )
+        assert response.status_code == 422
+        assert response.json() == {
+            "detail": "correction reason must not contain private information"
+        }
+        assert reason not in response.text
+
+    blank = TestClient(app).post(
+        f"/investment-events/{original_id}/corrections",
+        json={
+            **_body(live_events),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": " \t \n ",
+        },
+    )
+    assert blank.status_code == 422
+    assert blank.json()["detail"] == [
+        {
+            "type": "value_error",
+            "loc": ["body", "correctionReason"],
+            "msg": "Value error, must not be blank",
+        }
+    ]
+
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id = %s)""",
+            (live_events.owner.household_id,) * 3 + (original_id,),
+        )
+        assert cur.fetchone() == (1, 1, 1, 0)
+
+
+def test_reporting_overflow_is_a_safe_atomic_refusal(live_events: EventFixture) -> None:
+    """A valid wire amount times an extreme stored rate must not escape as a server error."""
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """UPDATE fx_rate SET rate = 9999999999.9999999999
+                 WHERE rate_date = '2026-02-01'
+                   AND base_currency = %s AND quote_currency = %s""",
+            (live_events.secondary_currency, live_events.currency),
+        )
+        cur.execute(
+            """INSERT INTO security (
+                   household_id, security_type, name, currency, country, asset_class)
+               VALUES (%s, 'mutual_fund', 'Synthetic boundary security', %s,
+                       'XZ', 'equity') RETURNING id""",
+            (live_events.owner.household_id, live_events.secondary_currency),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        boundary_security = UUID(str(row[0]))
+    live_events.connection.commit()
+    boundary_amount = "9999999999999999.9999"
+
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/investment-events/acquisitions",
+        json={
+            **_body(live_events),
+            "securityId": str(boundary_security),
+            "grossAmount": boundary_amount,
+            "charges": "0.0000",
+            "netAmount": f"-{boundary_amount}",
+            "currency": live_events.secondary_currency,
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "investment reporting amount exceeds the exact range"}
+    assert boundary_amount not in response.text
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM holding WHERE household_id = %s AND security_id = %s),
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s)""",
+            (
+                live_events.owner.household_id,
+                boundary_security,
+                live_events.owner.household_id,
+                live_events.owner.household_id,
+                live_events.owner.household_id,
+            ),
+        )
+        assert cur.fetchone() == (0, 0, 0, 0)
 
 
 def test_conflicting_idempotency_rolls_back_a_new_holding(live_events: EventFixture) -> None:
