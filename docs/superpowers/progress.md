@@ -13,10 +13,10 @@ Updated: 12 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Ready** — product direction exists; design and dated execution planning have not started | [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
-| Current documentation action | Owner review and merge of PR #164 | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Design the Phase 1.6 investment boundary, obtain owner approval, then write and review its specification and execution plan | [development cycle](../development-cycle.md) |
-| Implementation branch | No Phase 1.6 implementation branch has been started | — |
+| Outcome state | **Design approved; specification under owner review** — dated execution planning has not started | [Phase 1.6 specification](specs/2026-09-12-phase-1-6-investments.md) |
+| Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
+| Next product action | Owner reviews the Phase 1.6 specification; after approval, write the execution plan and pass `/oneledger-plan-review` before implementation | [development cycle](../development-cycle.md) |
+| Implementation branch | `feature/p1-6a-investment-ledger` exists from `develop`; documentation only, with no implementation dispatched | [Phase 1.6 specification](specs/2026-09-12-phase-1-6-investments.md) |
 
 ## Canonical phase status
 
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Canonical documentation migration | Implemented and verified; owner review and merge pending on PR #164 | [design](specs/2026-09-12-project-documentation-architecture-design.md) · [execution plan](plans/2026-09-12-project-documentation-architecture.md) |
+| Phase 1.6 specification | Owner review pending; execution plan and plan-review gate have not started | [specification](specs/2026-09-12-phase-1-6-investments.md) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
