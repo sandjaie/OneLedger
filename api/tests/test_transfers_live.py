@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import ORIGIN, Fixture, _clean, _connect
 
 MARCH = date(2026, 3, 1)
@@ -45,6 +46,7 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Fixture]:
             # then every account and household this suite invented. `db/tests/0006` asserts
             # the seed creates at most one household, and a leftover fails the next push.
             _clean(cur)
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM person WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM household WHERE NOT (id = ANY(%s))", (seeded,))

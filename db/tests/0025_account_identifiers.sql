@@ -422,6 +422,11 @@ DROP TABLE institution_alias;
 DROP TRIGGER trg_institution_household_is_immutable ON institution;
 DROP FUNCTION preserve_institution_household();
 DROP FUNCTION assert_institution_alias_scope();
+-- V30 depends on V28's household-leading document key. This upgrade rehearsal runs inside a
+-- transaction, so temporarily remove the later dependency before recreating the V27 shape;
+-- ROLLBACK restores the live V30 constraint unchanged.
+ALTER TABLE valuation_snapshot
+  DROP CONSTRAINT fk_valuation_snapshot_document_household;
 ALTER TABLE document DROP CONSTRAINT uq_document_household_id;
 ALTER TABLE statement_layout DROP CONSTRAINT uq_statement_layout_household_id;
 ALTER TABLE account DROP CONSTRAINT IF EXISTS account_legacy_identity_is_migratable;

@@ -26,7 +26,7 @@ from oneledger.main import app
 from oneledger.routes import identity_backfill
 
 from .fixtures.synthetic_pdf import Placement, build_encrypted_pdf
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 from .live_database import test_dsn as _test_dsn
 from .test_account_from_statement_live import (
     ACCOUNT_NUMBER,
@@ -249,6 +249,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[BackfillFi
                 """DELETE FROM account_identifier ai USING account a
                      WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
             )
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute(
                 "DELETE FROM statement_layout WHERE household_id = %s"
@@ -344,6 +345,7 @@ def test_preview_uses_only_completed_provenance_and_owner_accounts(live: Backfil
         assert str(foreign_account) not in live.preview().text
     finally:
         with live.conn.cursor() as cur:
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE household_id = %s", (foreign_household,))
             cur.execute("DELETE FROM person WHERE household_id = %s", (foreign_household,))
             cur.execute("DELETE FROM household WHERE id = %s", (foreign_household,))

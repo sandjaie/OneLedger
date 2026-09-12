@@ -23,6 +23,7 @@ import pytest
 from oneledger import auth
 from oneledger.main import app
 
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import ORIGIN, Fixture, _clean, _connect
 from .test_transfers_live import MARCH, a_leg, an_account, candidates, client, pairs
 
@@ -79,6 +80,7 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Owner]:
             _clean(cur)
             if fixture is not None:
                 cur.execute("DELETE FROM app_user WHERE id = %s", (fixture.user_id,))
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM person WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM household WHERE NOT (id = ANY(%s))", (seeded,))

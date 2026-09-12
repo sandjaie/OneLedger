@@ -33,7 +33,7 @@ from oneledger.ingest.storage import DuplicateDocument
 from oneledger.ingest.words import Page
 from tests.test_ingest_pipeline import profile, statement, transaction
 
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 # A card number in the filename, which is how the real ones arrive: `document.original_filename`
 # must hold the masked form and nothing else (spec §5.6).
@@ -139,6 +139,7 @@ def _clean(cur: psycopg.Cursor[Any]) -> None:
     """These tests commit, so isolation is by teardown rather than by rollback."""
     cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
     cur.execute("DELETE FROM statement_layout")
+    clear_synthetic_account_valuation_periods(cur)
     cur.execute("DELETE FROM account WHERE name = 'pipeline test'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
 

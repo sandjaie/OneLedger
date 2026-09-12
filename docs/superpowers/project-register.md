@@ -43,7 +43,7 @@ change the roadmap.
 | 6 Sep 2026 | Gather missing history back to the approved anchor | Phase 2.1 can reconcile only evidence that exists | Before Phase 2.1 planning |
 | 6 Sep 2026 | Obtain complete investment history where available | Phase 1.6 and later return analysis need transaction-level continuity | During Phase 1.6 design and import planning |
 | 6 Sep 2026 | Confirm whether a real loan exists | Loan support is conditional and must not be speculative | Before activating Phase 4.6 |
-| 6 Sep 2026 | Resolve retirement-account and property treatment | These affect consolidated position and later planning boundaries | Before the first affected phase is designed |
+| 6 Sep 2026 | Confirm whether real property evidence exists | Property uses dated valuation snapshots, but no asset should be created without owner evidence | Before property enters Phase 2.1 coverage |
 | 6 Sep 2026 | Decide whether emergency handover ever permits another person access | This changes the single-owner privacy boundary | Only through a separate product and privacy decision |
 
 The detailed scoping-question record remains in [questions](questions.html). A question is linked

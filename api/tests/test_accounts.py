@@ -19,6 +19,8 @@ from oneledger.identifiers import CompleteIdentifier
 from oneledger.main import app
 from oneledger.routes import accounts
 
+from .live_database import clear_synthetic_account_valuation_periods
+
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 HOUSEHOLD_ID = UUID("22222222-2222-2222-2222-222222222222")
 SESSION_ID = UUID("33333333-3333-3333-3333-333333333333")
@@ -151,6 +153,7 @@ def live_accounts(
         admin.rollback()
         with admin.cursor() as cur:
             cur.execute("DELETE FROM account_identifier WHERE household_id = %s", (household_id,))
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
             cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))
             cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
@@ -694,6 +697,7 @@ def test_complete_identifier_reveal_hides_another_household(
     finally:
         with admin.cursor() as cur:
             cur.execute("DELETE FROM account_identifier WHERE id = %s", (foreign_identifier_id,))
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE id = %s", (foreign_account_id,))
             cur.execute("DELETE FROM person WHERE id = %s", (foreign_person_id,))
             cur.execute("DELETE FROM household WHERE id = %s", (foreign_household_id,))

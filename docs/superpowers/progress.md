@@ -13,10 +13,10 @@ Updated: 12 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Ready** — product direction exists; design and dated execution planning have not started | [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
-| Current documentation action | Owner review and merge of PR #164 | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Design the Phase 1.6 investment boundary, obtain owner approval, then write and review its specification and execution plan | [development cycle](../development-cycle.md) |
-| Implementation branch | No Phase 1.6 implementation branch has been started | — |
+| Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
+| Next product action | Begin Task 2 — immutable events, holdings and acquisition lots — from updated `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-2--immutable-events-holdings-and-acquisition-lots) |
+| Implementation branch | No active task branch; next is `feature/p1-6b-investment-events` from `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-2--immutable-events-holdings-and-acquisition-lots) |
 
 ## Canonical phase status
 
@@ -32,7 +32,7 @@ Updated: 12 September 2026.
 | 1.3 — classification and transfers | **Accepted, 11 Sep 2026** | [delivery history](reports/2026-09-12-progress-history.md) · [ADR-0020](../adr/0020-assisted-ledger-decisions.html) |
 | 1.4 — cards, net worth, and trends | **Accepted, 11 Sep 2026** | [delivery history](reports/2026-09-12-progress-history.md) |
 | 1.5 — statement-guided onboarding and owner decisions | **Accepted, 12 Sep 2026** | [identity specification](specs/2026-09-11-local-statement-identities.md) · [ADR-0021](../adr/0021-local-owner-financial-identifiers.html) |
-| 1.6 — investments | **Ready** | [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
+| 1.6 — investments | **In progress** | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | 1.7 — salary and a thin forecast | **Planned** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | 1.8 — layout mapper and documents | **Planned** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | 2.1 — complete historical coverage | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Canonical documentation migration | Implemented and verified; owner review and merge pending on PR #164 | [design](specs/2026-09-12-project-documentation-architecture-design.md) · [execution plan](plans/2026-09-12-project-documentation-architecture.md) |
+| Phase 1.6 Task 1 | **Complete via PR #165** after full `/verify`, all ten local-review findings resolved, confirmation approval and green pre-push gates; 1,351 API tests ran with live database paths enabled | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

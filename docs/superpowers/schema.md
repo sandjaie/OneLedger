@@ -1604,132 +1604,142 @@ CREATE UNIQUE INDEX idx_card_stmt_period ON card_statement (account_id, period_e
 
 ---
 
-## `0012`
+## `V30`
 
-### Investments
+### Investment instruments and dated valuations (applied)
+
+`account_valuation_period` records exactly one effective-dated net-worth value source at a time:
+`ledger_balance`, `holdings`, or `snapshot`. Liability accounts can use only `ledger_balance`.
+Overlaps are rejected transactionally. Existing V29 accounts are backfilled as `ledger_balance`;
+the migration never infers holdings or snapshots from an account type without supporting evidence.
+New accounts receive a type-appropriate initial period, and later changes go through the
+owner-authorized `transition_account_valuation_mode` operation so history is appended, not replaced.
+Account edits are guarded in the database: a safe opening-anchor correction moves the initial
+period in the same transaction, while a change that would strand a non-ledger mode, relabel a
+retained valuation's currency, or place it outside the account lifetime or anchor is refused.
+Snapshot insertion takes a conflicting account-row lock, so these checks also hold when an insert
+and parent edit race in separate transactions.
+
+`account_identifier.kind` now also admits `folio` and `brokerage_account`. These private kinds use
+the canonical `****` plus four-character mask and, when complete evidence exists, a 5–64 character
+ASCII-alphanumeric normalized value. The full source spelling remains in the existing local-only
+identifier envelope; it is not a `holding` or `security` field.
 
 ```sql
+CREATE TYPE account_valuation_mode AS ENUM ('ledger_balance', 'holdings', 'snapshot');
 CREATE TYPE security_type AS ENUM (
-  'mutual_fund','stock','etf','bond','gold_etf','sovereign_gold_bond','physical_gold',
-  'fixed_deposit','recurring_deposit','ppf','epf','nps','reit','crypto','other'
+  'mutual_fund', 'equity', 'exchange_traded_fund', 'bond', 'deposit',
+  'commodity', 'real_asset', 'alternative', 'other'
 );
-
 CREATE TYPE asset_class AS ENUM (
-  'indian_equity','international_equity','debt','gold','cash','real_estate','other'
+  'equity', 'fixed_income', 'cash', 'commodity', 'real_asset', 'alternative', 'other'
+);
+CREATE TYPE valuation_method AS ENUM (
+  'owner_entered', 'market_quote', 'indexed', 'statement'
+);
+CREATE TYPE valuation_confidence AS ENUM ('high', 'medium', 'low');
+
+CREATE TABLE account_valuation_period (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id   UUID NOT NULL REFERENCES household(id),
+  account_id     UUID NOT NULL,
+  valuation_mode account_valuation_mode NOT NULL,
+  effective_from DATE NOT NULL,
+  effective_to   DATE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (household_id, account_id) REFERENCES account(household_id, id),
+  EXCLUDE USING gist (
+    account_id WITH =,
+    daterange(effective_from, effective_to, '[]') WITH &&)
 );
 
 CREATE TABLE security (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id    UUID REFERENCES household(id), -- NULL = shared reference
+  security_type   security_type NOT NULL,
+  name            TEXT NOT NULL,
+  currency        CHAR(3) NOT NULL REFERENCES currency(code),
+  country         CHAR(2) NOT NULL,
+  asset_class     asset_class NOT NULL,
+  sub_asset_class TEXT,
+  isin            TEXT,
+  ticker          TEXT,
+  exchange        TEXT,
+  is_active       BOOLEAN NOT NULL DEFAULT true,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE security_price_source (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id         UUID REFERENCES household(id), -- matches security scope
+  security_id          UUID NOT NULL REFERENCES security(id),
+  source_key           TEXT NOT NULL,
+  source_version       TEXT NOT NULL,
+  source_security_code TEXT NOT NULL,
+  effective_from       DATE NOT NULL,
+  effective_to         DATE,
+  is_active            BOOLEAN NOT NULL DEFAULT true,
+  deactivated_at       TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE price_snapshot (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id      UUID REFERENCES household(id),      -- NULL = shared reference data
-  security_type     security_type NOT NULL,
-  name              TEXT NOT NULL,
-  isin              TEXT,
-  provider_code     TEXT,                                -- key into the price feed, e.g. an AMFI scheme code
-  ticker            TEXT,
-  exchange          TEXT,                                -- NSE|BSE|NASDAQ|NYSE
-  currency          CHAR(3) NOT NULL,
-  country           CHAR(2) NOT NULL,
-  asset_class       asset_class NOT NULL,
-  sub_asset_class   TEXT,                                -- large_cap|mid_cap|flexi_cap|gilt...
-  fund_house        TEXT,
-  expense_ratio_pct NUMERIC(9,4),
-  is_active         BOOLEAN NOT NULL DEFAULT true,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  household_id      UUID REFERENCES household(id), -- matches security/source scope
+  security_id       UUID NOT NULL REFERENCES security(id),
+  source_mapping_id UUID NOT NULL REFERENCES security_price_source(id),
+  price_date        DATE NOT NULL,
+  price             NUMERIC(20,6) NOT NULL,
+  currency          CHAR(3) NOT NULL REFERENCES currency(code),
+  observed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  is_accepted       BOOLEAN NOT NULL DEFAULT false,
+  accepted_at       TIMESTAMPTZ
 );
 
-CREATE UNIQUE INDEX idx_security_isin ON security (isin) WHERE isin IS NOT NULL;
-CREATE UNIQUE INDEX idx_security_provider ON security (provider_code) WHERE provider_code IS NOT NULL;
-
-CREATE TABLE holding (
-  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id          UUID NOT NULL REFERENCES household(id),
-  account_id            UUID NOT NULL REFERENCES account(id),
-  security_id           UUID NOT NULL REFERENCES security(id),
-  owner_person_id       UUID NOT NULL REFERENCES person(id),
-  folio_number          TEXT,
-
-  -- all materialised from investment_transaction
-  units                 NUMERIC(28,8) NOT NULL DEFAULT 0,
-  average_cost          NUMERIC(20,6),
-  invested_amount       NUMERIC(20,4) NOT NULL DEFAULT 0,
-  realised_gain         NUMERIC(20,4) NOT NULL DEFAULT 0,
-  currency              CHAR(3) NOT NULL,
-
-  current_price         NUMERIC(20,6),
-  current_price_date    DATE,
-  current_value         NUMERIC(20,4),
-
-  first_purchase_date   DATE,
-  last_transaction_date DATE,
-  xirr_pct              NUMERIC(9,4),
-  xirr_computed_at      TIMESTAMPTZ,
-
-  is_closed             BOOLEAN NOT NULL DEFAULT false,
-  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE UNIQUE INDEX idx_holding_unique
-  ON holding (account_id, security_id, COALESCE(folio_number,''));
-
-CREATE TYPE investment_txn_kind AS ENUM (
-  'buy','sell','sip','switch_in','switch_out','stp_in','stp_out','swp',
-  'dividend_payout','dividend_reinvest','bonus','split','rights',
-  'redemption','maturity','contribution','interest_credit','fee'
-);
-
-CREATE TABLE investment_transaction (
+CREATE TABLE valuation_snapshot (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id         UUID NOT NULL REFERENCES household(id),
-  holding_id           UUID NOT NULL REFERENCES holding(id),
-  security_id          UUID NOT NULL REFERENCES security(id),
-  account_id           UUID NOT NULL REFERENCES account(id),
-
-  txn_date             DATE NOT NULL,
-  txn_kind             investment_txn_kind NOT NULL,
-
-  units                NUMERIC(28,8),          -- signed: + acquire, − dispose
-  nav_or_price         NUMERIC(20,6),
-  gross_amount         NUMERIC(20,4) NOT NULL, -- signed
-  charges              NUMERIC(20,4) NOT NULL DEFAULT 0,   -- brokerage, STT, stamp, exit load
-  tax_withheld         NUMERIC(20,4) NOT NULL DEFAULT 0,   -- TDS / STCG at source
-  net_amount           NUMERIC(20,4) NOT NULL, -- signed; what hit the bank
-
-  currency             CHAR(3) NOT NULL,
+  account_id           UUID NOT NULL,
+  as_of_date           DATE NOT NULL,
+  value_native         NUMERIC(20,4) NOT NULL,
+  currency             CHAR(3) NOT NULL REFERENCES currency(code),
   fx_rate_date         DATE NOT NULL,
   fx_rate_to_base      NUMERIC(20,10) NOT NULL,
   fx_rate_to_secondary NUMERIC(20,10) NOT NULL,
-  amount_base          NUMERIC(20,4) NOT NULL,
-  amount_secondary     NUMERIC(20,4) NOT NULL,
-
-  cash_transaction_id  UUID REFERENCES transaction(id),   -- the bank debit/credit
-  source_document_id   UUID REFERENCES document(id),
-  dedupe_hash          TEXT NOT NULL,
-  notes                TEXT,
+  value_base           NUMERIC(20,4) NOT NULL,
+  value_secondary      NUMERIC(20,4) NOT NULL,
+  method               valuation_method NOT NULL,
+  confidence           valuation_confidence NOT NULL,
+  source_note          TEXT,
+  source_document_id   UUID,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT units_direction CHECK (
-    units                IS NULL
-    OR (txn_kind IN ('buy','sip','switch_in','stp_in','dividend_reinvest','bonus','contribution')
-        AND units >= 0)
-    OR (txn_kind IN ('sell','switch_out','stp_out','swp','redemption','maturity')
-        AND units <= 0)
-    OR txn_kind IN ('split','rights','fee','dividend_payout','interest_credit'))
-);
-
-CREATE UNIQUE INDEX idx_inv_txn_dedupe ON investment_transaction (household_id, dedupe_hash);
-CREATE INDEX idx_inv_txn_holding ON investment_transaction (holding_id, txn_date);
-
-CREATE TABLE price_snapshot (
-  security_id UUID NOT NULL REFERENCES security(id),
-  price_date  DATE NOT NULL,
-  price       NUMERIC(20,6) NOT NULL,
-  currency    CHAR(3) NOT NULL,
-  source      TEXT NOT NULL,          -- price_feed id|manual|statement
-  fetched_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (security_id, price_date)
+  FOREIGN KEY (household_id, source_document_id)
+    REFERENCES document(household_id, id),
+  CHECK (fx_rate_date <= as_of_date)
 );
 ```
+
+ISIN and exchange/ticker identities are unique public instrument keys. Source mappings are
+effective-dated, non-overlapping per security and capability, and keep their identity when
+deactivated. PostgreSQL exclusion constraints also ensure that one exact public
+source/version/code resolves to only one security during any date range, including across
+households; non-overlapping reassignment remains possible. Price insertion and mapping closure use
+conflicting row locks, and a mapping cannot be shortened before any retained observation. Price
+observations are unique by security, date, mapping, and exact price, so a conflicting value is
+retained rather than overwritten. Only one observation per security/date may be accepted; an
+explicit resolution may change the selection without changing either observation.
+
+Account valuations require `snapshot` mode, the account's currency and lifetime, exact positive FX
+rates dated no later than the valuation, and reporting values equal to the native value multiplied
+and rounded to four places. Their optional document evidence uses a household-leading composite
+foreign key. Price facts and valuation snapshots are immutable. All five tables have RLS:
+authenticated owners read shared and household rows where applicable, never another household,
+and anonymous reads are empty.
+
+`holding`, investment events, acquisition lots and their materialized-unit invariants are not
+present yet; they belong to V31. V30 therefore targets valuations at account level. V31 adds the
+holding alternative and exactly-one-target constraint after the holding relation exists.
 
 ---
 
@@ -1810,38 +1820,13 @@ CREATE TABLE loan_event (
 
 ---
 
-## `0014`
+## `0014` (historical planned slot)
 
 ### Valuations
 
-```sql
-CREATE TABLE valuation_snapshot (
-  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id         UUID NOT NULL REFERENCES household(id),
-  account_id           UUID REFERENCES account(id),
-  holding_id           UUID REFERENCES holding(id),
-
-  as_of_date           DATE NOT NULL,
-  value_native         NUMERIC(20,4) NOT NULL,
-  currency             CHAR(3) NOT NULL,
-
-  fx_rate_to_base      NUMERIC(20,10) NOT NULL,      -- frozen at as_of_date
-  fx_rate_to_secondary NUMERIC(20,10) NOT NULL,
-  value_base           NUMERIC(20,4) NOT NULL,
-  value_secondary      NUMERIC(20,4) NOT NULL,
-
-  method               TEXT NOT NULL,   -- manual|market_quote|indexed|statement
-  confidence           TEXT NOT NULL DEFAULT 'medium',   -- high|medium|low
-  source_note          TEXT,
-  source_document_id   UUID REFERENCES document(id),
-  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT one_target CHECK (num_nonnulls(account_id, holding_id) = 1)
-);
-
-CREATE UNIQUE INDEX idx_valuation_unique
-  ON valuation_snapshot (COALESCE(account_id, holding_id), as_of_date);
-```
+The first account-level `valuation_snapshot` implementation landed earlier as V30 so valuation
+mode and double-count prevention exist before holdings. Its applied DDL is recorded in the V30
+section above. V31 adds holding targets without creating a second valuation table.
 
 ---
 

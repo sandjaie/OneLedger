@@ -27,7 +27,7 @@ from oneledger import auth
 from oneledger.main import app
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 ORIGIN = {"Origin": "http://localhost:3000"}
 LAYOUT_ID = UUID("66666666-6666-6666-6666-666666666666")
@@ -120,6 +120,7 @@ def _clean(cur: psycopg.Cursor[Any]) -> None:
         """DELETE FROM account_identifier ai USING account a
              WHERE ai.account_id = a.id AND a.name = 'route test'"""
     )
+    clear_synthetic_account_valuation_periods(cur)
     cur.execute("DELETE FROM account WHERE name = 'route test'")
     cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")

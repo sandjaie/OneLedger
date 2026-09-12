@@ -22,7 +22,7 @@ from oneledger.ingest import pipeline
 from oneledger.main import app
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 ORIGIN = {"Origin": "http://localhost:3000"}
 SALT = "account-proposal-test-salt"
@@ -70,6 +70,7 @@ class Fixture:
                 """DELETE FROM account_identifier ai USING account a
                      WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
             )
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute(
                 """DELETE FROM institution_alias
@@ -212,6 +213,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
                 """DELETE FROM account_identifier ai USING account a
                      WHERE ai.account_id = a.id AND a.name LIKE 'proposal test%'"""
             )
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name LIKE 'proposal test%'")
             cur.execute(
                 "DELETE FROM institution_alias WHERE alias_normalized = 'unseen test institution'"

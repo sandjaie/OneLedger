@@ -37,6 +37,7 @@ from oneledger import auth
 from oneledger.main import app
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_import_review_live import Staged, _all_row_ids, _connect
 from .test_ingest_route_live import COLUMNS, SALT
 
@@ -200,6 +201,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[CardStaged
             # `card_statement` references `document` and `transaction`, so the cascade takes it.
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name = 'route test'")
             cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
