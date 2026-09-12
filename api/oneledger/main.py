@@ -1,7 +1,8 @@
 # api/oneledger/main.py
 import os
 from collections.abc import Awaitable, Callable
-from typing import Annotated
+from functools import lru_cache
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -50,6 +51,54 @@ app = FastAPI(
 )
 
 
+@lru_cache
+def _validation_location_schema() -> tuple[frozenset[str], frozenset[str]]:
+    """Read registered OpenAPI properties; never infer a safe field from request spelling."""
+    properties: set[str] = set()
+    dynamic: set[str] = set()
+
+    def visit(node: object) -> None:
+        if not isinstance(node, dict):
+            return
+        for name, child in node.get("properties", {}).items():
+            properties.add(name)
+            if isinstance(child, dict) and "additionalProperties" in child:
+                dynamic.add(name)
+            visit(child)
+        for value in node.values():
+            if isinstance(value, dict):
+                visit(value)
+            elif isinstance(value, list):
+                for item in value:
+                    visit(item)
+
+    visit(app.openapi())
+    return frozenset(properties), frozenset(dynamic)
+
+
+def _safe_validation_location(error: dict[str, Any]) -> list[str | int]:
+    trusted, dynamic = _validation_location_schema()
+    location = error["loc"]
+    if error["type"] == "extra_forbidden":
+        return [
+            item
+            if isinstance(item, int) or item in {"body", "path", "query", "header", "cookie"}
+            else "field"
+            for item in location
+        ]
+    result: list[str | int] = []
+    in_dynamic = False
+    for item in location:
+        if isinstance(item, int) or item in {"body", "path", "query", "header", "cookie"}:
+            result.append(item)
+        elif in_dynamic or item not in trusted:
+            result.append("field")
+        else:
+            result.append(item)
+            in_dynamic = item in dynamic
+    return result
+
+
 @app.exception_handler(RequestValidationError)
 async def private_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Validation diagnostics describe the failure, never echo the submitted body."""
@@ -60,17 +109,7 @@ async def private_validation_error(request: Request, exc: RequestValidationError
             "detail": [
                 {
                     "type": error["type"],
-                    "loc": (
-                        [
-                            component
-                            if isinstance(component, int)
-                            or component in {"body", "path", "query", "header", "cookie"}
-                            else "field"
-                            for component in error["loc"]
-                        ]
-                        if error["type"] == "extra_forbidden"
-                        else error["loc"]
-                    ),
+                    "loc": _safe_validation_location(error),
                     "msg": error["msg"],
                 }
                 for error in exc.errors()
