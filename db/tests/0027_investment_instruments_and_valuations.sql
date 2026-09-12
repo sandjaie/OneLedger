@@ -714,6 +714,37 @@ ROLLBACK;
 
 -- A populated V29 upgrade must not reinterpret existing accounts as structured evidence.
 BEGIN;
+-- Later migrations may depend on V30 relations. Remove their objects first so this historical
+-- upgrade test can reconstruct the exact pre-V30 shape it is responsible for proving.
+ALTER TABLE valuation_snapshot
+  DROP CONSTRAINT fk_valuation_snapshot_holding_household;
+DROP TRIGGER trg_account_investment_history_remains_valid ON account;
+DROP TRIGGER trg_investment_transaction_projects ON investment_transaction;
+DROP TRIGGER trg_investment_transaction_uses_append ON investment_transaction;
+DROP TRIGGER trg_investment_transaction_is_immutable ON investment_transaction;
+DROP TRIGGER trg_investment_unit_effect_uses_append ON investment_unit_effect;
+DROP TRIGGER trg_investment_unit_effect_is_immutable ON investment_unit_effect;
+DROP TRIGGER trg_acquisition_lot_uses_append ON acquisition_lot;
+DROP TRIGGER trg_acquisition_lot_is_immutable ON acquisition_lot;
+DROP TRIGGER trg_holding_write_is_derived ON holding;
+DROP FUNCTION append_investment_transaction(
+  UUID, UUID, DATE, investment_event_kind,
+  NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, CHAR,
+  DATE, NUMERIC, NUMERIC, NUMERIC, NUMERIC,
+  investment_event_source, TEXT, TEXT, TEXT, TEXT, UUID, TEXT);
+DROP FUNCTION project_investment_transaction();
+DROP FUNCTION refresh_holding_projection(UUID);
+DROP FUNCTION investment_units_from_events(UUID);
+DROP FUNCTION guard_investment_history_insert();
+DROP FUNCTION preserve_investment_history();
+DROP FUNCTION guard_holding_write();
+DROP FUNCTION preserve_account_investment_history();
+DROP TABLE acquisition_lot;
+DROP TABLE investment_unit_effect;
+DROP TABLE investment_transaction;
+DROP TABLE holding;
+DROP TYPE investment_event_source;
+DROP TYPE investment_event_kind;
 DROP TRIGGER trg_account_valuation_period_initialized ON account;
 DROP TRIGGER trg_account_valuation_children_remain_valid ON account;
 DROP TRIGGER trg_account_valuation_period_scope ON account_valuation_period;

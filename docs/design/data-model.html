@@ -833,26 +833,37 @@ source mapping and price. Conflicting observations remain; only the accepted sel
 <tr><td><code>valuation_snapshot</code></td><td>An immutable account-level opaque-asset value with dated,
 non-future frozen reporting FX, method, confidence and optional evidence protected by a
 household-leading document foreign key.</td></tr>
-<tr><td><code>holding</code>, events and lots</td><td>V31 adds transaction-derived units and acquisition
-history. They are not present in V30.</td></tr>
-</tbody></table><p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>.</p>
+<tr><td><code>holding</code></td><td>One retained household/account/security position. Exact current
+units and open/closed dates are a guarded projection rebuilt from immutable unit effects; zero-unit
+holdings remain queryable as history.</td></tr>
+<tr><td><code>investment_transaction</code></td><td>An immutable, household-scoped event with a constrained
+kind-specific field matrix, exact signed units and cash direction, frozen reporting amounts,
+source-contract dedupe and optional owner-entered correction link.</td></tr>
+<tr><td><code>investment_unit_effect</code></td><td>One immutable signed-unit effect per unit-bearing event.
+Rebuilds exclude an effect only when an appended correction replaces its source event.</td></tr>
+<tr><td><code>acquisition_lot</code></td><td>The immutable date, units, evidenced native basis and origin
+event of an acquisition. Closing a holding never deletes its acquisition history.</td></tr>
+</tbody></table><p>Once events exist, parent security-currency and account date or valuation-mode
+edits are refused when they would relabel or strand that retained history.</p>
+<p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
+<code>V30</code>–<code>V31</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
 </code></pre>
 <p>by Newton–Raphson with bisection fallback (Newton alone diverges on irregular SIP series).
-Recomputed on any new investment transaction or price refresh, stored on <code>holding</code>, and stamped
-with <code>xirr_computed_at</code> so a stale figure is visible as stale.</p>
+The V31 holding stores units only; Task 20 adds the shared exact return calculator and any explicitly
+dated cache contract.</p>
 <h3 id="manual-valuations">Manual valuations</h3>
 <p>For an opaque asset with supplied evidence and no unambiguous market price
 (<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>).</p>
 <p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> V30 targets an account in
 <code>snapshot</code> period and freezes exact reporting values and non-future FX evidence beside the native value.
-V31 adds the alternative holding target once holdings exist and enforces exactly one target. Method,
+V31 adds the alternative holding target and enforces exactly one account or holding target. Account
+snapshots require <code>snapshot</code> mode; holding snapshots require <code>holdings</code> mode. Method,
 confidence and age are always displayed; no retirement placeholder is created without evidence.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>.</p>
+<code>V30</code>–<code>V31</code>.</p>
 <p><strong>Carried forward flat, never extrapolated.</strong> The valuation in effect on any date is the most
 recent snapshot at or before it. A trend line between two snapshots is drawn as a step, not a
 slope, because a smooth line would imply knowledge that does not exist (Invariant I7).</p>
