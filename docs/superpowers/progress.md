@@ -15,8 +15,8 @@ Updated: 12 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Complete Task 1 confirmation review, then make the first push and open its PR to `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
-| Implementation branch | `feature/p1-6a-investment-ledger` — V30 instruments and dated values under confirmation review | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Next product action | Owner review of PR #165; merge only after approval, then begin Task 2 from updated `develop` | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
+| Implementation branch | `feature/p1-6a-investment-ledger` — PR #165 open against `develop` with local verification and confirmation review green | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
 
 ## Canonical phase status
 
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Phase 1.6 Task 1 | Full `/verify` green after all nine local-review findings were fixed, including 1,351 API tests with live database paths enabled; confirmation review remains before push | [plan](plans/2026-09-12-phase-1-6-investments.md#task-1--instruments-and-dated-values) |
+| Phase 1.6 Task 1 | PR #165 open after full `/verify`, all ten local-review findings resolved, confirmation approval and green pre-push gates; 1,351 API tests ran with live database paths enabled | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
