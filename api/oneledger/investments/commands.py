@@ -256,11 +256,11 @@ def correct_acquisition(
                 raise InvestmentCommandError(404, "investment event not found")
             if original[0] not in {"purchase", "recurring_purchase"}:
                 raise InvestmentCommandError(422, "only acquisition events can be corrected here")
-            _screen_correction_reason(cur, body.correctionReason)
             existing = _existing_key(
                 cur, owner.household_id, _CORRECTION_SOURCE, body.idempotencyKey
             )
             if existing is None:
+                _screen_correction_reason(cur, body.correctionReason)
                 cur.execute(
                     """SELECT id FROM investment_transaction
                          WHERE household_id = %s AND corrects_transaction_id = %s""",

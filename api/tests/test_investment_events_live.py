@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from uuid import UUID, uuid4
@@ -278,6 +279,62 @@ def test_correction_is_idempotent_preserves_original_and_refuses_stale_second_wr
             (live_events.owner.household_id,),
         )
         assert cur.fetchone() == ("3.00000000", "3.00000000")
+
+
+def test_correction_retry_survives_a_stricter_privacy_policy(
+    live_events: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A later classifier policy must govern new writes without invalidating immutable retries."""
+    original_body = _body(live_events)
+    original = TestClient(app).post("/investment-events/acquisitions", json=original_body)
+    second = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={**original_body, "idempotencyKey": str(uuid4())},
+    )
+    assert original.status_code == second.status_code == 201
+    correction_body = {
+        **_body(live_events),
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "Manual correction review completed",
+    }
+    corrected = TestClient(app).post(
+        f"/investment-events/{original.json()['id']}/corrections", json=correction_body
+    )
+    assert corrected.status_code == 201, corrected.text
+
+    stricter_policy = re.compile(r"\bmanual correction review\b", re.IGNORECASE)
+    monkeypatch.setattr(commands, "CONTEXTUAL_SECRET", stricter_policy)
+    retried = TestClient(app).post(
+        f"/investment-events/{original.json()['id']}/corrections", json=correction_body
+    )
+    newly_private = TestClient(app).post(
+        f"/investment-events/{original.json()['id']}/corrections",
+        json={**correction_body, "idempotencyKey": str(uuid4())},
+    )
+    conflicting_reuse = TestClient(app).post(
+        f"/investment-events/{second.json()['id']}/corrections", json=correction_body
+    )
+
+    assert retried.status_code == 200
+    assert retried.json() == corrected.json()
+    assert newly_private.status_code == 422
+    assert newly_private.json() == {
+        "detail": "correction reason must not contain private information"
+    }
+    assert correction_body["correctionReason"] not in newly_private.text
+    assert conflicting_reuse.status_code == 409
+    assert conflicting_reuse.json() == {"detail": "idempotency key conflicts with another event"}
+    with live_events.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id IS NOT NULL AND household_id = %s)""",
+            (live_events.owner.household_id,) * 4,
+        )
+        assert cur.fetchone() == (3, 3, 3, 1)
 
 
 def test_cross_household_references_and_foreign_correction_are_hidden(
