@@ -11,6 +11,8 @@ import importlib.util
 import pathlib
 import subprocess
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 # Loaded by path: the script's name has a hyphen, as its neighbours' do.
 _spec = importlib.util.spec_from_file_location("check_docs", ROOT / "scripts" / "check-docs.py")
@@ -49,18 +51,26 @@ def test_delivery_terminology_reports_retired_current_identifiers(
 
 def test_delivery_terminology_allows_crosswalk_and_excludes_history(
     tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    master = tmp_path / "master-implementation-plan.html"
+    master = tmp_path / "docs" / "product" / "master-implementation-plan.html"
+    master.parent.mkdir(parents=True)
     master.write_text(
         "<p>Phase 1.6 follows Phase 1.5.</p>\n"
         "<!-- historical-numbering-crosswalk:start -->\n"
         "<p>M7 was the former investment milestone in V2-era documents.</p>\n"
         "<!-- historical-numbering-crosswalk:end -->\n"
     )
-    historical = tmp_path / "2026-09-09-phase-delivery-plan.md"
+    register = tmp_path / "docs" / "superpowers" / "project-register.md"
+    register.parent.mkdir(parents=True)
+    register.write_text("Phase 1.6 is ready for planning.\n")
+    historical = tmp_path / "docs" / "superpowers" / "reports" / "2026-09-09-history.md"
+    historical.parent.mkdir(parents=True)
     historical.write_text("Phase 2B and slice 1.8 are historical.\n")
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    monkeypatch.setattr(check_docs, "CANONICAL_DELIVERY_DOCUMENTS", (master, register))
 
-    problems = check_docs.check_delivery_terminology([master])
+    problems = check_docs.check_delivery_terminology()
 
     assert problems == []
 
