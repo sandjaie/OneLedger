@@ -839,6 +839,22 @@ a row imported before its layout learned the keys is read too; <code>raw_row</co
 could not reach it
 (<a href="multi-currency-and-fx.html">multi-currency-and-fx.html</a> §5,
 <a href="transfers-and-reconciliation.html">transfers-and-reconciliation.html</a> §3).</p>
+<h3>Investment statement staging</h3>
+<p>Investment statements use the same immutable document store but a separate Phase 1.6 staging
+shape. One document owns one <code>investment_import</code>. Its
+<code>investment_import_group</code> children keep every multi-holding switch, transfer or other
+dependent action atomic, while <code>investment_event_draft</code> rows and
+<code>investment_position_checkpoint</code> rows keep transaction evidence distinct from summary
+evidence. A checkpoint can confirm or dispute a position; it never manufactures an event.</p>
+<p><code>investment_evidence</code> retains only typed, bounded provenance: document, page and row,
+source contract and extraction version, an optional private source-event identity, and a versioned
+content fingerprint. It stores no filename or raw statement row. Exact replay is idempotent. A
+conflicting identity attaches no evidence and creates a fixed-severity
+<code>duplicate_conflict</code> review item that blocks only the affected group. Other review reasons
+use the same fixed blocking/advisory matrix, and a group with an open blocking item cannot be
+marked ready or committed. Once attached, the draft or checkpoint's typed source facts cannot be
+edited in place; later resolution may identify its account, security or holding and advance its
+lifecycle without rewriting what the source stated.</p>
 <hr>
 <h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
 <p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because
