@@ -2030,12 +2030,15 @@ match, no event side is over-allocated, no cash row mixes roles, and every cash 
 allocated. It then maps the leaf to `investment_buy`, `investment_sell`, `investment_income` or
 `investment_fee`; all four stay outside `v_transaction_reportable`. An allocated split child may
 carry that derived type while its ordinary sibling keeps the parent type, but a split parent is
-never linkable and every pre-existing split invariant remains enforced.
+never linkable, an allocated leaf must be unlinked before splitting, and every pre-existing split
+invariant remains enforced. The child type exception requires both the owning operation context and
+an allocation whose role maps exactly to that type; a caller-set flag alone grants nothing.
 
 `unlink_investment_cash_allocations` removes every allocation for one leaf in the same operation and
 restores the exact stored prior type. `allocate_investment_lots` accepts only an owner-visible unit
 disposal and acquisition lots from its holding, locks both sides, and refuses disposal-side or
-origin-lot over-allocation; it never chooses a lot or invents FIFO. V33 refuses a populated legacy
+origin-lot over-allocation. A lot may precede or share the disposal date but may not postdate it; the
+operation never chooses a lot or invents FIFO. V33 refuses a populated legacy
 cash-link column before schema changes, recreates the split guard and invoker-security ledger views
 without that column, then drops it. `classification_state_is_valid` now admits `investment_fee`.
 

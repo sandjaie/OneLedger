@@ -45,6 +45,7 @@ TxnType = Literal[
     "investment_buy",
     "investment_sell",
     "investment_income",
+    "investment_fee",
     "loan_disbursement",
     "loan_repayment",
     "adjustment",

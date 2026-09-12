@@ -120,7 +120,7 @@ def test_untrusted_or_report_excluding_priors_do_not_amplify() -> None:
     exclusion = Prior(
         account_id=ACCOUNT,
         description_clean="SYNTHETIC FUNDING",
-        txn_type="investment_buy",
+        txn_type="investment_fee",
         trusted=True,
     )
 

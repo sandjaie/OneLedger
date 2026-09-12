@@ -796,7 +796,7 @@ export type ClassificationState = {
     /**
      * Txntype
      */
-    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance';
+    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'investment_fee' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance';
     /**
      * Categoryid
      */
@@ -952,7 +952,7 @@ export type DerivedChanges = {
     /**
      * Txntype
      */
-    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'investment_fee' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
     /**
      * Categoryid
      */
@@ -1562,7 +1562,7 @@ export type KnowledgeBody = {
     /**
      * Txntype
      */
-    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    txnType?: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'investment_fee' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
     /**
      * Paymentmethod
      */
@@ -1668,7 +1668,7 @@ export type KnowledgeRow = {
     /**
      * Txntype
      */
-    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
+    txnType: 'income' | 'expense' | 'fee' | 'interest' | 'tax' | 'refund' | 'transfer_in' | 'transfer_out' | 'investment_buy' | 'investment_sell' | 'investment_income' | 'investment_fee' | 'loan_disbursement' | 'loan_repayment' | 'adjustment' | 'opening_balance' | null;
     /**
      * Paymentmethod
      */

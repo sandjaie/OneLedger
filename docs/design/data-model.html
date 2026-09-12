@@ -742,7 +742,8 @@ amount, its <code>description_raw</code> and its document provenance (I6); the c
 <code>account_id</code>, <code>booked_date</code>, <code>source_document_id</code> and the frozen FX columns from it, and differ
 only in <code>amount</code>, <code>category_id</code> and <code>notes</code>. One narrow exception is an
 exactly allocated investment leaf: its owner-authorized allocation operation derives the applicable
-investment transaction type while ordinary siblings retain the parent type.</p>
+investment transaction type while ordinary siblings retain the parent type. The allocation must be
+unlinked before that leaf can become a split parent.</p>
 <p>A constraint trigger asserts children sum exactly to the parent, so a split can never change an
 account&#39;s balance:</p>
 <pre><code class="language-sql">-- SUM(child.amount) = parent.amount, enforced at statement end

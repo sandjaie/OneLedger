@@ -214,6 +214,14 @@ BEGIN
     IF parent.parent_transaction_id IS NOT NULL THEN
       RAISE EXCEPTION 'splits are one level deep: the parent of % is itself a split child', NEW.id;
     END IF;
+    IF EXISTS (
+      SELECT FROM investment_cash_allocation allocation
+       WHERE allocation.cash_transaction_id = parent.id
+    ) THEN
+      RAISE EXCEPTION 'an allocated cash leaf must be unlinked before it can be split'
+        USING ERRCODE = '23514',
+              CONSTRAINT = 'investment_cash_transaction_must_remain_leaf';
+    END IF;
     IF EXISTS (SELECT FROM transaction child WHERE child.parent_transaction_id = NEW.id) THEN
       RAISE EXCEPTION 'splits are one level deep: % has children and cannot become a child', NEW.id;
     END IF;
@@ -229,12 +237,22 @@ BEGIN
     OR NEW.is_excluded           IS DISTINCT FROM parent.is_excluded
     OR (
       NEW.txn_type IS DISTINCT FROM parent.txn_type
-      AND current_setting('oneledger.investment_cash_allocation_write', true)
-            IS DISTINCT FROM 'on'
-      AND NOT EXISTS (
-        SELECT FROM investment_cash_allocation allocation
-         WHERE allocation.cash_transaction_id = NEW.id
-           AND investment_cash_type_for_role(allocation.role) = NEW.txn_type::TEXT
+      AND NOT (
+        current_user = pg_get_userbyid((
+          SELECT relation.relowner FROM pg_class relation
+           WHERE relation.oid = 'investment_cash_allocation'::regclass
+        ))
+        AND current_setting('oneledger.investment_cash_allocation_write', true) = 'on'
+        AND EXISTS (
+          SELECT FROM investment_cash_allocation allocation
+           WHERE allocation.cash_transaction_id = NEW.id
+             AND CASE allocation.role
+                   WHEN 'funding' THEN 'investment_buy'
+                   WHEN 'proceeds' THEN 'investment_sell'
+                   WHEN 'cash_distribution' THEN 'investment_income'
+                   WHEN 'fee' THEN 'investment_fee'
+                 END = NEW.txn_type::TEXT
+        )
       )
     )
     OR NEW.transfer_id           IS DISTINCT FROM parent.transfer_id
@@ -626,6 +644,14 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'an acquisition lot must belong to the disposal holding'
       USING ERRCODE = '23514', CONSTRAINT = 'investment_lot_matches_disposal_holding';
+  END IF;
+  IF EXISTS (
+    SELECT FROM acquisition_lot lot
+     WHERE lot.id = ANY(p_acquisition_lot_ids)
+       AND lot.acquisition_date > disposal.event_date
+  ) THEN
+    RAISE EXCEPTION 'an acquisition lot cannot postdate its disposal'
+      USING ERRCODE = '23514', CONSTRAINT = 'investment_lot_precedes_disposal';
   END IF;
   IF COALESCE((SELECT sum(allocated_units) FROM investment_lot_allocation
                 WHERE disposal_transaction_id = disposal.id), 0)

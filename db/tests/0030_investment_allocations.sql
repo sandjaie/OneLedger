@@ -164,6 +164,42 @@ BEGIN
   RETURN result;
 END $$;
 
+CREATE OR REPLACE FUNCTION pg_temp.t0030_event(
+  p_account UUID, p_security UUID, p_date DATE, p_kind investment_event_kind,
+  p_units NUMERIC, p_gross NUMERIC, p_charges NUMERIC, p_tax NUMERIC,
+  p_net NUMERIC, p_currency CHAR(3), p_key TEXT
+) RETURNS UUID LANGUAGE sql AS $$
+  SELECT append_investment_transaction(
+    p_account, p_security, p_date, p_kind, p_units,
+    CASE WHEN p_units IS NULL THEN NULL ELSE p_gross / abs(p_units) END,
+    p_gross, p_charges, p_tax, p_net, p_currency, p_date, 1, 1, p_net, p_net,
+    'owner_entered', 'allocation_v1', p_key, NULL, NULL, NULL, NULL)
+$$;
+
+-- Cash-only event append APIs arrive with the later lifecycle task. This test fixture inserts
+-- their already-validated immutable shape so Task 4 can prove allocation behavior now.
+CREATE OR REPLACE FUNCTION pg_temp.t0030_cash_event(
+  p_origin UUID, p_date DATE, p_kind investment_event_kind, p_gross NUMERIC,
+  p_charges NUMERIC, p_tax NUMERIC, p_net NUMERIC, p_key TEXT
+) RETURNS UUID LANGUAGE plpgsql AS $$
+DECLARE origin investment_transaction%ROWTYPE; result UUID;
+BEGIN
+  SELECT * INTO STRICT origin FROM investment_transaction WHERE id = p_origin;
+  PERFORM set_config('oneledger.investment_event_append', 'on', true);
+  INSERT INTO investment_transaction (
+    household_id, account_id, holding_id, security_id, event_date, event_kind,
+    gross_amount, charges, withheld_tax, net_amount, currency, fx_rate_date,
+    fx_rate_to_base, fx_rate_to_secondary, net_amount_base, net_amount_secondary,
+    source_kind, source_contract, source_event_id
+  ) VALUES (
+    origin.household_id, origin.account_id, origin.holding_id, origin.security_id, p_date, p_kind,
+    p_gross, p_charges, p_tax, p_net, origin.currency, p_date, 1, 1, p_net, p_net,
+    'owner_entered', 'allocation_v1', p_key
+  ) RETURNING id INTO result;
+  PERFORM set_config('oneledger.investment_event_append', 'off', true);
+  RETURN result;
+END $$;
+
 -- One event may use several cash leaves. Confirmation removes their ordinary flow, and unlink
 -- restores each leaf's exact previous type without touching immutable money.
 BEGIN;
@@ -223,6 +259,57 @@ BEGIN
   ASSERT spend_after = 60.0000,
     'only the unlinked fee leaf returns to ordinary reporting';
   RAISE NOTICE 'PASS 0030 many-to-many cash allocation and exact unlink restoration';
+END $$;
+ROLLBACK;
+
+-- Every cash role confirms/unlinks symmetrically; one complete same-role leaf may fund many events.
+BEGIN;
+DO $$
+DECLARE f RECORD; purchase UUID; sale UUID; distribution UUID; fee_a UUID; fee_b UUID;
+        sale_cash UUID; distribution_cash UUID; fee_cash UUID;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0030_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  purchase := pg_temp.t0030_event(f.investment_1, f.security_1, '2026-03-01',
+    'purchase', 10, 100, 0, 0, -100, f.base, 'role-origin');
+  sale := pg_temp.t0030_event(f.investment_1, f.security_1, '2026-03-02',
+    'sale', -2, 12, 0, 0, 12, f.base, 'role-sale');
+  distribution := pg_temp.t0030_cash_event(purchase, '2026-03-03',
+    'cash_distribution', 3, 0, 0, 3, 'role-distribution');
+  fee_a := pg_temp.t0030_cash_event(purchase, '2026-03-04',
+    'charge', NULL, 1, 0, -1, 'role-fee-a');
+  fee_b := pg_temp.t0030_cash_event(purchase, '2026-03-05',
+    'charge', NULL, 2, 0, -2, 'role-fee-b');
+  sale_cash := pg_temp.t0030_cash(f.h1, f.cash_1, 12, f.base, 'income', 'role-cash-sale');
+  distribution_cash := pg_temp.t0030_cash(f.h1, f.cash_1, 3, f.base, 'refund',
+    'role-cash-distribution');
+  fee_cash := pg_temp.t0030_cash(f.h1, f.cash_1, -3, f.base, 'fee', 'role-cash-fee');
+
+  PERFORM confirm_investment_cash_allocations(ARRAY[sale], ARRAY[sale_cash],
+    ARRAY['proceeds']::investment_cash_allocation_role[], ARRAY[12]);
+  PERFORM confirm_investment_cash_allocations(ARRAY[distribution], ARRAY[distribution_cash],
+    ARRAY['cash_distribution']::investment_cash_allocation_role[], ARRAY[3]);
+  PERFORM confirm_investment_cash_allocations(ARRAY[fee_a, fee_b], ARRAY[fee_cash, fee_cash],
+    ARRAY['fee', 'fee']::investment_cash_allocation_role[], ARRAY[1, 2]);
+  ASSERT (SELECT count(*) = 4
+      AND count(*) FILTER (WHERE role = 'proceeds' AND cash.txn_type = 'investment_sell') = 1
+      AND count(*) FILTER (WHERE role = 'cash_distribution'
+                           AND cash.txn_type = 'investment_income') = 1
+      AND count(*) FILTER (WHERE role = 'fee' AND cash.txn_type = 'investment_fee') = 2
+    FROM investment_cash_allocation JOIN transaction cash ON cash.id = cash_transaction_id
+    WHERE cash.id IN (sale_cash, distribution_cash, fee_cash)),
+    'every non-funding role maps to its report-excluded type';
+  ASSERT NOT EXISTS (SELECT FROM v_transaction_reportable
+                      WHERE id IN (sale_cash, distribution_cash, fee_cash)),
+    'every allocated investment role is outside ordinary reporting';
+  ASSERT (SELECT count(*) = 2 FROM investment_cash_allocation WHERE cash_transaction_id = fee_cash),
+    'one cash leaf may allocate to several investment events';
+  PERFORM unlink_investment_cash_allocations(cash)
+    FROM unnest(ARRAY[sale_cash, distribution_cash, fee_cash]) cash;
+  ASSERT (SELECT array_agg(txn_type::TEXT ORDER BY txn_type::TEXT) FROM transaction WHERE id IN
+          (sale_cash, distribution_cash, fee_cash)) = ARRAY['fee', 'income', 'refund'],
+    'unlink restores every role leaf to its exact prior type';
+  RAISE NOTICE 'PASS 0030 all cash roles and one leaf to many events';
 END $$;
 ROLLBACK;
 
@@ -342,9 +429,12 @@ ROLLBACK;
 -- A split parent is never cash evidence; an exactly allocated split child is a leaf and may be
 -- reclassified without weakening the one-level or exact-sum split invariants.
 BEGIN;
+GRANT UPDATE (txn_type) ON transaction TO authenticated;
+GRANT EXECUTE ON FUNCTION investment_cash_type_for_role(investment_cash_allocation_role)
+  TO authenticated;
 DO $$
 DECLARE f RECORD; event_id UUID; parent_id UUID; child_investment UUID; child_ordinary UUID;
-        refusal TEXT; reported NUMERIC;
+        allocated_event UUID; allocated_leaf UUID; refusal TEXT; reported NUMERIC;
 BEGIN
   SET CONSTRAINTS ALL IMMEDIATE;
   SELECT * INTO f FROM pg_temp.t0030_fixture();
@@ -389,6 +479,45 @@ BEGIN
     'an allocated split child carries the investment classification';
   ASSERT (SELECT txn_type = 'expense' FROM transaction WHERE id = child_ordinary),
     'the sibling keeps its ordinary classification';
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    PERFORM set_config('oneledger.investment_cash_allocation_write', 'on', true);
+    UPDATE transaction SET txn_type = 'investment_buy' WHERE id = child_ordinary;
+    RESET ROLE;
+  EXCEPTION WHEN raise_exception THEN NULL;
+  END;
+  ASSERT (SELECT txn_type = 'expense' FROM transaction WHERE id = child_ordinary),
+    'a caller-set flag cannot reclassify an unallocated split child';
+  SELECT -sum(amount_base) INTO reported FROM v_transaction_reportable
+   WHERE id IN (parent_id, child_investment, child_ordinary);
+  ASSERT reported = 60.0000, 'a spoofed split-child change cannot alter reportable flow';
+
+  allocated_event := pg_temp.t0030_event(f.investment_1, f.security_1, '2026-03-02',
+    'purchase', 2, 20, 0, 0, -20, f.base, 'allocated-parent-event');
+  allocated_leaf := pg_temp.t0030_cash(f.h1, f.cash_2, -20, f.base, 'expense',
+    'allocated-parent-cash');
+  PERFORM confirm_investment_cash_allocations(ARRAY[allocated_event], ARRAY[allocated_leaf],
+    ARRAY['funding']::investment_cash_allocation_role[], ARRAY[20]);
+  BEGIN
+    INSERT INTO transaction (
+      household_id, account_id, booked_date, description_raw, amount, currency,
+      fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
+      amount_secondary, txn_type, source, dedupe_hash, parent_transaction_id
+    ) VALUES
+      (f.h1, f.cash_2, '2026-03-01', 'SYNTHETIC ALLOCATION CASH', -8, f.base,
+       '2026-03-01', 1, 1, -8, -8, 'investment_buy', 'manual', 'stranded-child-a', allocated_leaf),
+      (f.h1, f.cash_2, '2026-03-01', 'SYNTHETIC ALLOCATION CASH', -12, f.base,
+       '2026-03-01', 1, 1, -12, -12, 'investment_buy', 'manual', 'stranded-child-b', allocated_leaf);
+    RAISE EXCEPTION 'an allocated leaf became a split parent';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_cash_transaction_must_remain_leaf', refusal;
+  END;
+  ASSERT NOT EXISTS (SELECT FROM transaction WHERE parent_transaction_id = allocated_leaf),
+    'refusing the split leaves no child behind';
+  PERFORM unlink_investment_cash_allocations(allocated_leaf);
+  ASSERT (SELECT txn_type = 'expense' FROM transaction WHERE id = allocated_leaf),
+    'the still-leaf cash row remains unlinkable';
   RAISE NOTICE 'PASS 0030 split parents refuse and allocated split leaves remain exact';
 END $$;
 ROLLBACK;
@@ -396,9 +525,9 @@ ROLLBACK;
 -- Lot allocation records only evidenced units against a disposal and its own holding's origins.
 BEGIN;
 DO $$
-DECLARE f RECORD; purchase_id UUID; other_purchase UUID; foreign_purchase UUID;
+DECLARE f RECORD; purchase_id UUID; later_purchase UUID; other_purchase UUID; foreign_purchase UUID;
         sale_one UUID; sale_two UUID; foreign_lot UUID;
-        lot_id UUID; other_lot UUID; refusal TEXT;
+        lot_id UUID; later_lot UUID; other_lot UUID; refusal TEXT;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0030_fixture();
   PERFORM set_config('app.user_id', f.u1::TEXT, true);
@@ -432,7 +561,10 @@ BEGIN
     '2026-03-02', 1, 1, 24.0000, 24.0000,
     'owner_entered', 'allocation_v1', 'lot-sale-two', NULL, NULL, NULL, NULL
   );
+  later_purchase := pg_temp.t0030_event(f.investment_1, f.security_1, '2026-03-03',
+    'purchase', 1, 5, 0, 0, -5, f.base, 'lot-origin-later');
   SELECT id INTO lot_id FROM acquisition_lot WHERE origin_transaction_id = purchase_id;
+  SELECT id INTO later_lot FROM acquisition_lot WHERE origin_transaction_id = later_purchase;
   SELECT id INTO other_lot FROM acquisition_lot WHERE origin_transaction_id = other_purchase;
 
   PERFORM allocate_investment_lots(sale_one, ARRAY[lot_id], ARRAY[4.00000000]);
@@ -443,6 +575,16 @@ BEGIN
        AND allocation.allocated_units = 4.00000000
        AND lot.origin_transaction_id = purchase_id
   ), 'a lot allocation retains its acquisition origin';
+
+  BEGIN
+    PERFORM allocate_investment_lots(sale_two, ARRAY[later_lot], ARRAY[1.00000000]);
+    RAISE EXCEPTION 'a post-disposal acquisition lot was allocated';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_lot_precedes_disposal', refusal;
+  END;
+  ASSERT NOT EXISTS (SELECT FROM investment_lot_allocation WHERE acquisition_lot_id = later_lot),
+    'the temporal refusal is atomic';
 
   BEGIN
     PERFORM allocate_investment_lots(sale_two, ARRAY[other_lot], ARRAY[1.00000000]);
@@ -592,33 +734,5 @@ BEGIN
     'anonymous readers see no lot allocations';
   RESET ROLE;
   RAISE NOTICE 'PASS 0030 direct DML fails closed and allocation RLS isolates households';
-END $$;
-ROLLBACK;
-
--- The upgrade guard refuses a populated legacy link before that column can be removed.
-BEGIN;
-ALTER TABLE transaction ADD COLUMN investment_transaction_id UUID;
-DO $$
-DECLARE f RECORD; cash_id UUID; refusal TEXT;
-BEGIN
-  SELECT * INTO f FROM pg_temp.t0030_fixture();
-  cash_id := pg_temp.t0030_cash(f.h1, f.cash_1, -1.0000, f.base, 'expense', 'legacy-cash');
-  UPDATE transaction SET investment_transaction_id = gen_random_uuid() WHERE id = cash_id;
-  BEGIN
-    PERFORM assert_legacy_investment_cash_links_empty(
-      (SELECT count(*) FROM transaction WHERE investment_transaction_id IS NOT NULL));
-    RAISE EXCEPTION 'a populated legacy investment link passed the V33 upgrade guard';
-  EXCEPTION WHEN check_violation THEN
-    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
-    ASSERT refusal = 'legacy_investment_cash_links_must_be_empty', refusal;
-  END;
-  ASSERT EXISTS (
-    SELECT FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = 'transaction'
-       AND column_name = 'investment_transaction_id'
-  ), 'the refusal must occur while the legacy column still exists';
-  ASSERT (SELECT investment_transaction_id IS NOT NULL FROM transaction WHERE id = cash_id),
-    'the refused upgrade must preserve its existing legacy value';
-  RAISE NOTICE 'PASS 0030 populated legacy link fails before column removal';
 END $$;
 ROLLBACK;

@@ -234,7 +234,7 @@ def test_equal_strength_conflicting_knowledge_abstains_as_one_question() -> None
 def test_report_excluding_role_is_warned_even_when_it_is_not_flagged_excluded() -> None:
     group = build_review_groups(
         HOUSEHOLD_ID,
-        [candidate(txn_type="investment_buy", classified_by="seed_rule")],
+        [candidate(txn_type="investment_fee", classified_by="seed_rule")],
         Knowledge(),
         category_names={},
     )[0]
@@ -254,7 +254,7 @@ def test_newly_proposed_report_excluding_role_is_warned_before_application() -> 
                 knowledge_version_id=KNOWLEDGE_VERSION_ID,
                 role="institution",
                 direction="debit",
-                txn_type="loan_repayment",
+                txn_type="investment_fee",
             )
         ]
     )
@@ -263,7 +263,7 @@ def test_newly_proposed_report_excluding_role_is_warned_before_application() -> 
 
     assert group.reason == "excluded_role"
     assert group.currentTxnType == "expense"
-    assert group.proposedTxnType == "loan_repayment"
+    assert group.proposedTxnType == "investment_fee"
 
 
 def test_manual_overrides_linked_legs_and_split_parents_are_not_questions() -> None:

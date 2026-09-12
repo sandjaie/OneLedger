@@ -244,6 +244,7 @@ def test_public_source_is_recorded_without_fetching_it_and_resolves_consistently
             sourceKind="public_source",
             sourceUrl="https://unreachable.invalid/evidence",
             attribution="synthetic public directory",
+            txnType="investment_fee",
         ),
         headers=ORIGIN,
     )
@@ -276,7 +277,7 @@ def test_public_source_is_recorded_without_fetching_it_and_resolves_consistently
             (transaction_id,),
         )
         stored = cur.fetchone()
-    assert stored == (live.category_id, "expense", "card", "merchant_alias")
+    assert stored == (live.category_id, "investment_fee", "card", "merchant_alias")
 
     assert (
         TestClient(app)

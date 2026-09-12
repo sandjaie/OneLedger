@@ -22,6 +22,7 @@ cd "$(dirname "$0")/../.."
 
 shopt -s nullglob
 tests=(db/tests/*.sql)
+upgrade_tests=(db/tests/*_upgrade.sh)
 [ ${#tests[@]} -gt 0 ] || { echo "no db tests yet — skipping"; exit 0; }
 
 if [ -z "${ONELEDGER_TEST_DSN:-}" ]; then
@@ -55,5 +56,9 @@ for f in db/seeds/*.sql; do psql "$db" -q -v ON_ERROR_STOP=1 -f "$f" >/dev/null;
 for t in "${tests[@]}"; do
   echo "  $t"
   psql "$db" -v ON_ERROR_STOP=1 -f "$t" >/dev/null
+done
+for t in "${upgrade_tests[@]}"; do
+  echo "  $t"
+  bash "$t" "$server"
 done
 echo "OK: $migrations migration(s) applied from empty; ${#tests[@]} invariant test(s) passed"
