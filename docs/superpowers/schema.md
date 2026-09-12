@@ -1852,6 +1852,130 @@ relabel or strand retained investment events.
 
 ---
 
+## `V32`
+
+### Investment import groups, evidence, checkpoints and reviews (applied)
+
+`investment_import` is the one import parent for an immutable investment document.
+`investment_import_group` partitions that document into independently reviewable atomic units, so
+one conflicted switch or holding does not prevent unrelated reconciled groups from proceeding.
+Typed event drafts and end-position checkpoints remain separate: a checkpoint carries only the
+units, cost or value the source stated and never creates investment history.
+
+```sql
+CREATE TABLE investment_import (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id       UUID NOT NULL REFERENCES household(id),
+  document_id        UUID NOT NULL,
+  source_contract    TEXT NOT NULL,
+  extraction_version TEXT NOT NULL,
+  status             investment_import_status NOT NULL DEFAULT 'staged',
+  completed_at       TIMESTAMPTZ,
+  FOREIGN KEY (household_id, document_id) REFERENCES document(household_id, id),
+  UNIQUE (document_id)
+);
+
+CREATE TABLE investment_import_group (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES household(id),
+  import_id    UUID NOT NULL,
+  group_number INTEGER NOT NULL,
+  status       investment_group_status NOT NULL DEFAULT 'draft',
+  committed_at TIMESTAMPTZ,
+  FOREIGN KEY (household_id, import_id)
+    REFERENCES investment_import(household_id, id),
+  UNIQUE (import_id, group_number)
+);
+
+CREATE TABLE investment_event_draft (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id   UUID NOT NULL REFERENCES household(id),
+  group_id       UUID NOT NULL,
+  source_order   INTEGER NOT NULL,
+  account_id     UUID,
+  security_id    UUID REFERENCES security(id),
+  event_date     DATE,
+  event_kind     investment_event_kind,
+  units          NUMERIC(28,8),
+  price          NUMERIC(20,6),
+  gross_amount   NUMERIC(20,4),
+  charges        NUMERIC(20,4),
+  withheld_tax   NUMERIC(20,4),
+  net_amount     NUMERIC(20,4),
+  currency       CHAR(3),
+  state          investment_draft_status NOT NULL DEFAULT 'pending',
+  committed_transaction_id UUID
+);
+
+CREATE TABLE investment_position_checkpoint (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id          UUID NOT NULL REFERENCES household(id),
+  group_id              UUID NOT NULL,
+  source_order          INTEGER NOT NULL,
+  account_id            UUID,
+  security_id           UUID REFERENCES security(id),
+  holding_id            UUID,
+  as_of_date            DATE NOT NULL,
+  reported_units        NUMERIC(28,8),
+  reported_cost_native  NUMERIC(20,4),
+  reported_value_native NUMERIC(20,4),
+  currency              CHAR(3),
+  declared_unit_scale   SMALLINT,
+  reconciliation_status investment_checkpoint_status NOT NULL DEFAULT 'pending'
+);
+
+CREATE TABLE investment_evidence (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id              UUID NOT NULL REFERENCES household(id),
+  group_id                  UUID NOT NULL,
+  document_id               UUID NOT NULL,
+  draft_id                  UUID,
+  checkpoint_id             UUID,
+  investment_transaction_id UUID,
+  page_number               SMALLINT,
+  row_number                INTEGER,
+  source_contract           TEXT NOT NULL,
+  extraction_version        TEXT NOT NULL,
+  source_event_id           TEXT,
+  fingerprint_version       TEXT NOT NULL,
+  evidence_fingerprint      TEXT NOT NULL,
+  CHECK (num_nonnulls(draft_id, checkpoint_id, investment_transaction_id) = 1)
+);
+
+CREATE TABLE investment_review_item (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id              UUID NOT NULL REFERENCES household(id),
+  import_id                 UUID,
+  group_id                  UUID,
+  draft_id                  UUID,
+  checkpoint_id             UUID,
+  investment_transaction_id UUID,
+  holding_id                UUID,
+  reason                    investment_review_reason NOT NULL,
+  is_blocking               BOOLEAN GENERATED ALWAYS AS (...) STORED,
+  status                    investment_review_status NOT NULL DEFAULT 'open',
+  resolution_kind           investment_review_resolution_kind,
+  resolution_reference_id   UUID,
+  resolved_by               UUID,
+  resolved_at               TIMESTAMPTZ
+);
+```
+
+All six relations use household-leading foreign keys and household RLS. Evidence inserts go
+through the owner-authorized `record_investment_evidence` operation; direct inserts, updates and
+deletes are refused. A normalized source-event identity is preferred when present, otherwise a
+versioned typed fingerprint is used, and neither key includes a filename. Exact replay returns the
+existing attachment. Conflicting evidence writes no attachment, creates one append-only
+`duplicate_conflict` review item and moves only its group to `blocked`.
+
+The twelve review reasons have database-fixed severity. Eight data-integrity reasons block their
+group; missing price, unmatched cash, incomplete lot allocation and stale valuation are advisory.
+Review rows cannot be deleted or marked resolved directly. A later validated resolution operation
+must prove the underlying invariant before closing one. A group with any open blocking item cannot
+be marked ready or committed.
+
+---
+
 ## `0013`
 
 ### Loans

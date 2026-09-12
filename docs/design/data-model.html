@@ -543,7 +543,12 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── classification_decision (append-only, per transaction/run)
             ├── security ──── security_price_source ──── price_snapshot
             ├── statement_layout
-            ├── document ──── import_batch ──── staged_transaction
+            ├── document ──┬─ import_batch ──── staged_transaction
+            │              └─ investment_import ── investment_import_group
+            │                                      ├── investment_event_draft
+            │                                      ├── investment_position_checkpoint
+            │                                      ├── investment_evidence
+            │                                      └── investment_review_item
             ├── net_worth_snapshot
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               [Phase 2]
@@ -811,7 +816,8 @@ a second source of truth for the same fact.</p>
 <h2 id="10-investments">10. Investments</h2>
 <p>Transaction-level lots (<a href="../adr/0005-transaction-level-investment-lots.html">ADR-0005</a>) — XIRR is
 impossible to reconstruct from snapshots.</p>
-<p>V30 establishes instrument and valuation identity before V31 adds holdings, events and lots.
+<p>V30 establishes instrument and valuation identity before V31 adds holdings, events and lots;
+V32 adds the isolated staging, evidence and review foundation.
 The types are deliberately generic: country, currency and source organization remain row data or
 configuration rather than required code identifiers.</p>
 <table><thead><tr><th>Table or field</th><th>What it holds</th></tr></thead><tbody>
@@ -843,10 +849,25 @@ source-contract dedupe and optional owner-entered correction link.</td></tr>
 Rebuilds exclude an effect only when an appended correction replaces its source event.</td></tr>
 <tr><td><code>acquisition_lot</code></td><td>The immutable date, units, evidenced native basis and origin
 event of an acquisition. Closing a holding never deletes its acquisition history.</td></tr>
+<tr><td><code>investment_import</code></td><td>The one import parent for an investment document, with
+bounded source-contract and extraction-version identity but no copied filename.</td></tr>
+<tr><td><code>investment_import_group</code></td><td>An independently reviewable atomic group for events
+that must stage and eventually commit together. An open blocking review prevents ready or committed
+state without blocking sibling groups.</td></tr>
+<tr><td><code>investment_event_draft</code></td><td>A typed, exact staged event candidate. It can later
+name its committed immutable event but does not alter holdings while staged.</td></tr>
+<tr><td><code>investment_position_checkpoint</code></td><td>Exact units, reported cost or reported value at a
+date. It reconciles event-derived state and never manufactures an event or price.</td></tr>
+<tr><td><code>investment_evidence</code></td><td>An immutable typed attachment to one draft, checkpoint
+or event, with document/page/row provenance and source identity or versioned fingerprint. Exact
+replay is idempotent; conflicting evidence attaches nothing.</td></tr>
+<tr><td><code>investment_review_item</code></td><td>An append-only fixed-reason issue whose generated
+severity is blocking or advisory. Resolution metadata cannot be written without a later validated
+domain operation.</td></tr>
 </tbody></table><p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V31</code>.</p>
+<code>V30</code>–<code>V32</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
@@ -1066,10 +1087,15 @@ V29__retire_legacy_account_identity_columns.sql
 V30__investment_instruments_and_valuations.sql
                                       securities, price-source mappings, exact dated values,
                                       valuation-mode history and investment identifier kinds (applied)
+V31__investment_events_and_lots.sql    immutable investment events, rebuildable holding units and
+                                      acquisition-origin lot history (applied)
+V32__investment_evidence_and_reviews.sql
+                                      atomic import groups, typed drafts, position checkpoints,
+                                      filename-free evidence and fixed review severity (applied)
 
   then, in this order, numbered as they land:
 
-investment holdings, events and lots
+investment allocations
 loans
 net_worth
 audit_log

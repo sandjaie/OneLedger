@@ -716,6 +716,29 @@ ROLLBACK;
 BEGIN;
 -- Later migrations may depend on V30 relations. Remove their objects first so this historical
 -- upgrade test can reconstruct the exact pre-V30 shape it is responsible for proving.
+DROP FUNCTION record_investment_evidence(
+  UUID, UUID, UUID, UUID, UUID, SMALLINT, INTEGER,
+  TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP TABLE investment_review_item;
+DROP TABLE investment_evidence;
+DROP TABLE investment_position_checkpoint;
+DROP TABLE investment_event_draft;
+DROP TABLE investment_import_group;
+DROP TABLE investment_import;
+DROP FUNCTION apply_investment_review_block();
+DROP FUNCTION guard_investment_group_transition();
+DROP FUNCTION preserve_investment_review_item();
+DROP FUNCTION guard_investment_evidence_insert();
+DROP FUNCTION preserve_investment_evidence();
+DROP FUNCTION assert_investment_staging_security_scope();
+DROP FUNCTION assert_investment_import_document();
+DROP TYPE investment_review_resolution_kind;
+DROP TYPE investment_review_status;
+DROP TYPE investment_review_reason;
+DROP TYPE investment_checkpoint_status;
+DROP TYPE investment_draft_status;
+DROP TYPE investment_group_status;
+DROP TYPE investment_import_status;
 ALTER TABLE valuation_snapshot
   DROP CONSTRAINT fk_valuation_snapshot_holding_household;
 DROP TRIGGER trg_account_investment_history_remains_valid ON account;
