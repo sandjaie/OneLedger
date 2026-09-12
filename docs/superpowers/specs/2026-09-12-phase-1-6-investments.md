@@ -131,6 +131,16 @@ under ADR-0021. Ordinary payloads expose only a safe mask, identifier UUID and r
 An explicit owner-only reveal uses no-store headers. Complete or normalized identifiers never enter
 logs, errors, URLs, analytics, browser persistence, fixtures, screenshots or documentation.
 
+The two added kinds are `folio` and `brokerage_account`. Both reuse the existing identifier
+normalizer: trim and NFKC-normalize the source; convert every Unicode decimal digit to ASCII;
+discard only whitespace and the established separator set; uppercase ASCII letters; and reject
+controls, non-ASCII letters or any other character. A complete normalized value is 5–64 ASCII
+alphanumeric characters. It is masked as `****` plus its final four normalized characters. A
+masked source must be explicitly declared masked and contain at least four trailing visible
+alphanumerics after a mask glyph; only that safe suffix is retained. A suffix matching more than one
+active account is ambiguous and creates a review item. Provider-specific capture patterns remain
+adapter data and never loosen this general boundary.
+
 ### Holding and net-worth valuation mode
 
 `holding` identifies a household, investment account and security. Current units, cost and value
@@ -187,6 +197,13 @@ Phase 1.6 may report holding- and portfolio-level money-weighted returns when ca
 complete even if tax-lot disposal selection is unresolved. It must label realised cost/gain as
 unavailable wherever that result depends on an unproved lot allocation.
 
+Three cost concepts stay separate. Cumulative external contributions are the evidenced cash paid
+into acquisitions. Remaining evidenced basis is the sum of still-open acquisition-lot basis and is
+unavailable after a disposal whose lot selection is unknown. Statement-reported cost is a dated
+checkpoint, used for reconciliation rather than silently replacing either calculation. Units and
+market value remain available after an unallocated disposal; realised and remaining-basis claims do
+not. XIRR may remain available when the dated external cash-flow series itself is complete.
+
 ### Cash and funding links
 
 Use an allocation relation between investment transactions and ordinary ledger transactions rather
@@ -201,6 +218,21 @@ A cross-account or cross-currency remittance remains an existing confirmed trans
 final cash debit links to the purchase. Internal transfers remain outside income and spending; the
 purchase remains an investment contribution, not consumption. The chain is visible as one
 explainable economic path without becoming one denormalized transaction.
+
+Direct Phase 1.6 allocations require the investment event and ledger leaf row to state the same
+native currency. A cross-currency journey therefore terminates at the final same-currency debit
+after the existing confirmed remittance chain; an unmatched direct cross-currency payment creates a
+review item. Allocation amounts are positive magnitudes. All allocations on one ledger row must sum
+to its absolute amount before confirmation; a partial ordinary/investment row must first be split
+through the existing ledger operation. Funding, proceeds, cash-distribution and fee roles reclassify
+that fully allocated leaf row to `investment_buy`, `investment_sell`, `investment_income` and the new
+`investment_fee` type respectively. The reportable view excludes all four investment types. The
+allocation records the prior type so unlinking the last allocation restores it exactly. Mixed roles
+on one cash row are refused.
+
+The many-to-many allocation is the sole investment/cash link. The migration refuses to run if the
+unused legacy `transaction.investment_transaction_id` contains any non-null value, recreates the
+split invariant without that column, drops the column, and removes its deferred schema contract.
 
 ### Source evidence and deduplication
 
@@ -220,10 +252,27 @@ previously confirmed fact silently.
 or licensed shared prices are read-only reference data. Owner-entered prices for a private
 instrument are household-scoped and visibly manual.
 
-On portfolio access the API returns cached values immediately and requests refresh when the latest
-expected price is stale. Mutual-fund NAV is end-of-day: the UI says the effective date and never
-labels it live. A successful refresh appends or idempotently confirms dated prices; it does not
-rewrite a different source value without review.
+The first approved adapter is `official_nav_text_v1`, reading the AMFI NAV Download complete NAV
+text publication at `https://portal.amfiindia.com/spages/NAVAll.txt`. The deployment supplies that
+URL in price-source configuration; the capability key, not the organization name, selects code.
+The adapter supports the latest complete daily publication only. Phase 1.6 accumulates those
+observations prospectively; it does not depend on an undocumented historical API. Statement NAV is
+transaction evidence and is not a terminal market price unless the statement separately supplies a
+dated valuation checkpoint.
+
+A price observation is identified by security, effective date, source ID and source version.
+Re-fetching the same value is idempotent; a different value for that identity is retained as
+conflicting evidence and creates review rather than overwriting the accepted fact. Valuation uses
+the one active source mapping effective on the date. A manual source becomes accepted only through
+an explicit dated owner choice and never silently outranks the configured official source.
+
+Portfolio GETs are read-only and return cached values immediately. The authenticated web flow sees
+refresh status and invokes a bounded owner-authorized refresh POST when no successful source check
+has occurred in the preceding 24 hours. Mutual-fund NAV is end-of-day: the UI says the effective
+date and never labels it live. A successful check on a non-published day may confirm the unchanged
+latest observation and refresh source health without inventing a new price date. A successful
+refresh appends or idempotently confirms dated prices; it does not rewrite a different source value
+without review.
 
 Refresh failure preserves the last known value with a stale label. A holding with no trustworthy
 price is unvalued; totals identify missing coverage rather than treating it as zero. Historical
@@ -245,6 +294,14 @@ valuation.
 Review payloads contain no source filename, complete private identifier, raw statement row or
 unredacted source reference. Resolving an item invokes the same validated domain operation as an
 ordinary manual entry or match; marking it resolved without fixing the invariant is refused.
+
+Import severity is fixed. An unknown unit-affecting action, unit mismatch or ambiguous account or
+security blocks the atomic group and its dependent return. A missing funding link commits otherwise
+complete statement facts, creates review and withholds only the funding-path claim. A missing
+disposal-lot allocation commits units and cash, creates review, and withholds realised and remaining
+basis without blocking XIRR by itself. A summary checkpoint mismatch creates no manufactured event
+and remains in review. Conflicting dedupe evidence attaches nothing silently and stops only the
+affected group.
 
 ## Reconciliation invariants
 
@@ -279,10 +336,23 @@ positive; an open position's current value is a terminal positive flow on the va
 Internal platform transfers, splits and reinvested distributions are not external cash flows.
 Charges and tax affect the net flow exactly once.
 
-The solver uses Decimal inputs and deterministic bracketing/fallback; no binary float enters money,
-price, units, rates or the cash-flow equation. It returns no result, with a fixed reason, when there
-is no sign change, no terminal value, incomplete required history, an unvalued holding or a blocking
-corporate action. A known independent cash-flow series must agree within 0.01 percentage points.
+The solver evaluates `sum(CF_i / (1 + r)^((d_i - d_0) / 365)) = 0` with a 50-significant-digit
+Decimal context and rate domain `-0.999999999999 < r <= 1000000`. Let
+`y_min = ln(0.000000000001)`, `y_max = ln(1000001)` and
+`step = (y_max - y_min) / 4096`. Evaluate the 4,097 endpoints
+`r_i = exp(y_min + i * step) - 1` for every integer `i` from 0 through 4,096, including both domain
+limits. A grid value whose scaled residual is at most `1e-24` is a root candidate; adjoining brackets
+that refine within the `1e-12` rate tolerance of that candidate are merged with it. Every remaining
+sign-change bracket is refined with safeguarded bisection/Newton until the rate interval is at most
+`1e-12` and the scaled residual is at most `1e-24`. More than one distinct valid root returns
+`multiple_roots` rather than selecting one. The percentage result is quantized to eight decimal
+places. Allocation ratios are quantized to ten decimal places. Fixed no-result reasons are
+`no_sign_change`, `multiple_roots`, `missing_terminal_value`, `incomplete_history`, `missing_price`,
+`blocked_action` and `not_converged`. No binary float enters money, price, units, rates or the
+cash-flow equation. A known independent series must agree within 0.01 percentage points.
+
+Database scales are money `NUMERIC(20,4)`, units `NUMERIC(28,8)`, prices `NUMERIC(20,6)`, frozen FX
+`NUMERIC(20,10)`, allocation ratio `NUMERIC(20,10)` and XIRR percent `NUMERIC(20,8)`.
 
 Holding, account, asset-class and portfolio calculations share one cash-flow service. Cached
 results, if used, carry valuation date, computed time and an input digest and are invalidated by a

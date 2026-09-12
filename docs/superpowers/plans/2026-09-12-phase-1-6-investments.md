@@ -1,0 +1,405 @@
+# Phase 1.6 investments implementation plan
+
+> Execute sequentially in the active checkout with `superpowers:executing-plans` and
+> `superpowers:test-driven-development`. Track completion only in `../progress.md`.
+
+**Goal:** Factual investment history, valuation, funding, allocation and XIRR without advice.
+
+**Architecture:** A household investment ledger keeps immutable events/lots and projected holdings.
+Atomic imports, prices and one Decimal calculator sit beside the reportable cash ledger.
+
+**Stack:** Existing PostgreSQL/Flyway, Python/FastAPI and Next.js/React; no new dependency. See the
+[Phase 1.6 specification](../specs/2026-09-12-phase-1-6-investments.md).
+
+## Global execution contract
+
+- Workspace: `/Users/sandjaieravi/dev/OneLedger`. Active checkout, one writer, no worktrees; every
+  branch and PR uses `develop`. Merge/fast-forward each dependency before creating the next branch.
+- TDD means focused RED, smallest implementation, then GREEN; never weaken or infer evidence.
+- Scales: money `NUMERIC(20,4)`, units `NUMERIC(28,8)`, price `NUMERIC(20,6)`, FX and allocation
+  `NUMERIC(20,10)`; XIRR is `NUMERIC(20,8)`. Python uses `Decimal`, JSON strings, TS display.
+- Financial routes use `require_owner`; queries, RLS and FKs enforce household scope.
+- Complete identifiers stay in typed owner-local stores. Ordinary responses mask; reveal is explicit
+  and `no-store`; full values never reach logs, errors, URLs, browser storage or artifacts.
+- Cash roles map to four excluded investment ledger types. Links fully allocate a same-currency
+  leaf; a cross-currency chain links at its final same-currency debit.
+- Unknown unit action/mismatch/ambiguity/conflict blocks its group. Funding or lot gaps create
+  reviews; lot gaps withhold basis, not XIRR; summary mismatch creates no event.
+- Keep contributions, open-lot basis and cost checkpoints distinct. Statement NAV is not terminal
+  value without a separate valuation checkpoint.
+- Update owning docs and only `progress.md` for status. Keep tasks below 800/1,600 counted lines.
+
+## Shared interfaces and algorithms
+
+- `SecurityResolver` accepts an exact ID or owner choice; ambiguity reviews. Adapters output pure
+  drafts/checkpoints/prices. The calculator alone turns committed facts into strings/reasons.
+- V33 makes allocations the sole cash link: reject non-null legacy links, recreate the split guard,
+  drop the old column, store/restore prior type, and reject mixed or partial roles.
+- `official_nav_text_v1` reads configured `https://portal.amfiindia.com/spages/NAVAll.txt`, latest
+  only; observations accumulate, GET stays read-only, and owner POST refreshes after 24 hours.
+- Price identity is security/date/source/version; conflicts review, mapping selects, manual values
+  require dated owner choice, and outage retains stale cache.
+- XIRR uses the spec's 365-day equation, Decimal-50 log scan over `(-0.999999999999,1000000]`,
+  refinement to `1e-12`/`1e-24`, eight-decimal percent and explicit multi/no-root reasons.
+
+## Verification and delivery
+
+Shared paths: schema = `docs/superpowers/schema.md` and `docs/design/data-model.html`; API/type =
+`docs/design/api-contracts.html` and `web/types/api/types.gen.ts`; ingestion, privacy and testing =
+`docs/design/statement-ingestion.html`, `docs/operations/security-and-privacy.html` and
+`docs/operations/testing-and-data-quality.html`; status = `docs/superpowers/progress.md`.
+Shared commands: docs = `python3 scripts/check-docs.py`; Python =
+`cd api && uv run ruff check . && uv run mypy .`; types =
+`cd web && npm run api:types && npm run api:types:check`. Live DB setup is
+`eval "$(scripts/test-db.sh up)"`; teardown is only `scripts/test-db.sh down`.
+After focused commands: full `/verify`, review, fix, reverify, confirm, first push, PR, merge/delete.
+
+## Proposed task and branch table
+
+| # | Outcome | Branch | Prod | Test | Depends |
+| -: | --- | --- | ---: | ---: | --- |
+| 1 | instruments and dated values | `feature/p1-6a-investment-ledger` | 540 | 760 | — |
+| 2 | events, holdings and lots | `feature/p1-6b-investment-events` | 700 | 820 | 1 |
+| 3 | groups, evidence and reviews | `feature/p1-6c-investment-evidence` | 500 | 650 | 2 |
+| 4 | allocations and legacy-link removal | `feature/p1-6d-investment-allocations` | 420 | 600 | 2–3 |
+| 5 | catalogue and manual-price API | `feature/p1-6e-investment-catalogue-api` | 500 | 700 | 1, 3 |
+| 6 | acquisition entry and corrections | `feature/p1-6f-investment-entry-api` | 460 | 700 | 2, 5 |
+| 7 | purchase funding confirmation | `feature/p1-6g-investment-funding` | 420 | 650 | 4, 6 |
+| 8 | acquisition positions and net worth | `feature/p1-6h-investment-position-api` | 560 | 820 | 5–7 |
+| 9 | owner-entry web flow | `feature/p1-6i-investment-entry-web` | 560 | 500 | 8 |
+| 10 | funding web flow | `feature/p1-6j-investment-funding-web` | 360 | 360 | 7, 9 |
+| 11 | detailed-statement extraction | `feature/p1-6k-investment-extraction` | 610 | 900 | 3, 5 |
+| 12 | idempotent staging | `feature/p1-6l-investment-staging` | 650 | 900 | 4, 11 |
+| 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11–12 |
+| 14 | cash lifecycle and lot allocation | `feature/p1-6n-investment-cash-lifecycle` | 680 | 900 | 4, 6–7 |
+| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14 |
+| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12–15 |
+| 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12–13 |
+| 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
+| 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
+| 20 | allocation and XIRR engine | `feature/p1-6t-investment-returns` | 500 | 850 | 15, 19 |
+| 21 | portfolio analytics API | `feature/p1-6u-investment-analytics-api` | 500 | 680 | 20 |
+| 22 | history/data-quality API | `feature/p1-6v-investment-history-api` | 520 | 680 | 16, 20–21 |
+| 23 | portfolio web flow | `feature/p1-6w-investment-portfolio-web` | 580 | 520 | 18, 21 |
+| 24 | history web and acceptance | `feature/p1-6x-investment-history-web` | 650 | 620 | 22–23 |
+
+Tasks 11, 12, 14 and 19 need dispatch-time reforecasting and split before exceeding 1,600 lines.
+
+## Task 1 — instruments and dated values
+
+**Branch/base/target:** `feature/p1-6a-investment-ledger` / `develop` / `develop`.
+**Files:** `db/migrations/V30__investment_instruments_and_valuations.sql`,
+`db/tests/0027_investment_instruments_and_valuations.sql`; shared schema/privacy/status paths.
+**Contract/tests:** Security/source mapping, valuation mode, price observation, snapshot target,
+RLS/shared-row/same-household/scale constraints and `folio`/`brokerage_account` kinds; forward V29
+upgrade, invalid/cross-household/double-mode RED cases; no seeded owner/retirement data.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && scripts/hooks/db-tests.sh`; shared docs command.
+Acceptance: exact dated value works, identity masks, and modes cannot double count.
+
+## Task 2 — immutable events, holdings and acquisition lots
+
+**Branch/base/target:** `feature/p1-6b-investment-events` / `develop` / `develop`.
+**Files:** `db/migrations/V31__investment_events_and_lots.sql`,
+`db/tests/0028_investment_events_and_lots.sql`; shared schema/status paths.
+**Contract/tests:** Event-kind field matrix, immutable imported facts, append-only correction,
+rebuildable units, origin lots, closed history, dedupe and household FKs; direction, precision,
+mutation, cross-household, rollback and unsupported-adjustment RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && scripts/hooks/db-tests.sh`; shared docs command.
+Acceptance: acquisition/redemption reconstruct units/lots and forbidden edits fail atomically.
+
+## Task 3 — import groups, evidence, checkpoints and reviews
+
+**Branch/base/target:** `feature/p1-6c-investment-evidence` / `develop` / `develop`.
+**Files:** `db/migrations/V32__investment_evidence_and_reviews.sql`,
+`db/tests/0029_investment_evidence_and_reviews.sql`; shared schema/ingestion/status paths.
+**Contract/tests:** Import parent, atomic groups, drafts, checkpoints, evidence fingerprints and
+review states; RLS, filename-free dedupe, summary-no-event, conflict, block matrix, unresolved-close
+and group rollback RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && scripts/hooks/db-tests.sh`; shared docs command.
+Acceptance: repeated evidence attaches once and conflict/block affects only its group.
+
+## Task 4 — allocations and legacy-link removal
+
+**Branch/base/target:** `feature/p1-6d-investment-allocations` / `develop` / `develop`.
+**Files:** `db/migrations/V33__investment_allocations.sql`,
+`db/tests/0030_investment_allocations.sql`; shared schema/testing/status paths.
+**Contract/tests:** Cash/lot allocations, roles, full leaf allocation, same native currency, prior
+type restore, `investment_fee`, reportable-view exclusion, split-guard recreation and fail-before-
+drop legacy column; over-allocation, mixed/partial, upgrade and unlink RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && scripts/hooks/db-tests.sh`; shared docs command.
+Acceptance: many-to-many allocations are the sole link and ordinary flow totals stay unchanged.
+
+## Task 5 — catalogue, private identity and manual-price API
+
+**Branch/base/target:** `feature/p1-6e-investment-catalogue-api` / `develop` / `develop`.
+**Files:** `api/oneledger/identifiers.py`, `api/oneledger/routes/investment_catalogue.py`,
+`api/oneledger/main.py`, `api/tests/test_investment_catalogue.py`,
+`api/tests/test_investment_catalogue_live.py`; shared API/type/privacy/status paths.
+**Contract/tests:** Exact/ambiguous security resolution; specified 5–64-character identifier
+normalization/masking/reveal; append manual price. Auth/RLS, Decimal strings, Unicode/raw serialized
+leakage, shared-row mutation and price conflict RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_catalogue.py tests/test_investment_catalogue_live.py)`;
+shared types command. Acceptance: synthetic instrument/account/price exposes only a mask.
+
+## Task 6 — acquisition entry and correction framework
+
+**Branch/base/target:** `feature/p1-6f-investment-entry-api` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/commands.py`, `api/oneledger/investments/schemas.py`,
+`api/oneledger/routes/investment_events.py`, `api/oneledger/main.py`,
+`api/tests/test_investment_events.py`, `api/tests/test_investment_events_live.py`; shared
+API/type/status paths.
+**Contract/tests:** Acquisition entry plus idempotent append correction/reversal; one transaction
+creates event/effect/lot. Field matrix, stale prior state, exact strings, cross-household, duplicate
+retry and rollback RED cases. Sales/distributions/charges wait for task 14.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_events.py tests/test_investment_events_live.py)`; shared types. Acceptance:
+purchase/correction preserve originals and reconcile acquisition units/basis.
+
+## Task 7 — purchase funding confirmation
+
+**Branch/base/target:** `feature/p1-6g-investment-funding` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_funding.py`,
+`api/oneledger/main.py`, `api/tests/test_investment_funding.py`,
+`api/tests/test_investment_funding_live.py`; shared API/type/testing/status paths.
+**Contract/tests:** Proposal never confirms; full same-currency leaf allocation; final debit of
+transfer chain; exact prior-type unlink. Over/mixed/partial, concurrent, split rows, one-to-many,
+many-to-one, cross-household/currency and unchanged flow RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_funding.py tests/test_investment_funding_live.py
+tests/test_dashboard_flows_live.py tests/test_transfers_live.py)`; shared types.
+Acceptance: one path creates no spending, income or wealth duplication.
+
+## Task 8 — acquisition-only positions and one-count net worth
+
+**Branch/base/target:** `feature/p1-6h-investment-position-api` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/positions.py`, `api/oneledger/routes/portfolio.py`,
+`api/oneledger/routes/dashboard.py`, `api/oneledger/main.py`, `api/tests/test_positions.py`,
+`api/tests/test_portfolio_live.py`, `api/tests/test_dashboard_live.py`; shared API/type/schema/status.
+**Contract/tests:** Acquisition units, cumulative contributions/current value/gain, price at/before
+as-of and valuation-mode replacement. Missing/stale/future price, FX, snapshot carry, transition and
+both-currency double-count RED cases; no disposal-basis claim yet.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_positions.py tests/test_portfolio_live.py tests/test_dashboard_live.py)`. Acceptance:
+the smallest API vertical values an acquisition and net worth exactly once.
+
+## Task 9 — catalogue, purchase, price and holding-entry web flow
+
+**Branch/base/target:** `feature/p1-6i-investment-entry-web` / `develop` / `develop`.
+**Files:** `web/app/investments/page.tsx`, `web/app/investments/entry-screen.tsx`,
+`web/app/investments/__tests__/entry-screen.test.tsx`, `web/app/workspace.tsx`,
+`web/app/globals.css`; shared status path.
+**Contract/tests:** Server strings only; masked identity, explicit confirmation, auth/loading/empty/
+error/missing states, labels/keyboard and no advisory copy/client arithmetic RED cases.
+**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/entry-screen.test.tsx`.
+Acceptance: entry creates one visible holding.
+
+## Task 10 — funding confirmation web flow
+
+**Branch/base/target:** `feature/p1-6j-investment-funding-web` / `develop` / `develop`.
+**Files:** `web/app/investments/funding-panel.tsx`,
+`web/app/investments/__tests__/funding-panel.test.tsx`, `web/app/investments/entry-screen.tsx`,
+shared status path.
+**Contract/tests:** Candidate/proposal/confirmation/unlink states, full-allocation requirement,
+transfer-chain explanation; stale, partial, many-to-many and accessibility RED cases.
+**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/funding-panel.test.tsx`.
+Acceptance: confirmation/removal never
+auto-matches or computes money in the UI.
+
+## Task 11 — detailed-statement extraction
+
+**Branch/base/target:** `feature/p1-6k-investment-extraction` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/adapters.py`,
+`api/oneledger/investments/detailed_fund_statement.py`, `api/tests/fixtures/investment_pdf.py`,
+`api/tests/test_investment_extraction.py`; shared ingestion/privacy/status paths.
+**Contract/tests:** Content-selected pure adapter emits versioned drafts/checkpoints/safe reasons.
+Synthetic tests cover buys, recurring buys, redemptions, distributions, reinvestment, fees/tax,
+splits/switches/transfers, page breaks, precision, hostile identifiers and unsupported/unknown rows.
+**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_extraction.py`; shared Python
+command. Acceptance: synthetic
+detailed evidence extracts exactly and ambiguity blocks without guessing.
+
+## Task 12 — idempotent investment staging
+
+**Branch/base/target:** `feature/p1-6l-investment-staging` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/staging.py`, `api/oneledger/routes/investment_imports.py`,
+`api/oneledger/main.py`, `api/tests/test_investment_staging.py`,
+`api/tests/test_investment_staging_live.py`; shared API/type/ingestion/privacy/status paths.
+**Contract/tests:** Reuse immutable storage; dry run default; safe bounded group preview; stage only
+after resolution. Auth/RLS, no-write, cancellation/retry, bytes/overlap dedupe, ambiguity, unknown
+action, filename/reference leakage, concurrent/storage rollback RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_staging.py tests/test_investment_staging_live.py)`;
+shared types. Acceptance: staging is idempotent and does not change holdings/net worth.
+
+## Task 13 — summary checkpoints
+
+**Branch/base/target:** `feature/p1-6m-investment-checkpoints` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/summary_fund_statement.py`,
+`api/oneledger/investments/staging.py`, `api/tests/test_investment_checkpoints.py`,
+`api/tests/test_investment_checkpoints_live.py`; shared ingestion/status paths.
+**Contract/tests:** Content-selected summary adapter emits position/cost/value checkpoints only;
+matched/mismatched detailed+summary, duplicate/overlap, unknown security and no-event RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_checkpoints.py tests/test_investment_checkpoints_live.py)`. Acceptance: a
+summary confirms positions without becoming transaction history or terminal price.
+
+## Task 14 — sales, distributions, charges and lot allocations
+
+**Branch/base/target:** `feature/p1-6n-investment-cash-lifecycle` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/cash_lifecycle.py`,
+`api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_events.py`,
+`api/oneledger/routes/investment_funding.py`, `api/tests/test_investment_cash_lifecycle.py`,
+`api/tests/test_investment_cash_lifecycle_live.py`, `api/tests/test_investment_funding.py`,
+`api/tests/test_investment_funding_live.py`; shared API/type/schema/testing/status paths.
+**Contract/tests:** Sale/redemption/maturity, distributions, charges/tax and evidenced
+lot allocation. Partial sale, closed/reopened history, missing allocation availability, cash roles,
+one-count fees/tax, corrections and flow-boundary RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
+tests/test_investment_funding.py tests/test_investment_funding_live.py)`; shared types.
+Acceptance: units/cash commit and basis claims require lot evidence.
+
+## Task 15 — splits, bonuses, switches and platform transfers
+
+**Branch/base/target:** `feature/p1-6o-investment-corporate-actions` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/unit_lifecycle.py`,
+`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py`,
+`api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/schema/status paths.
+**Contract/tests:** Evidenced split/bonus, switch atomicity, full lot-preserving transfer, refused
+ambiguous partial transfer and unknown action block; basis/value/history, corrections, review and no
+contribution/return RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)`; shared types.
+Acceptance: P12 transfer/split meaning is preserved before its later distribution calculation.
+
+## Task 16 — review decisions and atomic import commit
+
+**Branch/base/target:** `feature/p1-6p-investment-commit` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/commit.py`, `api/oneledger/routes/investment_imports.py`,
+`api/tests/test_investment_commit.py`, `api/tests/test_investment_commit_live.py`; shared
+API/type/ingestion/status paths.
+**Contract/tests:** Expected-state decisions; re-resolve/reconcile/commit per group; manual fallback
+calls existing commands; summary creates no event. Matrix, concurrency, rollback, monthly
+overlap, review closure, cancel and unknown-action dependent-return RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_commit.py tests/test_investment_commit_live.py)`; shared types. Acceptance:
+valid groups commit once and invalid groups remain safe/actionable independently.
+
+## Task 17 — investment upload and identification web flow
+
+**Branch/base/target:** `feature/p1-6q-investment-import-web` / `develop` / `develop`.
+**Files:** `web/app/investments/import/page.tsx`,
+`web/app/investments/import/investment-import-screen.tsx`,
+`web/app/investments/import/__tests__/investment-import-screen.test.tsx`, `web/app/workspace.tsx`,
+`web/app/globals.css`; shared status path.
+**Contract/tests:** Detailed/summary selection, dry-run identification, safe counts, unsupported/
+ambiguous/storage/auth/service/zero-file/accessibility states and no filename persistence RED cases.
+**RED/GREEN:** `cd web && npx vitest run
+app/investments/import/__tests__/investment-import-screen.test.tsx && npm run typecheck && npm run
+typecheck:compat && npm run build`. Acceptance: upload reaches staged groups without committing.
+
+## Task 18 — investment review and commit web flow
+
+**Branch/base/target:** `feature/p1-6r-investment-review-web` / `develop` / `develop`.
+**Files:** `web/app/investments/import/[importId]/page.tsx`,
+`web/app/investments/import/investment-review-screen.tsx`,
+`web/app/investments/import/__tests__/investment-review-screen.test.tsx`, `web/app/globals.css`,
+shared status path.
+**Contract/tests:** Group states follow severity matrix; exact manual fallback; stale decisions;
+detailed/summary/overlap completion; valid-plus-blocked, cancel, auth/accessibility and private
+render/error/storage leakage RED cases.
+**RED/GREEN:** `cd web && npx vitest run
+app/investments/import/__tests__/investment-review-screen.test.tsx && npm run typecheck && npm run
+typecheck:compat && npm run build`. Acceptance: review/correction commits facts once with blockers.
+
+## Task 19 — official price adapter, storage and refresh
+
+**Branch/base/target:** `feature/p1-6s-investment-prices` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/price_adapters.py`, `api/oneledger/investments/prices.py`,
+`api/oneledger/routes/investment_prices.py`, `api/oneledger/main.py`,
+`api/tests/test_investment_prices.py`, `api/tests/test_investment_prices_live.py`, `.env.example`,
+`docker-compose.yml`, `docker-compose.production.yml`; shared API/type/privacy/status paths.
+**Contract/tests:** Configured complete-text source, synthetic network, Decimal parse,
+effective mapping/identity/accepted source, 24-hour owner POST refresh. Replay/conflict, unchanged
+non-published day, outage/cache/stale/missing mapping/manual choice/no fabricated units RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_prices.py tests/test_investment_prices_live.py)`; shared types. Acceptance:
+published NAV is dated/sourced, outage retains stale cache, and missing never means zero.
+
+## Task 20 — exact allocation and XIRR engine
+
+**Branch/base/target:** `feature/p1-6t-investment-returns` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/allocation.py`, `api/oneledger/investments/returns.py`,
+`api/tests/test_investment_allocation.py`, `api/tests/test_investment_returns.py`; shared
+schema/testing/status paths.
+**Contract/tests:** Shared algorithm; holding/account/class/portfolio flows; independent series
+within 0.01 percentage points, roots near both boundaries and two roots separated by one grid
+interval; unavailable codes, charges once, internal-event exclusion, incomplete denominator,
+permutation/scale and no-float source RED cases.
+**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_allocation.py
+tests/test_investment_returns.py && uv run ruff check . && uv run mypy .`. Acceptance: allocation
+reconciles and XIRR proves or explicitly refuses every claim.
+
+## Task 21 — portfolio summary, allocation and return API
+
+**Branch/base/target:** `feature/p1-6u-investment-analytics-api` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/read_models.py`, `api/oneledger/routes/portfolio.py`,
+`api/tests/test_portfolio.py`, `api/tests/test_portfolio_live.py`; shared API/type/status paths.
+**Contract/tests:** Serialize calculator only; safe scopes/coverage/as-of. Exact group totals,
+blocked/missing propagation, closed exclusion from current, pagination/order, auth/RLS, string wire
+types and no advisory field RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_portfolio.py tests/test_portfolio_live.py)`; shared types. Acceptance: portfolio headline,
+allocation and XIRR reconcile with explicit incomplete states.
+
+## Task 22 — holding history, provenance and data-quality API
+
+**Branch/base/target:** `feature/p1-6v-investment-history-api` / `develop` / `develop`.
+**Files:** `api/oneledger/routes/investment_history.py`,
+`api/tests/test_investment_history.py`, `api/tests/test_investment_history_live.py`; shared
+API/type/privacy/status paths.
+**Contract/tests:** Open/closed holding, activity, lot, funding, price/review reads; safe evidence
+kind/date only. Cross-household/auth, paging, basis-unavailable, blocked return, safe provenance,
+identifier/error leakage and no-store separation RED cases.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
+tests/test_investment_history.py tests/test_investment_history_live.py)`; shared types. Acceptance:
+every claim is drillable without returning raw/private evidence.
+
+## Task 23 — portfolio summary and allocation web flow
+
+**Branch/base/target:** `feature/p1-6w-investment-portfolio-web` / `develop` / `develop`.
+**Files:** `web/app/investments/portfolio-screen.tsx`,
+`web/app/investments/__tests__/portfolio-screen.test.tsx`, `web/app/investments/page.tsx`,
+`web/app/workspace.tsx`, `web/app/globals.css`; shared status path.
+**Contract/tests:** Value/cost/gain/XIRR with independent dates/coverage, allocation/open holdings,
+refresh action and loading/empty/error/partial/stale/blocked/auth/accessibility/no-client-arithmetic
+RED cases; no advice/forecast/rebalancing copy.
+**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/portfolio-screen.test.tsx && npm
+run typecheck && npm run typecheck:compat && npm run build`. Acceptance: the daily portfolio shows
+only supported facts and truthful incomplete states.
+
+## Task 24 — holding/history/data-quality web and acceptance
+
+**Branch/base/target:** `feature/p1-6x-investment-history-web` / `develop` / `develop`.
+**Files:** `web/app/investments/[holdingId]/page.tsx`,
+`web/app/investments/holding-screen.tsx`, `web/app/investments/data-quality.tsx`,
+`web/app/investments/__tests__/holding-screen.test.tsx`,
+`web/app/investments/__tests__/data-quality.test.tsx`; all shared documentation/status paths.
+**Contract/tests:** History/funding/lot/price/review details; unavailable/stale/blocked,
+deep links, keyboard/auth and no private DOM/error/storage RED cases.
+**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/holding-screen.test.tsx
+app/investments/__tests__/data-quality.test.tsx`; full `/verify`.
+**Acceptance:** Through authenticated operations only, supplied detailed and summary evidence and a
+safe overlap fixture reconcile structurally; publish only pass/fail counts. All spec criteria are
+green; run `/oneledger-code-hygiene` and ship findings separately before acceptance.
+
+## Stop conditions
+
+- Do not dispatch task 1 until `/oneledger-plan-review` has no blocking finding and the owner has
+  approved every material correction.
+- Stop instead of inventing source evidence, identifier meaning, cost basis, lot selection or an
+  action. Future retirement evidence requires a new owner decision; none exists now.
+- Stop before push when required verification is red/not run, code review blocks, or size exceeds
+  budget. Never test private data by direct SQL or commit private filenames, identities, facts or
+  inferred relationships.

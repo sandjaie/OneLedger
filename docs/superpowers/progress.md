@@ -13,10 +13,10 @@ Updated: 12 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Design approved; specification under owner review** — dated execution planning has not started | [Phase 1.6 specification](specs/2026-09-12-phase-1-6-investments.md) |
+| Outcome state | **Design approved; plan review green** — awaiting owner approval; no implementation dispatched | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Owner reviews the Phase 1.6 specification; after approval, write the execution plan and pass `/oneledger-plan-review` before implementation | [development cycle](../development-cycle.md) |
-| Implementation branch | `feature/p1-6a-investment-ledger` exists from `develop`; documentation only, with no implementation dispatched | [Phase 1.6 specification](specs/2026-09-12-phase-1-6-investments.md) |
+| Next product action | Obtain owner approval, then dispatch task 1 on the declared branch with TDD | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Implementation branch | `feature/p1-6a-investment-ledger` exists from `develop`; it contains planning only until owner approval | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 
 ## Canonical phase status
 
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Phase 1.6 specification | Owner review pending; execution plan and plan-review gate have not started | [specification](specs/2026-09-12-phase-1-6-investments.md) |
+| Phase 1.6 plan | **Green**; confirmation review found no blockers; awaiting owner approval | [plan](plans/2026-09-12-phase-1-6-investments.md) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
