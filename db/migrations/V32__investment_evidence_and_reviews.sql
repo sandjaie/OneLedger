@@ -71,9 +71,31 @@ BEGIN
   RETURN NEW;
 END $$;
 
+CREATE FUNCTION preserve_investment_import() RETURNS TRIGGER
+  LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'investment imports retain their history'
+      USING ERRCODE = '55000';
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.household_id IS DISTINCT FROM OLD.household_id
+     OR NEW.document_id IS DISTINCT FROM OLD.document_id
+     OR NEW.source_contract IS DISTINCT FROM OLD.source_contract
+     OR NEW.extraction_version IS DISTINCT FROM OLD.extraction_version
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'investment import identity is immutable'
+      USING ERRCODE = '55000';
+  END IF;
+  RETURN NEW;
+END $$;
+
 CREATE TRIGGER trg_investment_import_document
   BEFORE INSERT OR UPDATE OF household_id, document_id ON investment_import
   FOR EACH ROW EXECUTE FUNCTION assert_investment_import_document();
+CREATE TRIGGER trg_investment_import_is_retained
+  BEFORE UPDATE OR DELETE ON investment_import
+  FOR EACH ROW EXECUTE FUNCTION preserve_investment_import();
 
 CREATE TABLE investment_import_group (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -203,25 +225,44 @@ CREATE INDEX idx_investment_checkpoint_group
 
 CREATE FUNCTION assert_investment_staging_security_scope() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE target_household UUID; target_currency CHAR(3);
+DECLARE
+  target_household UUID; target_currency CHAR(3);
+  target_account UUID; target_security UUID;
 BEGIN
-  IF NEW.security_id IS NULL THEN RETURN NEW; END IF;
-  SELECT household_id, currency INTO target_household, target_currency
-    FROM security WHERE id = NEW.security_id FOR KEY SHARE;
-  IF NOT FOUND OR (
-    target_household IS NOT NULL AND target_household <> NEW.household_id
-  ) THEN
-    RAISE EXCEPTION 'staged investment security is outside its household'
-      USING ERRCODE = '23503',
-            CONSTRAINT = CASE
-              WHEN TG_TABLE_NAME = 'investment_event_draft'
-                THEN 'fk_investment_event_draft_security_household'
-              ELSE 'fk_investment_checkpoint_security_household'
-            END;
+  IF NEW.security_id IS NOT NULL THEN
+    SELECT household_id, currency INTO target_household, target_currency
+      FROM security WHERE id = NEW.security_id FOR KEY SHARE;
+    IF NOT FOUND OR (
+      target_household IS NOT NULL AND target_household <> NEW.household_id
+    ) THEN
+      RAISE EXCEPTION 'staged investment security is outside its household'
+        USING ERRCODE = '23503',
+              CONSTRAINT = CASE
+                WHEN TG_TABLE_NAME = 'investment_event_draft'
+                  THEN 'fk_investment_event_draft_security_household'
+                ELSE 'fk_investment_checkpoint_security_household'
+              END;
+    END IF;
+    IF NEW.currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(target_currency) THEN
+      RAISE EXCEPTION 'staged investment currency must match its security'
+        USING ERRCODE = '23514', CONSTRAINT = 'investment_staging_currency_matches_security';
+    END IF;
   END IF;
-  IF NEW.currency IS NOT NULL AND rtrim(NEW.currency) <> rtrim(target_currency) THEN
-    RAISE EXCEPTION 'staged investment currency must match its security'
-      USING ERRCODE = '23514', CONSTRAINT = 'investment_staging_currency_matches_security';
+  IF TG_TABLE_NAME = 'investment_position_checkpoint' THEN
+    IF NEW.holding_id IS NOT NULL THEN
+      SELECT account_id, security_id INTO target_account, target_security
+        FROM holding
+       WHERE id = NEW.holding_id AND household_id = NEW.household_id
+       FOR KEY SHARE;
+      IF FOUND AND (
+        (NEW.account_id IS NOT NULL AND NEW.account_id <> target_account)
+        OR (NEW.security_id IS NOT NULL AND NEW.security_id <> target_security)
+      ) THEN
+        RAISE EXCEPTION 'investment checkpoint target must match its holding'
+          USING ERRCODE = '23514',
+                CONSTRAINT = 'investment_checkpoint_target_matches_holding';
+      END IF;
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
@@ -230,7 +271,7 @@ CREATE TRIGGER trg_investment_event_draft_security_scope
   BEFORE INSERT OR UPDATE OF household_id, security_id, currency ON investment_event_draft
   FOR EACH ROW EXECUTE FUNCTION assert_investment_staging_security_scope();
 CREATE TRIGGER trg_investment_checkpoint_security_scope
-  BEFORE INSERT OR UPDATE OF household_id, security_id, currency
+  BEFORE INSERT OR UPDATE OF household_id, account_id, security_id, holding_id, currency
   ON investment_position_checkpoint
   FOR EACH ROW EXECUTE FUNCTION assert_investment_staging_security_scope();
 
@@ -292,6 +333,10 @@ CREATE UNIQUE INDEX idx_investment_evidence_document_source_identity
   WHERE source_event_id IS NOT NULL;
 CREATE INDEX idx_investment_evidence_group
   ON investment_evidence (household_id, group_id, created_at);
+CREATE INDEX idx_investment_evidence_draft
+  ON investment_evidence (household_id, draft_id) WHERE draft_id IS NOT NULL;
+CREATE INDEX idx_investment_evidence_checkpoint
+  ON investment_evidence (household_id, checkpoint_id) WHERE checkpoint_id IS NOT NULL;
 
 CREATE TABLE investment_review_item (
   id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -340,6 +385,8 @@ CREATE TABLE investment_review_item (
       investment_transaction_id, holding_id) > 0),
   CONSTRAINT investment_review_group_has_import CHECK (
     group_id IS NULL OR import_id IS NOT NULL),
+  CONSTRAINT investment_review_staged_subject_has_group CHECK (
+    (draft_id IS NULL AND checkpoint_id IS NULL) OR group_id IS NOT NULL),
   CONSTRAINT investment_review_resolution_agrees CHECK (
     (status = 'open' AND resolution_kind IS NULL AND resolution_reference_id IS NULL
       AND resolved_by IS NULL AND resolved_at IS NULL)
@@ -363,6 +410,53 @@ BEGIN
     USING ERRCODE = '55000';
 END $$;
 
+CREATE FUNCTION preserve_investment_evidence_target() RETURNS TRIGGER
+  LANGUAGE plpgsql AS $$
+DECLARE has_evidence BOOLEAN;
+BEGIN
+  IF TG_TABLE_NAME = 'investment_event_draft' THEN
+    SELECT EXISTS (
+      SELECT FROM investment_evidence
+       WHERE household_id = OLD.household_id AND draft_id = OLD.id
+    ) INTO has_evidence;
+    IF has_evidence AND (
+      TG_OP = 'DELETE' OR (
+        NEW.id, NEW.household_id, NEW.group_id, NEW.source_order,
+        NEW.event_date, NEW.event_kind, NEW.units, NEW.price, NEW.gross_amount,
+        NEW.charges, NEW.withheld_tax, NEW.net_amount, NEW.currency, NEW.created_at
+      ) IS DISTINCT FROM (
+        OLD.id, OLD.household_id, OLD.group_id, OLD.source_order,
+        OLD.event_date, OLD.event_kind, OLD.units, OLD.price, OLD.gross_amount,
+        OLD.charges, OLD.withheld_tax, OLD.net_amount, OLD.currency, OLD.created_at
+      )
+    ) THEN
+      RAISE EXCEPTION 'evidence-backed investment draft facts are immutable'
+        USING ERRCODE = '55000';
+    END IF;
+  ELSE
+    SELECT EXISTS (
+      SELECT FROM investment_evidence
+       WHERE household_id = OLD.household_id AND checkpoint_id = OLD.id
+    ) INTO has_evidence;
+    IF has_evidence AND (
+      TG_OP = 'DELETE' OR (
+        NEW.id, NEW.household_id, NEW.group_id, NEW.source_order, NEW.as_of_date,
+        NEW.reported_units, NEW.reported_cost_native, NEW.reported_value_native,
+        NEW.currency, NEW.declared_unit_scale, NEW.created_at
+      ) IS DISTINCT FROM (
+        OLD.id, OLD.household_id, OLD.group_id, OLD.source_order, OLD.as_of_date,
+        OLD.reported_units, OLD.reported_cost_native, OLD.reported_value_native,
+        OLD.currency, OLD.declared_unit_scale, OLD.created_at
+      )
+    ) THEN
+      RAISE EXCEPTION 'evidence-backed investment checkpoint facts are immutable'
+        USING ERRCODE = '55000';
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END $$;
+
 CREATE FUNCTION guard_investment_evidence_insert() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
 BEGIN
@@ -380,6 +474,12 @@ CREATE TRIGGER trg_investment_evidence_is_immutable
 CREATE TRIGGER trg_investment_evidence_uses_operation
   BEFORE INSERT ON investment_evidence
   FOR EACH ROW EXECUTE FUNCTION guard_investment_evidence_insert();
+CREATE TRIGGER trg_investment_event_draft_preserves_evidence
+  BEFORE UPDATE OR DELETE ON investment_event_draft
+  FOR EACH ROW EXECUTE FUNCTION preserve_investment_evidence_target();
+CREATE TRIGGER trg_investment_checkpoint_preserves_evidence
+  BEFORE UPDATE OR DELETE ON investment_position_checkpoint
+  FOR EACH ROW EXECUTE FUNCTION preserve_investment_evidence_target();
 
 CREATE FUNCTION preserve_investment_review_item() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
@@ -403,7 +503,8 @@ BEGIN
     RAISE EXCEPTION 'investment import groups retain their history'
       USING ERRCODE = '55000';
   END IF;
-  IF NEW.household_id IS DISTINCT FROM OLD.household_id
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.household_id IS DISTINCT FROM OLD.household_id
      OR NEW.import_id IS DISTINCT FROM OLD.import_id
      OR NEW.group_number IS DISTINCT FROM OLD.group_number
      OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
@@ -559,8 +660,10 @@ BEGIN
 END $$;
 
 REVOKE ALL ON FUNCTION assert_investment_import_document() FROM PUBLIC;
+REVOKE ALL ON FUNCTION preserve_investment_import() FROM PUBLIC;
 REVOKE ALL ON FUNCTION assert_investment_staging_security_scope() FROM PUBLIC;
 REVOKE ALL ON FUNCTION preserve_investment_evidence() FROM PUBLIC;
+REVOKE ALL ON FUNCTION preserve_investment_evidence_target() FROM PUBLIC;
 REVOKE ALL ON FUNCTION guard_investment_evidence_insert() FROM PUBLIC;
 REVOKE ALL ON FUNCTION preserve_investment_review_item() FROM PUBLIC;
 REVOKE ALL ON FUNCTION guard_investment_group_transition() FROM PUBLIC;

@@ -69,7 +69,7 @@ requires a separate owner request.
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Phase 1.6 Task 1 | **Complete via PR #165** after full `/verify`, all ten local-review findings resolved, confirmation approval and green pre-push gates; 1,351 API tests ran with live database paths enabled | [PR #165](https://github.com/sandjaie/OneLedger/pull/165) |
 | Phase 1.6 Task 2 | **Complete via PR #166** — immutable events, rebuildable holdings and acquisition-origin lots are on `develop` | [PR #166](https://github.com/sandjaie/OneLedger/pull/166) |
-| Phase 1.6 Task 3 | **Delivery branch active** — import groups, typed drafts, checkpoints, evidence dedupe and fixed-severity review states are in verification; its PR will target `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-3--import-groups-evidence-checkpoints-and-reviews) |
+| Phase 1.6 Task 3 | **Delivery branch complete** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and the branch is awaiting confirmation review before its first push | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-3--import-groups-evidence-checkpoints-and-reviews) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

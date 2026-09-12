@@ -852,7 +852,9 @@ content fingerprint. It stores no filename or raw statement row. Exact replay is
 conflicting identity attaches no evidence and creates a fixed-severity
 <code>duplicate_conflict</code> review item that blocks only the affected group. Other review reasons
 use the same fixed blocking/advisory matrix, and a group with an open blocking item cannot be
-marked ready or committed.</p>
+marked ready or committed. Once attached, the draft or checkpoint's typed source facts cannot be
+edited in place; later resolution may identify its account, security or holding and advance its
+lifecycle without rewriting what the source stated.</p>
 <hr>
 <h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
 <p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because

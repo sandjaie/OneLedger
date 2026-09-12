@@ -125,10 +125,11 @@ BEGIN
   RETURN NEXT;
 END $$;
 
--- Import parents accept only same-household investment documents and one parent per document.
+-- Import parents accept only same-household investment documents, remain tied to their source,
+-- and allow one parent per document.
 BEGIN;
 DO $$
-DECLARE f RECORD; foreign_document UUID; bank_document UUID; refusal TEXT;
+DECLARE f RECORD; foreign_document UUID; replacement_document UUID; bank_document UUID; refusal TEXT;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0029_fixture();
   INSERT INTO document (
@@ -138,6 +139,13 @@ BEGIN
     f.h2, f.account_2, 'investment_statement', 'masked-cross-scope.pdf', 'documents',
     'synthetic/cross-scope', 'application/pdf', 100, repeat('d', 64), 'parsed', f.u2
   ) RETURNING id INTO foreign_document;
+  INSERT INTO document (
+    household_id, account_id, document_type, original_filename, storage_bucket,
+    storage_path, mime_type, byte_size, sha256, parsed_status, uploaded_by
+  ) VALUES (
+    f.h1, f.account_1, 'investment_statement', 'masked-replacement.pdf', 'documents',
+    'synthetic/replacement', 'application/pdf', 100, repeat('e', 64), 'parsed', f.u1
+  ) RETURNING id INTO replacement_document;
   BEGIN
     INSERT INTO investment_import (
       household_id, document_id, source_contract, extraction_version
@@ -156,6 +164,21 @@ BEGIN
     GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
     ASSERT refusal = 'uq_investment_import_document', refusal;
   END;
+  BEGIN
+    UPDATE investment_import SET document_id = replacement_document WHERE id = f.import_1;
+    RAISE EXCEPTION 'an import parent was relabelled to another document';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%investment import identity is immutable%', refusal;
+  END;
+  BEGIN
+    UPDATE investment_import SET source_contract = 'replacement_contract_v1'
+     WHERE id = f.import_1;
+    RAISE EXCEPTION 'an import parent source contract was relabelled';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%investment import identity is immutable%', refusal;
+  END;
   INSERT INTO document (
     household_id, account_id, document_type, original_filename, storage_bucket,
     storage_path, mime_type, byte_size, sha256, parsed_status, uploaded_by
@@ -172,7 +195,51 @@ BEGIN
     GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
     ASSERT refusal = 'investment_import_uses_investment_document', refusal;
   END;
-  RAISE NOTICE 'PASS 0029 import parent document scope and type';
+  RAISE NOTICE 'PASS 0029 import parent document scope, type and retained identity';
+END $$;
+ROLLBACK;
+
+-- Review subjects cannot bypass their household-leading group scope with nullable composite keys.
+BEGIN;
+DO $$
+DECLARE f RECORD; foreign_draft UUID; foreign_checkpoint UUID; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0029_fixture();
+  INSERT INTO investment_event_draft (
+    household_id, group_id, source_order, account_id, security_id, event_date,
+    event_kind, units, price, gross_amount, charges, withheld_tax, net_amount,
+    currency, state
+  ) VALUES (
+    f.h2, f.group_2, 1, f.account_2, f.security_2, '2026-02-01',
+    'purchase', 1.00000000, 5.000000, 5.0000, 0.0000, 0.0000, -5.0000,
+    f.base, 'ready'
+  ) RETURNING id INTO foreign_draft;
+  INSERT INTO investment_position_checkpoint (
+    household_id, group_id, source_order, account_id, security_id, as_of_date,
+    reported_units, currency, declared_unit_scale
+  ) VALUES (
+    f.h2, f.group_2, 2, f.account_2, f.security_2, '2026-02-28',
+    1.00000000, f.base, 8
+  ) RETURNING id INTO foreign_checkpoint;
+  BEGIN
+    INSERT INTO investment_review_item (household_id, draft_id, reason)
+    VALUES (f.h1, foreign_draft, 'unrecognized_event');
+    RAISE EXCEPTION 'a review bypassed draft household scope with a null group';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_review_staged_subject_has_group', refusal;
+  END;
+  BEGIN
+    INSERT INTO investment_review_item (household_id, checkpoint_id, reason)
+    VALUES (f.h1, foreign_checkpoint, 'unit_mismatch');
+    RAISE EXCEPTION 'a review bypassed checkpoint household scope with a null group';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_review_staged_subject_has_group', refusal;
+  END;
+  ASSERT NOT EXISTS (SELECT FROM investment_review_item),
+    'refused cross-household reviews must leave no rows';
+  RAISE NOTICE 'PASS 0029 review staged subjects require their scoped group';
 END $$;
 ROLLBACK;
 
@@ -452,10 +519,51 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- A checkpoint can match only the account and security of its retained holding.
+BEGIN;
+DO $$
+DECLARE f RECORD; other_account UUID; event_id UUID; holding_id UUID; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0029_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  INSERT INTO account (
+    household_id, owner_person_id, name, account_type, currency, country,
+    opening_balance, opening_balance_date
+  ) VALUES (
+    f.h1, f.p1, 'Synthetic checkpoint account', 'brokerage', f.base, 'XZ', 0,
+    '2026-01-01'
+  ) RETURNING id INTO other_account;
+  event_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-02-01', 'purchase',
+    1.00000000, 5.000000, 5.0000, 0.0000, 0.0000, -5.0000, f.base,
+    '2026-02-01', 1.0000000000, 2.0000000000, -5.0000, -10.0000,
+    'owner_entered', 'checkpoint_test_v1', 'synthetic-checkpoint-event',
+    NULL, NULL, NULL, NULL
+  );
+  SELECT event.holding_id INTO holding_id
+    FROM investment_transaction event WHERE event.id = event_id;
+  BEGIN
+    INSERT INTO investment_position_checkpoint (
+      household_id, group_id, source_order, account_id, security_id, holding_id,
+      as_of_date, reported_units, currency, declared_unit_scale, reconciliation_status
+    ) VALUES (
+      f.h1, f.group_1, 1, other_account, f.security_1, holding_id,
+      '2026-02-28', 1.00000000, f.base, 8, 'matched'
+    );
+    RAISE EXCEPTION 'a checkpoint matched an unrelated holding';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_checkpoint_target_matches_holding', refusal;
+  END;
+  RAISE NOTICE 'PASS 0029 checkpoint target agrees with its holding';
+END $$;
+ROLLBACK;
+
 -- Evidence and review facts are append-only.
 BEGIN;
 DO $$
-DECLARE f RECORD; draft_id UUID; evidence_id UUID; review_id UUID; refusal TEXT;
+DECLARE f RECORD; draft_id UUID; checkpoint_id UUID; evidence_id UUID;
+  checkpoint_evidence_id UUID; review_id UUID; refusal TEXT;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0029_fixture();
   PERFORM set_config('app.user_id', f.u1::TEXT, true);
@@ -472,6 +580,17 @@ BEGIN
     f.group_1, f.document_1, draft_id, NULL, NULL, 1::SMALLINT, 1,
     'synthetic_statement_v1', '1', NULL, 'typed_v1', repeat('7', 64)
   );
+  INSERT INTO investment_position_checkpoint (
+    household_id, group_id, source_order, account_id, security_id, as_of_date,
+    reported_units, currency, declared_unit_scale
+  ) VALUES (
+    f.h1, f.group_1, 2, f.account_1, f.security_1, '2026-02-28',
+    1.00000000, f.base, 8
+  ) RETURNING id INTO checkpoint_id;
+  checkpoint_evidence_id := record_investment_evidence(
+    f.group_1, f.document_1, NULL, checkpoint_id, NULL, 1::SMALLINT, 2,
+    'synthetic_summary_v1', '1', NULL, 'typed_v1', repeat('8', 64)
+  );
   INSERT INTO investment_review_item (household_id, import_id, group_id, draft_id, reason)
   VALUES (f.h1, f.import_1, f.group_1, draft_id, 'unrecognized_event')
   RETURNING id INTO review_id;
@@ -482,6 +601,23 @@ BEGIN
     GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
     ASSERT refusal LIKE '%investment_evidence is immutable%', refusal;
   END;
+  BEGIN
+    UPDATE investment_event_draft SET gross_amount = 6.0000 WHERE id = draft_id;
+    RAISE EXCEPTION 'an evidence-backed draft fact was edited';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%evidence-backed investment draft facts are immutable%', refusal;
+  END;
+  BEGIN
+    UPDATE investment_position_checkpoint SET reported_units = 2.00000000
+     WHERE id = checkpoint_id;
+    RAISE EXCEPTION 'an evidence-backed checkpoint fact was edited';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%evidence-backed investment checkpoint facts are immutable%', refusal;
+  END;
+  ASSERT checkpoint_evidence_id IS NOT NULL,
+    'checkpoint evidence must remain attached while source facts are protected';
   BEGIN
     DELETE FROM investment_review_item WHERE id = review_id;
     RAISE EXCEPTION 'an investment review item was deleted';
@@ -496,9 +632,37 @@ ROLLBACK;
 -- Owners read only their household import surface; anonymous readers see none.
 BEGIN;
 DO $$
-DECLARE f RECORD;
+DECLARE f RECORD; draft_1 UUID; draft_2 UUID; evidence_id UUID;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0029_fixture();
+  INSERT INTO investment_event_draft (
+    household_id, group_id, source_order, account_id, security_id, event_date,
+    event_kind, units, price, gross_amount, charges, withheld_tax, net_amount,
+    currency, state
+  ) VALUES (
+    f.h1, f.group_1, 1, f.account_1, f.security_1, '2026-02-01',
+    'purchase', 1.00000000, 5.000000, 5.0000, 0.0000, 0.0000, -5.0000,
+    f.base, 'ready'
+  ) RETURNING id INTO draft_1;
+  INSERT INTO investment_event_draft (
+    household_id, group_id, source_order, account_id, security_id, event_date,
+    event_kind, units, price, gross_amount, charges, withheld_tax, net_amount,
+    currency, state
+  ) VALUES (
+    f.h2, f.group_2, 1, f.account_2, f.security_2, '2026-02-01',
+    'purchase', 1.00000000, 5.000000, 5.0000, 0.0000, 0.0000, -5.0000,
+    f.base, 'ready'
+  ) RETURNING id INTO draft_2;
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  evidence_id := record_investment_evidence(
+    f.group_1, f.document_1, draft_1, NULL, NULL, 1::SMALLINT, 1,
+    'synthetic_statement_v1', '1', NULL, 'typed_v1', repeat('9', 64)
+  );
+  PERFORM set_config('app.user_id', f.u2::TEXT, true);
+  evidence_id := record_investment_evidence(
+    f.group_2, f.document_2, draft_2, NULL, NULL, 1::SMALLINT, 1,
+    'synthetic_statement_v1', '1', NULL, 'typed_v1', repeat('a', 64)
+  );
   INSERT INTO investment_position_checkpoint (
     household_id, group_id, source_order, account_id, security_id, as_of_date,
     reported_units, currency, declared_unit_scale, reconciliation_status
@@ -518,8 +682,12 @@ BEGIN
     'owner sees only own investment imports';
   ASSERT (SELECT count(*) FROM investment_import_group) = 2,
     'owner sees only own investment groups';
+  ASSERT (SELECT count(*) FROM investment_event_draft) = 1,
+    'owner sees only own investment drafts';
   ASSERT (SELECT count(*) FROM investment_position_checkpoint) = 1,
     'owner sees only own checkpoints';
+  ASSERT (SELECT count(*) FROM investment_evidence) = 1,
+    'owner sees only own investment evidence';
   ASSERT (SELECT count(*) FROM investment_review_item) = 1,
     'owner sees only own investment reviews';
   RESET ROLE;
@@ -529,6 +697,10 @@ BEGIN
     'anonymous investment import reads are empty';
   ASSERT (SELECT count(*) FROM investment_review_item) = 0,
     'anonymous investment review reads are empty';
+  ASSERT (SELECT count(*) FROM investment_event_draft) = 0,
+    'anonymous investment draft reads are empty';
+  ASSERT (SELECT count(*) FROM investment_evidence) = 0,
+    'anonymous investment evidence reads are empty';
   RESET ROLE;
   RAISE NOTICE 'PASS 0029 authenticated investment-import RLS';
 END $$;

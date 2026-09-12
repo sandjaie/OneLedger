@@ -849,15 +849,16 @@ source-contract dedupe and optional owner-entered correction link.</td></tr>
 Rebuilds exclude an effect only when an appended correction replaces its source event.</td></tr>
 <tr><td><code>acquisition_lot</code></td><td>The immutable date, units, evidenced native basis and origin
 event of an acquisition. Closing a holding never deletes its acquisition history.</td></tr>
-<tr><td><code>investment_import</code></td><td>The one import parent for an investment document, with
-bounded source-contract and extraction-version identity but no copied filename.</td></tr>
+<tr><td><code>investment_import</code></td><td>The one retained import parent for an investment document,
+with immutable bounded source-contract and extraction-version identity but no copied filename.</td></tr>
 <tr><td><code>investment_import_group</code></td><td>An independently reviewable atomic group for events
 that must stage and eventually commit together. An open blocking review prevents ready or committed
 state without blocking sibling groups.</td></tr>
 <tr><td><code>investment_event_draft</code></td><td>A typed, exact staged event candidate. It can later
 name its committed immutable event but does not alter holdings while staged.</td></tr>
 <tr><td><code>investment_position_checkpoint</code></td><td>Exact units, reported cost or reported value at a
-date. It reconciles event-derived state and never manufactures an event or price.</td></tr>
+date. It reconciles event-derived state and never manufactures an event or price; a matched
+checkpoint's resolved account and security must agree with its holding.</td></tr>
 <tr><td><code>investment_evidence</code></td><td>An immutable typed attachment to one draft, checkpoint
 or event, with document/page/row provenance and source identity or versioned fingerprint. Exact
 replay is idempotent; conflicting evidence attaches nothing.</td></tr>

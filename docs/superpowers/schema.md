@@ -1856,7 +1856,8 @@ relabel or strand retained investment events.
 
 ### Investment import groups, evidence, checkpoints and reviews (applied)
 
-`investment_import` is the one import parent for an immutable investment document.
+`investment_import` is the one import parent for an immutable investment document. Its document,
+source contract, extraction version and creation identity cannot be relabelled after insertion.
 `investment_import_group` partitions that document into independently reviewable atomic units, so
 one conflicted switch or holding does not prevent unrelated reconciled groups from proceeding.
 Typed event drafts and end-position checkpoints remain separate: a checkpoint carries only the
@@ -1961,12 +1962,19 @@ CREATE TABLE investment_review_item (
 );
 ```
 
-All six relations use household-leading foreign keys and household RLS. Evidence inserts go
+All six relations use household-leading foreign keys and household RLS. A draft or checkpoint
+review must carry its group and import, so nullable composite keys cannot bypass scope. A matched
+checkpoint's resolved account and security must agree with its retained holding. Evidence inserts go
 through the owner-authorized `record_investment_evidence` operation; direct inserts, updates and
 deletes are refused. A normalized source-event identity is preferred when present, otherwise a
 versioned typed fingerprint is used, and neither key includes a filename. Exact replay returns the
 existing attachment. Conflicting evidence writes no attachment, creates one append-only
 `duplicate_conflict` review item and moves only its group to `blocked`.
+
+Once evidence names a draft or checkpoint, its typed source facts are immutable. Later resolution
+may attach resolved account, security or holding identity and advance lifecycle state, but it cannot
+silently change the date, units, monetary values, event kind, source order or declared precision
+authenticated by the retained fingerprint.
 
 The twelve review reasons have database-fixed severity. Eight data-integrity reasons block their
 group; missing price, unmatched cash, incomplete lot allocation and stale valuation are advisory.
