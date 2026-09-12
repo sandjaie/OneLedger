@@ -101,9 +101,18 @@ tests skip; with `.env` exported instead they **fail**, because `tests/live_data
 refuses a database holding anything those fixtures would empty and refuses a split where the
 fixtures and the routes point at different databases.
 
-**Every checkout gets its own test server, a worktree included.** Each worktree under
-`.claude/worktrees/` is its own compose project, so `up` there starts `<worktree>-db-test-1` on
-the `<worktree>_pgdata_test` volume. The port is `TEST_DB_PORT` if set, then whatever this
+**Binding agent rule: one delivery verification stage uses one dedicated `db-test` server.** Start
+it once with `eval "$(scripts/test-db.sh up)"`. Every agent and database-dependent command in that
+stage uses the exported environment; a fresh shell runs `eval "$(scripts/test-db.sh env)"` to
+re-export the already-running server, never `up` again. API tests and
+`scripts/hooks/db-tests.sh` both use that server. On success or the first failure, one agent tears
+it down exactly once with `scripts/test-db.sh down`. A separate `oneledger-verify` scratch Compose
+stack is not part of the delivery cycle.
+
+**The stage's checkout owns its one test server.** Each other checkout, including a worktree under
+`.claude/worktrees/`, is its own compose project, so `up` there starts `<worktree>-db-test-1` on
+the `<worktree>_pgdata_test` volume, but one delivery verification stage never spans those
+checkout servers. The port is `TEST_DB_PORT` if set, then whatever this
 project's running `db-test` already holds, then 55434, then any free one. `up` exports it as
 `TEST_DB_PORT`, so your own compose calls in that shell keep the container where it is. `env`
 reports the port this checkout's running container holds, and exports no `TEST_DB_PORT`. When
@@ -119,12 +128,16 @@ copies it into each worktree it creates, listed in `.worktreeinclude`. For a wor
 other way, copy it from the main checkout yourself. Copy nothing else: `pdf-statements/` and
 `backups/` hold real data and stay in the main checkout.
 
-**Each pytest run then gets a database of its own on that server.** `api/tests/conftest.py`
-creates `pytest_<pid>_<n>` at the session start, migrates it from empty with the checkout's own
+Here, “the same testing database” means the same isolated `db-test` **server** for the stage, not
+one shared mutable database. **Each pytest run gets a database of its own on that server.**
+`api/tests/conftest.py` creates `pytest_<pid>_<n>` at the session start, migrates it from empty
+with the checkout's own
 migrations, seeds it, points the fixtures and the routes at it, and drops it at the end. Several
 sessions can therefore run the live suites at once without emptying each other's tables — the
 state the repository was in on 10 September 2026, with five parallel sessions sharing one
-`oneledger_test`. The push hook does the same for the SQL tests.
+`oneledger_test`. The database hook creates and drops its own throwaway database on that same
+server, including for real migration-upgrade rehearsals, so concurrency and data isolation remain
+unchanged.
 
 This is not a precaution in the abstract: on 10 September 2026 exporting `.env` to make the
 live suite run truncated the working ledger, taking 4,184 imported transactions and four layout
@@ -140,12 +153,6 @@ and `docker volume create oneledger_documents` before the first `up`. `pgdata_te
 deliberately not external: it exists to be destroyed. `down` removes this checkout's own
 `<project>_pgdata_test` and no other. It used to remove `oneledger_pgdata_test` by name, which
 from a worktree was the main checkout's volume.
-
-**A scratch stack brings its own volumes.** The external names resolve per compose project —
-`${COMPOSE_PROJECT_NAME:-oneledger}_pgdata` — so under any project but the default one they
-name volumes that do not exist, and `docker compose up` refuses rather than mounting the
-ledger's data directory under a second Postgres. Create `<project>_pgdata` and
-`<project>_documents` first, as the verify skill does, and remove them after.
 
 ### 6. Push — the hooks are the enforcement
 

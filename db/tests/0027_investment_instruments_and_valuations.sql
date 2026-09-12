@@ -716,6 +716,19 @@ ROLLBACK;
 BEGIN;
 -- Later migrations may depend on V30 relations. Remove their objects first so this historical
 -- upgrade test can reconstruct the exact pre-V30 shape it is responsible for proving.
+DROP FUNCTION allocate_investment_lots(UUID, UUID[], NUMERIC[]);
+DROP FUNCTION unlink_investment_cash_allocations(UUID);
+DROP FUNCTION confirm_investment_cash_allocations(
+  UUID[], UUID[], investment_cash_allocation_role[], NUMERIC[]);
+DROP TABLE investment_lot_allocation;
+DROP TABLE investment_cash_allocation;
+DROP FUNCTION guard_investment_lot_allocation_write();
+DROP TRIGGER trg_allocated_cash_classification_uses_operation ON transaction;
+DROP FUNCTION guard_allocated_cash_classification();
+DROP FUNCTION guard_investment_cash_allocation_write();
+DROP FUNCTION investment_cash_type_for_role(investment_cash_allocation_role);
+DROP TYPE investment_cash_allocation_role;
+DROP FUNCTION assert_legacy_investment_cash_links_empty(BIGINT);
 DROP FUNCTION record_investment_evidence(
   UUID, UUID, UUID, UUID, UUID, SMALLINT, INTEGER,
   TEXT, TEXT, TEXT, TEXT, TEXT);

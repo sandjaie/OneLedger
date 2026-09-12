@@ -256,6 +256,63 @@ def test_preview_persists_the_complete_guard_and_changes_no_transaction(
     assert proposed["txn_type"] == "expense"
 
 
+def test_preview_serializes_a_confirmed_investment_fee_state(live: RepairFixture) -> None:
+    cash_id = _transaction(live, txn_type="fee", amount="-3.0000")
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                                     country, opening_balance, opening_balance_date)
+               SELECT household_id, owner_person_id, 'synthetic fee investment', 'brokerage',
+                      currency, 'XZ', 0, DATE '2026-01-01' FROM account WHERE id = %s
+               RETURNING id""",
+            (live.account_id,),
+        )
+        investment_account = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO security (household_id, security_type, name, currency, country,
+                                      asset_class)
+               VALUES (%s, 'mutual_fund', 'synthetic fee security', %s, 'XZ', 'equity')
+               RETURNING id""",
+            (live.household_id, live.currency),
+        )
+        security_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(live.user_id),))
+        cur.execute(
+            """SELECT append_investment_transaction(%s, %s, DATE '2026-03-01', 'purchase',
+                      1, 1, 1, 0, 0, -1, %s, DATE '2026-03-01', 1, 1, -1, -1, 'owner_entered',
+                      'classification_fee_v1', %s, NULL, NULL, NULL, NULL)""",
+            (investment_account, security_id, live.currency, f"origin-{uuid4()}"),
+        )
+        origin_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        cur.execute(
+            """INSERT INTO investment_transaction (household_id, account_id, holding_id,
+                      security_id, event_date, event_kind, charges, net_amount, currency,
+                      fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, net_amount_base,
+                      net_amount_secondary, source_kind, source_contract, source_event_id)
+               SELECT household_id, account_id, holding_id, security_id, DATE '2026-04-01',
+                      'charge', 3, -3, currency, DATE '2026-04-01', 1, 1, -3, -3, 'owner_entered',
+                      'classification_fee_v1', %s FROM investment_transaction WHERE id = %s
+               RETURNING id""",
+            (f"fee-{uuid4()}", origin_id),
+        )
+        event_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'off', true)")
+        cur.execute(
+            """SELECT confirm_investment_cash_allocations(ARRAY[%s]::UUID[], ARRAY[%s]::UUID[],
+                      ARRAY['fee']::investment_cash_allocation_role[], ARRAY[3]::NUMERIC[])""",
+            (event_id, cash_id),
+        )
+    live.conn.commit()
+
+    response = _preview(live, [cash_id])
+
+    assert response.status_code == 200, response.text
+    [proposal] = response.json()["proposals"]
+    assert proposal["expectedState"]["txnType"] == "investment_fee"
+    assert proposal["proposedState"]["txnType"] == "expense"
+
+
 def test_preview_rejects_a_complete_proposed_state_over_the_jsonb_byte_limit(
     live: RepairFixture,
 ) -> None:

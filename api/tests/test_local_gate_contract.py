@@ -51,21 +51,21 @@ def test_markdown_lint_remains_in_ci_and_verify() -> None:
     assert command in VERIFY.read_text()
 
 
-def test_verify_database_port_is_distinct_from_every_long_lived_stack() -> None:
-    verify_port = re.search(r"DB_PORT=(\d+)", VERIFY.read_text())
+def test_verify_reuses_the_isolated_test_server_for_every_database_check() -> None:
+    verify = VERIFY.read_text()
     production_port = re.search(r"POSTGRES_PORT=(\d+)", PRODUCTION.read_text())
     development_port = re.search(r"\$\{DB_PORT:-(\d+)\}", COMPOSE.read_text())
     test_port = re.search(r"\$\{TEST_DB_PORT:-(\d+)\}", COMPOSE.read_text())
 
-    assert verify_port is not None
     assert production_port is not None
     assert development_port is not None
     assert test_port is not None
-    assert verify_port.group(1) not in {
-        production_port.group(1),
-        development_port.group(1),
-        test_port.group(1),
-    }
+    assert test_port.group(1) not in {production_port.group(1), development_port.group(1)}
+    assert 'eval "$(scripts/test-db.sh up)"' in verify
+    assert 'eval "$(scripts/test-db.sh env)"' in verify
+    assert "scripts/hooks/db-tests.sh" in verify
+    assert "COMPOSE_PROJECT_NAME=oneledger-verify" not in verify
+    assert re.search(r"(?m)^\s*(?:export\s+)?DB_PORT=", verify) is None
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:
