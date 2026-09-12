@@ -1215,7 +1215,7 @@ export type HouseholdUpdate = {
     secondaryCurrency: string;
 };
 
-export type IdentifierKind = 'bank_account' | 'iban' | 'card';
+export type IdentifierKind = 'bank_account' | 'iban' | 'card' | 'folio' | 'brokerage_account';
 
 /**
  * IdentityBackfillApplyRequest
@@ -1993,6 +1993,50 @@ export type LayoutProposal = {
 };
 
 /**
+ * ManualPriceCreate
+ */
+export type ManualPriceCreate = {
+    /**
+     * Pricedate
+     */
+    priceDate: string;
+    /**
+     * Price
+     */
+    price: string;
+};
+
+/**
+ * ManualPriceRow
+ */
+export type ManualPriceRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Pricedate
+     */
+    priceDate: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Status
+     */
+    status?: 'recorded';
+};
+
+/**
  * MatchedRow
  *
  * One row a rule would touch. Money is a string; nothing here computes with it.
@@ -2647,10 +2691,7 @@ export type RevealedStatementIdentifier = {
      * Value
      */
     value: string;
-    /**
-     * Kind
-     */
-    kind: 'bank_account' | 'iban' | 'card';
+    kind: IdentifierKind;
 };
 
 /**
@@ -3089,6 +3130,98 @@ export type RunResult = {
      * Sourcerunid
      */
     sourceRunId?: string | null;
+};
+
+/**
+ * SecurityCandidate
+ */
+export type SecurityCandidate = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Securitytype
+     */
+    securityType: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Assetclass
+     */
+    assetClass: string;
+    /**
+     * Subassetclass
+     */
+    subAssetClass: string | null;
+    /**
+     * Isin
+     */
+    isin: string | null;
+    /**
+     * Ticker
+     */
+    ticker: string | null;
+    /**
+     * Exchange
+     */
+    exchange: string | null;
+};
+
+/**
+ * SecurityResolution
+ */
+export type SecurityResolution = {
+    /**
+     * Status
+     */
+    status: 'matched' | 'needs_confirmation' | 'ambiguous';
+    /**
+     * Reason
+     */
+    reason: 'exact_public_identity' | 'no_exact_identity' | 'name_only' | 'multiple_name_matches';
+    /**
+     * Candidates
+     */
+    candidates: Array<SecurityCandidate>;
+};
+
+/**
+ * SecurityResolveRequest
+ *
+ * Only public identity values may make resolution automatic; names are a review hint.
+ */
+export type SecurityResolveRequest = {
+    /**
+     * Securityid
+     */
+    securityId?: string | null;
+    /**
+     * Isin
+     */
+    isin?: string | null;
+    /**
+     * Ticker
+     */
+    ticker?: string | null;
+    /**
+     * Exchange
+     */
+    exchange?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
 };
 
 /**
@@ -5017,6 +5150,65 @@ export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses = 
 };
 
 export type ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponse = ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses[keyof ApplyIdentityBackfillAccountIdentifiersBackfillApplyPostResponses];
+
+export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostData = {
+    body: SecurityResolveRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-catalogue/securities/resolve';
+};
+
+export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostError = ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostErrors[keyof ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostErrors];
+
+export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SecurityResolution;
+};
+
+export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponse = ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponses[keyof ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponses];
+
+export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostData = {
+    body: ManualPriceCreate;
+    path: {
+        /**
+         * Security Id
+         */
+        security_id: string;
+    };
+    query?: never;
+    url: '/investment-catalogue/securities/{security_id}/manual-prices';
+};
+
+export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostError = AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostErrors[keyof AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostErrors];
+
+export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: ManualPriceRow;
+    /**
+     * Successful Response
+     */
+    201: ManualPriceRow;
+};
+
+export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponse = AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponses[keyof AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

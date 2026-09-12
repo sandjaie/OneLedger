@@ -7,8 +7,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal, cast
 
-type IdentifierKind = Literal["bank_account", "iban", "card"]
-_KINDS = frozenset({"bank_account", "iban", "card"})
+type IdentifierKind = Literal["bank_account", "iban", "card", "folio", "brokerage_account"]
+_KINDS = frozenset({"bank_account", "iban", "card", "folio", "brokerage_account"})
 _SEPARATORS = frozenset("-‐‑‒–—―−./٬٫")
 _MASK_GLYPHS = frozenset("*•●…")
 _MAX_SOURCE_LENGTH = 128

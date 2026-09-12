@@ -24,6 +24,7 @@ from .routes import (
     household,
     identity_backfill,
     ingest,
+    investment_catalogue,
     layouts,
     merchant_knowledge,
     rules,
@@ -104,6 +105,7 @@ app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
 app.include_router(description_reparse.router)
 app.include_router(identity_backfill.router)
+app.include_router(investment_catalogue.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
 

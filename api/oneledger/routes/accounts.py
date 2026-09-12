@@ -53,7 +53,13 @@ def _money(value: str | None) -> str | None:
 
 
 def _identifier_kind(account_type: str) -> IdentifierKind:
-    return "card" if account_type == "credit_card" else "bank_account"
+    if account_type == "credit_card":
+        return "card"
+    if account_type == "mutual_fund_folio":
+        return "folio"
+    if account_type == "brokerage":
+        return "brokerage_account"
+    return "bank_account"
 
 
 def _body_identifier(body: AccountCreate | AccountUpdate) -> Identifier | None:

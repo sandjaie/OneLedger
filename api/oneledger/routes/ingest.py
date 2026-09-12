@@ -44,6 +44,7 @@ from ..fxrange import FxCoverageError
 from ..identifiers import (
     CompleteIdentifier,
     Identifier,
+    IdentifierKind,
     IdentifierValueError,
     identifier_from_source,
 )
@@ -301,7 +302,14 @@ def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountR
 
 def _statement_identifier(account_type: str, value: str, *, source_is_masked: bool) -> Identifier:
     """Build the identity using the layout's explicit complete-versus-mask declaration."""
-    kind = "card" if account_type == "credit_card" else "bank_account"
+    if account_type == "credit_card":
+        kind: IdentifierKind = "card"
+    elif account_type == "mutual_fund_folio":
+        kind = "folio"
+    elif account_type == "brokerage":
+        kind = "brokerage_account"
+    else:
+        kind = "bank_account"
     try:
         identifier = identifier_from_source(kind, value, source_is_masked=source_is_masked)
     except IdentifierValueError:
@@ -827,7 +835,7 @@ def _confirmed_institution_resolution(
 class RevealedStatementIdentifier(BaseModel):
     status: Literal["revealed"]
     value: str = Field(repr=False)
-    kind: Literal["bank_account", "iban", "card"]
+    kind: IdentifierKind
 
 
 class UnavailableStatementIdentifier(BaseModel):
