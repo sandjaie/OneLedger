@@ -23,6 +23,7 @@ from oneledger import auth
 from oneledger.main import app
 from oneledger.routes import dashboard
 
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import ORIGIN, Fixture, _clean, _connect
 
 # The fixture holds 1 secondary = 4 base on 1 and 2 March 2026, and nothing after.
@@ -44,6 +45,7 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Fixture]:
         app.dependency_overrides.clear()
         with conn.cursor() as cur:
             _clean(cur)
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM person WHERE NOT (household_id = ANY(%s))", (seeded,))
             cur.execute("DELETE FROM household WHERE NOT (id = ANY(%s))", (seeded,))

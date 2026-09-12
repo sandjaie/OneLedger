@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 
 def _household(
@@ -214,6 +214,7 @@ def test_group_labels_redact_identifiers_without_changing_grouping() -> None:
         app.dependency_overrides.clear()
         with conn.cursor() as cur:
             cur.execute("DELETE FROM transaction WHERE household_id = %s", (household_id,))
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
             cur.execute("DELETE FROM app_user WHERE household_id = %s", (household_id,))
             cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))

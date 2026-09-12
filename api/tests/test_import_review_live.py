@@ -34,6 +34,7 @@ from oneledger.main import app
 from oneledger.routes import ingest as ingest_routes
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import LAYOUT_ID, ORIGIN, SALT, Fixture, _statement
 
 
@@ -271,6 +272,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Staged]:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name = 'route test'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
             cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")

@@ -25,6 +25,7 @@ from oneledger import auth
 from oneledger.main import app
 
 from .fixtures.synthetic_pdf import Placement, build_pdf
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_import_review_live import Staged, _all_row_ids, _connect
 from .test_ingest_route_live import LAYOUT_ID, SALT
 from .test_transfers_live import a_leg, an_account, candidates
@@ -50,6 +51,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Staged]:
             # `transfer` references `transaction`, so the cascade takes it.
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name = 'route test'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
             cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")

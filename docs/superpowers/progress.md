@@ -13,10 +13,10 @@ Updated: 12 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Design approved; plan review green** — awaiting owner approval; no implementation dispatched | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Obtain owner approval, then dispatch task 1 on the declared branch with TDD | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
-| Implementation branch | `feature/p1-6a-investment-ledger` exists from `develop`; it contains planning only until owner approval | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Next product action | Complete Task 1 confirmation review, then make the first push and open its PR to `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Implementation branch | `feature/p1-6a-investment-ledger` — V30 instruments and dated values under confirmation review | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 
 ## Canonical phase status
 
@@ -32,7 +32,7 @@ Updated: 12 September 2026.
 | 1.3 — classification and transfers | **Accepted, 11 Sep 2026** | [delivery history](reports/2026-09-12-progress-history.md) · [ADR-0020](../adr/0020-assisted-ledger-decisions.html) |
 | 1.4 — cards, net worth, and trends | **Accepted, 11 Sep 2026** | [delivery history](reports/2026-09-12-progress-history.md) |
 | 1.5 — statement-guided onboarding and owner decisions | **Accepted, 12 Sep 2026** | [identity specification](specs/2026-09-11-local-statement-identities.md) · [ADR-0021](../adr/0021-local-owner-financial-identifiers.html) |
-| 1.6 — investments | **Ready** | [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
+| 1.6 — investments | **In progress** | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | 1.7 — salary and a thin forecast | **Planned** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | 1.8 — layout mapper and documents | **Planned** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | 2.1 — complete historical coverage | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Phase 1.6 plan | **Green**; confirmation review found no blockers; awaiting owner approval | [plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Phase 1.6 Task 1 | Full `/verify` green after all nine local-review findings were fixed, including 1,351 API tests with live database paths enabled; confirmation review remains before push | [plan](plans/2026-09-12-phase-1-6-investments.md#task-1--instruments-and-dated-values) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

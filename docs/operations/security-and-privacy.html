@@ -391,11 +391,19 @@ Local private application data when a source supplies it:
 ✓  Bank account number                 — masked by default; owner-revealable
 ✓  IBAN                                — masked by default; owner-revealable
 ✓  Credit card number                  — only the digits the source actually provides
+✓  Investment folio identifier         — masked by default; owner-revealable
+✓  Brokerage-account identifier        — masked by default; owner-revealable
 </code></pre>
 <p>No account/card identifier, statement text, transaction, amount, credential or real financial
 example enters source control, a fixture, screenshot or published report. Complete identifiers are
 stored as plaintext in local PostgreSQL so they remain readable without a separate application key.
 The database and its backups must therefore be treated as private financial data.</p>
+<p>V30 keeps folio and brokerage-account identifiers in the same typed
+<code>account_identifier</code> envelope rather than on securities, holdings or prices. Their ordinary
+mask is <code>****</code> plus four normalized ASCII alphanumerics. Complete and normalized forms never
+enter logs, errors, URLs, analytics, browser persistence, fixtures or documentation. Public
+instrument identifiers and public price-source codes identify a security, not the owner's account,
+and may be shared independently of these private values.</p>
 <p>Historical identity backfill previews are owner-only and read-only. They select stored PDFs only
 through completed import provenance, reject an original that fails its local path, symlink or
 SHA-256 check, and hold an optional PDF password in the request frame only. Their ordinary response
@@ -567,8 +575,12 @@ one household and is permanently single-tenant, but the property is genuinely lo
 <td>In addition to the owner session, every <code>POST</code>, <code>PUT</code>, <code>PATCH</code> and <code>DELETE</code> carrying a session cookie must send an exact <code>Origin</code> header matching <code>WEB_ORIGIN</code>. CORS is not treated as CSRF protection</td>
 </tr>
 <tr>
-<td>Reference tables (<code>fx_rate</code>, <code>currency</code>, <code>price_snapshot</code>)</td>
+<td>Reference tables (<code>fx_rate</code>, <code>currency</code>)</td>
 <td>RLS enabled with a <code>SELECT</code>-only policy. No write policy exists, so writes are denied to every role</td>
+</tr>
+<tr>
+<td>Investment facts (<code>security</code>, source mappings, prices, valuation periods and snapshots)</td>
+<td>RLS admits shared reference rows or the current household as appropriate; anonymous reads are empty, and household-leading foreign keys prevent cross-household account or document evidence</td>
 </tr>
 <tr>
 <td><code>SECURITY DEFINER</code> functions</td>

@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
+from .live_database import clear_synthetic_account_valuation_periods
 from .test_card_cycle_live import (
     CARD_IDENTITY_METADATA,
     CARD_LAYOUT_ID,
@@ -100,6 +101,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Earlier]:
         with conn.cursor() as cur:
             cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
             cur.execute("DELETE FROM statement_layout")
+            clear_synthetic_account_valuation_periods(cur)
             cur.execute("DELETE FROM account WHERE name = 'route test'")
             cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
             cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")

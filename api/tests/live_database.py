@@ -18,6 +18,7 @@ created on that server — so parallel sessions never share the tables these fix
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import psycopg
 import pytest
@@ -92,3 +93,18 @@ def connect_to_test_database() -> psycopg.Connection:
             'from the same container: eval "$(scripts/test-db.sh up)"'
         )
     return connection
+
+
+def clear_synthetic_account_valuation_periods(cur: psycopg.Cursor[Any]) -> None:
+    """Remove generated account children only from this run's throwaway database.
+
+    Production keeps valuation history immutable and restricts parent deletion. Test fixtures need
+    to remove their synthetic accounts, but must not introduce a deletion path into the product.
+    TRUNCATE bypasses the immutability trigger, so this helper first proves that conftest created
+    the per-process database and fails closed everywhere else.
+    """
+    cur.execute("SELECT current_database()")
+    row = cur.fetchone()
+    if row is None or not str(row[0]).startswith("pytest_"):
+        pytest.fail("refusing to clear valuation history outside a pytest database")
+    cur.execute("TRUNCATE account_valuation_period")

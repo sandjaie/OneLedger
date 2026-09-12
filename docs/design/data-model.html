@@ -520,6 +520,7 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── institution ──── institution_alias
             │      │
             ├── account ────────┬── account_identifier
+            │      │            ├── account_valuation_period
             │      │            ├── transaction ──┬── transfer (2 legs)
             │      │            │                 ├── card_statement
             │      │            │                 ├── investment_transaction
@@ -540,7 +541,7 @@ personal finance software, and it is designed out here rather than tested for.</
             │                                      └── classification_run
             │                                             └── classification_run_item
             ├── classification_decision (append-only, per transaction/run)
-            ├── security ──── price_snapshot
+            ├── security ──── security_price_source ──── price_snapshot
             ├── statement_layout
             ├── document ──── import_batch ──── staged_transaction
             ├── net_worth_snapshot
@@ -662,18 +663,20 @@ balance conversion and every future import.</p>
 <code>SECURITY DEFINER</code> function that calls <code>assert_is_owner()</code> first:</p>
 <pre><code class="language-sql">ALTER TABLE fx_rate  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE currency ENABLE ROW LEVEL SECURITY;
-ALTER TABLE price_snapshot ENABLE ROW LEVEL SECURITY;
 
 -- Readable by anyone signed in. No INSERT/UPDATE/DELETE policy exists, so writes are denied
 -- to every role except through the vetted functions.
-CREATE POLICY reference_read ON fx_rate        FOR SELECT TO authenticated USING (true);
-CREATE POLICY reference_read ON currency       FOR SELECT TO authenticated USING (true);
-CREATE POLICY reference_read ON price_snapshot FOR SELECT TO authenticated USING (true);
+CREATE POLICY reference_read ON fx_rate  FOR SELECT TO authenticated USING (true);
+CREATE POLICY reference_read ON currency FOR SELECT TO authenticated USING (true);
 </code></pre>
 <p>Keyed on <code>(rate_date, base_currency, quote_currency)</code>, with the rate as <code>NUMERIC(20,10)</code>. Every row records its <strong>provenance</strong>: <code>source</code> is <code>ecb</code>, <code>derived_peg</code>, <code>manual</code> or <code>actual_transfer</code>, and a carried-forward rate must name the date it came from — a <code>CHECK</code> enforces that, so a derived value can never masquerade as an observed one (Invariant I7).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0004</code>.</p>
+<p>V30 securities, source mappings and price observations instead carry a nullable
+<code>household_id</code>. Authenticated reads admit shared rows and the current household's rows;
+anonymous reads are empty. Ordinary writes can target only the current household, while shared
+reference refreshes remain behind the owner-authorized service boundary.</p>
 <hr>
 <h2 id="5-accounts">5. Accounts</h2>
-<p>One <code>account_type</code> enum spans everything from <code>cash</code> to <code>property</code> to <code>payable</code>; <code>account_class</code> (<code>asset</code>/<code>liability</code>) is derived from it by trigger and never set by hand.</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>Globalising attributes</td><td><code>country</code>, <code>currency</code>, <code>institution_id</code>, <code>account_subtype</code> (NRE/NRO/PPF/EPF), <code>tax_residency_context</code>. These are what make one model serve both countries.</td></tr><tr><td>Identity</td><td>An <code>account_identifier</code> relation holds independent bank-account, IBAN and card identities: full local source value, normalized exact-match value, and safe mask for ordinary display.</td></tr><tr><td>Anchoring</td><td><code>opening_balance</code> + <code>opening_balance_date</code> — the anchor every derived balance is computed from. On insert, an omitted <code>current_balance</code> starts at the opening balance and carries <code>current_balance_as_of</code> (V6); an explicit value, including zero, is kept. <code>opening_balance_note</code> records where the figure came from; <code>opening_balance_confirmed_at</code> stays null until the owner acknowledges it (V8). An inactive account must carry <code>closed_on</code>.</td></tr><tr><td>Toggles</td><td><code>include_in_net_worth</code>, and <code>is_liquid</code> (defaults true; the user de-selects what shouldn't count as liquid).</td></tr><tr><td>Type-specific</td><td><code>credit_limit</code>, <code>statement_day</code>, <code>payment_due_day</code> for cards; <code>interest_rate_pct</code>, <code>maturity_date</code> for deposits.</td></tr></tbody></table><p class="ddl-ref">V28 adds the identifier relation and copies every safe legacy mask/hash into it without inventing a full value. V29 moves all application reads and writes to that relation and retires the V3/V27 identity columns. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V28</code> and <code>V29</code>.</p>
+<p>One <code>account_type</code> enum spans everything from <code>cash</code> to <code>property</code> to <code>payable</code>; <code>account_class</code> (<code>asset</code>/<code>liability</code>) is derived from it by trigger and never set by hand.</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>Globalising attributes</td><td><code>country</code>, <code>currency</code>, <code>institution_id</code>, <code>account_subtype</code>, <code>tax_residency_context</code>. These make one model serve many jurisdictions.</td></tr><tr><td>Identity</td><td><code>account_identifier</code> holds bank-account, IBAN, card, folio and brokerage-account identities: local full value when evidenced, normalized exact-match value, and safe ordinary mask.</td></tr><tr><td>Anchoring</td><td><code>opening_balance</code> + <code>opening_balance_date</code> — the anchor every derived balance is computed from. On insert, an omitted <code>current_balance</code> starts at the opening balance and carries <code>current_balance_as_of</code> (V6); an explicit value, including zero, is kept. <code>opening_balance_note</code> records where the figure came from; <code>opening_balance_confirmed_at</code> stays null until the owner acknowledges it (V8). An inactive account must carry <code>closed_on</code>.</td></tr><tr><td>Value source</td><td>V30 adds non-overlapping <code>account_valuation_period</code> history: ledger balance, structured holdings or dated snapshots, exactly one at a time. Existing V29 accounts remain ledger-valued until an owner-authorized dated transition; liabilities always remain ledger-valued.</td></tr><tr><td>Toggles</td><td><code>include_in_net_worth</code>, and <code>is_liquid</code> (defaults true; the user de-selects what shouldn't count as liquid).</td></tr><tr><td>Type-specific</td><td><code>credit_limit</code>, <code>statement_day</code>, <code>payment_due_day</code> for cards; <code>interest_rate_pct</code>, <code>maturity_date</code> for deposits.</td></tr></tbody></table><p class="ddl-ref">V28 adds the identifier relation; V29 retires the legacy identity columns; V30 adds investment identifier kinds and effective-dated account valuation modes. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V28</code>–<code>V30</code>.</p>
 <p><strong>Complete source financial identifiers are local private application data.</strong> They
 are stored in plaintext in the owner's database, masked by default and revealed only through an
 explicit owner-authenticated operation. A normalized value matches statements exactly; a
@@ -808,7 +811,32 @@ a second source of truth for the same fact.</p>
 <h2 id="10-investments">10. Investments</h2>
 <p>Transaction-level lots (<a href="../adr/0005-transaction-level-investment-lots.html">ADR-0005</a>) — XIRR is
 impossible to reconstruct from snapshots.</p>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>security</code></td><td>The instrument. ISIN, a price-feed <code>provider_code</code> (an AMFI scheme code, say), ticker, exchange, <code>asset_class</code>, sub-class, fund house, expense ratio. <code>household_id IS NULL</code> for shared reference data.</td></tr><tr><td><code>holding</code></td><td>A position: units, average cost, invested amount, realised gain, current price and value, <code>xirr_pct</code> with <code>xirr_computed_at</code> so a stale figure reads as stale.</td></tr><tr><td><code>investment_transaction</code></td><td>The lot. Signed units, NAV, gross and net amount, charges, tax withheld, frozen FX, and the bank transaction that funded it.</td></tr><tr><td><code>price_snapshot</code></td><td>Price per security per date, with its source (<code>amfi</code>/<code>manual</code>/<code>statement</code>).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0012</code>.</p>
+<p>V30 establishes instrument and valuation identity before V31 adds holdings, events and lots.
+The types are deliberately generic: country, currency and source organization remain row data or
+configuration rather than required code identifiers.</p>
+<table><thead><tr><th>Table or field</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>account_valuation_period</code></td><td>Non-overlapping history of the account's
+<code>ledger_balance</code>, <code>holdings</code> or <code>snapshot</code> net-worth source. Existing accounts
+remain ledger-valued until an explicit owner transition; liabilities remain ledger-valued. Account
+edits atomically move an unused initial anchor or refuse changes that would invalidate retained
+periods or valuations; conflicting row locks preserve the same rule under concurrent snapshot
+insertion.</td></tr>
+<tr><td><code>security</code></td><td>A shared public or household-private instrument. Public identity
+is ISIN or exchange/ticker; private folio and brokerage identifiers stay on
+<code>account_identifier</code>.</td></tr>
+<tr><td><code>security_price_source</code></td><td>An effective-dated mapping from an instrument to a
+versioned price capability and its public source code. Transactional exclusion constraints refuse
+overlapping mappings and concurrent attempts to resolve one exact code to different securities.
+A mapping cannot close before any retained observation.</td></tr>
+<tr><td><code>price_snapshot</code></td><td>An immutable exact observation keyed by security, date,
+source mapping and price. Conflicting observations remain; only the accepted selection changes.</td></tr>
+<tr><td><code>valuation_snapshot</code></td><td>An immutable account-level opaque-asset value with dated,
+non-future frozen reporting FX, method, confidence and optional evidence protected by a
+household-leading document foreign key.</td></tr>
+<tr><td><code>holding</code>, events and lots</td><td>V31 adds transaction-derived units and acquisition
+history. They are not present in V30.</td></tr>
+</tbody></table><p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
+<code>V30</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
@@ -817,9 +845,14 @@ impossible to reconstruct from snapshots.</p>
 Recomputed on any new investment transaction or price refresh, stored on <code>holding</code>, and stamped
 with <code>xirr_computed_at</code> so a stale figure is visible as stale.</p>
 <h3 id="manual-valuations">Manual valuations</h3>
-<p>For property, physical gold, EPF, PPF — anything with no importable statement
+<p>For an opaque asset with supplied evidence and no unambiguous market price
 (<a href="../adr/0006-manual-valuation-snapshots.html">ADR-0006</a>).</p>
-<p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> Targets either an account or a holding — a <code>CHECK</code> enforces exactly one — and freezes the FX rates at <code>as_of_date</code> alongside the native value. Carries a <code>method</code> and a <code>confidence</code>, both displayed, never hidden.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0014</code>.</p>
+<p><em>&ldquo;As of date X, this is worth Y.&rdquo;</em> V30 targets an account in
+<code>snapshot</code> period and freezes exact reporting values and non-future FX evidence beside the native value.
+V31 adds the alternative holding target once holdings exist and enforces exactly one target. Method,
+confidence and age are always displayed; no retirement placeholder is created without evidence.</p>
+<p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
+<code>V30</code>.</p>
 <p><strong>Carried forward flat, never extrapolated.</strong> The valuation in effect on any date is the most
 recent snapshot at or before it. A trend line between two snapshots is drawn as a step, not a
 slope, because a smooth line would imply knowledge that does not exist (Invariant I7).</p>
@@ -918,10 +951,6 @@ Redundancy is cheaper than a leak.</p>
 <tbody><tr>
 <td><code>currency</code>, <code>fx_rate</code></td>
 <td>Public reference data. Exchange rates are not private</td>
-</tr>
-<tr>
-<td><code>price_snapshot</code></td>
-<td>Market prices for securities. Not private, and shared across households by design</td>
 </tr>
 <tr>
 <td><code>household</code></td>
@@ -1023,12 +1052,14 @@ V28__institution_and_account_identifiers.sql
 V29__retire_legacy_account_identity_columns.sql
                                       legacy account identity columns retired; application reads
                                       and writes use account_identifier (applied)
+V30__investment_instruments_and_valuations.sql
+                                      securities, price-source mappings, exact dated values,
+                                      valuation-mode history and investment identifier kinds (applied)
 
   then, in this order, numbered as they land:
 
-investments
+investment holdings, events and lots
 loans
-valuations
 net_worth
 audit_log
 phase2_tables                         recurring, budget, payslip
