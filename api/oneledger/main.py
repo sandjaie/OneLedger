@@ -1,12 +1,12 @@
 # api/oneledger/main.py
 import os
-from collections.abc import Awaitable, Callable
-from functools import lru_cache
+from collections.abc import Awaitable, Callable, Iterator
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 from starlette.responses import JSONResponse, Response
 
 from .auth import OwnerSession, auth_mode, require_owner, session_secret
@@ -51,65 +51,87 @@ app = FastAPI(
 )
 
 
-@lru_cache
-def _validation_location_schema() -> tuple[frozenset[str], frozenset[str]]:
-    """Read registered OpenAPI properties; never infer a safe field from request spelling."""
-    properties: set[str] = set()
-    dynamic: set[str] = set()
-
-    def visit(node: object) -> None:
-        if not isinstance(node, dict):
-            return
-        for name, child in node.get("properties", {}).items():
-            properties.add(name)
-            if isinstance(child, dict) and "additionalProperties" in child:
-                dynamic.add(name)
-            visit(child)
-        for value in node.values():
-            if isinstance(value, dict):
-                visit(value)
-            elif isinstance(value, list):
-                for item in value:
-                    visit(item)
-
-    visit(app.openapi())
-    return frozenset(properties), frozenset(dynamic)
+def _validation_schema_nodes(
+    node: object, document: dict[str, Any], seen: frozenset[str] = frozenset()
+) -> Iterator[dict[str, Any]]:
+    """Expand local references and wrappers without descending into child locations."""
+    if not isinstance(node, dict):
+        return
+    yield node
+    reference = node.get("$ref", "")
+    if reference.startswith("#/") and reference not in seen:
+        target = document
+        for part in reference[2:].split("/"):
+            target = target.get(part.replace("~1", "/").replace("~0", "~"), {})
+        yield from _validation_schema_nodes(target, document, seen | {reference})
+    for wrapper in ("anyOf", "oneOf", "allOf"):
+        for child in node.get(wrapper, []):
+            yield from _validation_schema_nodes(child, document, seen)
 
 
-def _safe_validation_location(error: dict[str, Any]) -> list[str | int]:
-    trusted, dynamic = _validation_location_schema()
-    location = error["loc"]
-    if error["type"] == "extra_forbidden":
-        return [
-            item
-            if isinstance(item, int) or item in {"body", "path", "query", "header", "cookie"}
-            else "field"
-            for item in location
-        ]
+def _safe_validation_location(request: Request, error: dict[str, Any]) -> list[str | int]:
+    """Trust a property only at its position in the matched route's request schema."""
+    document = app.openapi()
+    route = request.scope.get("route")
+    operation = (
+        document.get("paths", {}).get(route.path_format, {}).get(request.method.lower(), {})
+        if isinstance(route, APIRoute)
+        else {}
+    )
+    locations = {
+        source: {
+            "properties": {
+                parameter["name"]: parameter.get("schema", {})
+                for parameter in operation.get("parameters", [])
+                if parameter.get("in") == source
+            }
+        }
+        for source in ("path", "query", "header", "cookie")
+    }
+    content = operation.get("requestBody", {}).get("content", {})
+    media_type = request.headers.get("content-type", "application/json").split(";", 1)[0]
+    locations["body"] = content.get(media_type, content.get("application/json", {})).get(
+        "schema", {}
+    )
+    nodes: list[dict[str, Any]] = []
     result: list[str | int] = []
-    in_dynamic = False
-    for item in location:
-        if isinstance(item, int) or item in {"body", "path", "query", "header", "cookie"}:
-            result.append(item)
-        elif in_dynamic or item not in trusted:
-            result.append("field")
+    for index, item in enumerate(error["loc"]):
+        children: list[object] = []
+        declared = False
+        dynamic = False
+        if index == 0 and item in locations:
+            declared = True
+            children.append(locations[item])
         else:
-            result.append(item)
-            in_dynamic = item in dynamic
+            for node in nodes:
+                if isinstance(item, int) and "items" in node:
+                    children.append(node["items"])
+                elif item in node.get("properties", {}):
+                    declared = True
+                    children.append(node["properties"][item])
+                elif node.get("additionalProperties", False) is not False:
+                    dynamic = True
+                    children.append(node["additionalProperties"])
+        extra = error["type"] == "extra_forbidden" and index == len(error["loc"]) - 1
+        result.append(
+            item if isinstance(item, int) or (declared and not dynamic and not extra) else "field"
+        )
+        nodes = [
+            variant for child in children for variant in _validation_schema_nodes(child, document)
+        ]
     return result
 
 
 @app.exception_handler(RequestValidationError)
 async def private_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Validation diagnostics describe the failure, never echo the submitted body."""
-    del request
     return JSONResponse(
         status_code=422,
         content={
             "detail": [
                 {
                     "type": error["type"],
-                    "loc": _safe_validation_location(error),
+                    "loc": _safe_validation_location(request, error),
                     "msg": error["msg"],
                 }
                 for error in exc.errors()

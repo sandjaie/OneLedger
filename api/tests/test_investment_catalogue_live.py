@@ -141,7 +141,9 @@ def test_catalogue_validation_keeps_declared_field_locations() -> None:
     assert ("body", "price") in locations
 
 
-@pytest.mark.parametrize("unsafe_key", ["raw-private-12345", "ＦＯＬ１２３４５"])
+@pytest.mark.parametrize(
+    "unsafe_key", ["raw-private-12345", "ＦＯＬ１２３４５", "openingBalance", "body", "name"]
+)
 def test_layout_validation_masks_dynamic_dictionary_keys(unsafe_key: str) -> None:
     """A metadata dictionary key is request data, not a declared field location."""
     app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
@@ -152,10 +154,49 @@ def test_layout_validation_masks_dynamic_dictionary_keys(unsafe_key: str) -> Non
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 422
-    assert unsafe_key not in response.text
-    assert ("body", "metadataPatterns", "field") in {
-        tuple(error["loc"]) for error in response.json()["detail"]
-    }
+    if unsafe_key not in {"body", "name"}:  # These also occur in legitimate root locations.
+        assert unsafe_key not in response.text
+    assert [
+        error["loc"] for error in response.json()["detail"] if error["type"] == "string_type"
+    ] == [["body", "metadataPatterns", "field"]]
+    assert all(set(error) == {"type", "loc", "msg"} for error in response.json()["detail"])
+
+
+@pytest.mark.parametrize(
+    ("path", "body", "expected_location"),
+    [
+        (
+            "/layouts",
+            {"columns": [{"field": "date", "xMin": "invalid", "xMax": 2}]},
+            ["body", "columns", 0, "xMin"],
+        ),
+        ("/layouts", {"fingerprints": [7]}, ["body", "fingerprints", 0]),
+        (
+            "/investment-catalogue/securities/invalid/manual-prices",
+            {"priceDate": "2026-09-01", "price": "1.000000"},
+            ["path", "security_id"],
+        ),
+        (
+            "/investment-catalogue/securities/resolve",
+            {"name": "Synthetic Fund", "body": 7},
+            ["body", "field"],
+        ),
+    ],
+)
+def test_validation_schema_traversal_preserves_only_declared_locations(
+    path: str, body: dict[str, object], expected_location: list[str | int]
+) -> None:
+    """Traversal keeps nested model fields and indices but masks transport-like extra keys."""
+    app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
+        user_id=uuid4(), household_id=uuid4(), session_id=uuid4(), email="owner@example.invalid"
+    )
+    try:
+        response = TestClient(app).post(path, json=body)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert expected_location in [error["loc"] for error in response.json()["detail"]]
+    assert all(set(error) == {"type", "loc", "msg"} for error in response.json()["detail"])
 
 
 def test_exact_resolution_hides_other_household_rows_and_name_ambiguity_abstains(
