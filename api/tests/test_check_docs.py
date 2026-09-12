@@ -11,6 +11,8 @@ import importlib.util
 import pathlib
 import subprocess
 
+import pytest
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 # Loaded by path: the script's name has a hyphen, as its neighbours' do.
 _spec = importlib.util.spec_from_file_location("check_docs", ROOT / "scripts" / "check-docs.py")
@@ -30,3 +32,58 @@ def test_a_nested_checkout_is_not_this_tree(tmp_path: pathlib.Path) -> None:
     seen = {path.name for path in check_docs._tracked(tmp_path)}
 
     assert seen == {"mine.md"}
+
+
+def test_delivery_terminology_reports_retired_current_identifiers(
+    tmp_path: pathlib.Path,
+) -> None:
+    canonical = tmp_path / "roadmap.html"
+    canonical.write_text("<p>M7 then Phase 2A then V2. The next slice follows.</p>\n")
+
+    problems = check_docs.check_delivery_terminology([canonical])
+
+    assert len(problems) == 4
+    assert any("M7" in problem for problem in problems)
+    assert any("Phase 2A" in problem for problem in problems)
+    assert any("V2" in problem for problem in problems)
+    assert any("slice" in problem for problem in problems)
+
+
+def test_delivery_terminology_allows_crosswalk_and_excludes_history(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    master = tmp_path / "docs" / "product" / "master-implementation-plan.html"
+    master.parent.mkdir(parents=True)
+    master.write_text(
+        "<p>Phase 1.6 follows Phase 1.5.</p>\n"
+        "<!-- historical-numbering-crosswalk:start -->\n"
+        "<p>M7 was the former investment milestone in V2-era documents.</p>\n"
+        "<!-- historical-numbering-crosswalk:end -->\n"
+    )
+    register = tmp_path / "docs" / "superpowers" / "project-register.md"
+    register.parent.mkdir(parents=True)
+    register.write_text("Phase 1.6 is ready for planning.\n")
+    historical = tmp_path / "docs" / "superpowers" / "reports" / "2026-09-09-history.md"
+    historical.parent.mkdir(parents=True)
+    historical.write_text("Phase 2B and slice 1.8 are historical.\n")
+    monkeypatch.setattr(check_docs, "ROOT", tmp_path)
+    monkeypatch.setattr(check_docs, "CANONICAL_DELIVERY_DOCUMENTS", (master, register))
+
+    problems = check_docs.check_delivery_terminology()
+
+    assert problems == []
+
+
+def test_delivery_terminology_ignores_historical_link_targets(
+    tmp_path: pathlib.Path,
+) -> None:
+    canonical = tmp_path / "progress.md"
+    canonical.write_text(
+        "[Phase 1.1 evidence](reports/2026-09-09-slice-1.1-handoff.md)\n"
+        '<a href="reports/2026-09-08-m2-evidence.html">import evidence</a>\n'
+    )
+
+    problems = check_docs.check_delivery_terminology([canonical])
+
+    assert problems == []

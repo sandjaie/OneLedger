@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="./prd.html">Product requirements</a></li>
 <li><a href="./roadmap.html">Roadmap</a></li>
+<li><a href="./master-implementation-plan.html">Master implementation plan</a></li>
 <li><a href="./finance-os.html">Finance OS requirements</a></li>
 <li><a href="#" aria-current="page">UI and information architecture</a></li></ul>
     </div>
@@ -330,8 +331,7 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+      <ul><li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="../superpowers/schema.md">Schema reference</a></li>
 <li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
 <li><a href="../superpowers/questions.html">Questions</a></li></ul>
@@ -349,7 +349,7 @@ body {
 <li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
 <li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI</a></li>
 <li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
 <li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
 <li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
@@ -402,9 +402,10 @@ Documents         the vault
 Review            appears with a badge when a batch awaits review
 Settings          categories, rules, institutions, FX, backup
 </code></pre>
-<p>Phase 2A adds a Planning view for commitments, cash forecasts and actions. Phase 2B adds goals,
-emergency-reserve coverage and protection/administration records within that view. Phase 2C adds
-Budgets, Recurring and Salary as needed. V2 adds Ask. Avoid a separate top-level destination for
+<p>Phase 3.1 and Phase 3.2 add a Planning view for commitments, cash forecasts and actions.
+Phase 3.3 and Phase 3.4 add goals, emergency-reserve coverage and protection/administration
+records within that view. Phase 4.x adds Budgets, Recurring and Salary as needed. Phase 5.2 adds
+Ask. Avoid a separate top-level destination for
 every record type.</p>
 <p><strong>Persistent header:</strong> the <strong>currency toggle</strong> (the household&#39;s pair, <code>INR ⇄ AED</code> in the mockups below) and a date-range control on
 analytical screens. The currency toggle is global, persisted, and instant — it swaps a column, it
@@ -453,11 +454,11 @@ though it does (Invariant I7).</li>
 </ul>
 <hr>
 <h3 id="freshness-and-actions">Verified position and attention</h3>
-<p>The overview ships first as M9a after transfers; full M9b adds investment history and attribution.
+<p>The overview ships first in Phase 1.4 after transfers; Phase 2.2 adds investment history and attribution.
 Every headline exposes its as-of date and verified, partially covered or estimated status. Price,
 FX and statement freshness are separate. An old cash balance stays visibly old after a price refresh.</p>
-<p>The Phase 1 attention region links existing missing-statement, review, card-due and stale-valuation
-items to their source. Phase 2 extends it with open, snoozed, completed and dismissed actions, reasons
+<p>The Phase 1.x attention region links existing missing-statement, review, card-due and stale-valuation
+items to their source. Phase 3.x extends it with open, snoozed, completed and dismissed actions, reasons
 and due dates. Daily visits should answer what needs attention without implying live bank balances.</p>
 <p><strong>Monthly workflow:</strong> check account/period coverage → import → resolve transfers and
 classification → compare the verified position → inspect upcoming obligations → record follow-up.

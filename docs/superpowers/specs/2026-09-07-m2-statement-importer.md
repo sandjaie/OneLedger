@@ -1,5 +1,9 @@
 # M2 — the statement importer: specification
 
+> **Historical numbering:** This specification retains the identifiers used at review time. Use
+> the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for current Phase N.M identifiers.
+
 The contracts, table semantics and architecture decisions M2 is built against. The execution map is
 [the M2 plan](../plans/2026-09-07-m2-statement-importer.md), which points here rather than
 restating any of it.

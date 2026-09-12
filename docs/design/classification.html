@@ -306,6 +306,7 @@ body {
       <h2>Product</h2>
       <ul><li><a href="../product/prd.html">Product requirements</a></li>
 <li><a href="../product/roadmap.html">Roadmap</a></li>
+<li><a href="../product/master-implementation-plan.html">Master implementation plan</a></li>
 <li><a href="../product/ui-information-architecture.html">UI and information architecture</a></li></ul>
     </div>
 <div class="register-section">
@@ -329,8 +330,7 @@ body {
     </div>
 <div class="register-section">
       <h2>Plan</h2>
-      <ul><li><a href="../superpowers/plans/implementation-plan.md">Implementation plan</a></li>
-<li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
+      <ul><li><a href="../superpowers/phase-0-foundations.md">Phase 0 foundations</a></li>
 <li><a href="../superpowers/schema.md">Schema reference</a></li>
 <li><a href="../superpowers/test-suite.md">Test suite reference</a></li>
 <li><a href="../superpowers/questions.html">Questions</a></li></ul>
@@ -348,7 +348,7 @@ body {
 <li><a href="../adr/index.html">ADR index</a></li>
 <li><a href="../adr/0001-record-architecture-decisions.html">0001 Record architecture decisions</a></li>
 <li><a href="../adr/0002-frozen-dual-currency-amounts.html">0002 Frozen dual-currency amounts</a></li>
-<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI to V2</a></li>
+<li><a href="../adr/0003-defer-ai-to-v2.html">0003 Defer AI</a></li>
 <li><a href="../adr/0004-google-auth-single-user.html">0004 Google auth, single user</a></li>
 <li><a href="../adr/0005-transaction-level-investment-lots.html">0005 Transaction-level investment lots</a></li>
 <li><a href="../adr/0006-manual-valuation-snapshots.html">0006 Manual valuation snapshots</a></li>
@@ -368,7 +368,7 @@ body {
         <article class="prose">
           <h1 id="06--classification">06 — Classification</h1>
 <p><strong>The Phase 1 and Phase 2 application makes no LLM calls.</strong> The cascade below is fully deterministic and
-inspectable — every classification can name the rule that produced it. An LLM fallback is a V2
+inspectable — every classification can name the rule that produced it. A model fallback is a Phase 5.3
 consideration only (<a href="../adr/0003-defer-ai-to-v2.html">ADR-0003</a>).</p>
 <p><a href="../adr/0020-assisted-ledger-decisions.html">ADR-0020</a> permits owner-delegated
 assistance now: the agent can research public provider identities, preview and save supported
@@ -531,7 +531,7 @@ An uncertain expected reimbursement does not automatically become a recognised a
 income even when excluded from consumption. Investment funding, platform transfers and reinvestment
 remain distinguishable. The governing definitions are
 <a href="../product/finance-os.html#financial-meaning">finance OS F01–F03</a>; implement them with
-M4/M5 reporting requirements and preserve explicit user overrides.</p>
+Phase 1.3 reporting requirements and preserve explicit user overrides.</p>
 <h2 id="3-seed-taxonomy">3. Seed taxonomy</h2>
 <p>A universal two-level tree ships with the product, filled by the merchant rule packs below, so
 reports are meaningful on the very first import. Every category carries a <strong>bucket</strong> — <code>need</code>, <code>want</code>, <code>investment</code>, <code>debt_service</code>,
@@ -890,7 +890,7 @@ returns nothing instead.</p>
 unclassified descriptions by frequency — which is also the
 best list of rules worth writing next.</p>
 <hr>
-<h2 id="8-what-v2-would-add">8. What V2 would add</h2>
+<h2 id="8-what-phase-53-would-add">8. What Phase 5.3 would add</h2>
 <p>Recorded so the boundary stays clear, not as a commitment.</p>
 <p>An LLM fallback would sit at <strong>step 7</strong>, after everything deterministic has abstained — typically
 a handful of rows per import. It would propose, never decide, and its output would land in the

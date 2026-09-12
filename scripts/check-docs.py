@@ -19,6 +19,29 @@ LINK_PATTERNS = [
     re.compile(r'\]\((?!https?:|mailto:|#)([^)]+)\)'),    # markdown
 ]
 
+CANONICAL_DELIVERY_DOCUMENTS = (
+    ROOT / "README.md",
+    ROOT / "CLAUDE.md",
+    ROOT / "docs" / "index.html",
+    ROOT / "docs" / "development-cycle.md",
+    ROOT / "docs" / "product" / "roadmap.html",
+    ROOT / "docs" / "product" / "master-implementation-plan.html",
+    ROOT / "docs" / "superpowers" / "README.md",
+    ROOT / "docs" / "superpowers" / "progress.md",
+    ROOT / "docs" / "superpowers" / "project-register.md",
+)
+HISTORICAL_CROSSWALK = re.compile(
+    r"(?ms)<!-- historical-numbering-crosswalk:start -->.*?"
+    r"<!-- historical-numbering-crosswalk:end -->"
+)
+DELIVERY_LINK_TARGETS = re.compile(r'href="[^"]*"|\]\([^)]*\)')
+RETIRED_DELIVERY_TERMS = (
+    ("M-number", re.compile(r"\bM\d+[a-z]?\b")),
+    ("lettered Phase 2", re.compile(r"\bPhase\s+2[ABC]\b")),
+    ("V2 phase", re.compile(r"\bV2\b")),
+    ("slice", re.compile(r"\bslices?\b", re.IGNORECASE)),
+)
+
 
 class TagBalance(HTMLParser):
     def __init__(self) -> None:
@@ -139,10 +162,53 @@ def check_adr_numbers() -> list[str]:
     return out
 
 
+def check_delivery_terminology(
+    paths: list[pathlib.Path] | tuple[pathlib.Path, ...] | None = None,
+) -> list[str]:
+    """Current delivery sources use one Phase N.M vocabulary.
+
+    The default guard becomes active when both new canonical documents exist. During the
+    coordinated migration this keeps the checker installable before the document move; after the
+    move, the ordinary broken-link check also prevents either document from disappearing silently.
+    Callers may pass paths directly for focused tests.
+    """
+    if paths is None:
+        required = {
+            ROOT / "docs" / "product" / "master-implementation-plan.html",
+            ROOT / "docs" / "superpowers" / "project-register.md",
+        }
+        if not all(path.exists() for path in required):
+            return []
+        paths = CANONICAL_DELIVERY_DOCUMENTS
+
+    out = []
+    for path in paths:
+        if not path.exists():
+            continue
+        text = HISTORICAL_CROSSWALK.sub(
+            lambda match: "\n" * match.group(0).count("\n"), path.read_text()
+        )
+        text = DELIVERY_LINK_TARGETS.sub(
+            lambda match: re.sub(r"[^\n]", " ", match.group(0)), text
+        )
+        for label, pattern in RETIRED_DELIVERY_TERMS:
+            for match in pattern.finditer(text):
+                line = text.count("\n", 0, match.start()) + 1
+                try:
+                    shown_path = path.relative_to(ROOT)
+                except ValueError:
+                    shown_path = path
+                out.append(
+                    f"{shown_path}:{line}: retired {label} identifier {match.group(0)!r}"
+                )
+    return out
+
+
 CHECKS = [
     ("broken links", check_links),
     ("ADR link labels disagreeing with their target", check_adr_numbers),
     ("malformed html", check_html),
+    ("canonical Phase N.M terminology", check_delivery_terminology),
     ("real financial data tracked by git", check_no_real_data),
 ]
 

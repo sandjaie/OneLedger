@@ -35,7 +35,8 @@ Supporting specifications: [architecture](../design/architecture.html),
 This is an execution reference, not a status tracker. Read [implementation progress](progress.md)
 before starting work. Original PR headings are ordinal groups, not GitHub PR numbers.
 The [completion specification](specs/2026-09-06-phase-0-completion.md) supersedes conflicting
-historical snippets. The [master plan](plans/implementation-plan.md) defines product sequencing.
+historical snippets. The
+[master implementation plan](../product/master-implementation-plan.html) defines product sequencing.
 New plans and specifications live under `docs/superpowers/`.
 
 ## Global Constraints

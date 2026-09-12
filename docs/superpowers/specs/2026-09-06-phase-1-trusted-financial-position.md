@@ -1,5 +1,9 @@
 # Phase 1 specification — a trusted financial position
 
+> **Historical numbering:** This specification retains the identifiers used at review time. Use
+> the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for current Phase N.M identifiers.
+
 Date: 6 September 2026. Owner-authorized. Phase 1 is the ledger phase: accounts, statement
 import, classification, transfers, the verified overview, cards, investments, documents and
 consolidated wealth history. This specification defines the requirements, contracts and
@@ -9,7 +13,7 @@ executable against the tree as it stands today.
 Execution instructions are in the
 [Phase 1 implementation plan](../plans/2026-09-06-phase-1-trusted-financial-position.md).
 Scope and sequence remain owned by the [roadmap](../../product/roadmap.html) and the
-[master implementation plan](../plans/implementation-plan.md). Execution status is maintained
+[master implementation plan](../../product/master-implementation-plan.html). Execution status is maintained
 only in [implementation progress](../progress.md).
 
 ## 1. Scope

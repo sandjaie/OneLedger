@@ -1,5 +1,9 @@
 # Slice 1.8 — the import asks: design
 
+> **Historical numbering:** This delivered design is now mapped to Phase 1.5. Use the
+> [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+> for the current sequence.
+
 The decisions behind the [slice 1.8 plan](../plans/2026-09-10-slice-1-8-the-import-asks.md), taken
 on 10 September 2026 against `develop` at `a3cf13a`, for two owner requests made that day: **an import
 can create the account it needs**, and **an unclassified row should ask how to mark it**. The plan

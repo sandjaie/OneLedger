@@ -44,9 +44,13 @@ Investment Rate                    X %
 ## Documentation
 
 - [Specification index](docs/index.html) — product, design and operational documentation.
-- [Master implementation plan](docs/superpowers/plans/implementation-plan.md) — scope and build order.
-- [Implementation progress](docs/superpowers/progress.md) — the single maintained execution tracker.
-- [Product roadmap](docs/product/roadmap.html) — milestone scope and acceptance criteria.
+- [Product roadmap](docs/product/roadmap.html) — approved outcomes and acceptance criteria.
+- [Master implementation plan](docs/product/master-implementation-plan.html) — the canonical
+  Phase N.M order and dependencies.
+- [Implementation progress](docs/superpowers/progress.md) — the single maintained execution
+  tracker and next action.
+- [Project register](docs/superpowers/project-register.md) — deferred work, discoveries,
+  decisions, and risks awaiting review.
 - [Finance OS requirements](docs/product/finance-os.html) — verified positions, cash needs,
   resilience, goals, protection, actions and owner export.
 
@@ -144,7 +148,10 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [Statement Ingestion](docs/design/statement-ingestion.html) | Upload → parse → normalize → dedupe → reconcile → review → import |
 | [Classification](docs/design/classification.html) | Deterministic rule engine; the category taxonomy |
 | [Transfers & Reconciliation](docs/design/transfers-and-reconciliation.html) | Why transfers are first-class, and how they're matched |
-| [Roadmap](docs/product/roadmap.html) | Phase 0 → Phase 1 → Phase 2 → V2 |
+| [Roadmap](docs/product/roadmap.html) | Approved product outcomes and their success criteria |
+| [Master implementation plan](docs/product/master-implementation-plan.html) | Canonical Phase N.M order, dependencies, and delivery boundaries |
+| [Implementation progress](docs/superpowers/progress.md) | Live status, current outcome, next action, gates, and evidence |
+| [Project register](docs/superpowers/project-register.md) | Deferred or unapproved information and its review condition |
 | [Security & Privacy](docs/operations/security-and-privacy.html) | Threat model, the never-store list, the authorization boundary |
 | [API Contracts](docs/design/api-contracts.html) | The route surface, typed by Pydantic through OpenAPI |
 | [UI & Information Architecture](docs/product/ui-information-architecture.html) | Screens, navigation, key interactions |
@@ -153,7 +160,6 @@ Documents you read are HTML; plans that get executed are Markdown.
 | [ADRs](docs/adr/index.html) | 19 decisions in force, each with the alternatives actually considered |
 | [Decisions we changed](docs/adr/superseded.html) | The four replaced during specification, and why |
 | [Questions](docs/superpowers/questions.html) | Scoping questions — **17 of 24 answered** |
-| **[Implementation Plan](docs/superpowers/plans/implementation-plan.md)** | **The build order. Start here to write code** |
 | [Phase 0 Pull Requests](docs/superpowers/phase-0-pull-requests.md) | Historical PR grouping and review workflow |
 | [Schema Reference](docs/superpowers/schema.md) | The complete DDL, by migration |
 | [Test Suite Reference](docs/superpowers/test-suite.md) | The invariant suite and static checks |
@@ -201,7 +207,7 @@ considered. The ones that shape the most code:
 | **Statement layouts are data, not code** — no bank name appears in the codebase | [0012](docs/adr/0012-statement-layouts-as-data.html) |
 | **A Python backend service** owns all business logic | [0013](docs/adr/0013-python-backend-service.html) |
 | **One VPS, one compose file** — no managed services | [0014](docs/adr/0014-one-vps-one-compose-file.html) |
-| All AI deferred to V2, with four stated prerequisites | [0003](docs/adr/0003-defer-ai-to-v2.html) |
+| All intelligent features require the Phase 5 privacy and safety gate | [0003](docs/adr/0003-defer-ai-to-v2.html) |
 
 **The app is institution- and region-agnostic by construction.** Accounts, institutions,
 categories, merchants, rules, securities, currency pegs and statement layouts are all rows.
@@ -243,16 +249,16 @@ No per-seat, per-service or usage-based pricing: the bill does not grow with the
 
 ## Scope discipline
 
-Built in Phase 1 · deferred to Phase 2 · deferred to V2 — the boundaries are set in
-[roadmap.html](docs/product/roadmap.html) and are meant to be argued with *before* coding starts,
-not during.
+The boundaries are set in the [roadmap](docs/product/roadmap.html), and their implementation order
+is fixed in the [master implementation plan](docs/product/master-implementation-plan.html). New
+ideas enter the [project register](docs/superpowers/project-register.md) and are argued with before
+they become approved scope, not during implementation.
 
-**AI is entirely a V2 concern.** Phase 1 and Phase 2 contain no LLM calls. The classification
-engine is deterministic and inspectable; it has to be good on its own before anything smarter is
-layered on top ([ADR-0003](docs/adr/0003-defer-ai-to-v2.html)).
+**Intelligence begins only at Phase 5.1.** Earlier phases contain no model calls. Classification is
+deterministic and inspectable; it must be good on its own before an optional fallback is considered
+([ADR-0003](docs/adr/0003-defer-ai-to-v2.html)).
 
-**Usefulness arrives in stages.** M2 provides the first statement workflow; M5 adds the transfer
-and external-outflow treatment required for trustworthy spending. M9a then delivers a basic verified
-overview with coverage dates, ahead of the full M7 investment and M10 document experience. M9b
-completes wealth history and attribution. Phase 2A adds commitments, forecasts and actions; 2B adds
-resilience, goals and protection; 2C deepens analysis. The 01 Jan 2024 history objective remains.
+**Usefulness arrives in canonical order.** Phase 1.x completes the daily-use financial core,
+Phase 2.x establishes historical depth and data quality, Phase 3.x adds planning and resilience,
+and Phase 4.x adds deeper analysis. The approved history anchor remains unchanged. Current status
+and the next action live only in [implementation progress](docs/superpowers/progress.md).

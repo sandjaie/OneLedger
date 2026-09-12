@@ -1,17 +1,21 @@
 # Superpowers plans and references
 
-All **new implementation plans** live in `docs/superpowers/plans/` from 6 September 2026.
-Start with the [master implementation plan](plans/implementation-plan.md).
-Name feature plans `YYYY-MM-DD-<milestone-or-feature>.md` and write them immediately before
-execution, using the current code and accepted product requirements.
+The [product roadmap](../product/roadmap.html) owns approved outcomes and acceptance criteria. The
+[master implementation plan](../product/master-implementation-plan.html) owns their canonical
+Phase N.M order and dependencies. [Implementation progress](progress.md) is the only live status
+tracker, while the [project register](project-register.md) holds deferred or unapproved information.
+
+All **new implementation plans** live in `docs/superpowers/plans/`. Name them
+`YYYY-MM-DD-<feature>.md` and write them immediately before execution, using the current code and
+accepted product requirements. Each plan implements one Phase N.M outcome and does not maintain
+status.
 
 All **new specifications** live in `docs/superpowers/specs/`.
 
 The existing [Phase 0 task plan](phase-0-foundations.md) and
-[PR breakdown](phase-0-pull-requests.md) remain in place to finish that work without
-renumbering it. The [schema](schema.md), [test suite](test-suite.md), and
-[question record](questions.html) are the supporting references for that work. Keep new detailed
-plans in `plans/` and new specifications in `specs/`.
+[PR breakdown](phase-0-pull-requests.md) remain as historical evidence. The
+[schema](schema.md), [test suite](test-suite.md), and [question record](questions.html) are
+supporting references. Keep new detailed plans in `plans/` and new specifications in `specs/`.
 
 Product requirements remain in `docs/product/`; technical specifications in `docs/design/`;
 operational requirements in `docs/operations/`; decisions in `docs/adr/`. A plan links to those
