@@ -1743,6 +1743,115 @@ holding alternative and exactly-one-target constraint after the holding relation
 
 ---
 
+## `V31`
+
+### Immutable investment events, holdings and acquisition lots (applied)
+
+`holding` is the unique household/account/security position. Its exact `current_units`, opening
+date and optional closing date are projections: callers cannot edit them, and
+`investment_units_from_events` rebuilds the same units from immutable `investment_unit_effect`
+rows. A zero-unit position remains as closed history with all events and lots retained.
+
+`investment_transaction` stores the event-kind matrix and exact source facts. Unit direction,
+price/cash requirements, frozen reporting amounts and the absence of a generic `adjustment` kind
+are database constraints. Imported or owner-entered facts cannot be updated or deleted. A
+correction is a new owner-entered event naming the exact event it replaces; rebuilds ignore the
+replaced effect without removing either row or its lot.
+
+The owner-authorized `append_investment_transaction` operation is the only insertion boundary. It
+locks the account/holding, rejects excess decimal scale before PostgreSQL can round it, verifies
+the holdings valuation period and household scope, and writes the event, unit effect, acquisition
+lot and holding projection atomically. Task 2 enables purchase, recurring-purchase, sale,
+redemption and maturity appends; later lifecycle operations use the already constrained vocabulary
+rather than accepting a meaning-free adjustment.
+
+```sql
+CREATE TYPE investment_event_kind AS ENUM (
+  'purchase', 'recurring_purchase', 'sale', 'redemption', 'maturity',
+  'cash_distribution', 'interest', 'reinvested_distribution',
+  'charge', 'withheld_tax',
+  'switch_in', 'switch_out', 'systematic_transfer_in', 'systematic_transfer_out',
+  'split', 'bonus', 'rights', 'platform_transfer_in', 'platform_transfer_out'
+);
+
+CREATE TYPE investment_event_source AS ENUM ('statement', 'owner_entered');
+
+CREATE TABLE holding (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id  UUID NOT NULL REFERENCES household(id),
+  account_id    UUID NOT NULL,
+  security_id   UUID NOT NULL REFERENCES security(id),
+  current_units NUMERIC(28,8) NOT NULL,
+  opened_on     DATE NOT NULL,
+  closed_on     DATE,
+  FOREIGN KEY (household_id, account_id) REFERENCES account(household_id, id),
+  UNIQUE (household_id, account_id, security_id),
+  CHECK (current_units >= 0)
+);
+
+CREATE TABLE investment_transaction (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id            UUID NOT NULL REFERENCES household(id),
+  account_id              UUID NOT NULL,
+  holding_id              UUID NOT NULL,
+  security_id             UUID NOT NULL REFERENCES security(id),
+  event_date              DATE NOT NULL,
+  event_kind              investment_event_kind NOT NULL,
+  units                   NUMERIC(28,8),
+  unit_ratio              NUMERIC(20,10),
+  price                   NUMERIC(20,6),
+  gross_amount            NUMERIC(20,4),
+  charges                 NUMERIC(20,4) NOT NULL,
+  withheld_tax            NUMERIC(20,4) NOT NULL,
+  net_amount              NUMERIC(20,4) NOT NULL,
+  currency                CHAR(3) NOT NULL REFERENCES currency(code),
+  fx_rate_date            DATE,
+  fx_rate_to_base         NUMERIC(20,10),
+  fx_rate_to_secondary    NUMERIC(20,10),
+  net_amount_base         NUMERIC(20,4),
+  net_amount_secondary    NUMERIC(20,4),
+  source_kind             investment_event_source NOT NULL,
+  source_contract         TEXT NOT NULL,
+  source_event_id         TEXT,
+  dedupe_version          TEXT,
+  dedupe_fingerprint      TEXT,
+  corrects_transaction_id UUID,
+  correction_reason       TEXT
+);
+
+CREATE TABLE investment_unit_effect (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id              UUID NOT NULL REFERENCES household(id),
+  holding_id                UUID NOT NULL,
+  investment_transaction_id UUID NOT NULL,
+  effect_date               DATE NOT NULL,
+  signed_units              NUMERIC(28,8) NOT NULL,
+  UNIQUE (investment_transaction_id)
+);
+
+CREATE TABLE acquisition_lot (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id          UUID NOT NULL REFERENCES household(id),
+  holding_id            UUID NOT NULL,
+  origin_transaction_id UUID NOT NULL,
+  acquisition_date      DATE NOT NULL,
+  acquired_units        NUMERIC(28,8) NOT NULL,
+  cost_basis_native     NUMERIC(20,4) NOT NULL,
+  currency              CHAR(3) NOT NULL REFERENCES currency(code),
+  UNIQUE (origin_transaction_id)
+);
+```
+
+Every relation has household RLS and household-leading composite references. Source-event IDs or
+versioned content fingerprints deduplicate within a household/source contract: an exact replay
+returns the existing event, while different facts for the same identity fail without partial
+rows. `valuation_snapshot` now has exactly one account or holding target; account snapshots retain
+their V30 semantics and holding snapshots require the account's `holdings` period. Parent security
+currency, account lifetime/anchor and valuation-period edits are refused whenever they would
+relabel or strand retained investment events.
+
+---
+
 ## `0013`
 
 ### Loans
