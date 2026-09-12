@@ -308,7 +308,7 @@ constraints.
 CREATE TYPE txn_type AS ENUM (
   'income','expense','fee','interest','tax','refund',
   'transfer_in','transfer_out',
-  'investment_buy','investment_sell','investment_income',
+  'investment_buy','investment_sell','investment_income','investment_fee',
   'loan_disbursement','loan_repayment',
   'adjustment','opening_balance'
 );
@@ -368,7 +368,6 @@ CREATE TABLE transaction (
   -- links: any non-null link changes how this row is reported
   transfer_id               UUID REFERENCES transfer(id),
   card_statement_id         UUID REFERENCES card_statement(id),
-  investment_transaction_id UUID REFERENCES investment_transaction(id),
   loan_id                   UUID REFERENCES loan(id),
   loan_schedule_entry_id    UUID REFERENCES loan_schedule_entry(id),
   recurring_series_id       UUID REFERENCES recurring_series(id),
@@ -1984,6 +1983,64 @@ be marked ready or committed.
 
 ---
 
+## `V33` (applied)
+
+### Investment cash and disposal-lot allocations
+
+V33 replaces the retired one-to-one `transaction.investment_transaction_id` placeholder with two
+household-scoped many-to-many relations. `investment_cash_allocation` links an investment event to
+an ordinary ledger leaf with one of `funding`, `proceeds`, `cash_distribution` or `fee`, an exact
+positive `NUMERIC(20,4)` magnitude, the leaf's prior `txn_type`, and the owner who confirmed it.
+`investment_lot_allocation` links a unit disposal to an acquisition-origin lot in the same holding
+with exact positive `NUMERIC(28,8)` units and owner provenance.
+
+```sql
+CREATE TABLE investment_cash_allocation (
+  id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id              UUID NOT NULL REFERENCES household(id),
+  investment_transaction_id UUID NOT NULL,
+  cash_transaction_id       UUID NOT NULL,
+  role                      investment_cash_allocation_role NOT NULL,
+  allocated_amount          NUMERIC(20,4) NOT NULL,
+  prior_txn_type            txn_type NOT NULL,
+  allocated_by              UUID NOT NULL,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (investment_transaction_id, cash_transaction_id),
+  CHECK (allocated_amount > 0)
+);
+
+CREATE TABLE investment_lot_allocation (
+  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id            UUID NOT NULL REFERENCES household(id),
+  holding_id              UUID NOT NULL,
+  disposal_transaction_id UUID NOT NULL,
+  acquisition_lot_id      UUID NOT NULL,
+  allocated_units         NUMERIC(28,8) NOT NULL,
+  allocated_by            UUID NOT NULL,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (disposal_transaction_id, acquisition_lot_id),
+  CHECK (allocated_units > 0)
+);
+```
+
+Both tables have household RLS and household-leading event, ledger, holding, lot and actor foreign
+keys. Direct DML is refused. `confirm_investment_cash_allocations` locks and validates the complete
+batch atomically: arrays are exact, roles match event kind and cash direction, native currencies
+match, no event side is over-allocated, no cash row mixes roles, and every cash leaf is fully
+allocated. It then maps the leaf to `investment_buy`, `investment_sell`, `investment_income` or
+`investment_fee`; all four stay outside `v_transaction_reportable`. An allocated split child may
+carry that derived type while its ordinary sibling keeps the parent type, but a split parent is
+never linkable and every pre-existing split invariant remains enforced.
+
+`unlink_investment_cash_allocations` removes every allocation for one leaf in the same operation and
+restores the exact stored prior type. `allocate_investment_lots` accepts only an owner-visible unit
+disposal and acquisition lots from its holding, locks both sides, and refuses disposal-side or
+origin-lot over-allocation; it never chooses a lot or invents FIFO. V33 refuses a populated legacy
+cash-link column before schema changes, recreates the split guard and invoker-security ledger views
+without that column, then drops it. `classification_state_is_valid` now admits `investment_fee`.
+
+---
+
 ## `0013`
 
 ### Loans
@@ -2236,7 +2293,7 @@ CREATE TABLE payslip_line (
 
 ## `0018` — Deferred foreign keys
 
-`transaction` references `transfer`, `card_statement`, `investment_transaction`, `loan`,
+`transaction` references `transfer`, `card_statement`, `loan`,
 `loan_schedule_entry` and `recurring_series`, every one of which is created after it — and
 `transfer` references `transaction` back. Those columns are therefore created as bare `UUID` in
 `0007` and constrained here, once every target exists.
@@ -2245,11 +2302,12 @@ CREATE TABLE payslip_line (
 ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
   ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
-  ADD CONSTRAINT fk_txn_inv_txn      FOREIGN KEY (investment_transaction_id)
-                                     REFERENCES investment_transaction(id),
   ADD CONSTRAINT fk_txn_loan         FOREIGN KEY (loan_id)           REFERENCES loan(id),
   ADD CONSTRAINT fk_txn_loan_entry   FOREIGN KEY (loan_schedule_entry_id)
                                      REFERENCES loan_schedule_entry(id),
   ADD CONSTRAINT fk_txn_recurring    FOREIGN KEY (recurring_series_id)
                                      REFERENCES recurring_series(id);
 ```
+
+The former deferred investment-event reference was never populated and V33 removed its column;
+`investment_cash_allocation` is now the sole cash-to-investment link.

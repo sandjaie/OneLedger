@@ -725,7 +725,7 @@ immutable, so an existing counterparty reference cannot be re-homed after valida
 <hr>
 <h2 id="7-the-transaction-ledger">7. The transaction ledger</h2>
 <p>The centre of the system.</p>
-<p>The centre of the system. Its columns fall into eight groups:</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>identity</td><td><code>booked_date</code>, <code>value_date</code>, <code>description_raw</code> (never edited — it is the audit record), <code>description_clean</code>, <code>reference_raw</code></td></tr><tr><td>money</td><td><code>amount</code> + <code>currency</code>, <strong>immutable</strong> (I1). <code>original_amount</code>/<code>original_currency</code> where the bank converted for you</td></tr><tr><td>frozen FX</td><td><code>fx_rate_date</code>, <code>fx_rate_is_carried</code>, <code>fx_rate_to_base</code>, <code>fx_rate_to_secondary</code>, <code>amount_base</code>, <code>amount_secondary</code> — computed once, never recomputed (I5)</td></tr><tr><td>meaning</td><td><code>txn_type</code>, <code>category_id</code>, <code>merchant_id</code>, <code>counterparty_raw</code></td></tr><tr><td>context</td><td><code>country</code>, <code>payment_method</code></td></tr><tr><td>links</td><td><code>transfer_id</code>, <code>card_statement_id</code>, <code>investment_transaction_id</code>, <code>loan_id</code>, <code>recurring_series_id</code>, <code>parent_transaction_id</code>. <strong>Any non-null link changes how the row is reported.</strong></td></tr><tr><td>provenance</td><td><code>source</code>, <code>source_document_id</code>, page and row number, <code>import_batch_id</code>, <code>statement_layout_id</code>, <code>layout_version</code>, <code>dedupe_hash</code> (I6)</td></tr><tr><td>classification</td><td><code>classified_by</code>, <code>classification_rule_id</code>, <code>classification_confidence</code>, <code>is_reviewed</code> — so the UI can always answer <em>why is this Food &amp; Dining?</em></td></tr></tbody></table><p>A partial index on <code>is_reviewed = false</code> serves the review queue, and a GIN index over <code>description_raw</code> serves free-text search.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0007</code>.</p>
+<p>The centre of the system. Its columns fall into eight groups:</p><table><thead><tr><th>Group</th><th>Columns</th></tr></thead><tbody><tr><td>identity</td><td><code>booked_date</code>, <code>value_date</code>, <code>description_raw</code> (never edited — it is the audit record), <code>description_clean</code>, <code>reference_raw</code></td></tr><tr><td>money</td><td><code>amount</code> + <code>currency</code>, <strong>immutable</strong> (I1). <code>original_amount</code>/<code>original_currency</code> where the bank converted for you</td></tr><tr><td>frozen FX</td><td><code>fx_rate_date</code>, <code>fx_rate_is_carried</code>, <code>fx_rate_to_base</code>, <code>fx_rate_to_secondary</code>, <code>amount_base</code>, <code>amount_secondary</code> — computed once, never recomputed (I5)</td></tr><tr><td>meaning</td><td><code>txn_type</code>, <code>category_id</code>, <code>merchant_id</code>, <code>counterparty_raw</code></td></tr><tr><td>context</td><td><code>country</code>, <code>payment_method</code></td></tr><tr><td>links</td><td><code>transfer_id</code>, <code>card_statement_id</code>, <code>loan_id</code>, <code>recurring_series_id</code>, <code>parent_transaction_id</code>. Investment cash uses <code>investment_cash_allocation</code> rather than a column here. <strong>Any non-null direct link changes how the row is reported.</strong></td></tr><tr><td>provenance</td><td><code>source</code>, <code>source_document_id</code>, page and row number, <code>import_batch_id</code>, <code>statement_layout_id</code>, <code>layout_version</code>, <code>dedupe_hash</code> (I6)</td></tr><tr><td>classification</td><td><code>classified_by</code>, <code>classification_rule_id</code>, <code>classification_confidence</code>, <code>is_reviewed</code> — so the UI can always answer <em>why is this Food &amp; Dining?</em></td></tr></tbody></table><p>A partial index on <code>is_reviewed = false</code> serves the review queue, and a GIN index over <code>description_raw</code> serves free-text search.</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V33</code>.</p>
 <h3 id="splits-the-container-versus-posting-rule">Splits: the container-versus-posting rule</h3>
 <p>Splitting one ₹8,000 supermarket bill into ₹6,500 groceries and ₹1,500 household creates child
 rows via <code>parent_transaction_id</code>. Both the parent and its children then exist in <code>transaction</code>, so
@@ -740,7 +740,9 @@ WHERE NOT EXISTS (SELECT 1 FROM transaction c WHERE c.parent_transaction_id = t.
 <p>Balances, cash flow and every category report read leaf rows. The parent keeps its immutable
 amount, its <code>description_raw</code> and its document provenance (I6); the children inherit
 <code>account_id</code>, <code>booked_date</code>, <code>source_document_id</code> and the frozen FX columns from it, and differ
-only in <code>amount</code>, <code>category_id</code> and <code>notes</code>.</p>
+only in <code>amount</code>, <code>category_id</code> and <code>notes</code>. One narrow exception is an
+exactly allocated investment leaf: its owner-authorized allocation operation derives the applicable
+investment transaction type while ordinary siblings retain the parent type.</p>
 <p>A constraint trigger asserts children sum exactly to the parent, so a split can never change an
 account&#39;s balance:</p>
 <pre><code class="language-sql">-- SUM(child.amount) = parent.amount, enforced at statement end
@@ -765,7 +767,7 @@ WHERE  transfer_id IS NULL             -- a transfer leg is never income or expe
   AND  is_excluded = false
   AND  txn_type NOT IN (&#39;opening_balance&#39;,&#39;adjustment&#39;,
                         &#39;transfer_in&#39;,&#39;transfer_out&#39;,
-                        &#39;investment_buy&#39;,&#39;investment_sell&#39;,&#39;investment_income&#39;,
+                        &#39;investment_buy&#39;,&#39;investment_sell&#39;,&#39;investment_income&#39;,&#39;investment_fee&#39;,
                         &#39;loan_disbursement&#39;,&#39;loan_repayment&#39;);
 </code></pre>
 <p>This view is built on <code>transaction</code>, and the leaf rule above applies to it too: a split parent is
@@ -777,7 +779,7 @@ table.</strong> A static check enforces it (<a href="../operations/testing-and-d
 consumption. They have their own views:</p>
 <pre><code class="language-sql">CREATE VIEW v_investment_flow WITH (security_invoker = true) AS
   SELECT * FROM transaction
-  WHERE txn_type IN (&#39;investment_buy&#39;,&#39;investment_sell&#39;,&#39;investment_income&#39;)
+  WHERE txn_type IN (&#39;investment_buy&#39;,&#39;investment_sell&#39;,&#39;investment_income&#39;,&#39;investment_fee&#39;)
     AND is_excluded = false;
 
 CREATE VIEW v_debt_service_flow WITH (security_invoker = true) AS
@@ -1093,10 +1095,11 @@ V31__investment_events_and_lots.sql    immutable investment events, rebuildable 
 V32__investment_evidence_and_reviews.sql
                                       atomic import groups, typed drafts, position checkpoints,
                                       filename-free evidence and fixed review severity (applied)
+V33__investment_allocations.sql       owner-authorized cash and disposal-lot allocations; retired
+                                      legacy cash-link column and exact unlink restoration (applied)
 
   then, in this order, numbered as they land:
 
-investment allocations
 loans
 net_worth
 audit_log
@@ -1107,7 +1110,7 @@ security fix and a constraint the code already required — and a list that pins
 not yet written goes stale the first time something has to be repaired ahead of it. Applied
 migrations name their real file; the rest name the work.</p>
 <h3 id="the-circular-references">The circular references</h3>
-<p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>investment_transaction</code>, <code>loan</code>,
+<p><code>transaction</code> references <code>transfer</code>, <code>card_statement</code>, <code>loan</code>,
 <code>loan_schedule_entry</code> and <code>recurring_series</code>. Every one of those tables is created <em>after</em>
 <code>transaction</code>, and <code>transfer</code> references <code>transaction</code> back. V10
 (<code>schema.md</code> section <code>0007</code>) therefore cannot declare those columns as foreign keys — the
@@ -1121,14 +1124,14 @@ Phase 1.3's migration. The clauses below are the remaining eventual set (<code>s
 <pre><code class="language-sql">ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_transfer     FOREIGN KEY (transfer_id)       REFERENCES transfer(id),
   ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
-  ADD CONSTRAINT fk_txn_inv_txn      FOREIGN KEY (investment_transaction_id)
-                                     REFERENCES investment_transaction(id),
   ADD CONSTRAINT fk_txn_loan         FOREIGN KEY (loan_id)           REFERENCES loan(id),
   ADD CONSTRAINT fk_txn_loan_entry   FOREIGN KEY (loan_schedule_entry_id)
                                      REFERENCES loan_schedule_entry(id),
   ADD CONSTRAINT fk_txn_recurring    FOREIGN KEY (recurring_series_id)
                                      REFERENCES recurring_series(id);
 </code></pre>
+<p>The original bare investment-event UUID never became a link. V33 removed it after refusing any
+populated legacy value; <code>investment_cash_allocation</code> is the sole cash-to-investment relation.</p>
 <p>The schema listing in §7 shows the columns with their eventual <code>REFERENCES</code> for readability. The
 migration order is what is authoritative.</p>
 <p><strong>No down-migrations.</strong> For a single-user system, a mistake is corrected by a new forward
