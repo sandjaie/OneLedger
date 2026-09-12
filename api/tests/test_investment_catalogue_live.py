@@ -97,6 +97,31 @@ def test_catalogue_routes_require_an_owner_session() -> None:
     assert response.status_code == 401
 
 
+@pytest.mark.parametrize(
+    ("path", "body", "unsafe_key"),
+    [
+        ("/investment-catalogue/securities/resolve", {"name": "x"}, "ＦＯＬ１２３４５"),
+        (
+            "/investment-catalogue/securities/00000000-0000-0000-0000-000000000000/manual-prices",
+            {"priceDate": "2026-09-01", "price": "1.000000"},
+            "raw-private-12345",
+        ),
+    ],
+)
+def test_catalogue_validation_never_echoes_hostile_extra_keys(
+    path: str, body: dict[str, str], unsafe_key: str
+) -> None:
+    app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
+        user_id=uuid4(), household_id=uuid4(), session_id=uuid4(), email="owner@example.invalid"
+    )
+    try:
+        response = TestClient(app).post(path, json={**body, unsafe_key: "x"})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+    assert unsafe_key not in response.text
+
+
 def test_exact_resolution_hides_other_household_rows_and_name_ambiguity_abstains(
     live_catalogue: tuple[psycopg.Connection, auth.OwnerSession],
 ) -> None:
@@ -190,3 +215,82 @@ def test_manual_price_is_owner_scoped_exact_and_conflict_safe(
             (owner.household_id, household_security),
         )
         assert cur.fetchall() == [("12.500001",)]
+
+
+def test_manual_price_refuses_another_source_accepted_value_without_writing(
+    live_catalogue: tuple[psycopg.Connection, auth.OwnerSession],
+) -> None:
+    connection, owner = live_catalogue
+    security_id = _security(connection, owner.household_id, name="Other source security")
+    with connection.cursor() as cur:
+        cur.execute("SELECT min(code) FROM currency")
+        result = cur.fetchone()
+        assert result is not None
+        currency = result[0]
+        cur.execute(
+            """INSERT INTO security_price_source (
+                 household_id, security_id, source_key, source_version, source_security_code,
+                 effective_from)
+               VALUES (%s, %s, 'test_quote', 'v1', 'quote-1', '2026-01-01') RETURNING id""",
+            (owner.household_id, security_id),
+        )
+        created = cur.fetchone()
+        assert created is not None
+        mapping = created[0]
+        cur.execute(
+            """INSERT INTO price_snapshot (
+                 household_id, security_id, source_mapping_id, price_date, price, currency,
+                 is_accepted, accepted_at)
+               VALUES (%s, %s, %s, '2026-09-01', 9.000000, %s, true, now())""",
+            (owner.household_id, security_id, mapping, currency),
+        )
+    connection.commit()
+    response = TestClient(app).post(
+        f"/investment-catalogue/securities/{security_id}/manual-prices",
+        json={"priceDate": "2026-09-01", "price": "10.000000"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "an accepted price already exists for this date"
+
+
+def test_closed_manual_mapping_retries_its_date_but_refuses_a_gap(
+    live_catalogue: tuple[psycopg.Connection, auth.OwnerSession],
+) -> None:
+    connection, owner = live_catalogue
+    security_id = _security(connection, owner.household_id, name="Historical manual security")
+    with connection.cursor() as cur:
+        cur.execute("SELECT min(code) FROM currency")
+        result = cur.fetchone()
+        assert result is not None
+        currency = result[0]
+        cur.execute(
+            """INSERT INTO security_price_source (
+                 household_id, security_id, source_key, source_version, source_security_code,
+                 effective_from, effective_to, is_active, deactivated_at)
+               VALUES (%s, %s, 'owner_manual', 'v1', 'manual-history', '2026-01-01',
+                       '2026-01-31', false, now()) RETURNING id""",
+            (owner.household_id, security_id),
+        )
+        created = cur.fetchone()
+        assert created is not None
+        mapping = created[0]
+        cur.execute(
+            """INSERT INTO price_snapshot (
+                 household_id, security_id, source_mapping_id, price_date, price, currency,
+                 is_accepted, accepted_at)
+               VALUES (%s, %s, %s, '2026-01-15', 7.000000, %s, true, now())""",
+            (owner.household_id, security_id, mapping, currency),
+        )
+    connection.commit()
+    with TestClient(app) as client:
+        retry = client.post(
+            f"/investment-catalogue/securities/{security_id}/manual-prices",
+            json={"priceDate": "2026-01-15", "price": "7.000000"},
+        )
+        gap = client.post(
+            f"/investment-catalogue/securities/{security_id}/manual-prices",
+            json={"priceDate": "2026-02-01", "price": "8.000000"},
+        )
+    assert retry.status_code == 200
+    assert gap.status_code == 409
+    assert gap.json()["detail"] == "manual price date has no valid source mapping"

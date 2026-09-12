@@ -22,6 +22,7 @@ from ..identifiers import (
     IdentifierKind,
     IdentifierValueError,
     complete_identifier,
+    identifier_kind_for_account_type,
 )
 
 router = APIRouter(tags=["accounts"])
@@ -53,13 +54,7 @@ def _money(value: str | None) -> str | None:
 
 
 def _identifier_kind(account_type: str) -> IdentifierKind:
-    if account_type == "credit_card":
-        return "card"
-    if account_type == "mutual_fund_folio":
-        return "folio"
-    if account_type == "brokerage":
-        return "brokerage_account"
-    return "bank_account"
+    return identifier_kind_for_account_type(account_type)
 
 
 def _body_identifier(body: AccountCreate | AccountUpdate) -> Identifier | None:

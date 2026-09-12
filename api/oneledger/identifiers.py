@@ -135,6 +135,17 @@ class MaskedIdentifier:
 type Identifier = CompleteIdentifier | MaskedIdentifier
 
 
+def identifier_kind_for_account_type(account_type: str) -> IdentifierKind:
+    """Map account domains once, before any private identifier is normalized or queried."""
+    if account_type == "credit_card":
+        return "card"
+    if account_type == "mutual_fund_folio":
+        return "folio"
+    if account_type == "brokerage":
+        return "brokerage_account"
+    return "bank_account"
+
+
 def _refuse() -> IdentifierValueError:
     return IdentifierValueError("the identifier does not match its declared kind")
 

@@ -206,13 +206,21 @@ def _manual_price_mapping(
     cur.execute(
         """SELECT id FROM security_price_source
              WHERE household_id = %s AND security_id = %s
-               AND source_key = 'owner_manual' AND is_active
+               AND source_key = 'owner_manual'
+               AND effective_from <= %s AND (effective_to IS NULL OR effective_to >= %s)
              FOR UPDATE""",
-        (household_id, security_id),
+        (household_id, security_id, price_date, price_date),
     )
     existing = cur.fetchone()
     if existing is not None:
         return UUID(str(existing[0]))
+    cur.execute(
+        """SELECT 1 FROM security_price_source
+             WHERE household_id = %s AND security_id = %s AND source_key = 'owner_manual'""",
+        (household_id, security_id),
+    )
+    if cur.fetchone() is not None:
+        raise HTTPException(status_code=409, detail="manual price date has no valid source mapping")
     cur.execute(
         """INSERT INTO security_price_source (
                  household_id, security_id, source_key, source_version, source_security_code,
@@ -277,6 +285,16 @@ def append_manual_price(
                 priceDate=body.priceDate,
                 price=str(prior_price),
                 currency=str(prior_currency).strip(),
+            )
+        cur.execute(
+            """SELECT 1 FROM price_snapshot
+                 WHERE household_id = %s AND security_id = %s AND price_date = %s
+                   AND is_accepted AND source_mapping_id <> %s""",
+            (owner.household_id, security_id, body.priceDate, mapping_id),
+        )
+        if cur.fetchone() is not None:
+            raise HTTPException(
+                status_code=409, detail="an accepted price already exists for this date"
             )
         cur.execute(
             """INSERT INTO price_snapshot (

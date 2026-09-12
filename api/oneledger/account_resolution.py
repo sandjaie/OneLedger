@@ -9,7 +9,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 from uuid import UUID
 
-from .identifiers import CompleteIdentifier, Identifier, identifier_from_source
+from .identifiers import (
+    CompleteIdentifier,
+    Identifier,
+    identifier_from_source,
+    identifier_kind_for_account_type,
+)
 from .institutions import InstitutionResolution, normalize_institution_name
 
 type ResolutionStatus = Literal["matched", "needs_confirmation", "ambiguous"]
@@ -201,7 +206,7 @@ def resolve_statement_account(
     legacy_salt: str | None = None,
 ) -> AccountResolution:
     """Resolve exact evidence first, then one institution/type/suffix fallback."""
-    kind = "card" if account_type == "credit_card" else "bank_account"
+    kind = identifier_kind_for_account_type(account_type)
     identifier = identifier_from_source(kind, captured_value, source_is_masked=source_is_masked)
     normalized_currency = currency.strip().upper() if currency and currency.strip() else None
 

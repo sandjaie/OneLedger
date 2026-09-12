@@ -58,7 +58,18 @@ async def private_validation_error(request: Request, exc: RequestValidationError
         status_code=422,
         content={
             "detail": [
-                {key: error[key] for key in ("type", "loc", "msg")} for error in exc.errors()
+                {
+                    "type": error["type"],
+                    "loc": [
+                        component
+                        if isinstance(component, int)
+                        or component in {"body", "path", "query", "header", "cookie"}
+                        else "field"
+                        for component in error["loc"]
+                    ],
+                    "msg": error["msg"],
+                }
+                for error in exc.errors()
             ]
         },
     )
