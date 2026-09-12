@@ -1,8 +1,8 @@
 # M2 Implementation Plan — the statement importer, one layout end to end
 
-> **Historical numbering:** This delivered plan retains the identifiers used at review time. Use
-> the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
-> for current Phase N.M identifiers.
+**Historical numbering:** This delivered plan retains the identifiers used at review time. Use
+the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+for current Phase N.M identifiers.
 
 > **For agentic workers:** this plan follows the CLAUDE.md rule **"Plans are execution maps"**.
 > It carries outcomes, contracts, invariants, required test behaviours and acceptance criteria —

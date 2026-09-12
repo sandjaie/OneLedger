@@ -1,8 +1,8 @@
 # Local statement identities implementation plan
 
-> **Historical numbering:** This delivered plan completed work now mapped to Phase 1.5. Use the
-> [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
-> for the current sequence.
+**Historical numbering:** This delivered plan completed work now mapped to Phase 1.5. Use the
+[canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+for the current sequence.
 
 > **For the implementation agent:** Execute this plan sequentially in the active checkout. Use
 > `superpowers:test-driven-development` for every behavior change and

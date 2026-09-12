@@ -45,9 +45,12 @@ Investment Rate                    X %
 
 - [Specification index](docs/index.html) — product, design and operational documentation.
 - [Product roadmap](docs/product/roadmap.html) — approved outcomes and acceptance criteria.
-- [Master implementation plan](docs/product/master-implementation-plan.html) — the canonical Phase N.M order and dependencies.
-- [Implementation progress](docs/superpowers/progress.md) — the single maintained execution tracker and next action.
-- [Project register](docs/superpowers/project-register.md) — deferred work, discoveries, decisions, and risks awaiting review.
+- [Master implementation plan](docs/product/master-implementation-plan.html) — the canonical
+  Phase N.M order and dependencies.
+- [Implementation progress](docs/superpowers/progress.md) — the single maintained execution
+  tracker and next action.
+- [Project register](docs/superpowers/project-register.md) — deferred work, discoveries,
+  decisions, and risks awaiting review.
 - [Finance OS requirements](docs/product/finance-os.html) — verified positions, cash needs,
   resilience, goals, protection, actions and owner export.
 

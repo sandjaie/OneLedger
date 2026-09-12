@@ -5,9 +5,10 @@
 > for current Phase N.M identifiers.
 
 Execution map for Phase 1 slice 1.2, written against the tree at `8435fb1` on 10 September 2026.
-The phase delivery plan
-([current crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)) owns the historical outcome mapping and acceptance; this
-file owns how it is executed and is what implementers are dispatched from.
+The phase delivery plan ([current
+crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)) owns the
+historical outcome mapping and acceptance; this file owns how it is executed and is what
+implementers are dispatched from.
 
 ## What the survey found, and why the branches differ from the phase plan
 

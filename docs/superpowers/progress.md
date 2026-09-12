@@ -14,7 +14,7 @@ Updated: 12 September 2026.
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Ready** — product direction exists; design and dated execution planning have not started | [ADR-0005](../adr/0005-transaction-level-investment-lots.html) |
-| Current documentation action | Complete the canonical documentation migration in PR #164 | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
+| Current documentation action | Owner review and merge of PR #164 | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
 | Next product action | Design the Phase 1.6 investment boundary, obtain owner approval, then write and review its specification and execution plan | [development cycle](../development-cycle.md) |
 | Implementation branch | No Phase 1.6 implementation branch has been started | — |
 
@@ -67,7 +67,7 @@ requires a separate owner request.
 | --- | --- | --- |
 | Real permitted-account Google sign-in and protected access | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
 | Real second-account rejection and chooser recovery | Owner-operated evidence open; does not block Phase 1.6 design | [historical evidence](reports/2026-09-12-progress-history.md) |
-| Canonical documentation migration | Active on PR #164 | [design](specs/2026-09-12-project-documentation-architecture-design.md) · [execution plan](plans/2026-09-12-project-documentation-architecture.md) |
+| Canonical documentation migration | Implemented and verified; owner review and merge pending on PR #164 | [design](specs/2026-09-12-project-documentation-architecture-design.md) · [execution plan](plans/2026-09-12-project-documentation-architecture.md) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

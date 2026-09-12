@@ -533,9 +533,9 @@ Entry criterion satisfied: the FX backfill reaches the 01 Jan 2024 anchor (ADR-0
 | 5b — FX fetch-on-missing | `feature/m2-t5b-fx-fetch-on-missing` | Complete | [PR #48](https://github.com/sandjaie/OneLedger/pull/48), merged as `1f1aa18`; `api/tests/test_fx_range.py`; branch deleted |
 | 5c — document storage | `feature/m2-t5c-document-storage` | Complete | [PR #49](https://github.com/sandjaie/OneLedger/pull/49), merged as `953faf6`; branch deleted |
 
-Tasks 5d–9c were re-planned before dispatch into Phase 1 slices 1.1–1.7 of the
-[current historical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk); their scope
-ships there, none of it dropped.
+Tasks 5d–9c were re-planned before dispatch into Phase 1 slices 1.1–1.7 of the [current historical
+crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk); their
+scope ships there, none of it dropped.
 
 ## Phase 1 · M1b — manual transactions and taxonomy
 

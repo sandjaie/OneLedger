@@ -1,8 +1,8 @@
 # Phase 1 — Trusted Financial Position Implementation Plan
 
-> **Historical numbering:** This delivered plan retains the identifiers used at review time. Use
-> the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
-> for current Phase N.M identifiers.
+**Historical numbering:** This delivered plan retains the identifiers used at review time. Use
+the [canonical crosswalk](../../product/master-implementation-plan.html#historical-numbering-crosswalk)
+for current Phase N.M identifiers.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
