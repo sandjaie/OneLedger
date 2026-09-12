@@ -269,6 +269,24 @@ def test_money_must_be_an_exact_decimal_string() -> None:
     assert accounts.AccountCreate.model_validate({**CREATE, "openingBalance": "-4500.0000"})
 
 
+@pytest.mark.parametrize(
+    ("account_type", "expected_kind"),
+    [("mutual_fund_folio", "folio"), ("brokerage", "brokerage_account")],
+)
+def test_investment_account_types_store_their_private_identifier_under_the_right_kind(
+    account_type: str, expected_kind: str
+) -> None:
+    """A mistaken mapping would serialize or reveal the wrong private investment kind."""
+    body = accounts.AccountCreate.model_validate(
+        {**CREATE, "accountType": account_type, "accountNumber": "AB-12345"}
+    )
+
+    identifier = accounts._body_identifier(body)
+
+    assert identifier is not None
+    assert identifier.kind == expected_kind
+
+
 def test_a_liability_opening_balance_must_not_be_positive() -> None:
     """A positive liability opening would increase net worth (README invariant 2)."""
     with pytest.raises(ValidationError):

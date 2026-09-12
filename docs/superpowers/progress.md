@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Dispatch Task 5 — catalogue, private identity and manual-price API — only after Task 4 completes its controller-owned delivery gates | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-5--catalogue-private-identity-and-manual-price-api) |
-| Current implementation task | Task 4 implements exact cash/lot allocations and retires the legacy one-to-one cash link; Task 5 has not begun | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-4--allocations-and-legacy-link-removal) |
+| Next product action | Controller review and delivery of Task 5 — catalogue, private identity and manual-price API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-5--catalogue-private-identity-and-manual-price-api) |
+| Current implementation task | Task 5 adds exact-or-abstaining catalogue resolution, typed folio/brokerage identity handling, and append-only household manual prices; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-5--catalogue-private-identity-and-manual-price-api) |
 
 ## Canonical phase status
 
@@ -71,6 +71,7 @@ requires a separate owner request.
 | Phase 1.6 Task 2 | **Complete via PR #166** — immutable events, rebuildable holdings and acquisition-origin lots are on `develop` | [PR #166](https://github.com/sandjaie/OneLedger/pull/166) |
 | Phase 1.6 Task 3 | **Complete via PR #167** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and confirmation review found no remaining issues | [PR #167](https://github.com/sandjaie/OneLedger/pull/167) |
 | Phase 1.6 Task 4 | V33 and its invariant suite implement owner-authorized many-to-many cash links, exact unlink restoration, disposal-lot allocation and legacy-column retirement; the controller records local-gate and delivery evidence separately | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-4--allocations-and-legacy-link-removal) |
+| Phase 1.6 Task 5 | **Implementation ready for controller review** — catalogue resolution, private investment identifiers and append-only manual price observations are committed on the task branch; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-5--catalogue-private-identity-and-manual-price-api) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

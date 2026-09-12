@@ -24,6 +24,7 @@ from ..identifiers import (
     IdentifierValueError,
     MaskedIdentifier,
     identifier_from_source,
+    identifier_kind_for_account_type,
 )
 from ..ingest import engine
 from ..ingest.words import ExtractionError
@@ -379,7 +380,7 @@ def _assess_for_household(
         return _result(source.document_id, "missing", "identity_missing")
     if extraction.account_number_capture_count != 1:
         return _result(source.document_id, "conflicting", "capture_conflict")
-    identifier_kind = "card" if profile.accountType == "credit_card" else "bank_account"
+    identifier_kind = identifier_kind_for_account_type(profile.accountType)
     try:
         captured_identifier = identifier_from_source(
             identifier_kind,

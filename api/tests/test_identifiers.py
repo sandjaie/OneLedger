@@ -92,6 +92,37 @@ def test_normalization_is_stable_and_has_no_environment_dependency(
     assert dict(os.environ) == before
 
 
+@pytest.mark.parametrize("kind", ["folio", "brokerage_account"])
+@pytest.mark.parametrize(
+    ("source", "normalized"),
+    [
+        ("ab-123", "AB123"),
+        ("ＡＢ １２３", "AB123"),
+        ("A" * 64, "A" * 64),
+    ],
+)
+def test_investment_identifiers_use_the_general_safe_normalized_shape(
+    kind: str, source: str, normalized: str
+) -> None:
+    """A shorter/longer or non-alphanumeric folio/brokerage value must not become storable."""
+    value = complete_identifier(kind, source)
+
+    assert value.normalized_value == normalized
+    assert value.masked_value == f"****{normalized[-4:]}"
+
+
+@pytest.mark.parametrize("kind", ["folio", "brokerage_account"])
+@pytest.mark.parametrize("source", ["AB12", "A" * 65, "AB_123", "AB12\u200b34"])
+def test_investment_identifier_validation_refuses_unsafe_values_without_echoing(
+    kind: str, source: str
+) -> None:
+    """Changing the 5–64 ASCII rule must fail instead of admitting an unsafe private identity."""
+    with pytest.raises(IdentifierValueError) as refusal:
+        complete_identifier(kind, source)
+
+    assert source not in str(refusal.value)
+
+
 @pytest.mark.parametrize(
     ("kind", "source", "suffix"),
     [

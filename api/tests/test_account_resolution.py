@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
+import pytest
+
 from oneledger.account_resolution import (
     AccountResolution,
     proposal_group_key,
@@ -48,8 +50,10 @@ class Cursor:
             "visible_suffix": suffix or [],
         }
         self.selected: list[tuple[Any, ...]] = []
+        self.statements: list[tuple[str, tuple[Any, ...]]] = []
 
-    def execute(self, statement: str, _values: tuple[Any, ...]) -> None:
+    def execute(self, statement: str, values: tuple[Any, ...]) -> None:
+        self.statements.append((statement, values))
         self.selected = next(
             (rows for marker, rows in self.rows.items() if marker in statement), []
         )
@@ -205,6 +209,33 @@ def test_equivalent_complete_source_formatting_has_one_opaque_group_key() -> Non
     assert plain.startswith("pg1_")
     assert "2468013579" not in plain
     assert "3579" not in plain
+
+
+@pytest.mark.parametrize(
+    ("account_type", "capture", "expected_kind"),
+    [
+        ("mutual_fund_folio", "AB-12345", "folio"),
+        ("brokerage", "CD-67890", "brokerage_account"),
+    ],
+)
+def test_investment_account_evidence_uses_its_stored_identifier_kind(
+    account_type: str, capture: str, expected_kind: str
+) -> None:
+    """Using bank_account here makes a stored investment identity permanently unresolvable."""
+    cursor = Cursor(exact=[row(account_type=account_type)])
+
+    result = resolve_statement_account(
+        cursor,
+        household_id=HOUSEHOLD,
+        institution=institution(),
+        account_type=account_type,
+        currency="AED",
+        captured_value=capture,
+        source_is_masked=False,
+    )
+
+    assert result.status == "matched"
+    assert cursor.statements[0][1][1] == expected_kind
 
 
 def test_complete_values_sharing_a_suffix_have_distinct_group_keys() -> None:

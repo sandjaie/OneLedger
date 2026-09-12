@@ -7,8 +7,8 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal, cast
 
-type IdentifierKind = Literal["bank_account", "iban", "card"]
-_KINDS = frozenset({"bank_account", "iban", "card"})
+type IdentifierKind = Literal["bank_account", "iban", "card", "folio", "brokerage_account"]
+_KINDS = frozenset({"bank_account", "iban", "card", "folio", "brokerage_account"})
 _SEPARATORS = frozenset("-‐‑‒–—―−./٬٫")
 _MASK_GLYPHS = frozenset("*•●…")
 _MAX_SOURCE_LENGTH = 128
@@ -133,6 +133,17 @@ class MaskedIdentifier:
 
 
 type Identifier = CompleteIdentifier | MaskedIdentifier
+
+
+def identifier_kind_for_account_type(account_type: str) -> IdentifierKind:
+    """Map account domains once, before any private identifier is normalized or queried."""
+    if account_type == "credit_card":
+        return "card"
+    if account_type == "mutual_fund_folio":
+        return "folio"
+    if account_type == "brokerage":
+        return "brokerage_account"
+    return "bank_account"
 
 
 def _refuse() -> IdentifierValueError:
