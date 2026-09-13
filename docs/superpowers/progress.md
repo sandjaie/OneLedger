@@ -6,17 +6,17 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 13 September 2026.
+Updated: 14 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
+| Outcome state | **Implementation active** — re-baselined to personal scale on 14 Sep 2026 with owner approval | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Re-baseline the remaining Phase 1.6 work to personal scale, then deliver the next investment branch | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
-| Current implementation task | Task 15.1 — lot lineage read model, order guard, active-event lot capacity and consumed-lot refusal | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
+| Next product action | Deliver Task 15.2 — holding-level unit actions | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
+| Current implementation task | Task 15.1 is complete via PR #194: lot lineage read model, order guard, active-event lot capacity and consumed-lot refusal | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
 
 ## Canonical phase status
 
@@ -91,8 +91,8 @@ requires a separate owner request.
 | Phase 1.6 Task 14.2 | **Complete** — owner-authenticated disposal and cash-lifecycle APIs retain exact frozen facts, count embedded tax once, append corrections and use V38 to resolve superseded incomplete-lot review without reopening history or exposing inferred basis or gain | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
 | Phase 1.6 Task 14.3 | **Complete** — all four V33 cash roles share explicit proposal/confirmation and exact unlink restoration; V39 adds database-owned immutable lot decisions, replay-safe dated proposals, active-leaf allocation/correction serialization, canonical evidenced-basis claims and complete-review resolution without guessing lot order | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-143--evidenced-lot-and-cash-allocation) |
 | Phase 1.6 positions disposal fix | **Deviation from Task 8** — positions now value units from every active unit effect, so disposals and reinvestments change current value and net worth; gain is withheld once any non-purchase event is active | [PR #193](https://github.com/sandjaie/OneLedger/pull/193) |
-| Phase 1.6 Task 15 | **Split before implementation** — a 4,050–5,250-line dispatch reforecast exceeded the review budget and plan review added lineage guards; Tasks 15.1–15.5 now separate lineage reads and guards, the exact split operation, the bonus/rights/split owner API, the paired switch and platform-transfer operation, and its owner API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
-| Phase 1.6 Task 15.1 | **Delivered on `feature/p1-6o1-investment-lot-lineage`** — V40 adds household-scoped lot lineage, the unit-event order guard, lineage-aware open lots, active-event lot capacity and consumed-lot refusal; review findings repaired and confirmed | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
+| Phase 1.6 Task 15 | **Re-baselined 14 Sep 2026** — owner approved holding-level corporate actions; Task 15.1 (V40) is kept as the foundation; Tasks 15.2–24 are replaced by Tasks 15.2 and 16–20 | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
+| Phase 1.6 Task 15.1 | **Complete via PR #194** — V40 adds household-scoped lot lineage, the unit-event order guard, lineage-aware open lots, active-event lot capacity and consumed-lot refusal; review findings repaired and confirmed | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

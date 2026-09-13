@@ -23,11 +23,13 @@ Atomic imports, prices and one Decimal calculator sit beside the reportable cash
   and `no-store`; full values never reach logs, errors, URLs, browser storage or artifacts.
 - Cash roles map to four excluded investment ledger types. Links fully allocate a same-currency
   leaf; a cross-currency chain links at its final same-currency debit.
-- Unknown unit action/mismatch/ambiguity/conflict blocks its group. Funding or lot gaps create
-  reviews; lot gaps withhold basis, not XIRR; summary mismatch creates no event.
+- Unknown unit action/mismatch/ambiguity/conflict blocks its group. Lot gaps create non-blocking
+  reviews and withhold basis, not XIRR; funding gaps create no review; summary mismatch creates no
+  event. Corporate actions are holding-level unit effects that withhold basis and realised claims.
 - Keep contributions, open-lot basis and cost checkpoints distinct. Statement NAV is not terminal
   value without a separate valuation checkpoint.
-- Update owning docs and only `progress.md` for status. Keep tasks below 800/1,600 counted lines.
+- Update owning docs and only `progress.md` for status. Size branches to the diff budget in
+  `docs/git-workflow.md`.
 
 ## Shared interfaces and algorithms
 
@@ -52,7 +54,8 @@ Shared commands: docs = `python3 scripts/check-docs.py`; Python =
 `cd api && uv run ruff check . && uv run mypy .`; types =
 `cd web && npm run api:types && npm run api:types:check`. Live DB setup is
 `eval "$(scripts/test-db.sh up)"`; teardown is only `scripts/test-db.sh down`.
-After focused commands: full `/verify`, review, fix, reverify, confirm, first push, PR, merge/delete.
+After focused commands: one review, one repair, `scripts/verify.sh` once, first push, PR,
+merge/delete.
 
 ## Proposed task and branch table
 
@@ -79,26 +82,18 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 14.2 | disposal and income owner API | `feature/p1-6n2-investment-cash-events` | 560 | 800 | 14.1 |
 | 14.3 | evidenced lot and cash allocation | `feature/p1-6n3-investment-cash-allocations` | 650 | 1150 | 7, 14.2 |
 | 15.1 | lot lineage read model and guards | `feature/p1-6o1-investment-lot-lineage` | 500 | 780 | 4, 14.3 |
-| 15.2 | unit-action append and exact split | `feature/p1-6o2-investment-split-operation` | 465 | 680 | 15.1 |
-| 15.3 | bonus, rights and split owner API | `feature/p1-6o3-investment-unit-actions` | 505 | 900 | 15.2 |
-| 15.4 | paired switch and platform-transfer operation | `feature/p1-6o4-investment-transfer-operation` | 355 | 905 | 15.2 |
-| 15.5 | switch and transfer owner API | `feature/p1-6o5-investment-transfers` | 405 | 880 | 15.3–15.4 |
-| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.3, 15.5 |
-| 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
-| 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
-| 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
-| 20 | allocation and XIRR engine | `feature/p1-6t-investment-returns` | 500 | 850 | 15.4, 19 |
-| 21 | portfolio analytics API | `feature/p1-6u-investment-analytics-api` | 500 | 680 | 20 |
-| 22 | history/data-quality API | `feature/p1-6v-investment-history-api` | 520 | 680 | 16, 20–21 |
-| 23 | portfolio web flow | `feature/p1-6w-investment-portfolio-web` | 580 | 520 | 18, 21 |
-| 24 | history web and acceptance | `feature/p1-6x-investment-history-web` | 650 | 620 | 22–23 |
+| 15.2 | holding-level unit actions | `feature/p1-6o2-investment-unit-actions` | 1,100 | 1,300 | 15.1 |
+| 16 | import review, security catalogue and commit | `feature/p1-6p-investment-import-commit` | 800 | 1,100 | 13, 14.2, 15.2 |
+| 17 | investment import web flow | `feature/p1-6q-investment-import-web` | 900 | 700 | 16 |
+| 18 | official prices and returns engine | `feature/p1-6r-investment-prices-returns` | 950 | 1,300 | 8, 15.2 |
+| 19 | portfolio, holding and data-quality API | `feature/p1-6s-investment-portfolio-api` | 800 | 1,000 | 16, 18 |
+| 20 | portfolio web and acceptance | `feature/p1-6t-investment-portfolio-web` | 1,000 | 700 | 17, 19 |
 
-Task 11 was split at dispatch after a 2,150–2,800-line reforecast exposed the draft-ratio
-contract below. Task 12 was split after its 2,350–3,310-line dispatch reforecast exposed the
-evidence-scope correction below. Task 14 was split after its 2,100–2,750-line reforecast exposed
-the missing database operation below. Task 15 was split after its 4,050–5,250-line reforecast
-exposed the lot-lineage and paired-leg contracts below. Task 19 still needs dispatch-time
-reforecasting and must split before exceeding 1,600 lines.
+On 14 September 2026 the owner re-scoped the undispatched remainder to personal scale. Corporate
+actions become holding-level unit effects; per-lot lineage, lot-level realised gain after a
+corporate action, and account or asset-class returns move to the project register. Old Tasks
+15.2–15.5 become 15.2; 16 stays 16; 17–18 become 17; 19–20 become 18; 21–22 become 19; 23–24
+become 20. Task 15.1 and V40 remain the foundation; Tasks 1–15.1 are unchanged history.
 
 ## Task 1 — instruments and dated values
 
@@ -457,11 +452,8 @@ that same server and tear it down once with `scripts/test-db.sh down`. Acceptanc
 cash evidence makes only its supported basis/funding claims available; unresolved evidence withholds
 only the dependent claim.
 
-Task 15 was split at dispatch, and plan review added the lineage guards and refusal matrix below.
-The five tasks forecast 1,800–2,250 production lines and 3,300–4,150 test lines. V31 lots are
-immutable and holding-bound, and the V37 append boundary carries neither a split ratio nor a paired
-leg. Lineage reads and guards therefore land before any operation can create lineage, each
-operation precedes the owner API that calls it, and splits land before paired transfers reuse them.
+Task 15 was split into 15.1–15.5 at dispatch; the 14 September re-baseline kept 15.1 and replaced
+the rest with Task 15.2.
 
 ## Task 15.1 — lot lineage read model and guards
 
@@ -503,289 +495,248 @@ pytest -q tests/test_investment_checkpoints_live.py tests/test_investment_fundin
 Acceptance: lot reads, capacity, proposals, decisions and correction guards agree on active lineage,
 and existing acquisition, disposal and allocation results are unchanged.
 
-## Task 15.2 — unit-action append and exact split operation
+## Task 15.2 — holding-level unit actions
 
 **Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
-`feature/p1-6o2-investment-split-operation` / `develop` / `develop`.
-**Depends:** Task 15.1. **Forecast:** 375–465 production, 540–680 tests. **Size:** above 1,000
-lines because the moved append body must ship with its first ratio-bearing caller.
-**Files:** create `db/migrations/V41__investment_split_operation.sql` and
-`db/tests/0038_investment_split_operation.sql`; update the enum-typed function teardown in
-`db/tests/0027_investment_instruments_and_valuations.sql`; shared schema/data-model/status paths.
-**Contract/tests:** The append body moves to revoked `append_investment_transaction_v40(<V37
-arguments>, p_unit_ratio NUMERIC, p_counterpart_transaction_id UUID) RETURNS UUID`, which refuses
-ratio precision beyond scale 10 before storage and includes ratio and counterpart in replay identity.
-The unchanged 23-argument `append_investment_transaction` wraps it, adds `bonus` and `rights`, and
-refuses split and paired kinds and their corrections. Owner-only `append_investment_split(
-p_account_id UUID, p_security_id UUID, p_event_date DATE, p_unit_ratio NUMERIC, p_source_kind
-investment_event_source, p_source_contract TEXT, p_source_event_id TEXT, p_dedupe_version TEXT,
-p_dedupe_fingerprint TEXT, p_corrects_transaction_id UUID, p_correction_reason TEXT) RETURNS UUID`
-takes event advisory locks, then account, holding, lot and review locks, so it serializes with
-appends, allocations and corrections. It requires an open holding and raises
-`investment_lineage_is_latest` when another active unit- or lot-affecting event is dated after it,
-or on or after a corrected split. Holding units × (ratio − 1) must be exact at scale 8
-(`investment_split_units_are_exact`). With available lineage, open-lot units equal to holding units
-and every `open × ratio` exact, it consumes each open lot and creates successors under the
-specification's basis rule; otherwise it commits only the exact unit effect and one
-`incomplete_lot_allocation` review on the split. A replacement split keeps the original event,
-consumption and successors as a corrected leaf and is refused once they are used; any failure after
-lineage writes rolls back every row. RED cases: bonus zero-cost lot, fundable rights, excess ratio
-precision, inexact holding effect, lineage withheld by an unallocated disposal and by one inexact
-lot, later event, replay/conflict, concurrent split and allocation, late-failure rollback, correction
-before and after use, member/cross-household and internal-function refusal, and no cash role or FX.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
-`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh`; run `scripts/verify.sh` on
-that same server, which tears it down.
-Acceptance: an exact split preserves units, origin dates and total open basis; a lot-incomplete
-split commits exact units and withholds only lot-dependent claims.
+`feature/p1-6o2-investment-unit-actions` / `develop` / `develop`.
+**Depends:** Task 15.1. **Forecast:** 900–1,100 production, 1,000–1,300 tests.
+**Files:** create `db/migrations/V41__investment_unit_actions.sql`,
+`db/tests/0038_investment_unit_actions.sql`, `api/oneledger/investments/unit_actions.py`,
+`api/tests/test_investment_unit_actions.py` and `api/tests/test_investment_unit_actions_live.py`;
+update the function teardown in `db/tests/0027_investment_instruments_and_valuations.sql`,
+`api/oneledger/investments/schemas.py`, `api/oneledger/investments/positions.py`,
+`api/oneledger/investments/staging.py` and `api/oneledger/routes/investment_events.py`; shared
+schema/data-model/API/type/testing/status paths.
+**Contract:**
 
-## Task 15.3 — bonus, rights and split owner API
+- V41 moves the V37 append body into revoked `append_investment_event_core(<the 23 V37 arguments>,
+  p_unit_ratio NUMERIC, p_counterpart_transaction_id UUID) RETURNS UUID`; ratio scale 10 is checked
+  before storage, and ratio and counterpart join exact replay identity. The unchanged 23-argument
+  `append_investment_transaction` calls it, additionally admits `bonus` and `rights`, and still
+  refuses `split` and paired kinds.
+- V41 asserts no `split` row exists, then replaces `investment_event_kind_fields_agree` so a split
+  carries a non-zero `units` delta and a positive non-unity `unit_ratio`, with no price, gross or
+  cash.
+- Owner-only `append_investment_split(p_account_id UUID, p_security_id UUID, p_event_date DATE,
+  p_unit_ratio NUMERIC, p_source_kind investment_event_source, p_source_contract TEXT,
+  p_source_event_id TEXT, p_dedupe_version TEXT, p_dedupe_fingerprint TEXT,
+  p_corrects_transaction_id UUID, p_correction_reason TEXT) RETURNS UUID` returns an exact replay
+  first; locks the holding; raises `investment_split_is_latest` when an active unit-affecting event
+  in the holding is dated after the split (or after the split it corrects); and writes units =
+  holding units excluding any corrected split × (ratio − 1), raising
+  `investment_split_units_are_exact` unless exact at scale 8. It creates no lot.
+- Owner-only `append_investment_unit_transfer(p_out_kind investment_event_kind, p_event_date DATE,
+  p_out_account_id UUID, p_out_security_id UUID, p_out_units NUMERIC, p_out_price NUMERIC,
+  p_out_gross_amount NUMERIC, p_in_account_id UUID, p_in_security_id UUID, p_in_units NUMERIC,
+  p_in_price NUMERIC, p_in_gross_amount NUMERIC, p_currency CHAR(3),
+  p_source_kind investment_event_source, p_source_contract TEXT, p_out_source_event_id TEXT,
+  p_out_dedupe_version TEXT, p_out_dedupe_fingerprint TEXT, p_in_source_event_id TEXT,
+  p_in_dedupe_version TEXT, p_in_dedupe_fingerprint TEXT, p_corrects_out_transaction_id UUID,
+  p_correction_reason TEXT) RETURNS TABLE (out_event_id UUID, in_event_id UUID)` accepts
+  `switch_out`, `systematic_transfer_out` or `platform_transfer_out`, locks both accounts in UUID
+  order and writes the out leg then the in leg naming it as counterpart, or nothing. Switch and
+  systematic legs share an account, differ in security and have equal gross; platform legs share a
+  security, differ in account and have opposite units; otherwise it raises
+  `investment_unit_transfer_pair_agrees`. An exact pair replay returns both ids; a correction
+  replaces both legs.
+- A V41 BEFORE INSERT trigger on `investment_lot_allocation` raises
+  `investment_lot_allocation_requires_cash_disposal` for a switch, systematic or platform leg, or
+  for a disposal dated on or after an active split, switch, systematic or platform leg in its
+  holding.
+- Owner-only `POST /investment-events/unit-actions` accepts a strict body discriminated by `kind`
+  (`bonus`, `rights`, `split`, `switch`, `systematic_transfer`, `platform_transfer`) with exact
+  decimal strings and one idempotency key from which paired leg identities derive;
+  `POST /investment-events/{event_id}/unit-action-corrections` adds `expectedCorrectionState` and a
+  screened reason. Reuse the cash-lifecycle idempotency, frozen-flow (rights only),
+  reason-screening and error-translation helpers. `inexact_split`, `event_order_conflict` (V40
+  order guard or split-is-latest) and `invalid_transfer_pair` are fixed 422 reasons; identity
+  conflict is 409 and a foreign reference 404. Responses return the event or both legs, holding
+  units and lots created.
+- `positions.py`: `rights` joins contributions; gain stays available for purchase, rights, bonus
+  and split history and is withheld by any switch, systematic or platform leg.
+- `staging.py`: checkpoint cost is withheld (not compared, no review) for a holding with an active
+  split, switch, systematic or platform leg dated on or before the checkpoint.
+- No successor lot, lot selection or realised claim; `acquisition_lot.predecessor_lot_id` stays
+  null.
 
-**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
-`feature/p1-6o3-investment-unit-actions` / `develop` / `develop`.
-**Depends:** Task 15.2. **Forecast:** 400–505 production, 720–900 tests. **Size:** above 1,000
-lines because bonus, rights and split share one route pair, loader and live fixture.
-**Files:** create `api/oneledger/investments/unit_lifecycle.py`,
-`api/tests/test_investment_unit_lifecycle.py` and `api/tests/test_investment_unit_lifecycle_live.py`;
-update `api/oneledger/investments/schemas.py`, `api/oneledger/investments/commands.py` and
-`api/oneledger/routes/investment_events.py`; shared API/type/status paths.
-**Contract/tests:** Owner-only `POST /investment-events/unit-actions` and
-`POST /investment-events/{event_id}/unit-action-corrections` accept strict `bonus`, `rights` and
-`split` bodies with exact decimal strings, canonical dates and an idempotency key; corrections add
-`expectedCorrectionState` and a screened reason and keep the original kind. Bonus and rights call
-the 23-argument append, with rights freezing its funded flow; split calls `append_investment_split`.
-Reuse the cash-lifecycle idempotency, reporting-pair, frozen-flow, reason-screening and translation
-helpers. Responses return the event, exact `unitRatio`, holding units, lots created by the event and
-open review reasons, so a withheld split shows `incomplete_lot_allocation` and no lots; a replacement
-resolves the corrected split's review as `event_corrected`. `investment_split_units_are_exact`,
-`investment_unit_event_order` and `investment_lineage_is_latest` map to fixed 422 reasons
-`inexact_split` and `event_order_conflict`; identity conflicts map to 409 and foreign references to
-404. RED cases: field matrix and precision, bonus zero-cost lot, rights funding eligibility, exact
-and withheld split, inexact split, event order, identical retry 200, conflicting key 409, stale
-`expectedCorrectionState` 409, concurrent identical retries, concurrent split and sale, late
-database-failure rollback, member/cross-household, Unicode reason leakage and unchanged reportable
-flows.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
-`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
-tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)` and the shared
-types command; run `scripts/verify.sh` on that same server, which tears it down.
-Acceptance: the owner records and corrects bonuses, rights and splits exactly and idempotently
-without manufacturing cash, basis or contributions.
+**Tests:** the financial write floor for both functions and both routes; exact, inexact, reverse,
+later-event and corrected split; bonus zero-cost lot; fundable rights; pair all-or-nothing on a
+second-leg failure; each pair mismatch; replay and conflict; lot allocation refused for legs and
+later disposals; reportable flows unchanged; positions contribution and gain rules; checkpoint cost
+withheld.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)"`; `scripts/hooks/db-tests.sh`;
+`(cd api && uv run pytest -q tests/test_investment_unit_actions.py
+tests/test_investment_unit_actions_live.py tests/test_positions.py tests/test_portfolio_live.py
+tests/test_investment_checkpoints_live.py)`; shared types command; `scripts/verify.sh`.
+Acceptance: each corporate action changes holding units exactly through one owner operation,
+manufactures no cash, contribution (except rights), lot lineage or realised claim, and withholds
+basis and realised claims from its date.
 
-## Task 15.4 — paired switch and platform-transfer operation
-
-**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
-`feature/p1-6o4-investment-transfer-operation` / `develop` / `develop`.
-**Depends:** Task 15.2. **Forecast:** 295–355 production, 705–905 tests. **Size:** above 1,000
-lines because both legs, lineage writes and the refusal matrix form one atomic operation.
-**Files:** create `db/migrations/V42__investment_transfer_operation.sql`,
-`db/tests/0039_investment_transfer_operation.sql` and
-`api/tests/test_investment_transfer_operation_live.py`; update the `0027` function teardown; shared
-schema/data-model/testing/status paths.
-**Contract/tests:** Owner-only `append_investment_unit_transfer(p_out_kind investment_event_kind,
-p_event_date DATE, p_out_account_id UUID, p_out_security_id UUID, p_out_units NUMERIC,
-p_out_price NUMERIC, p_out_gross_amount NUMERIC, p_in_account_id UUID, p_in_security_id UUID,
-p_in_units NUMERIC, p_in_price NUMERIC, p_in_gross_amount NUMERIC, p_currency CHAR(3),
-p_lot_ids UUID[], p_lot_units NUMERIC[], p_source_kind investment_event_source,
-p_source_contract TEXT, p_out_source_event_id TEXT, p_out_dedupe_version TEXT,
-p_out_dedupe_fingerprint TEXT, p_in_source_event_id TEXT, p_in_dedupe_version TEXT,
-p_in_dedupe_fingerprint TEXT, p_corrects_out_transaction_id UUID, p_correction_reason TEXT)
-RETURNS TABLE (out_event_id UUID, in_event_id UUID)` writes both legs or raises with nothing
-written; the in leg names its out counterpart. Units, price, gross and selected units pass scale
-checks before any write. Switch and systematic legs share an account, differ in security and have
-equal gross; platform legs share a security, differ in account and have opposite units; every
-account and security is in the owner's household. After event advisory locks, accounts, holdings,
-lots and reviews lock in UUID order, so opposite-direction transfers cannot deadlock. Selected lots
-must be open source lots summing exactly to the out units. A switch without selection commits with
-one out-leg `incomplete_lot_allocation` review, resolved as `event_corrected` by correcting the pair
-while its switch-in lot is unused; with selection it calls `allocate_investment_lots`. A platform
-transfer raises `investment_transfer_lineage_unavailable` unless both holdings have available
-lineage and `investment_lineage_is_latest` when either holding has a later unit- or lot-affecting
-event. It consumes selected lots, or every open lot for a full transfer from a lot-complete source,
-and creates destination successors under the basis rule. Without selection, a partial transfer
-raises `investment_transfer_requires_lot_selection` and a full transfer from a lot-incomplete source
-raises `investment_transfer_source_lots_incomplete`. Corrections replace both legs; transfer
-out-legs share the split consumption exemption. A pair is used once its switch-out leg has an
-allocation or any in-leg lot is allocated or consumed by an active event. A trigger refuses V39
-decisions for switch, systematic and platform out-legs. RED cases: precision, second-leg rollback,
-value/unit/account mismatch, foreign in-leg account, replay and per-leg conflict, full-transfer
-dates and cost, partial selection with the rounding residual kept by the source, each refusal
-writing nothing, concurrent opposite-direction transfers, one-leg or used correction, direct DML on
-successor lots, member/cross-household, and no cash role, contribution or realised decision.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
-`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh` and
-`(cd api && uv run pytest -q tests/test_investment_transfer_operation_live.py)`; run
-`scripts/verify.sh` on that same server, which tears it down.
-Acceptance: one database call moves units and lots across both legs atomically, preserves every
-transferred lot's origin date and exact total open basis, and refuses each ambiguity distinctly.
-
-## Task 15.5 — switch and transfer owner API
+## Task 16 — import review, security catalogue and commit
 
 **Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
-`feature/p1-6o5-investment-transfers` / `develop` / `develop`.
-**Depends:** Tasks 15.3 and 15.4. **Forecast:** 325–405 production, 700–880 tests. **Size:** above
-1,000 lines because both leg shapes and every refusal share one route pair and live fixture.
-**Files:** update `api/oneledger/investments/unit_lifecycle.py`,
-`api/oneledger/investments/schemas.py`, `api/oneledger/investments/commands.py`,
-`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py` and
-`api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/status paths.
-**Contract/tests:** Owner-only `POST /investment-events/unit-transfers` and
-`POST /investment-events/{event_id}/unit-transfer-corrections` accept one kind family, event date,
-strict out and in legs, optional `lotSelections` of `{acquisitionLotId, units}` and one idempotency
-key from which both leg identities derive deterministically; corrections target the out leg with
-`expectedCorrectionState` and a screened reason. Each request calls
-`append_investment_unit_transfer` once. Responses return both legs, holding units, switch or
-successor lots and review reasons. V42 refusals write nothing and map to fixed 422 reasons
-`lot_selection_required`, `source_lots_incomplete`, `lot_lineage_unavailable` and
-`event_order_conflict`; review creation for an imported ambiguous transfer belongs to Task 16. RED
-cases: leg matrix and pairing, exact strings, switch with and without selection, full and partial
-platform transfer, each refusal reason, retry 200, conflict 409, stale `expectedCorrectionState` 409,
-one-leg correction, Unicode reason leakage, concurrent retries and opposite-direction transfers,
-late database-failure rollback, member/cross-household and unchanged reportable flows.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
-`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
-tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)` and the shared
-types command; run `scripts/verify.sh` on that same server, which tears it down.
-Acceptance: the owner records and corrects switches and platform transfers through authenticated
-operations, and P12 transfer/split meaning is preserved before later distribution calculations.
+`feature/p1-6p-investment-import-commit` / `develop` / `develop`.
+**Depends:** Tasks 13, 14.2 and 15.2. **Forecast:** 650–800 production, 900–1,100 tests.
+**Files:** create `api/oneledger/investments/commit.py`, `api/tests/test_investment_commit.py` and
+`api/tests/test_investment_commit_live.py`; update `api/oneledger/routes/investment_imports.py`,
+`api/oneledger/routes/investment_catalogue.py`, `api/oneledger/investments/staging.py` and
+`api/tests/test_investment_catalogue_live.py`; shared API/type/ingestion/privacy/status paths. No
+migration.
+**Contract:**
 
-## Task 16 — review decisions and atomic import commit
+- `POST /investment-catalogue/securities` creates a household-scoped security from owner-confirmed
+  name, security type, asset class, currency and optional ISIN (country from the ISIN prefix or
+  owner input); an existing ISIN returns 409 with the existing UUID.
+- Preview and `GET /investment-imports/{importId}` return per target a bounded `securityLabel`
+  passed through the existing identifier redaction, an optional well-formed `isin`, and at most
+  five `securityCandidates` from exact ISIN match (suggestions only), plus group status, drafts,
+  checkpoints, open review reasons, totals and an opaque `expectedState`.
+- `POST /investment-imports/{importId}/commit` with `expectedState`: under the household lock every
+  `ready` group commits in its own savepoint through `append_investment_transaction`,
+  `append_investment_split` or `append_investment_unit_transfer` (correlated legs), with statement
+  provenance, the draft's dedupe identity and derived frozen FX. Drafts become `committed` with
+  `committed_transaction_id`, groups `committed`, and the import `partially_committed` or
+  `completed`. A database refusal or missing FX rolls back only that group with a fixed reason;
+  blocked groups never commit. Identical replay returns the prior result; changed state is 409; a
+  foreign import is 404.
+- Committed disposals without lot evidence open the existing non-blocking
+  `incomplete_lot_allocation` review; no `unmatched_cash` review is created. Cancel keeps committed
+  groups and cancels the rest.
+- After commit, checkpoints reconcile; units matched with cost withheld is `matched`, with no
+  review.
 
-**Branch/base/target:** `feature/p1-6p-investment-commit` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/commit.py`, `api/oneledger/routes/investment_imports.py`,
-`api/tests/test_investment_commit.py`, `api/tests/test_investment_commit_live.py`,
-`db/migrations/V43__investment_import_lot_review.sql`,
-`db/tests/0040_investment_import_lot_review.sql`; shared API/type/ingestion/schema/status paths.
-Reforecast at dispatch; the migration was added by the Task 15 plan review, and its version must be
-rechecked if Task 19 lands a migration first.
-**Contract/tests:** Expected-state decisions; re-resolve/reconcile/commit per group; manual fallback
-calls existing commands; summary creates no event. A refused ambiguous or lot-incomplete transfer
-rolls back every financial write of its group; afterwards, in the same owner transaction, one open
-`incomplete_lot_allocation` review is recorded with `import_id`, `group_id` and the out-leg
-`draft_id`, reusing an existing open review on retry. V43 extends `apply_investment_review_block` so
-that review moves its group to `blocked` (held) even when the group is already `ready`, and extends
-the group-transition guard so, while that open lot review exists, its group can leave `blocked` only
-directly to `committed` or `cancelled`. With lot evidence, one transaction writes both legs and the
-complete lot allocation, resolves the review as `lot_allocated` referencing that in-transaction
-out-leg, then moves the group from `blocked` to `committed`. V43 adds resolution kind
-`import_cancelled` (referenced only from function bodies in that migration), keeps V39's
-event-scoped resolution branches unchanged, and
-refuses any other resolution of a draft-scoped lot review; `cancel_staged_import` resolves it as
-`import_cancelled` referencing the import in the cancellation transaction. Matrix, concurrency,
-rollback, monthly overlap, review closure, cancel, held group starting `ready`, repeated refusal,
-evidence commit and retry after late failure, ambiguous-transfer and unknown-action dependent-return
-RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_commit.py tests/test_investment_commit_live.py)`; shared types. Acceptance:
-valid groups commit once and invalid groups remain safe/actionable independently.
+**Tests:** the financial write floor for commit and security creation; core, split and pair
+commits; monthly overlap commits nothing twice; an inexact split and an unequal-gross switch roll
+back only their groups; a blocked group stays uncommitted; replay and stale state; cancel after a
+partial commit; hostile Unicode identifiers in labels; holdings and net worth change once;
+checkpoint matched with withheld cost.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)"`; `(cd api && uv run pytest -q
+tests/test_investment_commit.py tests/test_investment_commit_live.py
+tests/test_investment_staging_live.py tests/test_investment_checkpoints_live.py
+tests/test_investment_catalogue_live.py)`; shared types command; `scripts/verify.sh`.
+Acceptance: a staged detailed statement commits its ready groups once, independently of blocked
+groups, and a re-imported overlap adds no event.
 
-## Task 17 — investment upload and identification web flow
+## Task 17 — investment import web flow
 
-**Branch/base/target:** `feature/p1-6q-investment-import-web` / `develop` / `develop`.
-**Files:** `web/app/investments/import/page.tsx`,
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6q-investment-import-web` / `develop` / `develop`.
+**Depends:** Task 16. **Forecast:** 700–900 production, 500–700 tests.
+**Files:** create `web/app/investments/import/page.tsx`,
+`web/app/investments/import/[importId]/page.tsx`,
 `web/app/investments/import/investment-import-screen.tsx`,
-`web/app/investments/import/__tests__/investment-import-screen.test.tsx`, `web/app/workspace.tsx`,
-`web/app/globals.css`; shared status path.
-**Contract/tests:** Detailed/summary selection, dry-run identification, safe counts, unsupported/
-ambiguous/storage/auth/service/zero-file/accessibility states and no filename persistence RED cases.
+`web/app/investments/import/__tests__/investment-import-screen.test.tsx` and
+`web/app/investments/security-form.tsx`; update `web/app/investments/entry-screen.tsx`,
+`web/app/workspace.tsx` and `web/app/globals.css`; status path.
+**Contract:** Upload (PDF, request-only password) → dry-run counts → per-group account and security
+choice prefilled only from `securityCandidates`, with inline security creation → stage → review
+(group status, fixed reason text) → commit ready groups or cancel → completion counts.
+`/investments/import/{importId}` resumes review. The entry screen reuses the security form. Server
+strings only; no money arithmetic; loading, empty, error, 401 and 409-refresh states; no filename,
+password or identifier in storage or URL. Follow the `web/app/import/import-screen.tsx` patterns.
+**Tests:** happy path to commit with a mocked API; unsupported format; a prefill still needs
+confirmation; a blocked group is not committable; 409 refresh; cancel; no storage writes.
 **RED/GREEN:** `cd web && npx vitest run
-app/investments/import/__tests__/investment-import-screen.test.tsx && npm run typecheck && npm run
-typecheck:compat && npm run build`. Acceptance: upload reaches staged groups without committing.
+app/investments/import/__tests__/investment-import-screen.test.tsx && npm run typecheck`;
+`scripts/verify.sh`.
+Acceptance: the owner imports a detailed statement from upload to committed holdings in the app.
 
-## Task 18 — investment review and commit web flow
+## Task 18 — official prices and returns engine
 
-**Branch/base/target:** `feature/p1-6r-investment-review-web` / `develop` / `develop`.
-**Files:** `web/app/investments/import/[importId]/page.tsx`,
-`web/app/investments/import/investment-review-screen.tsx`,
-`web/app/investments/import/__tests__/investment-review-screen.test.tsx`, `web/app/globals.css`,
-shared status path.
-**Contract/tests:** Group states follow severity matrix; exact manual fallback; stale decisions;
-detailed/summary/overlap completion; valid-plus-blocked, cancel, auth/accessibility and private
-render/error/storage leakage RED cases.
-**RED/GREEN:** `cd web && npx vitest run
-app/investments/import/__tests__/investment-review-screen.test.tsx && npm run typecheck && npm run
-typecheck:compat && npm run build`. Acceptance: review/correction commits facts once with blockers.
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6r-investment-prices-returns` / `develop` / `develop`.
+**Depends:** Tasks 8 and 15.2. **Forecast:** 750–950 production, 1,000–1,300 tests.
+**Files:** create `api/oneledger/investments/price_adapters.py`,
+`api/oneledger/investments/prices.py`, `api/oneledger/investments/returns.py`,
+`api/oneledger/routes/investment_prices.py`, `api/tests/test_investment_prices.py`,
+`api/tests/test_investment_prices_live.py` and `api/tests/test_investment_returns.py`; update
+`api/oneledger/main.py`, `.env.example`, `docker-compose.yml` and `docker-compose.production.yml`;
+shared API/type/privacy/testing/status paths.
+**Contract:**
 
-## Task 19 — official price adapter, storage and refresh
+- `official_nav_text_v1` fetches the configured URL with the existing `httpx` dependency (timeout
+  and size cap) and parses the latest publication into `Decimal` prices; its currency is
+  configuration.
+- A household security with an ISIN and no active mapping for that source gains one when exactly
+  one publication code carries that ISIN and the currencies agree; otherwise nothing is mapped.
+- Refresh appends or idempotently confirms accepted `price_snapshot` rows for mapped securities; a
+  different value for an existing identity is retained unaccepted.
+- `GET /investment-prices/status` is read-only. Owner-only `POST /investment-prices/refresh` is a
+  no-op within 24 hours of a successful check (held in process memory; a restart refetches once);
+  an outage returns fixed `source_unavailable` and keeps cached prices. Tests never use the
+  network.
+- `xirr(flows: Sequence[CashFlow]) -> XirrResult`, with `CashFlow(on: date, amount: Decimal)` and
+  `XirrResult(rate_percent: Decimal | None, reason: XirrReason | None)`, implements the
+  specification's equation, Decimal context and quantization. `holding_flows` and
+  `portfolio_flows` read active events: purchase, recurring purchase, rights, charge and withheld
+  tax are net outflows; sale, redemption, maturity, cash distribution and interest are net inflows;
+  current value is the terminal inflow. Reinvested distributions, bonus, split and transfer legs
+  add no flow; a holding with a switch, systematic or platform leg returns `incomplete_history`; no
+  price returns `missing_price`.
+- `allocation` groups current value by asset class and by account with ten-decimal ratio strings,
+  unavailable when an included holding is unvalued.
 
-**Branch/base/target:** `feature/p1-6s-investment-prices` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/price_adapters.py`, `api/oneledger/investments/prices.py`,
-`api/oneledger/routes/investment_prices.py`, `api/oneledger/main.py`,
-`api/tests/test_investment_prices.py`, `api/tests/test_investment_prices_live.py`, `.env.example`,
-`docker-compose.yml`, `docker-compose.production.yml`; shared API/type/privacy/status paths.
-**Contract/tests:** Configured complete-text source, synthetic network, Decimal parse,
-effective mapping/identity/accepted source, 24-hour owner POST refresh. Replay/conflict, unchanged
-non-published day, outage/cache/stale/missing mapping/manual choice/no fabricated units RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_prices.py tests/test_investment_prices_live.py)`; shared types. Acceptance:
-published NAV is dated/sourced, outage retains stale cache, and missing never means zero.
+**Tests:** parse precision and malformed rows; ISIN mapping unique, ambiguous and currency
+mismatch; replay, retained conflict, outage, 24-hour no-op and owner-only refresh; an independently
+verified series within 0.01 percentage points; `no_sign_change`; `multiple_roots`; charges counted
+once and internal events excluded; allocation exact and incomplete.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)"`; `(cd api && uv run pytest -q
+tests/test_investment_prices.py tests/test_investment_prices_live.py
+tests/test_investment_returns.py)`; shared types command; `scripts/verify.sh`.
+Acceptance: mapped holdings value at the latest dated official price, missing never means zero, and
+XIRR proves or refuses each claim.
 
-## Task 20 — exact allocation and XIRR engine
+## Task 19 — portfolio, holding and data-quality API
 
-**Branch/base/target:** `feature/p1-6t-investment-returns` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/allocation.py`, `api/oneledger/investments/returns.py`,
-`api/tests/test_investment_allocation.py`, `api/tests/test_investment_returns.py`; shared
-schema/testing/status paths.
-**Contract/tests:** Shared algorithm; holding/account/class/portfolio flows; independent series
-within 0.01 percentage points, roots near both boundaries and two roots separated by one grid
-interval; unavailable codes, charges once, internal-event exclusion, incomplete denominator,
-permutation/scale and no-float source RED cases.
-**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_allocation.py
-tests/test_investment_returns.py && uv run ruff check . && uv run mypy .`. Acceptance: allocation
-reconciles and XIRR proves or explicitly refuses every claim.
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6s-investment-portfolio-api` / `develop` / `develop`.
+**Depends:** Tasks 16 and 18. **Forecast:** 600–800 production, 800–1,000 tests.
+**Files:** create `api/oneledger/investments/portfolio.py`,
+`api/tests/test_portfolio_summary_live.py` and `api/tests/test_holding_detail_live.py`; update
+`api/oneledger/investments/positions.py`, `api/oneledger/routes/portfolio.py`,
+`api/oneledger/routes/doctor.py` and `api/tests/test_doctor_live.py`; shared API/type/status paths.
+**Contract:** `GET /portfolio/summary?asOf=` returns value, contributions and gain in both
+reporting currencies (gain only when every included holding's gain is available), portfolio XIRR or
+its reason, allocation by asset class and by account, valued/unvalued/stale counts and price
+status. `GET /portfolio/positions` adds holding XIRR or reason and `includeClosed`; closed holdings
+never count in current value. `GET /portfolio/holdings/{holdingId}` returns the holding, its active
+and corrected events newest first (limit 200 plus total), cash links (role, cash transaction UUID,
+amount), the last 30 accepted prices and open review reasons — no lots, evidence or identifiers.
+`GET /doctor` adds an Investments section: blocking import reviews, unvalued holdings, prices older
+than seven days, unfunded purchases and disposals whose realised gain is unavailable. Owner-only;
+a foreign holding is 404; decimal strings only; no advisory field.
+**Tests:** totals reconcile to positions in both currencies; gain null when one holding withholds;
+allocation exact and incomplete; API XIRR equals the engine; closed holdings; paging and corrected
+events; foreign and member refusal; doctor findings.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)"`; `(cd api && uv run pytest -q
+tests/test_portfolio_summary_live.py tests/test_holding_detail_live.py tests/test_portfolio_live.py
+tests/test_positions.py tests/test_doctor.py tests/test_doctor_live.py)`; shared types command;
+`scripts/verify.sh`.
+Acceptance: every portfolio figure reconciles to holdings or states why it is unavailable.
 
-## Task 21 — portfolio summary, allocation and return API
+## Task 20 — portfolio web and Phase 1.6 acceptance
 
-**Branch/base/target:** `feature/p1-6u-investment-analytics-api` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/read_models.py`, `api/oneledger/routes/portfolio.py`,
-`api/tests/test_portfolio.py`, `api/tests/test_portfolio_live.py`; shared API/type/status paths.
-**Contract/tests:** Serialize calculator only; safe scopes/coverage/as-of. Exact group totals,
-blocked/missing propagation, closed exclusion from current, pagination/order, auth/RLS, string wire
-types and no advisory field RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_portfolio.py tests/test_portfolio_live.py)`; shared types. Acceptance: portfolio headline,
-allocation and XIRR reconcile with explicit incomplete states.
-
-## Task 22 — holding history, provenance and data-quality API
-
-**Branch/base/target:** `feature/p1-6v-investment-history-api` / `develop` / `develop`.
-**Files:** `api/oneledger/routes/investment_history.py`,
-`api/tests/test_investment_history.py`, `api/tests/test_investment_history_live.py`; shared
-API/type/privacy/status paths.
-**Contract/tests:** Open/closed holding, activity, lot, funding, price/review reads; safe evidence
-kind/date only. Cross-household/auth, paging, basis-unavailable, blocked return, safe provenance,
-identifier/error leakage and no-store separation RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_history.py tests/test_investment_history_live.py)`; shared types. Acceptance:
-every claim is drillable without returning raw/private evidence.
-
-## Task 23 — portfolio summary and allocation web flow
-
-**Branch/base/target:** `feature/p1-6w-investment-portfolio-web` / `develop` / `develop`.
-**Files:** `web/app/investments/portfolio-screen.tsx`,
-`web/app/investments/__tests__/portfolio-screen.test.tsx`, `web/app/investments/page.tsx`,
-`web/app/workspace.tsx`, `web/app/globals.css`; shared status path.
-**Contract/tests:** Value/cost/gain/XIRR with independent dates/coverage, allocation/open holdings,
-refresh action and loading/empty/error/partial/stale/blocked/auth/accessibility/no-client-arithmetic
-RED cases; no advice/forecast/rebalancing copy.
-**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/portfolio-screen.test.tsx && npm
-run typecheck && npm run typecheck:compat && npm run build`. Acceptance: the daily portfolio shows
-only supported facts and truthful incomplete states.
-
-## Task 24 — holding/history/data-quality web and acceptance
-
-**Branch/base/target:** `feature/p1-6x-investment-history-web` / `develop` / `develop`.
-**Files:** `web/app/investments/[holdingId]/page.tsx`,
-`web/app/investments/holding-screen.tsx`, `web/app/investments/data-quality.tsx`,
-`web/app/investments/__tests__/holding-screen.test.tsx`,
-`web/app/investments/__tests__/data-quality.test.tsx`; all shared documentation/status paths.
-**Contract/tests:** History/funding/lot/price/review details; unavailable/stale/blocked,
-deep links, keyboard/auth and no private DOM/error/storage RED cases.
-**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/holding-screen.test.tsx
-app/investments/__tests__/data-quality.test.tsx`; full `/verify`.
-**Acceptance:** Through authenticated operations only, supplied detailed and summary evidence and a
-safe overlap fixture reconcile structurally; publish only pass/fail counts. All spec criteria are
-green; run `/oneledger-code-hygiene` and ship findings separately before acceptance.
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6t-investment-portfolio-web` / `develop` / `develop`.
+**Depends:** Tasks 17 and 19. **Forecast:** 800–1,000 production, 500–700 tests.
+**Files:** create `web/app/investments/portfolio-screen.tsx`,
+`web/app/investments/holding-screen.tsx`, `web/app/investments/[holdingId]/page.tsx`,
+`web/app/investments/__tests__/portfolio-screen.test.tsx` and
+`web/app/investments/__tests__/holding-screen.test.tsx`; update `web/app/investments/page.tsx`,
+`web/app/workspace.tsx` and `web/app/globals.css`; status path.
+**Contract:** The investments page opens on the portfolio: value, contributions, gain and XIRR each
+with its as-of date or unavailable reason; refresh posts once when status says due and labels stale
+prices; allocation by asset class and account; open holdings (units, price and date, value, gain,
+XIRR) with a closed-holdings toggle; entry and import links. Holding detail shows events, funding
+links, prices and review reasons. Investment data quality appears in the existing Settings › Data
+Quality screen. No client arithmetic, advice, forecast or judgement colours.
+**Tests:** unavailable reasons; refresh due and not due; stale and missing labels; incomplete
+allocation; holding detail; 401.
+**RED/GREEN:** `cd web && npx vitest run app/investments/__tests__/portfolio-screen.test.tsx
+app/investments/__tests__/holding-screen.test.tsx && npm run typecheck`; `scripts/verify.sh`.
+**Acceptance:** the specification's acceptance criteria pass through the web app; the owner runs
+the real detailed and summary statements through authenticated operations and records only
+structural pass/fail counts.
 
 ## Stop conditions
 

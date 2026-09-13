@@ -91,8 +91,8 @@ institution, country or currency embedded as a required code identifier.
 
 ### Portfolio calculations
 
-One deterministic domain service calculates holdings, invested cost, current value, realised and
-unrealised results, allocation and XIRR from exact database values. Python uses `Decimal`,
+One deterministic domain service calculates holdings, contributions, current value, unrealised gain
+where available, allocation and XIRR from exact database values. Python uses `Decimal`,
 PostgreSQL uses `NUMERIC`, API values are strings, and TypeScript performs display-only formatting.
 
 ### Portfolio and review experience
@@ -186,50 +186,34 @@ correction of one dated on or before it, fails closed. Cash-only events and an e
 existing evidence are unaffected. On the action's own date, events committed before it precede it
 and events committed after it follow it.
 
-### Acquisition lots and disposal allocation
+### Acquisition lots and holding-level corporate actions
 
-Every acquisition event creates an acquisition lot carrying its original date, units, evidenced
-cost and origin transaction. Partial sales and redemptions may allocate units to source lots when
-the statement or owner provides that evidence. The implementation does not silently impose FIFO,
-average cost or a jurisdiction-specific tax rule.
+Every purchase, recurring purchase, reinvested distribution, rights, bonus and switch-in creates an
+immutable acquisition lot with its date, units, evidenced cost (zero for bonus) and origin
+transaction. Before any corporate action in its holding, a sale, redemption or maturity may allocate
+units to lots when the statement or owner supplies explicit evidence. No FIFO, average-cost or
+jurisdiction rule is imposed.
 
-Lots are immutable. A split or platform transfer consumes each affected open lot and creates a
-successor lot that keeps the predecessor's acquisition date. Open basis is
-`round(basis × open units / acquired units, 4)`; a successor's basis is its predecessor's open basis
-before the action minus its open basis after, so any rounding residual stays with the source and
-total open basis is preserved exactly. A corrected action's consumption and successors remain as
-history outside current reads, and lot capacity counts allocations only from active events.
+Phase 1.6 records corporate actions at holding level. A split's unit effect is the holding's units ×
+(ratio − 1), exact at eight decimal places, and is refused unless the split is the holding's latest
+unit-affecting event. Bonus units are a zero-cost lot; rights are a funded acquisition. A switch or
+systematic transfer is a paired out and in leg of equal gross value within one account; a platform
+transfer is a paired out and in leg of equal units for one security across two accounts. Both legs
+commit together or not at all and neither is an external cash flow, contribution or realised return.
+A switch carrying an exit load or stamp duty fails closed.
 
-A full platform transfer moves every open lot while preserving its origin date and cost. A partial
-transfer without evidenced lot selection fails closed and writes nothing. A full transfer from a
-lot-incomplete source, where an earlier disposal lacks complete lot allocation, also fails closed
-unless explicit lot selection covers the transferred units. A transfer involving a holding whose lot
-lineage is unavailable fails closed.
+No Phase 1.6 action creates successor lots or selects transferred lots. From the date of an active
+split, switch, systematic transfer or platform transfer, the affected holding's open-lot reads,
+remaining basis, lot allocation and realised cost and gain are unavailable; units, market value,
+contributions and portfolio XIRR remain available. A unit-affecting event dated before an active
+split or platform transfer is refused.
 
-A split's holding unit effect is current units × (ratio − 1) and must be exact at eight decimal
-places, or the split fails closed. On a lot-complete holding whose every transformed lot is exact,
-the split transforms open-lot units by the evidenced ratio and preserves total basis. Otherwise it
-commits the exact unit effect without successor lineage and opens an `incomplete_lot_allocation`
-review. From that split's date the holding's remaining basis, open-lot reads and dependent realised
-claims are unavailable, and lot allocation for a disposal dated on or after it is refused until a
-later delivery completes the lineage.
-
-Bonus units become an evidenced zero-cash lot. A switch or systematic transfer is a disposal and an
-acquisition of equal gross value; its realised cost and gain are unavailable in Phase 1.6, and a
-switch carrying an exit load or stamp duty fails closed because the event matrix cannot record that
-charge. An unrecognized corporate action blocks affected realised-cost and return claims from its
-effective date.
-
-Phase 1.6 may report holding- and portfolio-level money-weighted returns when cash-flow history is
-complete even if tax-lot disposal selection is unresolved. It must label realised cost/gain as
-unavailable wherever that result depends on an unproved lot allocation.
-
-Three cost concepts stay separate. Cumulative external contributions are the evidenced cash paid
-into acquisitions. Remaining evidenced basis is the sum of still-open acquisition-lot basis and is
-unavailable after a disposal whose lot selection is unknown. Statement-reported cost is a dated
-checkpoint, used for reconciliation rather than silently replacing either calculation. Units and
-market value remain available after an unallocated disposal; realised and remaining-basis claims do
-not. XIRR may remain available when the dated external cash-flow series itself is complete.
+Three cost concepts stay separate. Cumulative contributions are evidenced cash paid into purchases
+and rights. Remaining evidenced basis is open-lot basis and is unavailable after a disposal without
+complete lot evidence or after a corporate action. Statement-reported cost is a dated checkpoint for
+reconciliation only. XIRR remains available when the dated external cash-flow series is complete.
+Per-lot lineage and lot-level realised gain across corporate actions are deferred through the
+project register.
 
 ### Cash and funding links
 
@@ -291,7 +275,8 @@ A price observation is identified by security, effective date, source ID and sou
 Re-fetching the same value is idempotent; a different value for that identity is retained as
 conflicting evidence and creates review rather than overwriting the accepted fact. Valuation uses
 the one active source mapping effective on the date. A manual source becomes accepted only through
-an explicit dated owner choice and never silently outranks the configured official source.
+an explicit dated owner choice and never silently outranks the configured official source. Refresh
+maps a household security to the official source only by exact ISIN.
 
 Portfolio GETs are read-only and return cached values immediately. The authenticated web flow sees
 refresh status and invokes a bounded owner-authorized refresh POST when no successful source check
@@ -322,17 +307,16 @@ Review payloads contain no source filename, complete private identifier, raw sta
 unredacted source reference. Resolving an item invokes the same validated domain operation as an
 ordinary manual entry or match; marking it resolved without fixing the invariant is refused.
 
-Import severity is fixed. An unknown unit-affecting action, unit mismatch or ambiguous account or
-security blocks the atomic group and its dependent return. A missing funding link commits otherwise
-complete statement facts, creates review and withholds only the funding-path claim. A missing
-disposal-lot allocation commits units and cash, creates review, and withholds realised and remaining
-basis without blocking XIRR by itself. A split that cannot transform its lots commits exact units
-under the same review and withholds only lot-dependent claims. An imported partial platform
-transfer without evidenced lot selection, or a full transfer from a lot-incomplete source without
-it, commits nothing: its out-leg draft records an incomplete-lot-allocation review that holds the
-group uncommitted until explicit lot evidence commits the transfer or the import is cancelled. A
-summary checkpoint mismatch creates no manufactured event and remains in review. Conflicting dedupe
-evidence attaches nothing silently and stops only the affected group.
+Import severity is fixed. An unknown unit-affecting action, unit or cost mismatch, ambiguous account
+or security, missing transfer counterpart, or conflicting duplicate evidence blocks its atomic group;
+unrelated groups may commit. A blocked group never commits: the owner cancels the import or records
+the facts through owner entry. A missing funding link creates no review; unfunded purchases appear in
+funding and data-quality views. A disposal without lot evidence commits units and cash and opens a
+non-blocking `incomplete_lot_allocation` item that marks realised gain unavailable; it is
+informational, not an action to clear. A corporate action commits its exact holding-level unit
+effects and withholds basis and realised claims from its date. A summary checkpoint mismatch creates
+no event and remains in review; a checkpoint whose units match while cost is withheld is matched
+without a review.
 
 ## Reconciliation invariants
 
@@ -350,8 +334,8 @@ The database and domain tests must prove:
 6. A sale is proceeds and return, not salary or ordinary income. A cash dividend is investment
    income once. A reinvested dividend creates units but no external household cash flow.
 7. Charges and withheld tax reduce net return once.
-8. A platform transfer, split or bonus preserves explainable economic value and acquisition
-   history without becoming a contribution or return.
+8. A platform transfer, split or bonus preserves holding units and economic value without becoming
+   a contribution or return; history before the action never changes.
 9. An unknown unit-affecting event prevents the affected holding's return claim.
 10. Closed holdings retain history with zero current units and are absent from current value only.
 11. Structured holdings, account balance valuation and manual snapshots cannot count the same
@@ -385,12 +369,9 @@ cash-flow equation. A known independent series must agree within 0.01 percentage
 Database scales are money `NUMERIC(20,4)`, units `NUMERIC(28,8)`, prices `NUMERIC(20,6)`, frozen FX
 `NUMERIC(20,10)`, allocation ratio `NUMERIC(20,10)` and XIRR percent `NUMERIC(20,8)`.
 
-Holding, account, asset-class and portfolio calculations share one cash-flow service. Cached
-results, if used, carry valuation date, computed time and an input digest and are invalidated by a
-committed event, cash-link change, correction or applicable price update.
-
-Allocation groups current value by asset class, security, account, source platform and native
-currency. Group labels are data. API ratios and values are decimal strings; TypeScript only rounds
+Holding and portfolio XIRR share one cash-flow service and are computed on read; account and
+asset-class returns belong to Phase 4.3. Allocation groups current value by asset class and by
+account. Group labels are data. API ratios and values are decimal strings; TypeScript only rounds
 for display.
 
 ## API boundary
@@ -402,7 +383,7 @@ retains RLS as defence in depth. Proposed route groups are:
 - investment accounts and masked source identifiers;
 - owner-entered investment events and corrections;
 - investment import parse, review, decision, commit and cancellation;
-- holding, activity, lot and funding-link detail;
+- holding, activity and funding-link detail;
 - price status, refresh and owner-entered fallback;
 - portfolio summary, allocation and XIRR; and
 - investment review items and resolution operations.
@@ -440,9 +421,9 @@ is resolved.
 ### Daily portfolio
 
 The portfolio opens with cached facts, a visible valuation date and refresh state. It shows current
-value, invested cost, gain, XIRR, open holdings and allocation. A holding detail shows transactions,
-units, price history, lots, distributions, charges, funding path and source provenance. Closed
-holdings remain available in a separate historical view.
+value, contributions, gain, XIRR, open holdings and allocation. A holding detail shows transactions,
+units, price history, distributions, charges, funding path and review reasons. Closed holdings
+remain available in a separate historical view.
 
 ### Net worth
 
@@ -453,12 +434,12 @@ distributions, charges and valuations explain wealth change.
 
 ## User-interface presentation
 
-The portfolio summary presents factual headline cards for current value, invested cost, gain and
+The portfolio summary presents factual headline cards for current value, contributions, gain and
 XIRR, each with its applicable as-of or coverage label. It follows with allocation, open holdings,
 activity and data-quality sections. No red/green judgement label implies buy, hold or sell.
 
-Each holding row shows safe instrument name, units, latest price and date, current value, invested
-cost, gain and XIRR when available. Missing or partial facts use typed states rather than zero or an
+Each holding row shows safe instrument name, units, latest price and date, current value, gain and
+XIRR when available. Missing or partial facts use typed states rather than zero or an
 estimated number. The review queue is reachable from the portfolio and import completion views.
 
 The UI includes no forecast on this phase's actual-performance screen. A future scenario feature
@@ -485,73 +466,61 @@ investment account and security, record an exact purchase with a funding link, r
 dated price, reconcile units, show current value, and include it once in net worth. This proves the
 domain before a real statement parser can write it.
 
-The execution plan must split Phase 1.6 into reviewable branches, expected to cover:
-
-1. forward-only core schema, RLS and invariants;
-2. domain operations, owner entry and the smallest useful read model;
-3. funding links, corrections and lifecycle/lot preservation;
-4. detailed statement extraction and staging;
-5. review, atomic commit and summary reconciliation;
-6. official NAV history, refresh and stale/missing-price behavior;
-7. portfolio, allocation, XIRR and net-worth APIs;
-8. investment import/review web workflow; and
-9. portfolio, holding, history and data-quality web workflow.
-
-The plan-review gate may split these further before dispatch. No branch may exceed the repository's
-production or production-plus-test diff budget. The plan lands with the first Phase 1.6 branch.
+The dated plan groups this work into branches sized to the repository diff budget.
 
 ## Required failing-test evidence
 
-Every implementation task begins with focused tests that fail for the intended missing behavior.
-Across the phase, tests must cover at least:
+Money, authorization and database behavior begins with focused failing tests. Across the phase,
+tests cover:
 
-- exact NUMERIC/Decimal/string round trips for money, prices, units, rates, gains and XIRR;
-- RLS, owner authorization and same-household references on every investment relation and route;
-- masked ordinary identifier payloads, explicit no-store reveal and raw/serialized Unicode leakage;
-- acquisition, partial disposal, closed holding, distribution, reinvestment, charge, split, bonus,
-  full platform transfer and refused ambiguous partial transfer;
-- unit and end-position reconciliation, conflicting duplicate evidence and atomic group rollback;
-- detailed-statement staging, overlapping monthly idempotency and summary-as-checkpoint behavior;
-- funding-chain linkage and reportable-flow non-double-counting;
-- official price parsing, idempotent history, stale cache, outage preservation, missing mapping and
-  manual-price provenance;
+- exact NUMERIC/Decimal/string round trips for money, prices, units, ratios and XIRR;
+- owner authorization, household RLS and foreign-household refusal on every new relation and route;
+- masked identifiers, with no complete identifier in responses, errors or logs;
+- acquisition, partial disposal, closed holding, distribution, reinvestment, charge and tax;
+- bonus, rights, exact and inexact split, switch and platform transfer as holding-level unit
+  effects, with basis and realised claims withheld afterwards;
+- detailed-statement staging and commit, group-local rollback, overlapping-import idempotency and
+  summary-as-checkpoint behavior;
+- funding linkage without double-counting reportable flows;
+- official price parsing, idempotent history, outage preservation and missing mapping;
 - allocation totals and refusal of incomplete denominators;
-- an independently verified XIRR series within 0.01 percentage points plus no-result reason cases;
-- net worth counting each structured or snapshot asset once in both reporting currencies;
-- owner-entered correction history and refusal to clear an unresolved review item; and
-- unsupported formats and unrecognized corporate actions blocking only their atomic groups and
-  affected return claims.
+- an independently verified XIRR series within 0.01 percentage points, plus `no_sign_change`,
+  `multiple_roots` and `incomplete_history`;
+- net worth counting each investment asset once in both reporting currencies; and
+- unrecognized actions blocking only their atomic groups.
 
-Real-statement acceptance runs only through supported authenticated application operations. It
-publishes structural pass/fail outcomes and counts, never filenames, instrument/account identities,
-statement text, dates, units, prices, amounts or inferred owner holdings.
+Real-statement acceptance runs only through authenticated application operations and publishes
+structural pass/fail outcomes and counts, never filenames, identities, statement text, dates, units,
+prices or amounts.
 
 ## Acceptance
 
 Phase 1.6 is accepted when:
 
-- the supplied detailed consolidated statement imports through review and its supported holdings
-  reconcile to transaction-derived units;
-- the summary statement confirms end positions without creating duplicate events;
-- recurring monthly overlap is idempotent;
-- current prices refresh from the approved first source with visible date and provenance;
+- the supplied detailed statement imports through the web flow and committed holdings reconcile to
+  transaction-derived units;
+- the summary statement confirms end units without creating events;
+- re-importing an overlapping statement creates no duplicate event;
+- official prices refresh with a visible effective date, and a missing price shows as unvalued;
 - portfolio value enters net worth exactly once in both reporting currencies;
-- purchases expose their confirmed funding path without becoming spending or wealth creation;
-- applicable distributions, reinvestments, partial sales, charges, splits and platform transfers
-  preserve economic meaning and acquisition history;
-- an unrecognized corporate action blocks the affected return claim and creates a review item;
-- allocation reconciles exactly when complete and exposes missing coverage when incomplete;
+- purchases show their confirmed funding path without becoming spending or wealth creation;
+- distributions, reinvestments, sales, charges, bonus, rights, splits, switches and platform
+  transfers change units and cash exactly, with basis and realised claims withheld as specified;
+- an unrecognized corporate action blocks its group and creates a review item;
+- allocation reconciles exactly when complete and shows missing coverage otherwise;
 - a known cash-flow series matches independent XIRR evidence within 0.01 percentage points;
-- open and closed holdings, activity, funding, prices and data quality are usable from owner-only
-  web workflows;
-- owner-entered fallback resolves exact missing facts without editing imported originals; and
+- open and closed holdings, activity, funding, prices and investment data quality are usable from
+  owner-only web screens;
+- owner entry records missing facts and corrections without editing imported originals; and
 - no income, spending, contribution, value or return is double-counted.
 
 ## Explicit non-goals
 
 Phase 1.6 does not include investment recommendations, rebalancing, benchmark comparison, tax
 reports, capital-gains tax policy, automatic trading, email-account access, universal statement
-parsing, property-price estimation, retirement forecasting or long-horizon scenario projections.
+parsing, property-price estimation, retirement forecasting, long-horizon scenario projections,
+per-lot lineage and transferred-lot selection across corporate actions, lot-level realised gain
+after them, realised-gain screens, account or asset-class returns, or in-import review decisions.
 The schema and provenance contracts preserve the evidence those later approved outcomes will need.
 
 ## Documents the implementation must reconcile
