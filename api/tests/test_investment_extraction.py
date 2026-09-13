@@ -100,7 +100,7 @@ def test_selection_and_fingerprints_depend_on_content_not_the_pdf_filename(tmp_p
     assert left == right
     assert left.supported is True
     assert left.source_contract == "detailed_fund_statement_v1"
-    assert left.extraction_version == "1"
+    assert left.extraction_version == "2"
     assert "first.pdf" not in repr(left)
     assert "ignored-owner-label.pdf" not in repr(left)
 

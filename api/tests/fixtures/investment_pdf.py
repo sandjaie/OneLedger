@@ -19,6 +19,15 @@ _COLUMNS = (
     (690.0, "CURRENCY"),
     (765.0, "REFERENCE"),
 )
+_POSITION_COLUMNS = (
+    (20.0, "AS_OF"),
+    (130.0, "UNITS"),
+    (275.0, "COST"),
+    (410.0, "VALUE"),
+    (545.0, "CURRENCY"),
+    (650.0, "NAV"),
+    (750.0, "REFERENCE"),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,33 +44,65 @@ class InvestmentEventLine:
     source_event_id: str = "SYNTHETIC-EVENT"
 
 
+@dataclass(frozen=True, slots=True)
+class InvestmentCheckpointLine:
+    as_of_date: str
+    reported_units: str
+    reported_cost_native: str
+    reported_value_native: str
+    currency: str
+    statement_nav: str
+    source_event_id: str = "SYNTHETIC-CHECKPOINT"
+
+
 def _page_header(
-    page: int, *, account_reference: str | None, security_reference: str | None
+    page: int,
+    *,
+    account_reference: str | None,
+    security_reference: str | None,
+    position: bool = False,
 ) -> list[Placement]:
     placements = [
         Placement(page=page, x=20, y=760, text="DETAILED INVESTMENT STATEMENT V1"),
-        Placement(page=page, x=20, y=670, text="TRANSACTIONS"),
+        Placement(page=page, x=20, y=670, text="END POSITION" if position else "TRANSACTIONS"),
     ]
     if account_reference is not None:
         placements.append(Placement(page=page, x=20, y=730, text=f"ACCOUNT {account_reference}"))
     if security_reference is not None:
         placements.append(Placement(page=page, x=20, y=700, text=f"SECURITY {security_reference}"))
-    placements.extend(Placement(page=page, x=x, y=640, text=heading) for x, heading in _COLUMNS)
+    columns = _POSITION_COLUMNS if position else _COLUMNS
+    placements.extend(Placement(page=page, x=x, y=640, text=heading) for x, heading in columns)
     return placements
 
 
 def build_detailed_investment_pdf(
     events: list[InvestmentEventLine],
     *,
+    checkpoints: list[InvestmentCheckpointLine] | None = None,
     rows_per_page: int | None = None,
+    checkpoint_rows_per_page: int | None = None,
     account_kind: str = "folio",
     security_reference: str = "SYNTHETIC-SECURITY-A",
     page_targets: list[tuple[str | None, str | None]] | None = None,
+    data_size: float = 10.0,
 ) -> bytes:
     """Return synthetic bytes; no source PDF or provider-specific format is retained."""
     if rows_per_page is not None and rows_per_page < 1:
         raise ValueError("rows_per_page must be positive")
-    page_count = 1 if rows_per_page is None else max(1, (len(events) - 1) // rows_per_page + 1)
+    if checkpoint_rows_per_page is not None and checkpoint_rows_per_page < 1:
+        raise ValueError("checkpoint_rows_per_page must be positive")
+    checkpoints = checkpoints or []
+    event_pages = (
+        0
+        if not events and checkpoints
+        else (1 if rows_per_page is None else max(1, (len(events) - 1) // rows_per_page + 1))
+    )
+    checkpoint_pages = (
+        0
+        if not checkpoints
+        else (len(checkpoints) - 1) // (checkpoint_rows_per_page or len(checkpoints)) + 1
+    )
+    page_count = max(1, event_pages + checkpoint_pages)
     placements: list[Placement] = []
     for page in range(page_count):
         account, security = (
@@ -70,7 +111,12 @@ def build_detailed_investment_pdf(
             else (f"{account_kind} MASKED ****A1B2", security_reference)
         )
         placements.extend(
-            _page_header(page, account_reference=account, security_reference=security)
+            _page_header(
+                page,
+                account_reference=account,
+                security_reference=security,
+                position=page >= event_pages,
+            )
         )
 
     per_page = rows_per_page or max(1, len(events))
@@ -78,7 +124,7 @@ def build_detailed_investment_pdf(
         page = index // per_page
         row = index % per_page
         y = 605.0 - row * 32.0
-        values = (
+        event_values = (
             event.event_date,
             event.event_kind,
             event.units,
@@ -91,7 +137,25 @@ def build_detailed_investment_pdf(
             event.source_event_id,
         )
         placements.extend(
-            Placement(page=page, x=x, y=y, text=value)
-            for (x, _), value in zip(_COLUMNS, values, strict=True)
+            Placement(page=page, x=x, y=y, text=value, size=data_size)
+            for (x, _), value in zip(_COLUMNS, event_values, strict=True)
+        )
+    checkpoint_per_page = checkpoint_rows_per_page or max(1, len(checkpoints))
+    for index, checkpoint in enumerate(checkpoints):
+        page = event_pages + index // checkpoint_per_page
+        row = index % checkpoint_per_page
+        y = 605.0 - row * 32.0
+        checkpoint_values = (
+            checkpoint.as_of_date,
+            checkpoint.reported_units,
+            checkpoint.reported_cost_native,
+            checkpoint.reported_value_native,
+            checkpoint.currency,
+            checkpoint.statement_nav,
+            checkpoint.source_event_id,
+        )
+        placements.extend(
+            Placement(page=page, x=x, y=y, text=value, size=data_size)
+            for (x, _), value in zip(_POSITION_COLUMNS, checkpoint_values, strict=True)
         )
     return build_pdf(placements, page_count=page_count, page_size=_PAGE_SIZE)
