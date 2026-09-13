@@ -1,79 +1,77 @@
 ---
 name: verify
-description: Run the OneLedger gate — docs and real-data checks, secrets, api lint/types/tests,
-migrations from empty plus the SQL invariant tests, web types/tests/bundle scan. Use before opening
-a PR, as the stop condition for /goal and /loop, and whenever asked whether the tree is green.
+description: Run OneLedger's tiered verification runner — focused checks during TDD, a database-only
+final gate when the reviewed diff cannot affect application surfaces, or the full exact-head gate
+before the confirmation review and first push. Use before opening a PR, as the stop condition for
+/goal and /loop, and whenever asked whether the tree is green.
 ---
 
 # verify
 
-Run each section in order and stop at the first failure. Report every section as `ok` or `FAIL`
-with **the number of checks that actually ran**, then one verdict line.
+Use `scripts/verify.sh`; do not reconstruct this orchestration across ad hoc shells. The runner
+prints the mode and starting Git head, prints each stage's result, stops on the first failure, and
+refuses a result if `HEAD` changed while it ran.
 
-Start the delivery verification stage's one isolated test server before section 1:
+## Focused mode — implementation feedback
 
-```bash
-eval "$(scripts/test-db.sh up)"
-```
-
-Keep that `db-test` server running for every database-dependent check below. Tool calls commonly
-use fresh shells; in each later fresh shell, re-export the already-running server without starting
-another one:
+Wrap the smallest command that proves the current RED/GREEN step:
 
 ```bash
-eval "$(scripts/test-db.sh env)"
+scripts/verify.sh focused -- <affected-test-command>
+scripts/verify.sh focused --database -- <affected-database-test-command>
 ```
 
-On success, or immediately after the first failure, run `scripts/test-db.sh down` exactly once.
-Never launch a separate scratch Compose stack for this gate.
+The database form starts this checkout's one `db-test` server only if it is absent. It deliberately
+leaves the server running so every later focused test and the final gate reuse it. Focused green is
+required before code review, but it is not the final branch verdict.
 
-1. `python3 scripts/check-docs.py` — links, ADR link labels, HTML, no statement tracked by git
-2. Commit-stage hooks plus the Markdown check intentionally reserved for pre-push:
+## Database mode — narrow final gate
 
-   ```bash
-   pre-commit run --all-files
-   pre-commit run markdownlint --all-files --hook-stage pre-push
-   ```
+Use this only when the plan and comprehensive review establish that a database-only diff cannot
+affect API or web behavior:
 
-   These cover secrets, formatting and every commit-stage hook without putting a network-resolved
-   Markdown runner in the ordinary commit path.
-3. Re-export the test environment if this command runs in a fresh shell, then run the API gate.
-   The exported `ONELEDGER_TEST_DSN` and `POSTGRES_*` values make every live path execute against
-   the same isolated server:
+```bash
+scripts/verify.sh database
+```
 
-   ```bash
-   eval "$(scripts/test-db.sh env)"
-   (cd api && uv run ruff check . && uv run mypy . && uv run pytest -q)
-   ```
+It migrates a fresh database from empty, runs every SQL invariant and upgrade rehearsal through
+`scripts/hooks/db-tests.sh`, checks the exact head, and tears down the branch's test server once.
 
-4. Re-export the same running test server, then run the database invariant suite directly:
+## Full mode — normal final gate
 
-   ```bash
-   eval "$(scripts/test-db.sh env)"
-   scripts/hooks/db-tests.sh
-   ```
+After the comprehensive review and consolidated repair, run once:
 
-   The hook creates its own throwaway database on that server, migrates it from empty, runs every
-   SQL invariant suite and real upgrade rehearsal, then drops that database. Do not repeat this
-   section on another server.
+```bash
+scripts/verify.sh full
+```
 
-5. The web gate, then a scan of the bundle it produced:
+The runner executes, in order:
 
-   ```bash
-   cd web
-   npm run api:types:check && npm run typecheck && npm run typecheck:compat
-   npx vitest run && npm run build
-   grep -rE 'SESSION_SECRET|POSTGRES_PASSWORD|ACCOUNT_HASH_SALT|GOOGLE_CLIENT_SECRET|postgresql://' .next/static/
-   ```
+1. `python3 scripts/check-docs.py`.
+2. `pre-commit run --all-files` and
+   `pre-commit run markdownlint --all-files --hook-stage pre-push`; mutating fixers are skipped in
+   this gate and their non-mutating checks run in the component stages.
+3. `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy .` and
+   `uv run pytest -q` under `api/`.
+4. `scripts/hooks/db-tests.sh` on the same test server.
+5. generated API type checks, both TypeScript compilers, `npx vitest run`, the production build,
+   and the server-secret bundle scan under `web/`.
+
+The final mode reuses a running server or, if no database check was needed during implementation,
+starts it with `eval "$(scripts/test-db.sh up)"`. A fresh shell can re-export that same server with
+`eval "$(scripts/test-db.sh env)"`; it must never start a second verification server. The runner
+tears it down with `scripts/test-db.sh down` exactly once, on success or failure.
+
+Do not run the full mode before review and then again after fixes. Do not repeat it on an unchanged
+head. If a real repair changes the head after full verification, its evidence is stale and the
+runner must run once on the new head.
 
 ## What green means
 
-Every section passed **and collected a non-zero number of tests**. A suite that collects nothing
-and exits 0 is a failure, not a pass — it is the state a loop will otherwise sit in for hours
-believing it is fine.
-
-A section whose directory does not exist yet is **skipped**, and must be reported as skipped.
-Never report it as passing. `api/` arrives in Phase 0 PR 4, `web/` in PR 6.
+For a normal branch, `scripts/verify.sh full` passed on the exact head awaiting confirmation and
+each application suite collected a non-zero number of tests. A suite that collects nothing and
+exits 0 is a failure, not a pass. For a database-only branch, the reviewed scope and a passing
+`database` mode must both be recorded.
 
 ## What is never allowed to make it green
 

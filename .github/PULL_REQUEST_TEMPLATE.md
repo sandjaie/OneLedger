@@ -12,12 +12,17 @@
 Record actual evidence for the current change: applicable tests, lint/types, build, migrations,
 browser/manual checks, documentation checks, dependency audit and commit/push hooks.
 Use Pass, Fail, Not run or Not applicable. Include counts where useful and explain checks not run.
-Do not claim all tests passed if only selected checks ran. Replace the placeholder row.
+Do not claim all tests passed if only selected checks ran. Include the final verification runner's
+recorded Git head and the confirmation range. Replace the placeholder rows.
 -->
 
 | Check | Command or evidence | Result |
 | --- | --- | --- |
-| <!-- check --> | <!-- command/evidence --> | <!-- result and any explanation --> |
+| Focused TDD | <!-- affected tests and observed RED/GREEN --> | <!-- result --> |
+| Comprehensive local review | <!-- finding count and repair summary, or docs-only --> | <!-- result --> |
+| Final verification | <!-- scripts/verify.sh full/database and exact head --> | <!-- result --> |
+| Confirmation | <!-- repair commit/range inspected without repeating the full suite --> | <!-- result --> |
+| Static push hooks | <!-- pre-push result --> | <!-- result --> |
 
 ## Notes
 

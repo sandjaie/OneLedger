@@ -5,10 +5,11 @@ stands at each step. [docs/git-workflow.md](git-workflow.md) owns branches, inte
 releases; this file owns **when a gate runs, who runs it, and what it produces**. When the two
 disagree about a branch, git-workflow.md wins; when they disagree about a gate, this file wins.
 
-The cycle is deliberately light — owner decision, 8 September 2026: **plan → implement → local
-review → merge.** External (Codex) review is disabled. What remains is the part that catches a
-defect while it is still cheap: the suite, one local review of the diff, and hooks that cannot
-be skipped.
+The cycle is deliberately staged to find defects once and prove the final head once — owner
+decision, 13 September 2026: **plan → focused TDD → comprehensive local review → consolidated
+fix → final verification → narrow confirmation → merge.** External (Codex) review is disabled.
+The local review finds defects; the final suite proves the reviewed result. Repeating the whole
+suite or the whole review without a changed risk surface is waste, not an additional gate.
 
 ## The review skills report
 
@@ -23,8 +24,8 @@ and reports on a tree that no longer matches the one it reviewed.
 | `/oneledger-code-review` | the branch diff against `develop`, the tree around it | findings triaged blocking / non-blocking, with file and line | edits code, fixes a finding, pushes, opens a PR |
 | `/oneledger-code-hygiene` | the whole tree at a phase boundary | findings grouped mechanical / judgement, and a proposed `chore/` branch | deletes anything, edits a migration, touches a test |
 
-`/verify` is the other kind of gate: it runs the suite and reports green or red. It also changes
-nothing.
+`/verify` is the other kind of gate: `focused` and `database` tiers support implementation, while
+the `full` tier is the final branch gate. It reports green or red and changes no tracked files.
 
 ## The cycle
 
@@ -43,9 +44,11 @@ per task, and it does not run at all for work an existing reviewed plan already 
 
 ### 3. Implement the planned outcome
 
-One implementation agent at a time, on the plan's declared branch, TDD in the plan's order. A
-deviation from the plan is legitimate where repository reality requires it, and is recorded in
-the PR and `progress.md` — never by editing the plan after dispatch.
+One implementation agent at a time, on the plan's declared branch, TDD in the plan's order. One
+task branch and PR normally occupy one implementation session; after merge, start the next task
+from a compact handoff instead of carrying the phase's entire working context forward. A deviation
+from the plan is legitimate where repository reality requires it, and is recorded in the PR and
+`progress.md` — never by editing the plan after dispatch.
 
 **Nothing is weakened to reach green.** Not a loosened assertion, not a deleted case, not a
 skipped test, not a softened invariant. A red suite is a finding that already found itself, and
@@ -57,27 +60,37 @@ the same reason — "What a gate never does", below.
 configuration syntax, whitespace, real-data exclusion, documentation structure, identifier rules,
 and file-scoped Ruff/format and ESLint. It performs no network fetch. Whole-project type systems,
 Markdown lint, generated API contracts and the diff budget run at pre-push. Application tests,
-database migrations and SQL invariants run during implementation, `/verify` and CI, not in Git
-hooks.
+database migrations and SQL invariants run through the tiered verification runner and CI, not in
+Git hooks.
 
-### 4. Gate — `/verify`, on a tree the implementer believes is finished
+During implementation, run only the smallest test that can prove the RED/GREEN step. Use the
+single runner so the command, exact Git head and result remain together as evidence:
 
-Red is not reviewed. A failing test is a finding that already found itself.
+```bash
+scripts/verify.sh focused -- <affected-test-command>
+scripts/verify.sh focused --database -- <affected-database-test-command>
+```
 
-### 5. Gate — `/oneledger-code-review`, one round before the first push
+The database form starts this checkout's `db-test` only if it is absent, then leaves it running for
+the next focused check. Do not run every API, web and SQL test after each patch. Focused red is not
+reviewed: a failing affected test is a finding that already found itself.
 
-**Trigger: implementation is finished and `/verify` is green.** The order is:
+### 4. Gate — `/oneledger-code-review`, one comprehensive round
 
-> implement → `/verify` → review → fix the blocking findings → `/verify` → **first push** → PR
+**Trigger: the planned behavior is implemented and its affected tests are green.** The order is:
+
+> focused TDD → comprehensive review → consolidated fix → full `/verify` → narrow confirmation →
+> **first push** → PR
 
 The reviewer reads the diff against this repository's own rules: identifier leakage, money
 handling, the authorization boundary, reporting views, migrations, invariants, TDD evidence.
 **Blocking findings** — correctness, security, an invariant or contract breach, missing test
 evidence — are fixed on the branch before the push. **Non-blocking findings** — hardening,
 style, scope-widening suggestions — are recorded in the PR's Notes and become their own later
-task if they are worth one. One round is the default; re-review only what the fixes themselves
-changed. If the fixes keep producing new findings, stop and raise it with the owner — that is a
-design problem, not a patch problem.
+task if they are worth one. The first review reports its complete, deduplicated set of findings at
+once; it does not drip findings through sequential passes. When a change spans independent risk
+domains, read-only database/security and API/financial reviewers may inspect it in parallel and
+one controller merges their reports. The one-writer rule remains absolute.
 
 For a branch that contains one reviewed task, that clean task review **is** the branch review. Do
 not dispatch another reviewer over the same base-to-head range. A fix receives one confirmation
@@ -86,6 +99,53 @@ only for their combined integration surface, not a repetition of each task revie
 
 Nothing reaches `origin` unreviewed. A documentation-only branch carries no code for this gate
 to read: `scripts/check-docs.py` and the commit hooks are its gate, and the PR says so.
+
+### 5. Fix once, then run the final verification once
+
+The implementation agent applies the review's blocking findings as one consolidated repair and
+runs only affected focused checks while doing so. When those checks are green, run exactly one
+final gate on that head:
+
+```bash
+scripts/verify.sh full
+```
+
+For a database-only branch, `scripts/verify.sh database` is the final gate when the plan and review
+explicitly establish that no API or web surface can be affected. The runner records the starting
+Git head, refuses evidence from a head that changes underneath it, reuses the branch's test server,
+and tears that server down once at the final boundary. A changed head invalidates old full-suite
+evidence; re-running after an actual repair is required, but a second scheduled run on an unchanged
+head is forbidden.
+
+### 6. Confirm only the repair
+
+After the final gate is green, the reviewer confirms the original findings against the repair
+range. It does not re-review the base-to-head diff and does not re-run the full suite. If the
+confirmation is clean, push that unchanged head.
+
+If confirmation uncovers a new architectural, authorization, privacy, idempotency or concurrency
+boundary, **stop the patch loop**. Produce one consolidated design/threat review covering that
+boundary before any more edits. After its repair, focused tests, the full gate and one narrow
+confirmation run on the new head. Repeated one-finding/one-fix rounds are not an accepted delivery
+strategy.
+
+### Financial database-operation review matrix
+
+Every new or changed financial write operation — SQL function, route transaction, replay,
+correction or import commit — states and tests this matrix before review:
+
+- owner, member and foreign-household behavior;
+- refusal of unauthorized direct DML, with RLS and immutability behavior;
+- expected-state or idempotency conflicts on retries and stale requests;
+- input precision validation before normalization, hashing or deduplication;
+- active correction leaves and preserved historical records;
+- lock acquisition order and the concurrent duplicate/conflict path;
+- atomic rollback after each late failure, with no partial financial state.
+
+Unsupported cases fail closed. No price, transaction, cost basis, residual or corporate action is
+invented to make an operation complete.
+
+### One test server for the branch lifecycle
 
 **The live tests need a database of their own, and refuse any other.** Every `*_live.py`
 fixture empties `transaction`, `import_batch`, `document`, `statement_layout` and
@@ -102,13 +162,17 @@ tests skip; with `.env` exported instead they **fail**, because `tests/live_data
 refuses a database holding anything those fixtures would empty and refuses a split where the
 fixtures and the routes point at different databases.
 
-**Binding agent rule: one delivery verification stage uses one dedicated `db-test` server.** Start
-it once with `eval "$(scripts/test-db.sh up)"`. Every agent and database-dependent command in that
-stage uses the exported environment; a fresh shell runs `eval "$(scripts/test-db.sh env)"` to
-re-export the already-running server, never `up` again. API tests and
-`scripts/hooks/db-tests.sh` both use that server. On success or the first failure, one agent tears
-it down exactly once with `scripts/test-db.sh down`. A separate `oneledger-verify` scratch Compose
-stack is not part of the delivery cycle.
+**Binding agent rule: one task branch uses one dedicated `db-test` server for its entire
+lifecycle.** `scripts/verify.sh focused --database -- ...` starts it only when absent and every
+later focused check reuses it. A fresh shell may use `eval "$(scripts/test-db.sh env)"` to export
+the already-running server, never `up` again. API tests and `scripts/hooks/db-tests.sh` both use
+that server. The final `database` or `full` tier tears it down exactly once, including on failure.
+A separate scratch Compose stack or a second isolated server is not part of the delivery cycle.
+
+Migrations and fixtures still get fresh databases on that server. Therefore an unpushed migration
+may change between focused runs without carrying a stale applied checksum: the next API or SQL
+run creates a new database and migrates it from empty on the same server. Recreate the test server
+only when the server itself is unhealthy, not as a routine second verification environment.
 
 **The stage's checkout owns its one test server.** Each other checkout, including a worktree under
 `.claude/worktrees/`, is its own compose project, so `up` there starts `<worktree>-db-test-1` on
@@ -155,7 +219,7 @@ deliberately not external: it exists to be destroyed. `down` removes this checko
 `<project>_pgdata_test` and no other. It used to remove `oneledger_pgdata_test` by name, which
 from a worktree was the main checkout's volume.
 
-### 6. Push — static hooks are the enforcement
+### 7. Push — static hooks are the enforcement
 
 `pre-push` runs mypy, both TypeScript compilers, Markdown lint, the generated-type check and
 `scripts/check-diff-size.sh` (soft 800 / 1,600, hard stop 1,200 / 2,400; the
@@ -164,7 +228,7 @@ PR). Pytest, Vitest, migrations and SQL invariants are deliberately absent from 
 hooks because implementation and `/verify` already run them; CI remains the remote backstop.
 `--no-verify` is not an option for the static hooks that remain.
 
-### 7. Open the PR, then merge
+### 8. Open the PR, then merge
 
 One PR per branch, from `.github/PULL_REQUEST_TEMPLATE.md`, carrying this cycle's evidence
 honestly — including checks that did not run, and why. **The orchestrator merges** once the
@@ -179,7 +243,7 @@ Two cases stay the owner's, and an agent that reaches one says so and stops:
 - **Anything targeting `main`.** That moves only through `release/*` on a separate owner
   request ([docs/git-workflow.md](git-workflow.md)).
 
-### 8. Sweep at the phase boundary
+### 9. Sweep at the phase boundary
 
 At the end of a phase, run `/oneledger-code-hygiene`. Its findings ship as their own `chore/`
 branch, sized to the same budget, through this cycle from step 3. They are never folded into a

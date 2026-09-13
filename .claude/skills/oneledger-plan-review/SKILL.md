@@ -25,10 +25,10 @@ later. The budget is **owned by [docs/git-workflow.md](../../../docs/git-workflo
 enforced at push by `scripts/check-diff-size.sh`; the table below restates it for reading, and
 that file wins if the two ever disagree:
 
-| | Budget | Hard stop |
-|---|---|---|
-| Production lines added | 800 | 1,200 |
-| Production + test lines added | 1,600 | 2,400 |
+| | Dispatch target | Warning | Hard stop |
+|---|---:|---:|---:|
+| Production lines added | 500 | 800 | 1,200 |
+| Production + test lines added | 1,000 | 1,600 | 2,400 |
 
 Documentation, configuration and generated files do not count. Past the hard stop,
 `ONELEDGER_SIZE_OVERRIDE="reason"` allows the push and the same reason goes in the PR's Notes —
@@ -57,8 +57,11 @@ the forecast says so: one endpoint, one behaviour cluster, one migration — eac
 branch.
 
 For every task, write the forecast into the finding: files, estimated production lines, estimated
-test lines, verdict. Any task over 800/1,600 is **split**, and the split is named — sub-tasks in
-dependency order, each with its own `<type>/<name>` branch off `develop`.
+test lines, verdict and review headroom. The 500/1,000 dispatch target is deliberately 60–70% of
+the warning threshold so security and correctness repairs do not force a late split. A task
+forecast above that target is **split before dispatch**, and the split is named — sub-tasks in
+dependency order, each with its own `<type>/<name>` branch off `develop`. Crossing the formal
+800/1,600 warning because the estimate was wrong is not permission to keep expanding scope.
 
 A migration that genuinely cannot be divided is the one legitimate exception, and it rides with
 the smallest possible surface around it — the migration, its invariant test, nothing else.
@@ -87,6 +90,11 @@ Findings to raise:
   carrying something that belongs elsewhere.
 - **Status tables.** Progress lives only in `docs/superpowers/progress.md`. A plan with
   completion checkboxes is a second tracker.
+- **A financial write without its operation matrix.** Every new SQL function, write route,
+  replay, correction or import commit names tests for owner/member/foreign-household behavior,
+  direct-DML refusal and RLS, stale expected state and idempotency, precision before hashing or
+  deduplication, correction leaves/history, lock order/concurrency and atomic rollback. A task
+  that cannot cover that matrix inside the dispatch target splits at the operation boundary.
 
 ## 3. Check it against the documents in force
 
