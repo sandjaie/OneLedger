@@ -239,6 +239,14 @@ class Fixture:
                 (self.household_id, self.base),
             )
             self.second_security_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO security (
+                       household_id, security_type, name, currency, country, asset_class)
+                   VALUES (%s, 'mutual_fund', 'Synthetic route security other currency', %s,
+                           'ZZ', 'equity') RETURNING id""",
+                (self.household_id, self.secondary),
+            )
+            self.other_currency_security_id = cur.fetchone()[0]  # type: ignore[index]
 
             self.other_household_id, other_person_id, self.other_user_id = uuid4(), uuid4(), uuid4()
             cur.execute(
@@ -738,6 +746,42 @@ def _investment_statement(currency: str, *, security: str = "SYNTHETIC-SECURITY-
     )
 
 
+def _two_group_investment_statement(currency: str) -> bytes:
+    return build_detailed_investment_pdf(
+        [
+            InvestmentEventLine(
+                "2026-03-01",
+                "PURCHASE",
+                "1.00000000",
+                "10.000000",
+                "10.0000",
+                "0.0000",
+                "0.0000",
+                "-10.0000",
+                currency,
+                "SYNTHETIC-SOURCE-FIRST",
+            ),
+            InvestmentEventLine(
+                "2026-03-02",
+                "PURCHASE",
+                "2.00000000",
+                "10.000000",
+                "20.0000",
+                "0.0000",
+                "0.0000",
+                "-20.0000",
+                currency,
+                "SYNTHETIC-SOURCE-SECOND",
+            ),
+        ],
+        rows_per_page=1,
+        page_targets=[
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-FIRST"),
+            ("folio MASKED ****C3D4", "SYNTHETIC-SECURITY-SECOND"),
+        ],
+    )
+
+
 def _investment_resolutions(live: Fixture, **changes: object) -> str:
     resolution: dict[str, object] = {
         "sourceGroupNumber": 1,
@@ -835,6 +879,33 @@ def test_investment_resolved_preview_returns_only_uuid_and_safe_mask(live: Fixtu
     assert live.investment_counts()["document"] == 0
 
 
+def test_investment_preview_accepts_one_resolution_and_preserves_other_target(
+    live: Fixture,
+) -> None:
+    response = _investment_post(
+        live,
+        _two_group_investment_statement(live.base),
+        resolutions=_investment_resolutions(live),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["staged"] is False
+    assert [group["stageable"] for group in body["groups"]] == [True, False]
+    resolved, unresolved = [group["targets"][0] for group in body["groups"]]
+    assert resolved["accountId"] == str(live.investment_account_id)
+    assert resolved["securityId"] == str(live.security_id)
+    assert resolved["accountMask"] == "****A1B2"
+    assert unresolved["accountId"] is None
+    assert unresolved["securityId"] is None
+    assert unresolved["accountMask"] is None
+    assert live.investment_counts() == {
+        "document": 0,
+        "investment_import": 0,
+        "investment_event_draft": 0,
+    }
+
+
 def test_investment_routes_require_the_authenticated_owner(live: Fixture) -> None:
     app.dependency_overrides.clear()
     try:
@@ -866,6 +937,22 @@ def test_investment_stage_reextracts_and_identical_retry_reuses_rows(live: Fixtu
     with live.conn.cursor() as cur:
         cur.execute("SELECT units::text, price::text, net_amount::text FROM investment_event_draft")
         assert cur.fetchone() == ("1.23456789", "10.123456", "-12.5000")
+
+
+def test_investment_stage_uses_a_fixed_safe_document_label(live: Fixture) -> None:
+    private_identifier = "SYNTHETICFOLIOA1B2C3D4E5F6"
+    response: httpx.Response = TestClient(app).post(
+        "/investment-imports/parse",
+        files={"file": (f"statement-{private_identifier}.pdf", _investment_statement(live.base))},
+        data={"stage": "true", "resolutions": _investment_resolutions(live)},
+        headers=ORIGIN,
+    )
+
+    assert response.status_code == 201, response.text
+    assert private_identifier not in response.text
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT original_filename FROM document")
+        assert cur.fetchone() == ("investment-statement.pdf",)
 
 
 def test_investment_stage_response_uses_persisted_blocker_state(
@@ -905,6 +992,60 @@ def test_investment_stage_response_uses_persisted_blocker_state(
     assert body["totalBlockerCount"] == 1
 
 
+def test_investment_stage_counts_persisted_blocker_beyond_preview_limit() -> None:
+    from oneledger.investments.staging import (
+        PreparedGroup,
+        PreparedImport,
+        PreparedTarget,
+        StagedGroupResult,
+        StagedImportResult,
+    )
+    from oneledger.routes.investment_imports import _response
+
+    account_id, security_id = uuid4(), uuid4()
+    groups = tuple(
+        PreparedGroup(
+            number,
+            (PreparedTarget(number, account_id, security_id, (), (), ()),),
+            (),
+            True,
+        )
+        for number in range(1, 52)
+    )
+    prepared = PreparedImport(
+        True,
+        "synthetic_source_contract",
+        "synthetic_extraction_version",
+        groups,
+        (),
+        51,
+        0,
+        0,
+        True,
+        True,
+    )
+    staged = StagedImportResult(
+        uuid4(),
+        "awaiting_review",
+        tuple(uuid4() for _ in groups),
+        True,
+        tuple(
+            StagedGroupResult(
+                number,
+                "blocked" if number == 51 else "ready",
+                ("duplicate_conflict",) if number == 51 else (),
+            )
+            for number in range(1, 52)
+        ),
+    )
+
+    response = _response(prepared, {}, staged)
+
+    assert len(response.groups) == 50
+    assert response.previewTruncated is True
+    assert response.totalBlockerCount == 1
+
+
 @pytest.mark.parametrize(
     "resolutions",
     [
@@ -936,22 +1077,36 @@ def test_investment_resolution_json_is_strict_and_never_echoed(
     assert live.investment_counts()["document"] == 0
 
 
-def test_investment_invalid_or_stale_target_fails_without_changing_rows(live: Fixture) -> None:
+@pytest.mark.parametrize("invalid_target", ["foreign", "wrong_kind", "wrong_currency"])
+def test_investment_invalid_target_fails_before_blob_or_database_write(
+    live: Fixture, tmp_path: Path, invalid_target: str
+) -> None:
     pdf = _investment_statement(live.base)
+    account_id, security_id = live.investment_account_id, live.security_id
+    if invalid_target == "foreign":
+        account_id, security_id = live.other_account_id, live.other_security_id
+    elif invalid_target == "wrong_kind":
+        account_id = live.account_id
+    else:
+        security_id = live.other_currency_security_id
     invalid = _investment_post(
         live,
         pdf,
         stage="true",
         resolutions=_investment_resolutions(
             live,
-            accountId=str(live.other_account_id),
-            securityId=str(live.other_security_id),
+            accountId=str(account_id),
+            securityId=str(security_id),
         ),
     )
     assert invalid.status_code == 422
     assert invalid.json() == {"detail": "investment target is invalid"}
-    assert str(live.other_account_id) not in invalid.text
     assert live.investment_counts()["document"] == 0
+    assert list(tmp_path.rglob("*.pdf")) == []
+
+
+def test_investment_stale_target_retry_fails_without_changing_rows(live: Fixture) -> None:
+    pdf = _investment_statement(live.base)
 
     accepted = _investment_post(live, pdf, stage="true", resolutions=_investment_resolutions(live))
     changed = _investment_post(

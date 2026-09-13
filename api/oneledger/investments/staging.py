@@ -126,8 +126,13 @@ class StagedImportResult:
     group_states: tuple[StagedGroupResult, ...]
 
 
+def is_blocking_reason(reason: ReviewReason) -> bool:
+    """Return the database-aligned fixed severity for one safe review code."""
+    return reason in _BLOCKING_REASONS
+
+
 def _is_blocking(reason: SafeReason) -> bool:
-    return reason.code in _BLOCKING_REASONS
+    return is_blocking_reason(reason.code)
 
 
 def _correlations(group: StatementGroup) -> frozenset[SourceEventIdentity]:
@@ -339,17 +344,14 @@ def _validate_target(cur: psycopg.Cursor[Any], household_id: UUID, target: Prepa
 
 
 def validate_prepared_import(owner: OwnerSession, prepared: PreparedImport) -> None:
-    """Verify supplied target UUIDs without persisting preview state."""
-    if not prepared.groups or any(
-        not target.resolved for group in prepared.groups for target in group.targets
-    ):
-        raise StagingError("investment targets are unresolved")
+    """Verify every resolved target UUID without rejecting unresolved preview targets."""
     try:
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
             for group in prepared.groups:
                 for target in group.targets:
-                    _validate_target(cur, owner.household_id, target)
+                    if target.resolved:
+                        _validate_target(cur, owner.household_id, target)
             conn.rollback()
     except psycopg.Error:
         raise StagingError("investment targets could not be validated") from None

@@ -24,12 +24,14 @@ from ..investments.staging import (
     StagingError,
     TargetResolution,
     cancel_staged_import,
+    is_blocking_reason,
     prepare_import,
     stage_prepared_import_in_transaction,
     validate_prepared_import,
 )
 
 router = APIRouter(prefix="/investment-imports", tags=["investment imports"])
+_SAFE_DOCUMENT_LABEL = "investment-statement.pdf"
 
 
 class ResolutionInput(BaseModel):
@@ -176,8 +178,8 @@ def _response(
         {} if staged is None else {state.group_number: state for state in staged.group_states}
     )
     added_blockers = 0
-    groups: list[GroupResponse] = []
-    for group in prepared.preview_groups:
+    added_reasons_by_group: dict[int, tuple[ReviewReason, ...]] = {}
+    for group in prepared.groups:
         state = persisted.get(group.group_number)
         prepared_codes = {reason.code for reason in group.reasons}
         added_reasons = (
@@ -185,7 +187,12 @@ def _response(
             if state is None
             else tuple(reason for reason in state.reasons if reason not in prepared_codes)
         )
-        added_blockers += len(added_reasons)
+        added_reasons_by_group[group.group_number] = added_reasons
+        added_blockers += sum(is_blocking_reason(reason) for reason in added_reasons)
+    groups: list[GroupResponse] = []
+    for group in prepared.preview_groups:
+        state = persisted.get(group.group_number)
+        added_reasons = added_reasons_by_group[group.group_number]
         groups.append(
             GroupResponse(
                 groupNumber=group.group_number,
@@ -333,7 +340,8 @@ def parse_investment_statement(
                 return _response(prepared, _masks(owner, prepared))
             if not prepared.stageable:
                 raise StagingError("investment import is not stageable")
-            uploaded = storage.store(data, owner.household_id, file.filename or "statement.pdf")
+            validate_prepared_import(owner, prepared)
+            uploaded = storage.store(data, owner.household_id, _SAFE_DOCUMENT_LABEL)
             result = _document(
                 owner,
                 uploaded,
