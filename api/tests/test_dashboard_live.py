@@ -367,12 +367,16 @@ def investment_dashboard(
 
 
 def _investment_acquisition(
-    fixture: EventFixture, account_id: UUID | None = None, event_date: date = date(2026, 2, 1)
+    fixture: EventFixture,
+    account_id: UUID | None = None,
+    event_date: date = date(2026, 2, 1),
+    currency: str | None = None,
 ) -> dict[str, Any]:
     body = {
         **_body(fixture),
         "accountId": str(account_id or fixture.account_id),
         "eventDate": str(event_date),
+        "currency": currency or fixture.currency,
         "idempotencyKey": str(uuid4()),
     }
     response = TestClient(app).post("/investment-events/acquisitions", json=body, headers=ORIGIN)
@@ -477,6 +481,47 @@ def test_holding_fx_coverage_stands_or_falls_by_reporting_currency(
             "reportingCurrency": investment_dashboard.secondary_currency,
             "asOf": "2026-02-05",
         }
+    ]
+
+
+def test_secondary_currency_holding_keeps_its_identity_reporting_leg(
+    investment_dashboard: EventFixture,
+) -> None:
+    """Missing secondary-to-base FX cannot erase the exact secondary identity conversion."""
+    with investment_dashboard.connection.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET currency = %s WHERE id = %s",
+            (investment_dashboard.secondary_currency, investment_dashboard.account_id),
+        )
+        cur.execute(
+            "UPDATE security SET currency = %s WHERE id = %s",
+            (investment_dashboard.secondary_currency, investment_dashboard.security_id),
+        )
+    investment_dashboard.connection.commit()
+    _investment_acquisition(
+        investment_dashboard,
+        currency=investment_dashboard.secondary_currency,
+    )
+    _investment_price(investment_dashboard, date(2026, 2, 2))
+    with investment_dashboard.connection.cursor() as cur:
+        cur.execute(
+            "DELETE FROM fx_rate WHERE base_currency = %s AND quote_currency = %s",
+            (investment_dashboard.secondary_currency, investment_dashboard.currency),
+        )
+    investment_dashboard.connection.commit()
+
+    worth = the_dashboard(date(2026, 2, 5))["netWorth"]
+
+    assert worth["totalBase"] is None
+    assert worth["totalSecondary"] == "24.0000"
+    [rate] = worth["rates"]
+    assert (rate["currency"], rate["rateToBase"], rate["rateToSecondary"]) == (
+        investment_dashboard.secondary_currency,
+        None,
+        "1",
+    )
+    assert [(row["currency"], row["reportingCurrency"]) for row in worth["missing"]] == [
+        (investment_dashboard.secondary_currency, investment_dashboard.currency)
     ]
 
 
@@ -610,3 +655,43 @@ def test_snapshot_to_holdings_transition_closes_overlap_without_deleting_history
     with investment_dashboard.connection.cursor() as cur:
         cur.execute("SELECT count(*) FROM valuation_snapshot WHERE account_id = %s", (account_id,))
         assert cur.fetchone() == (1,)
+
+
+def test_snapshot_reentry_does_not_carry_a_snapshot_across_an_intervening_period(
+    investment_dashboard: EventFixture,
+) -> None:
+    """A snapshot from an earlier snapshot period cannot value a later snapshot re-entry."""
+    account_id = _snapshot_account(investment_dashboard)
+    _snapshot(investment_dashboard, account_id)
+    with investment_dashboard.connection.cursor() as cur:
+        cur.execute(
+            "SELECT set_config('app.user_id', %s, true)",
+            (str(investment_dashboard.owner.user_id),),
+        )
+        cur.execute(
+            "SELECT transition_account_valuation_mode(%s, 'ledger_balance', '2026-02-03')",
+            (account_id,),
+        )
+        cur.execute(
+            "SELECT transition_account_valuation_mode(%s, 'snapshot', '2026-02-05')",
+            (account_id,),
+        )
+    investment_dashboard.connection.commit()
+
+    worth = the_dashboard(date(2026, 2, 6))["netWorth"]
+
+    assert worth["totalBase"] is None
+    assert worth["totalSecondary"] is None
+    assert worth["investmentCoverage"] == [
+        {
+            "accountId": str(account_id),
+            "holdingId": None,
+            "valuationMode": "snapshot",
+            "status": "missing_snapshot",
+            "valueDate": None,
+            "carried": False,
+            "ageDays": None,
+            "method": None,
+            "confidence": None,
+        }
+    ]

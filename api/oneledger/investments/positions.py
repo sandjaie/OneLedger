@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import Any, Literal
 from uuid import UUID
 
@@ -14,10 +14,17 @@ from pydantic import BaseModel
 from ..money import _fixed, _out
 
 _MONEY = Decimal("0.0001")
+_MONEY_MAX = Decimal("9999999999999999.9999")
+_CALCULATION_PRECISION = 80
+
+
+class _MoneyOutsideSupportedRange(Exception):
+    pass
 
 
 @dataclass(frozen=True)
 class PositionCalculation:
+    calculation_status: Literal["available", "missing_price", "outside_supported_range"]
     current_value_native: Decimal | None
     current_value_base: Decimal | None
     current_value_secondary: Decimal | None
@@ -59,6 +66,7 @@ class AcquisitionPosition(BaseModel):
     cumulativeContributionsBase: str
     cumulativeContributionsSecondary: str
     priceStatus: Literal["current", "stale", "missing", "future_price_only"]
+    valueStatus: Literal["available", "missing_price", "outside_supported_range"]
     price: str | None
     priceDate: date | None
     currentValueNative: str | None
@@ -79,7 +87,10 @@ class PortfolioPositions(BaseModel):
 
 
 def _money(value: Decimal) -> Decimal:
-    return value.quantize(_MONEY, rounding=ROUND_HALF_UP)
+    rounded = value.quantize(_MONEY, rounding=ROUND_HALF_UP)
+    if not rounded.is_finite() or abs(rounded) > _MONEY_MAX:
+        raise _MoneyOutsideSupportedRange
+    return rounded
 
 
 def calculate_position(
@@ -94,17 +105,32 @@ def calculate_position(
 ) -> PositionCalculation:
     """Value current units while retaining each acquisition's frozen reporting contribution."""
     if price is None:
-        return PositionCalculation(None, None, None, None, None, None)
-    native = _money(units * price)
-    base = _money(native * rate_to_base) if rate_to_base is not None else None
-    secondary = _money(native * rate_to_secondary) if rate_to_secondary is not None else None
+        return PositionCalculation("missing_price", None, None, None, None, None, None)
+    try:
+        # NUMERIC(28,8) units × NUMERIC(20,6) price × NUMERIC(20,10) FX can require
+        # 68 significant digits before it is reduced to the project's NUMERIC(20,4) money scale.
+        with localcontext() as context:
+            context.prec = _CALCULATION_PRECISION
+            native = _money(units * price)
+            base = _money(native * rate_to_base) if rate_to_base is not None else None
+            secondary = (
+                _money(native * rate_to_secondary) if rate_to_secondary is not None else None
+            )
+            gain_native = _money(native - contribution_native)
+            gain_base = None if base is None else _money(base - contribution_base)
+            gain_secondary = (
+                None if secondary is None else _money(secondary - contribution_secondary)
+            )
+    except InvalidOperation, _MoneyOutsideSupportedRange:
+        return PositionCalculation("outside_supported_range", None, None, None, None, None, None)
     return PositionCalculation(
+        calculation_status="available",
         current_value_native=native,
         current_value_base=base,
         current_value_secondary=secondary,
-        gain_native=_money(native - contribution_native),
-        gain_base=None if base is None else _money(base - contribution_base),
-        gain_secondary=(None if secondary is None else _money(secondary - contribution_secondary)),
+        gain_native=gain_native,
+        gain_base=gain_base,
+        gain_secondary=gain_secondary,
     )
 
 
@@ -257,6 +283,7 @@ def read_positions(
                 cumulativeContributionsBase=str(row[8]),
                 cumulativeContributionsSecondary=str(row[9]),
                 priceStatus=status,
+                valueStatus=calculation.calculation_status,
                 price=_out(price),
                 priceDate=price_date,
                 currentValueNative=_out(calculation.current_value_native),

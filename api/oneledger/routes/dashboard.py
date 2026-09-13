@@ -40,8 +40,8 @@ from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
-from ..investments.positions import read_positions
-from ..money import _fixed, _out, translate
+from ..investments.positions import current_rate_pair, read_positions
+from ..money import _out, translate
 
 router = APIRouter(tags=["dashboard"])
 
@@ -70,6 +70,7 @@ class InvestmentCoverage(BaseModel):
         "stale_price",
         "missing_price",
         "future_price_only",
+        "outside_supported_range",
         "current_snapshot",
         "carried_snapshot",
         "missing_snapshot",
@@ -132,10 +133,6 @@ class DashboardResponse(BaseModel):
     trend: list[MonthFlows]
     cardsDue: list[CardDue]
 
-
-_RATE = """SELECT rate, rate_date, is_carried_forward, carried_from FROM fx_rate
-            WHERE base_currency = %s AND quote_currency = %s AND rate_date <= %s
-            ORDER BY rate_date DESC LIMIT 1"""
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
 
@@ -201,25 +198,6 @@ FLOWS = """
      ORDER BY m.month"""
 
 
-class _Rate:
-    """1 currency = `rate` base, the date it is really from, and whether that is not `as_of`."""
-
-    def __init__(self, rate: Decimal, real: date, carried: bool) -> None:
-        self.rate, self.real, self.carried = rate, real, carried
-
-
-def _to_base(cur: psycopg.Cursor[Any], currency: str, base: str, as_of: date) -> _Rate | None:
-    if currency == base:
-        return _Rate(Decimal(1), as_of, False)
-    cur.execute(_RATE, (currency, base, as_of))
-    found = cur.fetchone()
-    if found is None:
-        return None
-    rate, on, is_carried, carried_from = found
-    real = carried_from if is_carried else on
-    return _Rate(Decimal(rate), real, bool(is_carried) or on < as_of)
-
-
 def _net_worth(
     cur: psycopg.Cursor[Any], household_id: UUID, base: str, secondary: str, as_of: date
 ) -> NetWorth:
@@ -248,34 +226,24 @@ def _net_worth(
             *(position.currency for position in positions),
         }
     )
-    secondary_rate = _to_base(cur, secondary, base, as_of)
-
     rates: list[RateUsed] = []
     missing: list[MissingRate] = []
     rate_pairs: dict[str, tuple[Decimal | None, Decimal | None]] = {}
     for currency in held:
-        own = _to_base(cur, currency, base, as_of)
-        base_leg = own.rate if own else None
-        # A cross through the base, fixed at the stored precision as `money._frozen` fixes its
-        # own. Its date is the older leg's, and it is carried if either leg is.
-        secondary_leg = _fixed(own.rate / secondary_rate.rate) if own and secondary_rate else None
-        # The legs this currency's translation actually used — none when it has no rate of its
-        # own, so a missing currency never borrows another leg's date.
-        dated = (
-            []
-            if own is None
-            else [leg for leg in (own, secondary_rate if currency != secondary else None) if leg]
-        )
-        if own is None:
+        pair = current_rate_pair(cur, currency, base, secondary, as_of)
+        base_leg = None if pair.to_base is None else pair.to_base.rate
+        secondary_leg = None if pair.to_secondary is None else pair.to_secondary.rate
+        dated = [leg for leg in (pair.to_base, pair.to_secondary) if leg is not None]
+        if pair.to_base is None:
             missing.append(MissingRate(currency=currency, reportingCurrency=base, asOf=as_of))
-        if secondary_leg is None:
+        if pair.to_secondary is None:
             missing.append(MissingRate(currency=currency, reportingCurrency=secondary, asOf=as_of))
         rates.append(
             RateUsed(
                 currency=currency,
                 rateToBase=_out(base_leg),
                 rateToSecondary=_out(secondary_leg),
-                rateDate=min((leg.real for leg in dated), default=None),
+                rateDate=min((leg.real_date for leg in dated), default=None),
                 carried=any(leg.carried for leg in dated),
             )
         )
@@ -358,7 +326,11 @@ def _net_worth(
                 accountId=position.accountId,
                 holdingId=position.holdingId,
                 valuationMode="holdings",
-                status=price_coverage[position.priceStatus],  # type: ignore[arg-type]
+                status=(
+                    "outside_supported_range"
+                    if position.valueStatus == "outside_supported_range"
+                    else price_coverage[position.priceStatus]  # type: ignore[arg-type]
+                ),
                 valueDate=position.priceDate,
                 carried=position.priceDate is not None and position.priceDate < as_of,
                 ageDays=(None if position.priceDate is None else (as_of - position.priceDate).days),

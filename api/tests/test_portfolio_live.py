@@ -94,6 +94,7 @@ def test_acquisition_position_separates_frozen_contribution_from_current_value(
         "cumulativeContributionsBase": "21.0000",
         "cumulativeContributionsSecondary": "42.0000",
         "priceStatus": "stale",
+        "valueStatus": "available",
         "price": "6.000000",
         "priceDate": "2026-02-02",
         "currentValueNative": "24.0000",
@@ -125,22 +126,41 @@ def test_acquisition_position_separates_frozen_contribution_from_current_value(
             assert value is None or isinstance(value, str), key
 
 
-def test_latest_non_future_accepted_price_wins_and_a_future_observation_never_leaks_in(
+def test_only_latest_non_future_accepted_price_wins(
     position_live: EventFixture,
 ) -> None:
-    """Changing price selection to latest overall would value an earlier report with future data."""
+    """Future accepted and later non-future unaccepted observations are retained but not valued."""
     _acquire(position_live)
     _price(position_live, date(2026, 2, 2), "6.000000")
     _price(position_live, date(2026, 2, 10), "99.000000")
+    with position_live.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO price_snapshot (
+                   household_id, security_id, source_mapping_id, price_date, price, currency)
+               SELECT mapping.household_id, mapping.security_id, mapping.id,
+                      '2026-02-04', 88.000000, security.currency
+                 FROM security_price_source mapping
+                 JOIN security ON security.id = mapping.security_id
+                WHERE mapping.household_id = %s AND mapping.security_id = %s
+                  AND mapping.source_key = 'owner_manual'""",
+            (position_live.owner.household_id, position_live.security_id),
+        )
+    position_live.connection.commit()
 
-    [row] = _positions()["positions"]
+    payload = _positions()
+    [row] = payload["positions"]
 
     assert (row["price"], row["priceDate"], row["currentValueNative"]) == (
         "6.000000",
         "2026-02-02",
         "24.0000",
     )
-    assert "99.000000" not in str(row)
+    assert "99.000000" not in str(payload)
+    assert "88.000000" not in str(payload)
+    dashboard_response = _client().get("/dashboard", params={"asOf": str(AS_OF)})
+    assert dashboard_response.status_code == 200
+    assert dashboard_response.json()["netWorth"]["totalBase"] == "24.0000"
+    assert "88.000000" not in dashboard_response.text
 
 
 def test_as_of_units_and_contributions_ignore_later_acquisitions(
@@ -172,6 +192,7 @@ def test_no_eligible_price_is_typed_without_manufacturing_zero(
     [row] = _positions()["positions"]
 
     assert row["priceStatus"] == expected
+    assert row["valueStatus"] == "missing_price"
     assert row["price"] is None
     assert row["priceDate"] is None
     for key in (
@@ -271,3 +292,39 @@ def test_position_uses_the_active_correction_and_hides_another_household(
     assert str(position_live.other_account_id) not in str(_positions())
     assert str(position_live.other_security_id) not in str(_positions())
     assert "88.000000" not in str(_positions())
+
+
+def test_legal_event_and_price_scales_return_typed_unavailable_value(
+    position_live: EventFixture,
+) -> None:
+    """A large legal unit total and large legal price must not cause an uncontrolled API 500."""
+    _acquire(
+        position_live,
+        units="99999999999999999999.99999999",
+        price="0.000001",
+        grossAmount="100000000000000.0000",
+        charges="0.0000",
+        netAmount="-100000000000000.0000",
+    )
+    _price(position_live, date(2026, 2, 2), "99999999999999.999999")
+
+    portfolio_payload = _positions()
+    [row] = portfolio_payload["positions"]
+    dashboard_response = _client().get("/dashboard", params={"asOf": str(AS_OF)})
+
+    assert row["valueStatus"] == "outside_supported_range"
+    for key in (
+        "currentValueNative",
+        "currentValueBase",
+        "currentValueSecondary",
+        "gainNative",
+        "gainBase",
+        "gainSecondary",
+    ):
+        assert row[key] is None
+    assert "InvalidOperation" not in str(portfolio_payload)
+    assert dashboard_response.status_code == 200
+    dashboard_worth = dashboard_response.json()["netWorth"]
+    assert dashboard_worth["totalBase"] is None
+    assert dashboard_worth["totalSecondary"] is None
+    assert dashboard_worth["investmentCoverage"][0]["status"] == "outside_supported_range"

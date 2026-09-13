@@ -544,6 +544,10 @@ export type AcquisitionPosition = {
      */
     priceStatus: 'current' | 'stale' | 'missing' | 'future_price_only';
     /**
+     * Valuestatus
+     */
+    valueStatus: 'available' | 'missing_price' | 'outside_supported_range';
+    /**
      * Price
      */
     price: string | null;
@@ -1902,7 +1906,7 @@ export type InvestmentCoverage = {
     /**
      * Status
      */
-    status: 'current_price' | 'stale_price' | 'missing_price' | 'future_price_only' | 'current_snapshot' | 'carried_snapshot' | 'missing_snapshot';
+    status: 'current_price' | 'stale_price' | 'missing_price' | 'future_price_only' | 'outside_supported_range' | 'current_snapshot' | 'carried_snapshot' | 'missing_snapshot';
     /**
      * Valuedate
      */

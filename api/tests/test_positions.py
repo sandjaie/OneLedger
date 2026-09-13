@@ -28,6 +28,7 @@ def test_current_value_and_gain_use_exact_decimal_arithmetic() -> None:
     assert result.gain_native == Decimal("4.0313")
     assert result.gain_base == Decimal("4.0313")
     assert result.gain_secondary == Decimal("8.0626")
+    assert result.calculation_status == "available"
 
 
 def test_historical_contributions_remain_frozen_when_current_fx_moves() -> None:
@@ -86,4 +87,25 @@ def test_each_missing_current_fx_leg_abstains_independently() -> None:
     assert result.current_value_base == Decimal("15.0000")
     assert result.gain_base == Decimal("3.0000")
     assert result.current_value_secondary is None
+    assert result.gain_secondary is None
+
+
+def test_legal_stored_scales_abstain_when_the_derived_money_is_out_of_range() -> None:
+    """Legal NUMERIC values must not escape as InvalidOperation or huge derived money."""
+    result = calculate_position(
+        units=Decimal("99999999999999999999.99999999"),
+        contribution_native=Decimal("100000000000000.0000"),
+        contribution_base=Decimal("100000000000000.0000"),
+        contribution_secondary=Decimal("200000000000000.0000"),
+        price=Decimal("99999999999999.999999"),
+        rate_to_base=Decimal("1.0000000000"),
+        rate_to_secondary=Decimal("2.0000000000"),
+    )
+
+    assert result.calculation_status == "outside_supported_range"
+    assert result.current_value_native is None
+    assert result.current_value_base is None
+    assert result.current_value_secondary is None
+    assert result.gain_native is None
+    assert result.gain_base is None
     assert result.gain_secondary is None
