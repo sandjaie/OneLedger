@@ -26,6 +26,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.ingest import storage as ingest_storage
 from oneledger.main import app
 
 from .fixtures.investment_pdf import InvestmentEventLine, build_detailed_investment_pdf
@@ -748,12 +749,13 @@ def _investment_resolutions(live: Fixture, **changes: object) -> str:
 
 
 def _investment_post(live: Fixture, pdf: bytes, **form: str) -> httpx.Response:
-    return TestClient(app).post(
+    response: httpx.Response = TestClient(app).post(
         "/investment-imports/parse",
         files={"file": ("private-4111-1111-1111-9876.pdf", pdf)},
         data=form,
         headers=ORIGIN,
     )
+    return response
 
 
 def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixture) -> None:
@@ -1004,10 +1006,10 @@ def test_investment_storage_and_late_database_failures_are_atomic(
     pdf = _investment_statement(live.base)
     form = {"stage": "true", "resolutions": _investment_resolutions(live)}
     monkeypatch.setattr(
-        investment_imports.storage,
+        ingest_storage,
         "store",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            investment_imports.storage.StorageError("investment document could not be stored")
+            ingest_storage.StorageError("investment document could not be stored")
         ),
     )
     failed_storage = _investment_post(live, pdf, **form)
