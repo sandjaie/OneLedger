@@ -484,12 +484,15 @@ def _append_split_without_successor(fixture: FundingFixture, *, event_date: str)
         holding_row = cur.fetchone()
         assert holding_row is not None
         cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        # The exact unit-effect value plays no role in these lineage fixtures; any nonzero value
+        # satisfies Task 15.2's investment_event_kind_fields_agree shape for a split row.
         cur.execute(
             """INSERT INTO investment_transaction (
                  household_id, account_id, holding_id, security_id, event_date, event_kind,
-                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+                 units, unit_ratio, net_amount, currency, source_kind, source_contract,
+                 source_event_id
                ) VALUES (
-                 %s, %s, %s, %s, %s, 'split', 2, 0, %s, 'statement',
+                 %s, %s, %s, %s, %s, 'split', 1, 2, 0, %s, 'statement',
                  'funding_test_v1', 'SYNTHETIC-INCOMPLETE-SPLIT')""",
             (
                 fixture.owner.household_id,
@@ -530,12 +533,15 @@ def _append_split_with_successor(
         predecessor_row = cur.fetchone()
         assert predecessor_row is not None
         cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        # The exact unit-effect value plays no role in these lineage fixtures; any nonzero value
+        # satisfies Task 15.2's investment_event_kind_fields_agree shape for a split row.
         cur.execute(
             """INSERT INTO investment_transaction (
                  household_id, account_id, holding_id, security_id, event_date, event_kind,
-                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+                 units, unit_ratio, net_amount, currency, source_kind, source_contract,
+                 source_event_id
                ) VALUES (
-                 %s, %s, %s, %s, %s, 'split', %s, 0, %s, 'statement', 'funding_test_v1', %s)
+                 %s, %s, %s, %s, %s, 'split', 1, %s, 0, %s, 'statement', 'funding_test_v1', %s)
                RETURNING id""",
             (
                 fixture.owner.household_id,
@@ -707,6 +713,46 @@ def test_proposal_writes_nothing_then_confirmation_and_unlink_are_exact(
     assert _flow_and_net_worth()[1] == "60.0000"
     with live_funding.connection.cursor() as cur:
         cur.execute("SELECT txn_type::text FROM transaction WHERE id = %s", (cash_a,))
+        assert cur.fetchone() == ("investment_buy",)
+
+
+def _rights_event(fixture: FundingFixture, amount: str) -> UUID:
+    value = Decimal(amount)
+    response = TestClient(app).post(
+        "/investment-events/unit-actions",
+        json={
+            "kind": "rights",
+            "accountId": str(fixture.investment_account_id),
+            "securityId": str(fixture.security_id),
+            "eventDate": "2026-02-01",
+            "units": "5.00000000",
+            "price": f"{value / 5:.6f}",
+            "grossAmount": amount,
+            "charges": "0.0000",
+            "withheldTax": "0.0000",
+            "netAmount": f"-{amount}",
+            "currency": fixture.currency,
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return UUID(str(response.json()["event"]["id"]))
+
+
+def test_a_rights_event_is_fundable_like_a_purchase(live_funding: FundingFixture) -> None:
+    """Task 15.2's rights kind must reach the same V33 funding role as a purchase."""
+    event = _rights_event(live_funding, "100.0000")
+    cash = _cash(live_funding, "-100.0000")
+    allocations = [_allocation(event, cash, "100.0000")]
+
+    proposed = _proposal(allocations)
+    assert proposed.status_code == 200, proposed.text
+    confirmed = _confirm(allocations, proposed.json()["expectedState"])
+
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json()["allocations"][0]["role"] == "funding"
+    with live_funding.connection.cursor() as cur:
+        cur.execute("SELECT txn_type::text FROM transaction WHERE id = %s", (cash,))
         assert cur.fetchone() == ("investment_buy",)
 
 

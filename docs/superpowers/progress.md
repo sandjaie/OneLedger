@@ -16,7 +16,7 @@ Updated: 14 September 2026.
 | Outcome state | **Implementation active** — re-baselined to personal scale on 14 Sep 2026 with owner approval | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
 | Next product action | Deliver Task 15.2 — holding-level unit actions | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
-| Current implementation task | Task 15.1 is complete via PR #194: lot lineage read model, order guard, active-event lot capacity and consumed-lot refusal | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
+| Current implementation task | Task 15.2 is delivered on `feature/p1-6o2-investment-unit-actions`: split, bonus, rights, switch, systematic transfer and platform transfer unit actions | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
 
 ## Canonical phase status
 
@@ -93,6 +93,7 @@ requires a separate owner request.
 | Phase 1.6 positions disposal fix | **Deviation from Task 8** — positions now value units from every active unit effect, so disposals and reinvestments change current value and net worth; gain is withheld once any non-purchase event is active | [PR #193](https://github.com/sandjaie/OneLedger/pull/193) |
 | Phase 1.6 Task 15 | **Re-baselined 14 Sep 2026** — owner approved holding-level corporate actions; Task 15.1 (V40) is kept as the foundation; Tasks 15.2–24 are replaced by Tasks 15.2 and 16–20 | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
 | Phase 1.6 Task 15.1 | **Complete via PR #194** — V40 adds household-scoped lot lineage, the unit-event order guard, lineage-aware open lots, active-event lot capacity and consumed-lot refusal; review findings repaired and confirmed | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
+| Phase 1.6 Task 15.2 | **Delivered on `feature/p1-6o2-investment-unit-actions`** — V41 adds owner-only `append_investment_split` (exact holding-level delta, no lot) and `append_investment_unit_transfer` (paired switch/systematic-transfer/platform-transfer legs, all-or-nothing); `append_investment_transaction` additionally admits `bonus` and `rights`; lot lineage and a new `investment_lot_allocation` trigger withhold basis and realised claims from an active split, switch, systematic transfer or platform transfer; positions and checkpoint reconciliation apply the same distinction | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-152--holding-level-unit-actions) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

@@ -900,8 +900,9 @@ later acquisition in the same holding still contributes to it, so it is read fro
 &mdash; and remains unavailable if any active disposal evidence is incomplete or lineage is
 unavailable. Proposal state includes the disposal date and rejects a later-dated acquisition lot; a
 successor lot dated before the lineage event that created it, a predecessor already consumed by
-another active lineage event, and any lot for a disposal dated on or after a split whose lineage is
-unavailable, are refused before either allocation or remaining basis.</td></tr>
+another active lineage event, and any lot for a disposal dated on or after a split, switch,
+systematic transfer or platform transfer whose lineage is unavailable, are refused before either
+allocation or remaining basis.</td></tr>
 <tr><td><code>investment_open_lots</code></td><td>A read-only function, not a table: for a holding and
 as-of date, the tip lot of each lineage chain, its preserved acquisition date, open units and open
 basis rounded from an exact wide intermediate product rather than PostgreSQL's truncated
@@ -910,19 +911,29 @@ the as-of date and an allocation from an active disposal dated on or before it. 
 every lot in the household, because a platform transfer's successor can live in a different holding,
 and only the destination holding reports it. It returns nothing while
 <code>investment_lot_lineage_available</code> is false for that holding and date &mdash; from the date
-of an active split with no successor lot, until a later delivery completes the lineage; callers must
-check that explicitly rather than reading an empty result as "no open lots".</td></tr>
+of an active split with no successor lot, or of an active switch, systematic transfer or platform
+transfer leg, until a later delivery completes the split/platform lineage; callers must check that
+explicitly rather than reading an empty result as "no open lots". A <code>BEFORE INSERT</code>
+trigger on <code>investment_lot_allocation</code> enforces the same rule at the table itself.</td></tr>
 </tbody></table><p>The position service rebuilds as-of units from every active unit effect and
-cumulative contributions from active immutable purchase leaves, retains each event&#39;s frozen
-reporting contribution, withholds gain once any non-purchase event is active, and values those units
-with the latest accepted non-future price plus current as-of FX. Missing, stale and future-only
-evidence remain typed states rather than zero. The dashboard uses the dated
-<code>account_valuation_period</code> as an exclusive switch: ledger balance, structured holdings or
-the latest frozen snapshot inside the active period contributes, never two of them.</p>
+cumulative contributions from active immutable purchase and rights leaves, retains each
+event&#39;s frozen reporting contribution, withholds gain once any switch, systematic transfer,
+platform transfer, disposal or income event is active (a bonus or split alone does not withhold
+it), and values those units with the latest accepted non-future price plus current as-of FX.
+Missing, stale and future-only evidence remain typed states rather than zero. The dashboard uses
+the dated <code>account_valuation_period</code> as an exclusive switch: ledger balance, structured
+holdings or the latest frozen snapshot inside the active period contributes, never two of them.</p>
 <p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
+<p>Task 15.2 adds holding-level unit actions: owner-only <code>append_investment_split</code> writes
+an exact holding-level unit delta and creates no lot; owner-only
+<code>append_investment_unit_transfer</code> writes a switch, systematic transfer or platform
+transfer as one paired out/in leg or neither, with no field for a charge, so an exit load or stamp
+duty fails closed by construction. <code>append_investment_transaction</code> additionally admits
+<code>bonus</code> (a zero-cost lot) and <code>rights</code> (a funded acquisition lot) through its
+existing boundary; it still refuses <code>split</code> and the six paired transfer kinds.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V39</code>.</p>
+<code>V30</code>–<code>V41</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0

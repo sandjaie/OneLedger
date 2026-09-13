@@ -722,6 +722,9 @@ DROP FUNCTION confirm_investment_cash_allocations(
   UUID[], UUID[], investment_cash_allocation_role[], NUMERIC[]);
 DROP TABLE investment_lot_allocation_decision;
 DROP TABLE investment_lot_allocation;
+-- Task 15.2's V41 trigger on investment_lot_allocation is gone with the table above; this
+-- removes the standalone function it called.
+DROP FUNCTION guard_investment_lot_allocation_requires_cash_disposal();
 DROP TABLE investment_cash_allocation;
 DROP FUNCTION guard_investment_lot_allocation_write();
 DROP TRIGGER trg_allocated_cash_classification_uses_operation ON transaction;
@@ -768,11 +771,26 @@ DROP TRIGGER trg_investment_unit_effect_is_immutable ON investment_unit_effect;
 DROP TRIGGER trg_acquisition_lot_uses_append ON acquisition_lot;
 DROP TRIGGER trg_acquisition_lot_is_immutable ON acquisition_lot;
 DROP TRIGGER trg_holding_write_is_derived ON holding;
+DROP TRIGGER trg_investment_transaction_order_guard ON investment_transaction;
+-- Task 15.2's dedicated split and paired-transfer operations, and the revoked core they and
+-- the widened append_investment_transaction share.
+DROP FUNCTION append_investment_split(
+  UUID, UUID, DATE, NUMERIC, investment_event_source, TEXT, TEXT, TEXT, TEXT, UUID, TEXT);
+DROP FUNCTION append_investment_unit_transfer(
+  investment_event_kind, DATE, UUID, UUID, NUMERIC, NUMERIC, NUMERIC, UUID, UUID, NUMERIC,
+  NUMERIC, NUMERIC, CHAR, investment_event_source, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT,
+  UUID, TEXT);
 DROP FUNCTION append_investment_transaction(
   UUID, UUID, DATE, investment_event_kind,
   NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, CHAR,
   DATE, NUMERIC, NUMERIC, NUMERIC, NUMERIC,
   investment_event_source, TEXT, TEXT, TEXT, TEXT, UUID, TEXT);
+DROP FUNCTION append_investment_event_core(
+  UUID, UUID, DATE, investment_event_kind,
+  NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, NUMERIC, CHAR,
+  DATE, NUMERIC, NUMERIC, NUMERIC, NUMERIC,
+  investment_event_source, TEXT, TEXT, TEXT, TEXT, UUID, TEXT, NUMERIC, UUID);
+DROP FUNCTION guard_investment_unit_event_order();
 DROP FUNCTION project_investment_transaction();
 DROP FUNCTION refresh_holding_projection(UUID);
 DROP FUNCTION investment_units_from_events(UUID);

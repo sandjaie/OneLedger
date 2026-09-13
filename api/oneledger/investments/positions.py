@@ -175,7 +175,10 @@ _POSITIONS = """
     WITH active_events AS (
         SELECT event.holding_id, effect.signed_units, event.net_amount, event.net_amount_base,
                event.net_amount_secondary,
-               event.event_kind IN ('purchase', 'recurring_purchase') AS is_acquisition
+               event.event_kind IN ('purchase', 'recurring_purchase', 'rights')
+                 AS is_contribution,
+               event.event_kind IN ('purchase', 'recurring_purchase', 'rights', 'bonus', 'split')
+                 AS is_gain_eligible
           FROM investment_transaction event
           LEFT JOIN investment_unit_effect effect
             ON effect.household_id = event.household_id
@@ -188,13 +191,13 @@ _POSITIONS = """
     ), totals AS (
         SELECT holding_id,
                COALESCE(sum(signed_units), 0)::numeric(28,8) AS units,
-               COALESCE(-sum(net_amount) FILTER (WHERE is_acquisition), 0)
+               COALESCE(-sum(net_amount) FILTER (WHERE is_contribution), 0)
                  ::numeric(20,4) AS contribution_native,
-               COALESCE(-sum(net_amount_base) FILTER (WHERE is_acquisition), 0)
+               COALESCE(-sum(net_amount_base) FILTER (WHERE is_contribution), 0)
                  ::numeric(20,4) AS contribution_base,
-               COALESCE(-sum(net_amount_secondary) FILTER (WHERE is_acquisition), 0)
+               COALESCE(-sum(net_amount_secondary) FILTER (WHERE is_contribution), 0)
                  ::numeric(20,4) AS contribution_secondary,
-               bool_and(is_acquisition) AS acquisition_only
+               bool_and(is_gain_eligible) AS gain_eligible
           FROM active_events GROUP BY holding_id
     )
     SELECT h.id, h.account_id, h.security_id, security.name, security.asset_class::text,
@@ -204,7 +207,7 @@ _POSITIONS = """
            EXISTS (SELECT FROM price_snapshot future
                     WHERE future.security_id = h.security_id
                       AND future.is_accepted AND future.price_date > %(as_of)s),
-           totals.acquisition_only
+           totals.gain_eligible
       FROM totals
       JOIN holding h ON h.household_id = %(household)s AND h.id = totals.holding_id
       JOIN account a ON a.household_id = h.household_id AND a.id = h.account_id
@@ -236,7 +239,11 @@ def read_positions(
     *,
     included_only: bool = False,
 ) -> list[AcquisitionPosition]:
-    """Value active unit leaves at accepted dated prices; gain only for purchase-only history."""
+    """Value active unit leaves at accepted dated prices.
+
+    Gain stays available across a purchase, rights, bonus or split history and is withheld by
+    any switch, systematic transfer or platform transfer leg, or by any disposal or income event.
+    """
     cur.execute(
         _POSITIONS,
         {"household": household_id, "as_of": as_of, "included_only": included_only},

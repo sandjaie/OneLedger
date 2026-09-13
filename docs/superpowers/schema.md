@@ -2198,6 +2198,58 @@ event's own successor lots are allocated or consumed by another active lineage e
 
 ---
 
+## `V41` (applied)
+
+### Holding-level unit actions
+
+V41 moves the V37 append body into revoked `append_investment_event_core` (the 23 existing
+arguments plus `p_unit_ratio` and `p_counterpart_transaction_id`, both joining the exact-replay
+identity tuple); ratio is checked at scale 10 before storage. The unchanged 23-argument
+`append_investment_transaction` calls it, now additionally admitting `bonus` and `rights`, and
+still refuses `split` and the six paired transfer kinds. `investment_event_kind_fields_agree` now
+requires a split to carry a non-zero `units` delta and a positive non-unity `unit_ratio`, with no
+price, gross or cash — the delta is a genuine holding-level unit effect, not a null placeholder.
+
+Owner-only `append_investment_split` returns an exact replay before any check; locks the holding;
+raises `investment_split_is_latest` when an active unit-affecting event in the holding is dated
+after the split (or after the split it corrects, using the corrected event's own date); and writes
+`units` as the holding's units excluding any corrected split, times `(ratio − 1)`, raising
+`investment_split_units_are_exact` unless that product is exact at scale 8. It creates no lot.
+
+Owner-only `append_investment_unit_transfer` accepts `switch_out`, `systematic_transfer_out` or
+`platform_transfer_out`, returns an exact pair replay before any check, locks both accounts in UUID
+order, and writes the out leg then the in leg naming it as counterpart, or neither. Switch and
+systematic legs share an account, differ in security and carry equal gross value; platform legs
+share a security, differ in account and carry opposite units; any other shape raises
+`investment_unit_transfer_pair_agrees`. The function has no charges or withheld-tax argument, so a
+switch carrying an exit load or stamp duty fails closed by construction. A correction replaces both
+legs together, identified from the out leg's `corrects_transaction_id` and the retained in leg's
+`counterpart_transaction_id`.
+
+`investment_lot_lineage_available` now also treats an active `switch_in`, `switch_out`,
+`systematic_transfer_in`, `systematic_transfer_out`, `platform_transfer_in` or
+`platform_transfer_out` leg as unavailable from its date, alongside the existing split rule, so
+`investment_open_lots`, `allocate_investment_lots_v33` and checkpoint cost withholding
+(`staging.py`) agree on exactly the same holdings and dates. A new `BEFORE INSERT` trigger on
+`investment_lot_allocation` independently raises `investment_lot_allocation_requires_cash_disposal`
+for a switch/systematic/platform leg or whenever lineage is unavailable as of the disposal's date —
+the same invariant `allocate_investment_lots_v33` already enforces before any insert, now also
+reachable from a direct write.
+
+`positions.py` widens the cumulative-contribution kinds to include `rights` (a funded acquisition)
+and widens the gain-eligible kinds to `purchase`, `recurring_purchase`, `rights`, `bonus` and
+`split`; any switch, systematic transfer or platform transfer leg — like any disposal or income
+event before it — withholds the simple contribution-based gain estimate for that holding.
+`staging.py` distinguishes two causes of checkpoint cost unavailability: a real disposal with
+incomplete lot evidence still opens a non-blocking `incomplete_lot_allocation` review and stays
+pending, while a holding-level corporate action withholds cost silently — the checkpoint still
+matches once its reported units (if any) agree, with no review.
+
+No Phase 1.6 action yet creates a successor lot or selects a transferred lot;
+`acquisition_lot.predecessor_lot_id` stays null until a later task fills it in.
+
+---
+
 ## `0013`
 
 ### Loans

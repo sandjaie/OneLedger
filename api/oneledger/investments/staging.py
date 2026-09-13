@@ -897,7 +897,15 @@ def _checkpoint_actuals(
     account_id: UUID,
     security_id: UUID,
     as_of_date: date,
-) -> tuple[UUID | None, Decimal, Decimal | None]:
+) -> tuple[UUID | None, Decimal, Decimal | None, bool]:
+    """Return (holding, units, cost, cost_withheld_by_corporate_action).
+
+    Cost is None either because a real disposal still lacks complete lot evidence (an
+    ``incomplete_lot_allocation`` review is warranted) or because an active split, switch,
+    systematic transfer or platform transfer has made per-lot basis unavailable from its date
+    (no review: the checkpoint still matches on units alone). The fourth element distinguishes
+    the two so the caller never conflates them.
+    """
     cur.execute(
         """SELECT id FROM holding
              WHERE household_id = %s AND account_id = %s AND security_id = %s
@@ -906,7 +914,7 @@ def _checkpoint_actuals(
     )
     row = cur.fetchone()
     if row is None:
-        return None, Decimal(0), Decimal(0)
+        return None, Decimal(0), Decimal(0), False
     holding_id = UUID(str(row[0]))
     cur.execute(
         """SELECT coalesce(sum(effect.signed_units), 0)
@@ -923,6 +931,14 @@ def _checkpoint_actuals(
         (household_id, holding_id, as_of_date),
     )
     units = Decimal(cur.fetchone()[0])  # type: ignore[index]
+    # Lineage availability is checked before allocation completeness: a switch, systematic
+    # transfer or platform transfer leg is never allocated (a table trigger refuses it), so
+    # counting it among "disposals needing evidence" would always find it incomplete and open
+    # a spurious review; a split with no successor lot has the same effect on a later disposal
+    # in the same holding. Both cases withhold cost silently instead.
+    cur.execute("SELECT investment_lot_lineage_available(%s, %s)", (holding_id, as_of_date))
+    if not bool(cur.fetchone()[0]):  # type: ignore[index]
+        return holding_id, units, None, True
     cur.execute(
         """SELECT event.id, abs(event.units)
              FROM investment_transaction event
@@ -981,16 +997,13 @@ def _checkpoint_actuals(
         for disposal_id, disposed_units in disposals
     ) and set(allocations_by_lot).issubset(active_lot_ids)
     if not complete:
-        return holding_id, units, None
-    cur.execute("SELECT investment_lot_lineage_available(%s, %s)", (holding_id, as_of_date))
-    if not bool(cur.fetchone()[0]):  # type: ignore[index]
-        return holding_id, units, None
+        return holding_id, units, None, False
     cur.execute(
         "SELECT COALESCE(sum(open_basis_native), 0) FROM investment_open_lots(%s, %s)",
         (holding_id, as_of_date),
     )
     cost = Decimal(cur.fetchone()[0])  # type: ignore[index]
-    return holding_id, units, cost
+    return holding_id, units, cost, False
 
 
 def reconcile_staged_checkpoints(
@@ -1035,12 +1048,14 @@ def reconcile_staged_checkpoints(
                     continue
                 account_id = UUID(str(checkpoint[2]))
                 security_id = UUID(str(checkpoint[3]))
-                holding_id, actual_units, actual_cost = _checkpoint_actuals(
-                    cur,
-                    owner.household_id,
-                    account_id,
-                    security_id,
-                    checkpoint[4],
+                holding_id, actual_units, actual_cost, cost_withheld_by_action = (
+                    _checkpoint_actuals(
+                        cur,
+                        owner.household_id,
+                        account_id,
+                        security_id,
+                        checkpoint[4],
+                    )
                 )
                 unit_mismatch = checkpoint[5] is not None and (
                     holding_id is None
@@ -1054,11 +1069,25 @@ def reconcile_staged_checkpoints(
                         != Decimal(checkpoint[6])
                     )
                 )
+                # Genuinely incomplete lot evidence still opens a review and stays pending; a
+                # holding-level corporate action withholds cost silently — no review, and the
+                # checkpoint still matches once its units (if reported) agree.
                 cost_unavailable = (
-                    checkpoint[6] is not None and holding_id is not None and actual_cost is None
+                    checkpoint[6] is not None
+                    and holding_id is not None
+                    and actual_cost is None
+                    and not cost_withheld_by_action
                 )
-                compared = checkpoint[5] is not None or (
-                    checkpoint[6] is not None and actual_cost is not None
+                cost_withheld_no_review = (
+                    checkpoint[6] is not None
+                    and holding_id is not None
+                    and actual_cost is None
+                    and cost_withheld_by_action
+                )
+                compared = (
+                    checkpoint[5] is not None
+                    or (checkpoint[6] is not None and actual_cost is not None)
+                    or cost_withheld_no_review
                 )
                 next_status = (
                     "mismatched"
