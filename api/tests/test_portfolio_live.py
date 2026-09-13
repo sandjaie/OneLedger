@@ -385,3 +385,37 @@ def test_fully_disposed_holding_is_absent_from_current_value(
 
     assert _positions()["positions"] == []
     assert len(_positions(date(2026, 2, 1))["positions"]) == 1
+
+
+def test_cash_only_event_withholds_contribution_gain(
+    position_live: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropping unit-less events from the scan would report value less purchases as gain."""
+    monkeypatch.setattr(cash_lifecycle, "connect", connect_to_test_database)
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 1), "6.000000")
+    response = _client().post(
+        "/investment-events/cash-lifecycle",
+        json={
+            "accountId": str(position_live.account_id),
+            "securityId": str(position_live.security_id),
+            "eventDate": "2026-02-02",
+            "eventKind": "charge",
+            "units": None,
+            "price": None,
+            "grossAmount": None,
+            "charges": "1.2500",
+            "withheldTax": "0.0000",
+            "netAmount": "-1.2500",
+            "currency": position_live.currency,
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+
+    [row] = _positions()["positions"]
+
+    assert (row["units"], row["currentValueNative"]) == ("4.00000000", "24.0000")
+    assert row["cumulativeContributionsNative"] == "21.0000"
+    assert (row["gainNative"], row["gainBase"], row["gainSecondary"]) == (None, None, None)
