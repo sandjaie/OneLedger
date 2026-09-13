@@ -855,6 +855,16 @@ use the same fixed blocking/advisory matrix, and a group with an open blocking i
 marked ready or committed. Once attached, the draft or checkpoint's typed source facts cannot be
 edited in place; later resolution may identify its account, security or holding and advance its
 lifecycle without rewriting what the source stated.</p>
+<p><code>POST /investment-imports/parse</code> is the authenticated application boundary for this
+shape. Preview is the default and writes neither a blob nor a row. Its optional resolution JSON
+contains only source group numbers and explicit account/security UUIDs; staging re-reads the PDF,
+validates those UUIDs, and never accepts previewed facts from the browser. The bounded response
+shows at most fifty groups with complete totals and exact decimal strings, but excludes filenames,
+raw rows, complete identifiers, private security references, correlations, source-event identities
+and fingerprints. A first stage stores the original blob and creates the document and import rows
+in one database transaction; a later database refusal may leave only that inert content-addressed
+blob. Exact replay is idempotent, changed replay conflicts, and owner-scoped cancellation is
+idempotent and terminal while retaining provenance.</p>
 <hr>
 <h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
 <p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because

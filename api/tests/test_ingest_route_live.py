@@ -12,11 +12,13 @@ Skipped when no database is reachable. Every figure is invented.
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -26,6 +28,7 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
+from .fixtures.investment_pdf import InvestmentEventLine, build_detailed_investment_pdf
 from .fixtures.synthetic_pdf import Placement, build_pdf
 from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
@@ -113,17 +116,28 @@ def _clean(cur: psycopg.Cursor[Any]) -> None:
     # `classification_rule` joins the list with slice 1.3: a staged batch now arrives
     # pre-classified, so a rule left behind by one test decides the rows of the next — which is
     # exactly how three tests in this file first failed.
-    cur.execute("TRUNCATE staged_transaction, import_batch, document, transaction CASCADE")
+    cur.execute(
+        """TRUNCATE investment_evidence, investment_review_item,
+                         investment_position_checkpoint, investment_event_draft,
+                         investment_import_group, investment_import,
+                         staged_transaction, import_batch, document, transaction CASCADE"""
+    )
     cur.execute("DELETE FROM classification_rule")
     cur.execute("DELETE FROM statement_layout")
     cur.execute(
         """DELETE FROM account_identifier ai USING account a
-             WHERE ai.account_id = a.id AND a.name = 'route test'"""
+             WHERE ai.account_id = a.id
+               AND a.name IN ('route test', 'investment route test')"""
     )
     clear_synthetic_account_valuation_periods(cur)
-    cur.execute("DELETE FROM account WHERE name = 'route test'")
+    cur.execute("DELETE FROM security WHERE name LIKE 'Synthetic route security%'")
+    cur.execute("DELETE FROM account WHERE name IN ('route test', 'investment route test')")
+    cur.execute("DELETE FROM account WHERE name = 'foreign investment route test'")
     cur.execute("DELETE FROM institution WHERE name = 'Acme Bank'")
     cur.execute("DELETE FROM fx_rate WHERE source = 'manual'")
+    cur.execute("DELETE FROM app_user WHERE email LIKE 'route-other-%@example.invalid'")
+    cur.execute("DELETE FROM person WHERE display_name = 'route other owner'")
+    cur.execute("DELETE FROM household WHERE name = 'route other household'")
 
 
 class Fixture:
@@ -148,6 +162,25 @@ class Fixture:
             self.household_id, self.base, self.secondary = row[0], row[1], row[2]
             person = (row[3],)
             cur.execute(
+                "SELECT id FROM app_user WHERE household_id = %s AND person_id = %s LIMIT 1",
+                (self.household_id, person[0]),
+            )
+            user = cur.fetchone()
+            if user is None:
+                cur.execute(
+                    """INSERT INTO app_user (id, household_id, person_id, email, role)
+                       VALUES (%s, %s, %s, %s, 'owner') RETURNING id""",
+                    (
+                        uuid4(),
+                        self.household_id,
+                        person[0],
+                        f"route-owner-{self.household_id.hex[:8]}@example.invalid",
+                    ),
+                )
+                user = cur.fetchone()
+            assert user is not None
+            self.user_id = user[0]
+            cur.execute(
                 """INSERT INTO institution
                        (household_id, name, short_name, country, institution_type)
                      VALUES (%s, 'Acme Bank', 'Acme', 'ZZ', 'bank') RETURNING id""",
@@ -171,6 +204,79 @@ class Fixture:
                              'owner_entered')""",
                 (self.household_id, self.account_id, ACCOUNT_NUMBER, ACCOUNT_NUMBER),
             )
+
+            cur.execute(
+                """INSERT INTO account (
+                       household_id, owner_person_id, name, account_type, currency, country,
+                       opening_balance, opening_balance_date)
+                   VALUES (%s, %s, 'investment route test', 'mutual_fund_folio', %s, 'ZZ',
+                           0, DATE '2026-01-01') RETURNING id""",
+                (self.household_id, person[0], self.base),
+            )
+            self.investment_account_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO account_identifier (
+                       household_id, account_id, kind, masked_value, visible_suffix,
+                       full_value, normalized_value, provenance)
+                   VALUES (%s, %s, 'folio', '****A1B2', 'A1B2',
+                           'SYNTHETICFOLIOA1B2', 'SYNTHETICFOLIOA1B2', 'owner_entered')""",
+                (self.household_id, self.investment_account_id),
+            )
+            cur.execute(
+                """INSERT INTO security (
+                       household_id, security_type, name, currency, country, asset_class)
+                   VALUES (%s, 'mutual_fund', 'Synthetic route security', %s, 'ZZ', 'equity')
+                   RETURNING id""",
+                (self.household_id, self.base),
+            )
+            self.security_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO security (
+                       household_id, security_type, name, currency, country, asset_class)
+                   VALUES (%s, 'mutual_fund', 'Synthetic route security second', %s, 'ZZ',
+                           'equity') RETURNING id""",
+                (self.household_id, self.base),
+            )
+            self.second_security_id = cur.fetchone()[0]  # type: ignore[index]
+
+            self.other_household_id, other_person_id, self.other_user_id = uuid4(), uuid4(), uuid4()
+            cur.execute(
+                """INSERT INTO household (id, name, base_currency, secondary_currency)
+                   VALUES (%s, 'route other household', %s, %s)""",
+                (self.other_household_id, self.base, self.secondary),
+            )
+            cur.execute(
+                """INSERT INTO person (id, household_id, display_name, is_self)
+                   VALUES (%s, %s, 'route other owner', true)""",
+                (other_person_id, self.other_household_id),
+            )
+            cur.execute(
+                """INSERT INTO app_user (id, household_id, person_id, email, role)
+                   VALUES (%s, %s, %s, %s, 'owner')""",
+                (
+                    self.other_user_id,
+                    self.other_household_id,
+                    other_person_id,
+                    f"route-other-{self.other_household_id.hex[:8]}@example.invalid",
+                ),
+            )
+            cur.execute(
+                """INSERT INTO account (
+                       household_id, owner_person_id, name, account_type, currency, country,
+                       opening_balance, opening_balance_date)
+                   VALUES (%s, %s, 'foreign investment route test', 'brokerage', %s, 'ZZ',
+                           0, DATE '2026-01-01') RETURNING id""",
+                (self.other_household_id, other_person_id, self.base),
+            )
+            self.other_account_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO security (
+                       household_id, security_type, name, currency, country, asset_class)
+                   VALUES (%s, 'mutual_fund', 'Synthetic route security foreign', %s, 'ZZ',
+                           'equity') RETURNING id""",
+                (self.other_household_id, self.base),
+            )
+            self.other_security_id = cur.fetchone()[0]  # type: ignore[index]
 
             cur.execute(
                 """INSERT INTO statement_layout
@@ -206,7 +312,7 @@ class Fixture:
 
     def owner(self) -> auth.OwnerSession:
         return auth.OwnerSession(
-            user_id=UUID(int=1),
+            user_id=self.user_id,
             household_id=self.household_id,
             session_id=UUID(int=3),
             email="o@e.com",
@@ -229,6 +335,14 @@ class Fixture:
                 found[table] = cur.fetchone()[0]  # type: ignore[index]
             return found
 
+    def investment_counts(self) -> dict[str, int]:
+        with self.conn.cursor() as cur:
+            found = {}
+            for table in ("document", "investment_import", "investment_event_draft"):
+                cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 - fixed table names
+                found[table] = cur.fetchone()[0]  # type: ignore[index]
+            return found
+
 
 @pytest.fixture
 def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
@@ -244,6 +358,7 @@ def live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Fixture]:
         yield fixture
     finally:
         app.dependency_overrides.clear()
+        conn.rollback()
         with conn.cursor() as cur:
             _clean(cur)
         conn.commit()
@@ -600,3 +715,338 @@ def test_a_currency_column_that_is_not_a_code_fails_its_row_rather_than_the_requ
         "original_currency is not a three-letter code"
     ]
     assert "EURO" not in response.text, "the refusal names the field, never the cell"
+
+
+def _investment_statement(currency: str, *, security: str = "SYNTHETIC-SECURITY-A") -> bytes:
+    return build_detailed_investment_pdf(
+        [
+            InvestmentEventLine(
+                "2026-03-01",
+                "PURCHASE",
+                "1.23456789",
+                "10.123456",
+                "12.4999",
+                "0.0001",
+                "0.0000",
+                "-12.5000",
+                currency,
+                "PRIVATE-SOURCE-EVENT",
+            )
+        ],
+        security_reference=security,
+    )
+
+
+def _investment_resolutions(live: Fixture, **changes: object) -> str:
+    resolution: dict[str, object] = {
+        "sourceGroupNumber": 1,
+        "accountId": str(live.investment_account_id),
+        "securityId": str(live.security_id),
+    }
+    resolution.update(changes)
+    return json.dumps([resolution])
+
+
+def _investment_post(live: Fixture, pdf: bytes, **form: str) -> httpx.Response:
+    return TestClient(app).post(
+        "/investment-imports/parse",
+        files={"file": ("private-4111-1111-1111-9876.pdf", pdf)},
+        data=form,
+        headers=ORIGIN,
+    )
+
+
+def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixture) -> None:
+    private_security = "ＳＥＣＵＲＩＴＹ ١٢٣٤٥٦٧٨"
+    response = _investment_post(live, _investment_statement(live.base, security=private_security))
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "supported": True,
+        "staged": False,
+        "importId": None,
+        "status": "preview",
+        "groups": [
+            {
+                "groupNumber": 1,
+                "stageable": False,
+                "targets": [
+                    {
+                        "sourceGroupNumber": 1,
+                        "accountId": None,
+                        "securityId": None,
+                        "accountMask": None,
+                        "drafts": [
+                            {
+                                "eventDate": "2026-03-01",
+                                "eventKind": "purchase",
+                                "units": "1.23456789",
+                                "unitRatio": None,
+                                "price": "10.123456",
+                                "grossAmount": "12.4999",
+                                "charges": "0.0001",
+                                "withheldTax": "0.0000",
+                                "netAmount": "-12.5000",
+                                "currency": live.base,
+                                "pageNumber": 1,
+                                "rowNumber": 6,
+                            }
+                        ],
+                        "checkpoints": [],
+                        "reasons": [],
+                    }
+                ],
+                "reasons": [],
+            }
+        ],
+        "reasons": [],
+        "totalGroupCount": 1,
+        "totalDraftCount": 1,
+        "totalBlockerCount": 0,
+        "previewTruncated": False,
+    }
+    assert private_security not in response.text
+    assert "PRIVATE-SOURCE-EVENT" not in response.text
+    assert "4111" not in response.text and "9876" not in response.text
+    assert live.investment_counts() == {
+        "document": 0,
+        "investment_import": 0,
+        "investment_event_draft": 0,
+    }
+
+
+def test_investment_resolved_preview_returns_only_uuid_and_safe_mask(live: Fixture) -> None:
+    response = _investment_post(
+        live,
+        _investment_statement(live.base),
+        resolutions=_investment_resolutions(live),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    target = body["groups"][0]["targets"][0]
+    assert body["staged"] is False and body["status"] == "preview"
+    assert body["groups"][0]["stageable"] is True
+    assert target["accountId"] == str(live.investment_account_id)
+    assert target["securityId"] == str(live.security_id)
+    assert target["accountMask"] == "****A1B2"
+    assert live.investment_counts()["document"] == 0
+
+
+def test_investment_routes_require_the_authenticated_owner(live: Fixture) -> None:
+    app.dependency_overrides.clear()
+    try:
+        preview = _investment_post(live, _investment_statement(live.base))
+        cancel = TestClient(app).post(f"/investment-imports/{uuid4()}/cancel", headers=ORIGIN)
+    finally:
+        app.dependency_overrides[auth.require_owner] = live.owner
+
+    assert preview.status_code == cancel.status_code == 401
+
+
+def test_investment_stage_reextracts_and_identical_retry_reuses_rows(live: Fixture) -> None:
+    pdf = _investment_statement(live.base)
+    form = {"stage": "true", "resolutions": _investment_resolutions(live)}
+
+    first = _investment_post(live, pdf, **form)
+    retried = _investment_post(live, pdf, **form)
+
+    assert first.status_code == 201, first.text
+    assert retried.status_code == 200, retried.text
+    assert first.json()["importId"] == retried.json()["importId"]
+    assert first.json()["status"] == retried.json()["status"] == "staged"
+    assert first.json()["staged"] is True and retried.json()["staged"] is True
+    assert live.investment_counts() == {
+        "document": 1,
+        "investment_import": 1,
+        "investment_event_draft": 1,
+    }
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT units::text, price::text, net_amount::text FROM investment_event_draft")
+        assert cur.fetchone() == ("1.23456789", "10.123456", "-12.5000")
+
+
+def test_investment_stage_response_uses_persisted_blocker_state(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from oneledger.investments.staging import StagedGroupResult, StagedImportResult
+    from oneledger.routes import investment_imports
+
+    import_id, group_id = uuid4(), uuid4()
+    monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        investment_imports,
+        "_document",
+        lambda *_args, **_kwargs: StagedImportResult(
+            import_id,
+            "awaiting_review",
+            (group_id,),
+            True,
+            (StagedGroupResult(1, "blocked", ("duplicate_conflict",)),),
+        ),
+    )
+
+    response = _investment_post(
+        live,
+        _investment_statement(live.base),
+        stage="true",
+        resolutions=_investment_resolutions(live),
+    )
+
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["status"] == "awaiting_review"
+    assert body["groups"][0]["stageable"] is False
+    assert body["groups"][0]["reasons"] == [
+        {"code": "duplicate_conflict", "pageNumber": None, "rowNumber": None}
+    ]
+    assert body["totalBlockerCount"] == 1
+
+
+@pytest.mark.parametrize(
+    "resolutions",
+    [
+        "{}",
+        "not-json",
+        '[{"sourceGroupNumber":true,"accountId":"00000000-0000-0000-0000-000000000001",'
+        '"securityId":"00000000-0000-0000-0000-000000000002"}]',
+        '[{"sourceGroupNumber":2,"accountId":"00000000-0000-0000-0000-000000000001",'
+        '"securityId":"00000000-0000-0000-0000-000000000002"}]',
+        '[{"sourceGroupNumber":1,"accountId":"00000000-0000-0000-0000-000000000001",'
+        '"securityId":"00000000-0000-0000-0000-000000000002"},'
+        '{"sourceGroupNumber":1,"accountId":"00000000-0000-0000-0000-000000000003",'
+        '"securityId":"00000000-0000-0000-0000-000000000004"}]',
+        '[{"sourceGroupNumber":1,"accountId":"private-value","securityId":"private-value"}]',
+        '[{"sourceGroupNumber":1,"accountId":"00000000-0000-0000-0000-000000000001",'
+        '"securityId":"00000000-0000-0000-0000-000000000002","extra":"PRIVATE"}]',
+    ],
+)
+def test_investment_resolution_json_is_strict_and_never_echoed(
+    live: Fixture, resolutions: str
+) -> None:
+    response = _investment_post(
+        live, _investment_statement(live.base), stage="true", resolutions=resolutions
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "investment target resolutions are invalid"}
+    assert "private-value" not in response.text and "PRIVATE" not in response.text
+    assert live.investment_counts()["document"] == 0
+
+
+def test_investment_invalid_or_stale_target_fails_without_changing_rows(live: Fixture) -> None:
+    pdf = _investment_statement(live.base)
+    invalid = _investment_post(
+        live,
+        pdf,
+        stage="true",
+        resolutions=_investment_resolutions(
+            live,
+            accountId=str(live.other_account_id),
+            securityId=str(live.other_security_id),
+        ),
+    )
+    assert invalid.status_code == 422
+    assert invalid.json() == {"detail": "investment target is invalid"}
+    assert str(live.other_account_id) not in invalid.text
+    assert live.investment_counts()["document"] == 0
+
+    accepted = _investment_post(live, pdf, stage="true", resolutions=_investment_resolutions(live))
+    changed = _investment_post(
+        live,
+        pdf,
+        stage="true",
+        resolutions=_investment_resolutions(live, securityId=str(live.second_security_id)),
+    )
+    assert accepted.status_code == 201
+    assert changed.status_code == 409
+    assert changed.json() == {"detail": "investment import retry conflicts"}
+    assert live.investment_counts()["investment_event_draft"] == 1
+
+
+def test_investment_cancel_is_owner_scoped_idempotent_and_terminal(live: Fixture) -> None:
+    pdf = _investment_statement(live.base)
+    staged = _investment_post(
+        live, pdf, stage="true", resolutions=_investment_resolutions(live)
+    ).json()
+    import_id = staged["importId"]
+    client = TestClient(app)
+
+    first = client.post(f"/investment-imports/{import_id}/cancel", headers=ORIGIN)
+    second = client.post(f"/investment-imports/{import_id}/cancel", headers=ORIGIN)
+    retry = _investment_post(live, pdf, stage="true", resolutions=_investment_resolutions(live))
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert first.json()["status"] == "cancelled"
+    assert retry.status_code == 409
+    assert retry.json() == {"detail": "investment import is terminal"}
+
+    app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
+        live.other_user_id,
+        live.other_household_id,
+        uuid4(),
+        "other@example.invalid",
+    )
+    try:
+        foreign = client.post(f"/investment-imports/{import_id}/cancel", headers=ORIGIN)
+    finally:
+        app.dependency_overrides[auth.require_owner] = live.owner
+    assert foreign.status_code == 404
+    assert foreign.json() == {"detail": "investment import not found"}
+
+
+def test_investment_storage_and_late_database_failures_are_atomic(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from oneledger.routes import investment_imports
+
+    pdf = _investment_statement(live.base)
+    form = {"stage": "true", "resolutions": _investment_resolutions(live)}
+    monkeypatch.setattr(
+        investment_imports.storage,
+        "store",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            investment_imports.storage.StorageError("investment document could not be stored")
+        ),
+    )
+    failed_storage = _investment_post(live, pdf, **form)
+    assert failed_storage.status_code == 422
+    assert live.investment_counts()["document"] == 0
+
+    monkeypatch.undo()
+    monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        investment_imports,
+        "stage_prepared_import_in_transaction",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(psycopg.IntegrityError()),
+    )
+    failed_database = _investment_post(live, pdf, **form)
+    assert failed_database.status_code == 422
+    assert failed_database.json() == {"detail": "investment import could not be staged"}
+    assert live.investment_counts()["document"] == 0
+    assert list(tmp_path.rglob("*.pdf")), "the only permitted residue is the inert blob"
+
+
+def test_investment_retry_and_cancel_are_serialized(live: Fixture) -> None:
+    pdf = _investment_statement(live.base)
+    form = {"stage": "true", "resolutions": _investment_resolutions(live)}
+    import_id = _investment_post(live, pdf, **form).json()["importId"]
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        retry_future = pool.submit(_investment_post, live, pdf, **form)
+        cancel_future = pool.submit(
+            TestClient(app).post,
+            f"/investment-imports/{import_id}/cancel",
+            headers=ORIGIN,
+        )
+        retry, cancelled = retry_future.result(), cancel_future.result()
+
+    assert retry.status_code in {200, 409}
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT status::text FROM investment_import WHERE id = %s", (import_id,))
+        assert cur.fetchone() == ("cancelled",)
+        cur.execute("SELECT count(*) FROM investment_event_draft")
+        assert cur.fetchone() == (1,)

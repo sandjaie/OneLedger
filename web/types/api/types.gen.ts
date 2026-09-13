@@ -644,6 +644,28 @@ export type BodyConfirmStatementAccountParseAccountPost = {
 };
 
 /**
+ * Body_parse_investment_statement_investment_imports_parse_post
+ */
+export type BodyParseInvestmentStatementInvestmentImportsParsePost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Stage
+     */
+    stage?: boolean;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Resolutions
+     */
+    resolutions?: string;
+};
+
+/**
  * Body_parse_statement_parse_post
  */
 export type BodyParseStatementParsePost = {
@@ -891,6 +913,44 @@ export type CategoryUpdate = {
      * Isactive
      */
     isActive: boolean;
+};
+
+/**
+ * CheckpointResponse
+ */
+export type CheckpointResponse = {
+    /**
+     * Asofdate
+     */
+    asOfDate: string;
+    /**
+     * Reportedunits
+     */
+    reportedUnits: string | null;
+    /**
+     * Reportedcostnative
+     */
+    reportedCostNative: string | null;
+    /**
+     * Reportedvaluenative
+     */
+    reportedValueNative: string | null;
+    /**
+     * Currency
+     */
+    currency: string | null;
+    /**
+     * Declaredunitscale
+     */
+    declaredUnitScale: number | null;
+    /**
+     * Pagenumber
+     */
+    pageNumber: number;
+    /**
+     * Rownumber
+     */
+    rowNumber: number;
 };
 
 /**
@@ -1350,6 +1410,57 @@ export type DocumentIdentityPreview = {
 };
 
 /**
+ * DraftResponse
+ */
+export type DraftResponse = {
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    eventKind: InvestmentEventKind;
+    /**
+     * Units
+     */
+    units: string | null;
+    /**
+     * Unitratio
+     */
+    unitRatio: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Pagenumber
+     */
+    pageNumber: number;
+    /**
+     * Rownumber
+     */
+    rowNumber: number;
+};
+
+/**
  * Finding
  */
 export type Finding = {
@@ -1521,6 +1632,28 @@ export type FxRateResponse = {
      * Carried From
      */
     carried_from: string | null;
+};
+
+/**
+ * GroupResponse
+ */
+export type GroupResponse = {
+    /**
+     * Groupnumber
+     */
+    groupNumber: number;
+    /**
+     * Stageable
+     */
+    stageable: boolean;
+    /**
+     * Targets
+     */
+    targets: Array<TargetResponse>;
+    /**
+     * Reasons
+     */
+    reasons: Array<ReasonResponse>;
 };
 
 /**
@@ -1888,6 +2021,20 @@ export type InstitutionRow = {
 };
 
 /**
+ * InvestmentCancelResponse
+ */
+export type InvestmentCancelResponse = {
+    /**
+     * Importid
+     */
+    importId: string;
+    /**
+     * Status
+     */
+    status: 'cancelled';
+};
+
+/**
  * InvestmentCoverage
  */
 export type InvestmentCoverage = {
@@ -1928,6 +2075,8 @@ export type InvestmentCoverage = {
      */
     confidence: 'high' | 'medium' | 'low' | null;
 };
+
+export type InvestmentEventKind = 'purchase' | 'recurring_purchase' | 'sale' | 'redemption' | 'maturity' | 'cash_distribution' | 'interest' | 'reinvested_distribution' | 'charge' | 'withheld_tax' | 'switch_in' | 'switch_out' | 'systematic_transfer_in' | 'systematic_transfer_out' | 'split' | 'bonus' | 'rights' | 'platform_transfer_in' | 'platform_transfer_out';
 
 /**
  * InvestmentEventRow
@@ -2022,6 +2171,52 @@ export type InvestmentEventRow = {
      */
     currentUnits: string;
     lot: AcquisitionLotRow;
+};
+
+/**
+ * InvestmentParseResponse
+ */
+export type InvestmentParseResponse = {
+    /**
+     * Supported
+     */
+    supported: boolean;
+    /**
+     * Staged
+     */
+    staged: boolean;
+    /**
+     * Importid
+     */
+    importId: string | null;
+    /**
+     * Status
+     */
+    status: 'preview' | 'staged' | 'awaiting_review' | 'partially_committed' | 'completed' | 'cancelled' | 'failed';
+    /**
+     * Groups
+     */
+    groups: Array<GroupResponse>;
+    /**
+     * Reasons
+     */
+    reasons: Array<ReasonResponse>;
+    /**
+     * Totalgroupcount
+     */
+    totalGroupCount: number;
+    /**
+     * Totaldraftcount
+     */
+    totalDraftCount: number;
+    /**
+     * Totalblockercount
+     */
+    totalBlockerCount: number;
+    /**
+     * Previewtruncated
+     */
+    previewTruncated: boolean;
 };
 
 /**
@@ -3180,6 +3375,21 @@ export type RateUsed = {
 export type Reason = 'complete_identity' | 'source_mask_only' | 'identity_missing' | 'capture_conflict' | 'institution_unresolved' | 'account_mismatch' | 'layout_provenance_missing' | 'layout_unsupported' | 'storage_unsupported' | 'source_path_invalid' | 'source_unreadable' | 'source_hash_mismatch' | 'password_required_or_invalid';
 
 /**
+ * ReasonResponse
+ */
+export type ReasonResponse = {
+    code: ReviewReason;
+    /**
+     * Pagenumber
+     */
+    pageNumber: number | null;
+    /**
+     * Rownumber
+     */
+    rowNumber: number | null;
+};
+
+/**
  * Reconciliation
  *
  * `reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.
@@ -3377,6 +3587,8 @@ export type ReviewPeriod = {
      */
     isDerived: boolean | null;
 };
+
+export type ReviewReason = 'unsupported_format' | 'unknown_security' | 'ambiguous_account' | 'ambiguous_identifier' | 'unrecognized_event' | 'duplicate_conflict' | 'unit_mismatch' | 'cost_mismatch' | 'missing_price' | 'unmatched_cash' | 'incomplete_lot_allocation' | 'stale_valuation';
 
 /**
  * ReviewRow
@@ -3829,6 +4041,40 @@ export type SkippedStatement = {
      * Reason
      */
     reason: string;
+};
+
+/**
+ * TargetResponse
+ */
+export type TargetResponse = {
+    /**
+     * Sourcegroupnumber
+     */
+    sourceGroupNumber: number;
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Securityid
+     */
+    securityId: string | null;
+    /**
+     * Accountmask
+     */
+    accountMask: string | null;
+    /**
+     * Drafts
+     */
+    drafts: Array<DraftResponse>;
+    /**
+     * Checkpoints
+     */
+    checkpoints: Array<CheckpointResponse>;
+    /**
+     * Reasons
+     */
+    reasons: Array<ReasonResponse>;
 };
 
 /**
@@ -5945,6 +6191,65 @@ export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactio
 };
 
 export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponse = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses];
+
+export type ParseInvestmentStatementInvestmentImportsParsePostData = {
+    body: BodyParseInvestmentStatementInvestmentImportsParsePost;
+    path?: never;
+    query?: never;
+    url: '/investment-imports/parse';
+};
+
+export type ParseInvestmentStatementInvestmentImportsParsePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ParseInvestmentStatementInvestmentImportsParsePostError = ParseInvestmentStatementInvestmentImportsParsePostErrors[keyof ParseInvestmentStatementInvestmentImportsParsePostErrors];
+
+export type ParseInvestmentStatementInvestmentImportsParsePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvestmentParseResponse;
+    /**
+     * Import staged
+     */
+    201: InvestmentParseResponse;
+};
+
+export type ParseInvestmentStatementInvestmentImportsParsePostResponse = ParseInvestmentStatementInvestmentImportsParsePostResponses[keyof ParseInvestmentStatementInvestmentImportsParsePostResponses];
+
+export type CancelInvestmentImportInvestmentImportsImportIdCancelPostData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/investment-imports/{import_id}/cancel';
+};
+
+export type CancelInvestmentImportInvestmentImportsImportIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelInvestmentImportInvestmentImportsImportIdCancelPostError = CancelInvestmentImportInvestmentImportsImportIdCancelPostErrors[keyof CancelInvestmentImportInvestmentImportsImportIdCancelPostErrors];
+
+export type CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvestmentCancelResponse;
+};
+
+export type CancelInvestmentImportInvestmentImportsImportIdCancelPostResponse = CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses[keyof CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;

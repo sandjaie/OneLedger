@@ -22,13 +22,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date
-from pathlib import Path
-from shutil import copyfileobj
-from tempfile import NamedTemporaryFile
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -54,8 +49,8 @@ from ..ingest.dedupe import OCCURRENCE, fingerprint
 from ..ingest.engine import ExtractionResult
 from ..ingest.reconcile import Verdict
 from ..ingest.storage import DuplicateDocument, StorageError
+from ..ingest.uploads import uploaded_pages
 from ..ingest.words import ExtractionError
-from ..ingest.words import extract_pages as read_pdf_pages
 from ..institutions import InstitutionCandidate as ResolvedInstitutionCandidate
 from ..institutions import InstitutionResolution as ResolvedInstitution
 from ..institutions import normalize_institution_name, resolve_institution
@@ -610,24 +605,6 @@ def _unidentified(exc: pipeline.LayoutNotIdentified) -> HTTPException:
     return HTTPException(status_code=422, detail=f"{exc} — scored: {ranked}")
 
 
-@contextmanager
-def _uploaded_pages(file: UploadFile, password: str | None) -> Iterator[tuple[bytes, list[Any]]]:
-    """Read an upload once and remove its private scratch copy on every exit."""
-    data = file.file.read()
-    if not data:
-        raise HTTPException(status_code=422, detail="the uploaded file is empty")
-    temporary_path: Path | None = None
-    try:
-        with NamedTemporaryFile(prefix="oneledger-parse-", suffix=".pdf", delete=False) as temp:
-            temporary_path = Path(temp.name)
-            file.file.seek(0)
-            copyfileobj(file.file, temp)
-        yield data, read_pdf_pages(temporary_path, password=password)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
-
-
 @router.post("/parse")
 def parse_statement(
     file: Annotated[UploadFile, File()],
@@ -638,7 +615,7 @@ def parse_statement(
     password: Annotated[str | None, Form()] = None,
 ) -> ParseResponse:
     try:
-        with _uploaded_pages(file, password) as (data, pages):
+        with uploaded_pages(file, password) as (data, pages):
             with connect() as conn, conn.cursor() as cur:
                 household = _household(cur, owner.household_id)
                 result = pipeline.parse(
@@ -852,7 +829,7 @@ def reveal_statement_identifier(
     no_store = {"Cache-Control": "no-store", "Pragma": "no-cache"}
     response.headers.update(no_store)
     try:
-        with _uploaded_pages(file, password) as (_data, pages):
+        with uploaded_pages(file, password) as (_data, pages):
             with connect() as conn, conn.cursor() as cur:
                 profiles = _profiles(cur, owner.household_id, layoutId)
                 identification = pipeline.identify(
@@ -928,7 +905,7 @@ def confirm_statement_account(
             detail="an existing account supplies its institution reuse decision",
         )
     try:
-        with _uploaded_pages(file, password) as (data, pages):
+        with uploaded_pages(file, password) as (data, pages):
             with connect() as conn, conn.cursor() as cur:
                 household = _household(cur, owner.household_id)
                 result = pipeline.parse(

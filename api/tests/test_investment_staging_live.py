@@ -715,6 +715,11 @@ def test_conflicting_overlap_blocks_only_its_group_and_attaches_nothing(
         _prepared(live_staging, (conflict, unrelated)),
     )
 
+    assert result.group_states == (
+        staging.StagedGroupResult(1, "blocked", ("duplicate_conflict",)),
+        staging.StagedGroupResult(2, "ready", ()),
+    )
+
     with live_staging.connection.cursor() as cur:
         cur.execute(
             """SELECT group_number, status::text FROM investment_import_group

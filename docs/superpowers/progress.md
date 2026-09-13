@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Deliver Task 12.3 — authenticated investment-import preview, staging and cancellation API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-123--owner-api-and-cancellation-surface) |
-| Current implementation task | Task 12.2 is complete; prepared investment groups now stage atomically with validated targets, source-scoped overlap dedupe, idempotent retry and terminal cancellation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-122--idempotent-atomic-persistence) |
+| Next product action | Deliver Task 13 — reconcile summary checkpoints without manufacturing investment events or prices | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-13--summary-checkpoints) |
+| Current implementation task | Task 12.3 is complete; the authenticated application API now previews, explicitly resolves, stages, replays and terminally cancels investment imports | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-123--owner-api-and-cancellation-surface) |
 
 ## Canonical phase status
 
@@ -84,6 +84,7 @@ requires a separate owner request.
 | Phase 1.6 Task 12 | **Split before implementation** — dispatch reforecast exceeded the review budget; Tasks 12.1–12.3 now separate pure preparation, atomic persistence/source-scoped dedupe and the owner API/cancellation surface | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-121--preparation-and-safe-preview-contract) |
 | Phase 1.6 Task 12.1 | **Complete** — explicit UUID resolutions prepare exact immutable drafts and checkpoints, correlated legs share one atomic group, and previews remain bounded and privacy-safe | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-121--preparation-and-safe-preview-contract) |
 | Phase 1.6 Task 12.2 | **Complete** — validated owner-scoped targets stage under one household transaction; retries, cross-document evidence overlap, group-local blockers and terminal cancellation retain provenance without changing financial facts | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-122--idempotent-atomic-persistence) |
+| Phase 1.6 Task 12.3 | **Complete** — owner-authenticated write-free previews, explicit UUID resolution, atomic staging/replay and idempotent terminal cancellation are available through the application API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-123--owner-api-and-cancellation-surface) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

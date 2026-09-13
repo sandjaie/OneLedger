@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import psycopg
@@ -98,10 +99,20 @@ class PreparedImport:
 type StagedImportStatus = Literal[
     "staged", "awaiting_review", "partially_committed", "completed", "cancelled", "failed"
 ]
+type StagedGroupStatus = Literal["draft", "ready", "blocked", "committed", "cancelled"]
 
 
 class StagingError(Exception):
     """A fixed privacy-safe refusal from investment staging."""
+
+
+@dataclass(frozen=True, slots=True)
+class StagedGroupResult:
+    """Persisted group state and fixed open reasons, without source evidence."""
+
+    group_number: int
+    status: StagedGroupStatus
+    reasons: tuple[ReviewReason, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +123,7 @@ class StagedImportResult:
     status: StagedImportStatus
     group_ids: tuple[UUID, ...]
     created: bool
+    group_states: tuple[StagedGroupResult, ...]
 
 
 def _is_blocking(reason: SafeReason) -> bool:
@@ -268,15 +280,32 @@ def _load_result(
     if row is None:
         raise StagingError("investment import not found")
     cur.execute(
-        """SELECT id FROM investment_import_group
-             WHERE household_id = %s AND import_id = %s ORDER BY group_number""",
+        """SELECT child.id, child.group_number, child.status::text,
+                  coalesce(array_agg(review.reason::text ORDER BY review.reason::text)
+                    FILTER (WHERE review.status = 'open'), '{}')
+             FROM investment_import_group child
+             LEFT JOIN investment_review_item review
+               ON review.household_id = child.household_id
+              AND review.import_id = child.import_id AND review.group_id = child.id
+            WHERE child.household_id = %s AND child.import_id = %s
+            GROUP BY child.id, child.group_number, child.status
+            ORDER BY child.group_number""",
         (household_id, import_id),
     )
+    groups = cur.fetchall()
     return StagedImportResult(
         import_id,
         row[0],
-        tuple(UUID(str(group[0])) for group in cur.fetchall()),
+        tuple(UUID(str(group[0])) for group in groups),
         created,
+        tuple(
+            StagedGroupResult(
+                int(group[1]),
+                cast(StagedGroupStatus, group[2]),
+                cast(tuple[ReviewReason, ...], tuple(group[3])),
+            )
+            for group in groups
+        ),
     )
 
 
@@ -307,6 +336,23 @@ def _validate_target(cur: psycopg.Cursor[Any], household_id: UUID, target: Prepa
         or (fact_currencies and fact_currencies != {str(security[0]).strip()})
     ):
         raise StagingError(_INVALID_TARGET)
+
+
+def validate_prepared_import(owner: OwnerSession, prepared: PreparedImport) -> None:
+    """Verify supplied target UUIDs without persisting preview state."""
+    if not prepared.groups or any(
+        not target.resolved for group in prepared.groups for target in group.targets
+    ):
+        raise StagingError("investment targets are unresolved")
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            for group in prepared.groups:
+                for target in group.targets:
+                    _validate_target(cur, owner.household_id, target)
+            conn.rollback()
+    except psycopg.Error:
+        raise StagingError("investment targets could not be validated") from None
 
 
 def _committed_overlap(
@@ -644,7 +690,11 @@ def _insert_checkpoint(
 
 
 def stage_prepared_import(
-    owner: OwnerSession, document_id: UUID, prepared: PreparedImport
+    owner: OwnerSession,
+    document_id: UUID,
+    prepared: PreparedImport,
+    *,
+    connection: psycopg.Connection[Any] | None = None,
 ) -> StagedImportResult:
     """Persist one prepared import atomically without creating financial facts."""
     if (
@@ -658,7 +708,8 @@ def stage_prepared_import(
     ):
         raise StagingError("investment targets are unresolved")
     try:
-        with connect() as conn, conn.cursor() as cur:
+        manager = connect() if connection is None else nullcontext(connection)
+        with manager as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             if cur.fetchone() is None:
@@ -769,6 +820,16 @@ def stage_prepared_import(
             return _load_result(cur, owner.household_id, import_id, created=True)
     except psycopg.Error:
         raise StagingError("investment import could not be staged") from None
+
+
+def stage_prepared_import_in_transaction(
+    owner: OwnerSession,
+    document_id: UUID,
+    prepared: PreparedImport,
+    connection: psycopg.Connection[Any],
+) -> StagedImportResult:
+    """Stage on the caller's transaction so its document row commits or rolls back with it."""
+    return stage_prepared_import(owner, document_id, prepared, connection=connection)
 
 
 def cancel_staged_import(owner: OwnerSession, import_id: UUID) -> StagedImportResult:
