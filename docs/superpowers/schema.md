@@ -1976,6 +1976,13 @@ may attach resolved account, security or holding identity and advance lifecycle 
 silently change the date, units, monetary values, event kind, source order or declared precision
 authenticated by the retained fingerprint.
 
+Summary-statement extraction creates checkpoint rows only. Owner-scoped reconciliation serializes
+with investment event writes, compares dated committed unit effects at `declared_unit_scale` and
+compares the separately reported cost with dated retained acquisition basis. A match attaches the
+holding and marks the checkpoint `matched`; a discrepancy marks it `mismatched` and appends the
+checkpoint-scoped `unit_mismatch` or `cost_mismatch` review. Reported value remains immutable source
+evidence and is never promoted to `price_snapshot` or investment history.
+
 The twelve review reasons have database-fixed severity. Eight data-integrity reasons block their
 group; missing price, unmatched cash, incomplete lot allocation and stale valuation are advisory.
 Review rows cannot be deleted or marked resolved directly. A later validated resolution operation

@@ -855,6 +855,12 @@ use the same fixed blocking/advisory matrix, and a group with an open blocking i
 marked ready or committed. Once attached, the draft or checkpoint's typed source facts cannot be
 edited in place; later resolution may identify its account, security or holding and advance its
 lifecycle without rewriting what the source stated.</p>
+<p>The content-selected summary-statement adapter emits checkpoints only. Reconciliation compares
+reported units at the source-declared precision and reported cost with committed dated holding
+facts. Agreement attaches the retained holding; disagreement appends fixed
+<code>unit_mismatch</code> or <code>cost_mismatch</code> review evidence. Reported value remains a
+checkpoint fact: it is never converted into a transaction, valuation snapshot or terminal
+security price.</p>
 <p><code>POST /investment-imports/parse</code> is the authenticated application boundary for this
 shape. Preview is the default and writes neither a blob nor a row. Its optional resolution JSON
 contains only source group numbers and explicit account/security UUIDs; staging re-reads the PDF,

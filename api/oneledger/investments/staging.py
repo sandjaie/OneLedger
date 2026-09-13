@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, cast
 from uuid import UUID
 
@@ -124,6 +126,16 @@ class StagedImportResult:
     group_ids: tuple[UUID, ...]
     created: bool
     group_states: tuple[StagedGroupResult, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointReconciliationResult:
+    """Safe aggregate outcome; statement facts and private targets stay in storage."""
+
+    matched: int
+    mismatched: int
+    pending: int
+    blocked: int
 
 
 def is_blocking_reason(reason: ReviewReason) -> bool:
@@ -611,11 +623,16 @@ def _insert_review(
     import_id: UUID,
     group_id: UUID | None,
     reason: ReviewReason,
+    *,
+    checkpoint_id: UUID | None = None,
+    holding_id: UUID | None = None,
 ) -> None:
     cur.execute(
-        """INSERT INTO investment_review_item (household_id, import_id, group_id, reason)
-           VALUES (%s, %s, %s, %s::investment_review_reason) ON CONFLICT DO NOTHING""",
-        (household_id, import_id, group_id, reason),
+        """INSERT INTO investment_review_item (
+             household_id, import_id, group_id, checkpoint_id, holding_id, reason)
+           VALUES (%s, %s, %s, %s, %s, %s::investment_review_reason)
+           ON CONFLICT DO NOTHING""",
+        (household_id, import_id, group_id, checkpoint_id, holding_id, reason),
     )
 
 
@@ -867,3 +884,173 @@ def cancel_staged_import(owner: OwnerSession, import_id: UUID) -> StagedImportRe
             return _load_result(cur, owner.household_id, import_id, created=False)
     except psycopg.Error:
         raise StagingError("investment import could not be cancelled") from None
+
+
+def _rounded_units(value: Decimal, scale: int) -> Decimal:
+    quantum = Decimal(1).scaleb(-scale)
+    return value.quantize(quantum, rounding=ROUND_HALF_UP)
+
+
+def _checkpoint_actuals(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    account_id: UUID,
+    security_id: UUID,
+    as_of_date: date,
+) -> tuple[UUID | None, Decimal, Decimal]:
+    cur.execute(
+        """SELECT id FROM holding
+             WHERE household_id = %s AND account_id = %s AND security_id = %s
+             FOR UPDATE""",
+        (household_id, account_id, security_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None, Decimal(0), Decimal(0)
+    holding_id = UUID(str(row[0]))
+    cur.execute(
+        """SELECT coalesce(sum(effect.signed_units), 0)
+             FROM investment_unit_effect effect
+             JOIN investment_transaction event
+               ON event.household_id = effect.household_id
+              AND event.id = effect.investment_transaction_id
+            WHERE effect.household_id = %s AND effect.holding_id = %s
+              AND effect.effect_date <= %s
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = event.household_id
+                   AND correction.corrects_transaction_id = event.id)""",
+        (household_id, holding_id, as_of_date),
+    )
+    units = Decimal(cur.fetchone()[0])  # type: ignore[index]
+    cur.execute(
+        """SELECT coalesce(sum(lot.cost_basis_native), 0)
+             FROM acquisition_lot lot
+             JOIN investment_transaction event
+               ON event.household_id = lot.household_id
+              AND event.id = lot.origin_transaction_id
+            WHERE lot.household_id = %s AND lot.holding_id = %s
+              AND lot.acquisition_date <= %s
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = event.household_id
+                   AND correction.corrects_transaction_id = event.id)""",
+        (household_id, holding_id, as_of_date),
+    )
+    cost = Decimal(cur.fetchone()[0])  # type: ignore[index]
+    return holding_id, units, cost
+
+
+def reconcile_staged_checkpoints(
+    owner: OwnerSession, import_id: UUID
+) -> CheckpointReconciliationResult:
+    """Compare staged checkpoints with committed facts without creating financial history."""
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+            cur.execute(
+                """SELECT status::text FROM investment_import
+                     WHERE household_id = %s AND id = %s FOR UPDATE""",
+                (owner.household_id, import_id),
+            )
+            import_row = cur.fetchone()
+            if import_row is None:
+                raise StagingError("investment import not found")
+            if import_row[0] in {"completed", "cancelled", "failed"}:
+                raise StagingError("investment import is terminal")
+            cur.execute(
+                """SELECT checkpoint.id, checkpoint.group_id, checkpoint.account_id,
+                          checkpoint.security_id, checkpoint.as_of_date,
+                          checkpoint.reported_units, checkpoint.reported_cost_native,
+                          checkpoint.declared_unit_scale,
+                          checkpoint.reconciliation_status::text
+                     FROM investment_position_checkpoint checkpoint
+                     JOIN investment_import_group child
+                       ON child.household_id = checkpoint.household_id
+                      AND child.id = checkpoint.group_id
+                    WHERE checkpoint.household_id = %s AND child.import_id = %s
+                    ORDER BY child.group_number, checkpoint.source_order
+                    FOR UPDATE OF checkpoint""",
+                (owner.household_id, import_id),
+            )
+            checkpoints = cur.fetchall()
+            for checkpoint in checkpoints:
+                checkpoint_id = UUID(str(checkpoint[0]))
+                group_id = UUID(str(checkpoint[1]))
+                status = str(checkpoint[8])
+                if status != "pending":
+                    continue
+                account_id = UUID(str(checkpoint[2]))
+                security_id = UUID(str(checkpoint[3]))
+                holding_id, actual_units, actual_cost = _checkpoint_actuals(
+                    cur,
+                    owner.household_id,
+                    account_id,
+                    security_id,
+                    checkpoint[4],
+                )
+                unit_mismatch = checkpoint[5] is not None and (
+                    holding_id is None
+                    or _rounded_units(actual_units, int(checkpoint[7])) != Decimal(checkpoint[5])
+                )
+                cost_mismatch = checkpoint[6] is not None and (
+                    holding_id is None
+                    or actual_cost.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                    != Decimal(checkpoint[6])
+                )
+                compared = checkpoint[5] is not None or checkpoint[6] is not None
+                next_status = (
+                    "mismatched"
+                    if unit_mismatch or cost_mismatch
+                    else "matched"
+                    if compared and holding_id is not None
+                    else "pending"
+                )
+                if next_status != "pending":
+                    cur.execute(
+                        """UPDATE investment_position_checkpoint
+                              SET holding_id = %s, reconciliation_status = %s,
+                                  updated_at = now()
+                            WHERE household_id = %s AND id = %s""",
+                        (holding_id, next_status, owner.household_id, checkpoint_id),
+                    )
+                if unit_mismatch:
+                    _insert_review(
+                        cur,
+                        owner.household_id,
+                        import_id,
+                        group_id,
+                        "unit_mismatch",
+                        checkpoint_id=checkpoint_id,
+                        holding_id=holding_id,
+                    )
+                if cost_mismatch:
+                    _insert_review(
+                        cur,
+                        owner.household_id,
+                        import_id,
+                        group_id,
+                        "cost_mismatch",
+                        checkpoint_id=checkpoint_id,
+                        holding_id=holding_id,
+                    )
+            cur.execute(
+                """SELECT reconciliation_status::text, count(*)
+                     FROM investment_position_checkpoint checkpoint
+                     JOIN investment_import_group child
+                       ON child.household_id = checkpoint.household_id
+                      AND child.id = checkpoint.group_id
+                    WHERE checkpoint.household_id = %s AND child.import_id = %s
+                    GROUP BY reconciliation_status""",
+                (owner.household_id, import_id),
+            )
+            counts = {str(status): int(count) for status, count in cur.fetchall()}
+            return CheckpointReconciliationResult(
+                matched=counts.get("matched", 0),
+                mismatched=counts.get("mismatched", 0),
+                pending=counts.get("pending", 0),
+                blocked=counts.get("blocked", 0),
+            )
+    except psycopg.Error:
+        raise StagingError("investment checkpoints could not be reconciled") from None
