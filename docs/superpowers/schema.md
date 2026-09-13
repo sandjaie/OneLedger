@@ -2073,6 +2073,18 @@ the draft's immutable typed source facts. Existing V34 rows upgrade with a null 
 
 ---
 
+## `V36` (applied)
+
+### Source-scoped investment evidence replay
+
+V36 keeps the owner-authorized `record_investment_evidence` signature unchanged while making a
+fingerprint replay explicitly scoped by household, document and source contract. Supporting
+household/source-contract indexes cover typed source-event identity and versioned fingerprint
+overlap across documents. A typed source-event identity is authoritative when present; only
+evidence without one uses the fingerprint fallback. Existing attachments remain unchanged.
+
+---
+
 ## `0013`
 
 ### Loans

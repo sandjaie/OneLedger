@@ -867,7 +867,9 @@ date. It reconciles event-derived state and never manufactures an event or price
 checkpoint's resolved account and security must agree with its holding.</td></tr>
 <tr><td><code>investment_evidence</code></td><td>An immutable typed attachment to one draft, checkpoint
 or event, with document/page/row provenance and source identity or versioned fingerprint. Exact
-replay is idempotent; conflicting evidence attaches nothing.</td></tr>
+replay is idempotent; conflicting evidence attaches nothing. Fingerprints are scoped by household
+and source contract, while indexed cross-document overlap lets a new document attach evidence to
+an already committed immutable event without creating another draft.</td></tr>
 <tr><td><code>investment_review_item</code></td><td>An append-only fixed-reason issue whose generated
 severity is blocking or advisory. Resolution metadata cannot be written without a later validated
 domain operation.</td></tr>
@@ -880,7 +882,7 @@ holdings or the latest frozen snapshot inside the active period contributes, nev
 <p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V35</code>.</p>
+<code>V30</code>–<code>V36</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
