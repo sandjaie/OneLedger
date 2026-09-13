@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol, cast
 from uuid import UUID
 
 import psycopg
@@ -17,6 +18,21 @@ from ..db import connect
 router = APIRouter(prefix="/investment-catalogue", tags=["investment catalogue"])
 
 _PUBLIC_IDENTITY: Literal["exact_public_identity"] = "exact_public_identity"
+_ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+type SecurityTypeName = Literal[
+    "mutual_fund",
+    "equity",
+    "exchange_traded_fund",
+    "bond",
+    "deposit",
+    "commodity",
+    "real_asset",
+    "alternative",
+    "other",
+]
+type AssetClassName = Literal[
+    "equity", "fixed_income", "cash", "commodity", "real_asset", "alternative", "other"
+]
 _SECURITY_COLUMNS = """s.id, s.household_id, s.security_type::text, s.name, s.currency,
                        s.country, s.asset_class::text, s.sub_asset_class, s.isin, s.ticker,
                        s.exchange"""
@@ -199,6 +215,107 @@ def resolve_catalogue_security(
             ticker=body.ticker,
             exchange=body.exchange,
             name=body.name,
+        )
+
+
+class SecurityCreate(BaseModel):
+    """A household-scoped security the owner has confirmed; never derived from statement text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: StrictStr = Field(min_length=1, max_length=200)
+    securityType: SecurityTypeName
+    assetClass: AssetClassName
+    currency: StrictStr = Field(min_length=3, max_length=3, pattern=r"^[A-Za-z]{3}$")
+    isin: StrictStr | None = Field(default=None, min_length=12, max_length=12)
+    country: StrictStr | None = Field(
+        default=None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"
+    )
+
+    @model_validator(mode="after")
+    def isin_or_country(self) -> SecurityCreate:
+        if self.isin is None and self.country is None:
+            raise ValueError("country is required without an ISIN")
+        if self.isin is not None and not _ISIN.fullmatch(self.isin.strip().upper()):
+            raise ValueError("ISIN is not well-formed")
+        return self
+
+
+class SecurityRow(BaseModel):
+    id: UUID
+    name: str
+    securityType: str
+    assetClass: str
+    currency: str
+    country: str
+    isin: str | None
+
+
+@router.post(
+    "/securities",
+    response_model=SecurityRow,
+    status_code=status.HTTP_201_CREATED,
+    responses={409: {"description": "the ISIN already names an existing security"}},
+)
+def create_catalogue_security(
+    body: SecurityCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> SecurityRow:
+    isin = None if body.isin is None else body.isin.strip().upper()
+    # An ISIN's first two characters are its issuing country by construction (ISO 6166); it is
+    # authoritative over a merely-supplied country whenever both are given, so there is nothing
+    # to reconcile — never a currency, institution or country name standing in as an identifier.
+    country = isin[:2] if isin is not None else cast(str, body.country).strip().upper()
+    with connect() as conn, conn.cursor() as cur:
+        if isin is not None:
+            cur.execute(
+                """SELECT id FROM security
+                     WHERE isin = %s AND (household_id IS NULL OR household_id = %s)""",
+                (isin, owner.household_id),
+            )
+            existing = cur.fetchone()
+            if existing is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "message": "the ISIN already names an existing security",
+                        "existingSecurityId": str(existing[0]),
+                    },
+                )
+        try:
+            cur.execute(
+                """INSERT INTO security (
+                       household_id, security_type, name, currency, country, asset_class, isin)
+                   VALUES (%s, %s::security_type, %s, %s, %s, %s::asset_class, %s)
+                   RETURNING id, security_type::text, name, currency, country,
+                             asset_class::text, isin""",
+                (
+                    owner.household_id,
+                    body.securityType,
+                    body.name.strip(),
+                    body.currency.strip().upper(),
+                    country,
+                    body.assetClass,
+                    isin,
+                ),
+            )
+        except psycopg.errors.UniqueViolation:
+            conn.rollback()
+            raise HTTPException(
+                status_code=409, detail="the ISIN already names an existing security"
+            ) from None
+        except psycopg.Error:
+            conn.rollback()
+            raise HTTPException(status_code=422, detail="security could not be created") from None
+        row = cur.fetchone()
+        assert row is not None
+        return SecurityRow(
+            id=row[0],
+            securityType=row[1],
+            name=row[2],
+            currency=str(row[3]).strip(),
+            country=row[4],
+            assetClass=row[5],
+            isin=row[6],
         )
 
 

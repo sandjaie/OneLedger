@@ -822,6 +822,9 @@ def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixtur
                         "accountId": None,
                         "securityId": None,
                         "accountMask": None,
+                        "securityLabel": None,
+                        "isin": None,
+                        "securityCandidates": [],
                         "drafts": [
                             {
                                 "eventDate": "2026-03-01",
@@ -850,6 +853,7 @@ def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixtur
         "totalDraftCount": 1,
         "totalBlockerCount": 0,
         "previewTruncated": False,
+        "expectedState": None,
     }
     assert private_security not in response.text
     assert "PRIVATE-SOURCE-EVENT" not in response.text
@@ -972,6 +976,7 @@ def test_investment_stage_response_uses_persisted_blocker_state(
             (group_id,),
             True,
             (StagedGroupResult(1, "blocked", ("duplicate_conflict",)),),
+            "synthetic-expected-state",
         ),
     )
 
@@ -1037,9 +1042,10 @@ def test_investment_stage_counts_persisted_blocker_beyond_preview_limit() -> Non
             )
             for number in range(1, 52)
         ),
+        "synthetic-expected-state",
     )
 
-    response = _response(prepared, {}, staged)
+    response = _response(prepared, {}, {}, staged)
 
     assert len(response.groups) == 50
     assert response.previewTruncated is True

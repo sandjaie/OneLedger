@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
@@ -126,6 +127,7 @@ class StagedImportResult:
     group_ids: tuple[UUID, ...]
     created: bool
     group_states: tuple[StagedGroupResult, ...]
+    expected_state: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -285,6 +287,24 @@ def resolve_existing_investment_account(owner: OwnerSession, identifier: Identif
     return UUID(str(rows[0][0])) if len(rows) == 1 else None
 
 
+def _expected_state(cur: psycopg.Cursor[Any], household_id: UUID, import_id: UUID) -> str:
+    """An opaque staleness token, stable across a commit's own forward progress.
+
+    Staged content is immutable once recorded and a commit can only ever move a group from
+    ready toward committed or blocked, so an identical retry of a commit call must compute the
+    same token before and after — that is what lets it replay safely instead of being refused
+    as stale. Only a cancellation (an owner action outside commit itself) changes it.
+    """
+    cur.execute(
+        """SELECT group_number FROM investment_import_group
+             WHERE household_id = %s AND import_id = %s AND status = 'cancelled'
+             ORDER BY group_number""",
+        (household_id, import_id),
+    )
+    cancelled = tuple(int(row[0]) for row in cur.fetchall())
+    return hashlib.sha256(f"{import_id}|{cancelled}".encode()).hexdigest()
+
+
 def _load_result(
     cur: psycopg.Cursor[Any], household_id: UUID, import_id: UUID, *, created: bool
 ) -> StagedImportResult:
@@ -323,6 +343,7 @@ def _load_result(
             )
             for group in groups
         ),
+        _expected_state(cur, household_id, import_id),
     )
 
 
