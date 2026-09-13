@@ -25,25 +25,32 @@ def _append_purchase(
     *,
     units: str = "2.50000000",
     gross: str = "25.0000",
+    price: str = "10.000000",
+    event_date: str = "2026-03-01",
+    source_id: str = "SYNTHETIC-DETAIL-EVENT",
 ) -> None:
     with fixture.connection.cursor() as cur:
         cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
         cur.execute(
             """SELECT append_investment_transaction(
-                 %s, %s, '2026-03-01', 'purchase', %s, 10.000000, %s,
-                 0.0000, 0.0000, %s, %s, '2026-03-01', 1.0000000000,
+                 %s, %s, %s, 'purchase', %s, %s, %s,
+                 0.0000, 0.0000, %s, %s, %s, 1.0000000000,
                  1.0000000000, %s, %s, 'statement',
-                 'detailed_fund_statement_v1', 'SYNTHETIC-DETAIL-EVENT', NULL, NULL,
+                 'detailed_fund_statement_v1', %s, NULL, NULL,
                  NULL, NULL)""",
             (
                 fixture.account_id,
                 fixture.security_id,
+                event_date,
                 Decimal(units),
+                Decimal(price),
                 Decimal(gross),
                 -Decimal(gross),
                 fixture.currency,
+                event_date,
                 -Decimal(gross),
                 -Decimal(gross),
+                source_id,
             ),
         )
         assert cur.fetchone() is not None
@@ -54,38 +61,52 @@ def _append_disposal(
     fixture: StagingFixture,
     *,
     event_date: str,
-    allocated_units: str | None,
+    allocated_units: tuple[str, ...] | None,
+    disposed_units: str = "4.00000000",
+    gross: str = "40.0000",
+    price: str = "10.000000",
 ) -> None:
     with fixture.connection.cursor() as cur:
         cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
         cur.execute(
             """SELECT id FROM acquisition_lot
-                 WHERE household_id = %s ORDER BY acquisition_date, id LIMIT 1""",
+                 WHERE household_id = %s ORDER BY acquisition_date, id""",
             (fixture.owner.household_id,),
         )
-        lot = cur.fetchone()
-        assert lot is not None
+        lots = cur.fetchall()
+        assert lots
         cur.execute(
             """SELECT append_investment_transaction(
-                 %s, %s, %s, 'sale', -4.00000000, 10.000000, 40.0000,
-                 0.0000, 0.0000, 40.0000, %s, %s, 1.0000000000,
-                 1.0000000000, 40.0000, 40.0000, 'statement',
+                 %s, %s, %s, 'sale', %s, %s, %s,
+                 0.0000, 0.0000, %s, %s, %s, 1.0000000000,
+                 1.0000000000, %s, %s, 'statement',
                  'detailed_fund_statement_v1', 'SYNTHETIC-DETAIL-DISPOSAL', NULL, NULL,
                  NULL, NULL)""",
             (
                 fixture.account_id,
                 fixture.security_id,
                 event_date,
+                -Decimal(disposed_units),
+                Decimal(price),
+                Decimal(gross),
+                Decimal(gross),
                 fixture.currency,
                 event_date,
+                Decimal(gross),
+                Decimal(gross),
             ),
         )
         disposal = cur.fetchone()
         assert disposal is not None
         if allocated_units is not None:
+            assert len(lots) >= len(allocated_units)
             cur.execute(
                 "SELECT allocate_investment_lots(%s, %s::UUID[], %s::NUMERIC[])",
-                (disposal[0], [lot[0]], [Decimal(allocated_units)]),
+                (
+                    disposal[0],
+                    [lot[0] for lot in lots[: len(allocated_units)]],
+                    [Decimal(units) for units in allocated_units],
+                ),
             )
     fixture.connection.commit()
 
@@ -265,7 +286,7 @@ def test_dated_complete_disposal_allocation_reconciles_retained_basis(
     _append_disposal(
         live_staging,
         event_date="2026-05-01",
-        allocated_units="4.00000000",
+        allocated_units=("4.00000000",),
     )
     staged = staging.stage_prepared_import(
         live_staging.owner,
@@ -287,7 +308,7 @@ def test_disposal_after_checkpoint_does_not_reduce_dated_units_or_basis(
     _append_disposal(
         live_staging,
         event_date="2026-07-01",
-        allocated_units="4.00000000",
+        allocated_units=("4.00000000",),
     )
     staged = staging.stage_prepared_import(
         live_staging.owner,
@@ -301,10 +322,10 @@ def test_disposal_after_checkpoint_does_not_reduce_dated_units_or_basis(
     assert result.pending == 0
 
 
-@pytest.mark.parametrize("allocated_units", [None, "2.00000000"])
+@pytest.mark.parametrize("allocated_units", [None, ("2.00000000",)])
 def test_incomplete_disposal_allocation_never_claims_or_invents_remaining_basis(
     live_staging: StagingFixture,
-    allocated_units: str | None,
+    allocated_units: tuple[str, ...] | None,
 ) -> None:
     _append_purchase(live_staging, units="10.00000000", gross="100.0000")
     _append_disposal(
@@ -411,3 +432,40 @@ def test_value_only_checkpoint_remains_evidence_without_event_or_price(
     assert result.pending == 1
     assert result.matched == 0
     assert _financial_counts(live_staging) == (0, 0, 0, 0)
+
+
+def test_retained_basis_rounds_each_lot_before_summing(
+    live_staging: StagingFixture,
+) -> None:
+    for day, source_id in ((1, "SYNTHETIC-TINY-LOT-A"), (2, "SYNTHETIC-TINY-LOT-B")):
+        _append_purchase(
+            live_staging,
+            units="2.00000000",
+            price="0.000050",
+            gross="0.0001",
+            event_date=f"2026-03-{day:02d}",
+            source_id=source_id,
+        )
+    _append_disposal(
+        live_staging,
+        event_date="2026-05-01",
+        disposed_units="2.00000000",
+        price="0.000050",
+        gross="0.0001",
+        allocated_units=("1.00000000", "1.00000000"),
+    )
+    staged = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared_checkpoint(
+            live_staging,
+            units="2.00000000",
+            cost="0.0002",
+            value="0.0002",
+        ),
+    )
+
+    result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
+
+    assert result.matched == 1
+    assert result.mismatched == 0
