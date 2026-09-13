@@ -60,9 +60,9 @@ code, fixtures, commits, logs, errors or agent messages. Unsupported cases fail 
 
 ## Working rules
 
-- Use TDD for money, authorization and database behavior: observe the smallest relevant test fail
-  for the intended reason, implement, then make it pass. Never weaken a test or invariant to reach
-  green.
+- Test major behavior (money totals, authorization, household isolation, database writes); obvious
+  code needs no dedicated test and test-first is optional. Never weaken a test or invariant to
+  reach green.
 - Use the active checkout returned by `git rev-parse --show-toplevel`. Do not create worktrees.
 - One implementation writer works at a time. Reviewers are read-only; the orchestrator owns
   branch switching, pushes, PRs and merges.

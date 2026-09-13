@@ -5,7 +5,7 @@ Read [CLAUDE.md](CLAUDE.md) before working. It routes each rule to its authorita
 [docs/git-workflow.md](docs/git-workflow.md) alone owns branches and releases.
 [docs/development-cycle.md](docs/development-cycle.md) alone owns delivery gates. In brief:
 
-> phase plan reviewed once → TDD with affected tests → local commit → one read-only review →
+> phase plan reviewed once → implement with major tests → local commit → one read-only review →
 > one repair → `scripts/verify.sh` once → first push → PR
 
 Use the active checkout; do not create worktrees. One implementation agent writes at a time.

@@ -127,11 +127,28 @@ class MonthFlows(BaseModel):
     savingsRatePctSecondary: str | None
 
 
+class YearToDate(BaseModel):
+    # Calendar year of `asOf`, 1 January through `asOf` inclusive.
+    yearStart: date
+    asOf: date
+    incomeBase: str
+    incomeSecondary: str
+    spendingBase: str
+    spendingSecondary: str
+    netBase: str
+    netSecondary: str
+    savingsRatePctBase: str | None
+    savingsRatePctSecondary: str | None
+    investedBase: str
+    investedSecondary: str
+
+
 class DashboardResponse(BaseModel):
     netWorth: NetWorth
     thisMonth: MonthFlows
     trend: list[MonthFlows]
     cardsDue: list[CardDue]
+    yearToDate: YearToDate
 
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
@@ -196,6 +213,44 @@ FLOWS = """
            round(f.net_secondary / NULLIF(GREATEST(f.income_secondary, 0), 0) * 100, 4)
       FROM months m LEFT JOIN flows f USING (month)
      ORDER BY m.month"""
+
+
+# The calendar year of `asOf` through `asOf`, same classification as FLOWS, plus investment
+# contributions from active, counted accounts over the same window — active (not corrected) rows
+# only, so a corrected purchase counts once, via its replacement.
+YEAR_TO_DATE = """
+    WITH flows AS (
+        SELECT sum(amount_base) FILTER (WHERE txn_type = 'income') AS income_base,
+               sum(amount_secondary) FILTER (WHERE txn_type = 'income') AS income_secondary,
+               -sum(amount_base) FILTER (WHERE txn_type <> 'income') AS spending_base,
+               -sum(amount_secondary) FILTER (WHERE txn_type <> 'income') AS spending_secondary,
+               sum(amount_base) AS net_base,
+               sum(amount_secondary) AS net_secondary
+          FROM v_transaction_reportable
+         WHERE household_id = %(household)s
+           AND booked_date >= date_trunc('year', %(as_of)s::timestamp)
+           AND booked_date <= %(as_of)s
+    ), invested AS (
+        SELECT sum(-e.net_amount_base) AS invested_base,
+               sum(-e.net_amount_secondary) AS invested_secondary
+          FROM investment_transaction e
+          JOIN account a ON a.household_id = e.household_id AND a.id = e.account_id
+         WHERE e.household_id = %(household)s AND a.is_active AND a.include_in_net_worth
+           AND e.event_kind IN ('purchase', 'recurring_purchase', 'rights')
+           AND e.event_date >= date_trunc('year', %(as_of)s::timestamp)
+           AND e.event_date <= %(as_of)s
+           AND NOT EXISTS (
+               SELECT 1 FROM investment_transaction c WHERE c.corrects_transaction_id = e.id
+           )
+    )
+    SELECT coalesce(f.income_base, 0.0000), coalesce(f.income_secondary, 0.0000),
+           coalesce(f.spending_base, 0.0000), coalesce(f.spending_secondary, 0.0000),
+           coalesce(f.net_base, 0.0000), coalesce(f.net_secondary, 0.0000),
+           round(f.net_base / NULLIF(GREATEST(f.income_base, 0), 0) * 100, 4),
+           round(f.net_secondary / NULLIF(GREATEST(f.income_secondary, 0), 0) * 100, 4),
+           coalesce(round(i.invested_base, 4), 0.0000),
+           coalesce(round(i.invested_secondary, 4), 0.0000)
+      FROM flows f, invested i"""
 
 
 def _net_worth(
@@ -419,4 +474,27 @@ def read_dashboard(
             )
             for row in cur.fetchall()
         ]
-    return DashboardResponse(netWorth=net_worth, thisMonth=trend[-1], trend=trend, cardsDue=cards)
+        cur.execute(YEAR_TO_DATE, {"as_of": as_of, "household": owner.household_id})
+        ytd = cur.fetchone()
+        assert ytd is not None
+        year_to_date = YearToDate(
+            yearStart=date(as_of.year, 1, 1),
+            asOf=as_of,
+            incomeBase=str(ytd[0]),
+            incomeSecondary=str(ytd[1]),
+            spendingBase=str(ytd[2]),
+            spendingSecondary=str(ytd[3]),
+            netBase=str(ytd[4]),
+            netSecondary=str(ytd[5]),
+            savingsRatePctBase=_out(ytd[6]),
+            savingsRatePctSecondary=_out(ytd[7]),
+            investedBase=str(ytd[8]),
+            investedSecondary=str(ytd[9]),
+        )
+    return DashboardResponse(
+        netWorth=net_worth,
+        thisMonth=trend[-1],
+        trend=trend,
+        cardsDue=cards,
+        yearToDate=year_to_date,
+    )

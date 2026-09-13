@@ -1570,6 +1570,7 @@ export type DashboardResponse = {
      * Cardsdue
      */
     cardsDue: Array<CardDue>;
+    yearToDate: YearToDate;
 };
 
 /**
@@ -5552,6 +5553,60 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+/**
+ * YearToDate
+ */
+export type YearToDate = {
+    /**
+     * Yearstart
+     */
+    yearStart: string;
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Incomebase
+     */
+    incomeBase: string;
+    /**
+     * Incomesecondary
+     */
+    incomeSecondary: string;
+    /**
+     * Spendingbase
+     */
+    spendingBase: string;
+    /**
+     * Spendingsecondary
+     */
+    spendingSecondary: string;
+    /**
+     * Netbase
+     */
+    netBase: string;
+    /**
+     * Netsecondary
+     */
+    netSecondary: string;
+    /**
+     * Savingsratepctbase
+     */
+    savingsRatePctBase: string | null;
+    /**
+     * Savingsratepctsecondary
+     */
+    savingsRatePctSecondary: string | null;
+    /**
+     * Investedbase
+     */
+    investedBase: string;
+    /**
+     * Investedsecondary
+     */
+    investedSecondary: string;
 };
 
 /**

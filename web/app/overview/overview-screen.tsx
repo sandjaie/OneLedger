@@ -12,6 +12,7 @@ import type {
   HouseholdResponse,
   MissingRate,
   MonthFlows,
+  YearToDate,
 } from "@/types/api";
 
 type Props = {
@@ -55,6 +56,25 @@ function flows(month: MonthFlows, base: boolean) {
         spending: month.spendingSecondary,
         net: month.netSecondary,
         savings: month.savingsRatePctSecondary,
+      };
+}
+
+/** The year's five figures in one reporting currency — picked by name, never computed. */
+function yearToDate(year: YearToDate, base: boolean) {
+  return base
+    ? {
+        income: year.incomeBase,
+        spending: year.spendingBase,
+        net: year.netBase,
+        savings: year.savingsRatePctBase,
+        invested: year.investedBase,
+      }
+    : {
+        income: year.incomeSecondary,
+        spending: year.spendingSecondary,
+        net: year.netSecondary,
+        savings: year.savingsRatePctSecondary,
+        invested: year.investedSecondary,
       };
 }
 
@@ -146,6 +166,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
     const base = currency.code === worth.baseCurrency;
     const shown = base ? worth.baseCurrency : worth.secondaryCurrency;
     const now = flows(dashboard.thisMonth, base);
+    const ytd = yearToDate(dashboard.yearToDate, base);
     const sides = [
       { code: worth.baseCurrency, net: worth.totalBase, assets: worth.assetsBase, liabilities: worth.liabilitiesBase, liquid: worth.liquidBase },
       {
@@ -248,6 +269,18 @@ export function OverviewScreen({ household, currency, currencies, request, child
             <div><dt>Spending</dt><dd>{money(now.spending, shown)}</dd></div>
             <div><dt>Net</dt><dd>{money(now.net, shown)}</dd></div>
             <div><dt>Savings rate</dt><dd>{percent(now.savings)}</dd></div>
+          </dl>
+        </section>
+
+        <section className="overview-month-card" aria-labelledby="year-title">
+          <h2 className="visually-hidden" id="year-title">This year so far</h2>
+          <p className="section-label">This year so far · {dashboard.yearToDate.yearStart} to {dashboard.yearToDate.asOf}</p>
+          <dl className="overview-month-figures">
+            <div><dt>Income</dt><dd>{money(ytd.income, shown)}</dd></div>
+            <div><dt>Spending</dt><dd>{money(ytd.spending, shown)}</dd></div>
+            <div><dt>Saved</dt><dd>{money(ytd.net, shown)}</dd></div>
+            <div><dt>Savings rate</dt><dd>{percent(ytd.savings)}</dd></div>
+            <div><dt>Invested</dt><dd>{money(ytd.invested, shown)}</dd></div>
           </dl>
         </section>
 

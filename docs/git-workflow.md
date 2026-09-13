@@ -23,7 +23,7 @@ not open a documentation-only PR for them.
 
 ## Task flow
 
-Follow [development-cycle.md](development-cycle.md): implement with TDD and affected tests, commit
+Follow [development-cycle.md](development-cycle.md): implement with tests for major behavior, commit
 locally, review once, repair once, then run `scripts/verify.sh` once. The first push is
 allowed only for that unchanged verified head.
 

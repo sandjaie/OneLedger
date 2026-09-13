@@ -88,6 +88,20 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
     thisMonth: march,
     trend: [...MONTHS.slice(0, 11).map((on) => month(on)), march],
     cardsDue: [],
+    yearToDate: {
+      yearStart: "2026-01-01",
+      asOf: "2026-03-15",
+      incomeBase: "1500000.0000",
+      incomeSecondary: "66000.0000",
+      spendingBase: "370000.0000",
+      spendingSecondary: "16296.3000",
+      netBase: "1130000.0000",
+      netSecondary: "49703.7000",
+      savingsRatePctBase: "75.3333",
+      savingsRatePctSecondary: "75.3136",
+      investedBase: "200000.0000",
+      investedSecondary: "8800.0000",
+    },
     ...overrides,
   };
 }
@@ -211,6 +225,22 @@ describe("overview screen", () => {
     const trend = screen.getByRole("table", { name: "The last twelve months" });
     expect(within(trend).getByText("AED 16,567.90")).toBeTruthy();
     expect(within(trend).queryByText(/₹/)).toBeNull();
+  });
+
+  it("renders the year-to-date panel from the payload, switching currency with the toggle", async () => {
+    renderWith(payload());
+    const year = await screen.findByRole("region", { name: "This year so far" });
+    expect(within(year).getByText("This year so far · 2026-01-01 to 2026-03-15")).toBeTruthy();
+    for (const shown of ["₹15,00,000.00", "₹3,70,000.00", "₹11,30,000.00", "75.33%", "₹2,00,000.00"]) {
+      expect(within(year).getByText(shown)).toBeTruthy();
+    }
+
+    cleanup();
+    renderWith(payload(), household.currencies[1]);
+    const secondary = await screen.findByRole("region", { name: "This year so far" });
+    expect(within(secondary).getByText("AED 66,000.00")).toBeTruthy();
+    expect(within(secondary).getByText("AED 8,800.00")).toBeTruthy();
+    expect(within(secondary).queryByText(/₹/)).toBeNull();
   });
 
   it("renders each card's dues in that card's own currency, with its due date and days remaining", async () => {
