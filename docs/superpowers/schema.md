@@ -2144,7 +2144,9 @@ database derives its actor, request hash, completeness and exact nullable claims
 authenticated insert, update and delete are refused. An incomplete decision has no cost, gain or
 remaining-basis claims; a complete decision has exact realised cost and gain, while remaining basis
 stays null whenever other active disposal evidence is incomplete. This makes identical replay stable
-and conflicting reuse atomic without permitting callers to fabricate a result.
+and conflicting reuse atomic without permitting callers to fabricate a result. Non-empty parallel
+allocation arrays, complete unique lot references and positive units at no more than eight decimal
+places are validated before either canonical hashing or retained-decision replay.
 
 V39 serializes allocation and correction through an event advisory mutex followed by event,
 holding, lot and review row locks. Every selected disposal and acquisition origin must still be an

@@ -130,6 +130,80 @@ BEGIN
     'the database operation derives decision actor and request hash';
 
   BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[4.000000001], repeat('a', 64), decision_key);
+    RAISE EXCEPTION 'over-precision replay returned the retained decision';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[]::UUID[], ARRAY[]::NUMERIC[], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'an empty lot decision was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[]::NUMERIC[], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'mismatched lot decision arrays were accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id, lot_id], ARRAY[2.00000000, 2.00000000],
+      repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'duplicate lot decision references were accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[0.00000000], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'a non-positive lot decision was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[NULL::UUID], ARRAY[4.00000000], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'a null lot reference was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[NULL::NUMERIC], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'a null allocated unit value was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      NULL, ARRAY[lot_id], ARRAY[4.00000000], repeat('a', 64), gen_random_uuid());
+    RAISE EXCEPTION 'a null disposal reference was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[4.00000000], NULL, gen_random_uuid());
+    RAISE EXCEPTION 'a null expected state was accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[4.00000000], repeat('a', 64), NULL);
+    RAISE EXCEPTION 'a null idempotency key was accepted';
+  EXCEPTION WHEN check_violation OR invalid_parameter_value THEN NULL;
+  END;
+  ASSERT (SELECT count(*) = 1 AND min(allocated_units) = 4.00000000
+            FROM investment_lot_allocation WHERE disposal_transaction_id = disposal_id),
+    'invalid lot decision input changed retained allocations';
+  ASSERT (SELECT count(*) = 1 AND min(realised_cost_native) = 8.0000
+                 AND min(realised_gain_native) = 4.0000
+                 AND min(remaining_basis_native) = 12.0000
+            FROM investment_lot_allocation_decision),
+    'invalid lot decision input changed retained decision claims';
+  ASSERT (SELECT status = 'resolved' AND resolution_kind = 'lot_allocated'
+                 AND resolved_at = first_resolution_time
+            FROM investment_review_item WHERE id = review_id),
+    'invalid lot decision input changed retained review state';
+
+  BEGIN
     INSERT INTO investment_lot_allocation_decision (
       household_id, idempotency_key, request_hash, disposal_transaction_id,
       realised_cost_native, realised_gain_native, remaining_basis_native,

@@ -105,14 +105,30 @@ GRANT SELECT ON investment_lot_allocation_decision TO authenticated;
 CREATE FUNCTION investment_lot_request_hash(
   p_disposal_transaction_id UUID, p_acquisition_lot_ids UUID[],
   p_allocated_units NUMERIC[], p_expected_state TEXT
-) RETURNS TEXT LANGUAGE SQL IMMUTABLE PARALLEL SAFE
+) RETURNS TEXT LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
   SET search_path = public, pg_temp AS $$
-  SELECT encode(digest(convert_to(jsonb_build_array(
+BEGIN
+  IF p_disposal_transaction_id IS NULL
+     OR p_expected_state IS NULL OR p_expected_state !~ '^[0-9a-f]{64}$'
+     OR p_acquisition_lot_ids IS NULL OR p_allocated_units IS NULL
+     OR cardinality(p_acquisition_lot_ids) = 0
+     OR cardinality(p_acquisition_lot_ids) <> cardinality(p_allocated_units)
+     OR array_position(p_acquisition_lot_ids, NULL) IS NOT NULL
+     OR array_position(p_allocated_units, NULL) IS NOT NULL
+     OR (SELECT count(*) <> count(DISTINCT lot_id)
+           FROM unnest(p_acquisition_lot_ids) lot_id)
+     OR EXISTS (SELECT FROM unnest(p_allocated_units) units
+                 WHERE units <= 0 OR units <> round(units, 8)) THEN
+    RAISE EXCEPTION 'lot decision input must be complete and exact'
+      USING ERRCODE = '23514', CONSTRAINT = 'investment_lot_decision_input_is_valid';
+  END IF;
+  RETURN encode(digest(convert_to(jsonb_build_array(
     p_disposal_transaction_id::TEXT, p_expected_state,
     (SELECT jsonb_agg(jsonb_build_array(lot_id::TEXT, (units::NUMERIC(28,8))::TEXT)
                       ORDER BY ordinal)
        FROM unnest(p_acquisition_lot_ids, p_allocated_units) WITH ORDINALITY
-         AS item(lot_id, units, ordinal)))::TEXT, 'UTF8'), 'sha256'), 'hex')
+         AS item(lot_id, units, ordinal)))::TEXT, 'UTF8'), 'sha256'), 'hex');
+END
 $$;
 CREATE FUNCTION preserve_investment_lot_decision() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
