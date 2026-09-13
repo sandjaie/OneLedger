@@ -1,5 +1,5 @@
-# Git hooks provide fast static feedback. Full application and database suites
-# run during implementation, /verify and CI rather than blocking commit/push.
+# Commit hooks provide fast staged-file feedback. The final verifier runs the
+# complete gate once; pre-push checks only its exact-head receipt and diff size.
 # Install once, for both hook types:
 #
 #     pre-commit install --install-hooks -t pre-commit -t pre-push
@@ -51,7 +51,7 @@ repos:
         language: system
         files: '\.md$'
         exclude: '^(web/node_modules|web/\.next|api/\.venv)/'
-        stages: [pre-push]
+        stages: [manual]
 
       - id: docs
         name: docs — links, html, adr numbering
@@ -80,33 +80,17 @@ repos:
         language: system
         files: '^api/.*\.py$'
 
-      - id: mypy
-        name: mypy --strict (api)
-        entry: scripts/hooks/api.sh mypy .
-        language: system
-        pass_filenames: false
-        files: '^api/.*\.py$'
-        stages: [pre-push]
-
       - id: eslint
         name: eslint (web)
         entry: scripts/hooks/web.sh lint
         language: system
         files: '^web/.*\.(ts|tsx|js|jsx)$'
 
-      - id: tsc
-        name: tsc --noEmit (web)
-        entry: scripts/hooks/web.sh typecheck
-        language: system
-        pass_filenames: false
-        files: '^web/.*\.(ts|tsx)$'
-        stages: [pre-push]
+      # ---- pre-push: verified exact head and branch shape only ----
 
-      # ---- pre-push: whole-tree static and branch-shape checks ----
-
-      - id: api-types
-        name: generated API types are current (web)
-        entry: scripts/hooks/web.sh api-types-check
+      - id: verified-head
+        name: current head passed final verification
+        entry: scripts/verify.sh --check-receipt
         language: system
         pass_filenames: false
         always_run: true

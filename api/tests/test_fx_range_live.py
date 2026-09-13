@@ -3,8 +3,8 @@
 Its predicates decide whether a statement's dates are priced, and a stub cursor cannot check
 them: one that dispatches on `"FROM fx_rate" in sql` answers the same way for a query missing
 its `quote_currency` filter entirely. Everything here runs inside a transaction that rolls
-back; nothing persists. Skipped when no database is reachable — the pre-push hook runs with
-the stack up, which is where this proof matters.
+back; nothing persists. The final verifier supplies the isolated test database where this proof
+runs.
 """
 
 from __future__ import annotations

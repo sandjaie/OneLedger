@@ -1,7 +1,7 @@
 """The B3.5 interleaving, against the live database: a reporting-pair change and a frozen
 write serialize on the household row in both orders. Everything runs inside transactions that
-roll back; nothing persists. Skipped when no database or no bound owner is reachable — the
-pre-push hook runs with the stack up, which is where this proof matters."""
+roll back; nothing persists. The final verifier supplies the isolated test database where this
+proof runs."""
 
 from __future__ import annotations
 

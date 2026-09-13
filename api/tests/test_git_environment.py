@@ -1,11 +1,4 @@
-"""The suite runs under git's pre-push hook, and must never touch the repository that hook is for.
-
-A hook runs with `GIT_DIR` exported — and, from a linked worktree, `GIT_WORK_TREE` — so that the
-git commands it starts find the repository. pytest inherits them, and a test that runs `git init`
-in a temporary directory then re-initialises the hook's repository instead. On 10 September 2026
-that wrote `core.bare = true`, then `core.worktree` naming one worktree, into the config every
-checkout of this repository shares: each of them then read and wrote that one worktree's files.
-"""
+"""Subprocess tests must not inherit Git variables that redirect the working repository."""
 
 from __future__ import annotations
 
@@ -18,9 +11,7 @@ API = pathlib.Path(__file__).resolve().parents[1]
 
 
 def test_a_hooks_repository_is_untouched_by_a_test_that_runs_git(tmp_path: pathlib.Path) -> None:
-    # Cleared here as well as in conftest: were conftest's protection gone and this run under a
-    # hook, the setup `git init` below would itself re-initialise the hook's repository — the
-    # damage this test exists to catch. No test database either: this run is about git alone.
+    # Cleared here as well as in conftest so this test independently proves the boundary.
     local = subprocess.run(
         ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True, check=True
     ).stdout.split()
