@@ -75,10 +75,11 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 12.2 | idempotent atomic persistence | `feature/p1-6l2-investment-staging-persistence` | 460 | 690 | 4, 12.1 |
 | 12.3 | owner API and cancellation | `feature/p1-6l3-investment-staging-api` | 340 | 560 | 12.2 |
 | 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12.3 |
-| 14.1 | disposal and income lifecycle | `feature/p1-6n1-investment-cash-events` | 560 | 760 | 4, 6 |
-| 14.2 | evidenced lot and cash allocation | `feature/p1-6n2-investment-cash-allocations` | 480 | 720 | 7, 14.1 |
-| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14.2 |
-| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.2, 15 |
+| 14.1 | cash-lifecycle database operation | `feature/p1-6n1-investment-cash-event-operation` | 300 | 420 | 4, 6 |
+| 14.2 | disposal and income owner API | `feature/p1-6n2-investment-cash-events` | 560 | 800 | 14.1 |
+| 14.3 | evidenced lot and cash allocation | `feature/p1-6n3-investment-cash-allocations` | 480 | 720 | 7, 14.2 |
+| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14.3 |
+| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.3, 15 |
 | 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
 | 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
 | 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
@@ -90,8 +91,9 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 
 Task 11 was split at dispatch after a 2,150–2,800-line reforecast exposed the draft-ratio
 contract below. Task 12 was split after its 2,350–3,310-line dispatch reforecast exposed the
-evidence-scope correction below. Tasks 14 and 19 still need dispatch-time reforecasting and must
-split before exceeding 1,600 lines.
+evidence-scope correction below. Task 14 was split after its 2,100–2,750-line reforecast exposed
+the missing database operation below. Tasks 15 and 19 still need dispatch-time reforecasting and
+must split before exceeding 1,600 lines.
 
 ## Task 1 — instruments and dated values
 
@@ -377,32 +379,53 @@ matched/mismatched detailed+summary, duplicate/overlap, unknown security and no-
 tests/test_investment_checkpoints.py tests/test_investment_checkpoints_live.py)`. Acceptance: a
 summary confirms positions without becoming transaction history or terminal price.
 
-Task 14 was split at dispatch. Its four domain/API surfaces and four focused suites reforecast to
-900–1,150 production lines and 1,200–1,600 test lines, beyond one reviewable branch. The split keeps
-event semantics independently reviewable before allocation evidence is allowed to make basis or
-funding claims.
+Task 14 was split at dispatch. Its database, domain/API and allocation surfaces plus SQL and Python
+suites reforecast to 900–1,150 production lines and 1,200–1,600 test lines, beyond one reviewable
+branch. The split establishes the authorized event operation before an API can call it, then keeps
+allocation evidence independently reviewable before it can make basis or funding claims.
 
-## Task 14.1 — disposal and income lifecycle
+## Task 14.1 — cash-lifecycle database operation
 
-**Branch/base/target:** `feature/p1-6n1-investment-cash-events` / `develop` / `develop`.
+**Branch/base/target:** `feature/p1-6n1-investment-cash-event-operation` / `develop` / `develop`.
+**Files:** `db/migrations/V37__investment_cash_lifecycle.sql`,
+`db/tests/0034_investment_cash_lifecycle.sql`; shared schema/status paths.
+**Contract/tests:** Extend the owner-authorized atomic investment append boundary with exact
+event-kind fields for cash distributions, interest, reinvested distributions, standalone charges
+and withheld tax while preserving sale/redemption/maturity behavior. A reinvested distribution has
+evidenced positive units and gross basis, creates its acquisition-origin lot and produces no
+external cash flow. Imported facts remain immutable; corrections append; household scope, RLS,
+dedupe, direction, precision and atomic refusal remain enforced. No basis, FIFO, average-cost or
+jurisdiction rule is inferred.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh`; run full verification on
+that same server and tear it down once with `scripts/test-db.sh down`. Acceptance: V37 admits every
+supported cash-lifecycle kind through one sanctioned operation and reconstructs the correct
+holding/lot effects without manufacturing external cash.
+
+## Task 14.2 — disposal and income owner API
+
+**Branch/base/target:** `feature/p1-6n2-investment-cash-events` / `develop` / `develop`.
 **Files:** `api/oneledger/investments/cash_lifecycle.py`,
-`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_cash_lifecycle.py`,
+`api/oneledger/investments/schemas.py`, `api/oneledger/routes/investment_events.py`,
+`api/tests/test_investment_cash_lifecycle.py`,
 `api/tests/test_investment_cash_lifecycle_live.py`; shared API/type/schema/status paths.
 **Contract/tests:** Owner-authorized sale, redemption and maturity events change units and cash;
-cash distributions and interest, standalone charges and withheld tax retain their distinct economic
-meaning. Partial sale, closed/reopened history, exact event-kind fields, append-only corrections,
-one-count charges/tax and external-flow boundary RED cases. A disposal without evidenced lot
-selection commits its units and cash but creates one `incomplete_lot_allocation` review and exposes
-neither realised cost/gain nor remaining basis.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, then `(cd api && uv run
-pytest -q tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py)`;
-reuse it with `scripts/test-db.sh env` and tear it down once. Acceptance: every cash lifecycle event
-is exact, reconstructs units, preserves closed history and never counts proceeds, income, charges or
-tax twice.
+cash distributions, interest, reinvested distributions, standalone charges and withheld tax retain
+their distinct economic meaning. Partial sale, closed/reopened history, exact event-kind fields,
+append-only corrections, one-count charges/tax and external-flow boundary RED cases. A reinvested
+distribution creates evidenced units/basis but no external cash. A disposal without evidenced lot
+selection commits units and cash, creates one `incomplete_lot_allocation` review and exposes neither
+realised cost/gain nor remaining basis.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
+tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py)`; run full
+verification on that same server and tear it down once with `scripts/test-db.sh down`. Acceptance:
+every cash-lifecycle event is exact, reconstructs units, preserves closed history and never counts
+proceeds, income, reinvestment, charges or tax twice.
 
-## Task 14.2 — evidenced lot and cash allocation
+## Task 14.3 — evidenced lot and cash allocation
 
-**Branch/base/target:** `feature/p1-6n2-investment-cash-allocations` / `develop` / `develop`.
+**Branch/base/target:** `feature/p1-6n3-investment-cash-allocations` / `develop` / `develop`.
 **Files:** `api/oneledger/investments/cash_lifecycle.py`,
 `api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_funding.py`,
 `api/tests/test_investment_cash_lifecycle.py`,
@@ -413,22 +436,25 @@ transactions to purchase funding, sale proceeds, distributions, charges and tax 
 roles. Cover full and partial sale evidence, missing allocation availability, many-to-many cash
 roles, over-allocation, cross-household and wrong-currency refusal, correction/unlink restoration,
 and one-count flow totals. No FIFO, average-cost or jurisdiction rule is inferred.
-**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, then `(cd api && uv run
-pytest -q tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
-tests/test_investment_funding.py tests/test_investment_funding_live.py)`; reuse it with
-`scripts/test-db.sh env` and tear it down once. Acceptance: confirmed lot and cash evidence makes
-only its supported basis/funding claims available; unresolved evidence withholds only the dependent
-claim.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
+tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
+tests/test_investment_funding.py tests/test_investment_funding_live.py)`; run full verification on
+that same server and tear it down once with `scripts/test-db.sh down`. Acceptance: confirmed lot and
+cash evidence makes only its supported basis/funding claims available; unresolved evidence withholds
+only the dependent claim.
 
 ## Task 15 — splits, bonuses, switches and platform transfers
 
 **Branch/base/target:** `feature/p1-6o-investment-corporate-actions` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/unit_lifecycle.py`,
+**Files:** `db/migrations/V38__investment_unit_lifecycle.sql`,
+`db/tests/0035_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
 `api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py`,
 `api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/schema/status paths.
-**Contract/tests:** Evidenced split/bonus, switch atomicity, full lot-preserving transfer, refused
-ambiguous partial transfer and unknown action block; basis/value/history, corrections, review and no
-contribution/return RED cases.
+**Contract/tests:** A forward owner-authorized database operation admits evidenced split, bonus,
+rights, switch and platform-transfer kinds that V31 currently refuses. Cover switch atomicity, full
+lot-preserving transfer, refused ambiguous partial transfer and unknown action block;
+basis/value/history, corrections, review and no contribution/return RED cases.
 **RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
 tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)`; shared types.
 Acceptance: P12 transfer/split meaning is preserved before its later distribution calculation.
