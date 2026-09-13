@@ -136,6 +136,20 @@ const dashboard: DashboardResponse = {
   thisMonth: march,
   trend: [march],
   cardsDue: [],
+  yearToDate: {
+    yearStart: "2026-01-01",
+    asOf: "2026-03-15",
+    incomeBase: "1500000.0000",
+    incomeSecondary: "66000.0000",
+    spendingBase: "300000.0000",
+    spendingSecondary: "13200.0000",
+    netBase: "1200000.0000",
+    netSecondary: "52800.0000",
+    savingsRatePctBase: "80.0000",
+    savingsRatePctSecondary: "80.0000",
+    investedBase: "0.0000",
+    investedSecondary: "0.0000",
+  },
 };
 
 describe("authenticated workspace", () => {

@@ -428,6 +428,35 @@ def test_holdings_mode_replaces_the_account_balance_exactly_once_in_both_currenc
     ]
 
 
+def test_year_to_date_invested_is_the_frozen_purchase_and_counts_once_when_corrected(
+    investment_dashboard: EventFixture,
+) -> None:
+    """Invested is `-net_amount_base`/`-net_amount_secondary` of active purchases this year; a
+    correction replaces the original rather than doubling the contribution."""
+    acquired = _investment_acquisition(investment_dashboard, event_date=date(2026, 2, 1))
+
+    ytd = the_dashboard(date(2026, 2, 5))["yearToDate"]
+    assert ytd["investedBase"] == "21.0000"
+    assert ytd["investedSecondary"] == "42.0000"
+
+    correction_body = {
+        **_body(investment_dashboard),
+        "units": "3.00000000",
+        "grossAmount": "15.0000",
+        "charges": "0.0000",
+        "netAmount": "-15.0000",
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "synthetic correction",
+    }
+    corrected = TestClient(app).post(
+        f"/investment-events/{acquired['id']}/corrections", json=correction_body
+    )
+    assert corrected.status_code == 201, corrected.text
+
+    after = the_dashboard(date(2026, 2, 5))["yearToDate"]
+    assert after["investedBase"] == "15.0000"
+
+
 @pytest.mark.parametrize(
     ("with_future", "status"), ((False, "missing_price"), (True, "future_price_only"))
 )

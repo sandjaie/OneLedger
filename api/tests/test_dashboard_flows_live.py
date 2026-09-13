@@ -229,6 +229,34 @@ def test_the_savings_rate_is_null_when_income_is_not_positive(live: Owner) -> No
 
 
 # ---------------------------------------------------------------------------------------
+# Year to date.
+
+
+def test_year_to_date_sums_from_january_through_as_of_in_both_currencies(live: Owner) -> None:
+    """Same classification as the month, widened to the calendar year: the prior year's December
+    and the day after as-of are both excluded."""
+    own = live.account_id
+    a_flow(live, own, "-999", date(2026, 12, 31), "expense")  # last year: excluded
+    a_flow(live, own, "10000", date(2027, 1, 5), "income")
+    a_flow(live, own, "-1234.50", date(2027, 1, 10), "expense", to_secondary="0.2")
+    a_flow(live, own, "-700", date(2027, 1, 16), "expense")  # after as-of: excluded
+
+    ytd = the_dashboard(date(2027, 1, 15))["yearToDate"]
+    assert ytd["yearStart"] == "2027-01-01"
+    assert ytd["asOf"] == "2027-01-15"
+    assert ytd["incomeBase"] == "10000.0000"
+    assert ytd["incomeSecondary"] == "2500.0000"
+    assert ytd["spendingBase"] == "1234.5000"
+    assert ytd["spendingSecondary"] == "246.9000"
+    assert ytd["netBase"] == "8765.5000"
+    assert ytd["netSecondary"] == "2253.1000"
+    assert ytd["savingsRatePctBase"] == "87.6550"
+    assert ytd["savingsRatePctSecondary"] == "90.1240"
+    assert ytd["investedBase"] == "0.0000"
+    assert ytd["investedSecondary"] == "0.0000"
+
+
+# ---------------------------------------------------------------------------------------
 # The trend.
 
 
