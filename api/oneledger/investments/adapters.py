@@ -108,6 +108,7 @@ class EvidenceDraft:
     source_event_id: SourceEventIdentity | None
     fingerprint_version: str
     fingerprint: str
+    source_correlation_id: SourceEventIdentity | None = None
 
 
 @dataclass(frozen=True, slots=True)

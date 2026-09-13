@@ -8,8 +8,9 @@ ALTER TABLE investment_event_draft
     unit_ratio IS NULL OR (unit_ratio > 0 AND unit_ratio <> 1)
   ),
   ADD CONSTRAINT investment_event_draft_ratio_shape_agrees CHECK (
-    (event_kind = 'split' AND units IS NULL
-      AND (state NOT IN ('ready', 'duplicate', 'committed') OR unit_ratio IS NOT NULL))
+    (event_kind = 'split' AND (
+      state NOT IN ('ready', 'duplicate', 'committed')
+      OR (units IS NULL AND unit_ratio IS NOT NULL)))
     OR (event_kind IS DISTINCT FROM 'split' AND unit_ratio IS NULL)
   );
 

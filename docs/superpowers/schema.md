@@ -1897,6 +1897,7 @@ CREATE TABLE investment_event_draft (
   event_date     DATE,
   event_kind     investment_event_kind,
   units          NUMERIC(28,8),
+  unit_ratio     NUMERIC(20,10),
   price          NUMERIC(20,6),
   gross_amount   NUMERIC(20,4),
   charges        NUMERIC(20,4),
@@ -2057,6 +2058,18 @@ serialize on the same event row and exactly one may commit. The active replaceme
 Unlink discovers and locks every referenced investment event in UUID order before it locks and
 restores the cash leaf. This matches confirmation's event-then-cash protocol and retains V33's exact
 prior-type restoration and owner/household boundary.
+
+---
+
+## `V35` (applied)
+
+### Staged investment split ratios
+
+V35 adds nullable `investment_event_draft.unit_ratio NUMERIC(20,10)`. Pending, blocked and conflict
+split drafts may retain source units while review is unresolved. A split may enter `ready`,
+`duplicate` or `committed` only after those units are cleared and a positive non-unity ratio is
+present; every non-split draft must keep the ratio null. Once evidence is attached, the ratio joins
+the draft's immutable typed source facts. Existing V34 rows upgrade with a null ratio.
 
 ---
 

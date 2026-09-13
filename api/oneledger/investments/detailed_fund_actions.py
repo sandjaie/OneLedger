@@ -213,12 +213,12 @@ def parse_action(
     )
 
 
-def accepted_action_orders(actions: Sequence[ParsedAction]) -> frozenset[int]:
-    """Accept only singleton actions or exact in/out pairs named by one source group."""
+def valid_action_groups(actions: Sequence[ParsedAction]) -> tuple[tuple[ParsedAction, ...], ...]:
+    """Return source-named singleton actions and exact indivisible in/out pairs."""
     grouped: dict[str, list[ParsedAction]] = defaultdict(list)
     for action in actions:
         grouped[action.action_reference.value].append(action)
-    accepted: set[int] = set()
+    accepted: list[tuple[ParsedAction, ...]] = []
     for candidates in grouped.values():
         kinds = frozenset(candidate.draft.event_kind for candidate in candidates)
         is_single = len(candidates) == 1 and not kinds.intersection(_PAIRED_KINDS)
@@ -227,6 +227,18 @@ def accepted_action_orders(actions: Sequence[ParsedAction]) -> frozenset[int]:
             and kinds in _PAIRS
             and len({candidate.target_key for candidate in candidates}) == 2
         )
+        if kinds == frozenset(("platform_transfer_in", "platform_transfer_out")):
+            accounts = {candidate.target_key[0] for candidate in candidates}
+            securities = {candidate.target_key[1] for candidate in candidates}
+            units = [candidate.draft.units for candidate in candidates]
+            is_pair = (
+                is_pair
+                and len(accounts) == 2
+                and len(securities) == 1
+                and units[0] is not None
+                and units[1] is not None
+                and units[0] == -units[1]
+            )
         if is_single or is_pair:
-            accepted.update(candidate.draft.source_order for candidate in candidates)
-    return frozenset(accepted)
+            accepted.append(tuple(candidates))
+    return tuple(accepted)

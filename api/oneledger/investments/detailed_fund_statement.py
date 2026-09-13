@@ -7,7 +7,7 @@ import re
 import unicodedata
 from bisect import bisect_right
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -544,11 +544,45 @@ class DetailedFundStatementAdapter:
                         ),
                     )
                 )
-        accepted_orders = actions.accepted_action_orders(parsed_actions)
+        accepted_groups = actions.valid_action_groups(parsed_actions)
+        accepted_orders = {
+            action.draft.source_order for group in accepted_groups for action in group
+        }
+        blocked_keys = {
+            action.target_key
+            for action in parsed_actions
+            if action.draft.source_order not in accepted_orders
+        } | {key for key, builder in builders.items() if builder.reasons}
+        previous_size = -1
+        while len(blocked_keys) != previous_size:
+            previous_size = len(blocked_keys)
+            for group in accepted_groups:
+                keys = {action.target_key for action in group}
+                if len(group) == 2 and keys.intersection(blocked_keys):
+                    blocked_keys.update(keys)
         for parsed_action in parsed_actions:
             builder = builders[parsed_action.target_key]
-            if parsed_action.draft.source_order in accepted_orders:
-                builder.drafts.append(parsed_action.draft)
+            if (
+                parsed_action.draft.source_order in accepted_orders
+                and parsed_action.target_key not in blocked_keys
+            ):
+                correlation = next(
+                    (
+                        group[0].action_reference
+                        for group in accepted_groups
+                        if len(group) == 2 and parsed_action in group
+                    ),
+                    None,
+                )
+                builder.drafts.append(
+                    replace(
+                        parsed_action.draft,
+                        evidence=replace(
+                            parsed_action.draft.evidence,
+                            source_correlation_id=correlation,
+                        ),
+                    )
+                )
             else:
                 evidence = parsed_action.draft.evidence
                 builder.reasons.append(

@@ -34,7 +34,8 @@ DO $$
 DECLARE
   base CHAR(3); secondary CHAR(3); household_id UUID; person_id UUID; user_id UUID;
   v_account_id UUID; v_security_id UUID; document_id UUID; import_id UUID; group_id UUID;
-  purchase_id UUID; split_id UUID; refusal TEXT;
+  purchase_id UUID; split_id UUID; holding_id UUID; committed_event_id UUID; refusal TEXT;
+  draft_state investment_draft_status;
 BEGIN
   SELECT min(code), max(code) INTO base, secondary FROM currency;
   INSERT INTO household (name, base_currency, secondary_currency)
@@ -106,10 +107,20 @@ BEGIN
   END LOOP;
 
   INSERT INTO investment_event_draft (
-    household_id, group_id, source_order, event_kind, units, unit_ratio, state
+    household_id, group_id, source_order, account_id, security_id, event_date,
+    event_kind, units, unit_ratio, charges, withheld_tax, net_amount, currency, state
   ) VALUES (
-    household_id, group_id, 2, 'split', NULL, NULL, 'pending'
+    household_id, group_id, 2, v_account_id, v_security_id, '2026-07-15',
+    'split', 1.00000000, NULL, 0, 0, 0, base, 'pending'
   ) RETURNING id INTO split_id;
+  BEGIN
+    UPDATE investment_event_draft SET state = 'ready' WHERE id = split_id;
+    RAISE EXCEPTION 'a pending split with source units resolved before transformation';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
+  END;
+  UPDATE investment_event_draft SET units = NULL WHERE id = split_id;
   BEGIN
     UPDATE investment_event_draft SET state = 'ready' WHERE id = split_id;
     RAISE EXCEPTION 'a ready split accepted no ratio';
@@ -117,10 +128,7 @@ BEGIN
     GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
     ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
   END;
-  UPDATE investment_event_draft SET unit_ratio = 2.0000000000 WHERE id = split_id;
-  UPDATE investment_event_draft SET state = 'ready', account_id = v_account_id,
-    security_id = v_security_id, event_date = '2026-07-15', charges = 0,
-    withheld_tax = 0, net_amount = 0, currency = base
+  UPDATE investment_event_draft SET unit_ratio = 2.0000000000, state = 'ready'
    WHERE id = split_id;
   ASSERT (SELECT unit_ratio = 2.0000000000 AND units IS NULL
             FROM investment_event_draft WHERE id = split_id),
@@ -134,6 +142,72 @@ BEGIN
   END;
 
   PERFORM set_config('app.user_id', user_id::TEXT, true);
+  PERFORM set_config('oneledger.investment_event_append', 'on', true);
+  INSERT INTO holding (
+    household_id, account_id, security_id, current_units, opened_on, closed_on
+  ) VALUES (
+    household_id, v_account_id, v_security_id, 0, '2026-07-15', '2026-07-15'
+  ) RETURNING id INTO holding_id;
+  INSERT INTO investment_transaction (
+    household_id, account_id, holding_id, security_id, event_date, event_kind,
+    units, unit_ratio, price, gross_amount, charges, withheld_tax, net_amount,
+    currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+    net_amount_base, net_amount_secondary, source_kind, source_contract, source_event_id
+  ) VALUES (
+    household_id, v_account_id, holding_id, v_security_id, '2026-07-01', 'purchase',
+    1.00000000, NULL, 1.000000, 1.0000, 0, 0, -1.0000,
+    base, '2026-07-01', 1, 1, -1.0000, -1.0000,
+    'statement', 'synthetic_statement_v1', 'synthetic-prior-acquisition'
+  );
+  PERFORM set_config('oneledger.investment_event_append', 'on', true);
+  INSERT INTO investment_transaction (
+    household_id, account_id, holding_id, security_id, event_date, event_kind,
+    units, unit_ratio, price, gross_amount, charges, withheld_tax, net_amount,
+    currency, source_kind, source_contract, source_event_id
+  ) VALUES (
+    household_id, v_account_id, holding_id, v_security_id, '2026-07-15', 'split',
+    NULL, 2.0000000000, NULL, NULL, 0, 0, 0,
+    base, 'statement', 'synthetic_statement_v1', 'synthetic-committed-split'
+  ) RETURNING id INTO committed_event_id;
+  PERFORM set_config('oneledger.investment_event_append', 'off', true);
+
+  FOREACH draft_state IN ARRAY ARRAY[
+    'ready'::investment_draft_status,
+    'duplicate'::investment_draft_status,
+    'committed'::investment_draft_status
+  ] LOOP
+    BEGIN
+      INSERT INTO investment_event_draft (
+        household_id, group_id, source_order, account_id, security_id, event_date,
+        event_kind, units, unit_ratio, charges, withheld_tax, net_amount, currency,
+        state, committed_transaction_id
+      ) VALUES (
+        household_id, group_id, 3, v_account_id, v_security_id, '2026-07-15',
+        'split', NULL, NULL, 0, 0, 0, base, draft_state,
+        CASE WHEN draft_state = 'committed' THEN committed_event_id ELSE NULL END
+      );
+      RAISE EXCEPTION '% split accepted no ratio', draft_state;
+    EXCEPTION WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+      ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
+    END;
+    BEGIN
+      INSERT INTO investment_event_draft (
+        household_id, group_id, source_order, account_id, security_id, event_date,
+        event_kind, units, unit_ratio, charges, withheld_tax, net_amount, currency,
+        state, committed_transaction_id
+      ) VALUES (
+        household_id, group_id, 3, v_account_id, v_security_id, '2026-07-15',
+        'split', 1.00000000, 2.0000000000, 0, 0, 0, base, draft_state,
+        CASE WHEN draft_state = 'committed' THEN committed_event_id ELSE NULL END
+      );
+      RAISE EXCEPTION '% split accepted source units', draft_state;
+    EXCEPTION WHEN check_violation THEN
+      GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+      ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
+    END;
+  END LOOP;
+
   PERFORM record_investment_evidence(
     group_id, document_id, split_id, NULL, NULL, 1::SMALLINT, 1,
     'synthetic_statement_v1', '3', 'synthetic-split',
@@ -205,8 +279,8 @@ BEGIN
     currency, state
   ) VALUES (
     f.household_id, f.group_id, 1, f.account_id, f.security_id, '2026-07-01',
-    'purchase', 1.00000000, 10.000000, 10.0000, 0.0000, 0.0000, -10.0000,
-    base, 'ready'
+    'split', 4.00000000, NULL, NULL, 0.0000, 0.0000, 0.0000,
+    base, 'pending'
   ) RETURNING id INTO f.draft_id;
   UPDATE t0032_upgrade_ids SET draft_id = f.draft_id;
 END $$;
@@ -214,10 +288,34 @@ END $$;
 \ir ../migrations/V35__investment_draft_unit_ratio.sql
 
 DO $$
+DECLARE refusal TEXT;
 BEGIN
-  ASSERT (SELECT d.unit_ratio IS NULL
+  ASSERT (SELECT d.unit_ratio IS NULL AND d.units = 4.00000000
             FROM investment_event_draft d JOIN t0032_upgrade_ids f ON f.draft_id = d.id),
-    'V35 must preserve populated V34 drafts with a null ratio';
+    'V35 must preserve a pending split source row and add a null ratio';
+  BEGIN
+    UPDATE investment_event_draft SET state = 'ready'
+     WHERE id = (SELECT draft_id FROM t0032_upgrade_ids);
+    RAISE EXCEPTION 'a preserved pending split resolved with source units and no ratio';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
+  END;
+  UPDATE investment_event_draft SET units = NULL
+   WHERE id = (SELECT draft_id FROM t0032_upgrade_ids);
+  BEGIN
+    UPDATE investment_event_draft SET state = 'ready'
+     WHERE id = (SELECT draft_id FROM t0032_upgrade_ids);
+    RAISE EXCEPTION 'a preserved split resolved without its ratio';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_event_draft_ratio_shape_agrees', refusal;
+  END;
+  UPDATE investment_event_draft SET unit_ratio = 2.0000000000, state = 'ready'
+   WHERE id = (SELECT draft_id FROM t0032_upgrade_ids);
+  ASSERT (SELECT d.units IS NULL AND d.unit_ratio = 2.0000000000 AND d.state = 'ready'
+            FROM investment_event_draft d JOIN t0032_upgrade_ids f ON f.draft_id = d.id),
+    'a preserved split resolves only after source units transform into a valid ratio';
   RAISE NOTICE 'PASS 0032 populated V34-to-V35 upgrade preserves existing drafts';
 END $$;
 ROLLBACK;

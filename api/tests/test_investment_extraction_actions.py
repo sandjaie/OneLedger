@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from decimal import Decimal
 from pathlib import Path
 
@@ -157,7 +158,12 @@ def test_paired_actions_use_the_explicit_source_group_and_preserve_directions(
         action_rows_per_page=1,
         page_targets=[
             ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
-            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-B"),
+            (
+                "folio MASKED ****B2C3",
+                "SYNTHETIC-SECURITY-A"
+                if in_kind == "PLATFORM_TRANSFER_IN"
+                else "SYNTHETIC-SECURITY-B",
+            ),
         ],
     )
 
@@ -170,6 +176,96 @@ def test_paired_actions_use_the_explicit_source_group_and_preserve_directions(
     assert [draft.price for draft in drafts] == (
         [Decimal("5.000000"), Decimal("5.000000")] if with_price else [None, None]
     )
+    correlations = [draft.evidence.source_correlation_id for draft in drafts]
+    assert all(correlation is not None for correlation in correlations)
+    assert correlations[0] == correlations[1]
+    assert correlations[0] is not None and correlations[0].value == shared_reference
+    assert shared_reference not in repr(result)
+    with pytest.raises(FrozenInstanceError):
+        drafts[0].evidence.source_correlation_id = correlations[1]  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    ("out_units", "in_units", "second_account", "second_security"),
+    [
+        ("-2.00000000", "1.00000000", "****B2C3", "SYNTHETIC-SECURITY-A"),
+        ("-2.00000000", "2.00000000", "****B2C3", "SYNTHETIC-SECURITY-B"),
+        ("-2.00000000", "2.00000000", "****A1B2", "SYNTHETIC-SECURITY-A"),
+    ],
+)
+def test_platform_transfer_requires_balanced_units_one_security_and_distinct_accounts(
+    tmp_path: Path,
+    out_units: str,
+    in_units: str,
+    second_account: str,
+    second_security: str,
+) -> None:
+    shared_reference = "SYNTHETIC-PLATFORM-PAIR"
+    result = _extract(
+        tmp_path,
+        [
+            _action(
+                "PLATFORM_TRANSFER_OUT",
+                units=out_units,
+                action_reference=shared_reference,
+            ),
+            _action(
+                "PLATFORM_TRANSFER_IN",
+                units=in_units,
+                action_reference=shared_reference,
+            ),
+        ],
+        action_rows_per_page=1,
+        page_targets=[
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
+            (f"folio MASKED {second_account}", second_security),
+        ],
+    )
+
+    assert all(group.drafts == () for group in result.groups)
+    assert all(
+        group.reasons and all(reason.code == "unrecognized_event" for reason in group.reasons)
+        for group in result.groups
+    )
+
+
+def test_a_blocker_on_one_correlated_leg_blocks_both_while_an_unrelated_group_remains_usable(
+    tmp_path: Path,
+) -> None:
+    shared_reference = "SYNTHETIC-PRIVATE-ATOMIC-PAIR"
+    result = _extract(
+        tmp_path,
+        [
+            _action(
+                "PLATFORM_TRANSFER_OUT",
+                units="-2.00000000",
+                action_reference=shared_reference,
+            ),
+            _action(
+                "PLATFORM_TRANSFER_IN",
+                units="2.00000000",
+                action_reference=shared_reference,
+            ),
+            _action("UNKNOWN_ACTION", action_reference="SYNTHETIC-LOCAL-BLOCKER"),
+        ],
+        events=[_purchase()],
+        action_rows_per_page=1,
+        page_targets=[
+            ("folio MASKED ****E5F6", "SYNTHETIC-SECURITY-E"),
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-P"),
+            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-P"),
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-P"),
+        ],
+    )
+
+    assert [draft.event_kind for draft in result.groups[0].drafts] == ["purchase"]
+    assert result.groups[0].reasons == ()
+    assert all(group.drafts == () for group in result.groups[1:])
+    assert all(
+        any(reason.code == "unrecognized_event" for reason in group.reasons)
+        for group in result.groups[1:]
+    )
+    assert shared_reference not in repr(result)
 
 
 def test_matching_nearby_values_without_the_same_explicit_group_never_pair(tmp_path: Path) -> None:
@@ -182,7 +278,7 @@ def test_matching_nearby_values_without_the_same_explicit_group_never_pair(tmp_p
         action_rows_per_page=1,
         page_targets=[
             ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
-            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-B"),
+            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-A"),
         ],
     )
 
@@ -248,7 +344,7 @@ def test_unknown_action_blocks_its_group_while_an_unrelated_group_remains_usable
         events=[_purchase()],
         page_targets=[
             ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
-            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-B"),
+            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-A"),
         ],
     )
 
@@ -311,7 +407,7 @@ def test_action_page_breaks_keep_ordered_evidence_and_private_grouping_ids(tmp_p
         action_rows_per_page=1,
         page_targets=[
             ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
-            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-B"),
+            ("folio MASKED ****B2C3", "SYNTHETIC-SECURITY-A"),
         ],
     )
 
