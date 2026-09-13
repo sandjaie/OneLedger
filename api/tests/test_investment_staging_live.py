@@ -279,21 +279,25 @@ def _checkpoint(order: int, currency: str) -> PositionCheckpointDraft:
     )
 
 
-def _extraction(groups: tuple[StatementGroup, ...]) -> StatementExtraction:
-    return StatementExtraction(True, "detailed_fund_statement_v1", "3", groups)
+def _extraction(
+    groups: tuple[StatementGroup, ...], reasons: tuple[SafeReason, ...] = ()
+) -> StatementExtraction:
+    return StatementExtraction(True, "detailed_fund_statement_v1", "3", groups, reasons)
 
 
 def _prepared(
     fixture: StagingFixture,
     groups: tuple[StatementGroup, ...],
     resolutions: tuple[TargetResolution, ...] | None = None,
+    *,
+    reasons: tuple[SafeReason, ...] = (),
 ) -> PreparedImport:
     if resolutions is None:
         resolutions = tuple(
             TargetResolution(group.group_number, fixture.account_id, fixture.security_id)
             for group in groups
         )
-    return prepare_import(_extraction(groups), resolutions)
+    return prepare_import(_extraction(groups, reasons), resolutions)
 
 
 def test_only_complete_active_account_identity_is_reused(live_staging: StagingFixture) -> None:
@@ -427,6 +431,132 @@ def test_active_retry_must_match_the_already_staged_targets_and_facts(
     with live_staging.connection.cursor() as cur:
         cur.execute("SELECT account_id, security_id FROM investment_event_draft")
         assert cur.fetchone() == (live_staging.account_id, live_staging.security_id)
+
+
+def test_global_review_reasons_are_retained_and_part_of_exact_retry(
+    live_staging: StagingFixture,
+) -> None:
+    group = StatementGroup(1, live_staging.masked_target, (_draft(1, live_staging.currency),))
+    prepared = _prepared(
+        live_staging,
+        (group,),
+        reasons=(SafeReason("unsupported_format", 1, 9),),
+    )
+
+    created = staging.stage_prepared_import(
+        live_staging.owner, live_staging.document_ids[0], prepared
+    )
+    assert created.status == "awaiting_review"
+    with live_staging.connection.cursor() as cur:
+        cur.execute(
+            """SELECT reason::text, group_id FROM investment_review_item
+                 WHERE import_id = %s""",
+            (created.import_id,),
+        )
+        assert cur.fetchall() == [("unsupported_format", None)]
+        cur.execute(
+            "SELECT status::text FROM investment_import_group WHERE import_id = %s",
+            (created.import_id,),
+        )
+        assert cur.fetchone() == ("ready",)
+
+    changed = _prepared(
+        live_staging,
+        (group,),
+        reasons=(SafeReason("ambiguous_account", 1, 9),),
+    )
+    with pytest.raises(staging.StagingError, match="^investment import retry conflicts$"):
+        staging.stage_prepared_import(live_staging.owner, live_staging.document_ids[0], changed)
+
+
+def test_cross_currency_and_closed_historical_targets_remain_valid(
+    live_staging: StagingFixture,
+) -> None:
+    with live_staging.connection.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET currency = %s WHERE id = %s",
+            (live_staging.secondary_currency, live_staging.second_account_id),
+        )
+        cur.execute(
+            """UPDATE account SET is_active = false, opened_on = '2026-03-01',
+                      closed_on = '2026-03-31' WHERE id = %s""",
+            (live_staging.account_id,),
+        )
+        cur.execute(
+            "UPDATE security SET is_active = false WHERE id = %s", (live_staging.security_id,)
+        )
+    live_staging.connection.commit()
+    groups = (
+        StatementGroup(1, live_staging.masked_target, (_draft(1, live_staging.currency),)),
+        StatementGroup(2, live_staging.masked_target, (_draft(2, live_staging.currency),)),
+    )
+
+    result = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared(
+            live_staging,
+            groups,
+            (
+                TargetResolution(1, live_staging.account_id, live_staging.security_id),
+                TargetResolution(2, live_staging.second_account_id, live_staging.security_id),
+            ),
+        ),
+    )
+
+    assert result.status == "staged"
+    with live_staging.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM investment_event_draft WHERE household_id = %s",
+            (live_staging.owner.household_id,),
+        )
+        assert cur.fetchone() == (2,)
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    ["draft_order", "draft_page", "checkpoint_order", "checkpoint_row"],
+)
+def test_retry_refuses_any_changed_immutable_provenance(
+    live_staging: StagingFixture, provenance: str
+) -> None:
+    draft = _draft(1, live_staging.currency)
+    checkpoint = _checkpoint(2, live_staging.currency)
+    group = StatementGroup(1, live_staging.masked_target, (draft,), (checkpoint,))
+    staging.stage_prepared_import(
+        live_staging.owner, live_staging.document_ids[0], _prepared(live_staging, (group,))
+    )
+    if provenance == "draft_order":
+        changed = replace(group, drafts=(replace(draft, source_order=7),))
+    elif provenance == "draft_page":
+        changed = replace(
+            group, drafts=(replace(draft, evidence=replace(draft.evidence, page_number=7)),)
+        )
+    elif provenance == "checkpoint_order":
+        changed = replace(group, checkpoints=(replace(checkpoint, source_order=7),))
+    else:
+        changed = replace(
+            group,
+            checkpoints=(replace(checkpoint, evidence=replace(checkpoint.evidence, row_number=7)),),
+        )
+
+    with pytest.raises(staging.StagingError, match="^investment import retry conflicts$"):
+        staging.stage_prepared_import(
+            live_staging.owner,
+            live_staging.document_ids[0],
+            _prepared(live_staging, (changed,)),
+        )
+
+    with live_staging.connection.cursor() as cur:
+        cur.execute("SELECT source_order FROM investment_event_draft")
+        assert cur.fetchone() == (1,)
+        cur.execute("SELECT source_order FROM investment_position_checkpoint")
+        assert cur.fetchone() == (2,)
+        cur.execute(
+            """SELECT page_number, row_number FROM investment_evidence
+                 ORDER BY row_number"""
+        )
+        assert cur.fetchall() == [(1, 1), (1, 2)]
 
 
 @pytest.mark.parametrize(

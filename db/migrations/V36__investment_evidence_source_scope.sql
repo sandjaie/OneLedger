@@ -3,7 +3,8 @@
 DROP INDEX idx_investment_evidence_document_fingerprint;
 CREATE UNIQUE INDEX idx_investment_evidence_document_fingerprint
   ON investment_evidence (
-    household_id, document_id, source_contract, fingerprint_version, evidence_fingerprint);
+    household_id, document_id, source_contract, fingerprint_version, evidence_fingerprint)
+  WHERE source_event_id IS NULL;
 
 CREATE INDEX idx_investment_evidence_source_identity_overlap
   ON investment_evidence (
@@ -74,7 +75,8 @@ BEGIN
      AND source_contract = p_source_contract
      AND CASE
        WHEN p_source_event_id IS NOT NULL THEN source_event_id = p_source_event_id
-       ELSE fingerprint_version = p_fingerprint_version
+       ELSE source_event_id IS NULL
+         AND fingerprint_version = p_fingerprint_version
          AND evidence_fingerprint = p_evidence_fingerprint
      END
    ORDER BY created_at, id

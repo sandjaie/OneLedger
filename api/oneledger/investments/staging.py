@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
@@ -285,8 +284,8 @@ def _validate_target(cur: psycopg.Cursor[Any], household_id: UUID, target: Prepa
     if target.account_id is None or target.security_id is None:
         raise StagingError("investment targets are unresolved")
     cur.execute(
-        """SELECT currency::text FROM account
-             WHERE household_id = %s AND id = %s AND is_active
+        """SELECT 1 FROM account
+             WHERE household_id = %s AND id = %s
                AND account_type IN ('brokerage', 'mutual_fund_folio')
              FOR KEY SHARE""",
         (household_id, target.account_id),
@@ -294,7 +293,7 @@ def _validate_target(cur: psycopg.Cursor[Any], household_id: UUID, target: Prepa
     account = cur.fetchone()
     cur.execute(
         """SELECT currency::text FROM security
-             WHERE id = %s AND (household_id IS NULL OR household_id = %s) AND is_active
+             WHERE id = %s AND (household_id IS NULL OR household_id = %s)
              FOR KEY SHARE""",
         (target.security_id, household_id),
     )
@@ -305,8 +304,7 @@ def _validate_target(cur: psycopg.Cursor[Any], household_id: UUID, target: Prepa
     if (
         account is None
         or security is None
-        or str(account[0]).strip() != str(security[0]).strip()
-        or (fact_currencies and fact_currencies != {str(account[0]).strip()})
+        or (fact_currencies and fact_currencies != {str(security[0]).strip()})
     ):
         raise StagingError(_INVALID_TARGET)
 
@@ -379,9 +377,14 @@ def _overlap_is_exact(
     )
 
 
-def _draft_signature(target: PreparedTarget, draft: InvestmentEventDraft) -> tuple[Any, ...]:
+def _draft_signature(
+    target: PreparedTarget, draft: InvestmentEventDraft, *, event_attachment: bool = False
+) -> tuple[Any, ...]:
     evidence = draft.evidence
     return (
+        None if event_attachment else draft.source_order,
+        evidence.page_number,
+        evidence.row_number,
         target.account_id,
         target.security_id,
         draft.event_date,
@@ -405,6 +408,9 @@ def _checkpoint_signature(
 ) -> tuple[Any, ...]:
     evidence = checkpoint.evidence
     return (
+        checkpoint.source_order,
+        evidence.page_number,
+        evidence.row_number,
         target.account_id,
         target.security_id,
         checkpoint.as_of_date,
@@ -430,6 +436,14 @@ def _retry_matches(
     stored_groups = cur.fetchall()
     if [row[1] for row in stored_groups] != [group.group_number for group in prepared.groups]:
         return False
+    cur.execute(
+        """SELECT reason::text FROM investment_review_item
+             WHERE household_id = %s AND import_id = %s AND group_id IS NULL
+               AND status = 'open'""",
+        (household_id, import_id),
+    )
+    if {row[0] for row in cur.fetchall()} != {reason.code for reason in prepared.reasons}:
+        return False
     assert prepared.source_contract is not None
     for stored, group in zip(stored_groups, prepared.groups, strict=True):
         group_id = stored[0]
@@ -441,9 +455,12 @@ def _retry_matches(
                 if overlap is not None and not _overlap_is_exact(overlap, target, draft):
                     expected_reasons.add("duplicate_conflict")
                 else:
-                    expected_events.append(_draft_signature(target, draft))
+                    expected_events.append(
+                        _draft_signature(target, draft, event_attachment=overlap is not None)
+                    )
         cur.execute(
-            """SELECT coalesce(d.account_id, event.account_id),
+            """SELECT d.source_order, evidence.page_number, evidence.row_number,
+                      coalesce(d.account_id, event.account_id),
                       coalesce(d.security_id, event.security_id),
                       coalesce(d.event_date, event.event_date),
                       coalesce(d.event_kind, event.event_kind)::text,
@@ -459,29 +476,43 @@ def _retry_matches(
                  LEFT JOIN investment_transaction event
                    ON event.id = evidence.investment_transaction_id
                 WHERE evidence.household_id = %s AND evidence.group_id = %s
-                  AND evidence.checkpoint_id IS NULL""",
+                  AND evidence.checkpoint_id IS NULL
+                ORDER BY coalesce(d.source_order, evidence.row_number), evidence.page_number,
+                         evidence.row_number, evidence.evidence_fingerprint""",
             (household_id, group_id),
         )
-        if Counter(cur.fetchall()) != Counter(expected_events):
+        expected_events.sort(
+            key=lambda signature: (
+                signature[0] if signature[0] is not None else signature[2],
+                signature[1],
+                signature[2],
+                signature[-1],
+            )
+        )
+        if cur.fetchall() != expected_events:
             return False
-        expected_checkpoints = Counter(
+        expected_checkpoints = [
             _checkpoint_signature(target, checkpoint)
             for target in group.targets
             for checkpoint in target.checkpoints
-        )
+        ]
         cur.execute(
-            """SELECT checkpoint.account_id, checkpoint.security_id, checkpoint.as_of_date,
+            """SELECT checkpoint.source_order, evidence.page_number, evidence.row_number,
+                      checkpoint.account_id, checkpoint.security_id, checkpoint.as_of_date,
                       checkpoint.reported_units, checkpoint.reported_cost_native,
                       checkpoint.reported_value_native, rtrim(checkpoint.currency),
                       checkpoint.declared_unit_scale, evidence.source_event_id,
                       evidence.fingerprint_version, evidence.evidence_fingerprint
                  FROM investment_evidence evidence
-                 JOIN investment_position_checkpoint checkpoint
+                JOIN investment_position_checkpoint checkpoint
                    ON checkpoint.id = evidence.checkpoint_id
-                WHERE evidence.household_id = %s AND evidence.group_id = %s""",
+                WHERE evidence.household_id = %s AND evidence.group_id = %s
+                ORDER BY checkpoint.source_order, evidence.page_number, evidence.row_number,
+                         evidence.evidence_fingerprint""",
             (household_id, group_id),
         )
-        if Counter(cur.fetchall()) != expected_checkpoints:
+        expected_checkpoints.sort(key=lambda signature: (signature[0:3], signature[-1]))
+        if cur.fetchall() != expected_checkpoints:
             return False
         cur.execute(
             """SELECT reason::text FROM investment_review_item
@@ -530,7 +561,7 @@ def _insert_review(
     cur: psycopg.Cursor[Any],
     household_id: UUID,
     import_id: UUID,
-    group_id: UUID,
+    group_id: UUID | None,
     reason: ReviewReason,
 ) -> None:
     cur.execute(
@@ -672,6 +703,8 @@ def stage_prepared_import(
                 ),
             )
             import_id = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+            for reason in prepared.reasons:
+                _insert_review(cur, owner.household_id, import_id, None, reason.code)
             for group in prepared.groups:
                 cur.execute(
                     """INSERT INTO investment_import_group (
