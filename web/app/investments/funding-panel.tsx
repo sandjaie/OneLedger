@@ -293,6 +293,9 @@ export function FundingPanel({ events, request }: Props) {
     confirmed?.allocations.map((allocation) => allocation.cashTransactionId) ?? [],
   ));
   const removingTransaction = transactionFor(removingCashId);
+  const removingAllocationCount = confirmed?.allocations.filter(
+    (allocation) => allocation.cashTransactionId === removingCashId,
+  ).length ?? 0;
 
   return (
     <section aria-labelledby="funding-title" className="investment-funding-panel">
@@ -476,7 +479,8 @@ export function FundingPanel({ events, request }: Props) {
         <fieldset aria-label="Confirm funding removal" className="investment-funding-removal">
           <legend>Remove cash-leaf allocations</legend>
           {removingTransaction && <strong>{cashLabel(removingTransaction)}</strong>}
-          <p>This removes every funding allocation on this cash leaf and restores its recorded prior type. It does not remove the purchase or transfer chain.</p>
+          <p>{removingAllocationCount} confirmed funding allocation{removingAllocationCount === 1 ? "" : "s"} will be removed from this cash leaf.</p>
+          <p>The cash entry returns to its recorded prior type. The purchase and transfer chain remain unchanged.</p>
           <div className="investment-confirm-actions">
             <button className="primary-action" disabled={busy} onClick={() => void unlink()} ref={removeButton} type="button">
               {busy ? "Removing funding link…" : "Remove funding link"}

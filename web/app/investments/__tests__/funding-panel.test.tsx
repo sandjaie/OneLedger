@@ -16,6 +16,7 @@ import type {
 
 const EVENT_A = "00000000-0000-4000-8000-000000000101";
 const EVENT_B = "00000000-0000-4000-8000-000000000102";
+const EVENT_C = "00000000-0000-4000-8000-000000000103";
 const CASH_A = "00000000-0000-4000-8000-000000000201";
 const CASH_B = "00000000-0000-4000-8000-000000000202";
 const CASH_TRANSFER = "00000000-0000-4000-8000-000000000203";
@@ -91,7 +92,7 @@ function cash(overrides: Partial<TransactionRow> = {}): TransactionRow {
 const transactions: TransactionsResponse = {
   transactions: [
     cash(),
-    cash({ id: CASH_B, bookedDate: "2026-04-09", descriptionRaw: "Synthetic second debit", amount: "-11.0000" }),
+    cash({ id: CASH_B, bookedDate: "2026-04-09", descriptionRaw: "Synthetic second debit", amount: "-11.0000", txnType: "fee" }),
     cash({ id: CASH_TRANSFER, descriptionRaw: "Synthetic confirmed transfer leg", transferId: "00000000-0000-4000-8000-000000000501" }),
   ],
   total: 3,
@@ -356,9 +357,31 @@ describe("investment funding", () => {
   });
 
   it("targets one confirmed cash leaf for reviewed removal and preserves its context and focus", async () => {
-    const twoRows = [
+    const fundingEvents = [
+      investmentEvent(),
+      investmentEvent({ id: EVENT_B, eventKind: "recurring_purchase", grossAmount: "4.0000", netAmount: "-5.0000" }),
+      investmentEvent({ id: EVENT_C, eventKind: "recurring_purchase", grossAmount: "5.0000", netAmount: "-6.0000" }),
+    ];
+    const proposalRows = [
       ...proposal().allocations,
-      { ...proposal().allocations[0], cashTransactionId: CASH_B, allocatedAmount: "11.0000", cashAmount: "11.0000" },
+      {
+        ...proposal().allocations[0],
+        investmentEventId: EVENT_B,
+        cashTransactionId: CASH_B,
+        allocatedAmount: "5.0000",
+        eventRemainingAmount: "5.0000",
+        cashAmount: "11.0000",
+        priorTransactionType: "fee",
+      },
+      {
+        ...proposal().allocations[0],
+        investmentEventId: EVENT_C,
+        cashTransactionId: CASH_B,
+        allocatedAmount: "6.0000",
+        eventRemainingAmount: "6.0000",
+        cashAmount: "11.0000",
+        priorTransactionType: "fee",
+      },
     ];
     const confirmed: FundingConfirmationResponse = {
       state: "confirmed",
@@ -374,10 +397,19 @@ describe("investment funding", () => {
         },
         {
           id: "00000000-0000-4000-8000-000000000602",
-          investmentEventId: EVENT_A,
+          investmentEventId: EVENT_B,
           cashTransactionId: CASH_B,
           role: "funding",
-          allocatedAmount: "11.0000",
+          allocatedAmount: "5.0000",
+          priorTransactionType: "fee",
+          cashTransactionType: "investment_buy",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000603",
+          investmentEventId: EVENT_C,
+          cashTransactionId: CASH_B,
+          role: "funding",
+          allocatedAmount: "6.0000",
           priorTransactionType: "fee",
           cashTransactionType: "investment_buy",
         },
@@ -387,22 +419,24 @@ describe("investment funding", () => {
       state: "unlinked",
       cashTransactionId: CASH_B,
       restoredTransactionType: "fee",
-      removedAllocationCount: 3,
+      removedAllocationCount: 2,
     };
     let releaseConfirmation!: (value: FundingConfirmationResponse) => void;
     const request = routes({
       ...candidateReads(),
-      "POST /investment-funding/proposals": proposal({ allocations: twoRows }),
+      "POST /investment-funding/proposals": proposal({ allocations: proposalRows }),
       "POST /investment-funding/confirmations": () => new Promise((resolve) => {
         releaseConfirmation = resolve;
       }),
       [`DELETE /investment-funding/cash-transactions/${CASH_B}`]: unlinked,
     });
-    renderPanel(request);
+    renderPanel(request, fundingEvents);
     await loadCandidates();
     fillAllocation(1, EVENT_A, CASH_A, "30.0000");
     fireEvent.click(screen.getByRole("button", { name: "Add allocation row" }));
-    fillAllocation(2, EVENT_A, CASH_B, "11.0000");
+    fillAllocation(2, EVENT_B, CASH_B, "5.0000");
+    fireEvent.click(screen.getByRole("button", { name: "Add allocation row" }));
+    fillAllocation(3, EVENT_C, CASH_B, "6.0000");
     fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
     const confirmButton = await screen.findByRole("button", { name: "Confirm funding" });
     fireEvent.click(confirmButton);
@@ -416,7 +450,8 @@ describe("investment funding", () => {
     expect(JSON.parse(String(confirmationPosts[0][1]?.body))).toEqual({
       allocations: [
         { investmentEventId: EVENT_A, cashTransactionId: CASH_A, allocatedAmount: "30.0000" },
-        { investmentEventId: EVENT_A, cashTransactionId: CASH_B, allocatedAmount: "11.0000" },
+        { investmentEventId: EVENT_B, cashTransactionId: CASH_B, allocatedAmount: "5.0000" },
+        { investmentEventId: EVENT_C, cashTransactionId: CASH_B, allocatedAmount: "6.0000" },
       ],
       expectedState: "a".repeat(64),
     });
@@ -424,10 +459,11 @@ describe("investment funding", () => {
     const secondRecord = screen.getByRole("article", { name: "Confirmed funding for Synthetic second debit" });
     const secondReview = within(secondRecord).getByRole("button", { name: "Review removal for Synthetic second debit" });
     fireEvent.click(secondReview);
-    expect(request.mock.calls.some(([path]) => path.includes("cash-transactions"))).toBe(false);
     const removal = screen.getByRole("group", { name: "Confirm funding removal" });
     expect(within(removal).getByText(/Synthetic second debit/)).toBeTruthy();
     expect(within(removal).getByText(/XAA -11.0000/)).toBeTruthy();
+    expect(within(removal).getByText("2 confirmed funding allocations will be removed from this cash leaf.")).toBeTruthy();
+    expect(request.mock.calls.some(([path]) => path.includes("cash-transactions"))).toBe(false);
     expect(within(removal).queryByText(/Synthetic investment debit/)).toBeNull();
     expect(document.activeElement).toBe(within(removal).getByRole("button", { name: "Remove funding link" }));
     fireEvent.click(within(removal).getByRole("button", { name: "Keep funding link" }));
@@ -438,7 +474,7 @@ describe("investment funding", () => {
     fireEvent.click(within(confirmedRemoval).getByRole("button", { name: "Remove funding link" }));
     const result = await screen.findByRole("status");
     expect(result.textContent).toContain("Synthetic second debit");
-    expect(result.textContent).toContain("3 funding allocations removed. Cash entry restored to fee.");
+    expect(result.textContent).toContain("2 funding allocations removed. Cash entry restored to fee.");
     expect(screen.getByRole("article", { name: "Confirmed funding for Synthetic investment debit" })).toBeTruthy();
     expect(screen.queryByRole("article", { name: "Confirmed funding for Synthetic second debit" })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Purchase funding" }));
