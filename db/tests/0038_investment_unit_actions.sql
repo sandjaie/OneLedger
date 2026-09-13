@@ -258,6 +258,99 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- A correction that moves a split's date backward across an intervening active purchase must
+-- refuse: naively re-anchoring on the original date alone would silently absorb that purchase
+-- into the recomputed baseline and write the wrong unit effect.
+BEGIN;
+DO $$
+DECLARE
+  f RECORD; purchase_id UUID; second_purchase_id UUID; split_id UUID; holding_id UUID;
+  refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0038_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  purchase_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-01-01', 'purchase',
+    10.00000000, 10.000000, 100.0000, 0.0000, 0.0000, -100.0000, f.base,
+    '2026-01-01', 1.0000000000, 1.0000000000, -100.0000, -100.0000,
+    'owner_entered', 'unit_action_v1', 'ua-backdate-purchase-one', NULL, NULL, NULL, NULL);
+  SELECT holding.id INTO holding_id FROM investment_transaction event
+    JOIN holding ON holding.id = event.holding_id WHERE event.id = purchase_id;
+  second_purchase_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-02-10', 'purchase',
+    5.00000000, 10.000000, 50.0000, 0.0000, 0.0000, -50.0000, f.base,
+    '2026-02-10', 1.0000000000, 1.0000000000, -50.0000, -50.0000,
+    'owner_entered', 'unit_action_v1', 'ua-backdate-purchase-two', NULL, NULL, NULL, NULL);
+  split_id := append_investment_split(
+    f.account_1, f.security_1, '2026-03-01', 2,
+    'owner_entered', 'unit_action_split_v1', 'ua-backdate-split-one', NULL, NULL, NULL, NULL);
+  ASSERT (SELECT current_units FROM holding WHERE id = holding_id) = 30,
+    'the original split doubles the holding from 15 to 30';
+
+  BEGIN
+    PERFORM append_investment_split(
+      f.account_1, f.security_1, '2026-02-01', 2,
+      'owner_entered', 'unit_action_split_v1', 'ua-backdate-split-two', NULL, NULL,
+      split_id, 'move the split earlier');
+    RAISE EXCEPTION 'a split correction skipped over an intervening active purchase';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_split_is_latest', refusal;
+  END;
+  ASSERT (SELECT count(*) FROM investment_transaction WHERE event_kind = 'split') = 1,
+    'the backdated correction refusal is atomic';
+  ASSERT (SELECT current_units FROM holding WHERE id = holding_id) = 30,
+    'the holding is unchanged by the refused correction';
+  RAISE NOTICE 'PASS 0038 a split correction cannot skip backward over an intervening purchase';
+END $$;
+ROLLBACK;
+
+-- A same-day purchase committed after the split must also block a ratio-only correction: event
+-- dates alone cannot order same-day rows, so the check must fall back to commit order.
+BEGIN;
+DO $$
+DECLARE
+  f RECORD; purchase_id UUID; split_id UUID; same_day_purchase_id UUID; holding_id UUID;
+  refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0038_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  purchase_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-01-01', 'purchase',
+    100.00000000, 1.000000, 100.0000, 0.0000, 0.0000, -100.0000, f.base,
+    '2026-01-01', 1.0000000000, 1.0000000000, -100.0000, -100.0000,
+    'owner_entered', 'unit_action_v1', 'ua-sameday-purchase-one', NULL, NULL, NULL, NULL);
+  SELECT holding.id INTO holding_id FROM investment_transaction event
+    JOIN holding ON holding.id = event.holding_id WHERE event.id = purchase_id;
+  split_id := append_investment_split(
+    f.account_1, f.security_1, '2026-02-01', 2,
+    'owner_entered', 'unit_action_split_v1', 'ua-sameday-split-one', NULL, NULL, NULL, NULL);
+  ASSERT (SELECT current_units FROM holding WHERE id = holding_id) = 200,
+    'the original split doubles the holding from 100 to 200';
+  same_day_purchase_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-02-01', 'purchase',
+    10.00000000, 10.000000, 100.0000, 0.0000, 0.0000, -100.0000, f.base,
+    '2026-02-01', 1.0000000000, 1.0000000000, -100.0000, -100.0000,
+    'owner_entered', 'unit_action_v1', 'ua-sameday-purchase-two', NULL, NULL, NULL, NULL);
+  ASSERT (SELECT current_units FROM holding WHERE id = holding_id) = 210,
+    'the same-day purchase commits after the split';
+
+  BEGIN
+    PERFORM append_investment_split(
+      f.account_1, f.security_1, '2026-02-01', 3,
+      'owner_entered', 'unit_action_split_v1', 'ua-sameday-split-two', NULL, NULL,
+      split_id, 'change the ratio on the same day');
+    RAISE EXCEPTION 'a same-day ratio correction ignored a purchase committed after the split';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = CONSTRAINT_NAME;
+    ASSERT refusal = 'investment_split_is_latest', refusal;
+  END;
+  ASSERT (SELECT count(*) FROM investment_transaction WHERE event_kind = 'split') = 1,
+    'the same-day correction refusal is atomic';
+  RAISE NOTICE 'PASS 0038 a same-day purchase committed after the split refuses its correction';
+END $$;
+ROLLBACK;
+
 -- A conflicting split dedupe identity refuses atomically.
 BEGIN;
 DO $$
@@ -578,6 +671,74 @@ BEGIN
   ASSERT (SELECT count(*) FROM investment_transaction WHERE event_kind = 'split') = 0,
     'no split was written by an unauthorized attempt';
   RAISE NOTICE 'PASS 0038 a member and a foreign household cannot split a holding';
+END $$;
+ROLLBACK;
+
+-- A member and a foreign household cannot write a paired unit transfer either.
+BEGIN;
+DO $$
+DECLARE f RECORD; purchase_id UUID; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0038_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  purchase_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-01-01', 'purchase',
+    10.00000000, 10.000000, 100.0000, 0.0000, 0.0000, -100.0000, f.base,
+    '2026-01-01', 1.0000000000, 1.0000000000, -100.0000, -100.0000,
+    'owner_entered', 'unit_action_v1', 'ua-scope-transfer-purchase', NULL, NULL, NULL, NULL);
+
+  PERFORM set_config('app.user_id', f.m1::TEXT, true);
+  BEGIN
+    PERFORM append_investment_unit_transfer(
+      'switch_out', '2026-02-01', f.account_1, f.security_1, -4, 10.000000, 40.0000,
+      f.account_1, f.security_2, 8, 5.000000, 40.0000,
+      f.base, 'owner_entered', 'unit_action_switch_v1',
+      'ua-scope-member-out', NULL, NULL, 'ua-scope-member-in', NULL, NULL, NULL, NULL);
+    RAISE EXCEPTION 'a household member wrote a paired unit transfer';
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal = 'not authorized', refusal;
+  END;
+
+  PERFORM set_config('app.user_id', f.u2::TEXT, true);
+  BEGIN
+    PERFORM append_investment_unit_transfer(
+      'switch_out', '2026-02-01', f.account_1, f.security_1, -4, 10.000000, 40.0000,
+      f.account_1, f.security_2, 8, 5.000000, 40.0000,
+      f.base, 'owner_entered', 'unit_action_switch_v1',
+      'ua-scope-foreign-out', NULL, NULL, 'ua-scope-foreign-in', NULL, NULL, NULL, NULL);
+    RAISE EXCEPTION 'a foreign household wrote another household''s paired unit transfer';
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal = 'not authorized', refusal;
+  END;
+
+  ASSERT (SELECT count(*) FROM investment_transaction WHERE event_kind::text LIKE 'switch%') = 0,
+    'no leg was written by an unauthorized transfer attempt';
+  RAISE NOTICE 'PASS 0038 a member and a foreign household cannot write a paired unit transfer';
+END $$;
+ROLLBACK;
+
+-- A split ratio beyond scale 10 is refused before any check runs.
+BEGIN;
+DO $$
+DECLARE f RECORD; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0038_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  BEGIN
+    PERFORM append_investment_split(
+      f.account_1, f.security_1, '2026-02-01', 2.00000000001,
+      'owner_entered', 'unit_action_split_v1', 'ua-ratio-scale', NULL, NULL, NULL, NULL);
+    RAISE EXCEPTION 'a split ratio beyond scale 10 was accepted';
+  EXCEPTION WHEN numeric_value_out_of_range THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal = 'unit ratio exceeds scale 10', refusal;
+  END;
+  ASSERT NOT EXISTS (
+    SELECT FROM investment_transaction WHERE source_event_id = 'ua-ratio-scale'
+  ), 'the ratio-scale refusal is atomic';
+  RAISE NOTICE 'PASS 0038 a split ratio beyond scale 10 refuses before any check runs';
 END $$;
 ROLLBACK;
 

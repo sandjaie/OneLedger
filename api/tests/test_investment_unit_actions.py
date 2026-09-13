@@ -128,6 +128,21 @@ def test_unit_action_routes_require_an_owner_session() -> None:
     assert response.status_code == 401
 
 
+def test_unit_action_correction_route_requires_an_owner_session() -> None:
+    app.dependency_overrides.clear()
+
+    response = TestClient(app).post(
+        f"/investment-events/{uuid4()}/unit-action-corrections",
+        json={
+            **_bonus_body(),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic replacement",
+        },
+    )
+
+    assert response.status_code == 401
+
+
 @pytest.mark.parametrize(
     ("body_factory", "expected_type"),
     [

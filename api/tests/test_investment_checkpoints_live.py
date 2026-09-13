@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
@@ -145,6 +146,45 @@ def _append_split_without_successor(
             ),
         )
         cur.execute("SELECT set_config('oneledger.investment_event_append', 'off', true)")
+    fixture.connection.commit()
+
+
+def _append_split(fixture: StagingFixture, *, ratio: str, event_date: str) -> None:
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
+        cur.execute(
+            """SELECT append_investment_split(
+                 %s, %s, %s, %s, 'owner_entered', 'checkpoint_test_v1', %s,
+                 NULL, NULL, NULL, NULL)""",
+            (fixture.account_id, fixture.security_id, event_date, Decimal(ratio), str(uuid4())),
+        )
+        assert cur.fetchone() is not None
+    fixture.connection.commit()
+
+
+def _append_switch_out(fixture: StagingFixture, *, event_date: str) -> None:
+    """One switch_out leg (this fixture's own security) paired with an in leg on a sibling
+    security in the same account; only the out leg's holding matters to these tests."""
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
+        cur.execute(
+            """SELECT out_event_id, in_event_id FROM append_investment_unit_transfer(
+                 'switch_out'::investment_event_kind, %s, %s, %s, -1.00000000, 10.000000,
+                 10.0000, %s, %s, 2.00000000, 5.000000, 10.0000,
+                 %s, 'owner_entered'::investment_event_source, 'checkpoint_test_v1',
+                 %s, NULL, NULL, %s, NULL, NULL, NULL, NULL)""",
+            (
+                event_date,
+                fixture.account_id,
+                fixture.security_id,
+                fixture.account_id,
+                fixture.second_security_id,
+                fixture.currency,
+                str(uuid4()),
+                str(uuid4()),
+            ),
+        )
+        assert cur.fetchone() is not None
     fixture.connection.commit()
 
 
@@ -528,6 +568,63 @@ def test_active_split_still_flags_a_genuine_unit_mismatch(
     assert result.matched == 0
     assert result.mismatched == 1
     assert result.pending == 0
+
+
+def test_a_switch_out_leg_withholds_cost_and_matches_with_no_review(
+    live_staging: StagingFixture,
+) -> None:
+    """A transfer leg is not a disposal needing lot evidence: lineage unavailability must be
+    checked before allocation completeness, or this holding wrongly opens a pending review."""
+    _append_purchase(live_staging, units="10.00000000", gross="100.0000")
+    _append_switch_out(live_staging, event_date="2026-04-01")
+    staged = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared_checkpoint(
+            live_staging, units="9.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
+        ),
+    )
+
+    result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
+
+    assert result.matched == 1
+    assert result.mismatched == 0
+    assert result.pending == 0
+    with live_staging.connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM investment_review_item")
+        assert cur.fetchone() == (0,)
+
+
+def test_an_unallocated_sale_after_a_split_withholds_cost_and_matches_with_no_review(
+    live_staging: StagingFixture,
+) -> None:
+    """Once lineage is unavailable, an unallocated disposal must not additionally open its own
+    incomplete_lot_allocation review: the corporate action already explains the missing basis."""
+    _append_purchase(live_staging, units="10.00000000", gross="100.0000")
+    _append_split_without_successor(live_staging, event_date="2026-04-01", units="10.00000000")
+    _append_disposal(
+        live_staging,
+        event_date="2026-05-01",
+        allocated_units=None,
+        disposed_units="4.00000000",
+        gross="40.0000",
+    )
+    staged = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared_checkpoint(
+            live_staging, units="16.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
+        ),
+    )
+
+    result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
+
+    assert result.matched == 1
+    assert result.mismatched == 0
+    assert result.pending == 0
+    with live_staging.connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM investment_review_item")
+        assert cur.fetchone() == (0,)
 
 
 def test_retained_basis_rounds_each_lot_before_summing(

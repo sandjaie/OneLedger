@@ -931,6 +931,14 @@ def _checkpoint_actuals(
         (household_id, holding_id, as_of_date),
     )
     units = Decimal(cur.fetchone()[0])  # type: ignore[index]
+    # Lineage availability is checked before allocation completeness: a switch, systematic
+    # transfer or platform transfer leg is never allocated (a table trigger refuses it), so
+    # counting it among "disposals needing evidence" would always find it incomplete and open
+    # a spurious review; a split with no successor lot has the same effect on a later disposal
+    # in the same holding. Both cases withhold cost silently instead.
+    cur.execute("SELECT investment_lot_lineage_available(%s, %s)", (holding_id, as_of_date))
+    if not bool(cur.fetchone()[0]):  # type: ignore[index]
+        return holding_id, units, None, True
     cur.execute(
         """SELECT event.id, abs(event.units)
              FROM investment_transaction event
@@ -990,9 +998,6 @@ def _checkpoint_actuals(
     ) and set(allocations_by_lot).issubset(active_lot_ids)
     if not complete:
         return holding_id, units, None, False
-    cur.execute("SELECT investment_lot_lineage_available(%s, %s)", (holding_id, as_of_date))
-    if not bool(cur.fetchone()[0]):  # type: ignore[index]
-        return holding_id, units, None, True
     cur.execute(
         "SELECT COALESCE(sum(open_basis_native), 0) FROM investment_open_lots(%s, %s)",
         (holding_id, as_of_date),

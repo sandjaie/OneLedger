@@ -316,7 +316,7 @@ CREATE FUNCTION append_investment_split(
 DECLARE
   owner_household UUID; security_currency CHAR(3); holding_row holding%ROWTYPE;
   existing investment_transaction%ROWTYPE; corrected investment_transaction%ROWTYPE;
-  baseline_units NUMERIC(28,8); computed_units NUMERIC; new_id UUID;
+  baseline_units NUMERIC(28,8); computed_units NUMERIC; new_id UUID; anchor_date DATE;
 BEGIN
   PERFORM assert_is_owner();
   owner_household := current_household_id();
@@ -376,20 +376,41 @@ BEGIN
     END IF;
   END IF;
 
+  -- A correction can move the split's date in either direction, so "latest" must be checked
+  -- against whichever of the new and the original date comes first: an event skipped over by
+  -- moving the split earlier is exactly as disqualifying as one already after it. A same-day
+  -- event committed after the corrected split (created_at, not event_date, breaks the tie) is
+  -- also disqualifying, since the correction would otherwise silently reorder history that was
+  -- already committed against the original split's position.
+  anchor_date := CASE WHEN p_corrects_transaction_id IS NULL THEN p_event_date
+                       ELSE LEAST(p_event_date, corrected.event_date) END;
   IF EXISTS (
     SELECT FROM investment_transaction later
      WHERE later.household_id = owner_household AND later.holding_id = holding_row.id
        AND later.units IS NOT NULL
-       AND later.event_date > COALESCE(corrected.event_date, p_event_date)
        AND (p_corrects_transaction_id IS NULL OR later.id <> p_corrects_transaction_id)
        AND NOT EXISTS (
          SELECT FROM investment_transaction c WHERE c.corrects_transaction_id = later.id)
+       AND (
+         later.event_date > anchor_date
+         OR (p_corrects_transaction_id IS NOT NULL AND later.event_date = anchor_date
+             AND later.created_at > corrected.created_at)
+       )
   ) THEN
     RAISE EXCEPTION 'a split must be the holding''s latest unit-affecting event'
       USING ERRCODE = '23514', CONSTRAINT = 'investment_split_is_latest';
   END IF;
 
   baseline_units := holding_row.current_units - COALESCE(corrected.units, 0);
+  -- Defense in depth: the corrected split's own recorded effect must still be exactly
+  -- reproducible from today's baseline and its original ratio. An intervening active event the
+  -- order check above did not catch would desynchronize this product from the retained fact.
+  IF p_corrects_transaction_id IS NOT NULL
+     AND baseline_units * (corrected.unit_ratio - 1) IS DISTINCT FROM corrected.units THEN
+    RAISE EXCEPTION 'a split must be the holding''s latest unit-affecting event'
+      USING ERRCODE = '23514', CONSTRAINT = 'investment_split_is_latest';
+  END IF;
+
   computed_units := baseline_units * (p_unit_ratio - 1);
   IF computed_units IS DISTINCT FROM round(computed_units, 8) THEN
     RAISE EXCEPTION 'split unit effect is not exact at scale 8'

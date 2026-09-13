@@ -716,6 +716,46 @@ def test_proposal_writes_nothing_then_confirmation_and_unlink_are_exact(
         assert cur.fetchone() == ("investment_buy",)
 
 
+def _rights_event(fixture: FundingFixture, amount: str) -> UUID:
+    value = Decimal(amount)
+    response = TestClient(app).post(
+        "/investment-events/unit-actions",
+        json={
+            "kind": "rights",
+            "accountId": str(fixture.investment_account_id),
+            "securityId": str(fixture.security_id),
+            "eventDate": "2026-02-01",
+            "units": "5.00000000",
+            "price": f"{value / 5:.6f}",
+            "grossAmount": amount,
+            "charges": "0.0000",
+            "withheldTax": "0.0000",
+            "netAmount": f"-{amount}",
+            "currency": fixture.currency,
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return UUID(str(response.json()["event"]["id"]))
+
+
+def test_a_rights_event_is_fundable_like_a_purchase(live_funding: FundingFixture) -> None:
+    """Task 15.2's rights kind must reach the same V33 funding role as a purchase."""
+    event = _rights_event(live_funding, "100.0000")
+    cash = _cash(live_funding, "-100.0000")
+    allocations = [_allocation(event, cash, "100.0000")]
+
+    proposed = _proposal(allocations)
+    assert proposed.status_code == 200, proposed.text
+    confirmed = _confirm(allocations, proposed.json()["expectedState"])
+
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json()["allocations"][0]["role"] == "funding"
+    with live_funding.connection.cursor() as cur:
+        cur.execute("SELECT txn_type::text FROM transaction WHERE id = %s", (cash,))
+        assert cur.fetchone() == ("investment_buy",)
+
+
 def test_one_cash_leaf_can_fund_many_events(live_funding: FundingFixture) -> None:
     first = _event(live_funding, "30.0000")
     second = _event(live_funding, "70.0000", kind="recurring_purchase")

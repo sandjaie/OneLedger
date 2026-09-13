@@ -16,6 +16,7 @@ from httpx import Response
 from oneledger import auth
 from oneledger.investments import unit_actions
 from oneledger.main import app
+from oneledger.routes import investment_catalogue, portfolio
 
 from .live_database import connect_to_test_database
 
@@ -384,6 +385,44 @@ def test_split_correction_replaces_the_original_and_recomputes_units(
     assert event["currentUnits"] == "30.00000000"
 
 
+def test_split_correction_cannot_skip_backward_over_an_intervening_purchase(
+    live_unit_actions: UnitActionFixture,
+) -> None:
+    """A backdated correction must not silently absorb a purchase into the new baseline."""
+    _purchase(live_unit_actions, event_date="2026-02-01")
+    # Dated after the correction's target (02-02) but before the split's original date (03-01);
+    # committed before the split exists, since a backdated purchase after an active split is
+    # refused by the unrelated V40 unit-event order guard.
+    _purchase(
+        live_unit_actions,
+        event_date="2026-02-15",
+        units="5.00000000",
+        gross="50.0000",
+    )
+    original = _post("unit-actions", _split_body(live_unit_actions, event_date="2026-03-01"))
+    assert original.status_code == 201, original.text
+    original_id = original.json()["event"]["id"]
+
+    corrected = _post(
+        f"{original_id}/unit-action-corrections",
+        {
+            **_split_body(live_unit_actions, event_date="2026-02-02"),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic backdated split correction",
+        },
+    )
+
+    assert corrected.status_code == 422, corrected.text
+    assert corrected.json()["detail"] == "event_order_conflict"
+    with live_unit_actions.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                 WHERE household_id = %s AND event_kind = 'split'""",
+            (live_unit_actions.owner.household_id,),
+        )
+        assert cur.fetchone() == (1,)
+
+
 def test_switch_moves_equal_gross_value_between_two_securities(
     live_unit_actions: UnitActionFixture,
 ) -> None:
@@ -500,3 +539,236 @@ def test_lot_allocation_is_refused_for_a_switch_out_leg(
                 ),
             )
     live_unit_actions.connection.rollback()
+
+
+def _price(security_id: UUID, on: str, value: str) -> None:
+    response = TestClient(app).post(
+        f"/investment-catalogue/securities/{security_id}/manual-prices",
+        json={"priceDate": on, "price": value},
+    )
+    assert response.status_code == 201, response.text
+
+
+def _positions(as_of: str) -> list[dict[str, object]]:
+    response = TestClient(app).get("/portfolio/positions", params={"asOf": as_of})
+    assert response.status_code == 200, response.text
+    return cast(list[dict[str, object]], response.json()["positions"])
+
+
+def test_rights_adds_contribution_and_bonus_adds_none(
+    live_unit_actions: UnitActionFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    _purchase(live_unit_actions)  # contributes 100.0000 / 100.0000 / 200.0000
+    assert _post("unit-actions", _bonus_body(live_unit_actions)).status_code == 201
+    assert _post("unit-actions", _rights_body(live_unit_actions)).status_code == 201  # +41/41/82
+
+    [row] = _positions("2026-02-02")
+
+    assert row["cumulativeContributionsNative"] == "141.0000"
+    assert row["cumulativeContributionsBase"] == "141.0000"
+    assert row["cumulativeContributionsSecondary"] == "282.0000"
+
+
+def test_gain_stays_available_after_purchase_bonus_rights_and_split(
+    live_unit_actions: UnitActionFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
+    _purchase(live_unit_actions)
+    assert _post("unit-actions", _bonus_body(live_unit_actions)).status_code == 201
+    assert _post("unit-actions", _rights_body(live_unit_actions)).status_code == 201
+    split = _post("unit-actions", _split_body(live_unit_actions, event_date="2026-02-15"))
+    assert split.status_code == 201, split.text
+    _price(live_unit_actions.security_id, "2026-02-15", "10.000000")
+
+    [row] = _positions("2026-02-15")
+
+    assert row["gainNative"] is not None
+    assert row["gainBase"] is not None
+
+
+def test_gain_is_withheld_on_both_holdings_after_a_switch(
+    live_unit_actions: UnitActionFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
+    _purchase(live_unit_actions)
+    switch = _post("unit-actions", _switch_body(live_unit_actions))
+    assert switch.status_code == 201, switch.text
+    _price(live_unit_actions.security_id, "2026-02-02", "10.000000")
+    _price(live_unit_actions.security_2_id, "2026-02-02", "5.000000")
+
+    positions = {row["securityId"]: row for row in _positions("2026-02-02")}
+
+    assert positions[str(live_unit_actions.security_id)]["gainNative"] is None
+    assert positions[str(live_unit_actions.security_2_id)]["gainNative"] is None
+
+
+def test_gain_is_withheld_on_both_accounts_after_a_platform_transfer(
+    live_unit_actions: UnitActionFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
+    _purchase(live_unit_actions)
+    transfer = _post("unit-actions", _platform_transfer_body(live_unit_actions))
+    assert transfer.status_code == 201, transfer.text
+    _price(live_unit_actions.security_id, "2026-02-02", "10.000000")
+
+    positions = {row["accountId"]: row for row in _positions("2026-02-02")}
+
+    assert positions[str(live_unit_actions.account_id)]["gainNative"] is None
+    assert positions[str(live_unit_actions.account_2_id)]["gainNative"] is None
+
+
+def test_split_correction_stale_conflicting_and_identical_retry(
+    live_unit_actions: UnitActionFixture,
+) -> None:
+    """Financial write floor: stale second writer, conflicting key reuse and identical retry."""
+    _purchase(live_unit_actions)
+    original = _post("unit-actions", _split_body(live_unit_actions))
+    assert original.status_code == 201, original.text
+    original_id = original.json()["event"]["id"]
+    correction_body = {
+        **_split_body(live_unit_actions, ratio="3", event_date="2026-03-01"),
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "Synthetic exact replacement ratio",
+    }
+
+    corrected = _post(f"{original_id}/unit-action-corrections", correction_body)
+    assert corrected.status_code == 201, corrected.text
+
+    identical_retry = _post(f"{original_id}/unit-action-corrections", correction_body)
+    assert identical_retry.status_code == 200, identical_retry.text
+    assert identical_retry.json() == corrected.json()
+
+    conflicting_retry = _post(
+        f"{original_id}/unit-action-corrections",
+        {**correction_body, "unitRatio": "4"},
+    )
+    assert conflicting_retry.status_code == 409, conflicting_retry.text
+
+    stale = _post(
+        f"{original_id}/unit-action-corrections",
+        {**correction_body, "idempotencyKey": str(uuid4())},
+    )
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["detail"] == "investment event correction state changed"
+
+    with live_unit_actions.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                 WHERE household_id = %s AND event_kind = 'split'""",
+            (live_unit_actions.owner.household_id,),
+        )
+        assert cur.fetchone() == (2,)
+
+
+def test_split_correction_reason_containing_private_text_is_refused(
+    live_unit_actions: UnitActionFixture,
+) -> None:
+    _purchase(live_unit_actions)
+    original = _post("unit-actions", _split_body(live_unit_actions))
+    assert original.status_code == 201, original.text
+    original_id = original.json()["event"]["id"]
+
+    response = _post(
+        f"{original_id}/unit-action-corrections",
+        {
+            **_split_body(live_unit_actions, ratio="3", event_date="2026-03-01"),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "PIN " + "1234",
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "correction reason must not contain private information"
+    with live_unit_actions.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                 WHERE household_id = %s AND event_kind = 'split'""",
+            (live_unit_actions.owner.household_id,),
+        )
+        assert cur.fetchone() == (1,)
+
+
+def test_bonus_correction_replaces_the_original(live_unit_actions: UnitActionFixture) -> None:
+    _purchase(live_unit_actions)
+    original = _post("unit-actions", _bonus_body(live_unit_actions))
+    assert original.status_code == 201, original.text
+    original_id = original.json()["event"]["id"]
+
+    corrected = _post(
+        f"{original_id}/unit-action-corrections",
+        {
+            **_bonus_body(live_unit_actions),
+            "units": "3.00000000",
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic bonus unit correction",
+        },
+    )
+
+    assert corrected.status_code == 201, corrected.text
+    event = corrected.json()["event"]
+    assert event["correctsEventId"] == original_id
+    assert event["units"] == "3.00000000"
+    assert event["currentUnits"] == "13.00000000"
+
+
+def test_rights_correction_replaces_the_original_and_refreezes_fx(
+    live_unit_actions: UnitActionFixture,
+) -> None:
+    _purchase(live_unit_actions)
+    original = _post("unit-actions", _rights_body(live_unit_actions))
+    assert original.status_code == 201, original.text
+    original_id = original.json()["event"]["id"]
+
+    corrected = _post(
+        f"{original_id}/unit-action-corrections",
+        {
+            **_rights_body(live_unit_actions),
+            "units": "4.00000000",
+            "price": "10.000000",
+            "grossAmount": "40.0000",
+            "netAmount": "-41.0000",
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic rights unit correction",
+        },
+    )
+
+    assert corrected.status_code == 201, corrected.text
+    event = corrected.json()["event"]
+    assert event["correctsEventId"] == original_id
+    assert event["units"] == "4.00000000"
+    assert event["currentUnits"] == "14.00000000"
+    assert event["lot"]["costBasisNative"] == "41.0000"
+
+
+def test_pair_correction_restores_units_on_both_holdings(
+    live_unit_actions: UnitActionFixture,
+) -> None:
+    """Correcting a pair to different amounts must exclude the superseded legs entirely, not
+    add the new effect on top of the old one."""
+    _purchase(live_unit_actions)
+    original = _post("unit-actions", _switch_body(live_unit_actions))
+    assert original.status_code == 201, original.text
+    out_id = original.json()["outEvent"]["id"]
+
+    corrected = _post(
+        f"{out_id}/unit-action-corrections",
+        {
+            **_switch_body(live_unit_actions),
+            "outUnits": "-2.00000000",
+            "outGrossAmount": "20.0000",
+            "inUnits": "4.00000000",
+            "inGrossAmount": "20.0000",
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic switch amount correction",
+        },
+    )
+
+    assert corrected.status_code == 201, corrected.text
+    payload = corrected.json()
+    assert payload["outEvent"]["correctsEventId"] == out_id
+    assert payload["outEvent"]["currentUnits"] == "8.00000000"  # 10 - 2, not 10 - 4 - 2
+    assert payload["inEvent"]["currentUnits"] == "4.00000000"  # 4, not 8 + 4
