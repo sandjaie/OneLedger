@@ -154,6 +154,7 @@ export function InvestmentEntryScreen({
   const purchaseLocked = mutationProgress !== "none";
 
   function changeDraft<K extends keyof Draft>(field: K, value: Draft[K]) {
+    if (mutationProgress === "complete") return;
     setDraft((current) => ({ ...current, [field]: value }));
     setConfirmation(false);
     setProblem(false);
@@ -473,8 +474,8 @@ export function InvestmentEntryScreen({
           ) : null}
           {draft.addValuation && (
             <div className="investment-valuation-fields">
-              <label className="date-field"><span>Valuation date</span><input onChange={(event) => changeDraft("valuationDate", event.target.value)} required type="date" value={draft.valuationDate} /></label>
-              <label className="text-field"><span>Valuation price</span><input inputMode="decimal" onChange={(event) => changeDraft("valuationPrice", event.target.value)} required value={draft.valuationPrice} /></label>
+              <label className="date-field"><span>Valuation date</span><input disabled={mutationProgress === "complete"} onChange={(event) => changeDraft("valuationDate", event.target.value)} required type="date" value={draft.valuationDate} /></label>
+              <label className="text-field"><span>Valuation price</span><input disabled={mutationProgress === "complete"} inputMode="decimal" onChange={(event) => changeDraft("valuationPrice", event.target.value)} required value={draft.valuationPrice} /></label>
               <p>This is separate dated valuation evidence, not a change to the transaction price.</p>
             </div>
           )}
@@ -489,7 +490,9 @@ export function InvestmentEntryScreen({
               <p>{mutationProgress === "purchase"
                 ? "The purchase is already recorded. Confirm only the remaining dated price."
                 : mutationProgress === "complete"
-                  ? "The purchase facts are recorded. Reload holdings to display the resulting position."
+                  ? draft.addValuation
+                    ? "The purchase and dated price are recorded. Reload holdings to display the resulting position."
+                    : "The purchase facts are recorded. Reload holdings to display the resulting position."
                   : "This appends a new owner-entered event. Check each exact fact before recording it."}</p>
               <dl>
                 <div><dt>Account</dt><dd>{accountLabel(account)}</dd></div>
@@ -499,7 +502,7 @@ export function InvestmentEntryScreen({
                 <div><dt>Gross</dt><dd>{security.currency} {draft.grossAmount}</dd></div>
                 <div><dt>Net cash</dt><dd>Net cash {security.currency} {draft.netAmount}</dd></div>
               </dl>
-              {draft.addValuation && <p>Then record valuation price {security.currency} {draft.valuationPrice} dated {dateLabel(draft.valuationDate)}.</p>}
+              {draft.addValuation && mutationProgress !== "complete" && <p>Then record valuation price {security.currency} {draft.valuationPrice} dated {dateLabel(draft.valuationDate)}.</p>}
               {problem && (
                 <p className="inline-alert" role="alert">
                   {mutationProgress === "purchase"
@@ -512,7 +515,11 @@ export function InvestmentEntryScreen({
               <div className="investment-confirm-actions">
                 <button className="primary-action" disabled={busy} onClick={() => void submitPurchase()} ref={confirmButton} type="button">
                   {busy
-                    ? "Recording purchase…"
+                    ? mutationProgress === "purchase"
+                      ? "Recording dated price…"
+                      : mutationProgress === "complete"
+                        ? "Reloading holdings…"
+                        : "Recording purchase…"
                     : problem && mutationProgress === "purchase"
                       ? "Retry dated price"
                       : problem && mutationProgress === "complete"

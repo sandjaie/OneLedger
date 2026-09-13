@@ -489,6 +489,7 @@ describe("investment entry", () => {
   it("locks a recorded purchase while a refused dated price is edited and retried", async () => {
     let priceAttempts = 0;
     let reads = 0;
+    let releasePrice!: (value: unknown) => void;
     const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
     const request = requestFrom(async (path) => {
       if (path === "/portfolio/positions") return positions(reads++ === 0 ? [] : [position]);
@@ -497,7 +498,7 @@ describe("investment entry", () => {
       }
       if (path === "/investment-events/acquisitions") return event;
       if (path.includes("manual-prices") && priceAttempts++ === 0) throw new ApiError(422, "synthetic refusal");
-      if (path.includes("manual-prices")) return { status: "recorded" };
+      if (path.includes("manual-prices")) return new Promise((resolve) => { releasePrice = resolve; });
       throw new Error(`Unexpected synthetic route ${path}`);
     });
     renderScreen(request, [investmentAccount], createKey);
@@ -520,6 +521,9 @@ describe("investment entry", () => {
     fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.100000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review dated price" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm dated price" }));
+    expect(screen.getByRole("button", { name: "Recording dated price…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Recording purchase…" })).toBeNull();
+    releasePrice({ status: "recorded" });
     await screen.findByRole("article", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
@@ -530,31 +534,44 @@ describe("investment entry", () => {
 
   it("reloads holdings after a committed purchase without resubmitting the acquisition", async () => {
     let reads = 0;
+    let releaseHoldings!: (value: unknown) => void;
     const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
     const request = requestFrom(async (path) => {
       if (path === "/portfolio/positions") {
         reads += 1;
         if (reads === 1) return positions();
         if (reads === 2) throw new TypeError("offline");
-        return positions([position]);
+        return new Promise((resolve) => { releaseHoldings = resolve; });
       }
       if (path === "/investment-catalogue/securities/resolve") {
         return { status: "matched", reason: "exact_public_identity", candidates: [candidate] };
       }
       if (path === "/investment-events/acquisitions") return event;
+      if (path.includes("manual-prices")) return { status: "recorded" };
       throw new Error(`Unexpected synthetic route ${path}`);
     });
     renderScreen(request, [investmentAccount], createKey);
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
+    fireEvent.click(screen.getByLabelText("Record a dated valuation price after this purchase"));
+    fireEvent.change(screen.getByLabelText("Valuation date"), { target: { value: "2026-02-06" } });
+    fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm purchase" }));
     expect((await screen.findByRole("alert")).textContent).toContain("facts were recorded");
     const reloadGroup = screen.getByRole("group", { name: "Reload holdings" });
-    expect(within(reloadGroup).getByText("The purchase facts are recorded. Reload holdings to display the resulting position.")).toBeTruthy();
+    expect(within(reloadGroup).getByText("The purchase and dated price are recorded. Reload holdings to display the resulting position.")).toBeTruthy();
     expect(within(reloadGroup).queryByText(/appends a new owner-entered event/i)).toBeNull();
+    expect(within(reloadGroup).queryByText(/record valuation price/i)).toBeNull();
+    const committedPrice = screen.getByLabelText<HTMLInputElement>("Valuation price");
+    expect(committedPrice.disabled).toBe(true);
+    fireEvent.change(committedPrice, { target: { value: "9.200000" } });
+    expect(screen.getByRole("button", { name: "Reload holdings" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Reload holdings" }));
+    expect(screen.getByRole("button", { name: "Reloading holdings…" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Recording purchase…" })).toBeNull();
+    releaseHoldings(positions([position]));
     await screen.findByRole("article", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
