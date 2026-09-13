@@ -7,7 +7,7 @@ import re
 import unicodedata
 from bisect import bisect_right
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -18,6 +18,7 @@ from ..identifiers import (
     identifier_from_source,
 )
 from ..ingest.words import Line, Page
+from . import detailed_fund_actions as actions
 from .adapters import (
     EvidenceDraft,
     InvestmentEventDraft,
@@ -31,7 +32,7 @@ from .adapters import (
 )
 
 SOURCE_CONTRACT = "detailed_fund_statement_v1"
-EXTRACTION_VERSION = "2"
+EXTRACTION_VERSION = "3"
 FINGERPRINT_VERSION = "typed_event_v1"
 _TITLE = "DETAILED INVESTMENT STATEMENT V1"
 _HEADERS: tuple[str, ...] = (
@@ -393,7 +394,9 @@ class DetailedFundStatementAdapter:
     def matches(self, pages: Sequence[Page]) -> bool:
         lines = tuple(line for page in pages for line in page.lines)
         return any(_normalized_text(line) == _TITLE for line in lines) and any(
-            _header_anchors(line) is not None or _position_anchors(line) is not None
+            _header_anchors(line) is not None
+            or _position_anchors(line) is not None
+            or _anchors(line, actions.ACTION_HEADERS) is not None
             for line in lines
         )
 
@@ -406,7 +409,9 @@ class DetailedFundStatementAdapter:
         anchors: tuple[float, ...] | None = None
         headers: tuple[str, ...] = _HEADERS
         position = False
+        action = False
         source_order = 0
+        parsed_actions: list[actions.ParsedAction] = []
         for page_number, page in enumerate(pages, start=1):
             for row_number, line in enumerate(page.lines, start=1):
                 source_text = _line_text(line)
@@ -423,23 +428,32 @@ class DetailedFundStatementAdapter:
                     current_security = source_text
                     target_ready = current_account is not None
                     continue
+                header = _anchors(line, actions.ACTION_HEADERS)
+                if header is not None:
+                    anchors = header
+                    headers = actions.ACTION_HEADERS
+                    position = False
+                    action = True
+                    continue
                 header = _header_anchors(line)
                 if header is not None:
                     anchors = header
                     headers = _HEADERS
                     position = False
+                    action = False
                     continue
                 header = _position_anchors(line)
                 if header is not None:
                     anchors = header
                     headers = _POSITION_HEADERS
                     position = True
+                    action = False
                     continue
                 if (
                     anchors is None
                     or not line.words
                     or not text
-                    or text in {_TITLE, "TRANSACTIONS", "END POSITION"}
+                    or text in {_TITLE, "TRANSACTIONS", "UNIT ACTIONS", "END POSITION"}
                 ):
                     continue
                 values = _cells(line, anchors, headers)
@@ -462,6 +476,24 @@ class DetailedFundStatementAdapter:
                     _security_key(target.security_reference),
                 )
                 builder = builders.setdefault(key, _GroupBuilder(target=target))
+                if action:
+                    try:
+                        parsed_actions.append(
+                            actions.parse_action(
+                                values,
+                                target,
+                                key,
+                                source_contract=self.source_contract,
+                                source_order=source_order,
+                                page_number=page_number,
+                                row_number=row_number,
+                            )
+                        )
+                    except actions.ActionRefusal:
+                        builder.reasons.append(
+                            SafeReason("unrecognized_event", page_number, row_number)
+                        )
+                    continue
                 if position:
                     try:
                         builder.checkpoints.append(
@@ -512,6 +544,52 @@ class DetailedFundStatementAdapter:
                         ),
                     )
                 )
+        accepted_groups = actions.valid_action_groups(parsed_actions)
+        accepted_orders = {
+            action.draft.source_order for group in accepted_groups for action in group
+        }
+        blocked_keys = {
+            action.target_key
+            for action in parsed_actions
+            if action.draft.source_order not in accepted_orders
+        } | {key for key, builder in builders.items() if builder.reasons}
+        previous_size = -1
+        while len(blocked_keys) != previous_size:
+            previous_size = len(blocked_keys)
+            for group in accepted_groups:
+                keys = {action.target_key for action in group}
+                if len(group) == 2 and keys.intersection(blocked_keys):
+                    blocked_keys.update(keys)
+        for parsed_action in parsed_actions:
+            builder = builders[parsed_action.target_key]
+            if (
+                parsed_action.draft.source_order in accepted_orders
+                and parsed_action.target_key not in blocked_keys
+            ):
+                correlation = next(
+                    (
+                        group[0].action_reference
+                        for group in accepted_groups
+                        if len(group) == 2 and parsed_action in group
+                    ),
+                    None,
+                )
+                builder.drafts.append(
+                    replace(
+                        parsed_action.draft,
+                        evidence=replace(
+                            parsed_action.draft.evidence,
+                            source_correlation_id=correlation,
+                        ),
+                    )
+                )
+            else:
+                evidence = parsed_action.draft.evidence
+                builder.reasons.append(
+                    SafeReason("unrecognized_event", evidence.page_number, evidence.row_number)
+                )
+        for builder in builders.values():
+            builder.drafts.sort(key=lambda draft: draft.source_order)
         groups = tuple(
             StatementGroup(
                 group_number=index,

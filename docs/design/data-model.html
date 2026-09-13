@@ -857,8 +857,11 @@ with immutable bounded source-contract and extraction-version identity but no co
 <tr><td><code>investment_import_group</code></td><td>An independently reviewable atomic group for events
 that must stage and eventually commit together. An open blocking review prevents ready or committed
 state without blocking sibling groups.</td></tr>
-<tr><td><code>investment_event_draft</code></td><td>A typed, exact staged event candidate. It can later
-name its committed immutable event but does not alter holdings while staged.</td></tr>
+<tr><td><code>investment_event_draft</code></td><td>A typed, exact staged event candidate. Its nullable
+<code>NUMERIC(20,10)</code> unit ratio is split-only and must be positive and non-unity; resolved
+split states require the ratio and cleared source units, while unresolved review may preserve the
+source units. A draft can later name its committed immutable event but does not alter holdings while
+staged.</td></tr>
 <tr><td><code>investment_position_checkpoint</code></td><td>Exact units, reported cost or reported value at a
 date. It reconciles event-derived state and never manufactures an event or price; a matched
 checkpoint's resolved account and security must agree with its holding.</td></tr>
@@ -877,7 +880,7 @@ holdings or the latest frozen snapshot inside the active period contributes, nev
 <p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V34</code>.</p>
+<code>V30</code>–<code>V35</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
