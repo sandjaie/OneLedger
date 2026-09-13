@@ -16,7 +16,7 @@ explain anything not run. Include the final verifier's exact head. Replace the p
 | Check | Command or evidence | Result |
 | --- | --- | --- |
 | Focused TDD | <!-- affected tests and observed RED/GREEN --> | <!-- result --> |
-| Local review | <!-- comprehensive findings; confirmation range if repairs existed; or owner docs review --> | <!-- result --> |
+| Local review | <!-- one review; blocking findings and repair; confirmation only for money/auth/migration repairs; or owner docs review --> | <!-- result --> |
 | Final verification | <!-- scripts/verify.sh scope and exact-head receipt --> | <!-- result --> |
 
 ## Notes

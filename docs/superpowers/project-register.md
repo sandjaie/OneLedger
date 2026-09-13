@@ -5,7 +5,7 @@ action. The [roadmap](../product/roadmap.html) owns approved product outcomes, t
 [master implementation plan](../product/master-implementation-plan.html) owns delivery order, and
 [progress](progress.md) owns live implementation state.
 
-Updated: 13 September 2026.
+Updated: 14 September 2026.
 
 ## How entries move
 
@@ -28,8 +28,15 @@ an inferred institution identity.
 | 12 Sep 2026 | Remove a harmless repeated-header word from one encrypted layout's narration | Acceptance reconciles, but the retained description can be cleaner | Address with Phase 1.8 mapping diagnostics |
 | 12 Sep 2026 | Surface card metadata-read failures on the import screen | The backend reports the condition but the import screen does not | Include in the next focused import-screen delivery |
 | 12 Sep 2026 | Capture transfer fees when a trustworthy source supplies them | Current statement evidence does not expose a reliable fee value | Reconsider when a source document or owner-entered path exists |
-| 13 Sep 2026 | Complete lot lineage for a split recorded on a lot-incomplete holding | Phase 1.6 commits the split's exact units but withholds successor lots, remaining basis and dependent realised claims when an earlier disposal lacks lot evidence or one transformed lot is inexact | When lot evidence completes the earlier disposal, or before Phase 1.6 acceptance |
-| 13 Sep 2026 | Correct a switch after its lots are used | A switch without lot evidence resolves its review only by correcting the pair while its switch-in lot is unused | When owner lot evidence exists for a switch whose lots are already allocated or transferred |
+| 14 Sep 2026 | Per-lot lineage across splits, switches and platform transfers | Owner re-scoped Phase 1.6 to holding-level corporate actions; V40's `predecessor_lot_id` is present but unused | Before Phase 5.6 planning, or when the owner needs lot cost after a corporate action |
+| 14 Sep 2026 | Lot-level realised gain after a corporate action, and a realised-gain view | Phase 1.6 withholds basis and realised claims from a corporate action's date; the disposal lot-allocation API remains | Phase 4.3 planning |
+| 14 Sep 2026 | Account- and asset-class XIRR; platform and currency allocation groupings | Phase 1.6 reports holding and portfolio XIRR, and allocation by asset class and account | Phase 4.3 planning |
+| 14 Sep 2026 | Resolve a blocked import group inside the import | Blocked groups stay uncommitted; the owner cancels or uses owner entry | When blocked groups recur in real monthly imports |
+| 14 Sep 2026 | Switch charges (exit load, stamp duty) | The event matrix records no switch charge, so such a switch fails closed | When real evidence contains one |
+| 14 Sep 2026 | Backdated unit events before a platform transfer | V40's order guard refuses them although holding-level transfers carry explicit units | Phase 2.1 planning |
+| 14 Sep 2026 | Persist the price-source check time | Refresh throttling lives in process memory, so a restart refetches once | If refetches become noticeable |
+| 14 Sep 2026 | Extract payslips from documents | Phase 1.7 records payslips by owner entry at personal scale | After Phase 1.8, when owner entry proves tedious |
+| 14 Sep 2026 | Search document contents | Phase 1.8 filters documents by type, account, period and import status; indexing statement text widens the private-data surface | Only through a separate privacy decision |
 
 ## Unapproved discoveries and improvement candidates
 
@@ -47,7 +54,6 @@ change the roadmap.
 | 6 Sep 2026 | Confirm whether a real loan exists | Loan support is conditional and must not be speculative | Before activating Phase 4.6 |
 | 6 Sep 2026 | Confirm whether real property evidence exists | Property uses dated valuation snapshots, but no asset should be created without owner evidence | Before property enters Phase 2.1 coverage |
 | 6 Sep 2026 | Decide whether emergency handover ever permits another person access | This changes the single-owner privacy boundary | Only through a separate product and privacy decision |
-| 13 Sep 2026 | Confirm the lot-incomplete split default | Plan review chose to commit a split's exact units and withhold lot lineage rather than refuse the split, keeping units reconciled while basis stays unavailable | Before Task 15.2 dispatch |
 
 The detailed scoping-question record remains in [questions](questions.html). A question is linked
 from an implementation specification when it becomes a prerequisite; this register does not mirror

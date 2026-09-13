@@ -9,7 +9,7 @@ This file is the single authority for branches, commits, PRs and releases.
 |---|---|---|---|
 | `main` | — | — | Released code only; receives `release/*` merges. |
 | `develop` | `main` | `main` through `release/*` | Standing integration branch and target for task PRs. |
-| `<type>/<name>` | `develop` | `develop` | One task-sized feature, fix, chore or documentation change. |
+| `<type>/<name>` | `develop` | `develop` | One coherent outcome — a feature, fix, chore or documentation change — grouping related plan tasks up to the diff budget. |
 | `release/<version>` | `develop` | `main` | Changelog, release notes, tag and release candidate. |
 
 Allowed task prefixes are `feature/`, `fix/`, `chore/` and `docs/`. Use the active checkout only;
@@ -18,12 +18,13 @@ merges. One implementation writer works at a time.
 
 Before dispatch, every task plan records the exact `Workspace`, `Branch`, and `Base and PR target`.
 Start each task branch from current `develop`. A phase may use several task branches; its approved
-plan lands with the first.
+plan lands with the first. Splits, re-baselines and status updates ride in the next feature PR; do
+not open a documentation-only PR for them.
 
 ## Task flow
 
 Follow [development-cycle.md](development-cycle.md): implement with TDD and affected tests, commit
-locally, review, repair and confirm if needed, then run `scripts/verify.sh` once. The first push is
+locally, review once, repair once, then run `scripts/verify.sh` once. The first push is
 allowed only for that unchanged verified head.
 
 Open one PR per branch to `develop` using `.github/PULL_REQUEST_TEMPLATE.md`. Record actual evidence
@@ -56,13 +57,14 @@ receipt and diff size; it does not rerun application or database suites. Do not 
 
 ## Diff budget
 
-Plan each branch toward 500 added production lines and 1,000 production plus test lines. The
-warning threshold is 800 / 1,600; `scripts/check-diff-size.sh` refuses a push above 1,200 / 2,400.
-Documentation, configuration, lockfiles and generated code do not count.
+Plan each branch within 1,500 added production lines and 3,000 production plus test lines, grouping
+related plan tasks until a branch approaches that budget. `scripts/check-diff-size.sh` warns above
+the budget and refuses a push above 2,000 / 4,000. Documentation, configuration, lockfiles and
+generated code do not count.
 
-Split work before implementation when it exceeds the planning target. For a genuinely indivisible
-change, such as one migration, the owner may set `ONELEDGER_SIZE_OVERRIDE="reason"`; record the
-same reason in PR Notes.
+Above the hard stop, move the unfinished remainder to the next branch before pushing. For a
+genuinely indivisible change, such as one migration, the owner may set
+`ONELEDGER_SIZE_OVERRIDE="reason"`; record the same reason in PR Notes.
 
 ## Releases
 

@@ -8,12 +8,11 @@
 # (docs/superpowers/phase-0-pull-requests.md), so a milestone plan or a regenerated API type
 # file never pushes a branch over.
 #
-#   soft budget   800 production lines added, 1600 production + test lines added
-#   hard stop     1200 / 2400 — refuses the push
+#   soft budget   1500 production lines added, 3000 production + test lines added
+#   hard stop     2000 / 4000 — refuses the push
 #
-# Loosened 2026-09-09 with the move to the local-review delivery cycle: without per-PR external
-# review rounds, a coherent slice beats a minimal one. The hard stop still exists because a
-# reviewer still reads the whole diff.
+# Loosened 2026-09-14 for single-owner speed: related plan tasks are grouped into one branch and
+# reviewed once. The hard stop remains because one reviewer still reads the whole diff.
 #
 # Over the hard stop, an owner override takes a reason and records it:
 #
@@ -22,10 +21,10 @@
 # The reason belongs in the PR's Notes section, not only in a shell.
 set -euo pipefail
 
-SOFT_PROD=${ONELEDGER_SOFT_PROD:-800}
-SOFT_TOTAL=${ONELEDGER_SOFT_TOTAL:-1600}
-HARD_PROD=${ONELEDGER_HARD_PROD:-1200}
-HARD_TOTAL=${ONELEDGER_HARD_TOTAL:-2400}
+SOFT_PROD=${ONELEDGER_SOFT_PROD:-1500}
+SOFT_TOTAL=${ONELEDGER_SOFT_TOTAL:-3000}
+HARD_PROD=${ONELEDGER_HARD_PROD:-2000}
+HARD_TOTAL=${ONELEDGER_HARD_TOTAL:-4000}
 
 # Git's pre-push contract puts each pushed ref on stdin; pre-commit consumes that and
 # re-exposes it. Measure what is actually being pushed, not what happens to be checked out —
@@ -137,9 +136,8 @@ if [ "$over_hard" = 1 ]; then
   fi
   echo ""
   echo "FAIL: this branch is past the hard stop. Split it before pushing."
-  echo "      A branch this size is re-read in full on every review round; that is where the"
-  echo "      rounds come from. Carve the next commit-sized slice onto its own branch off"
-  echo "      develop and ship them in order."
+  echo "      One reviewer reads the whole diff; past this size findings get missed. Move the"
+  echo "      unfinished remainder onto the next branch off develop and ship them in order."
   echo ""
   echo "      If it genuinely cannot be split — one migration, one generated surface — push with"
   echo "      the reason, and put the same reason in the PR:"
