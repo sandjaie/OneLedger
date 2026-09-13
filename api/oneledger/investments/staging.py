@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Any, Literal, cast
 from uuid import UUID
 
@@ -577,7 +577,7 @@ def _retry_matches(
         cur.execute(
             """SELECT reason::text FROM investment_review_item
                  WHERE household_id = %s AND import_id = %s AND group_id = %s
-                   AND status = 'open'""",
+                   AND checkpoint_id IS NULL AND status = 'open'""",
             (household_id, import_id, group_id),
         )
         if {row[0] for row in cur.fetchall()} != expected_reasons:
@@ -897,7 +897,7 @@ def _checkpoint_actuals(
     account_id: UUID,
     security_id: UUID,
     as_of_date: date,
-) -> tuple[UUID | None, Decimal, Decimal]:
+) -> tuple[UUID | None, Decimal, Decimal | None]:
     cur.execute(
         """SELECT id FROM holding
              WHERE household_id = %s AND account_id = %s AND security_id = %s
@@ -924,7 +924,23 @@ def _checkpoint_actuals(
     )
     units = Decimal(cur.fetchone()[0])  # type: ignore[index]
     cur.execute(
-        """SELECT coalesce(sum(lot.cost_basis_native), 0)
+        """SELECT event.id, abs(event.units)
+             FROM investment_transaction event
+            WHERE event.household_id = %s AND event.holding_id = %s
+              AND event.event_date <= %s
+              AND event.event_kind IN (
+                'sale', 'redemption', 'maturity', 'switch_out',
+                'systematic_transfer_out', 'platform_transfer_out')
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = event.household_id
+                   AND correction.corrects_transaction_id = event.id)
+            ORDER BY event.id FOR UPDATE""",
+        (household_id, holding_id, as_of_date),
+    )
+    disposals = [(UUID(str(row[0])), Decimal(row[1])) for row in cur.fetchall()]
+    cur.execute(
+        """SELECT lot.id, lot.acquired_units, lot.cost_basis_native
              FROM acquisition_lot lot
              JOIN investment_transaction event
                ON event.household_id = lot.household_id
@@ -934,10 +950,51 @@ def _checkpoint_actuals(
               AND NOT EXISTS (
                 SELECT FROM investment_transaction correction
                  WHERE correction.household_id = event.household_id
-                   AND correction.corrects_transaction_id = event.id)""",
+                   AND correction.corrects_transaction_id = event.id)
+            ORDER BY lot.id FOR UPDATE OF lot""",
         (household_id, holding_id, as_of_date),
     )
-    cost = Decimal(cur.fetchone()[0])  # type: ignore[index]
+    lots = [(UUID(str(row[0])), Decimal(row[1]), Decimal(row[2])) for row in cur.fetchall()]
+    allocations_by_disposal: dict[UUID, Decimal] = {}
+    allocations_by_lot: dict[UUID, Decimal] = {}
+    if disposals:
+        cur.execute(
+            """SELECT disposal_transaction_id, acquisition_lot_id, allocated_units
+                 FROM investment_lot_allocation
+                WHERE household_id = %s AND disposal_transaction_id = ANY(%s::UUID[])
+                ORDER BY disposal_transaction_id, acquisition_lot_id""",
+            (household_id, [disposal_id for disposal_id, _ in disposals]),
+        )
+        for disposal_id, lot_id, allocated_units in cur.fetchall():
+            typed_disposal_id = UUID(str(disposal_id))
+            typed_lot_id = UUID(str(lot_id))
+            units_allocated = Decimal(allocated_units)
+            allocations_by_disposal[typed_disposal_id] = (
+                allocations_by_disposal.get(typed_disposal_id, Decimal(0)) + units_allocated
+            )
+            allocations_by_lot[typed_lot_id] = (
+                allocations_by_lot.get(typed_lot_id, Decimal(0)) + units_allocated
+            )
+    active_lot_ids = {lot_id for lot_id, _, _ in lots}
+    complete = all(
+        allocations_by_disposal.get(disposal_id, Decimal(0)) == disposed_units
+        for disposal_id, disposed_units in disposals
+    ) and set(allocations_by_lot).issubset(active_lot_ids)
+    if not complete:
+        return holding_id, units, None
+    with localcontext() as context:
+        context.prec = 80
+        cost = sum(
+            (
+                (
+                    basis
+                    * (acquired_units - allocations_by_lot.get(lot_id, Decimal(0)))
+                    / acquired_units
+                ).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                for lot_id, acquired_units, basis in lots
+            ),
+            Decimal(0),
+        )
     return holding_id, units, cost
 
 
@@ -996,13 +1053,23 @@ def reconcile_staged_checkpoints(
                 )
                 cost_mismatch = checkpoint[6] is not None and (
                     holding_id is None
-                    or actual_cost.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-                    != Decimal(checkpoint[6])
+                    or (
+                        actual_cost is not None
+                        and actual_cost.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+                        != Decimal(checkpoint[6])
+                    )
                 )
-                compared = checkpoint[5] is not None or checkpoint[6] is not None
+                cost_unavailable = (
+                    checkpoint[6] is not None and holding_id is not None and actual_cost is None
+                )
+                compared = checkpoint[5] is not None or (
+                    checkpoint[6] is not None and actual_cost is not None
+                )
                 next_status = (
                     "mismatched"
                     if unit_mismatch or cost_mismatch
+                    else "pending"
+                    if cost_unavailable
                     else "matched"
                     if compared and holding_id is not None
                     else "pending"
@@ -1032,6 +1099,16 @@ def reconcile_staged_checkpoints(
                         import_id,
                         group_id,
                         "cost_mismatch",
+                        checkpoint_id=checkpoint_id,
+                        holding_id=holding_id,
+                    )
+                if cost_unavailable:
+                    _insert_review(
+                        cur,
+                        owner.household_id,
+                        import_id,
+                        group_id,
+                        "incomplete_lot_allocation",
                         checkpoint_id=checkpoint_id,
                         holding_id=holding_id,
                     )

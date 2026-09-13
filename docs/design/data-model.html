@@ -866,8 +866,10 @@ staged.</td></tr>
 date. It reconciles event-derived state and never manufactures an event or price; a matched
 checkpoint's resolved account and security must agree with its holding. Summary content creates
 only checkpoints; dated unit effects are compared at declared precision and reported cost remains
-separate from retained acquisition basis. A discrepancy appends a fixed checkpoint-scoped review,
-while reported value never becomes a terminal security price.</td></tr>
+separate from retained acquisition basis after exact as-of disposal-lot allocations. Incomplete
+allocation leaves cost pending with an advisory review rather than inventing basis. A discrepancy
+appends a fixed checkpoint-scoped review, while reported value never becomes a terminal security
+price.</td></tr>
 <tr><td><code>investment_evidence</code></td><td>An immutable typed attachment to one draft, checkpoint
 or event, with document/page/row provenance and source identity or versioned fingerprint. Exact
 replay is idempotent; conflicting evidence attaches nothing. Fingerprints are scoped by household

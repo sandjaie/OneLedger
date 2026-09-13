@@ -857,7 +857,10 @@ edited in place; later resolution may identify its account, security or holding 
 lifecycle without rewriting what the source stated.</p>
 <p>The content-selected summary-statement adapter emits checkpoints only. Reconciliation compares
 reported units at the source-declared precision and reported cost with committed dated holding
-facts. Agreement attaches the retained holding; disagreement appends fixed
+facts after deducting exact lot allocations for disposals through the checkpoint date. If any
+relevant disposal is unallocated or partially allocated, cost remains pending with an advisory
+<code>incomplete_lot_allocation</code> review instead of claiming a basis. Agreement attaches the
+retained holding; disagreement appends fixed
 <code>unit_mismatch</code> or <code>cost_mismatch</code> review evidence. Reported value remains a
 checkpoint fact: it is never converted into a transaction, valuation snapshot or terminal
 security price.</p>
