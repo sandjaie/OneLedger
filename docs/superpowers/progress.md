@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Controller review and delivery of Task 8 — acquisition positions and one-count net worth | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
-| Current implementation task | Task 8 rebuilds acquisition-only positions from active immutable events, selects accepted non-future prices with explicit coverage states, and makes dated ledger, holdings and snapshot modes mutually exclusive in dashboard net worth; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
+| Next product action | Controller review and delivery of Task 9 — catalogue, purchase, price and holding-entry web flow | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-9--catalogue-purchase-price-and-holding-entry-web-flow) |
+| Current implementation task | Task 9 adds an owner-only investment entry workspace that resolves catalogue evidence, confirms exact acquisition facts, optionally records a dated manual price and reloads the resulting acquisition-only holding; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-9--catalogue-purchase-price-and-holding-entry-web-flow) |
 
 ## Canonical phase status
 
@@ -74,7 +74,8 @@ requires a separate owner request.
 | Phase 1.6 Task 5 | **Complete via PR #170** — catalogue resolution, private investment identifiers and append-only manual price observations are on `develop` | [PR #170](https://github.com/sandjaie/OneLedger/pull/170) |
 | Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on `develop` | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
 | Phase 1.6 Task 7 | **Complete via PR #172** — purchase funding proposals, correction-safe atomic confirmation, final-debit selection and exact unlink restoration are on `develop` | [PR #172](https://github.com/sandjaie/OneLedger/pull/172) |
-| Phase 1.6 Task 8 | **Implementation ready for controller review** — acquisition-only positions, typed price/FX coverage and exclusive ledger/holdings/snapshot dashboard valuation are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
+| Phase 1.6 Task 8 | **Complete via PR #173** — acquisition-only positions, typed price/FX coverage and exclusive ledger/holdings/snapshot dashboard valuation are on `develop` | [PR #173](https://github.com/sandjaie/OneLedger/pull/173) |
+| Phase 1.6 Task 9 | **Implementation ready for controller review** — catalogue resolution, explicit acquisition confirmation, optional dated price entry and resulting holding display are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-9--catalogue-purchase-price-and-holding-entry-web-flow) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
