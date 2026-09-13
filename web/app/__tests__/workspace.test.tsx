@@ -131,6 +131,7 @@ const dashboard: DashboardResponse = {
     liquidSecondary: "13500.0000",
     rates: [{ currency: "XIN", rateToBase: "1", rateToSecondary: "0.0450000000", rateDate: "2026-03-15", carried: false }],
     missing: [],
+    investmentCoverage: [],
   },
   thisMonth: march,
   trend: [march],

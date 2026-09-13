@@ -83,6 +83,7 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
         { currency: "XAE", rateToBase: "22.2222222222", rateToSecondary: "1", rateDate: "2026-03-13", carried: true },
       ],
       missing: [],
+      investmentCoverage: [],
     },
     thisMonth: march,
     trend: [...MONTHS.slice(0, 11).map((on) => month(on)), march],

@@ -125,6 +125,24 @@ def live_funding() -> Iterator[FundingFixture]:
             found = cur.fetchone()
             assert found is not None
             security_ids.append(UUID(str(found[0])))
+        for household, security_id in zip(
+            (household_id, other_household_id), security_ids, strict=True
+        ):
+            cur.execute(
+                """INSERT INTO security_price_source (
+                       household_id, security_id, source_key, source_version,
+                       source_security_code, effective_from)
+                   VALUES (%s, %s, 'owner_manual', 'v1', %s, '2026-01-01') RETURNING id""",
+                (household, security_id, f"synthetic:{security_id}"),
+            )
+            mapping_id = cur.fetchone()[0]  # type: ignore[index]
+            cur.execute(
+                """INSERT INTO price_snapshot (
+                       household_id, security_id, source_mapping_id, price_date, price, currency,
+                       is_accepted, accepted_at)
+                   VALUES (%s, %s, %s, '2026-02-01', 10.000000, %s, true, now())""",
+                (household, security_id, mapping_id, base),
+            )
     connection.commit()
     app.dependency_overrides[auth.require_owner] = lambda: owner
     try:
@@ -148,6 +166,7 @@ def live_funding() -> Iterator[FundingFixture]:
         with connection.cursor() as cur:
             cur.execute("TRUNCATE transaction, transfer, investment_transaction CASCADE")
             cur.execute("TRUNCATE holding CASCADE")
+            cur.execute("TRUNCATE price_snapshot, security_price_source CASCADE")
             cur.execute(
                 "DELETE FROM security WHERE household_id IN (%s, %s)",
                 (household_id, other_household_id),
@@ -381,6 +400,7 @@ def test_proposal_writes_nothing_then_confirmation_and_unlink_are_exact(
     )
     allocations = [_allocation(event, cash_a, "40.0000"), _allocation(event, cash_b, "60.0000")]
     before = _flow_and_net_worth()
+    assert before[2] == "-90.0000"
     proposed = _proposal(allocations)
     assert proposed.status_code == 200, proposed.text
     assert proposed.json()["state"] == "ready"
@@ -512,7 +532,7 @@ def test_a_transfer_leg_is_not_the_final_funding_debit(live_funding: FundingFixt
         txn_type="income",
     )
     before_transfer = _flow_and_net_worth()
-    assert before_transfer[:2] == ("50.0000", "50.0000")
+    assert before_transfer == ("50.0000", "50.0000", "10.0000")
     transfer = _client().post(
         "/transfers",
         json={
@@ -531,8 +551,7 @@ def test_a_transfer_leg_is_not_the_final_funding_debit(live_funding: FundingFixt
         account_id=live_funding.second_cash_account_id,
     )
     after_debit = _flow_and_net_worth()
-    assert after_debit[:2] == ("0.0000", "50.0000")
-    assert after_debit[2] != after_transfer[2]
+    assert after_debit == ("0.0000", "50.0000", "-40.0000")
     transfer_leg = _proposal([_allocation(event, source, "50.0000")])
     final = _proposal([_allocation(event, final_debit, "50.0000")])
     assert transfer_leg.status_code == 422

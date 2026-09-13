@@ -492,6 +492,100 @@ export type AcquisitionLotRow = {
 };
 
 /**
+ * AcquisitionPosition
+ */
+export type AcquisitionPosition = {
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Securityname
+     */
+    securityName: string;
+    /**
+     * Assetclass
+     */
+    assetClass: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Cumulativecontributionsnative
+     */
+    cumulativeContributionsNative: string;
+    /**
+     * Cumulativecontributionsbase
+     */
+    cumulativeContributionsBase: string;
+    /**
+     * Cumulativecontributionssecondary
+     */
+    cumulativeContributionsSecondary: string;
+    /**
+     * Pricestatus
+     */
+    priceStatus: 'current' | 'stale' | 'missing' | 'future_price_only';
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Pricedate
+     */
+    priceDate: string | null;
+    /**
+     * Currentvaluenative
+     */
+    currentValueNative: string | null;
+    /**
+     * Currentvaluebase
+     */
+    currentValueBase: string | null;
+    /**
+     * Currentvaluesecondary
+     */
+    currentValueSecondary: string | null;
+    /**
+     * Gainnative
+     */
+    gainNative: string | null;
+    /**
+     * Gainbase
+     */
+    gainBase: string | null;
+    /**
+     * Gainsecondary
+     */
+    gainSecondary: string | null;
+    /**
+     * Missingfx
+     */
+    missingFx: Array<string>;
+    /**
+     * Fxrates
+     */
+    fxRates: Array<PositionFxRate>;
+};
+
+/**
  * ApplyBody
  */
 export type ApplyBody = {
@@ -1790,6 +1884,48 @@ export type InstitutionRow = {
 };
 
 /**
+ * InvestmentCoverage
+ */
+export type InvestmentCoverage = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string | null;
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'holdings' | 'snapshot';
+    /**
+     * Status
+     */
+    status: 'current_price' | 'stale_price' | 'missing_price' | 'future_price_only' | 'current_snapshot' | 'carried_snapshot' | 'missing_snapshot';
+    /**
+     * Valuedate
+     */
+    valueDate: string | null;
+    /**
+     * Carried
+     */
+    carried: boolean;
+    /**
+     * Agedays
+     */
+    ageDays: number | null;
+    /**
+     * Method
+     */
+    method: 'owner_entered' | 'market_quote' | 'indexed' | 'statement' | null;
+    /**
+     * Confidence
+     */
+    confidence: 'high' | 'medium' | 'low' | null;
+};
+
+/**
  * InvestmentEventRow
  */
 export type InvestmentEventRow = {
@@ -2585,6 +2721,10 @@ export type NetWorth = {
      * Missing
      */
     missing: Array<MissingRate>;
+    /**
+     * Investmentcoverage
+     */
+    investmentCoverage: Array<InvestmentCoverage>;
 };
 
 export type Outcome = 'complete' | 'mask_only' | 'missing' | 'conflicting' | 'unsupported';
@@ -2886,6 +3026,50 @@ export type PeersResponse = {
      * Peers
      */
     peers: Array<Candidate>;
+};
+
+/**
+ * PortfolioPositions
+ */
+export type PortfolioPositions = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    /**
+     * Positions
+     */
+    positions: Array<AcquisitionPosition>;
+};
+
+/**
+ * PositionFxRate
+ */
+export type PositionFxRate = {
+    /**
+     * Reportingcurrency
+     */
+    reportingCurrency: string;
+    /**
+     * Rate
+     */
+    rate: string | null;
+    /**
+     * Ratedate
+     */
+    rateDate: string | null;
+    /**
+     * Carried
+     */
+    carried: boolean;
 };
 
 /**
@@ -5753,6 +5937,36 @@ export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactio
 };
 
 export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponse = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses];
+
+export type PortfolioPositionsPortfolioPositionsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/portfolio/positions';
+};
+
+export type PortfolioPositionsPortfolioPositionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PortfolioPositionsPortfolioPositionsGetError = PortfolioPositionsPortfolioPositionsGetErrors[keyof PortfolioPositionsPortfolioPositionsGetErrors];
+
+export type PortfolioPositionsPortfolioPositionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PortfolioPositions;
+};
+
+export type PortfolioPositionsPortfolioPositionsGetResponse = PortfolioPositionsPortfolioPositionsGetResponses[keyof PortfolioPositionsPortfolioPositionsGetResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

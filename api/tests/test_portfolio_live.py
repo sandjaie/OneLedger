@@ -1,0 +1,273 @@
+"""Owner-scoped acquisition positions from immutable events and accepted dated prices."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from datetime import date
+from typing import Any
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+from oneledger import auth
+from oneledger.main import app
+from oneledger.routes import dashboard, investment_catalogue, portfolio
+
+from .live_database import connect_to_test_database
+from .test_ingest_route_live import ORIGIN
+from .test_investment_events_live import EventFixture, _body
+
+pytest_plugins = ("tests.test_investment_events_live",)
+
+AS_OF = date(2026, 2, 5)
+
+
+@pytest.fixture
+def position_live(
+    live_events: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[EventFixture]:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
+    monkeypatch.setattr(dashboard, "connect", connect_to_test_database)
+    yield live_events
+
+
+def _client() -> TestClient:
+    return TestClient(app)
+
+
+def _acquire(fixture: EventFixture, **changes: object) -> dict[str, Any]:
+    response = _client().post(
+        "/investment-events/acquisitions", json={**_body(fixture), **changes}, headers=ORIGIN
+    )
+    assert response.status_code == 201, response.text
+    result: dict[str, Any] = response.json()
+    return result
+
+
+def _price(fixture: EventFixture, on: date, value: str) -> None:
+    response = _client().post(
+        f"/investment-catalogue/securities/{fixture.security_id}/manual-prices",
+        json={"priceDate": str(on), "price": value},
+        headers=ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+
+
+def _positions(as_of: date = AS_OF) -> dict[str, Any]:
+    response = _client().get("/portfolio/positions", params={"asOf": str(as_of)})
+    assert response.status_code == 200, response.text
+    result: dict[str, Any] = response.json()
+    return result
+
+
+def test_portfolio_positions_require_an_owner_session() -> None:
+    response = _client().get("/portfolio/positions", params={"asOf": str(AS_OF)})
+
+    assert response.status_code == 401
+
+
+def test_acquisition_position_separates_frozen_contribution_from_current_value(
+    position_live: EventFixture,
+) -> None:
+    """Revaluing historical contribution FX or serializing numerics would break this wire result."""
+    acquired = _acquire(position_live)
+    _price(position_live, date(2026, 2, 2), "6.000000")
+
+    payload = _positions()
+
+    assert payload["asOf"] == str(AS_OF)
+    assert payload["baseCurrency"] == position_live.currency
+    assert payload["secondaryCurrency"] == position_live.secondary_currency
+    [row] = payload["positions"]
+    assert row == {
+        "holdingId": acquired["holdingId"],
+        "accountId": str(position_live.account_id),
+        "securityId": str(position_live.security_id),
+        "securityName": "Synthetic acquisition security",
+        "assetClass": "equity",
+        "currency": position_live.currency,
+        "asOf": str(AS_OF),
+        "units": "4.00000000",
+        "cumulativeContributionsNative": "21.0000",
+        "cumulativeContributionsBase": "21.0000",
+        "cumulativeContributionsSecondary": "42.0000",
+        "priceStatus": "stale",
+        "price": "6.000000",
+        "priceDate": "2026-02-02",
+        "currentValueNative": "24.0000",
+        "currentValueBase": "24.0000",
+        "currentValueSecondary": "48.0000",
+        "gainNative": "3.0000",
+        "gainBase": "3.0000",
+        "gainSecondary": "6.0000",
+        "missingFx": [],
+        "fxRates": [
+            {
+                "reportingCurrency": position_live.currency,
+                "rate": "1",
+                "rateDate": str(AS_OF),
+                "carried": False,
+            },
+            {
+                "reportingCurrency": position_live.secondary_currency,
+                "rate": "2.0000000000",
+                "rateDate": "2026-02-02",
+                "carried": True,
+            },
+        ],
+    }
+    forbidden = {"realisedGain", "remainingBasis", "distributions", "return", "xirr"}
+    assert forbidden.isdisjoint(row)
+    for key, value in row.items():
+        if key in {"units", "price"} or "Value" in key or "gain" in key or "Contribution" in key:
+            assert value is None or isinstance(value, str), key
+
+
+def test_latest_non_future_accepted_price_wins_and_a_future_observation_never_leaks_in(
+    position_live: EventFixture,
+) -> None:
+    """Changing price selection to latest overall would value an earlier report with future data."""
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 2), "6.000000")
+    _price(position_live, date(2026, 2, 10), "99.000000")
+
+    [row] = _positions()["positions"]
+
+    assert (row["price"], row["priceDate"], row["currentValueNative"]) == (
+        "6.000000",
+        "2026-02-02",
+        "24.0000",
+    )
+    assert "99.000000" not in str(row)
+
+
+def test_as_of_units_and_contributions_ignore_later_acquisitions(
+    position_live: EventFixture,
+) -> None:
+    """Reading holding.current_units would pull a later acquisition into an earlier position."""
+    _acquire(position_live)
+    _acquire(position_live, eventDate="2026-02-02", idempotencyKey=str(uuid4()))
+    _price(position_live, date(2026, 2, 1), "6.000000")
+
+    [row] = _positions(date(2026, 2, 1))["positions"]
+
+    assert row["units"] == "4.00000000"
+    assert row["cumulativeContributionsNative"] == "21.0000"
+    assert row["currentValueNative"] == "24.0000"
+
+
+@pytest.mark.parametrize(
+    ("with_future", "expected"), ((False, "missing"), (True, "future_price_only"))
+)
+def test_no_eligible_price_is_typed_without_manufacturing_zero(
+    position_live: EventFixture, with_future: bool, expected: str
+) -> None:
+    """Missing and future-only evidence are different recovery states, neither a zero value."""
+    _acquire(position_live)
+    if with_future:
+        _price(position_live, date(2026, 2, 10), "9.000000")
+
+    [row] = _positions()["positions"]
+
+    assert row["priceStatus"] == expected
+    assert row["price"] is None
+    assert row["priceDate"] is None
+    for key in (
+        "currentValueNative",
+        "currentValueBase",
+        "currentValueSecondary",
+        "gainNative",
+        "gainBase",
+        "gainSecondary",
+    ):
+        assert row[key] is None
+
+
+def test_current_fx_is_explicitly_missing_without_rewriting_frozen_contributions(
+    position_live: EventFixture,
+) -> None:
+    """Removing the current secondary leg must retain native/base facts and frozen contribution."""
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 2), "6.000000")
+    with position_live.connection.cursor() as cur:
+        cur.execute(
+            "DELETE FROM fx_rate WHERE base_currency = %s AND quote_currency = %s",
+            (position_live.secondary_currency, position_live.currency),
+        )
+        cur.execute(
+            """INSERT INTO fx_rate (
+                   rate_date, base_currency, quote_currency, rate, source)
+               VALUES ('2026-02-10', %s, %s, 9.0000000000, 'manual')""",
+            (position_live.secondary_currency, position_live.currency),
+        )
+    position_live.connection.commit()
+
+    [row] = _positions()["positions"]
+
+    assert row["cumulativeContributionsSecondary"] == "42.0000"
+    assert row["currentValueNative"] == "24.0000"
+    assert row["currentValueBase"] == "24.0000"
+    assert row["gainBase"] == "3.0000"
+    assert row["currentValueSecondary"] is None
+    assert row["gainSecondary"] is None
+    assert row["missingFx"] == [position_live.secondary_currency]
+    assert row["fxRates"][1] == {
+        "reportingCurrency": position_live.secondary_currency,
+        "rate": None,
+        "rateDate": None,
+        "carried": False,
+    }
+
+
+def test_position_uses_the_active_correction_and_hides_another_household(
+    position_live: EventFixture,
+) -> None:
+    """Counting the original beside its replacement or dropping household scope inflates units."""
+    original = _acquire(position_live)
+    corrected = _client().post(
+        f"/investment-events/{original['id']}/corrections",
+        json={
+            **_body(position_live),
+            "units": "3.00000000",
+            "grossAmount": "15.0000",
+            "charges": "0.0000",
+            "netAmount": "-15.0000",
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic exact replacement",
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert corrected.status_code == 201, corrected.text
+    _price(position_live, date(2026, 2, 2), "6.000000")
+    app.dependency_overrides[auth.require_owner] = lambda: position_live.other_owner
+    foreign = _client().post(
+        "/investment-events/acquisitions",
+        json={
+            **_body(position_live),
+            "accountId": str(position_live.other_account_id),
+            "securityId": str(position_live.other_security_id),
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert foreign.status_code == 201, foreign.text
+    foreign_price = _client().post(
+        f"/investment-catalogue/securities/{position_live.other_security_id}/manual-prices",
+        json={"priceDate": "2026-02-02", "price": "88.000000"},
+        headers=ORIGIN,
+    )
+    assert foreign_price.status_code == 201, foreign_price.text
+    app.dependency_overrides[auth.require_owner] = lambda: position_live.owner
+
+    [row] = _positions()["positions"]
+
+    assert row["units"] == "3.00000000"
+    assert row["cumulativeContributionsNative"] == "15.0000"
+    assert row["currentValueNative"] == "18.0000"
+    assert row["gainNative"] == "3.0000"
+    assert str(position_live.other_account_id) not in str(_positions())
+    assert str(position_live.other_security_id) not in str(_positions())
+    assert "88.000000" not in str(_positions())

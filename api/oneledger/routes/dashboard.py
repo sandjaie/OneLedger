@@ -1,15 +1,15 @@
 """Slice 1.4 task 4b2: the dashboard — net worth, this month, the trend and the cards due.
 
-`GET /dashboard` answers in one payload. Its balance-sheet half (4b2a) reads `account` and
-`card_statement`; its flow half (4b2b) reads `v_transaction_reportable` and nothing else.
+`GET /dashboard` answers in one payload. Its balance-sheet half reads the one valuation source
+selected for each account plus `card_statement`; its flow half reads `v_transaction_reportable`
+and nothing else.
 
-**Net worth is one SUM of signed balances** (ADR-0010) — assets positive, liabilities negative, no
-CASE on the account's class and no subtraction, because each of those is a place a sign error
-hides. The asset, liability and liquid figures are FILTERs on the same sum. Each balance is
-translated at the rate for the date being viewed (`multi-currency-and-fx.html` §6), multiplied and
-aggregated in Postgres, with the rates passed in as parameters.
-`asOf` moves the rates and the card cycles, not the balances, which are the accounts' current
-ones; a past date's balance sheet is `GET /networth`'s.
+**Net worth is one SUM of signed values** (ADR-0010) — ledger-mode signed balances, holding values
+or one frozen snapshot, never two sources for one account. Assets are positive and liabilities
+negative; the asset, liability and liquid figures are FILTERs on the same PostgreSQL sum. `asOf`
+selects the valuation period, event-derived units, accepted non-future price, snapshot, rates and
+card cycles. A ledger-mode account still contributes its current balance, so a complete historical
+balance sheet remains `GET /networth`'s.
 
 **Which rate, and how it is labelled (Invariant 7).** The date's own row when the table holds one —
 itself labelled carried over a weekend, with the date it really comes from. The table is filled
@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
@@ -39,8 +39,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
-from ..money import _fixed, _out
+from ..db import connect, scope_to_owner
+from ..investments.positions import read_positions
+from ..money import _fixed, _out, translate
 
 router = APIRouter(tags=["dashboard"])
 
@@ -60,6 +61,26 @@ class MissingRate(BaseModel):
     asOf: date
 
 
+class InvestmentCoverage(BaseModel):
+    accountId: UUID
+    holdingId: UUID | None
+    valuationMode: Literal["holdings", "snapshot"]
+    status: Literal[
+        "current_price",
+        "stale_price",
+        "missing_price",
+        "future_price_only",
+        "current_snapshot",
+        "carried_snapshot",
+        "missing_snapshot",
+    ]
+    valueDate: date | None
+    carried: bool
+    ageDays: int | None
+    method: Literal["owner_entered", "market_quote", "indexed", "statement"] | None
+    confidence: Literal["high", "medium", "low"] | None
+
+
 class NetWorth(BaseModel):
     asOf: date
     baseCurrency: str
@@ -74,6 +95,7 @@ class NetWorth(BaseModel):
     liquidSecondary: str | None
     rates: list[RateUsed]
     missing: list[MissingRate]
+    investmentCoverage: list[InvestmentCoverage]
 
 
 class CardDue(BaseModel):
@@ -117,25 +139,19 @@ _RATE = """SELECT rate, rate_date, is_carried_forward, carried_from FROM fx_rate
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
 
-NET_WORTH = f"""
-    WITH rates (currency, to_base, to_secondary) AS (
-        SELECT * FROM unnest(%s::char(3)[], %s::numeric[], %s::numeric[])
+NET_WORTH = """
+    WITH values (account_class, is_liquid, value_base, value_secondary) AS (
+        SELECT * FROM unnest(%s::account_class[], %s::boolean[], %s::numeric[], %s::numeric[])
     )
-    SELECT coalesce(round(sum(a.current_balance * r.to_base), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_secondary), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_base)
-                          FILTER (WHERE a.account_class = 'asset'), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_secondary)
-                          FILTER (WHERE a.account_class = 'asset'), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_base)
-                          FILTER (WHERE a.account_class = 'liability'), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_secondary)
-                          FILTER (WHERE a.account_class = 'liability'), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_base) FILTER (WHERE a.is_liquid), 4), 0),
-           coalesce(round(sum(a.current_balance * r.to_secondary)
-                          FILTER (WHERE a.is_liquid), 4), 0)
-      FROM account a JOIN rates r ON r.currency = a.currency
-     WHERE {_COUNTED}"""
+    SELECT coalesce(round(sum(value_base), 4), 0),
+           coalesce(round(sum(value_secondary), 4), 0),
+           coalesce(round(sum(value_base) FILTER (WHERE account_class = 'asset'), 4), 0),
+           coalesce(round(sum(value_secondary) FILTER (WHERE account_class = 'asset'), 4), 0),
+           coalesce(round(sum(value_base) FILTER (WHERE account_class = 'liability'), 4), 0),
+           coalesce(round(sum(value_secondary) FILTER (WHERE account_class = 'liability'), 4), 0),
+           coalesce(round(sum(value_base) FILTER (WHERE is_liquid), 4), 0),
+           coalesce(round(sum(value_secondary) FILTER (WHERE is_liquid), 4), 0)
+      FROM values"""
 
 # The latest cycle per card known as of the date. Days and utilisation are computed here, and
 # utilisation is absent when the cycle states no limit — NULLIF, so no CASE is needed.
@@ -208,15 +224,35 @@ def _net_worth(
     cur: psycopg.Cursor[Any], household_id: UUID, base: str, secondary: str, as_of: date
 ) -> NetWorth:
     cur.execute(
-        f"SELECT DISTINCT a.currency FROM account a WHERE {_COUNTED} ORDER BY 1", (household_id,)
+        f"""SELECT a.id, a.account_class::text, a.is_liquid, a.currency, a.current_balance,
+                   period.valuation_mode::text, period.effective_from
+              FROM account a
+              JOIN account_valuation_period period
+                ON period.id = coalesce(
+                    (SELECT active.id FROM account_valuation_period active
+                      WHERE active.account_id = a.id AND %s >= active.effective_from
+                        AND (active.effective_to IS NULL OR %s <= active.effective_to)
+                      ORDER BY active.effective_from DESC LIMIT 1),
+                    (SELECT initial.id FROM account_valuation_period initial
+                      WHERE initial.account_id = a.id
+                      ORDER BY initial.effective_from LIMIT 1))
+             WHERE {_COUNTED} ORDER BY a.id""",
+        (as_of, as_of, household_id),
     )
-    held = [str(row[0]) for row in cur.fetchall()]
+    accounts = cur.fetchall()
+    account_by_id = {row[0]: row for row in accounts}
+    positions = read_positions(cur, household_id, base, secondary, as_of, included_only=True)
+    held = sorted(
+        {
+            *(str(row[3]).strip() for row in accounts if row[5] == "ledger_balance"),
+            *(position.currency for position in positions),
+        }
+    )
     secondary_rate = _to_base(cur, secondary, base, as_of)
 
     rates: list[RateUsed] = []
     missing: list[MissingRate] = []
-    to_base: list[Decimal | None] = []
-    to_secondary: list[Decimal | None] = []
+    rate_pairs: dict[str, tuple[Decimal | None, Decimal | None]] = {}
     for currency in held:
         own = _to_base(cur, currency, base, as_of)
         base_leg = own.rate if own else None
@@ -243,15 +279,100 @@ def _net_worth(
                 carried=any(leg.carried for leg in dated),
             )
         )
-        to_base.append(base_leg)
-        to_secondary.append(secondary_leg)
+        rate_pairs[currency] = (base_leg, secondary_leg)
 
-    cur.execute(NET_WORTH, (held, to_base, to_secondary, household_id))
+    classes: list[str] = []
+    liquidity: list[bool] = []
+    values_base: list[Decimal | None] = []
+    values_secondary: list[Decimal | None] = []
+    coverage: list[InvestmentCoverage] = []
+
+    for account_id, account_class, liquid, currency_raw, balance, mode, effective_from in accounts:
+        currency = str(currency_raw).strip()
+        if mode == "ledger_balance":
+            rate_base, rate_secondary = rate_pairs[currency]
+            classes.append(account_class)
+            liquidity.append(bool(liquid))
+            values_base.append(
+                None if rate_base is None else translate(Decimal(balance), rate_base)
+            )
+            values_secondary.append(
+                None if rate_secondary is None else translate(Decimal(balance), rate_secondary)
+            )
+        elif mode == "snapshot":
+            cur.execute(
+                """SELECT as_of_date, value_base, value_secondary,
+                          method::text, confidence::text
+                     FROM valuation_snapshot
+                    WHERE household_id = %s AND account_id = %s
+                      AND as_of_date >= %s AND as_of_date <= %s
+                    ORDER BY as_of_date DESC, created_at DESC, id DESC LIMIT 1""",
+                (household_id, account_id, effective_from, as_of),
+            )
+            snapshot = cur.fetchone()
+            classes.append(account_class)
+            liquidity.append(bool(liquid))
+            values_base.append(None if snapshot is None else Decimal(snapshot[1]))
+            values_secondary.append(None if snapshot is None else Decimal(snapshot[2]))
+            value_date = None if snapshot is None else snapshot[0]
+            coverage.append(
+                InvestmentCoverage(
+                    accountId=account_id,
+                    holdingId=None,
+                    valuationMode="snapshot",
+                    status=(
+                        "missing_snapshot"
+                        if value_date is None
+                        else "current_snapshot"
+                        if value_date == as_of
+                        else "carried_snapshot"
+                    ),
+                    valueDate=value_date,
+                    carried=value_date is not None and value_date < as_of,
+                    ageDays=None if value_date is None else (as_of - value_date).days,
+                    method=None if snapshot is None else snapshot[3],
+                    confidence=None if snapshot is None else snapshot[4],
+                )
+            )
+
+    price_coverage = {
+        "current": "current_price",
+        "stale": "stale_price",
+        "missing": "missing_price",
+        "future_price_only": "future_price_only",
+    }
+    for position in positions:
+        account = account_by_id[position.accountId]
+        classes.append(str(account[1]))
+        liquidity.append(bool(account[2]))
+        values_base.append(
+            None if position.currentValueBase is None else Decimal(position.currentValueBase)
+        )
+        values_secondary.append(
+            None
+            if position.currentValueSecondary is None
+            else Decimal(position.currentValueSecondary)
+        )
+        coverage.append(
+            InvestmentCoverage(
+                accountId=position.accountId,
+                holdingId=position.holdingId,
+                valuationMode="holdings",
+                status=price_coverage[position.priceStatus],  # type: ignore[arg-type]
+                valueDate=position.priceDate,
+                carried=position.priceDate is not None and position.priceDate < as_of,
+                ageDays=(None if position.priceDate is None else (as_of - position.priceDate).days),
+                method=None,
+                confidence=None,
+            )
+        )
+
+    cur.execute(NET_WORTH, (classes, liquidity, values_base, values_secondary))
     figures = cur.fetchone() or (None,) * 8
     # Python decides which total may be shown and does no arithmetic: a missing rate nulls its
     # reporting currency whole rather than letting SUM skip the account it could not translate.
-    base_whole = all(rate is not None for rate in to_base)
-    secondary_whole = all(rate is not None for rate in to_secondary)
+    base_whole = all(value is not None for value in values_base)
+    secondary_whole = all(value is not None for value in values_secondary)
 
     def shown(value: Decimal | None, whole: bool) -> str | None:
         return _out(value) if whole else None
@@ -270,6 +391,13 @@ def _net_worth(
         liquidSecondary=shown(figures[7], secondary_whole),
         rates=rates,
         missing=missing,
+        investmentCoverage=sorted(
+            coverage,
+            key=lambda item: (
+                str(item.accountId),
+                "" if item.holdingId is None else str(item.holdingId),
+            ),
+        ),
     )
 
 
@@ -280,6 +408,7 @@ def read_dashboard(
 ) -> DashboardResponse:
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
         cur.execute(
             "SELECT base_currency, secondary_currency FROM household WHERE id = %s",
             (owner.household_id,),

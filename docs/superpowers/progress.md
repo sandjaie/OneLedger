@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Controller review and delivery of Task 7 — purchase funding confirmation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
-| Current implementation task | Task 7 adds read-only purchase-funding proposals, correction-safe atomic confirmation and event-first exact prior-type unlink; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
+| Next product action | Controller review and delivery of Task 8 — acquisition positions and one-count net worth | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
+| Current implementation task | Task 8 rebuilds acquisition-only positions from active immutable events, selects accepted non-future prices with explicit coverage states, and makes dated ledger, holdings and snapshot modes mutually exclusive in dashboard net worth; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
 
 ## Canonical phase status
 
@@ -73,7 +73,8 @@ requires a separate owner request.
 | Phase 1.6 Task 4 | **Complete via PR #169** — V33 enforces owner-authorized many-to-many cash links, exact unlink restoration, disposal-lot allocation and legacy-column retirement | [PR #169](https://github.com/sandjaie/OneLedger/pull/169) |
 | Phase 1.6 Task 5 | **Complete via PR #170** — catalogue resolution, private investment identifiers and append-only manual price observations are on `develop` | [PR #170](https://github.com/sandjaie/OneLedger/pull/170) |
 | Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on `develop` | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
-| Phase 1.6 Task 7 | **Implementation ready for controller review** — read-only proposals, correction-chain and stale-state serialization, atomic full-leaf allocation, final-debit selection and event-first exact prior-type unlink are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
+| Phase 1.6 Task 7 | **Complete via PR #172** — purchase funding proposals, correction-safe atomic confirmation, final-debit selection and exact unlink restoration are on `develop` | [PR #172](https://github.com/sandjaie/OneLedger/pull/172) |
+| Phase 1.6 Task 8 | **Implementation ready for controller review** — acquisition-only positions, typed price/FX coverage and exclusive ledger/holdings/snapshot dashboard valuation are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-8--acquisition-only-positions-and-one-count-net-worth) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
