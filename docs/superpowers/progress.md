@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Deliver Task 14.2 — owner API for cash lifecycle events and reviewed disposal income | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
-| Current implementation task | Task 14.1 is complete: V37 extends the single owner-authorized append operation to exact cash lifecycle facts and reinvestment effects; Task 14.2 owns the event API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
+| Next product action | Deliver Task 14.3 — evidenced lot and cash allocation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-143--evidenced-lot-and-cash-allocation) |
+| Current implementation task | Task 14.2 is complete: owner-only exact disposal and cash-lifecycle APIs preserve event meaning, append corrections and create explicit incomplete-lot review without inferring basis | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
 
 ## Canonical phase status
 
@@ -86,8 +86,9 @@ requires a separate owner request.
 | Phase 1.6 Task 12.2 | **Complete** — validated owner-scoped targets stage under one household transaction; retries, cross-document evidence overlap, group-local blockers and terminal cancellation retain provenance without changing financial facts | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-122--idempotent-atomic-persistence) |
 | Phase 1.6 Task 12.3 | **Complete** — owner-authenticated write-free previews, explicit UUID resolution, atomic staging/replay and idempotent terminal cancellation are available through the application API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-123--owner-api-and-cancellation-surface) |
 | Phase 1.6 Task 13 | **Complete** — content-selected summary statements emit only exact units/cost/value checkpoints; owner-scoped reconciliation confirms or disputes committed positions without manufacturing events or terminal prices | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-13--summary-checkpoints) |
-| Phase 1.6 Task 14 | **Split before implementation; Task 14.1 complete** — Task 14.2 owns the event API and Task 14.3 owns evidenced lot/cash allocation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
+| Phase 1.6 Task 14 | **Split before implementation; Tasks 14.1–14.2 complete** — Task 14.3 owns evidenced lot/cash allocation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
 | Phase 1.6 Task 14.1 | **Complete** — V37 admits exact cash distributions, interest, reinvested distributions, standalone charges and withheld tax through one atomic owner-authorized operation without manufacturing cash, units or lots | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
+| Phase 1.6 Task 14.2 | **Complete** — owner-authenticated disposal and cash-lifecycle APIs retain exact frozen facts, count embedded tax once, append corrections and create incomplete-lot review without exposing inferred basis or gain | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

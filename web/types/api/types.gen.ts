@@ -831,6 +831,221 @@ export type CardDue = {
 };
 
 /**
+ * CashLifecycleCorrectionCreate
+ */
+export type CashLifecycleCorrectionCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'sale' | 'redemption' | 'maturity' | 'cash_distribution' | 'interest' | 'reinvested_distribution' | 'charge' | 'withheld_tax';
+    /**
+     * Units
+     */
+    units: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * CashLifecycleCreate
+ */
+export type CashLifecycleCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'sale' | 'redemption' | 'maturity' | 'cash_distribution' | 'interest' | 'reinvested_distribution' | 'charge' | 'withheld_tax';
+    /**
+     * Units
+     */
+    units: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * CashLifecycleEventRow
+ */
+export type CashLifecycleEventRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'sale' | 'redemption' | 'maturity' | 'cash_distribution' | 'interest' | 'reinvested_distribution' | 'charge' | 'withheld_tax';
+    /**
+     * Units
+     */
+    units: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string | null;
+    /**
+     * Fxratetobase
+     */
+    fxRateToBase: string | null;
+    /**
+     * Fxratetosecondary
+     */
+    fxRateToSecondary: string | null;
+    /**
+     * Netamountbase
+     */
+    netAmountBase: string | null;
+    /**
+     * Netamountsecondary
+     */
+    netAmountSecondary: string | null;
+    /**
+     * Sourcekind
+     */
+    sourceKind: 'owner_entered';
+    /**
+     * Correctseventid
+     */
+    correctsEventId: string | null;
+    /**
+     * Correctionstate
+     */
+    correctionState: 'uncorrected' | 'corrected';
+    /**
+     * Currentunits
+     */
+    currentUnits: string;
+    lot: AcquisitionLotRow | null;
+    /**
+     * Reviewreasons
+     */
+    reviewReasons: Array<'incomplete_lot_allocation'>;
+};
+
+/**
  * CategoryCreate
  */
 export type CategoryCreate = {
@@ -6111,6 +6326,69 @@ export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostRes
 };
 
 export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponse = AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses[keyof AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses];
+
+export type AppendCashLifecycleEventInvestmentEventsCashLifecyclePostData = {
+    body: CashLifecycleCreate;
+    path?: never;
+    query?: never;
+    url: '/investment-events/cash-lifecycle';
+};
+
+export type AppendCashLifecycleEventInvestmentEventsCashLifecyclePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendCashLifecycleEventInvestmentEventsCashLifecyclePostError = AppendCashLifecycleEventInvestmentEventsCashLifecyclePostErrors[keyof AppendCashLifecycleEventInvestmentEventsCashLifecyclePostErrors];
+
+export type AppendCashLifecycleEventInvestmentEventsCashLifecyclePostResponses = {
+    /**
+     * Identical retry
+     */
+    200: CashLifecycleEventRow;
+    /**
+     * Successful Response
+     */
+    201: CashLifecycleEventRow;
+};
+
+export type AppendCashLifecycleEventInvestmentEventsCashLifecyclePostResponse = AppendCashLifecycleEventInvestmentEventsCashLifecyclePostResponses[keyof AppendCashLifecycleEventInvestmentEventsCashLifecyclePostResponses];
+
+export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostData = {
+    body: CashLifecycleCorrectionCreate;
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: string;
+    };
+    query?: never;
+    url: '/investment-events/{event_id}/cash-lifecycle-corrections';
+};
+
+export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostError = AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostErrors[keyof AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostErrors];
+
+export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: CashLifecycleEventRow;
+    /**
+     * Successful Response
+     */
+    201: CashLifecycleEventRow;
+};
+
+export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponse = AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponses[keyof AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponses];
 
 export type ProposePurchaseFundingInvestmentFundingProposalsPostData = {
     body: FundingProposalRequest;
