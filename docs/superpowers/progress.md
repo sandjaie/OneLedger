@@ -72,7 +72,7 @@ requires a separate owner request.
 | Phase 1.6 Task 3 | **Complete via PR #167** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and confirmation review found no remaining issues | [PR #167](https://github.com/sandjaie/OneLedger/pull/167) |
 | Phase 1.6 Task 4 | **Complete via PR #169** — V33 enforces owner-authorized many-to-many cash links, exact unlink restoration, disposal-lot allocation and legacy-column retirement | [PR #169](https://github.com/sandjaie/OneLedger/pull/169) |
 | Phase 1.6 Task 5 | **Complete via PR #170** — catalogue resolution, private investment identifiers and append-only manual price observations are on `develop` | [PR #170](https://github.com/sandjaie/OneLedger/pull/170) |
-| Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on <code>develop</code> | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
+| Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on `develop` | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
 | Phase 1.6 Task 7 | **Implementation ready for controller review** — read-only proposals, stale-state confirmation, atomic full-leaf allocation, final-debit selection and exact prior-type unlink are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
 
 Longer-horizon findings and decisions are maintained in the
