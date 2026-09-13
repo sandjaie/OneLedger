@@ -33,6 +33,7 @@ class SecurityCandidate(BaseModel):
     isin: str | None
     ticker: str | None
     exchange: str | None
+    manualPriceEligible: bool
 
 
 class SecurityResolution(BaseModel):
@@ -121,6 +122,7 @@ def _candidate(row: tuple[Any, ...]) -> SecurityCandidate:
         isin=isin,
         ticker=ticker,
         exchange=exchange,
+        manualPriceEligible=_household_id is not None,
     )
 
 
