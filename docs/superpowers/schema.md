@@ -1816,7 +1816,9 @@ CREATE TABLE investment_transaction (
   dedupe_version          TEXT,
   dedupe_fingerprint      TEXT,
   corrects_transaction_id UUID,
-  correction_reason       TEXT
+  correction_reason       TEXT,
+  counterpart_transaction_id UUID  -- present only for paired switch_in/systematic_transfer_in/
+                                    -- platform_transfer_in kinds, added by V40
 );
 
 CREATE TABLE investment_unit_effect (
@@ -1838,7 +1840,13 @@ CREATE TABLE acquisition_lot (
   acquired_units        NUMERIC(28,8) NOT NULL,
   cost_basis_native     NUMERIC(20,4) NOT NULL,
   currency              CHAR(3) NOT NULL REFERENCES currency(code),
-  UNIQUE (origin_transaction_id)
+  predecessor_lot_id    UUID,  -- added by V40; household-scoped, any holding (a platform
+                                -- transfer's successor lives in the destination holding)
+  FOREIGN KEY (household_id, predecessor_lot_id) REFERENCES acquisition_lot(household_id, id),
+  UNIQUE (household_id, id),  -- V40; backs the household-scoped self reference above
+  UNIQUE NULLS NOT DISTINCT (origin_transaction_id, predecessor_lot_id)  -- V40 replaces V31's
+                                                                          -- single-row-per-origin
+                                                                          -- uniqueness
 );
 ```
 
@@ -2154,6 +2162,39 @@ active correction-chain leaf; retained allocation evidence makes either origin i
 correction. A proposal includes the immutable disposal date in its expected state and refuses an
 acquisition lot dated after that disposal. Remaining basis includes active acquisition origins and
 allocations from active disposals only, applying `ROUND_HALF_UP` at four decimals per lot.
+
+V40 adds the lot lineage read model ahead of any operation that creates lineage (Task 15.2's split
+and Task 15.4's paired transfer). `acquisition_lot.predecessor_lot_id` is a nullable, household-scoped
+self reference spanning any holding, because a platform transfer's successor lives in the destination
+holding, not the source: a successor lot keeps its predecessor's `acquisition_date`, and
+`(origin_transaction_id, predecessor_lot_id)` is unique with nulls not distinct so one lineage event
+creates at most one successor per predecessor. `investment_transaction.counterpart_transaction_id`
+is a nullable, household-scoped, unique self reference present exactly for the paired `switch_in`,
+`systematic_transfer_in` and `platform_transfer_in` kinds; the future paired operation names the in
+leg's out counterpart there. A `BEFORE INSERT` order guard on `investment_transaction` raises
+`investment_unit_event_order` when a unit- or lot-affecting row (`units` present, or `event_kind =
+'split'`) predates an active `split`/`platform_transfer_in`/`platform_transfer_out` event in its
+holding, or corrects an event an active lineage event already fixed (excluding, from both
+comparisons, the event a correction itself targets — it is still "active" during its own
+replacement's insert). The cash-only exemption requires both the new row and any corrected event to
+carry no units and not be a split; exact dedupe replay is exempt because it returns before any
+insert. `investment_lot_lineage_available(holding_id, as_of)` is false from the date of an active
+split with no successor lot. `investment_open_lots(holding_id, as_of)` returns each lineage chain's
+tip lot, its preserved acquisition date, open units and open basis rounded from an exact wide
+intermediate product (not PostgreSQL's truncated division-scale heuristic), counting only a lot
+whose creating event is active and dated on or before `as_of` and an allocation from an active
+disposal dated on or before `as_of`; tip detection spans every lot in the household so a
+cross-holding successor is found, and only the destination `holding_id` reports it. It returns
+nothing while lineage is unavailable; callers must check that explicitly. `allocate_investment_lots_v33`
+counts lot capacity from active disposals only and refuses three cases before writing: a successor
+lot for a disposal dated before its creating event, any lot once lineage is unavailable as of the
+disposal date, and a predecessor already consumed by another active lineage event (dated on or
+before the disposal) even when lineage itself remains available. `confirm_investment_lot_allocation`
+keeps V39's unbounded remaining-basis semantics — a later acquisition in the same holding still
+contributes — by reading `investment_open_lots` and `investment_lot_lineage_available` as of
+`'infinity'::date` rather than the disposal's own date. `guard_correction_unfunded_event` exempts a
+corrected split's or transfer out-leg's own predecessor consumption but still refuses once that
+event's own successor lots are allocated or consumed by another active lineage event.
 
 ---
 

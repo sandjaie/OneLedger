@@ -201,10 +201,12 @@ class _Lot(NamedTuple):
     holding_id: UUID
     origin_event_id: UUID
     acquisition_date: date
+    origin_event_date: date
     acquired_units: Decimal
     cost_basis: Decimal
     allocated_units: Decimal
     has_correction: bool
+    has_active_successor: bool
 
 
 class _LotState(NamedTuple):
@@ -216,6 +218,7 @@ class _LotState(NamedTuple):
     has_correction: bool
     allocated_units: Decimal
     review_status: str | None
+    lineage_available: bool
     lots: dict[UUID, _Lot]
 
 
@@ -472,7 +475,8 @@ def _load_lot_state(
                   (SELECT status::text FROM investment_review_item review
                     WHERE review.household_id = event.household_id
                       AND review.investment_transaction_id = event.id
-                      AND review.reason = 'incomplete_lot_allocation')
+                      AND review.reason = 'incomplete_lot_allocation'),
+                  investment_lot_lineage_available(event.holding_id, event.event_date)
              FROM investment_transaction event
             WHERE event.household_id = %s AND event.id = %s""",
         (owner.household_id, body.disposalEventId),
@@ -480,33 +484,54 @@ def _load_lot_state(
     event = cur.fetchone()
     if event is None:
         raise FundingError(404, "lot allocation reference not found")
+    disposal_date = event[2]
     lot_ids = [item.acquisitionLotId for item in body.allocations]
     cur.execute(
         """SELECT lot.id, lot.holding_id, lot.origin_transaction_id, lot.acquisition_date,
-                  lot.acquired_units, lot.cost_basis_native,
-                  COALESCE(sum(allocation.allocated_units), 0),
+                  origin.event_date, lot.acquired_units, lot.cost_basis_native,
+                  COALESCE(sum(allocation.allocated_units)
+                           FILTER (WHERE alloc_disposal.id IS NOT NULL), 0),
                   EXISTS (SELECT FROM investment_transaction correction
                            WHERE correction.household_id = origin.household_id
-                             AND correction.corrects_transaction_id = origin.id)
+                             AND correction.corrects_transaction_id = origin.id),
+                  EXISTS (SELECT FROM acquisition_lot successor
+                          JOIN investment_transaction succ_origin
+                            ON succ_origin.household_id = successor.household_id
+                           AND succ_origin.id = successor.origin_transaction_id
+                          WHERE successor.household_id = lot.household_id
+                            AND successor.predecessor_lot_id = lot.id
+                            AND succ_origin.event_date <= %s
+                            AND NOT EXISTS (
+                              SELECT FROM investment_transaction c2
+                               WHERE c2.corrects_transaction_id = succ_origin.id))
              FROM acquisition_lot lot
              JOIN investment_transaction origin
                ON origin.household_id = lot.household_id AND origin.id = lot.origin_transaction_id
              LEFT JOIN investment_lot_allocation allocation
                ON allocation.household_id = lot.household_id
               AND allocation.acquisition_lot_id = lot.id
+             LEFT JOIN investment_transaction alloc_disposal
+               ON alloc_disposal.household_id = allocation.household_id
+              AND alloc_disposal.id = allocation.disposal_transaction_id
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = alloc_disposal.household_id
+                   AND correction.corrects_transaction_id = alloc_disposal.id)
             WHERE lot.household_id = %s AND lot.id = ANY(%s::UUID[])
             GROUP BY lot.id, origin.id ORDER BY lot.id""",
-        (owner.household_id, lot_ids),
+        (disposal_date, owner.household_id, lot_ids),
     )
     lots = {
         UUID(str(row[0])): _Lot(
             UUID(str(row[1])),
             UUID(str(row[2])),
             row[3],
-            Decimal(row[4]),
+            row[4],
             Decimal(row[5]),
             Decimal(row[6]),
-            bool(row[7]),
+            Decimal(row[7]),
+            bool(row[8]),
+            bool(row[9]),
         )
         for row in cur.fetchall()
     }
@@ -521,6 +546,7 @@ def _load_lot_state(
         bool(event[5]),
         Decimal(event[6]),
         None if event[7] is None else str(event[7]),
+        bool(event[8]),
         lots,
     )
 
@@ -530,11 +556,14 @@ def _validate_lot_state(body: LotAllocationRequest, state: _LotState) -> None:
     if (
         state.event_kind not in {"sale", "redemption", "maturity"}
         or state.has_correction
+        or not state.lineage_available
         or proposed_total + state.allocated_units > state.disposed_units
         or any(
             lot.holding_id != state.holding_id
             or lot.has_correction
+            or lot.has_active_successor
             or lot.acquisition_date > state.disposal_date
+            or lot.origin_event_date > state.disposal_date
             or Decimal(item.allocatedUnits) + lot.allocated_units > lot.acquired_units
             for item in body.allocations
             for lot in [state.lots[item.acquisitionLotId]]
@@ -554,16 +583,19 @@ def _lot_state_token(body: LotAllocationRequest, state: _LotState) -> str:
             state.has_correction,
             f"{state.allocated_units:.8f}",
             state.review_status,
+            state.lineage_available,
         ),
         "lots": [
             (
                 str(item.acquisitionLotId),
                 str(state.lots[item.acquisitionLotId].origin_event_id),
                 str(state.lots[item.acquisitionLotId].acquisition_date),
+                state.lots[item.acquisitionLotId].origin_event_date.isoformat(),
                 f"{state.lots[item.acquisitionLotId].acquired_units:.8f}",
                 _money(state.lots[item.acquisitionLotId].cost_basis),
                 f"{state.lots[item.acquisitionLotId].allocated_units:.8f}",
                 state.lots[item.acquisitionLotId].has_correction,
+                state.lots[item.acquisitionLotId].has_active_successor,
                 f"{Decimal(item.allocatedUnits):.8f}",
             )
             for item in body.allocations
