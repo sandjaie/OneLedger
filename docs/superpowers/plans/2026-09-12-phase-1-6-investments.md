@@ -441,6 +441,8 @@ roles, over-allocation, cross-household and wrong-currency refusal, correction/u
 and one-count flow totals. Lot confirmations carry bounded idempotency and exact expected state;
 only active disposal and acquisition leaves participate, allocation/correction share the database's
 event-to-holding-to-lot/review lock order, and retained evidence must be removed before correction.
+The database alone derives and immutably retains the allocation decision and its exact nullable
+claims. Proposal state includes the disposal date and refuses any acquisition lot dated after it.
 No FIFO, average-cost or jurisdiction rule is inferred.
 **RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
 `eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q

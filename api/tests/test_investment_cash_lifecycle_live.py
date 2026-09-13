@@ -616,6 +616,27 @@ def test_corrected_disposal_and_superseded_acquisition_lot_are_not_allocation_ev
     assert confirmed.json()["remainingBasisNative"] == "27.0000"
 
 
+def test_postdated_acquisition_lot_is_refused_during_proposal_without_a_decision(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={**_acquisition(live_lifecycle), "eventDate": "2026-02-03"},
+    )
+    sale = _post(_lifecycle(live_lifecycle, "sale"))
+    response = _propose_lots(sale.json()["id"], [(acquisition.json()["lot"]["id"], "1.00000000")])
+    assert response.status_code == 422
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_lot_allocation WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_lot_allocation_decision
+                   WHERE household_id = %s)""",
+            (live_lifecycle.owner.household_id, live_lifecycle.owner.household_id),
+        )
+        assert cur.fetchone() == (0, 0)
+
+
 @pytest.mark.parametrize("allocated_units", ["0.50000000", "1.00000000"])
 def test_retained_partial_or_full_lot_evidence_refuses_either_event_correction(
     live_lifecycle: LifecycleFixture, allocated_units: str

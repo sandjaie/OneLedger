@@ -1,6 +1,14 @@
 -- V39: complete evidenced lot allocation resolves its retained review through the owner boundary.
 \set ON_ERROR_STOP on
 
+DO $$ BEGIN
+  ASSERT NOT has_table_privilege('authenticated', 'investment_lot_allocation_decision', 'INSERT'),
+    'authenticated callers must not fabricate lot decisions';
+  ASSERT EXISTS (SELECT FROM pg_trigger WHERE tgrelid =
+    'investment_lot_allocation_decision'::regclass AND tgname = 'trg_lot_decision_is_immutable'),
+    'lot decisions require an immutable direct-DML boundary';
+END $$;
+
 BEGIN;
 DO $$
 DECLARE
@@ -8,7 +16,8 @@ DECLARE
   person_id UUID; member_id UUID; other_person_id UUID;
   owner_id UUID; member_user_id UUID; other_owner_id UUID;
   account_id UUID; security_id UUID; lot_id UUID; holding_id UUID;
-  purchase_id UUID; disposal_id UUID; review_id UUID; first_resolution_time TIMESTAMPTZ;
+  purchase_id UUID; disposal_id UUID; review_id UUID; decision_key UUID := gen_random_uuid();
+  first_resolution_time TIMESTAMPTZ; created BOOLEAN; cost NUMERIC; gain NUMERIC; remaining NUMERIC;
 BEGIN
   SELECT min(code), max(code) INTO base, secondary FROM currency;
   INSERT INTO household (name, base_currency, secondary_currency)
@@ -68,8 +77,6 @@ BEGIN
   END;
   ASSERT (SELECT status = 'open' FROM investment_review_item WHERE id = review_id),
     'missing-evidence refusal changed retained review state';
-  PERFORM allocate_investment_lots(disposal_id, ARRAY[lot_id], ARRAY[4.00000000]);
-
   BEGIN
     PERFORM resolve_investment_review_item(review_id, 'lot_allocated', purchase_id);
     RAISE EXCEPTION 'lot allocation resolved against the wrong event';
@@ -97,8 +104,12 @@ BEGIN
     'foreign refusal changed retained review state';
 
   PERFORM set_config('app.user_id', owner_id::TEXT, true);
-  ASSERT resolve_investment_review_item(review_id, 'lot_allocated', disposal_id) = review_id,
-    'owner resolution returns the retained review identity';
+  SELECT result.created, result.realised_cost_native, result.realised_gain_native,
+         result.remaining_basis_native INTO created, cost, gain, remaining
+    FROM confirm_investment_lot_allocation(
+      disposal_id, ARRAY[lot_id], ARRAY[4.00000000], repeat('a', 64), decision_key) result;
+  ASSERT created AND cost = 8.0000 AND gain = 4.0000 AND remaining = 12.0000,
+    'owner operation retains exact allocation claims';
   SELECT review.resolved_at INTO first_resolution_time FROM investment_review_item review
    WHERE review.id = review_id;
   ASSERT (SELECT status = 'resolved' AND resolution_kind = 'lot_allocated'
@@ -110,6 +121,60 @@ BEGIN
   ASSERT (SELECT investment_review_item.resolved_at = first_resolution_time
             FROM investment_review_item WHERE id = review_id),
     'identical replay changed retained resolution time';
+  SELECT result.created INTO created FROM confirm_investment_lot_allocation(
+    disposal_id, ARRAY[lot_id], ARRAY[4.00000000], repeat('a', 64), decision_key) result;
+  ASSERT NOT created, 'identical owner allocation replay created a second decision';
+  ASSERT (SELECT decided_by = owner_id AND request_hash = investment_lot_request_hash(
+      disposal_id, ARRAY[lot_id], ARRAY[4.00000000], repeat('a', 64))
+    FROM investment_lot_allocation_decision WHERE idempotency_key = decision_key),
+    'the database operation derives decision actor and request hash';
+
+  BEGIN
+    INSERT INTO investment_lot_allocation_decision (
+      household_id, idempotency_key, request_hash, disposal_transaction_id,
+      realised_cost_native, realised_gain_native, remaining_basis_native,
+      allocation_complete, decided_by)
+    VALUES (household_id, gen_random_uuid(), repeat('b', 64), disposal_id,
+            1, NULL, NULL, false, owner_id);
+    RAISE EXCEPTION 'an invalid partial decision claim was stored';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO investment_lot_allocation_decision (
+      household_id, idempotency_key, request_hash, disposal_transaction_id,
+      allocation_complete, decided_by)
+    VALUES (household_id, gen_random_uuid(), repeat('b', 64), disposal_id, true, owner_id);
+    RAISE EXCEPTION 'an invalid complete decision claim was stored';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE investment_lot_allocation_decision SET realised_gain_native = 5
+     WHERE idempotency_key = decision_key;
+    RAISE EXCEPTION 'a retained lot decision was updated directly';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+  END;
+  BEGIN
+    DELETE FROM investment_lot_allocation_decision WHERE idempotency_key = decision_key;
+    RAISE EXCEPTION 'a retained lot decision was deleted directly';
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL;
+  END;
+  PERFORM set_config('app.user_id', member_user_id::TEXT, true);
+  BEGIN
+    SET LOCAL ROLE authenticated;
+    INSERT INTO investment_lot_allocation_decision (
+      household_id, idempotency_key, request_hash, disposal_transaction_id,
+      realised_cost_native, realised_gain_native, allocation_complete, decided_by)
+    VALUES (household_id, gen_random_uuid(), repeat('c', 64), disposal_id,
+            8, 4, true, member_user_id);
+    RESET ROLE;
+    RAISE EXCEPTION 'a member inserted a fabricated lot decision';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  PERFORM set_config('app.user_id', other_owner_id::TEXT, true);
+  SET LOCAL ROLE authenticated;
+  ASSERT (SELECT count(*) FROM investment_lot_allocation_decision) = 0,
+    'another household can see retained lot decisions';
+  RESET ROLE;
   RAISE NOTICE 'PASS 0036 complete lot evidence resolves review once';
 END $$;
 ROLLBACK;

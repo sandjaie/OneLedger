@@ -4,7 +4,8 @@ import hashlib
 import json
 from collections import defaultdict
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from datetime import date
+from decimal import Decimal
 from hmac import compare_digest
 from typing import Any, Literal, NamedTuple
 from uuid import UUID
@@ -199,7 +200,7 @@ class _State(NamedTuple):
 class _Lot(NamedTuple):
     holding_id: UUID
     origin_event_id: UUID
-    acquisition_date: object
+    acquisition_date: date
     acquired_units: Decimal
     cost_basis: Decimal
     allocated_units: Decimal
@@ -209,6 +210,7 @@ class _Lot(NamedTuple):
 class _LotState(NamedTuple):
     holding_id: UUID
     event_kind: str
+    disposal_date: date
     disposed_units: Decimal
     net_amount: Decimal
     has_correction: bool
@@ -458,7 +460,8 @@ def _load_lot_state(
     cur: psycopg.Cursor[Any], owner: OwnerSession, body: LotAllocationRequest
 ) -> _LotState:
     cur.execute(
-        """SELECT event.holding_id, event.event_kind::text, abs(event.units), event.net_amount,
+        """SELECT event.holding_id, event.event_kind::text, event.event_date,
+                  abs(event.units), event.net_amount,
                   EXISTS (SELECT FROM investment_transaction correction
                            WHERE correction.household_id = event.household_id
                              AND correction.corrects_transaction_id = event.id),
@@ -512,11 +515,12 @@ def _load_lot_state(
     return _LotState(
         UUID(str(event[0])),
         str(event[1]),
-        Decimal(event[2]),
+        event[2],
         Decimal(event[3]),
-        bool(event[4]),
-        Decimal(event[5]),
-        None if event[6] is None else str(event[6]),
+        Decimal(event[4]),
+        bool(event[5]),
+        Decimal(event[6]),
+        None if event[7] is None else str(event[7]),
         lots,
     )
 
@@ -530,7 +534,7 @@ def _validate_lot_state(body: LotAllocationRequest, state: _LotState) -> None:
         or any(
             lot.holding_id != state.holding_id
             or lot.has_correction
-            or lot.acquisition_date is None
+            or lot.acquisition_date > state.disposal_date
             or Decimal(item.allocatedUnits) + lot.allocated_units > lot.acquired_units
             for item in body.allocations
             for lot in [state.lots[item.acquisitionLotId]]
@@ -544,6 +548,7 @@ def _lot_state_token(body: LotAllocationRequest, state: _LotState) -> str:
         "disposal": (
             str(body.disposalEventId),
             state.event_kind,
+            state.disposal_date.isoformat(),
             f"{state.disposed_units:.8f}",
             _money(state.net_amount),
             state.has_correction,
@@ -596,128 +601,6 @@ def propose_lot_allocation(
         )
 
 
-def _lot_claims(
-    cur: psycopg.Cursor[Any], household_id: UUID, disposal_id: UUID
-) -> tuple[Decimal | None, Decimal | None, Decimal | None, bool]:
-    cur.execute(
-        """SELECT holding_id, abs(units), net_amount
-             FROM investment_transaction
-            WHERE household_id = %s AND id = %s FOR UPDATE""",
-        (household_id, disposal_id),
-    )
-    disposal = cur.fetchone()
-    if disposal is None:
-        raise FundingError(404, "lot allocation reference not found")
-    holding_id, disposed_units, net_amount = disposal
-    cur.execute(
-        """SELECT allocation.allocated_units, lot.acquired_units, lot.cost_basis_native
-             FROM investment_lot_allocation allocation
-             JOIN acquisition_lot lot ON lot.household_id = allocation.household_id
-                                     AND lot.id = allocation.acquisition_lot_id
-            WHERE allocation.household_id = %s
-              AND allocation.disposal_transaction_id = %s
-            ORDER BY allocation.acquisition_lot_id""",
-        (household_id, disposal_id),
-    )
-    target_allocations = [tuple(Decimal(value) for value in row) for row in cur.fetchall()]
-    complete = sum((row[0] for row in target_allocations), Decimal(0)) == Decimal(disposed_units)
-    if not complete:
-        return None, None, None, False
-    with localcontext() as context:
-        context.prec = 80
-        realised_cost = sum(
-            (
-                (allocated * basis / acquired).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-                for allocated, acquired, basis in target_allocations
-            ),
-            Decimal(0),
-        )
-    realised_gain = Decimal(net_amount) - realised_cost
-
-    cur.execute(
-        """SELECT event.id, abs(event.units)
-             FROM investment_transaction event
-            WHERE event.household_id = %s AND event.holding_id = %s
-              AND event.event_kind IN (
-                'sale', 'redemption', 'maturity', 'switch_out',
-                'systematic_transfer_out', 'platform_transfer_out')
-              AND NOT EXISTS (
-                SELECT FROM investment_transaction correction
-                 WHERE correction.household_id = event.household_id
-                   AND correction.corrects_transaction_id = event.id)
-            ORDER BY event.id FOR UPDATE""",
-        (household_id, holding_id),
-    )
-    disposals = [(UUID(str(row[0])), Decimal(row[1])) for row in cur.fetchall()]
-    cur.execute(
-        """SELECT disposal_transaction_id, sum(allocated_units)
-             FROM investment_lot_allocation
-            WHERE household_id = %s AND disposal_transaction_id = ANY(%s::UUID[])
-            GROUP BY disposal_transaction_id""",
-        (household_id, [item[0] for item in disposals]),
-    )
-    allocated_by_disposal = {UUID(str(row[0])): Decimal(row[1]) for row in cur.fetchall()}
-    if any(
-        allocated_by_disposal.get(event_id, Decimal(0)) != units for event_id, units in disposals
-    ):
-        return realised_cost, realised_gain, None, True
-
-    cur.execute(
-        """SELECT lot.id, lot.acquired_units, lot.cost_basis_native,
-                  COALESCE(active_allocations.allocated_units, 0)
-             FROM acquisition_lot lot
-             JOIN investment_transaction origin
-               ON origin.household_id = lot.household_id
-              AND origin.id = lot.origin_transaction_id
-             LEFT JOIN (
-               SELECT allocation.household_id, allocation.acquisition_lot_id,
-                      sum(allocation.allocated_units) AS allocated_units
-                 FROM investment_lot_allocation allocation
-                 JOIN investment_transaction disposal
-                   ON disposal.household_id = allocation.household_id
-                  AND disposal.id = allocation.disposal_transaction_id
-                WHERE NOT EXISTS (
-                  SELECT FROM investment_transaction correction
-                   WHERE correction.household_id = disposal.household_id
-                     AND correction.corrects_transaction_id = disposal.id)
-                GROUP BY allocation.household_id, allocation.acquisition_lot_id
-             ) active_allocations
-               ON active_allocations.household_id = lot.household_id
-              AND active_allocations.acquisition_lot_id = lot.id
-            WHERE lot.household_id = %s AND lot.holding_id = %s
-              AND NOT EXISTS (
-                SELECT FROM investment_transaction correction
-                 WHERE correction.household_id = origin.household_id
-                   AND correction.corrects_transaction_id = origin.id)
-            ORDER BY lot.id""",
-        (household_id, holding_id),
-    )
-    with localcontext() as context:
-        context.prec = 80
-        remaining_basis = sum(
-            (
-                (Decimal(row[2]) * (Decimal(row[1]) - Decimal(row[3])) / Decimal(row[1])).quantize(
-                    Decimal("0.0001"), rounding=ROUND_HALF_UP
-                )
-                for row in cur.fetchall()
-            ),
-            Decimal(0),
-        )
-    return realised_cost, realised_gain, remaining_basis, True
-
-
-def _lot_request_hash(body: LotAllocationConfirmationRequest) -> str:
-    facts = (
-        str(body.disposalEventId),
-        body.expectedState,
-        tuple(
-            (str(item.acquisitionLotId), f"{Decimal(item.allocatedUnits):.8f}")
-            for item in body.allocations
-        ),
-    )
-    return hashlib.sha256(json.dumps(facts).encode()).hexdigest()
-
-
 def _lot_response(
     body: LotAllocationRequest,
     realised_cost: Decimal | None,
@@ -745,7 +628,16 @@ def allocate_lots(
                 "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
                 (f"{owner.household_id}:{body.idempotencyKey}",),
             )
-            request_hash = _lot_request_hash(body)
+            lot_ids = [item.acquisitionLotId for item in body.allocations]
+            units = [Decimal(item.allocatedUnits) for item in body.allocations]
+            cur.execute(
+                "SELECT investment_lot_request_hash(%s, %s, %s, %s)",
+                (body.disposalEventId, lot_ids, units, body.expectedState),
+            )
+            hash_row = cur.fetchone()
+            if hash_row is None:
+                raise RuntimeError("lot allocation operation returned no request hash")
+            request_hash = str(hash_row[0])
             cur.execute(
                 """SELECT request_hash, realised_cost_native, realised_gain_native,
                           remaining_basis_native, allocation_complete
@@ -777,51 +669,30 @@ def allocate_lots(
                 raise FundingError(409, "lot allocation state changed")
             _validate_lot_state(body, state)
             cur.execute(
-                "SELECT allocate_investment_lots(%s, %s, %s)",
+                """SELECT created, realised_cost_native, realised_gain_native,
+                          remaining_basis_native, allocation_complete
+                     FROM confirm_investment_lot_allocation(%s, %s, %s, %s, %s)""",
                 (
                     body.disposalEventId,
-                    [item.acquisitionLotId for item in body.allocations],
-                    [Decimal(item.allocatedUnits) for item in body.allocations],
-                ),
-            )
-            realised_cost, realised_gain, remaining_basis, complete = _lot_claims(
-                cur, owner.household_id, body.disposalEventId
-            )
-            if complete:
-                cur.execute(
-                    """SELECT id FROM investment_review_item
-                         WHERE household_id = %s AND investment_transaction_id = %s
-                           AND reason = 'incomplete_lot_allocation' AND status = 'open'
-                         FOR UPDATE""",
-                    (owner.household_id, body.disposalEventId),
-                )
-                review = cur.fetchone()
-                if review is not None:
-                    cur.execute(
-                        """SELECT resolve_investment_review_item(
-                             %s, 'lot_allocated'::investment_review_resolution_kind, %s)""",
-                        (review[0], body.disposalEventId),
-                    )
-            cur.execute(
-                """INSERT INTO investment_lot_allocation_decision (
-                     household_id, idempotency_key, request_hash, disposal_transaction_id,
-                     realised_cost_native, realised_gain_native, remaining_basis_native,
-                     allocation_complete, decided_by)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    owner.household_id,
+                    lot_ids,
+                    units,
+                    body.expectedState,
                     body.idempotencyKey,
-                    request_hash,
-                    body.disposalEventId,
-                    realised_cost,
-                    realised_gain,
-                    remaining_basis,
-                    complete,
-                    owner.user_id,
                 ),
             )
+            row = cur.fetchone()
+            if row is None:
+                raise RuntimeError("lot allocation operation returned no decision")
+            created, realised_cost, realised_gain, remaining_basis, complete = row
             return LotAllocationResult(
-                _lot_response(body, realised_cost, realised_gain, remaining_basis, complete), True
+                _lot_response(
+                    body,
+                    None if realised_cost is None else Decimal(realised_cost),
+                    None if realised_gain is None else Decimal(realised_gain),
+                    None if remaining_basis is None else Decimal(remaining_basis),
+                    bool(complete),
+                ),
+                bool(created),
             )
     except psycopg.errors.InsufficientPrivilege:
         raise FundingError(404, "lot allocation reference not found") from None

@@ -2139,11 +2139,18 @@ foreign or wrong-event evidence leaves the review open; identical resolution rep
 original resolver and timestamp. Allocation rows and event facts remain immutable.
 
 Lot allocation confirmations retain one household-scoped `investment_lot_allocation_decision`
-per UUID idempotency key. Its request hash and exact nullable claims make identical replay stable
-and conflicting reuse atomic. V39 serializes allocation and correction through an event advisory
-mutex followed by event, holding, lot and review row locks. Every selected disposal and acquisition
-origin must still be an active correction-chain leaf; retained allocation evidence makes either
-origin ineligible for correction. Remaining basis includes active acquisition origins and
+per UUID idempotency key. Only the owner-authorized confirmation operation may create one: the
+database derives its actor, request hash, completeness and exact nullable claims, while direct
+authenticated insert, update and delete are refused. An incomplete decision has no cost, gain or
+remaining-basis claims; a complete decision has exact realised cost and gain, while remaining basis
+stays null whenever other active disposal evidence is incomplete. This makes identical replay stable
+and conflicting reuse atomic without permitting callers to fabricate a result.
+
+V39 serializes allocation and correction through an event advisory mutex followed by event,
+holding, lot and review row locks. Every selected disposal and acquisition origin must still be an
+active correction-chain leaf; retained allocation evidence makes either origin ineligible for
+correction. A proposal includes the immutable disposal date in its expected state and refuses an
+acquisition lot dated after that disposal. Remaining basis includes active acquisition origins and
 allocations from active disposals only, applying `ROUND_HALF_UP` at four decimals per lot.
 
 ---

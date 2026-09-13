@@ -881,6 +881,12 @@ owner operation may retain and close a superseded disposal&#39;s incomplete-lot 
 <code>event_corrected</code> only when its resolution reference is the immutable replacement event;
 or close an active disposal as <code>lot_allocated</code> only when its retained allocation rows total
 the exact disposed units. The same event/reason identity cannot later be reopened.</td></tr>
+<tr><td><code>investment_lot_allocation_decision</code></td><td>An immutable, household-scoped receipt
+created only by the owner-authorized lot-confirmation operation. The database derives its actor,
+request hash, completeness and exact nullable claims; direct authenticated insert, update and delete
+are refused. Incomplete decisions claim no cost, gain or remaining basis. Complete decisions retain
+realised cost and gain, while remaining basis remains unavailable if any active disposal evidence is
+incomplete. Proposal state includes the disposal date and rejects a later-dated acquisition lot.</td></tr>
 </tbody></table><p>The acquisition-only position service rebuilds as-of units and cumulative
 contributions from active immutable purchase leaves, retains each event&#39;s frozen reporting
 contribution, and values those units with the latest accepted non-future price plus current as-of
@@ -890,7 +896,7 @@ holdings or the latest frozen snapshot inside the active period contributes, nev
 <p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V38</code>.</p>
+<code>V30</code>–<code>V39</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
