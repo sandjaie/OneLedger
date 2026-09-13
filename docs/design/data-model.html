@@ -887,9 +887,9 @@ request hash, completeness and exact nullable claims; direct authenticated inser
 are refused. Incomplete decisions claim no cost, gain or remaining basis. Complete decisions retain
 realised cost and gain, while remaining basis remains unavailable if any active disposal evidence is
 incomplete. Proposal state includes the disposal date and rejects a later-dated acquisition lot.</td></tr>
-</tbody></table><p>The acquisition-only position service rebuilds as-of units and cumulative
-contributions from active immutable purchase leaves, retains each event&#39;s frozen reporting
-contribution, and values those units with the latest accepted non-future price plus current as-of
+</tbody></table><p>The position service rebuilds as-of units from every active unit effect and
+cumulative contributions from active immutable purchase leaves, retains each event&#39;s frozen
+reporting contribution, withholds gain once any non-purchase event is active, and values those units with the latest accepted non-future price plus current as-of
 FX. Missing, stale and future-only evidence remain typed states rather than zero. The dashboard
 uses the dated <code>account_valuation_period</code> as an exclusive switch: ledger balance, structured
 holdings or the latest frozen snapshot inside the active period contributes, never two of them.</p>

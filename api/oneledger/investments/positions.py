@@ -1,8 +1,8 @@
-"""Acquisition-only investment positions from committed facts and dated market evidence."""
+"""Open investment positions from committed unit facts and dated market evidence."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation, localcontext
 from typing import Any, Literal
@@ -173,24 +173,28 @@ def current_rate_pair(
 
 _POSITIONS = """
     WITH active_events AS (
-        SELECT event.holding_id, event.net_amount, event.net_amount_base,
-               event.net_amount_secondary, effect.signed_units
+        SELECT event.holding_id, effect.signed_units, event.net_amount, event.net_amount_base,
+               event.net_amount_secondary,
+               event.event_kind IN ('purchase', 'recurring_purchase') AS is_acquisition
           FROM investment_transaction event
-          JOIN investment_unit_effect effect
+          LEFT JOIN investment_unit_effect effect
             ON effect.household_id = event.household_id
            AND effect.investment_transaction_id = event.id
          WHERE event.household_id = %(household)s
            AND event.event_date <= %(as_of)s
-           AND event.event_kind IN ('purchase', 'recurring_purchase')
            AND NOT EXISTS (
                SELECT FROM investment_transaction correction
                 WHERE correction.corrects_transaction_id = event.id)
     ), totals AS (
         SELECT holding_id,
-               sum(signed_units)::numeric(28,8) AS units,
-               -sum(net_amount)::numeric(20,4) AS contribution_native,
-               -sum(net_amount_base)::numeric(20,4) AS contribution_base,
-               -sum(net_amount_secondary)::numeric(20,4) AS contribution_secondary
+               COALESCE(sum(signed_units), 0)::numeric(28,8) AS units,
+               COALESCE(-sum(net_amount) FILTER (WHERE is_acquisition), 0)
+                 ::numeric(20,4) AS contribution_native,
+               COALESCE(-sum(net_amount_base) FILTER (WHERE is_acquisition), 0)
+                 ::numeric(20,4) AS contribution_base,
+               COALESCE(-sum(net_amount_secondary) FILTER (WHERE is_acquisition), 0)
+                 ::numeric(20,4) AS contribution_secondary,
+               bool_and(is_acquisition) AS acquisition_only
           FROM active_events GROUP BY holding_id
     )
     SELECT h.id, h.account_id, h.security_id, security.name, security.asset_class::text,
@@ -199,7 +203,8 @@ _POSITIONS = """
            accepted.price, accepted.price_date,
            EXISTS (SELECT FROM price_snapshot future
                     WHERE future.security_id = h.security_id
-                      AND future.is_accepted AND future.price_date > %(as_of)s)
+                      AND future.is_accepted AND future.price_date > %(as_of)s),
+           totals.acquisition_only
       FROM totals
       JOIN holding h ON h.household_id = %(household)s AND h.id = totals.holding_id
       JOIN account a ON a.household_id = h.household_id AND a.id = h.account_id
@@ -231,7 +236,7 @@ def read_positions(
     *,
     included_only: bool = False,
 ) -> list[AcquisitionPosition]:
-    """Build open acquisition positions from active event leaves and accepted dated prices."""
+    """Value active unit leaves at accepted dated prices; gain only for purchase-only history."""
     cur.execute(
         _POSITIONS,
         {"household": household_id, "as_of": as_of, "included_only": included_only},
@@ -255,6 +260,12 @@ def read_positions(
             rate_to_base=None if rates.to_base is None else rates.to_base.rate,
             rate_to_secondary=None if rates.to_secondary is None else rates.to_secondary.rate,
         )
+        if not row[13]:
+            # Value less purchase cash is not a gain once disposals or income exist; realised and
+            # remaining-basis claims wait for evidenced lot allocation and the returns engine.
+            calculation = replace(
+                calculation, gain_native=None, gain_base=None, gain_secondary=None
+            )
         status: Literal["current", "stale", "missing", "future_price_only"]
         if price_date == as_of:
             status = "current"

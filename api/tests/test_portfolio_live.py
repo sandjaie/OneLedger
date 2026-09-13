@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.investments import cash_lifecycle
 from oneledger.main import app
 from oneledger.routes import dashboard, investment_catalogue, portfolio
 
@@ -328,3 +329,59 @@ def test_legal_event_and_price_scales_return_typed_unavailable_value(
     assert dashboard_worth["totalBase"] is None
     assert dashboard_worth["totalSecondary"] is None
     assert dashboard_worth["investmentCoverage"][0]["status"] == "outside_supported_range"
+
+
+def _dispose(fixture: EventFixture, on: date, units: str, gross: str) -> None:
+    response = _client().post(
+        "/investment-events/cash-lifecycle",
+        json={
+            "accountId": str(fixture.account_id),
+            "securityId": str(fixture.security_id),
+            "eventDate": str(on),
+            "eventKind": "sale",
+            "units": f"-{units}",
+            "price": "6.000000",
+            "grossAmount": gross,
+            "charges": "0.0000",
+            "withheldTax": "0.0000",
+            "netAmount": gross,
+            "currency": fixture.currency,
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_disposal_reduces_valued_units_and_withholds_contribution_gain(
+    position_live: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Counting purchase units only would value sold units and overstate net worth."""
+    monkeypatch.setattr(cash_lifecycle, "connect", connect_to_test_database)
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 1), "6.000000")
+    _dispose(position_live, date(2026, 2, 2), "1.00000000", "6.0000")
+
+    [before] = _positions(date(2026, 2, 1))["positions"]
+    [row] = _positions()["positions"]
+
+    assert before["units"] == "4.00000000"
+    assert before["gainNative"] == "3.0000"
+    assert row["units"] == "3.00000000"
+    assert row["currentValueNative"] == "18.0000"
+    assert row["cumulativeContributionsNative"] == "21.0000"
+    assert row["valueStatus"] == "available"
+    assert (row["gainNative"], row["gainBase"], row["gainSecondary"]) == (None, None, None)
+
+
+def test_fully_disposed_holding_is_absent_from_current_value(
+    position_live: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A closed holding keeps history but must not add value to current positions."""
+    monkeypatch.setattr(cash_lifecycle, "connect", connect_to_test_database)
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 1), "6.000000")
+    _dispose(position_live, date(2026, 2, 2), "4.00000000", "24.0000")
+
+    assert _positions()["positions"] == []
+    assert len(_positions(date(2026, 2, 1))["positions"]) == 1
