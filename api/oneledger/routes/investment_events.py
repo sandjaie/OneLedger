@@ -24,7 +24,11 @@ from ..investments.schemas import (
     CashLifecycleCreate,
     CashLifecycleEventRow,
     InvestmentEventRow,
+    UnitActionCorrectionCreate,
+    UnitActionCreate,
+    UnitActionResult,
 )
+from ..investments.unit_actions import correct_unit_action, create_unit_action
 
 router = APIRouter(prefix="/investment-events", tags=["investment events"])
 
@@ -109,3 +113,44 @@ def append_cash_lifecycle_correction(
     if not result.created:
         response.status_code = status.HTTP_200_OK
     return result.event
+
+
+@router.post(
+    "/unit-actions",
+    response_model=UnitActionResult,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": UnitActionResult, "description": "Identical retry"}},
+)
+def append_unit_action(
+    body: UnitActionCreate,
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> UnitActionResult:
+    try:
+        result = create_unit_action(owner, body)
+    except InvestmentCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.result
+
+
+@router.post(
+    "/{event_id}/unit-action-corrections",
+    response_model=UnitActionResult,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": UnitActionResult, "description": "Identical retry"}},
+)
+def append_unit_action_correction(
+    event_id: UUID,
+    body: UnitActionCorrectionCreate,
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> UnitActionResult:
+    try:
+        result = correct_unit_action(owner, event_id, body)
+    except InvestmentCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.result

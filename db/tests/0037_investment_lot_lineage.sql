@@ -131,13 +131,15 @@ DECLARE result UUID; event_currency CHAR(3);
 BEGIN
   SELECT currency INTO event_currency FROM security WHERE id = p_security;
   PERFORM set_config('oneledger.investment_event_append', 'on', true);
+  -- The exact unit-effect value plays no role in these lineage fixtures; any nonzero value
+  -- satisfies Task 15.2's investment_event_kind_fields_agree shape for a split row.
   INSERT INTO investment_transaction (
     household_id, account_id, holding_id, security_id, event_date, event_kind,
-    unit_ratio, net_amount, currency, source_kind, source_contract,
+    units, unit_ratio, net_amount, currency, source_kind, source_contract,
     dedupe_version, dedupe_fingerprint, corrects_transaction_id, correction_reason
   ) VALUES (
     p_household, p_account, p_holding, p_security, p_date, 'split',
-    p_ratio, 0, event_currency,
+    1, p_ratio, 0, event_currency,
     CASE WHEN p_corrects IS NULL THEN 'statement' ELSE 'owner_entered' END::investment_event_source,
     'lineage_v1', 'v1', rpad(md5(p_key), 64, '0'), p_corrects, p_reason
   ) RETURNING id INTO result;

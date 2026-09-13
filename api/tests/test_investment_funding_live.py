@@ -484,12 +484,15 @@ def _append_split_without_successor(fixture: FundingFixture, *, event_date: str)
         holding_row = cur.fetchone()
         assert holding_row is not None
         cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        # The exact unit-effect value plays no role in these lineage fixtures; any nonzero value
+        # satisfies Task 15.2's investment_event_kind_fields_agree shape for a split row.
         cur.execute(
             """INSERT INTO investment_transaction (
                  household_id, account_id, holding_id, security_id, event_date, event_kind,
-                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+                 units, unit_ratio, net_amount, currency, source_kind, source_contract,
+                 source_event_id
                ) VALUES (
-                 %s, %s, %s, %s, %s, 'split', 2, 0, %s, 'statement',
+                 %s, %s, %s, %s, %s, 'split', 1, 2, 0, %s, 'statement',
                  'funding_test_v1', 'SYNTHETIC-INCOMPLETE-SPLIT')""",
             (
                 fixture.owner.household_id,
@@ -530,12 +533,15 @@ def _append_split_with_successor(
         predecessor_row = cur.fetchone()
         assert predecessor_row is not None
         cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        # The exact unit-effect value plays no role in these lineage fixtures; any nonzero value
+        # satisfies Task 15.2's investment_event_kind_fields_agree shape for a split row.
         cur.execute(
             """INSERT INTO investment_transaction (
                  household_id, account_id, holding_id, security_id, event_date, event_kind,
-                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+                 units, unit_ratio, net_amount, currency, source_kind, source_contract,
+                 source_event_id
                ) VALUES (
-                 %s, %s, %s, %s, %s, 'split', %s, 0, %s, 'statement', 'funding_test_v1', %s)
+                 %s, %s, %s, %s, %s, 'split', 1, %s, 0, %s, 'statement', 'funding_test_v1', %s)
                RETURNING id""",
             (
                 fixture.owner.household_id,

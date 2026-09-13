@@ -728,6 +728,82 @@ export type BodyRevealStatementIdentifierParseIdentifierRevealPost = {
 };
 
 /**
+ * BonusActionCorrectionCreate
+ */
+export type BonusActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'bonus';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * BonusActionCreate
+ */
+export type BonusActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'bonus';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
  * CancelResult
  *
  * What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
@@ -3567,6 +3643,98 @@ export type PeersResponse = {
 };
 
 /**
+ * PlatformTransferActionCorrectionCreate
+ */
+export type PlatformTransferActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'platform_transfer';
+    /**
+     * Outaccountid
+     */
+    outAccountId: string;
+    /**
+     * Inaccountid
+     */
+    inAccountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * PlatformTransferActionCreate
+ */
+export type PlatformTransferActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'platform_transfer';
+    /**
+     * Outaccountid
+     */
+    outAccountId: string;
+    /**
+     * Inaccountid
+     */
+    inAccountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
  * PortfolioPositions
  */
 export type PortfolioPositions = {
@@ -4021,6 +4189,122 @@ export type ReviewRow = {
 };
 
 /**
+ * RightsActionCorrectionCreate
+ */
+export type RightsActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'rights';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Grossamount
+     */
+    grossAmount: string;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * RightsActionCreate
+ */
+export type RightsActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'rights';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string;
+    /**
+     * Grossamount
+     */
+    grossAmount: string;
+    /**
+     * Charges
+     */
+    charges: string;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
  * RowDecision
  *
  * A bulk decision. Reviewing 200 rows one at a time is why people abandon these tools.
@@ -4380,6 +4664,322 @@ export type SkippedStatement = {
      * Reason
      */
     reason: string;
+};
+
+/**
+ * SplitActionCorrectionCreate
+ */
+export type SplitActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'split';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Unitratio
+     */
+    unitRatio: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * SplitActionCreate
+ */
+export type SplitActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'split';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Unitratio
+     */
+    unitRatio: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * SwitchActionCorrectionCreate
+ */
+export type SwitchActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'switch';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Outsecurityid
+     */
+    outSecurityId: string;
+    /**
+     * Insecurityid
+     */
+    inSecurityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Outprice
+     */
+    outPrice: string;
+    /**
+     * Outgrossamount
+     */
+    outGrossAmount: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Inprice
+     */
+    inPrice: string;
+    /**
+     * Ingrossamount
+     */
+    inGrossAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * SwitchActionCreate
+ */
+export type SwitchActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'switch';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Outsecurityid
+     */
+    outSecurityId: string;
+    /**
+     * Insecurityid
+     */
+    inSecurityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Outprice
+     */
+    outPrice: string;
+    /**
+     * Outgrossamount
+     */
+    outGrossAmount: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Inprice
+     */
+    inPrice: string;
+    /**
+     * Ingrossamount
+     */
+    inGrossAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * SystematicTransferActionCorrectionCreate
+ */
+export type SystematicTransferActionCorrectionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'systematic_transfer';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Outsecurityid
+     */
+    outSecurityId: string;
+    /**
+     * Insecurityid
+     */
+    inSecurityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Outprice
+     */
+    outPrice: string;
+    /**
+     * Outgrossamount
+     */
+    outGrossAmount: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Inprice
+     */
+    inPrice: string;
+    /**
+     * Ingrossamount
+     */
+    inGrossAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Expectedcorrectionstate
+     */
+    expectedCorrectionState: 'uncorrected';
+    /**
+     * Correctionreason
+     */
+    correctionReason: string;
+};
+
+/**
+ * SystematicTransferActionCreate
+ */
+export type SystematicTransferActionCreate = {
+    /**
+     * Kind
+     */
+    kind: 'systematic_transfer';
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Outsecurityid
+     */
+    outSecurityId: string;
+    /**
+     * Insecurityid
+     */
+    inSecurityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Outunits
+     */
+    outUnits: string;
+    /**
+     * Outprice
+     */
+    outPrice: string;
+    /**
+     * Outgrossamount
+     */
+    outGrossAmount: string;
+    /**
+     * Inunits
+     */
+    inUnits: string;
+    /**
+     * Inprice
+     */
+    inPrice: string;
+    /**
+     * Ingrossamount
+     */
+    inGrossAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
 };
 
 /**
@@ -4786,6 +5386,144 @@ export type UndoBody = {
      * Reason
      */
     reason: string;
+};
+
+/**
+ * UnitActionEventRow
+ */
+export type UnitActionEventRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'bonus' | 'rights' | 'split';
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Unitratio
+     */
+    unitRatio: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Netamount
+     */
+    netAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Correctseventid
+     */
+    correctsEventId: string | null;
+    /**
+     * Correctionstate
+     */
+    correctionState: 'uncorrected' | 'corrected';
+    /**
+     * Currentunits
+     */
+    currentUnits: string;
+    lot: AcquisitionLotRow | null;
+};
+
+/**
+ * UnitActionLegRow
+ */
+export type UnitActionLegRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: 'switch_in' | 'switch_out' | 'systematic_transfer_in' | 'systematic_transfer_out' | 'platform_transfer_in' | 'platform_transfer_out';
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Correctseventid
+     */
+    correctsEventId: string | null;
+    /**
+     * Correctionstate
+     */
+    correctionState: 'uncorrected' | 'corrected';
+    /**
+     * Currentunits
+     */
+    currentUnits: string;
+};
+
+/**
+ * UnitActionResult
+ */
+export type UnitActionResult = {
+    /**
+     * Kind
+     */
+    kind: 'bonus' | 'rights' | 'split' | 'switch' | 'systematic_transfer' | 'platform_transfer';
+    event?: UnitActionEventRow | null;
+    outEvent?: UnitActionLegRow | null;
+    inEvent?: UnitActionLegRow | null;
 };
 
 /**
@@ -6513,6 +7251,99 @@ export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCor
 };
 
 export type AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponse = AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponses[keyof AppendCashLifecycleCorrectionInvestmentEventsEventIdCashLifecycleCorrectionsPostResponses];
+
+export type AppendUnitActionInvestmentEventsUnitActionsPostData = {
+    /**
+     * Body
+     */
+    body: ({
+        kind: 'bonus';
+    } & BonusActionCreate) | ({
+        kind: 'rights';
+    } & RightsActionCreate) | ({
+        kind: 'split';
+    } & SplitActionCreate) | ({
+        kind: 'switch';
+    } & SwitchActionCreate) | ({
+        kind: 'systematic_transfer';
+    } & SystematicTransferActionCreate) | ({
+        kind: 'platform_transfer';
+    } & PlatformTransferActionCreate);
+    path?: never;
+    query?: never;
+    url: '/investment-events/unit-actions';
+};
+
+export type AppendUnitActionInvestmentEventsUnitActionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendUnitActionInvestmentEventsUnitActionsPostError = AppendUnitActionInvestmentEventsUnitActionsPostErrors[keyof AppendUnitActionInvestmentEventsUnitActionsPostErrors];
+
+export type AppendUnitActionInvestmentEventsUnitActionsPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: UnitActionResult;
+    /**
+     * Successful Response
+     */
+    201: UnitActionResult;
+};
+
+export type AppendUnitActionInvestmentEventsUnitActionsPostResponse = AppendUnitActionInvestmentEventsUnitActionsPostResponses[keyof AppendUnitActionInvestmentEventsUnitActionsPostResponses];
+
+export type AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostData = {
+    /**
+     * Body
+     */
+    body: ({
+        kind: 'bonus';
+    } & BonusActionCorrectionCreate) | ({
+        kind: 'rights';
+    } & RightsActionCorrectionCreate) | ({
+        kind: 'split';
+    } & SplitActionCorrectionCreate) | ({
+        kind: 'switch';
+    } & SwitchActionCorrectionCreate) | ({
+        kind: 'systematic_transfer';
+    } & SystematicTransferActionCorrectionCreate) | ({
+        kind: 'platform_transfer';
+    } & PlatformTransferActionCorrectionCreate);
+    path: {
+        /**
+         * Event Id
+         */
+        event_id: string;
+    };
+    query?: never;
+    url: '/investment-events/{event_id}/unit-action-corrections';
+};
+
+export type AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostError = AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostErrors[keyof AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostErrors];
+
+export type AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostResponses = {
+    /**
+     * Identical retry
+     */
+    200: UnitActionResult;
+    /**
+     * Successful Response
+     */
+    201: UnitActionResult;
+};
+
+export type AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostResponse = AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostResponses[keyof AppendUnitActionCorrectionInvestmentEventsEventIdUnitActionCorrectionsPostResponses];
 
 export type ProposePurchaseFundingInvestmentFundingProposalsPostData = {
     body: FundingProposalRequest;

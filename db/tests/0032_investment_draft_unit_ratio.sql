@@ -166,7 +166,7 @@ BEGIN
     currency, source_kind, source_contract, source_event_id
   ) VALUES (
     household_id, v_account_id, holding_id, v_security_id, '2026-07-15', 'split',
-    NULL, 2.0000000000, NULL, NULL, 0, 0, 0,
+    1.00000000, 2.0000000000, NULL, NULL, 0, 0, 0,
     base, 'statement', 'synthetic_statement_v1', 'synthetic-committed-split'
   ) RETURNING id INTO committed_event_id;
   PERFORM set_config('oneledger.investment_event_append', 'off', true);

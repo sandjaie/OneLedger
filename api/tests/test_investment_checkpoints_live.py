@@ -112,9 +112,9 @@ def _append_disposal(
 
 
 def _append_split_without_successor(
-    fixture: StagingFixture, *, event_date: str = "2026-04-01"
+    fixture: StagingFixture, *, event_date: str = "2026-04-01", units: str = "10.00000000"
 ) -> None:
-    """Insert an incomplete-lineage split directly. No operation creates one until Task 15.2."""
+    """Insert a lineage-breaking split directly. Task 15.2 creates no successor lot for one."""
     with fixture.connection.cursor() as cur:
         cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
         cur.execute(
@@ -129,9 +129,10 @@ def _append_split_without_successor(
         cur.execute(
             """INSERT INTO investment_transaction (
                  household_id, account_id, holding_id, security_id, event_date, event_kind,
-                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+                 units, unit_ratio, net_amount, currency, source_kind, source_contract,
+                 source_event_id
                ) VALUES (
-                 %s, %s, %s, %s, %s, 'split', 2, 0, %s, 'statement',
+                 %s, %s, %s, %s, %s, 'split', %s, 2, 0, %s, 'statement',
                  'detailed_fund_statement_v1', 'SYNTHETIC-INCOMPLETE-SPLIT')""",
             (
                 fixture.owner.household_id,
@@ -139,6 +140,7 @@ def _append_split_without_successor(
                 holding_row[0],
                 fixture.security_id,
                 event_date,
+                Decimal(units),
                 fixture.currency,
             ),
         )
@@ -178,13 +180,17 @@ def _prepared_checkpoint(
 
 
 def _financial_counts(fixture: StagingFixture) -> tuple[int, int, int, int]:
+    # price_snapshot is scoped to this fixture's own security: the table itself is not
+    # household-scoped, and another live suite's shared-security prices persist in the same
+    # per-session test database when several live test files run together.
     with fixture.connection.cursor() as cur:
         cur.execute(
             """SELECT
-                 (SELECT count(*) FROM investment_transaction),
-                 (SELECT count(*) FROM investment_unit_effect),
-                 (SELECT count(*) FROM acquisition_lot),
-                 (SELECT count(*) FROM price_snapshot)"""
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %(household)s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %(household)s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %(household)s),
+                 (SELECT count(*) FROM price_snapshot WHERE security_id = %(security)s)""",
+            {"household": fixture.owner.household_id, "security": fixture.security_id},
         )
         row = cur.fetchone()
     assert row is not None
@@ -469,32 +475,59 @@ def test_value_only_checkpoint_remains_evidence_without_event_or_price(
     assert _financial_counts(live_staging) == (0, 0, 0, 0)
 
 
-def test_incomplete_split_lineage_withholds_remaining_basis_from_its_date(
+def test_active_split_withholds_cost_and_matches_on_units_alone(
     live_staging: StagingFixture,
 ) -> None:
+    """Task 15.2: a corporate action withholds cost silently instead of opening a review."""
     _append_purchase(live_staging, units="10.00000000", gross="100.0000")
-    _append_split_without_successor(live_staging, event_date="2026-04-01")
+    # A holding-level 2-for-1 split doubles units; this fixture writes that exact effect
+    # directly since no operation creates a successor lot for it under Task 15.2.
+    _append_split_without_successor(live_staging, event_date="2026-04-01", units="10.00000000")
     staged = staging.stage_prepared_import(
         live_staging.owner,
         live_staging.document_ids[0],
         _prepared_checkpoint(
-            live_staging, units="10.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
+            live_staging, units="20.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
+        ),
+    )
+
+    result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
+
+    assert result.matched == 1
+    assert result.mismatched == 0
+    assert result.pending == 0
+    with live_staging.connection.cursor() as cur:
+        cur.execute(
+            """SELECT checkpoint.reconciliation_status::text, count(review.id)
+                 FROM investment_position_checkpoint checkpoint
+                 LEFT JOIN investment_review_item review
+                   ON review.checkpoint_id = checkpoint.id
+                WHERE checkpoint.group_id = %s
+                GROUP BY checkpoint.id""",
+            (staged.group_ids[0],),
+        )
+        assert cur.fetchone() == ("matched", 0)
+
+
+def test_active_split_still_flags_a_genuine_unit_mismatch(
+    live_staging: StagingFixture,
+) -> None:
+    """Withholding cost must not also silence a real unit disagreement."""
+    _append_purchase(live_staging, units="10.00000000", gross="100.0000")
+    _append_split_without_successor(live_staging, event_date="2026-04-01", units="10.00000000")
+    staged = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared_checkpoint(
+            live_staging, units="21.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
         ),
     )
 
     result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
 
     assert result.matched == 0
-    assert result.mismatched == 0
-    assert result.pending == 1
-    with live_staging.connection.cursor() as cur:
-        cur.execute(
-            """SELECT checkpoint.reconciliation_status::text
-                 FROM investment_position_checkpoint checkpoint
-                WHERE checkpoint.group_id = %s""",
-            (staged.group_ids[0],),
-        )
-        assert cur.fetchone() == ("pending",)
+    assert result.mismatched == 1
+    assert result.pending == 0
 
 
 def test_retained_basis_rounds_each_lot_before_summing(
