@@ -71,16 +71,17 @@ function dateLabel(value: string) {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function coverageText(position: AcquisitionPosition) {
+function coverageMessages(position: AcquisitionPosition) {
+  const messages: Array<string> = [];
   if (position.priceStatus === "future_price_only") {
-    return "Only future-dated price evidence is recorded.";
+    messages.push("Only future-dated price evidence is recorded.");
   }
-  if (position.priceStatus === "missing") return "No dated price is recorded.";
+  if (position.priceStatus === "missing") messages.push("No dated price is recorded.");
+  if (position.priceStatus === "stale") messages.push("The latest recorded price is stale.");
   if (position.valueStatus === "outside_supported_range") {
-    return "The exact value is outside the supported reporting range.";
+    messages.push("The exact value is outside the supported reporting range.");
   }
-  if (position.priceStatus === "stale") return "The latest recorded price is stale.";
-  return "Dated value available.";
+  return messages.length > 0 ? messages : ["Dated value available."];
 }
 
 function InstrumentCandidate({ candidate }: { candidate: SecurityCandidate }) {
@@ -348,7 +349,7 @@ export function InvestmentEntryScreen({
                   {item.price !== null && item.priceDate !== null && (
                     <p>Price {item.currency} {item.price} · {dateLabel(item.priceDate)}</p>
                   )}
-                  <p>{coverageText(item)}</p>
+                  {coverageMessages(item).map((message) => <p key={message}>{message}</p>)}
                 </div>
               </article>
             ))}
@@ -483,9 +484,13 @@ export function InvestmentEntryScreen({
           </button>
 
           {confirmation && account && security && (
-            <fieldset className="investment-confirmation" aria-label="Confirm purchase">
-              <legend>Confirm purchase</legend>
-              <p>This appends a new owner-entered event. Check each exact fact before recording it.</p>
+            <fieldset className="investment-confirmation" aria-label={mutationProgress === "purchase" ? "Confirm dated price" : mutationProgress === "complete" ? "Reload holdings" : "Confirm purchase"}>
+              <legend>{mutationProgress === "purchase" ? "Confirm dated price" : mutationProgress === "complete" ? "Reload holdings" : "Confirm purchase"}</legend>
+              <p>{mutationProgress === "purchase"
+                ? "The purchase is already recorded. Confirm only the remaining dated price."
+                : mutationProgress === "complete"
+                  ? "The purchase facts are recorded. Reload holdings to display the resulting position."
+                  : "This appends a new owner-entered event. Check each exact fact before recording it."}</p>
               <dl>
                 <div><dt>Account</dt><dd>{accountLabel(account)}</dd></div>
                 <div><dt>Instrument</dt><dd>{security.name}</dd></div>

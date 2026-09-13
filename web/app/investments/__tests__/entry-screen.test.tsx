@@ -213,10 +213,9 @@ describe("investment entry", () => {
   });
 
   it("renders dated price evidence independently from stale and unsupported value coverage", async () => {
-    const stale = { ...position, priceStatus: "stale" as const };
-    const outside = {
+    const staleOutside = {
       ...position,
-      holdingId: "00000000-0000-4000-8000-000000000051",
+      priceStatus: "stale" as const,
       valueStatus: "outside_supported_range" as const,
       currentValueNative: null,
       currentValueBase: null,
@@ -225,14 +224,13 @@ describe("investment entry", () => {
       gainBase: null,
       gainSecondary: null,
     };
-    renderScreen(requestFrom(() => positions([stale, outside])));
+    renderScreen(requestFrom(() => positions([staleOutside])));
 
-    const holdings = await screen.findAllByRole("article", { name: candidate.name });
-    expect(within(holdings[0]).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
-    expect(within(holdings[0]).getByText("The latest recorded price is stale.")).toBeTruthy();
-    expect(within(holdings[1]).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
-    expect(within(holdings[1]).getByText("The exact value is outside the supported reporting range.")).toBeTruthy();
-    expect(within(holdings[1]).getByText("Current value unavailable")).toBeTruthy();
+    const holding = await screen.findByRole("article", { name: candidate.name });
+    expect(within(holding).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
+    expect(within(holding).getByText("The latest recorded price is stale.")).toBeTruthy();
+    expect(within(holding).getByText("The exact value is outside the supported reporting range.")).toBeTruthy();
+    expect(within(holding).getByText("Current value unavailable")).toBeTruthy();
   });
 
   it("uses only active investment accounts and displays their masked identifiers", async () => {
@@ -514,6 +512,9 @@ describe("investment entry", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("The purchase was recorded, but the dated price was not");
+    const priceGroup = screen.getByRole("group", { name: "Confirm dated price" });
+    expect(within(priceGroup).getByText("The purchase is already recorded. Confirm only the remaining dated price.")).toBeTruthy();
+    expect(within(priceGroup).queryByText(/appends a new owner-entered event/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit dated price" }));
     expect(screen.getByLabelText<HTMLInputElement>("Gross amount").disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.100000" } });
@@ -550,6 +551,9 @@ describe("investment entry", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm purchase" }));
     expect((await screen.findByRole("alert")).textContent).toContain("facts were recorded");
+    const reloadGroup = screen.getByRole("group", { name: "Reload holdings" });
+    expect(within(reloadGroup).getByText("The purchase facts are recorded. Reload holdings to display the resulting position.")).toBeTruthy();
+    expect(within(reloadGroup).queryByText(/appends a new owner-entered event/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Reload holdings" }));
     await screen.findByRole("article", { name: candidate.name });
 
