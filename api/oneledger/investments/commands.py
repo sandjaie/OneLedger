@@ -213,6 +213,8 @@ def _load_event(cur: psycopg.Cursor[Any], household_id: UUID, event_id: UUID) ->
 def _translate_database_error(exc: psycopg.Error) -> InvestmentCommandError:
     if exc.sqlstate == "42501":
         return InvestmentCommandError(404, "investment account or security not found")
+    if exc.diag.constraint_name == "investment_correction_requires_unfunded_event":
+        return InvestmentCommandError(422, "a funded investment event cannot be corrected")
     if exc.sqlstate == "23505":
         return InvestmentCommandError(409, "idempotency key conflicts with another event")
     if exc.sqlstate in {"22003", "22023", "22P02", "23502", "23503", "23514"}:

@@ -99,6 +99,7 @@ class _Event(NamedTuple):
     net_amount: Decimal
     currency: str
     allocated: Decimal
+    has_correction: bool
 
 
 class _Cash(NamedTuple):
@@ -141,7 +142,10 @@ def _load_state(
 
     cur.execute(
         """SELECT event.id, event.event_kind::text, event.net_amount, event.currency,
-                  COALESCE(sum(allocation.allocated_amount), 0)
+                  COALESCE(sum(allocation.allocated_amount), 0),
+                  EXISTS (SELECT FROM investment_transaction correction
+                           WHERE correction.household_id = event.household_id
+                             AND correction.corrects_transaction_id = event.id)
              FROM investment_transaction event
              LEFT JOIN investment_cash_allocation allocation
                ON allocation.household_id = event.household_id
@@ -151,7 +155,9 @@ def _load_state(
         (owner.household_id, event_ids),
     )
     events = {
-        UUID(str(row[0])): _Event(row[1], Decimal(row[2]), str(row[3]).strip(), Decimal(row[4]))
+        UUID(str(row[0])): _Event(
+            row[1], Decimal(row[2]), str(row[3]).strip(), Decimal(row[4]), bool(row[5])
+        )
         for row in cur.fetchall()
     }
     cur.execute(
@@ -189,6 +195,7 @@ def _state_token(body: FundingProposalRequest, state: _State) -> str:
                 _money(value.net_amount),
                 value.currency,
                 _money(value.allocated),
+                value.has_correction,
             )
             for key, value in state.events.items()
         ),
@@ -221,6 +228,7 @@ def _validate(body: FundingProposalRequest, state: _State) -> None:
         if (
             event.kind not in {"purchase", "recurring_purchase"}
             or event.net_amount >= 0
+            or event.has_correction
             or cash.amount >= 0
             or event.currency != cash.currency
             or cash.transfer_id is not None

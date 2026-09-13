@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import cast
+from threading import Event
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -12,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.investments import commands, funding
 from oneledger.main import app
 
 from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
@@ -164,14 +167,8 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _event(
-    fixture: FundingFixture,
-    amount: str,
-    *,
-    other: bool = False,
-    kind: str = "purchase",
-) -> UUID:
-    body = {
+def _event_body(fixture: FundingFixture, amount: str, kind: str = "purchase") -> dict[str, str]:
+    return {
         "accountId": str(fixture.investment_account_id),
         "securityId": str(fixture.security_id),
         "eventDate": "2026-02-01",
@@ -185,6 +182,16 @@ def _event(
         "currency": fixture.currency,
         "idempotencyKey": str(uuid4()),
     }
+
+
+def _event(
+    fixture: FundingFixture,
+    amount: str,
+    *,
+    other: bool = False,
+    kind: str = "purchase",
+) -> UUID:
+    body = _event_body(fixture, amount, kind)
     if other:
         with fixture.connection.cursor() as cur:
             cur.execute(
@@ -313,6 +320,18 @@ def _confirm(allocations: list[dict[str, str]], expected_state: str) -> httpx.Re
             "/investment-funding/confirmations",
             json={"allocations": allocations, "expectedState": expected_state},
         ),
+    )
+
+
+def _correct(fixture: FundingFixture, event_id: UUID, amount: str = "100.0000") -> httpx.Response:
+    body = {
+        **_event_body(fixture, amount),
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "Synthetic funding correction",
+    }
+    return cast(
+        httpx.Response,
+        _client().post(f"/investment-events/{event_id}/corrections", json=body),
     )
 
 
@@ -470,6 +489,8 @@ def test_a_transfer_leg_is_not_the_final_funding_debit(live_funding: FundingFixt
         account_id=live_funding.second_cash_account_id,
         txn_type="income",
     )
+    before_transfer = _flow_and_net_worth()
+    assert before_transfer[:2] == ("50.0000", "50.0000")
     transfer = _client().post(
         "/transfers",
         json={
@@ -479,11 +500,17 @@ def test_a_transfer_leg_is_not_the_final_funding_debit(live_funding: FundingFixt
         },
     )
     assert transfer.status_code == 201, transfer.text
+    after_transfer = _flow_and_net_worth()
+    assert after_transfer[:2] == ("0.0000", "0.0000")
+    assert after_transfer[2] == before_transfer[2]
     final_debit = _cash(
         live_funding,
         "-50.0000",
         account_id=live_funding.second_cash_account_id,
     )
+    after_debit = _flow_and_net_worth()
+    assert after_debit[:2] == ("0.0000", "50.0000")
+    assert after_debit[2] != after_transfer[2]
     transfer_leg = _proposal([_allocation(event, source, "50.0000")])
     final = _proposal([_allocation(event, final_debit, "50.0000")])
     assert transfer_leg.status_code == 422
@@ -495,9 +522,98 @@ def test_a_transfer_leg_is_not_the_final_funding_debit(live_funding: FundingFixt
         [_allocation(event, final_debit, "50.0000")], final.json()["expectedState"]
     )
     assert confirmed.status_code == 201, confirmed.text
+    after_confirmation = _flow_and_net_worth()
+    assert after_confirmation[:2] == ("0.0000", "0.0000")
+    assert after_confirmation[2] == after_debit[2]
     with live_funding.connection.cursor() as cur:
         cur.execute("SELECT txn_type::text FROM transaction WHERE id = %s", (source,))
         assert cur.fetchone() == ("transfer_out",)
+
+
+def test_only_the_active_acquisition_correction_leaf_can_be_funded(
+    live_funding: FundingFixture,
+) -> None:
+    original = _event(live_funding, "100.0000")
+    corrected = _correct(live_funding, original)
+    assert corrected.status_code == 201, corrected.text
+    replacement = UUID(corrected.json()["id"])
+    cash = _cash(live_funding, "-100.0000")
+    refused = _proposal([_allocation(original, cash, "100.0000")])
+    active = _proposal([_allocation(replacement, cash, "100.0000")])
+    assert refused.status_code == 422
+    assert refused.json() == {
+        "detail": "funding allocation is not a full eligible cash-leaf decision"
+    }
+    assert active.status_code == 200, active.text
+    confirmed = _confirm(
+        [_allocation(replacement, cash, "100.0000")], active.json()["expectedState"]
+    )
+    assert confirmed.status_code == 201, confirmed.text
+
+
+def test_a_funded_acquisition_cannot_be_corrected(live_funding: FundingFixture) -> None:
+    event = _event(live_funding, "100.0000")
+    cash = _cash(live_funding, "-100.0000")
+    allocations = [_allocation(event, cash, "100.0000")]
+    proposal = _proposal(allocations)
+    assert _confirm(allocations, proposal.json()["expectedState"]).status_code == 201
+    correction = _correct(live_funding, event)
+    assert correction.status_code == 422
+    assert correction.json() == {"detail": "a funded investment event cannot be corrected"}
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id = %s),
+                 (SELECT count(*) FROM investment_cash_allocation
+                   WHERE investment_transaction_id = %s)""",
+            (event, event),
+        )
+        assert cur.fetchone() == (0, 1)
+
+
+def test_correction_winning_confirmation_race_returns_stale_conflict(
+    live_funding: FundingFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    event = _event(live_funding, "100.0000")
+    cash = _cash(live_funding, "-100.0000")
+    allocations = [_allocation(event, cash, "100.0000")]
+    proposal = _proposal(allocations)
+    correction_locked, confirmation_started, release = Event(), Event(), Event()
+    real_screen = commands._screen_correction_reason
+    real_load = funding._load_state
+
+    def pause_correction(cur: psycopg.Cursor[Any], reason: str) -> None:
+        real_screen(cur, reason)
+        correction_locked.set()
+        assert release.wait(timeout=5)
+
+    def mark_confirmation(
+        cur: psycopg.Cursor[Any],
+        owner: auth.OwnerSession,
+        body: funding.FundingProposalRequest,
+        *,
+        lock: bool,
+    ) -> funding._State:
+        if lock:
+            confirmation_started.set()
+        return real_load(cur, owner, body, lock=lock)
+
+    monkeypatch.setattr(commands, "_screen_correction_reason", pause_correction)
+    monkeypatch.setattr(funding, "_load_state", mark_confirmation)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        correcting = pool.submit(_correct, live_funding, event)
+        assert correction_locked.wait(timeout=5)
+        confirming = pool.submit(_confirm, allocations, proposal.json()["expectedState"])
+        assert confirmation_started.wait(timeout=5)
+        release.set()
+        correction, confirmation = correcting.result(), confirming.result()
+    assert correction.status_code == 201, correction.text
+    assert confirmation.status_code == 409
+    assert confirmation.json() == {"detail": "funding proposal state changed"}
+    with live_funding.connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM investment_cash_allocation")
+        assert cur.fetchone() == (0,)
 
 
 def test_stale_and_replayed_confirmations_are_conflicts(live_funding: FundingFixture) -> None:
