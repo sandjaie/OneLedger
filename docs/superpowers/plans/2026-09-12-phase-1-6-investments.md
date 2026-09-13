@@ -68,9 +68,11 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 8 | acquisition positions and net worth | `feature/p1-6h-investment-position-api` | 560 | 820 | 5–7 |
 | 9 | owner-entry web flow | `feature/p1-6i-investment-entry-web` | 560 | 500 | 8 |
 | 10 | funding web flow | `feature/p1-6j-investment-funding-web` | 360 | 360 | 7, 9 |
-| 11 | detailed-statement extraction | `feature/p1-6k-investment-extraction` | 610 | 900 | 3, 5 |
-| 12 | idempotent staging | `feature/p1-6l-investment-staging` | 650 | 900 | 4, 11 |
-| 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11–12 |
+| 11.1 | core detailed extraction | `feature/p1-6k1-investment-extraction-core` | 560 | 700 | 3, 5 |
+| 11.2 | income, checkpoints and hostile evidence | `feature/p1-6k2-investment-extraction-coverage` | 240 | 500 | 11.1 |
+| 11.3 | grouped unit actions and draft ratios | `feature/p1-6k3-investment-extraction-actions` | 350 | 700 | 11.2 |
+| 12 | idempotent staging | `feature/p1-6l-investment-staging` | 650 | 900 | 4, 11.3 |
+| 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12 |
 | 14 | cash lifecycle and lot allocation | `feature/p1-6n-investment-cash-lifecycle` | 680 | 900 | 4, 6–7 |
 | 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14 |
 | 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12–15 |
@@ -83,7 +85,9 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 23 | portfolio web flow | `feature/p1-6w-investment-portfolio-web` | 580 | 520 | 18, 21 |
 | 24 | history web and acceptance | `feature/p1-6x-investment-history-web` | 650 | 620 | 22–23 |
 
-Tasks 11, 12, 14 and 19 need dispatch-time reforecasting and split before exceeding 1,600 lines.
+Task 11 was split at dispatch after a 2,150–2,800-line reforecast exposed the draft-ratio
+contract below. Tasks 12, 14 and 19 still need dispatch-time reforecasting and must split before
+exceeding 1,600 lines.
 
 ## Task 1 — instruments and dated values
 
@@ -206,18 +210,78 @@ transfer-chain explanation; stale, partial, many-to-many and accessibility RED c
 Acceptance: confirmation/removal never
 auto-matches or computes money in the UI.
 
-## Task 11 — detailed-statement extraction
+## Task 11.1 — adapter contract and core detailed extraction
 
-**Branch/base/target:** `feature/p1-6k-investment-extraction` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/adapters.py`,
-`api/oneledger/investments/detailed_fund_statement.py`, `api/tests/fixtures/investment_pdf.py`,
-`api/tests/test_investment_extraction.py`; shared ingestion/privacy/status paths.
-**Contract/tests:** Content-selected pure adapter emits versioned drafts/checkpoints/safe reasons.
-Synthetic tests cover buys, recurring buys, redemptions, distributions, reinvestment, fees/tax,
-splits/switches/transfers, page breaks, precision, hostile identifiers and unsupported/unknown rows.
-**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_extraction.py`; shared Python
-command. Acceptance: synthetic
-detailed evidence extracts exactly and ambiguity blocks without guessing.
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6k1-investment-extraction-core` / `develop` / `develop`.
+**Depends:** Tasks 3 and 5. **Forecast:** 450–560 production, 560–700 tests.
+**Files:** create `api/oneledger/investments/adapters.py`,
+`api/oneledger/investments/detailed_fund_statement.py`, `api/tests/fixtures/investment_pdf.py` and
+`api/tests/test_investment_extraction.py`; shared ingestion/privacy/status paths only as needed.
+**Contract/tests:** A pure immutable adapter consumes the existing `api.oneledger.ingest.words.Page`
+boundary and is selected only from document content. Filename, path, institution identity and
+provider popularity are never evidence. Results contain ordered groups of drafts, detailed-statement
+checkpoints and fixed safe reasons, with source-contract and extraction versions. Evidence carries
+page/row, optional typed private source-event identity and a versioned fingerprint over normalized
+typed facts—never filename or raw text. Draft facts mirror V32 plus nullable `unit_ratio`: event date,
+kind, signed units, ratio, price, gross, charges, tax, net and currency, using `Decimal` and exact
+typed values. Account/security source evidence stays transient for Task 12; extraction invents no
+UUID and resolves no ambiguity. Result representations and errors expose no complete identifier,
+unredacted reference or raw statement row. Synthetic tests reuse `api/tests/fixtures/synthetic_pdf.py`
+and cover content selection, purchase, recurring purchase, sale, redemption, maturity, page breaks,
+exact date/direction/precision and safe unsupported-format abstention. This capability-neutral
+investment semantic adapter does not reintroduce per-bank modules under ADR-0012 and uses no AI or
+network access.
+**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_extraction.py`.
+Acceptance: supported synthetic content produces exact core drafts; unsupported content abstains,
+and no checkpoint capability beyond the frozen result shape is claimed yet.
+
+## Task 11.2 — income, checkpoints and hostile evidence
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6k2-investment-extraction-coverage` / `develop` / `develop`.
+**Depends:** Task 11.1. **Forecast:** 170–240 production, 360–500 tests.
+**Files:** extend `api/oneledger/investments/detailed_fund_statement.py` and
+`api/tests/fixtures/investment_pdf.py`; create `api/tests/test_investment_extraction_coverage.py`;
+update shared ingestion/privacy/status paths only as needed. The 11.1 adapter interface is frozen.
+**Contract/tests:** Add cash distribution, interest, reinvested distribution, charge and withheld-tax
+drafts plus detailed-statement end-position units/cost/value checkpoints. A checkpoint remains
+reconciliation evidence and statement NAV never becomes a terminal market price. Cover repeated
+headers and section rows across page breaks, maximum supported precision and atomic excess-precision
+refusal. Hostile ASCII, formatted and Unicode identity evidence stays absent from representations,
+safe reasons and fingerprints. Unknown unit-affecting rows emit fixed `unrecognized_event` blockers
+only for their affected group without guessing or suppressing unrelated groups.
+**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_extraction.py
+tests/test_investment_extraction_coverage.py`.
+Acceptance: all single-holding detailed facts and checkpoints extract exactly; ambiguous and unknown
+facts produce only fixed safe reasons.
+
+## Task 11.3 — grouped unit actions and staged split ratios
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6k3-investment-extraction-actions` / `develop` / `develop`.
+**Depends:** Task 11.2. **Forecast:** 260–350 production, 490–700 tests.
+**Files:** create `api/oneledger/investments/detailed_fund_actions.py`,
+`api/tests/test_investment_extraction_actions.py`,
+`db/migrations/V35__investment_draft_unit_ratio.sql` and
+`db/tests/0032_investment_draft_unit_ratio.sql`; extend the detailed adapter and synthetic fixture
+only at their frozen action boundaries; update shared schema/ingestion/privacy/status paths.
+**Contract/tests:** Extract split, bonus, rights, switch, systematic-transfer and platform-transfer
+drafts. Pair/group only from explicit source evidence, never proximity or approximate amount.
+Missing counterparts, contradictory pairs and unknown unit actions emit an `unrecognized_event`
+blocker for that group while unrelated groups remain usable. Extraction preserves source facts and
+does not implement Task 15 lot/value transformations. Forward-only V35 adds nullable
+`investment_event_draft.unit_ratio NUMERIC(20,10)`; positive non-unity ratios only. A
+ready/duplicate/committed split draft requires a ratio and no units; non-split drafts forbid ratios.
+Replace the evidence-backed preservation function forward so attached-evidence drafts cannot change
+ratio. Include ratio in the typed fingerprint. SQL tests prove scale, shapes, ready-state rules,
+immutability and safe upgrade of existing rows without editing V31 or V32.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, reuse it through
+`eval "$(scripts/test-db.sh env)"` for `scripts/hooks/db-tests.sh` and
+`cd api && uv run pytest -q tests/test_investment_extraction_actions.py`, then tear down once with
+`scripts/test-db.sh down`.
+Acceptance: split/switch/transfer evidence is exact, group-atomic and stageable; ambiguous partial
+transfers abstain without guessing.
 
 ## Task 12 — idempotent investment staging
 
