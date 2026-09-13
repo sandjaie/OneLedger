@@ -608,9 +608,11 @@ INVESTMENTS
 <a href="../adr/0013-python-backend-service.html">ADR-0013</a> moved the rules engine and the transfer matcher
 into Python, so their tests are ordinary unit tests — which was one of the reasons for that decision.</p>
 <p>Target: the full suite under five minutes, so it is actually run.</p>
-<p><strong>CI</strong> on every push: lint, type-check, migrations-from-empty, then the suite. Migrations are
-verified by applying all of them to a fresh database and diffing the result against the schema
-snapshot — a migration that drifts from the documented schema fails.</p>
+<p><strong>Delivery gates:</strong> commit and push hooks run fast static checks only. Application tests,
+migrations-from-empty and SQL invariants run during implementation and the required local
+<code>/verify</code> gate. The full CI workflow remains available as an owner-triggered remote mirror.
+Migrations are verified by applying all of them to a fresh database and diffing the result against
+the schema snapshot — a migration that drifts from the documented schema fails.</p>
 <hr>
 <h2 id="7-manual-verification">7. Manual verification</h2>
 <p>Some things are only provable against reality.</p>

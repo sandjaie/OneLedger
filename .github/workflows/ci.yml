@@ -9,10 +9,10 @@ name: ci
 # workflow-local throwaway literal for a database that exists only for the
 # life of the job, the same reasoning scripts/hooks/db-tests.sh documents.
 # This workflow publishes nothing — docs.yml owns Pages.
-# Manual-only by owner decision (2026-09-07): every gate this workflow mirrors already runs
-# locally in the pre-commit and pre-push hooks, which are the enforced gate. The workflow is
-# kept, proven green (three runs on PR #32), and runnable on demand from the Actions tab;
-# restore the pull_request/push triggers when automatic CI is wanted again.
+# Manual-only by owner decision (2026-09-07). Full suites run during implementation and the
+# required local /verify gate; commit and push hooks intentionally keep only fast static checks.
+# This workflow remains the on-demand remote mirror, proven green (three runs on PR #32) and
+# runnable from the Actions tab; restore pull_request/push triggers when automatic CI is wanted.
 on:
   workflow_dispatch:
 
