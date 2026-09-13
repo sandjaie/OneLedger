@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal
 from threading import Event
+from time import monotonic, sleep
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -17,7 +18,11 @@ from oneledger import auth
 from oneledger.investments import commands, funding
 from oneledger.main import app
 
-from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
+from .live_database import (
+    clear_synthetic_account_valuation_periods,
+    connect_to_test_database,
+)
+from .live_database import test_dsn as database_dsn
 
 
 @dataclass(frozen=True)
@@ -346,6 +351,23 @@ def _flow_and_net_worth() -> tuple[str, str, str | None]:
     )
 
 
+def _wait_for_lock(connection: psycopg.Connection, query_fragment: str) -> None:
+    deadline = monotonic() + 5
+    while monotonic() < deadline:
+        with connection.cursor() as cur:
+            cur.execute(
+                """SELECT count(*) FROM pg_stat_activity
+                    WHERE datname = current_database() AND pid <> pg_backend_pid()
+                      AND wait_event_type = 'Lock' AND query LIKE %s""",
+                (f"%{query_fragment}%",),
+            )
+            found = cur.fetchone()
+        if found is not None and found[0] > 0:
+            return
+        sleep(0.01)
+    pytest.fail(f"database session did not wait at {query_fragment}")
+
+
 def test_proposal_writes_nothing_then_confirmation_and_unlink_are_exact(
     live_funding: FundingFixture,
 ) -> None:
@@ -614,6 +636,64 @@ def test_correction_winning_confirmation_race_returns_stale_conflict(
     with live_funding.connection.cursor() as cur:
         cur.execute("SELECT count(*) FROM investment_cash_allocation")
         assert cur.fetchone() == (0,)
+
+
+@pytest.mark.parametrize("winner", ["unlink", "confirmation"])
+def test_unlink_and_confirmation_serialize_event_then_cash(
+    live_funding: FundingFixture, winner: str
+) -> None:
+    event = _event(live_funding, "100.0000")
+    cash_a = _cash(live_funding, "-40.0000")
+    allocation_a = [_allocation(event, cash_a, "40.0000")]
+    proposal_a = _proposal(allocation_a)
+    assert _confirm(allocation_a, proposal_a.json()["expectedState"]).status_code == 201
+    cash_b = _cash(live_funding, "-60.0000")
+    allocation_b = [_allocation(event, cash_b, "60.0000")]
+    proposal_b = _proposal(allocation_b)
+    assert proposal_b.status_code == 200, proposal_b.text
+    blocker = psycopg.connect(database_dsn())
+    observer = psycopg.connect(database_dsn(), autocommit=True)
+    pool = ThreadPoolExecutor(max_workers=2)
+    blocker.execute("SELECT id FROM investment_transaction WHERE id = %s FOR UPDATE", (event,))
+    calls = {
+        "unlink": lambda: _client().delete(f"/investment-funding/cash-transactions/{cash_a}"),
+        "confirmation": lambda: _confirm(allocation_b, proposal_b.json()["expectedState"]),
+    }
+    waits = {
+        "unlink": "unlink_investment_cash_allocations",
+        "confirmation": "SELECT id FROM investment_transaction WHERE household_id",
+    }
+    second = "confirmation" if winner == "unlink" else "unlink"
+    try:
+        first_result = pool.submit(calls[winner])
+        _wait_for_lock(observer, waits[winner])
+        second_result = pool.submit(calls[second])
+        _wait_for_lock(observer, waits[second])
+        blocker.commit()
+        responses = {
+            winner: first_result.result(timeout=5),
+            second: second_result.result(timeout=5),
+        }
+    finally:
+        blocker.rollback()
+        blocker.close()
+        observer.close()
+        pool.shutdown(wait=True, cancel_futures=True)
+    assert responses["unlink"].status_code == 200, responses["unlink"].text
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            """SELECT cash_transaction_id, allocated_amount::text
+                 FROM investment_cash_allocation WHERE investment_transaction_id = %s""",
+            (event,),
+        )
+        remaining = cur.fetchall()
+    if winner == "unlink":
+        assert responses["confirmation"].status_code == 409
+        assert responses["confirmation"].json() == {"detail": "funding proposal state changed"}
+        assert remaining == []
+    else:
+        assert responses["confirmation"].status_code == 201
+        assert remaining == [(cash_b, "60.0000")]
 
 
 def test_stale_and_replayed_confirmations_are_conflicts(live_funding: FundingFixture) -> None:
