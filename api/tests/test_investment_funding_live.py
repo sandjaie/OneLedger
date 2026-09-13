@@ -256,6 +256,59 @@ def _event(
     return UUID(response.json()["id"])
 
 
+def _cash_lifecycle_event(
+    fixture: FundingFixture, kind: str, amount: str, *, units: str | None = None
+) -> UUID:
+    shapes: dict[str, dict[str, object]] = {
+        "sale": {
+            "units": units or "-1.00000000",
+            "price": amount,
+            "grossAmount": amount,
+            "charges": "0.0000",
+            "withheldTax": "0.0000",
+            "netAmount": amount,
+        },
+        "cash_distribution": {
+            "units": None,
+            "price": None,
+            "grossAmount": amount,
+            "charges": "0.0000",
+            "withheldTax": "0.0000",
+            "netAmount": amount,
+        },
+        "charge": {
+            "units": None,
+            "price": None,
+            "grossAmount": None,
+            "charges": amount,
+            "withheldTax": "0.0000",
+            "netAmount": f"-{amount}",
+        },
+        "withheld_tax": {
+            "units": None,
+            "price": None,
+            "grossAmount": None,
+            "charges": "0.0000",
+            "withheldTax": amount,
+            "netAmount": f"-{amount}",
+        },
+    }
+    response = _client().post(
+        "/investment-events/cash-lifecycle",
+        json={
+            "accountId": str(fixture.investment_account_id),
+            "securityId": str(fixture.security_id),
+            "eventDate": "2026-02-01",
+            "eventKind": kind,
+            "currency": fixture.currency,
+            "idempotencyKey": str(uuid4()),
+            **shapes[kind],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return UUID(response.json()["id"])
+
+
 def _cash(
     fixture: FundingFixture,
     amount: str,
@@ -472,6 +525,137 @@ def test_one_cash_leaf_can_fund_many_events(live_funding: FundingFixture) -> Non
             (cash,),
         )
         assert cur.fetchone() == (2, "100.0000")
+
+
+def test_fixed_cash_roles_support_proceeds_income_and_many_to_many_fees(
+    live_funding: FundingFixture,
+) -> None:
+    _event(live_funding, "20.0000")
+    sale = _cash_lifecycle_event(live_funding, "sale", "3.0000")
+    distribution = _cash_lifecycle_event(live_funding, "cash_distribution", "2.0000")
+    charge = _cash_lifecycle_event(live_funding, "charge", "1.0000")
+    tax = _cash_lifecycle_event(live_funding, "withheld_tax", "2.0000")
+    sale_cash = _cash(live_funding, "3.0000", txn_type="income")
+    distribution_cash = _cash(live_funding, "2.0000", txn_type="income")
+    fee_cash = _cash(live_funding, "-3.0000", txn_type="fee")
+    before = _flow_and_net_worth()
+    assert before[:2] == ("5.0000", "3.0000")
+
+    allocations = [
+        _allocation(sale, sale_cash, "3.0000"),
+        _allocation(distribution, distribution_cash, "2.0000"),
+        _allocation(charge, fee_cash, "1.0000"),
+        _allocation(tax, fee_cash, "2.0000"),
+    ]
+    proposal = _proposal(allocations)
+    assert proposal.status_code == 200, proposal.text
+    assert [row["role"] for row in proposal.json()["allocations"]] == [
+        "proceeds",
+        "cash_distribution",
+        "fee",
+        "fee",
+    ]
+    confirmed = _confirm(allocations, proposal.json()["expectedState"])
+    assert confirmed.status_code == 201, confirmed.text
+    assert [row["role"] for row in confirmed.json()["allocations"]] == [
+        "proceeds",
+        "cash_distribution",
+        "fee",
+        "fee",
+    ]
+    after = _flow_and_net_worth()
+    assert after[:2] == ("0.0000", "0.0000")
+    assert after[2] == before[2]
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            """SELECT role::text, cash.txn_type::text, count(*), sum(allocated_amount)::text
+                 FROM investment_cash_allocation allocation
+                 JOIN transaction cash ON cash.id = allocation.cash_transaction_id
+                GROUP BY role, cash.txn_type ORDER BY role"""
+        )
+        assert cur.fetchall() == [
+            ("cash_distribution", "investment_income", 1, "2.0000"),
+            ("fee", "investment_fee", 2, "3.0000"),
+            ("proceeds", "investment_sell", 1, "3.0000"),
+        ]
+    unlinked = _client().delete(f"/investment-funding/cash-transactions/{fee_cash}")
+    assert unlinked.status_code == 200, unlinked.text
+    assert unlinked.json()["restoredTransactionType"] == "fee"
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM investment_cash_allocation WHERE cash_transaction_id = %s",
+            (fee_cash,),
+        )
+        assert cur.fetchone() == (0,)
+
+
+def test_cash_role_currency_and_event_amount_are_atomic_boundaries(
+    live_funding: FundingFixture,
+) -> None:
+    _event(live_funding, "20.0000")
+    sale = _cash_lifecycle_event(live_funding, "sale", "3.0000")
+    wrong_currency = _cash(
+        live_funding,
+        "3.0000",
+        account_id=live_funding.secondary_cash_account_id,
+        currency=live_funding.secondary_currency,
+    )
+    too_large = _cash(live_funding, "4.0000")
+
+    for cash, amount in ((wrong_currency, "3.0000"), (too_large, "4.0000")):
+        response = _proposal([_allocation(sale, cash, amount)])
+        assert response.status_code == 422
+    with live_funding.connection.cursor() as cur:
+        cur.execute("SELECT count(*) FROM investment_cash_allocation")
+        assert cur.fetchone() == (0,)
+
+
+def test_proceeds_must_be_unlinked_before_append_only_correction(
+    live_funding: FundingFixture,
+) -> None:
+    _event(live_funding, "20.0000")
+    sale = _cash_lifecycle_event(live_funding, "sale", "3.0000")
+    cash = _cash(live_funding, "3.0000", txn_type="income")
+    allocations = [_allocation(sale, cash, "3.0000")]
+    proposal = _proposal(allocations)
+    assert _confirm(allocations, proposal.json()["expectedState"]).status_code == 201
+    replacement = {
+        "accountId": str(live_funding.investment_account_id),
+        "securityId": str(live_funding.security_id),
+        "eventDate": "2026-02-01",
+        "eventKind": "sale",
+        "units": "-1.00000000",
+        "price": "4.000000",
+        "grossAmount": "4.0000",
+        "charges": "0.0000",
+        "withheldTax": "0.0000",
+        "netAmount": "4.0000",
+        "currency": live_funding.currency,
+        "idempotencyKey": str(uuid4()),
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "Synthetic proceeds correction",
+    }
+
+    blocked = _client().post(
+        f"/investment-events/{sale}/cash-lifecycle-corrections", json=replacement
+    )
+    assert blocked.status_code == 422
+    assert _client().delete(f"/investment-funding/cash-transactions/{cash}").status_code == 200
+    corrected = _client().post(
+        f"/investment-events/{sale}/cash-lifecycle-corrections", json=replacement
+    )
+    assert corrected.status_code == 201, corrected.text
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_cash_allocation
+                   WHERE investment_transaction_id = %s),
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id = %s),
+                 (SELECT txn_type::text FROM transaction WHERE id = %s)""",
+            (sale, sale, cash),
+        )
+        assert cur.fetchone() == (0, 1, "income")
 
 
 @pytest.mark.parametrize(

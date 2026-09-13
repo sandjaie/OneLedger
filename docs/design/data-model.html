@@ -879,7 +879,8 @@ an already committed immutable event without creating another draft.</td></tr>
 severity is blocking or advisory. Resolution metadata cannot be written directly. A validated
 owner operation may retain and close a superseded disposal&#39;s incomplete-lot review as
 <code>event_corrected</code> only when its resolution reference is the immutable replacement event;
-the same event/reason identity cannot later be reopened.</td></tr>
+or close an active disposal as <code>lot_allocated</code> only when its retained allocation rows total
+the exact disposed units. The same event/reason identity cannot later be reopened.</td></tr>
 </tbody></table><p>The acquisition-only position service rebuilds as-of units and cumulative
 contributions from active immutable purchase leaves, retains each event&#39;s frozen reporting
 contribution, and values those units with the latest accepted non-future price plus current as-of

@@ -2128,6 +2128,18 @@ reopening a resolved question.
 
 ---
 
+## `V39` (applied)
+
+### Evidenced disposal-lot review resolution
+
+V39 extends the existing owner-authorized review transition with `lot_allocated`. The reviewed
+event itself is the retained resolution reference, and the transition is accepted only when the
+active disposal has exact positive allocation rows totalling all disposed units. Missing, partial,
+foreign or wrong-event evidence leaves the review open; identical resolution replay retains its
+original resolver and timestamp. Allocation rows and event facts remain immutable.
+
+---
+
 ## `0013`
 
 ### Loans

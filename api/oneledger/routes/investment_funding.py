@@ -13,6 +13,9 @@ from ..investments.funding import (
     FundingProposalRequest,
     FundingProposalResponse,
     FundingUnlinkResponse,
+    LotAllocationRequest,
+    LotAllocationResponse,
+    allocate_lots,
     confirm_funding,
     propose_funding,
     unlink_funding,
@@ -54,5 +57,20 @@ def unlink_purchase_funding(
 ) -> FundingUnlinkResponse:
     try:
         return unlink_funding(owner, cash_transaction_id)
+    except FundingError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+
+
+@router.post(
+    "/lot-allocations",
+    response_model=LotAllocationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def confirm_lot_allocation(
+    body: LotAllocationRequest,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> LotAllocationResponse:
+    try:
+        return allocate_lots(owner, body)
     except FundingError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None

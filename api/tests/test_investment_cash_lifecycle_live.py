@@ -233,6 +233,22 @@ def _post(body: dict[str, object]) -> Response:
     return cast(Response, TestClient(app).post("/investment-events/cash-lifecycle", json=body))
 
 
+def _allocate_lots(disposal_id: str, allocations: list[tuple[str, str]]) -> Response:
+    return cast(
+        Response,
+        TestClient(app).post(
+            "/investment-funding/lot-allocations",
+            json={
+                "disposalEventId": disposal_id,
+                "allocations": [
+                    {"acquisitionLotId": lot_id, "allocatedUnits": units}
+                    for lot_id, units in allocations
+                ],
+            },
+        ),
+    )
+
+
 def test_all_cash_lifecycle_kinds_are_exact_idempotent_and_count_tax_once(
     live_lifecycle: LifecycleFixture,
 ) -> None:
@@ -378,6 +394,149 @@ def test_partial_close_and_reinvestment_reopen_preserve_holding_history(
             (live_lifecycle.owner.household_id,),
         )
         assert cur.fetchone() == (2,)
+
+
+def test_evidenced_partial_sale_across_lots_exposes_only_exact_supported_claims(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    first = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    second_body = {
+        **_acquisition(live_lifecycle, units="4.00000000"),
+        "eventDate": "2026-02-02",
+        "idempotencyKey": str(uuid4()),
+    }
+    second = TestClient(app).post("/investment-events/acquisitions", json=second_body)
+    assert first.status_code == second.status_code == 201
+    sale = _post(
+        {
+            **_lifecycle(live_lifecycle, "sale"),
+            "eventDate": "2026-02-03",
+            "units": "-5.00000000",
+            "grossAmount": "15.0000",
+            "netAmount": "15.0000",
+        }
+    )
+    assert sale.status_code == 201, sale.text
+    assert sale.json()["reviewReasons"] == ["incomplete_lot_allocation"]
+
+    confirmed = _allocate_lots(
+        sale.json()["id"],
+        [
+            (first.json()["lot"]["id"], "3.00000000"),
+            (second.json()["lot"]["id"], "2.00000000"),
+        ],
+    )
+
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json() == {
+        "state": "confirmed",
+        "disposalEventId": sale.json()["id"],
+        "allocations": [
+            {
+                "acquisitionLotId": first.json()["lot"]["id"],
+                "allocatedUnits": "3.00000000",
+            },
+            {
+                "acquisitionLotId": second.json()["lot"]["id"],
+                "allocatedUnits": "2.00000000",
+            },
+        ],
+        "realisedCostNative": "10.0000",
+        "realisedGainNative": "5.0000",
+        "remainingBasisNative": "18.0000",
+        "reviewReasons": [],
+    }
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT status::text, resolution_kind::text, resolution_reference_id
+                 FROM investment_review_item WHERE investment_transaction_id = %s""",
+            (UUID(sale.json()["id"]),),
+        )
+        assert cur.fetchone() == ("resolved", "lot_allocated", UUID(sale.json()["id"]))
+
+
+def test_incomplete_lot_evidence_withholds_claims_until_the_disposal_is_fully_allocated(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    first = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    second = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={
+            **_acquisition(live_lifecycle, units="4.00000000"),
+            "eventDate": "2026-02-02",
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+    sale = _post(
+        {
+            **_lifecycle(live_lifecycle, "sale"),
+            "eventDate": "2026-02-03",
+            "units": "-4.00000000",
+            "grossAmount": "12.0000",
+            "netAmount": "12.0000",
+        }
+    )
+    partial = _allocate_lots(sale.json()["id"], [(first.json()["lot"]["id"], "2.00000000")])
+    assert partial.status_code == 201, partial.text
+    assert partial.json()["realisedCostNative"] is None
+    assert partial.json()["realisedGainNative"] is None
+    assert partial.json()["remainingBasisNative"] is None
+    assert partial.json()["reviewReasons"] == ["incomplete_lot_allocation"]
+
+    completed = _allocate_lots(sale.json()["id"], [(second.json()["lot"]["id"], "2.00000000")])
+    assert completed.status_code == 201, completed.text
+    assert completed.json()["realisedCostNative"] == "8.0000"
+    assert completed.json()["realisedGainNative"] == "4.0000"
+    assert completed.json()["remainingBasisNative"] == "20.0000"
+    assert completed.json()["reviewReasons"] == []
+
+
+def test_lot_overallocation_and_foreign_evidence_refuse_atomically(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    sale = _post(_lifecycle(live_lifecycle, "sale"))
+    assert acquisition.status_code == sale.status_code == 201
+
+    app.dependency_overrides[auth.require_owner] = lambda: live_lifecycle.other_owner
+    foreign_acquisition = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json={
+            **_acquisition(live_lifecycle),
+            "accountId": str(live_lifecycle.other_account_id),
+            "securityId": str(live_lifecycle.other_security_id),
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+    assert foreign_acquisition.status_code == 201, foreign_acquisition.text
+    app.dependency_overrides[auth.require_owner] = lambda: live_lifecycle.owner
+
+    over = _allocate_lots(sale.json()["id"], [(acquisition.json()["lot"]["id"], "2.00000000")])
+    foreign = _allocate_lots(
+        sale.json()["id"], [(foreign_acquisition.json()["lot"]["id"], "1.00000000")]
+    )
+    assert over.status_code == 422
+    assert foreign.status_code == 404
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_lot_allocation WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_review_item
+                   WHERE household_id = %s AND investment_transaction_id = %s
+                     AND status = 'open')""",
+            (
+                live_lifecycle.owner.household_id,
+                live_lifecycle.owner.household_id,
+                UUID(sale.json()["id"]),
+            ),
+        )
+        assert cur.fetchone() == (0, 1)
 
 
 def test_disposal_correction_resolves_original_review_and_retry_cannot_reopen_it(
