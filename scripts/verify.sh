@@ -18,12 +18,13 @@ current_head() {
 }
 
 check_receipt() {
-  local head verified=
+  local head pushed verified=
   head="$(current_head)"
+  pushed="${PRE_COMMIT_TO_REF:-$head}"
   [ -f "$receipt" ] && verified="$(sed -n '1p' "$receipt")"
-  [ "$verified" = "$head" ] ||
+  [ "$verified" = "$pushed" ] ||
     fail "HEAD has not passed scripts/verify.sh; run it on the clean reviewed commit before pushing."
-  echo "PASS verified-head $head"
+  echo "PASS verified-head $pushed"
 }
 
 if [ "${1:-}" = "--check-receipt" ]; then
@@ -90,13 +91,14 @@ ensure_test_server() {
   local mapped
   if mapped="$(docker compose --profile test port db-test 5432 2>/dev/null)" &&
     [ -n "$mapped" ]; then
+    test_server_ready=1
     eval "$(scripts/test-db.sh env)"
     echo "REUSE db-test at ${mapped##*:}"
   else
+    test_server_ready=1
     eval "$(scripts/test-db.sh up)"
     echo "START db-test at ${POSTGRES_PORT}"
   fi
-  test_server_ready=1
 }
 
 run_commit_hooks() {

@@ -30,11 +30,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
       - name: Install verification dependencies
         run: |
           pip install "pre-commit>=4.0.0"
           uv sync --project api --frozen
           npm ci --prefix web
+      - name: Fetch the verification base
+        run: git fetch --no-tags origin develop:refs/remotes/origin/develop
       - name: Create external volumes required by the Compose model
         run: |
           docker volume create oneledger_pgdata

@@ -47,7 +47,10 @@ def test_pre_push_only_enforces_the_verification_receipt_and_diff_size() -> None
         assert f"      - id: {hook_id}\n" not in config
 
     assert "scripts/verify.sh --check-receipt" in _hook("verified-head")
-    assert "run: scripts/verify.sh" in CI.read_text()
+    ci = CI.read_text()
+    assert "run: scripts/verify.sh" in ci
+    assert "postgresql-client" in ci
+    assert "git fetch --no-tags origin develop:refs/remotes/origin/develop" in ci
 
 
 def test_verify_reuses_the_isolated_test_server_for_every_database_check() -> None:
@@ -65,6 +68,10 @@ def test_verify_reuses_the_isolated_test_server_for_every_database_check() -> No
     assert "scripts/hooks/db-tests.sh" in verify
     assert "COMPOSE_PROJECT_NAME=oneledger-verify" not in verify
     assert re.search(r"(?m)^\s*(?:export\s+)?DB_PORT=", verify) is None
+    assert re.search(
+        r'else\n\s+test_server_ready=1\n\s+eval "\$\(scripts/test-db\.sh up\)"',
+        verify,
+    )
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -168,6 +175,24 @@ def test_receipt_check_refuses_a_commit_created_after_verification(tmp_path: Pat
 
     assert stale.returncode != 0
     assert "HEAD has not passed scripts/verify.sh" in stale.stderr
+
+
+def test_receipt_check_uses_the_commit_being_pushed(tmp_path: Path) -> None:
+    repo, environment = _docs_only_repository(tmp_path)
+    subprocess.run(["bash", "scripts/verify.sh"], cwd=repo, env=environment, check=True)
+    environment["PRE_COMMIT_TO_REF"] = _git(repo, "rev-parse", "develop")
+
+    result = subprocess.run(
+        ["bash", "scripts/verify.sh", "--check-receipt"],
+        cwd=repo,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "HEAD has not passed scripts/verify.sh" in result.stderr
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:
