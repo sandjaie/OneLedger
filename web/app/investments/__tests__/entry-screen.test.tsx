@@ -396,6 +396,27 @@ describe("investment entry", () => {
     });
   });
 
+  it("offers explicit cash-funding review for the event returned by a completed purchase", async () => {
+    const request = requestFrom(async (path) => {
+      if (path === "/portfolio/positions") return positions();
+      if (path === "/investment-catalogue/securities/resolve") {
+        return { status: "matched", reason: "exact_public_identity", candidates: [candidate] };
+      }
+      if (path === "/investment-events/acquisitions") return event;
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request);
+    await screen.findByText("No investment holdings are recorded yet.");
+    await resolveExactInstrument();
+    fillPurchase();
+    fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm purchase" }));
+
+    expect(await screen.findByRole("heading", { name: "Purchase funding" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Find cash entries" })).toBeTruthy();
+    expect(vi.mocked(request).mock.calls.some(([path]) => path.startsWith("/transactions?"))).toBe(false);
+  });
+
   it("uses the selected security currency for the purchase and confirmation", async () => {
     const otherCurrency = { ...candidate, currency: "XBB" };
     const request = requestFrom(async (path) => {

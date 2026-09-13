@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
+import { FundingPanel } from "@/app/investments/funding-panel";
 import type { apiFetch } from "@/lib/api/client";
 import type {
   AccountRow,
@@ -123,6 +124,7 @@ export function InvestmentEntryScreen({
   const [problem, setProblem] = useState(false);
   const [mutationProgress, setMutationProgress] = useState<MutationProgress>("none");
   const [feedback, setFeedback] = useState("");
+  const [fundingEvents, setFundingEvents] = useState<Array<InvestmentEventRow>>([]);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const lookupGeneration = useRef(0);
   const lookupRequest = useRef<AbortController>(null);
@@ -258,11 +260,14 @@ export function InvestmentEntryScreen({
     let progress = mutationProgress;
     try {
       if (progress === "none") {
-        await request<InvestmentEventRow>("/investment-events/acquisitions", {
+        const recorded = await request<InvestmentEventRow>("/investment-events/acquisitions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(acquisition),
         });
+        setFundingEvents((current) => (
+          current.some(({ id }) => id === recorded.id) ? current : [...current, recorded]
+        ));
         progress = draft.addValuation ? "purchase" : "complete";
         setMutationProgress(progress);
       }
@@ -541,6 +546,7 @@ export function InvestmentEntryScreen({
           {feedback && <p className="investment-feedback" role="status">{feedback}</p>}
         </form>
       )}
+      {fundingEvents.length > 0 && <FundingPanel events={fundingEvents} request={request} />}
     </section>
   );
 }

@@ -75,7 +75,8 @@ requires a separate owner request.
 | Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on `develop` | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
 | Phase 1.6 Task 7 | **Complete via PR #172** — purchase funding proposals, correction-safe atomic confirmation, final-debit selection and exact unlink restoration are on `develop` | [PR #172](https://github.com/sandjaie/OneLedger/pull/172) |
 | Phase 1.6 Task 8 | **Complete via PR #173** — acquisition-only positions, typed price/FX coverage and exclusive ledger/holdings/snapshot dashboard valuation are on `develop` | [PR #173](https://github.com/sandjaie/OneLedger/pull/173) |
-| Phase 1.6 Task 9 | **Implementation ready for controller review** — catalogue resolution, explicit acquisition confirmation, optional dated price entry and resulting holding display are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-9--catalogue-purchase-price-and-holding-entry-web-flow) |
+| Phase 1.6 Task 9 | **Complete via PR #174** — catalogue resolution, explicit acquisition confirmation, optional dated price entry and resulting holding display are on `develop` | [PR #174](https://github.com/sandjaie/OneLedger/pull/174) |
+| Phase 1.6 Task 10 | **Implementation ready for controller review** — exact cash candidates, many-to-many funding proposals, explicit confirmation, stale-state refusal, transfer-path explanation and reviewed unlink are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-10--funding-confirmation-web-flow) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
