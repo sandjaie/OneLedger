@@ -9,20 +9,15 @@
 ## Verification
 
 <!--
-Record actual evidence for the current change: applicable tests, lint/types, build, migrations,
-browser/manual checks, documentation checks, dependency audit and commit/push hooks.
-Use Pass, Fail, Not run or Not applicable. Include counts where useful and explain checks not run.
-Do not claim all tests passed if only selected checks ran. Include the final verification runner's
-recorded Git head and the confirmation range. Replace the placeholder rows.
+Record actual evidence only. Use Pass, Fail, Not run or Not applicable, include useful counts, and
+explain anything not run. Include the final verifier's exact head. Replace the placeholder rows.
 -->
 
 | Check | Command or evidence | Result |
 | --- | --- | --- |
 | Focused TDD | <!-- affected tests and observed RED/GREEN --> | <!-- result --> |
-| Comprehensive local review | <!-- finding count and repair summary, or docs-only --> | <!-- result --> |
-| Final verification | <!-- scripts/verify.sh full/database and exact head --> | <!-- result --> |
-| Confirmation | <!-- repair commit/range inspected without repeating the full suite --> | <!-- result --> |
-| Static push hooks | <!-- pre-push result --> | <!-- result --> |
+| Local review | <!-- comprehensive findings; confirmation range if repairs existed; or owner docs review --> | <!-- result --> |
+| Final verification | <!-- scripts/verify.sh scope and exact-head receipt --> | <!-- result --> |
 
 ## Notes
 

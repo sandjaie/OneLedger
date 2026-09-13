@@ -1,440 +1,121 @@
 ---
 name: oneledger-code-review
-description: >-
-  Senior-level review of OneLedger work before it is pushed or merged into develop — correctness,
-  edge cases, money handling, private-data boundaries, identifier leakage, authorization,
-  reporting views, migrations, invariants, test sufficiency and diff size. It produces one
-  consolidated finding set for the implementing agent and does not modify code. Run it unprompted
-  after focused implementation tests are green, before final verification or any push, then run a
-  narrow confirmation over its repair range after final verification.
+description: Review a completed OneLedger task before final verification and first push. Report one consolidated finding set without modifying code; after repairs, confirm only the findings and repair range.
 ---
 
-# OneLedger Code Review
+# OneLedger code review
 
-## Purpose
+Perform a senior, evidence-based review of the task branch against `develop`. This skill is
+report-only unless the owner explicitly requests fix mode.
 
-Perform a senior-level engineering review of changes before they are pushed or merged into
-`develop`. Identify real defects, regressions, security problems, missing edge cases, insufficient
-tests, and violations of this repository's own rules.
+## When to run
 
-**Produce findings another agent can patch. Do not modify code** unless the user explicitly
-commands fix mode.
+- **Comprehensive pass:** implementation is complete and affected tests are green.
+- **Confirmation pass:** the implementation agent repaired blocking findings. Confirm those
+  findings and inspect only the repair range.
 
-**This is the only review.** Cloud review was removed on 8 September 2026, so nothing downstream
-catches what this pass misses. That raises the stakes and lowers the tolerance for ceremony in
-equal measure: spend the time on the diff and on hostile inputs, not on re-running gates the
-implementer already ran. M2 task 3's eight rounds and fifteen fix commits were every one on a
-theme this skill names — a raw identifier reaching a response, a log line or an error message —
-and that is the kind of thing only reading finds.
+If no repair was needed, skip confirmation. `scripts/verify.sh` runs once after the review is
+clean; reviewers do not repeat its suites. Nothing reaches `origin` before review and final
+verification.
 
-## Repository workflow
+## Establish scope
 
-`develop` is the integration branch. Work arrives on `feature/*`, `fix/*`, `chore/*` or `docs/*`
-branches, one task-sized slice each. The flow is:
-
-focused TDD → **comprehensive review** → consolidated fix → full `/verify` → **confirmation of
-the repair range** → first push → PR → `develop`
-
-This is gate 4 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
-**implementation being finished with its affected tests green** — not "before some push", but
-before the branch reaches `origin` at all. The full suite deliberately follows this review and its
-consolidated repair, so it normally runs once on the head that is actually intended to ship. A PR
-is opened only from a head whose final verification and confirmation passed. There is no path to
-`origin` that skips them — not a checkpoint commit, not a one-line follow-up.
-
-**Never review `develop` as though it were a feature branch.**
-
-## Budget the review
-
-**A first pass aims at five minutes; a re-review of fixes aims at three.** Past that the gate
-stops paying for itself. The slow parts are almost never the thinking, and a reviewer that spends
-nine minutes re-running what the implementer already ran has bought nothing and delayed the fix.
-
-Two shapes, and the dispatching prompt says which:
-
-- **First pass** — a module or route this gate has not seen. Read the diff and its neighbours,
-  inspect focused TDD evidence, and spend the review on hostile inputs and the passes below. This
-  is where findings come from. Return one complete, deduplicated report rather than one theme at a
-  time.
-- **Confirmation pass** — the same branch after fixes. Confirm each earlier finding is closed,
-  review the fix commits as their own surface, and stop. Do not re-derive the branch or re-run the
-  full suite.
-
-In practice, all of this measured on M2 task 5, where rounds ran to fifteen minutes and the two
-tightest rounds found as much as the longest:
-
-- **Do not duplicate the final gate.** The implementer supplies focused green evidence before the
-  first pass. `scripts/verify.sh full` runs once after the repair; inspect its exact-head output at
-  confirmation instead of running it again.
-- **Do not re-derive the mutation battery.** The implementer runs it and reports it. Verify a
-  sample of three to five — the ones guarding money, an invariant or the authorization boundary
-  — and spend the rest of the budget hunting for guards the battery never covered. That hunt is
-  the value; re-running someone else's twenty mutants is not.
-- **Read the sections the prompt names**, not whole documents. The M2 spec alone runs to seven
-  hundred lines.
-
-A diff that genuinely needs longer — a migration, a new authorization path, a module handling
-identifiers — takes longer. Say in the report why the budget did not fit.
-
-## Determine review scope
-
-Review the current branch against `develop`:
+Resolve the merge base with `origin/develop`, falling back to `develop`. Inspect:
 
 ```bash
-git fetch origin develop --quiet
-git merge-base HEAD origin/develop      # falls back to develop when origin/develop is absent
+git status --short
 git diff --stat <base>...HEAD
 git diff --name-status <base>...HEAD
 git diff <base>...HEAD
 git log --oneline <base>..HEAD
-```
-
-**Include work that is not committed yet.** This gate runs before the push, so uncommitted changes
-are part of what is about to ship:
-
-```bash
-git status --short
-git diff              # unstaged
-git diff --cached     # staged
-```
-
-A finding in uncommitted work is still a finding. Say which findings sit in committed history and
-which in the working tree, because they are patched differently.
-
-Then measure the branch:
-
-```bash
 scripts/check-diff-size.sh
 ```
 
-A branch past the hard stop is not reviewed — it is **split**. Reviewing it wastes the review; the
-diff is about to change shape. Report which slices it splits into, name a branch per slice, and
-stop there. The exception is the one the budget itself allows: where the owner has invoked
-`ONELEDGER_SIZE_OVERRIDE` for a change that genuinely cannot be divided — an indivisible migration
-— review it as it stands and record that it ships oversized on that reason. Without that
-exception, an approved migration has no path through the cycle at all.
+Include staged and unstaged work. Read the task contract, changed files, relevant neighboring code,
+callers, tests and the owning ADR/design/operations documents. Do not review unrelated historical
+code. If affected tests are red or the branch exceeds the hard size limit without an owner
+override, report that blocking condition and stop.
 
-A focused-red tree is not reviewed either: a failing affected test is a finding that already found
-itself. If the plan's focused checks have not run, or came back red, report that and stop. Full
-`/verify` is not a prerequisite for the first pass; it is the post-repair gate.
+## Adaptive review checklist
 
-Do not review unrelated historical code unless a changed component makes an existing defect newly
-relevant.
+Apply the first row to every change and only the additional rows its surface needs.
 
-## Understand intent first
+| Surface | Review |
+|---|---|
+| Every change | Task scope and contracts; logic and failure paths; idempotency; concurrency; cleanup; backward compatibility; tests that would fail if behavior regressed |
+| Financial data or SQL | `NUMERIC`/`Decimal`/wire strings; signs and rounding; approved reporting views; no fabricated facts; forward-only migrations; schema docs; RLS; the full operation matrix below |
+| API or authorization | `require_owner()`; household isolation; input validation; atomic transactions; stable camelCase contracts; generated types; safe errors and logs |
+| Identifiers or documents | Never-store boundary; ordinary responses, validation details, exceptions, logs, filenames, fixtures and serialized models; no real data or complete identifiers |
+| Web | No money arithmetic; generated API types; privacy-safe rendering; loading, empty, error and retry states; no server secret in the client |
+| Documentation or workflow | One authoritative owner; valid links and commands; no duplicate progress tracking; executable behavior matches prose |
 
-Before reporting anything:
-
-1. Read the task's block in `docs/superpowers/plans/` — its outcome, contracts and acceptance
-   criteria are what the branch is measured against.
-2. Read the changed files and the implementation around them, not the diff alone.
-3. Trace callers and consumers of every changed function, route and table.
-4. Read the existing tests for the code being changed.
-5. Read the ADRs, `docs/design/` and `docs/operations/` pages the change touches — this
-   repository's rules live there, and a reviewer who has not read them invents different ones.
-6. Understand the existing pattern before recommending an alternative to it.
-
-On a diff spanning independent risk domains, split the passes across parallel **read-only**
-fresh-context reviewers — normally database/security and API/financial behavior — then merge and
-deduplicate their results into one report before the writer starts fixing. No specialist edits the
-tree or drip-feeds a second report after repair begins. Fresh context is the value: a reviewer that
-watched the code being written inherits the reasoning that produced the bug.
-
----
-
-## Review passes
-
-## 1. Money and the eight invariants
-
-- `Decimal` in Python, `NUMERIC(20,4)` in Postgres, a **string** on the wire. No `float`, no JSON
-  number, no `parseFloat`/`Number()` on a money field. TypeScript formats; it never computes.
-  Aggregation happens in Postgres.
-- Percentages are human-readable: `15.2500` is 15.25%, not `0.1525`.
-- **No currency, institution or country name as an identifier** — column, type, enum member,
-  function, constant or required seed row (ADR-0012). `amount_base` / `amount_secondary`.
-- **Reports read `v_transaction_reportable`** and the frozen `amount_base` / `amount_secondary`.
-  Never the base table, never a multiplication by a rate at read time.
-- **Invariant 7**: no carried-forward rate, interpolated valuation or residual is invented
-  silently. Each is a labelled stored fact, surfaced as one.
-- Signs (I2), the household reporting-pair lock, and every other invariant the change touches:
-  check `README.md` and its test in `docs/operations/testing-and-data-quality.html` §1.
-- Rounding, ordering and tie-breaks are stated and tested, not left to chance. A rounding rule that
-  differs between Python and Postgres is a defect even when both look reasonable.
-
-## 2. Privacy, secrets and the authorization boundary
-
-The pass that would have saved eight rounds on PR #34.
-
-- **Identifier storage boundary** (`security-and-privacy.html` §4; ADR-0021): complete account,
-  card and IBAN source values may exist only in the household-scoped `account_identifier` relation
-  for local matching and deliberate owner reveal. They remain forbidden in ordinary responses,
-  logs, errors, fixtures, screenshots, code and arbitrary text fields. CVV, PIN, OTP, passwords and
-  full tax or national IDs remain never-store data.
-- **Follow every value derived from an identifier to every place it can surface**: a response
-  body, a log line, an exception message, a 422 `detail`, a validation echo, a preview payload, a
-  filename, a stack trace, a `repr()` on a dataclass, a test fixture's expected output. That is
-  the class of finding that took eight rounds.
-- `require_owner()` on every financial route. `/health`, `/auth/login` and `/auth/callback` are the
-  complete public set (ADR-0013, ADR-0016). The UI is never the boundary.
-- Every `SECURITY DEFINER` function calls `assert_is_owner()` first.
-- Current normalized identifier matching and reveal require no application secret. A missing
-  `ACCOUNT_HASH_SALT` disables only the explicitly transitional comparison with
-  `legacy_sha256_v1` fingerprints; it must not gate current identities or cause an empty-salt hash.
-- No secret behind `NEXT_PUBLIC_`. No string-interpolated SQL. No real financial data, no
-  `pdf-statements/` path, no `.env`, on any branch.
-- No LLM call (ADR-0003).
-
-## 3. Correctness
-
-Trace the execution paths; do not review syntax.
-
-- incorrect logic, invalid assumptions, wrong conditions, wrong defaults
-- unexpected fallthrough, incorrect return values
-- swallowed errors, incorrect error propagation, partial-failure handling
-- incorrect state transitions; a batch or transaction left half-applied
-- concurrency: interleaved requests, the reporting-pair lock, `SELECT … FOR UPDATE` that isn't
-- resource leaks, broken cleanup, unclosed files or connections
-- regressions in existing behaviour, and backwards compatibility
-
-## 4. Edge cases
-
-Actively look for inputs that get forgotten. Ask of every operation:
-
-> **What happens if this runs twice?**
-
-Ingestion, staging and commit should be idempotent wherever it is reasonable.
-
-- missing values, empty strings, empty lists, a statement with one row, a statement with none
-- malformed configuration; a layout profile that no longer matches its statement
-- a PDF that is scanned, password-protected, corrupt, or has no text layer
-- **the same statement imported twice** — and the same statement after a partial commit
-- a retry after an interrupted parse, an interrupted commit, a previous run that half-finished
-- dates at a period boundary, two-digit years, a value date after the period closes
-- an FX rate missing for a weekend, a holiday, or the first day of the range
-- a household with no secondary currency; a locked reporting pair; a currency with other decimals
-- duplicate operations, repeated execution, conflicting configuration
-- special characters, spaces in paths, very long names, unicode look-alikes in an identifier
-- external failure: the database unreachable, the rate source down, a timeout, an expired session
-
-### Financial database-operation matrix
-
-For every new or changed financial write operation, confirm the implementation and tests cover
-all of these before reporting the review complete:
+For every new or changed financial write, require tests for:
 
 - owner, member and foreign-household behavior;
-- unauthorized direct DML refusal, RLS and immutability;
-- stale expected-state and repeated idempotency requests;
+- unauthorized direct DML, RLS and immutability;
+- stale expected state and repeated idempotency requests;
 - precision refusal before normalization, hashing or deduplication;
-- active correction leaves and preserved historical records;
-- one documented lock order plus concurrent duplicate and conflict paths;
-- atomic rollback after every late failure, with no partial financial state.
+- active correction leaves and preserved history;
+- one lock order plus concurrent duplicate and conflict paths;
+- atomic rollback after late failure.
 
-Missing matrix coverage is one consolidated finding, broken down by uncovered row. Do not reveal
-one row per confirmation pass. Unsupported adjustments fail closed; no price, transaction, cost
-basis, residual or corporate action may be fabricated.
+Unsupported cases fail closed. Never fabricate a price, transaction, cost basis, residual,
+valuation or corporate action.
 
-## 5. Data, migrations and contracts
+## Test audit
 
-- A table change edits the migration, `docs/superpowers/schema.md` and
-  `docs/design/data-model.html` **in one commit**. A migration carrying more than `schema.md`
-  shows is expected; one that disagrees with it is a finding.
-- Migrations are forward-only. **An applied migration is never edited** — Flyway checksums it.
-- RLS is enabled and isolating on every new table; a `CHECK` says what it means to say.
-- A route change updates `docs/design/api-contracts.html` and regenerates `web/types/api/`.
-- The wire is camelCase, the Python is snake_case, and the mapping is explicit.
-- The plan's stated contracts and acceptance criteria are met. A deviation is legitimate —
-  repository reality wins — but it must be **recorded** in the PR and
-  `docs/superpowers/progress.md`, not silently absorbed.
-- ADRs decide, `docs/design/` and `docs/operations/` specify, `docs/superpowers/` executes. A
-  contradiction is a bug in one of them: say which.
+Tests must prove behavior, not implementation details. For each changed contract, identify the
+happy path, refusal path, boundary or malformed input, retry/idempotency case and regression
+assertion. A status-only assertion, over-mocking, a skipped negative case or a test that still
+passes when production behavior is removed is a finding. Never accept weakened tests or
+invariants as a repair.
 
-## 6. Test audit
+On the comprehensive pass, inspect focused RED/GREEN evidence. Run only a narrow reproducer needed
+to prove or disprove a possible finding. On confirmation, inspect the repair range and evidence for
+its affected tests. The final verifier belongs after confirmation.
 
-Do not ask whether tests exist. Determine whether they prove the changed behaviour.
+## Findings
 
-**The implementer's mutation battery is evidence, not a substitute for this pass.** Verify a
-sample, then hunt for what it missed — a guard nobody thought to mutate is the finding. An
-"equivalent mutant" claim deserves one check before it is accepted, and a mutant that dies of a
-syntax error or an aborted transaction proves nothing about the semantics it was aimed at.
+Report only issues that are specific, actionable, reproducible, caused or exposed by this change,
+and verified in the tree. Do not report formatter-owned style or speculative possibilities.
 
-For each meaningful behaviour change, identify the happy path, the failure path, the boundary, the
-malformed input, the external-dependency failure, the idempotency case and the regression that
-would catch this bug returning.
+- **CRITICAL:** security/never-store breach, destructive behavior or corrupted money.
+- **HIGH:** likely functional failure, invariant/contract violation or invalid migration.
+- **MEDIUM:** real edge-case/reliability defect or missing regression proof.
+- **LOW:** minor engineering issue worth recording.
 
-Report tests that:
+Mark each finding blocking or non-blocking. Fix every in-scope blocking finding before push.
+Record useful out-of-scope or hardening work once in PR Notes rather than widening this task.
 
-- test implementation details instead of behaviour
-- assert weakly — a status code with no body, a length with no contents
-- mock everything and prove nothing
-- **cannot fail if the production behaviour breaks**
-- omit the negative case entirely
-
-Name the assertion that would break if the change were reverted. If you cannot, the change has no
-regression protection and that is the finding.
-
-Nothing weakened to reach green: no loosened assertion, no deleted case, no skipped test, no
-softened invariant. If an invariant is genuinely wrong, that is a superseding ADR.
-
-## 7. Maintainability and scope
-
-Report these only where they have real engineering impact.
-
-- duplicated logic that already exists elsewhere in the tree
-- hidden side effects, giant functions, deeply nested control flow
-- inconsistent error handling; an abstraction the new code bypasses
-- dead code, unreachable branches, debug leftovers, commented-out code
-- a TODO without an owner and a reason
-- **anything in the diff not required by the task's stated outcome** — scope creep is what makes a
-  branch unreviewable
-- commits: `type(scope): a lowercase sentence stating what is now true`, declarative not
-  imperative; scopes `db api web ci docs plan`
-
-Do not raise style a linter or formatter already owns.
-
----
-
-## Validation
-
-On the first pass, inspect the implementer's focused RED/GREEN evidence and run
-`scripts/check-diff-size.sh`. Run a narrowly targeted reproducer only when it is needed to prove or
-disprove a finding. Do not run the application or database suites: the final verification runner
-does that after the findings are repaired.
-
-On confirmation, inspect the final `scripts/verify.sh full` (or approved database-only) output and
-confirm its recorded head equals the current head. Then inspect only the repair range. Do not run
-the runner again on the unchanged head.
-
-**Never claim a command passed unless you actually ran it and it succeeded.** If something cannot
-be run here — no database, no browser, no network — say so explicitly and mark it `NOT RUN` with
-the reason. A gate that reports checks it did not run is worse than no gate.
-
-**Pytest's exit code is not a mutation-kill signal here.** With `POSTGRES_PASSWORD` exported, six
-tests in `api/tests/test_auth.py` and `api/tests/test_oidc.py` fail on `develop` itself. Judge
-mutants against a subset asserted green first, and put that baseline in the report. Two M2 rounds
-reported kills that were only the pre-existing failures.
-
-**Purge `__pycache__` and set `PYTHONDONTWRITEBYTECODE=1` before any mutation run.** A stale
-`.pyc` has produced a false result in this repository before.
-
----
-
-## Finding quality
-
-Every finding must be specific, actionable, demonstrable, related to this change, and backed by
-code evidence you can point at.
-
-- **Verify each finding against the tree before reporting it.** A reviewer's first instinct is a
-  hypothesis: open the file, read the surrounding code, confirm the failure is real.
-- Do not report a speculative issue because something "could possibly" happen.
-- Prefer few high-confidence findings over many low-value observations.
-- Do not praise the code, and do not write filler.
-
----
-
-## Severity
-
-**CRITICAL** — a security or never-store violation, identifier leakage, a broken authorization
-boundary, destructive or data-losing behaviour, corrupted money.
-
-**HIGH** — likely functional failure, an invariant breach, a schema or contract mismatch, a
-migration that will not apply, a major regression, missing validation on a financial path.
-
-**MEDIUM** — a real defect in an edge case, a reliability or maintainability problem, or a
-behaviour change with no regression protection.
-
-**LOW** — a minor engineering issue worth fixing, not required to merge safely.
-
-Do not inflate severity. Severity ranks the work and orders the report; it does not decide what
-gets fixed.
-
-Every in-scope **blocking** finding is fixed before the push. A non-blocking hardening or style
-suggestion is recorded once in the PR's Notes and does not buy another repair cycle. Severity
-describes impact; the finding must also say whether it blocks this task's stated contract.
-
-The one exception is **scope, not severity**: a finding in code this task does not touch — an
-adjacent refactor, a pre-existing defect the change merely made visible — is recorded in the PR's
-Notes and raised as its own task, because patching it widens the branch past the task it carries
-and past its diff budget. Say that explicitly in the report; do not leave it implied.
-
----
-
-## Output format
-
-Produce exactly this structure.
+## Output
 
 ```markdown
 # OneLedger Code Review
 
-## Review scope
-
+## Scope
 Branch: <branch>
-Base: develop (<merge-base sha>)
-Files changed: <count>            Commits: <count>
-Diff size: <production> production / <tests> test — <within budget | over budget | over hard stop>
-Uncommitted work included: <yes, N files | none>
-
-Evidence inspected / validation performed:
-* <command or prior exact-head result> — PASS / FAIL / NOT RUN (<reason if not run>)
-
-## Summary
-
-Critical: X   High: X   Medium: X   Low: X
-
+Base: develop (<merge-base>)
 Pass: COMPREHENSIVE | CONFIRMATION
-Verdict: READY FOR FINAL VERIFY | READY TO PUSH | CHANGES REQUIRED | DESIGN/THREAT REVIEW REQUIRED
+Files / commits / diff size: <facts>
+Evidence inspected: <commands and actual results>
+
+## Verdict
+READY FOR FINAL VERIFY | CHANGES REQUIRED | DESIGN/THREAT REVIEW REQUIRED
 
 ## Findings
+### OL-001 — [HIGH] <title>
+File: `path:line`
+Category: <category>   Blocking: yes | no
+Problem: <demonstrated defect>
+Impact: <failure scenario>
+Required behavior: <fix outcome>
+Test: <regression assertion>
 
-### OL-001 — [HIGH] Short descriptive title
-
-**File:** `path/to/file.py:120`
-**Category:** Money | Privacy | Authorization | Correctness | Edge case | Migration | Contract |
-Testing | Maintainability
-**Blocking:** yes | no
-**State:** committed | working tree
-
-**Problem** — what is wrong.
-
-**Why it matters** — the failure scenario: the input, the path through the code, the wrong result.
-
-**Evidence** — the implementation or execution path that demonstrates it.
-
-**Recommended fix** — the expected behaviour, not a patch.
-
-**Test required** — the regression test that should exist, and the assertion that would fail
-today.
-
-## Test coverage gaps
-
-Scenarios not covered by a finding above, or `No significant test coverage gaps identified.`
-
-## Final verdict
-
-For a comprehensive pass, use CHANGES REQUIRED while an in-scope blocking finding is open and
-READY FOR FINAL VERIFY when none is. For confirmation, use READY TO PUSH only when the repair is
-clean and its exact-head final gate is green. Use DESIGN/THREAT REVIEW REQUIRED for a newly exposed
-risk boundary. Record non-blocking and out-of-scope findings once in the PR's Notes.
+## Coverage gaps
+<gaps not already captured, or None>
 ```
 
-Order findings CRITICAL → HIGH → MEDIUM → LOW.
-
-A no-finding review still names the risk passes and focused evidence it inspected; absence of filler
-is not absence of review.
-
----
-
-## Constraints
-
-Do not:
-
-- modify source files, or fix a finding
-- stage, commit, push, or open the PR
-- resolve a review comment or update `docs/superpowers/progress.md`
-- expand the review into unrelated cleanup
-- report a hypothetical finding with no evidence
-
-The implementing agent fixes the complete in-scope finding set, runs affected focused checks, then
-runs the final `/verify` once. This gate's confirmation inspects only that repair range. If it finds
-a new architectural, authorization, privacy, idempotency or concurrency boundary, report
-`DESIGN/THREAT REVIEW REQUIRED` and stop: consolidate that boundary before any more edits instead
-of starting another one-finding/one-fix round.
+Order findings by severity and deduplicate them before returning the report. A clean report still
+names the risk surfaces and evidence inspected. If confirmation exposes a new architectural,
+authorization, privacy, idempotency or concurrency boundary, return
+`DESIGN/THREAT REVIEW REQUIRED` instead of starting another patch loop.

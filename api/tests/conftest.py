@@ -31,11 +31,9 @@ import pytest
 os.environ.setdefault("SESSION_SECRET", "test-secret-not-used-outside-this-suite")
 os.environ.setdefault("ALLOWED_USER_EMAIL", "owner@example.com")
 
-# A git hook exports GIT_DIR, and from a linked worktree GIT_WORK_TREE, so that the commands it
-# starts find the repository; pytest runs under pre-push and inherits them. A test that runs
-# `git init` in a temporary directory then re-initialises the hook's repository instead: on
-# 10 September 2026 that wrote `core.bare`, then `core.worktree`, into the config every checkout
-# shares. Every git command a test runs means the directory it names, so none of these is kept.
+# Keep repository-local Git environment variables out of subprocess tests. A test that runs
+# `git init` in a temporary directory must operate on that directory, regardless of how pytest
+# itself was started.
 for _name in subprocess.run(
     ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True, check=True
 ).stdout.split():
