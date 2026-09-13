@@ -15,7 +15,7 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Deliver Task 14.2 — owner API for cash lifecycle events and reviewed disposal income | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--cash-lifecycle-and-disposal-api) |
+| Next product action | Deliver Task 14.2 — owner API for cash lifecycle events and reviewed disposal income | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
 | Current implementation task | Task 14.1 is complete: V37 extends the single owner-authorized append operation to exact cash lifecycle facts and reinvestment effects; Task 14.2 owns the event API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
 
 ## Canonical phase status

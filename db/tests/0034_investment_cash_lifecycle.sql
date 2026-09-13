@@ -161,6 +161,47 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- Embedded withholding on a reinvestment remains evidence, not a manufactured cash event.
+BEGIN;
+DO $$
+DECLARE f RECORD; reinvestment_id UUID; v_holding_id UUID;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0034_fixture();
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  reinvestment_id := append_investment_transaction(
+    f.account_1, f.security_1, '2026-02-01', 'reinvested_distribution',
+    1.25000000, 4.000000, 5.0000, 0.0000, 0.3750, 0.0000, f.base,
+    NULL, NULL, NULL, NULL, NULL,
+    'statement', 'cash_reinvestment_tax_v1', 'reinvestment-with-tax',
+    NULL, NULL, NULL, NULL
+  );
+  SELECT transaction.holding_id INTO v_holding_id
+    FROM investment_transaction transaction WHERE transaction.id = reinvestment_id;
+
+  ASSERT (SELECT withheld_tax = 0.3750 AND net_amount = 0
+                  AND fx_rate_date IS NULL AND fx_rate_to_base IS NULL
+                  AND fx_rate_to_secondary IS NULL AND net_amount_base IS NULL
+                  AND net_amount_secondary IS NULL
+            FROM investment_transaction WHERE id = reinvestment_id),
+    'embedded reinvestment withholding is retained without an external cash flow';
+  ASSERT (SELECT count(*) = 1 FROM investment_transaction
+           WHERE holding_id = v_holding_id),
+    'embedded withholding must not manufacture a separate cash event';
+  ASSERT (SELECT count(*) = 1 FROM investment_unit_effect
+           WHERE investment_transaction_id = reinvestment_id
+             AND signed_units = 1.25000000),
+    'the reinvestment creates only its evidenced positive unit effect';
+  ASSERT (SELECT count(*) = 1 FROM acquisition_lot
+           WHERE origin_transaction_id = reinvestment_id
+             AND acquired_units = 1.25000000
+             AND cost_basis_native = 5.0000),
+    'embedded withholding does not alter the evidenced gross-basis origin lot';
+  ASSERT (SELECT current_units = 1.25000000 FROM holding WHERE id = v_holding_id),
+    'the cash-free reinvestment remains exactly rebuildable';
+  RAISE NOTICE 'PASS 0034 reinvestment retains embedded tax exactly once';
+END $$;
+ROLLBACK;
+
 -- Existing disposal kinds remain admitted after the operation is replaced.
 BEGIN;
 DO $$

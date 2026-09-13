@@ -2105,8 +2105,10 @@ tax through the existing owner-authorized atomic investment append operation. Ca
 and interest retain their exact positive external cash flow; charges and withheld tax retain their
 exact negative external cash flow. A reinvested distribution instead creates its evidenced positive
 unit effect and acquisition-origin lot with gross amount as cost basis, while all external cash-flow
-fields remain absent. Cash-only history can retain a zero-unit holding without manufacturing a unit
-effect or acquisition lot. The existing household scope, RLS, immutable facts, append-only
+fields remain absent. Evidence of tax withheld within that reinvestment stays on the same event;
+Task 14.2 must surface it once and must not manufacture a second standalone tax event. Cash-only
+history can retain a zero-unit holding without manufacturing a unit effect or acquisition lot. The
+existing household scope, RLS, immutable facts, append-only
 corrections, dedupe, precision and atomic-refusal boundaries remain unchanged.
 
 ---
