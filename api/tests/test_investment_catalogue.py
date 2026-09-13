@@ -30,10 +30,12 @@ class Cursor:
         return self.rows
 
 
-def _row(identifier: UUID, *, name: str = "Synthetic Fund") -> tuple[object, ...]:
+def _row(
+    identifier: UUID, *, household_id: UUID | None = None, name: str = "Synthetic Fund"
+) -> tuple[object, ...]:
     return (
         identifier,
-        None,
+        household_id,
         "mutual_fund",
         name,
         "XIN",
@@ -72,6 +74,16 @@ def test_name_only_ambiguity_abstains_without_echoing_the_name() -> None:
     assert result.reason == "multiple_name_matches"
     assert len(result.candidates) == 2
     assert unsafe_name not in repr(result)
+
+
+def test_manual_price_eligibility_is_server_supplied_without_disclosing_ownership() -> None:
+    """The web flow must not infer private ownership from names or public identifiers."""
+    cursor = Cursor([_row(FIRST, household_id=HOUSEHOLD), _row(SECOND)])
+
+    result = catalogue.resolve_security(cursor, HOUSEHOLD, name="Synthetic Fund")
+
+    assert [candidate.manualPriceEligible for candidate in result.candidates] == [True, False]
+    assert "household" not in repr(result)
 
 
 def test_manual_price_requires_a_decimal_string_not_a_float() -> None:

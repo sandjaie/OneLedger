@@ -74,6 +74,7 @@ const candidate: SecurityCandidate = {
   isin: "XSYN00000001",
   ticker: null,
   exchange: null,
+  manualPriceEligible: true,
 };
 
 const position: AcquisitionPosition = {
@@ -145,11 +146,15 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
   return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
 }
 
-function renderScreen(request: Request, accounts: Array<AccountRow> = [investmentAccount]) {
+function renderScreen(
+  request: Request,
+  accounts: Array<AccountRow> = [investmentAccount],
+  createIdempotencyKey = () => "00000000-0000-4000-8000-000000000080",
+) {
   return render(
     <InvestmentEntryScreen
       accounts={accounts}
-      createIdempotencyKey={() => "00000000-0000-4000-8000-000000000080"}
+      createIdempotencyKey={createIdempotencyKey}
       request={request}
     />,
   );
@@ -207,6 +212,29 @@ describe("investment entry", () => {
     expect(within(holding).queryByText(/XAA 0/)).toBeNull();
   });
 
+  it("renders dated price evidence independently from stale and unsupported value coverage", async () => {
+    const stale = { ...position, priceStatus: "stale" as const };
+    const outside = {
+      ...position,
+      holdingId: "00000000-0000-4000-8000-000000000051",
+      valueStatus: "outside_supported_range" as const,
+      currentValueNative: null,
+      currentValueBase: null,
+      currentValueSecondary: null,
+      gainNative: null,
+      gainBase: null,
+      gainSecondary: null,
+    };
+    renderScreen(requestFrom(() => positions([stale, outside])));
+
+    const holdings = await screen.findAllByRole("article", { name: candidate.name });
+    expect(within(holdings[0]).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
+    expect(within(holdings[0]).getByText("The latest recorded price is stale.")).toBeTruthy();
+    expect(within(holdings[1]).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
+    expect(within(holdings[1]).getByText("The exact value is outside the supported reporting range.")).toBeTruthy();
+    expect(within(holdings[1]).getByText("Current value unavailable")).toBeTruthy();
+  });
+
   it("uses only active investment accounts and displays their masked identifiers", async () => {
     const nonInvestment = { ...investmentAccount, id: "00000000-0000-4000-8000-000000000011", accountType: "savings", name: "Synthetic savings" };
     const accountWithUnsafeExtra = {
@@ -258,6 +286,75 @@ describe("investment entry", () => {
     expect(screen.getByText("Instrument confirmed by owner.")).toBeTruthy();
   });
 
+  it("invalidates a name candidate and an exact ticker match when their evidence changes", async () => {
+    const tickerCandidate = { ...candidate, isin: null, ticker: "SYN", exchange: "XSYN" };
+    const request = requestFrom(async (path, init) => {
+      if (path === "/portfolio/positions") return positions();
+      if (path === "/investment-catalogue/securities/resolve") {
+        const body = JSON.parse(String(init?.body));
+        return body.name
+          ? { status: "needs_confirmation", reason: "name_only", candidates: [candidate] }
+          : { status: "matched", reason: "exact_public_identity", candidates: [tickerCandidate] };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request);
+    await screen.findByText("No investment holdings are recorded yet.");
+
+    fireEvent.change(screen.getByLabelText("Lookup method"), { target: { value: "name" } });
+    fireEvent.change(screen.getByLabelText("Instrument name"), { target: { value: candidate.name } });
+    fireEvent.click(screen.getByRole("button", { name: "Find instrument" }));
+    await screen.findByRole("group", { name: "Confirm instrument" });
+    fireEvent.change(screen.getByLabelText("Instrument name"), { target: { value: "Changed synthetic name" } });
+    expect(screen.queryByRole("group", { name: "Confirm instrument" })).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Lookup method"), { target: { value: "ticker" } });
+    fireEvent.change(screen.getByLabelText("Ticker"), { target: { value: "SYN" } });
+    fireEvent.change(screen.getByLabelText("Exchange"), { target: { value: "XSYN" } });
+    fireEvent.click(screen.getByRole("button", { name: "Find instrument" }));
+    expect(await screen.findByText("Matched by exact public identity.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Exchange"), { target: { value: "XALT" } });
+    expect(screen.queryByText("Matched by exact public identity.")).toBeNull();
+    expect(screen.queryByText(tickerCandidate.name)).toBeNull();
+  });
+
+  it("ignores a late catalogue response after the lookup evidence changes", async () => {
+    let release!: (value: unknown) => void;
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return positions();
+      if (path === "/investment-catalogue/securities/resolve") {
+        return new Promise((resolve) => { release = resolve; });
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request);
+    await screen.findByText("No investment holdings are recorded yet.");
+    fireEvent.change(screen.getByLabelText("Public identifier"), { target: { value: candidate.isin } });
+    fireEvent.click(screen.getByRole("button", { name: "Find instrument" }));
+    fireEvent.change(screen.getByLabelText("Public identifier"), { target: { value: "XSYN00000002" } });
+    release({ status: "matched", reason: "exact_public_identity", candidates: [candidate] });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Find instrument" }).textContent).toBe("Find instrument"));
+    expect(screen.queryByText(candidate.name)).toBeNull();
+  });
+
+  it("does not offer manual pricing for a shared catalogue instrument", async () => {
+    const shared = { ...candidate, manualPriceEligible: false };
+    const request = requestFrom(async (path) => {
+      if (path === "/portfolio/positions") return positions();
+      if (path === "/investment-catalogue/securities/resolve") {
+        return { status: "matched", reason: "exact_public_identity", candidates: [shared] };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request);
+    await screen.findByText("No investment holdings are recorded yet.");
+    await resolveExactInstrument();
+
+    expect(screen.queryByLabelText("Record a dated valuation price after this purchase")).toBeNull();
+    expect(screen.getByText("Manual dated prices are unavailable for this shared catalogue instrument.")).toBeTruthy();
+  });
+
   it("requires a second explicit action and sends every financial field unchanged", async () => {
     const request = requestFrom(async (path) => {
       if (path === "/portfolio/positions") return positions();
@@ -299,6 +396,35 @@ describe("investment entry", () => {
       currency: "XAA",
       idempotencyKey: "00000000-0000-4000-8000-000000000080",
     });
+  });
+
+  it("uses the selected security currency for the purchase and confirmation", async () => {
+    const otherCurrency = { ...candidate, currency: "XBB" };
+    const request = requestFrom(async (path) => {
+      if (path === "/portfolio/positions") return positions();
+      if (path === "/investment-catalogue/securities/resolve") {
+        return { status: "matched", reason: "exact_public_identity", candidates: [otherCurrency] };
+      }
+      if (path === "/investment-events/acquisitions") return event;
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request);
+    await screen.findByText("No investment holdings are recorded yet.");
+    await resolveExactInstrument();
+    fillPurchase();
+    fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
+
+    const confirmation = screen.getByRole("group", { name: "Confirm purchase" });
+    expect(within(confirmation).getByText("XBB 25.0000")).toBeTruthy();
+    expect(within(confirmation).getByText("Net cash XBB -25.7500")).toBeTruthy();
+    fireEvent.click(within(confirmation).getByRole("button", { name: "Confirm purchase" }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledWith(
+      "/investment-events/acquisitions",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const call = vi.mocked(request).mock.calls.find(([path]) => path === "/investment-events/acquisitions");
+    expect(JSON.parse(String(call?.[1]?.body)).currency).toBe("XBB");
   });
 
   it("records an optional dated valuation after the purchase and reloads the holding", async () => {
@@ -362,17 +488,21 @@ describe("investment entry", () => {
     expect(bodies[0].idempotencyKey).toBe(bodies[1].idempotencyKey);
   });
 
-  it("reports a recorded purchase honestly when only the dated price is refused", async () => {
+  it("locks a recorded purchase while a refused dated price is edited and retried", async () => {
+    let priceAttempts = 0;
+    let reads = 0;
+    const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
     const request = requestFrom(async (path) => {
-      if (path === "/portfolio/positions") return positions();
+      if (path === "/portfolio/positions") return positions(reads++ === 0 ? [] : [position]);
       if (path === "/investment-catalogue/securities/resolve") {
         return { status: "matched", reason: "exact_public_identity", candidates: [candidate] };
       }
       if (path === "/investment-events/acquisitions") return event;
-      if (path.includes("manual-prices")) throw new ApiError(422, "synthetic refusal");
+      if (path.includes("manual-prices") && priceAttempts++ === 0) throw new ApiError(422, "synthetic refusal");
+      if (path.includes("manual-prices")) return { status: "recorded" };
       throw new Error(`Unexpected synthetic route ${path}`);
     });
-    renderScreen(request);
+    renderScreen(request, [investmentAccount], createKey);
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
@@ -384,7 +514,63 @@ describe("investment entry", () => {
 
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toContain("The purchase was recorded, but the dated price was not");
-    expect(screen.getByRole("button", { name: "Retry dated price" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit dated price" }));
+    expect(screen.getByLabelText<HTMLInputElement>("Gross amount").disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.100000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review dated price" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm dated price" }));
+    await screen.findByRole("article", { name: candidate.name });
+
+    expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
+    expect(createKey).toHaveBeenCalledTimes(1);
+    const priceBodies = vi.mocked(request).mock.calls.filter(([path]) => path.includes("manual-prices"));
+    expect(JSON.parse(String(priceBodies[1][1]?.body)).price).toBe("9.100000");
+  });
+
+  it("reloads holdings after a committed purchase without resubmitting the acquisition", async () => {
+    let reads = 0;
+    const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
+    const request = requestFrom(async (path) => {
+      if (path === "/portfolio/positions") {
+        reads += 1;
+        if (reads === 1) return positions();
+        if (reads === 2) throw new TypeError("offline");
+        return positions([position]);
+      }
+      if (path === "/investment-catalogue/securities/resolve") {
+        return { status: "matched", reason: "exact_public_identity", candidates: [candidate] };
+      }
+      if (path === "/investment-events/acquisitions") return event;
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    renderScreen(request, [investmentAccount], createKey);
+    await screen.findByText("No investment holdings are recorded yet.");
+    await resolveExactInstrument();
+    fillPurchase();
+    fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm purchase" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("facts were recorded");
+    fireEvent.click(screen.getByRole("button", { name: "Reload holdings" }));
+    await screen.findByRole("article", { name: candidate.name });
+
+    expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
+    expect(createKey).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a generic initial holdings failure with exactly one new read", async () => {
+    let reads = 0;
+    const request = requestFrom(async (path) => {
+      if (path !== "/portfolio/positions") throw new Error(`Unexpected synthetic route ${path}`);
+      reads += 1;
+      if (reads === 1) throw new TypeError("offline");
+      return positions([position]);
+    });
+    renderScreen(request);
+
+    expect(await screen.findByText("Recorded holdings could not be loaded.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByRole("article", { name: candidate.name });
+    expect(reads).toBe(2);
   });
 
   it.each([[401, "/login"], [403, "/unauthorized"]] as const)(

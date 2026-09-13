@@ -3765,6 +3765,10 @@ export type SecurityCandidate = {
      * Exchange
      */
     exchange: string | null;
+    /**
+     * Manualpriceeligible
+     */
+    manualPriceEligible: boolean;
 };
 
 /**

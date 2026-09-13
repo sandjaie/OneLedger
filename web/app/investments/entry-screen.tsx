@@ -123,6 +123,8 @@ export function InvestmentEntryScreen({
   const [mutationProgress, setMutationProgress] = useState<MutationProgress>("none");
   const [feedback, setFeedback] = useState("");
   const confirmButton = useRef<HTMLButtonElement>(null);
+  const lookupGeneration = useRef(0);
+  const lookupRequest = useRef<AbortController>(null);
 
   useEffect(() => {
     let current = true;
@@ -148,6 +150,7 @@ export function InvestmentEntryScreen({
       && draft.charges && draft.withheldTax && draft.netAmount
       && (!draft.addValuation || (draft.valuationDate && draft.valuationPrice)),
   );
+  const purchaseLocked = mutationProgress !== "none";
 
   function changeDraft<K extends keyof Draft>(field: K, value: Draft[K]) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -156,14 +159,22 @@ export function InvestmentEntryScreen({
     setFeedback("");
   }
 
-  function changeLookup(method: LookupMethod) {
-    setLookupMethod(method);
-    setIdentity("");
-    setExchange("");
+  function invalidateResolution() {
+    lookupGeneration.current += 1;
+    lookupRequest.current?.abort();
+    lookupRequest.current = null;
+    setResolving(false);
     setResolution(undefined);
     setCandidateId("");
     setSecurity(undefined);
     setConfirmation(false);
+  }
+
+  function changeLookup(method: LookupMethod) {
+    setLookupMethod(method);
+    setIdentity("");
+    setExchange("");
+    invalidateResolution();
   }
 
   async function resolveInstrument() {
@@ -172,6 +183,11 @@ export function InvestmentEntryScreen({
       : lookupMethod === "ticker"
         ? { ticker: identity, exchange }
         : { name: identity };
+    lookupRequest.current?.abort();
+    const controller = new AbortController();
+    const generation = lookupGeneration.current + 1;
+    lookupGeneration.current = generation;
+    lookupRequest.current = controller;
     setResolving(true);
     setProblem(false);
     setFeedback("");
@@ -184,15 +200,20 @@ export function InvestmentEntryScreen({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
+      if (generation !== lookupGeneration.current) return;
       setResolution(next);
       if (next.status === "matched" && next.candidates.length === 1) {
         setSecurity(next.candidates[0]);
+        if (!next.candidates[0].manualPriceEligible) {
+          setDraft((current) => ({ ...current, addValuation: false }));
+        }
       }
     } catch {
-      setProblem(true);
+      if (generation === lookupGeneration.current) setProblem(true);
     } finally {
-      setResolving(false);
+      if (generation === lookupGeneration.current) setResolving(false);
     }
   }
 
@@ -200,16 +221,16 @@ export function InvestmentEntryScreen({
     const selected = resolution?.candidates.find(({ id }) => id === candidateId);
     if (!selected) return;
     setSecurity(selected);
+    if (!selected.manualPriceEligible) changeDraft("addValuation", false);
     setConfirmation(false);
   }
 
   function reviewPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!completeDraft) return;
-    setIdempotencyKey(createIdempotencyKey());
+    if (mutationProgress === "none") setIdempotencyKey(createIdempotencyKey());
     setProblem(false);
     setFeedback("");
-    setMutationProgress("none");
     setConfirmation(true);
   }
 
@@ -226,22 +247,24 @@ export function InvestmentEntryScreen({
       charges: draft.charges,
       withheldTax: draft.withheldTax,
       netAmount: draft.netAmount,
-      currency: account.currency,
+      currency: security.currency,
       idempotencyKey,
     };
     setBusy(true);
     setProblem(false);
     setFeedback("");
+    let progress = mutationProgress;
     try {
-      if (mutationProgress === "none") {
+      if (progress === "none") {
         await request<InvestmentEventRow>("/investment-events/acquisitions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(acquisition),
         });
-        setMutationProgress(draft.addValuation ? "purchase" : "complete");
+        progress = draft.addValuation ? "purchase" : "complete";
+        setMutationProgress(progress);
       }
-      if (draft.addValuation && mutationProgress !== "complete") {
+      if (draft.addValuation && progress === "purchase") {
         const valuation: ManualPriceCreate = {
           priceDate: draft.valuationDate,
           price: draft.valuationPrice,
@@ -254,7 +277,8 @@ export function InvestmentEntryScreen({
             body: JSON.stringify(valuation),
           },
         );
-        setMutationProgress("complete");
+        progress = "complete";
+        setMutationProgress(progress);
       }
       const next = await request<PortfolioPositions>("/portfolio/positions");
       setPortfolio(next);
@@ -321,9 +345,10 @@ export function InvestmentEntryScreen({
                 <div className="investment-holding-value">
                   <small>Current value</small>
                   <strong>{item.currentValueNative === null ? "Current value unavailable" : `${item.currency} ${item.currentValueNative}`}</strong>
-                  <p>{item.price === null || item.priceDate === null
-                    ? coverageText(item)
-                    : `Price ${item.currency} ${item.price} · ${dateLabel(item.priceDate)}`}</p>
+                  {item.price !== null && item.priceDate !== null && (
+                    <p>Price {item.currency} {item.price} · {dateLabel(item.priceDate)}</p>
+                  )}
+                  <p>{coverageText(item)}</p>
                 </div>
               </article>
             ))}
@@ -350,7 +375,7 @@ export function InvestmentEntryScreen({
 
           <label className="select-field">
             <span>Investment account</span>
-            <select onChange={(event) => { setAccountId(event.target.value); setConfirmation(false); }} value={accountId}>
+            <select disabled={purchaseLocked} onChange={(event) => { setAccountId(event.target.value); setConfirmation(false); }} value={accountId}>
               {investmentAccounts.map((item) => (
                 <option key={item.id} value={item.id}>{accountLabel(item)}</option>
               ))}
@@ -361,7 +386,7 @@ export function InvestmentEntryScreen({
             <legend>Catalogue instrument</legend>
             <label className="select-field">
               <span>Lookup method</span>
-              <select onChange={(event) => changeLookup(event.target.value as LookupMethod)} value={lookupMethod}>
+              <select disabled={purchaseLocked} onChange={(event) => changeLookup(event.target.value as LookupMethod)} value={lookupMethod}>
                 <option value="isin">Public identifier</option>
                 <option value="ticker">Ticker and exchange</option>
                 <option value="name">Instrument name</option>
@@ -371,7 +396,8 @@ export function InvestmentEntryScreen({
               <span>{lookupMethod === "name" ? "Instrument name" : lookupMethod === "ticker" ? "Ticker" : "Public identifier"}</span>
               <input
                 autoComplete="off"
-                onChange={(event) => { setIdentity(event.target.value); setSecurity(undefined); setConfirmation(false); }}
+                disabled={purchaseLocked}
+                onChange={(event) => { setIdentity(event.target.value); invalidateResolution(); }}
                 required
                 value={identity}
               />
@@ -379,12 +405,12 @@ export function InvestmentEntryScreen({
             {lookupMethod === "ticker" && (
               <label className="text-field">
                 <span>Exchange</span>
-                <input autoComplete="off" onChange={(event) => setExchange(event.target.value)} required value={exchange} />
+                <input autoComplete="off" disabled={purchaseLocked} onChange={(event) => { setExchange(event.target.value); invalidateResolution(); }} required value={exchange} />
               </label>
             )}
             <button
               className="text-action"
-              disabled={resolving || !identity || (lookupMethod === "ticker" && !exchange)}
+              disabled={purchaseLocked || resolving || !identity || (lookupMethod === "ticker" && !exchange)}
               onClick={() => void resolveInstrument()}
               type="button"
             >{resolving ? "Checking catalogue…" : "Find instrument"}</button>
@@ -422,24 +448,28 @@ export function InvestmentEntryScreen({
           <div className="investment-purchase-fields">
             <label className="select-field">
               <span>Entry kind</span>
-              <select onChange={(event) => changeDraft("eventKind", event.target.value as Draft["eventKind"])} value={draft.eventKind}>
+              <select disabled={purchaseLocked} onChange={(event) => changeDraft("eventKind", event.target.value as Draft["eventKind"])} value={draft.eventKind}>
                 <option value="purchase">Purchase</option>
                 <option value="recurring_purchase">Recurring purchase</option>
               </select>
             </label>
-            <label className="date-field"><span>Purchase date</span><input onChange={(event) => changeDraft("eventDate", event.target.value)} required type="date" value={draft.eventDate} /></label>
-            <label className="text-field"><span>Units acquired</span><input inputMode="decimal" onChange={(event) => changeDraft("units", event.target.value)} required value={draft.units} /></label>
-            <label className="text-field"><span>Transaction price</span><input inputMode="decimal" onChange={(event) => changeDraft("price", event.target.value)} required value={draft.price} /></label>
-            <label className="text-field"><span>Gross amount</span><input inputMode="decimal" onChange={(event) => changeDraft("grossAmount", event.target.value)} required value={draft.grossAmount} /></label>
-            <label className="text-field"><span>Charges</span><input inputMode="decimal" onChange={(event) => changeDraft("charges", event.target.value)} required value={draft.charges} /></label>
-            <label className="text-field"><span>Withheld tax</span><input inputMode="decimal" onChange={(event) => changeDraft("withheldTax", event.target.value)} required value={draft.withheldTax} /></label>
-            <label className="text-field"><span>Net cash amount</span><input inputMode="decimal" onChange={(event) => changeDraft("netAmount", event.target.value)} required value={draft.netAmount} /></label>
+            <label className="date-field"><span>Purchase date</span><input disabled={purchaseLocked} onChange={(event) => changeDraft("eventDate", event.target.value)} required type="date" value={draft.eventDate} /></label>
+            <label className="text-field"><span>Units acquired</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("units", event.target.value)} required value={draft.units} /></label>
+            <label className="text-field"><span>Transaction price</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("price", event.target.value)} required value={draft.price} /></label>
+            <label className="text-field"><span>Gross amount</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("grossAmount", event.target.value)} required value={draft.grossAmount} /></label>
+            <label className="text-field"><span>Charges</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("charges", event.target.value)} required value={draft.charges} /></label>
+            <label className="text-field"><span>Withheld tax</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("withheldTax", event.target.value)} required value={draft.withheldTax} /></label>
+            <label className="text-field"><span>Net cash amount</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("netAmount", event.target.value)} required value={draft.netAmount} /></label>
           </div>
 
-          <label className="check-field investment-valuation-toggle">
-            <input checked={draft.addValuation} onChange={(event) => changeDraft("addValuation", event.target.checked)} type="checkbox" />
-            <span>Record a dated valuation price after this purchase</span>
-          </label>
+          {security?.manualPriceEligible ? (
+            <label className="check-field investment-valuation-toggle">
+              <input checked={draft.addValuation} disabled={purchaseLocked} onChange={(event) => changeDraft("addValuation", event.target.checked)} type="checkbox" />
+              <span>Record a dated valuation price after this purchase</span>
+            </label>
+          ) : security ? (
+            <p className="investment-state">Manual dated prices are unavailable for this shared catalogue instrument.</p>
+          ) : null}
           {draft.addValuation && (
             <div className="investment-valuation-fields">
               <label className="date-field"><span>Valuation date</span><input onChange={(event) => changeDraft("valuationDate", event.target.value)} required type="date" value={draft.valuationDate} /></label>
@@ -448,7 +478,9 @@ export function InvestmentEntryScreen({
             </div>
           )}
 
-          <button className="primary-action" disabled={!completeDraft || busy} type="submit">Review purchase</button>
+          <button className="primary-action" disabled={!completeDraft || busy || mutationProgress === "complete"} type="submit">
+            {mutationProgress === "purchase" ? "Review dated price" : "Review purchase"}
+          </button>
 
           {confirmation && account && security && (
             <fieldset className="investment-confirmation" aria-label="Confirm purchase">
@@ -459,10 +491,10 @@ export function InvestmentEntryScreen({
                 <div><dt>Instrument</dt><dd>{security.name}</dd></div>
                 <div><dt>Date</dt><dd>{dateLabel(draft.eventDate)}</dd></div>
                 <div><dt>Units</dt><dd>{draft.units} units</dd></div>
-                <div><dt>Gross</dt><dd>{account.currency} {draft.grossAmount}</dd></div>
-                <div><dt>Net cash</dt><dd>Net cash {account.currency} {draft.netAmount}</dd></div>
+                <div><dt>Gross</dt><dd>{security.currency} {draft.grossAmount}</dd></div>
+                <div><dt>Net cash</dt><dd>Net cash {security.currency} {draft.netAmount}</dd></div>
               </dl>
-              {draft.addValuation && <p>Then record valuation price {account.currency} {draft.valuationPrice} dated {dateLabel(draft.valuationDate)}.</p>}
+              {draft.addValuation && <p>Then record valuation price {security.currency} {draft.valuationPrice} dated {dateLabel(draft.valuationDate)}.</p>}
               {problem && (
                 <p className="inline-alert" role="alert">
                   {mutationProgress === "purchase"
@@ -482,9 +514,15 @@ export function InvestmentEntryScreen({
                         ? "Reload holdings"
                         : problem
                           ? "Retry purchase"
-                          : "Confirm purchase"}
+                          : mutationProgress === "purchase"
+                            ? "Confirm dated price"
+                            : "Confirm purchase"}
                 </button>
-                <button className="text-action" disabled={busy} onClick={() => { setConfirmation(false); setProblem(false); }} type="button">Go back</button>
+                {mutationProgress !== "complete" && (
+                  <button className="text-action" disabled={busy} onClick={() => { setConfirmation(false); setProblem(false); }} type="button">
+                    {mutationProgress === "purchase" ? "Edit dated price" : "Go back"}
+                  </button>
+                )}
               </div>
             </fieldset>
           )}
