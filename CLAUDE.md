@@ -121,8 +121,8 @@ instead of `v_transaction_reportable`, and on a flow multiplied by a rate outsid
 git. `scripts/check-diff-size.sh` refuses an oversized push. The pre-commit and pre-push hooks run
 fast static checks: lint, formatting, types, secrets, configuration/documentation checks,
 generated API contracts and the diff budget. Pytest, Vitest, migrations and every
-`db/tests/*.sql` run during implementation, `/verify` and CI instead of Git hooks. None of the
-remaining hook checks may be silenced.
+`db/tests/*.sql` run through `scripts/verify.sh` and CI instead of Git hooks. None of the remaining
+hook checks may be silenced.
 
 ## Working
 
@@ -136,6 +136,15 @@ style and the diff budget belong to [docs/git-workflow.md](docs/git-workflow.md)
 each runs, and that they report findings without modifying code, belong to
 [docs/development-cycle.md](docs/development-cycle.md). Read both; run the gates unprompted at
 their triggers; nothing reaches `origin` unreviewed.
+
+**One task branch and PR normally use one implementation session.** During implementation, run
+focused RED/GREEN checks with `scripts/verify.sh focused`; keep the branch's one `db-test` server
+for every database-dependent check. Then run one comprehensive read-only review, apply its findings
+as one consolidated repair, run `scripts/verify.sh full` once on that reviewed head, and confirm
+only the repair range before the first push. Read-only specialist reviews may run in parallel;
+only one agent writes. A new architectural or security finding at confirmation stops the patch
+loop and triggers one consolidated design/threat review. Every financial write operation must
+cover the database-operation matrix in [development-cycle.md](docs/development-cycle.md).
 
 **Sequential agents use the active repository checkout.** Resolve its root from the current
 repository with `git rev-parse --show-toplevel` and record that path in the task plan/spec before
@@ -164,6 +173,6 @@ pre-commit install --install-hooks -t pre-commit -t pre-push
 
 Commit runs staged-file lint, formatting, secrets, configuration and documentation checks. Push
 runs whole-project type checks, Markdown lint, generated API contract checks and the diff budget.
-Full application and database tests remain mandatory in implementation, `/verify` and CI, but do
-not run again inside Git hooks. A failing hook is not a reason to reach for `--no-verify`; fix it
-and try again.
+Focused application and database tests run during implementation; the full suites run once at the
+final `/verify` head and again in CI, but never inside Git hooks. A failing hook is not a reason to
+reach for `--no-verify`; fix it and try again.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Every db/tests/*.sql asserts an invariant, and they run on push against a real database —
-# an invariant proven only in CI is proven too late.
+# Every db/tests/*.sql asserts an invariant, and the final verification runner executes them
+# against a real test server before the first push — an invariant proven only in CI is too late.
 #
 # The database is a throwaway one, created on the TEST server for this run, migrated from empty
 # with this branch's own db/migrations, seeded, tested and dropped. Never the working ledger,
@@ -13,10 +13,9 @@
 #     adding a migration would be tested against the schema before it; and migrating it from a
 #     branch whose migration is still changing is how Flyway's checksum refusal is earned.
 #
-# From empty on every push therefore proves two things at once: the migrations apply in order on
-# a clean database, and every invariant holds on the result. psql applies the files in version
-# order, which is Flyway's effect for forward-only SQL; Flyway's own checksum validation is the
-# verify skill's section 4.
+# From empty on every final database gate therefore proves two things at once: the migrations apply
+# in order on a clean database, and every invariant holds on the result. psql applies the files in
+# version order, which is Flyway's effect for forward-only SQL.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -32,7 +31,7 @@ server="${ONELEDGER_TEST_DSN%/*}"
 
 if ! psql "$server/postgres" -c 'SELECT 1' >/dev/null 2>&1; then
   echo "FAIL: ${#tests[@]} invariant test(s) exist but the test database server is unreachable."
-  echo "      Start it and push again:  eval \"\$(scripts/test-db.sh up)\""
+  echo "      Start it and verify again:  eval \"\$(scripts/test-db.sh up)\""
   echo "      (It is never the working ledger: this hook does not fall back to it.)"
   exit 1
 fi

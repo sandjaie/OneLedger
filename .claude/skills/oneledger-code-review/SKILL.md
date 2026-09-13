@@ -3,10 +3,10 @@ name: oneledger-code-review
 description: >-
   Senior-level review of OneLedger work before it is pushed or merged into develop — correctness,
   edge cases, money handling, private-data boundaries, identifier leakage, authorization,
-  reporting views, migrations, invariants, test sufficiency and diff size. It produces findings
-  for the implementing agent to patch and does not modify code. Run it unprompted when
-  implementation is finished, before any push, and again after a patch answering a finding; also
-  use it whenever asked to review a branch, task, or work about to ship.
+  reporting views, migrations, invariants, test sufficiency and diff size. It produces one
+  consolidated finding set for the implementing agent and does not modify code. Run it unprompted
+  after focused implementation tests are green, before final verification or any push, then run a
+  narrow confirmation over its repair range after final verification.
 ---
 
 # OneLedger Code Review
@@ -32,15 +32,15 @@ and that is the kind of thing only reading finds.
 `develop` is the integration branch. Work arrives on `feature/*`, `fix/*`, `chore/*` or `docs/*`
 branches, one task-sized slice each. The flow is:
 
-implement → `/verify` → **this review** → fix every finding → re-review → **first push** →
-PR → `develop`
+focused TDD → **comprehensive review** → consolidated fix → full `/verify` → **confirmation of
+the repair range** → first push → PR → `develop`
 
-This is gate 5 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
-**implementation being finished on a green tree** — not "before some push", but before the
-branch reaches `origin` at all. Pushing unreviewed work and reviewing it afterwards is the
-failure this gate exists to prevent: a finding raised after the push has already cost what the
-gate was meant to save. A PR is opened only from a head this gate has passed. There is no path to
-`origin` that skips it — not a checkpoint commit, not a one-line follow-up.
+This is gate 4 of [docs/development-cycle.md](../../../docs/development-cycle.md). Its trigger is
+**implementation being finished with its affected tests green** — not "before some push", but
+before the branch reaches `origin` at all. The full suite deliberately follows this review and its
+consolidated repair, so it normally runs once on the head that is actually intended to ship. A PR
+is opened only from a head whose final verification and confirmation passed. There is no path to
+`origin` that skips them — not a checkpoint commit, not a one-line follow-up.
 
 **Never review `develop` as though it were a feature branch.**
 
@@ -53,19 +53,19 @@ nine minutes re-running what the implementer already ran has bought nothing and 
 Two shapes, and the dispatching prompt says which:
 
 - **First pass** — a module or route this gate has not seen. Read the diff and its neighbours,
-  run the applicable gates once, and spend everything left on hostile inputs and the passes
-  below. This is where findings come from.
+  inspect focused TDD evidence, and spend the review on hostile inputs and the passes below. This
+  is where findings come from. Return one complete, deduplicated report rather than one theme at a
+  time.
 - **Confirmation pass** — the same branch after fixes. Confirm each earlier finding is closed,
-  review the fix commits as their own surface, and stop. Do not re-derive the branch.
+  review the fix commits as their own surface, and stop. Do not re-derive the branch or re-run the
+  full suite.
 
 In practice, all of this measured on M2 task 5, where rounds ran to fifteen minutes and the two
 tightest rounds found as much as the longest:
 
-- **Run only the gates the diff can affect.** An API-only branch needs no `npm run build`, no
-  vitest and no TypeScript compiler; a branch with no migration needs no SQL suites. Skipping a
-  gate the diff cannot reach is correct — name it skipped and why. A skipped gate is honest; an
-  unrun gate reported as passing is not.
-- **Run each gate once, at the end.** Not between passes.
+- **Do not duplicate the final gate.** The implementer supplies focused green evidence before the
+  first pass. `scripts/verify.sh full` runs once after the repair; inspect its exact-head output at
+  confirmation instead of running it again.
 - **Do not re-derive the mutation battery.** The implementer runs it and reports it. Verify a
   sample of three to five — the ones guarding money, an invariant or the authorization boundary
   — and spend the rest of the budget hunting for guards the battery never covered. That hunt is
@@ -114,8 +114,9 @@ stop there. The exception is the one the budget itself allows: where the owner h
 — review it as it stands and record that it ships oversized on that reason. Without that
 exception, an approved migration has no path through the cycle at all.
 
-A red tree is not reviewed either: a failing test is a finding that already found itself. If
-`/verify` has not been run, or came back red, report that and stop.
+A focused-red tree is not reviewed either: a failing affected test is a finding that already found
+itself. If the plan's focused checks have not run, or came back red, report that and stop. Full
+`/verify` is not a prerequisite for the first pass; it is the post-repair gate.
 
 Do not review unrelated historical code unless a changed component makes an existing defect newly
 relevant.
@@ -133,9 +134,11 @@ Before reporting anything:
    repository's rules live there, and a reviewer who has not read them invents different ones.
 6. Understand the existing pattern before recommending an alternative to it.
 
-On a large diff the passes below may be split across parallel fresh-context reviewers, with the
-reports merged and deduplicated. Fresh context is the value: a reviewer that watched the code
-being written inherits the reasoning that produced the bug.
+On a diff spanning independent risk domains, split the passes across parallel **read-only**
+fresh-context reviewers — normally database/security and API/financial behavior — then merge and
+deduplicate their results into one report before the writer starts fixing. No specialist edits the
+tree or drip-feeds a second report after repair begins. Fresh context is the value: a reviewer that
+watched the code being written inherits the reasoning that produced the bug.
 
 ---
 
@@ -213,6 +216,23 @@ Ingestion, staging and commit should be idempotent wherever it is reasonable.
 - special characters, spaces in paths, very long names, unicode look-alikes in an identifier
 - external failure: the database unreachable, the rate source down, a timeout, an expired session
 
+### Financial database-operation matrix
+
+For every new or changed financial write operation, confirm the implementation and tests cover
+all of these before reporting the review complete:
+
+- owner, member and foreign-household behavior;
+- unauthorized direct DML refusal, RLS and immutability;
+- stale expected-state and repeated idempotency requests;
+- precision refusal before normalization, hashing or deduplication;
+- active correction leaves and preserved historical records;
+- one documented lock order plus concurrent duplicate and conflict paths;
+- atomic rollback after every late failure, with no partial financial state.
+
+Missing matrix coverage is one consolidated finding, broken down by uncovered row. Do not reveal
+one row per confirmation pass. Unsupported adjustments fail closed; no price, transaction, cost
+basis, residual or corporate action may be fabricated.
+
 ## 5. Data, migrations and contracts
 
 - A table change edits the migration, `docs/superpowers/schema.md` and
@@ -275,16 +295,14 @@ Do not raise style a linter or formatter already owns.
 
 ## Validation
 
-Run the gates **this diff can affect**, once each, and report real numbers. Do not introduce a new
-dependency to review.
+On the first pass, inspect the implementer's focused RED/GREEN evidence and run
+`scripts/check-diff-size.sh`. Run a narrowly targeted reproducer only when it is needed to prove or
+disprove a finding. Do not run the application or database suites: the final verification runner
+does that after the findings are repaired.
 
-| The diff touches | Run |
-| --- | --- |
-| `api/` | `ruff check .`, `mypy .`, `pytest -q` |
-| a migration or `db/tests/` | `scripts/hooks/db-tests.sh` — it migrates a throwaway database from empty on the test server every time, so migrations from empty come with it |
-| `web/` | `api:types:check`, `typecheck`, `vitest run`; `npm run build` only when the bundle could change |
-| `docs/` or any `.md` | `python3 scripts/check-docs.py` |
-| anything | `scripts/check-diff-size.sh` |
+On confirmation, inspect the final `scripts/verify.sh full` (or approved database-only) output and
+confirm its recorded head equals the current head. Then inspect only the repair range. Do not run
+the runner again on the unchanged head.
 
 **Never claim a command passed unless you actually ran it and it succeeded.** If something cannot
 be run here — no database, no browser, no network — say so explicitly and mark it `NOT RUN` with
@@ -329,10 +347,9 @@ behaviour change with no regression protection.
 Do not inflate severity. Severity ranks the work and orders the report; it does not decide what
 gets fixed.
 
-**Every finding is fixed before the push, LOW included.** This gate exists so that nothing reaches
-Codex that could have been found here. Fixing a finding now costs no round trip; leaving it costs
-a Codex round, a push and a re-review — so a LOW left open is the most expensive kind of finding
-there is.
+Every in-scope **blocking** finding is fixed before the push. A non-blocking hardening or style
+suggestion is recorded once in the PR's Notes and does not buy another repair cycle. Severity
+describes impact; the finding must also say whether it blocks this task's stated contract.
 
 The one exception is **scope, not severity**: a finding in code this task does not touch — an
 adjacent refactor, a pre-existing defect the change merely made visible — is recorded in the PR's
@@ -356,14 +373,15 @@ Files changed: <count>            Commits: <count>
 Diff size: <production> production / <tests> test — <within budget | over budget | over hard stop>
 Uncommitted work included: <yes, N files | none>
 
-Validation performed:
-* <command> — PASS / FAIL / NOT RUN (<reason if not run>)
+Evidence inspected / validation performed:
+* <command or prior exact-head result> — PASS / FAIL / NOT RUN (<reason if not run>)
 
 ## Summary
 
 Critical: X   High: X   Medium: X   Low: X
 
-Verdict: READY TO PUSH | CHANGES REQUIRED
+Pass: COMPREHENSIVE | CONFIRMATION
+Verdict: READY FOR FINAL VERIFY | READY TO PUSH | CHANGES REQUIRED | DESIGN/THREAT REVIEW REQUIRED
 
 ## Findings
 
@@ -372,6 +390,7 @@ Verdict: READY TO PUSH | CHANGES REQUIRED
 **File:** `path/to/file.py:120`
 **Category:** Money | Privacy | Authorization | Correctness | Edge case | Migration | Contract |
 Testing | Maintainability
+**Blocking:** yes | no
 **State:** committed | working tree
 
 **Problem** — what is wrong.
@@ -391,13 +410,16 @@ Scenarios not covered by a finding above, or `No significant test coverage gaps 
 
 ## Final verdict
 
-CHANGES REQUIRED while any in-scope finding is open, at any severity. READY TO PUSH only when
-none is, with any out-of-scope findings listed for the PR's Notes.
+For a comprehensive pass, use CHANGES REQUIRED while an in-scope blocking finding is open and
+READY FOR FINAL VERIFY when none is. For confirmation, use READY TO PUSH only when the repair is
+clean and its exact-head final gate is green. Use DESIGN/THREAT REVIEW REQUIRED for a newly exposed
+risk boundary. Record non-blocking and out-of-scope findings once in the PR's Notes.
 ```
 
 Order findings CRITICAL → HIGH → MEDIUM → LOW.
 
-A review that finds nothing on a 700-line diff is a review that did not happen.
+A no-finding review still names the risk passes and focused evidence it inspected; absence of filler
+is not absence of review.
 
 ---
 
@@ -411,7 +433,8 @@ Do not:
 - expand the review into unrelated cleanup
 - report a hypothetical finding with no evidence
 
-The implementing agent fixes every in-scope finding, re-runs `/verify`, and re-runs this gate on
-the new diff — a fix has its own surface. If that second pass finds new blocking problems inside the
-first
-pass's fixes, it stops and raises it with the owner: that is a design problem, not a patch problem.
+The implementing agent fixes the complete in-scope finding set, runs affected focused checks, then
+runs the final `/verify` once. This gate's confirmation inspects only that repair range. If it finds
+a new architectural, authorization, privacy, idempotency or concurrency boundary, report
+`DESIGN/THREAT REVIEW REQUIRED` and stop: consolidate that boundary before any more edits instead
+of starting another one-finding/one-fix round.

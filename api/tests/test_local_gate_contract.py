@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".pre-commit-config.yaml"
 CI = ROOT / ".github/workflows/ci.yml"
 VERIFY = ROOT / ".claude/skills/verify/SKILL.md"
+VERIFY_RUNNER = ROOT / "scripts/verify.sh"
 PRODUCTION = ROOT / "scripts/production-stack.sh"
 COMPOSE = ROOT / "docker-compose.yml"
 
@@ -74,6 +75,36 @@ def test_verify_reuses_the_isolated_test_server_for_every_database_check() -> No
     assert "scripts/hooks/db-tests.sh" in verify
     assert "COMPOSE_PROJECT_NAME=oneledger-verify" not in verify
     assert re.search(r"(?m)^\s*(?:export\s+)?DB_PORT=", verify) is None
+
+
+def test_focused_verify_runs_the_requested_check_and_records_the_exact_head() -> None:
+    expected_head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    result = subprocess.run(
+        [
+            "bash",
+            str(VERIFY_RUNNER),
+            "focused",
+            "--",
+            "printf",
+            "focused-check-ok\\n",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"VERIFY mode=focused head={expected_head}" in result.stdout
+    assert "focused-check-ok" in result.stdout
+    assert "PASS focused" in result.stdout
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:
