@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Deliver Task 12 — idempotent investment staging | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-12--idempotent-investment-staging) |
-| Current implementation task | Task 11.3 completes the approved extraction boundary; Task 12 stages only resolved groups | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-12--idempotent-investment-staging) |
+| Next product action | Confirm the dispatch-time Task 12 split, then deliver Task 12.1 — preparation and safe preview | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-121--preparation-and-safe-preview-contract) |
+| Current implementation task | Task 11 is complete; Task 12 reforecast at 2,350–3,310 counted lines and is split into three sequential branches before staging implementation begins | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-121--preparation-and-safe-preview-contract) |
 
 ## Canonical phase status
 
@@ -81,6 +81,7 @@ requires a separate owner request.
 | Phase 1.6 Task 11.1 | **Complete** — pure content selection, frozen versioned results, exact core event drafts, safe abstention and private evidence representations are on `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-111--adapter-contract-and-core-detailed-extraction) |
 | Phase 1.6 Task 11.2 | **Complete** — exact income, fee and tax drafts plus end-position checkpoints, page-break coverage, precision refusal and hostile-evidence privacy are on `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-112--income-checkpoints-and-hostile-evidence) |
 | Phase 1.6 Task 11.3 | **Complete** — exact evidence-grouped unit actions, group-local abstention and forward-only staged split ratios are on `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-113--grouped-unit-actions-and-staged-split-ratios) |
+| Phase 1.6 Task 12 | **Split before implementation** — dispatch reforecast exceeded the review budget; Tasks 12.1–12.3 now separate pure preparation, atomic persistence/source-scoped dedupe and the owner API/cancellation surface | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-121--preparation-and-safe-preview-contract) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

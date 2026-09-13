@@ -71,12 +71,14 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 11.1 | core detailed extraction | `feature/p1-6k1-investment-extraction-core` | 560 | 700 | 3, 5 |
 | 11.2 | income, checkpoints and hostile evidence | `feature/p1-6k2-investment-extraction-coverage` | 240 | 500 | 11.1 |
 | 11.3 | grouped unit actions and draft ratios | `feature/p1-6k3-investment-extraction-actions` | 350 | 700 | 11.2 |
-| 12 | idempotent staging | `feature/p1-6l-investment-staging` | 650 | 900 | 4, 11.3 |
-| 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12 |
+| 12.1 | preparation and safe preview | `feature/p1-6l1-investment-staging-preview` | 270 | 430 | 11.3 |
+| 12.2 | idempotent atomic persistence | `feature/p1-6l2-investment-staging-persistence` | 460 | 690 | 4, 12.1 |
+| 12.3 | owner API and cancellation | `feature/p1-6l3-investment-staging-api` | 340 | 560 | 12.2 |
+| 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12.3 |
 | 14 | cash lifecycle and lot allocation | `feature/p1-6n-investment-cash-lifecycle` | 680 | 900 | 4, 6–7 |
 | 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14 |
-| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12–15 |
-| 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12–13 |
+| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13–15 |
+| 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
 | 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
 | 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
 | 20 | allocation and XIRR engine | `feature/p1-6t-investment-returns` | 500 | 850 | 15, 19 |
@@ -86,8 +88,9 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 24 | history web and acceptance | `feature/p1-6x-investment-history-web` | 650 | 620 | 22–23 |
 
 Task 11 was split at dispatch after a 2,150–2,800-line reforecast exposed the draft-ratio
-contract below. Tasks 12, 14 and 19 still need dispatch-time reforecasting and must split before
-exceeding 1,600 lines.
+contract below. Task 12 was split after its 2,350–3,310-line dispatch reforecast exposed the
+evidence-scope correction below. Tasks 14 and 19 still need dispatch-time reforecasting and must
+split before exceeding 1,600 lines.
 
 ## Task 1 — instruments and dated values
 
@@ -283,18 +286,83 @@ immutability and safe upgrade of existing rows without editing V31 or V32.
 Acceptance: split/switch/transfer evidence is exact, group-atomic and stageable; ambiguous partial
 transfers abstain without guessing.
 
-## Task 12 — idempotent investment staging
+## Task 12.1 — preparation and safe preview contract
 
-**Branch/base/target:** `feature/p1-6l-investment-staging` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/staging.py`, `api/oneledger/routes/investment_imports.py`,
-`api/oneledger/main.py`, `api/tests/test_investment_staging.py`,
-`api/tests/test_investment_staging_live.py`; shared API/type/ingestion/privacy/status paths.
-**Contract/tests:** Reuse immutable storage; dry run default; safe bounded group preview; stage only
-after resolution. Auth/RLS, no-write, cancellation/retry, bytes/overlap dedupe, ambiguity, unknown
-action, filename/reference leakage, concurrent/storage rollback RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_staging.py tests/test_investment_staging_live.py)`;
-shared types. Acceptance: staging is idempotent and does not change holdings/net worth.
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6l1-investment-staging-preview` / `develop` / `develop`.
+**Depends:** Task 11.3. **Forecast:** 200–270 production, 320–430 tests and fixtures.
+**Files:** create `api/oneledger/investments/staging.py` and
+`api/tests/test_investment_staging.py`; reuse the existing investment PDF fixture without changing
+the extraction contract; update shared privacy/status paths only as needed.
+**Contract/tests:** Immutable `TargetResolution`, `PreparedTarget`, `PreparedGroup` and
+`PreparedImport` contracts consume the frozen Task 11 extraction result. Resolution requests use
+only extraction group numbers and explicit account/security UUIDs; no private source value appears
+in a request, response or representation. Legs carrying one opaque source correlation become one
+prepared atomic group while each leg retains its own target. A blocker on either correlated leg
+blocks the pair; unrelated groups remain usable. Exact dates and `Decimal` values remain unchanged.
+Preview returns at most 50 groups plus total group/draft/blocker counts and `preview_truncated`.
+Unresolved targets cannot be stageable. Preparation performs no storage, database, route, filename,
+raw-row or source-reference work.
+**RED/GREEN:** `cd api && uv run pytest -q tests/test_investment_staging.py`.
+Acceptance: preparation is deterministic, immutable, privacy-safe and correlation-aware, and a
+resolved preview contains enough typed information for persistence without reinterpreting source
+rows.
+
+## Task 12.2 — idempotent atomic persistence
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6l2-investment-staging-persistence` / `develop` / `develop`.
+**Depends:** Tasks 4 and 12.1. **Forecast:** 350–460 production, 520–690 tests and fixtures.
+**Files:** extend `api/oneledger/investments/staging.py` and
+`api/tests/test_investment_staging.py`; create `api/tests/test_investment_staging_live.py`,
+`db/migrations/V36__investment_evidence_source_scope.sql` and
+`db/tests/0033_investment_evidence_source_scope.sql`; update schema, data-model and progress
+documentation.
+**Contract/tests:** Forward-only V36 includes `source_contract` in fingerprint replay scope and adds
+supporting household/source-contract overlap indexes without changing the existing evidence
+operation signature. Stage under one household lock and transaction. Validate every explicit UUID
+against owner household, investment-account kind, security scope and native currency. A unique exact
+active complete account identifier may be reused; masked-only evidence never auto-selects. Security
+names and untyped references never auto-select; explicit security UUIDs are verified. Identical
+active retry returns the existing import and rows. Across documents, typed source identity wins over
+fingerprint; exact committed overlap attaches new evidence to the existing immutable transaction
+without a new draft, while conflict attaches nothing and creates one group-local
+`duplicate_conflict`. Unknown actions persist as group-local blockers. Correlated legs share one
+database group. Cancellation is idempotent and terminal, retains staged provenance and never creates
+or changes a holding, transaction, lot, allocation or valuation; retry does not silently reopen it.
+Storage/database failure rolls back all database rows; a later database failure may leave only the
+inert content-addressed blob.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, reuse it through
+`eval "$(scripts/test-db.sh env)"` for `scripts/hooks/db-tests.sh` and
+`cd api && uv run pytest -q tests/test_investment_staging.py
+tests/test_investment_staging_live.py`, then tear down once with `scripts/test-db.sh down`.
+Acceptance: resolved extraction stages atomically and idempotently, overlapping committed evidence
+does not duplicate financial facts, and holdings/net worth remain unchanged.
+
+## Task 12.3 — owner API and cancellation surface
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6l3-investment-staging-api` / `develop` / `develop`.
+**Depends:** Task 12.2. **Forecast:** 250–340 production, 420–560 tests and fixtures.
+**Files:** create `api/oneledger/routes/investment_imports.py`; update
+`api/oneledger/main.py`, staging tests and shared API types/contracts; optionally create the shared
+`api/oneledger/ingest/uploads.py` boundary and update `api/oneledger/routes/ingest.py` mechanically;
+update statement-ingestion, privacy and progress documentation.
+**Contract/tests:** `POST /investment-imports/parse` accepts multipart PDF, optional password,
+strict resolution JSON and `stage=false` by default. Dry run performs no storage or database write.
+A stage request re-extracts and verifies resolutions rather than trusting previewed facts. Responses
+use exact decimal strings, fixed reason/status codes, safe masks, UUIDs, at most 50 groups, total
+counts and `previewTruncated`; they never expose filename, raw row, complete identifier, security
+reference, correlation identity or source-event identity. `POST /investment-imports/{id}/cancel` is
+owner-scoped and idempotent. Cross-household, malformed resolution, stale retry, concurrent
+stage/cancel, storage failure and Unicode identifier leakage fail atomically.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, reuse it through
+`eval "$(scripts/test-db.sh env)"` for `scripts/hooks/db-tests.sh` and
+`cd api && uv run pytest -q tests/test_investment_staging.py
+tests/test_investment_staging_live.py tests/test_ingest_route_live.py`, then tear down once with
+`scripts/test-db.sh down`; regenerate shared API types.
+Acceptance: the owner can safely preview, explicitly resolve, stage, retry and cancel an investment
+import through authenticated application operations.
 
 ## Task 13 — summary checkpoints
 
