@@ -31,7 +31,7 @@ from .adapters import (
 )
 
 SOURCE_CONTRACT = "detailed_fund_statement_v1"
-EXTRACTION_VERSION = "1"
+EXTRACTION_VERSION = "2"
 FINGERPRINT_VERSION = "typed_event_v1"
 _TITLE = "DETAILED INVESTMENT STATEMENT V1"
 _HEADERS: tuple[str, ...] = (

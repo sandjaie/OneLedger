@@ -72,6 +72,26 @@ def _extract(
 
 
 @pytest.mark.parametrize(
+    "event",
+    [
+        _event(
+            "PURCHASE",
+            units="1.00000000",
+            price="12.500000",
+            net_amount="-12.8000",
+        ),
+        _event("INTEREST"),
+    ],
+)
+def test_core_and_new_content_report_the_coverage_extraction_version(
+    tmp_path: Path, event: InvestmentEventLine
+) -> None:
+    result = _extract(tmp_path, events=[event])
+
+    assert result.extraction_version == "2"
+
+
+@pytest.mark.parametrize(
     ("event", "expected"),
     [
         (
