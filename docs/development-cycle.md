@@ -56,8 +56,9 @@ the same reason — "What a gate never does", below.
 **The commit hook is the fast feedback loop, not the full gate.** It checks staged-file secrets,
 configuration syntax, whitespace, real-data exclusion, documentation structure, identifier rules,
 and file-scoped Ruff/format and ESLint. It performs no network fetch. Whole-project type systems,
-Markdown lint, tests, generated API contracts, database invariants and the diff budget run at
-pre-push. `/verify` and CI retain their owning whole-tree checks.
+Markdown lint, generated API contracts and the diff budget run at pre-push. Application tests,
+database migrations and SQL invariants run during implementation, `/verify` and CI, not in Git
+hooks.
 
 ### 4. Gate — `/verify`, on a tree the implementer believes is finished
 
@@ -117,9 +118,9 @@ project's running `db-test` already holds, then 55434, then any free one. `up` e
 `TEST_DB_PORT`, so your own compose calls in that shell keep the container where it is. `env`
 reports the port this checkout's running container holds, and exports no `TEST_DB_PORT`. When
 none is running, `env` falls back to 55434 and whichever server holds it, if any. That is safe:
-pytest and the push hook each create and drop a database of their own there. When the container
-does not start or never accepts a connection, `up` exits non-zero, says why on stderr and prints
-`false`, so the `eval` fails too.
+pytest and the SQL invariant suite each create and drop a database of their own there. When the
+container does not start or never accepts a connection, `up` exits non-zero, says why on stderr
+and prints `false`, so the `eval` fails too.
 It never exports a database that is not there. On 10 September 2026 a worktree's `up` could not
 bind the main checkout's port and printed nothing, so the live tests skipped and looked green.
 
@@ -154,15 +155,14 @@ deliberately not external: it exists to be destroyed. `down` removes this checko
 `<project>_pgdata_test` and no other. It used to remove `oneledger_pgdata_test` by name, which
 from a worktree was the main checkout's volume.
 
-### 6. Push — the hooks are the enforcement
+### 6. Push — static hooks are the enforcement
 
-`pre-push` runs mypy, both TypeScript compilers, Markdown lint, pytest, vitest, the SQL invariant
-tests — in a throwaway database on the test server, migrated from empty with the branch's own
-migrations and dropped after, never the working ledger — the generated-type check and
+`pre-push` runs mypy, both TypeScript compilers, Markdown lint, the generated-type check and
 `scripts/check-diff-size.sh` (soft 800 / 1,600, hard stop 1,200 / 2,400; the
 `ONELEDGER_SIZE_OVERRIDE` reason exists for what genuinely cannot be split, and it goes in the
-PR). A skill can be skipped by an agent in a hurry; a hook cannot. `--no-verify` is not an
-option.
+PR). Pytest, Vitest, migrations and SQL invariants are deliberately absent from commit and push
+hooks because implementation and `/verify` already run them; CI remains the remote backstop.
+`--no-verify` is not an option for the static hooks that remain.
 
 ### 7. Open the PR, then merge
 

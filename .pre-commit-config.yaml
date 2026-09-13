@@ -1,5 +1,6 @@
-# Everything that can fail a pull request should have failed at commit or push
-# instead. Install once, for both hook types:
+# Git hooks provide fast static feedback. Full application and database suites
+# run during implementation, /verify and CI rather than blocking commit/push.
+# Install once, for both hook types:
 #
 #     pre-commit install --install-hooks -t pre-commit -t pre-push
 #
@@ -101,23 +102,7 @@ repos:
         files: '^web/.*\.(ts|tsx)$'
         stages: [pre-push]
 
-      # ---- pre-push: the full suite, so a red test never reaches a PR ----
-
-      - id: pytest
-        name: pytest (api)
-        entry: scripts/hooks/api.sh pytest -q
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: vitest
-        name: vitest (web)
-        entry: scripts/hooks/web.sh test
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
+      # ---- pre-push: whole-tree static and branch-shape checks ----
 
       - id: api-types
         name: generated API types are current (web)
@@ -130,14 +115,6 @@ repos:
       - id: diff-size
         name: diff size is reviewable (branch vs develop)
         entry: scripts/check-diff-size.sh
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: db-invariants
-        name: db invariant tests
-        entry: scripts/hooks/db-tests.sh
         language: system
         pass_filenames: false
         always_run: true

@@ -46,7 +46,7 @@ Never launch a separate scratch Compose stack for this gate.
    (cd api && uv run ruff check . && uv run mypy . && uv run pytest -q)
    ```
 
-4. Re-export the same running test server, then run the pre-push database hook directly:
+4. Re-export the same running test server, then run the database invariant suite directly:
 
    ```bash
    eval "$(scripts/test-db.sh env)"

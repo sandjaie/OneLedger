@@ -31,18 +31,26 @@ def test_commit_stage_is_staged_file_fast() -> None:
         assert "stages: [pre-push]" in _hook(hook_id)
 
 
-def test_full_safety_suite_remains_on_pre_push() -> None:
+def test_static_checks_remain_on_pre_push_and_suites_remain_in_verify_ci() -> None:
     for hook_id in (
         "markdownlint",
         "mypy",
         "tsc",
-        "pytest",
-        "vitest",
         "api-types",
         "diff-size",
-        "db-invariants",
     ):
         assert "stages: [pre-push]" in _hook(hook_id)
+
+    config = CONFIG.read_text()
+    for hook_id in ("pytest", "vitest", "db-invariants"):
+        assert f"      - id: {hook_id}\n" not in config
+
+    verify = VERIFY.read_text()
+    ci = CI.read_text()
+    for command in ("uv run pytest -q", "scripts/hooks/db-tests.sh", "npx vitest run"):
+        assert command in verify
+    for command in ("uv run pytest -q", "scripts/hooks/db-tests.sh", "npm run test"):
+        assert command in ci
 
 
 def test_markdown_lint_remains_in_ci_and_verify() -> None:

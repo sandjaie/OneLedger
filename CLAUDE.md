@@ -119,8 +119,10 @@ identifier, on money arithmetic in TypeScript, on a report reading the base `tra
 instead of `v_transaction_reportable`, and on a flow multiplied by a rate outside the freeze.
 `scripts/check-docs.py` fails on a broken link, malformed HTML, and on real financial data reaching
 git. `scripts/check-diff-size.sh` refuses an oversized push. The pre-commit and pre-push hooks run
-lint, types, secrets, pytest, vitest and every `db/tests/*.sql` against a live database. None of
-these may be silenced.
+fast static checks: lint, formatting, types, secrets, configuration/documentation checks,
+generated API contracts and the diff budget. Pytest, Vitest, migrations and every
+`db/tests/*.sql` run during implementation, `/verify` and CI instead of Git hooks. None of the
+remaining hook checks may be silenced.
 
 ## Working
 
@@ -160,6 +162,8 @@ unrelated changes; never reset or overwrite them.
 pre-commit install --install-hooks -t pre-commit -t pre-push
 ```
 
-Commit runs lint, types, secrets and the docs check. Push runs pytest, vitest, every
-`db/tests/*.sql` against a live database, and the diff budget. A failing push is not a reason to
-reach for `--no-verify`; fix it and push again.
+Commit runs staged-file lint, formatting, secrets, configuration and documentation checks. Push
+runs whole-project type checks, Markdown lint, generated API contract checks and the diff budget.
+Full application and database tests remain mandatory in implementation, `/verify` and CI, but do
+not run again inside Git hooks. A failing hook is not a reason to reach for `--no-verify`; fix it
+and try again.
