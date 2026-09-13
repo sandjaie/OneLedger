@@ -186,8 +186,12 @@ def extract_statement(
     """Select exactly one adapter using content only, then return its pure result."""
     if adapters is None:
         from .detailed_fund_statement import DetailedFundStatementAdapter
+        from .summary_fund_statement import SummaryFundStatementAdapter
 
-        selected_adapters: Sequence[InvestmentStatementAdapter] = (DetailedFundStatementAdapter(),)
+        selected_adapters: Sequence[InvestmentStatementAdapter] = (
+            DetailedFundStatementAdapter(),
+            SummaryFundStatementAdapter(),
+        )
     else:
         selected_adapters = adapters
     matching = tuple(adapter for adapter in selected_adapters if adapter.matches(pages))
