@@ -380,10 +380,10 @@ def test_partial_close_and_reinvestment_reopen_preserve_holding_history(
         assert cur.fetchone() == (2,)
 
 
-def test_disposal_correction_is_append_only_and_retains_one_review_per_event(
+def test_disposal_correction_resolves_original_review_and_retry_cannot_reopen_it(
     live_lifecycle: LifecycleFixture,
 ) -> None:
-    """Editing a disposal or omitting its replacement review would break the audit trail."""
+    """A correction must close the old question once and never recreate it on exact replay."""
     acquisition = TestClient(app).post(
         "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
     )
@@ -422,6 +422,10 @@ def test_disposal_correction_is_append_only_and_retains_one_review_per_event(
     assert corrected.json()["correctsEventId"] == original.json()["id"]
     assert corrected.json()["currentUnits"] == "9.00000000"
     assert corrected.json()["reviewReasons"] == ["incomplete_lot_allocation"]
+    original_retry = _post(original_body)
+    assert original_retry.status_code == 200
+    assert original_retry.json()["id"] == original.json()["id"]
+    assert original_retry.json()["reviewReasons"] == []
     with live_lifecycle.connection.cursor() as cur:
         cur.execute(
             """SELECT units::text, gross_amount::text FROM investment_transaction
@@ -430,12 +434,129 @@ def test_disposal_correction_is_append_only_and_retains_one_review_per_event(
         )
         assert cur.fetchone() == ("-2.00000000", "6.0000")
         cur.execute(
-            """SELECT count(*), count(DISTINCT investment_transaction_id)
+            """SELECT status::text, resolution_kind::text,
+                      resolution_reference_id, count(*)
                  FROM investment_review_item WHERE household_id = %s
-                   AND reason = 'incomplete_lot_allocation' AND status = 'open'""",
+                   AND reason = 'incomplete_lot_allocation'
+                 GROUP BY status, resolution_kind, resolution_reference_id
+                 ORDER BY status""",
             (live_lifecycle.owner.household_id,),
         )
-        assert cur.fetchone() == (2, 2)
+        assert cur.fetchall() == [
+            ("open", None, None, 1),
+            ("resolved", "event_corrected", UUID(corrected.json()["id"]), 1),
+        ]
+    live_lifecycle.connection.commit()
+    with pytest.raises(psycopg.errors.UniqueViolation):
+        with live_lifecycle.connection.transaction(), live_lifecycle.connection.cursor() as cur:
+            cur.execute(
+                """INSERT INTO investment_review_item (
+                       household_id, investment_transaction_id, holding_id, reason)
+                     VALUES (%s, %s, %s, 'incomplete_lot_allocation')""",
+                (
+                    live_lifecycle.owner.household_id,
+                    UUID(original.json()["id"]),
+                    UUID(original.json()["holdingId"]),
+                ),
+            )
+
+
+def test_disposal_corrected_to_income_leaves_only_resolved_review_history(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    """A non-disposal replacement must not retain an active lot-allocation question."""
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    assert acquisition.status_code == 201, acquisition.text
+    original = _post(_lifecycle(live_lifecycle, "sale"))
+    assert original.status_code == 201, original.text
+    corrected = TestClient(app).post(
+        f"/investment-events/{original.json()['id']}/cash-lifecycle-corrections",
+        json={
+            **_lifecycle(live_lifecycle, "cash_distribution"),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic event-kind replacement",
+        },
+    )
+
+    assert corrected.status_code == 201, corrected.text
+    assert corrected.json()["currentUnits"] == "10.00000000"
+    assert corrected.json()["reviewReasons"] == []
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT status::text, resolution_kind::text, resolution_reference_id
+                 FROM investment_review_item WHERE household_id = %s
+                   AND reason = 'incomplete_lot_allocation'""",
+            (live_lifecycle.owner.household_id,),
+        )
+        assert cur.fetchall() == [("resolved", "event_corrected", UUID(corrected.json()["id"]))]
+
+
+def test_other_review_reasons_do_not_expand_the_cash_lifecycle_response(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    """Loading a legitimate unrelated review must not fail the endpoint's narrow enum."""
+    body = _lifecycle(live_lifecycle, "cash_distribution")
+    created = _post(body)
+    assert created.status_code == 201, created.text
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO investment_review_item (
+                   household_id, investment_transaction_id, holding_id, reason)
+                 VALUES (%s, %s, %s, 'duplicate_conflict')""",
+            (
+                live_lifecycle.owner.household_id,
+                UUID(created.json()["id"]),
+                UUID(created.json()["holdingId"]),
+            ),
+        )
+    live_lifecycle.connection.commit()
+
+    retry = TestClient(app, raise_server_exceptions=False).post(
+        "/investment-events/cash-lifecycle", json=body
+    )
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["id"] == created.json()["id"]
+    assert retry.json()["reviewReasons"] == []
+
+
+@pytest.mark.parametrize("kind", ["sale", "redemption", "maturity"])
+def test_oversell_refuses_every_disposal_kind_without_partial_projection(
+    live_lifecycle: LifecycleFixture, kind: str
+) -> None:
+    """A correctly shaped disposal cannot take reconstructed holdings below zero."""
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions",
+        json=_acquisition(live_lifecycle, units="4.00000000"),
+    )
+    assert acquisition.status_code == 201, acquisition.text
+
+    response = _post(
+        {
+            **_lifecycle(live_lifecycle, kind),
+            "units": "-5.00000000",
+            "grossAmount": "15.0000",
+            "netAmount": "15.0000",
+        }
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "investment event violates its required field matrix"}
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_transaction WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_unit_effect WHERE household_id = %s),
+                 (SELECT count(*) FROM acquisition_lot WHERE household_id = %s),
+                 (SELECT count(*) FROM investment_review_item WHERE household_id = %s),
+                 (SELECT count(*) FROM holding WHERE household_id = %s),
+                 (SELECT current_units::text FROM holding WHERE household_id = %s),
+                 (SELECT investment_units_from_events(id)::text
+                    FROM holding WHERE household_id = %s)""",
+            (live_lifecycle.owner.household_id,) * 7,
+        )
+        assert cur.fetchone() == (1, 1, 1, 0, 1, "4.00000000", "4.00000000")
 
 
 def test_foreign_targets_and_foreign_corrections_are_hidden_atomically(

@@ -167,6 +167,25 @@ def _ensure_disposal_review(
     )
 
 
+def _resolve_corrected_disposal_review(
+    cur: psycopg.Cursor[Any], household_id: UUID, event_id: UUID, replacement_id: UUID
+) -> None:
+    cur.execute(
+        """SELECT id FROM investment_review_item
+             WHERE household_id = %s AND investment_transaction_id = %s
+               AND reason = 'incomplete_lot_allocation' AND status = 'open'
+             FOR UPDATE""",
+        (household_id, event_id),
+    )
+    row = cur.fetchone()
+    if row is not None:
+        cur.execute(
+            """SELECT resolve_investment_review_item(
+                 %s, 'event_corrected'::investment_review_resolution_kind, %s)""",
+            (row[0], replacement_id),
+        )
+
+
 def _fixed(value: Decimal | int | str | None, places: int) -> str | None:
     return None if value is None else f"{Decimal(value):.{places}f}"
 
@@ -205,7 +224,8 @@ def _load_event(
     cur.execute(
         """SELECT reason::text FROM investment_review_item
              WHERE household_id = %s AND investment_transaction_id = %s
-               AND status = 'open' ORDER BY reason""",
+               AND status = 'open' AND reason = 'incomplete_lot_allocation'
+             ORDER BY reason""",
         (household_id, event_id),
     )
     reasons = [reason[0] for reason in cur.fetchall()]
@@ -266,7 +286,8 @@ def create_cash_lifecycle_event(
                 if existing is None
                 else _stored_frozen_flow(cur, owner.household_id, existing),
             )
-            _ensure_disposal_review(cur, owner.household_id, event_id, body.eventKind)
+            if existing is None:
+                _ensure_disposal_review(cur, owner.household_id, event_id, body.eventKind)
             return CashLifecycleResult(
                 _load_event(cur, owner.household_id, event_id), existing is None
             )
@@ -323,7 +344,11 @@ def correct_cash_lifecycle_event(
                 if existing is None
                 else _stored_frozen_flow(cur, owner.household_id, existing),
             )
-            _ensure_disposal_review(cur, owner.household_id, replacement_id, body.eventKind)
+            if existing is None:
+                _resolve_corrected_disposal_review(
+                    cur, owner.household_id, event_id, replacement_id
+                )
+                _ensure_disposal_review(cur, owner.household_id, replacement_id, body.eventKind)
             return CashLifecycleResult(
                 _load_event(cur, owner.household_id, replacement_id), existing is None
             )

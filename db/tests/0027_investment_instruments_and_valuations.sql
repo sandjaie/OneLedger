@@ -732,6 +732,8 @@ DROP FUNCTION assert_legacy_investment_cash_links_empty(BIGINT);
 DROP FUNCTION record_investment_evidence(
   UUID, UUID, UUID, UUID, UUID, SMALLINT, INTEGER,
   TEXT, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION resolve_investment_review_item(
+  UUID, investment_review_resolution_kind, UUID);
 DROP TABLE investment_review_item;
 DROP TABLE investment_evidence;
 DROP TABLE investment_position_checkpoint;
