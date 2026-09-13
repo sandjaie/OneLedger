@@ -187,8 +187,8 @@ def prepare_import(
         )
     prepared = tuple(prepared_groups)
     global_blocked = any(_is_blocking(reason) for reason in extraction.reasons)
-    blocked_groups = sum(
-        any(_is_blocking(reason) for reason in group.reasons) for group in prepared
+    blocker_count = sum(_is_blocking(reason) for reason in extraction.reasons) + sum(
+        _is_blocking(reason) for group in prepared for reason in group.reasons
     )
     return PreparedImport(
         supported=extraction.supported,
@@ -198,7 +198,7 @@ def prepare_import(
         reasons=extraction.reasons,
         total_group_count=len(prepared),
         total_draft_count=sum(len(target.drafts) for group in prepared for target in group.targets),
-        total_blocker_count=blocked_groups + int(global_blocked),
+        total_blocker_count=blocker_count,
         preview_truncated=len(prepared) > PREVIEW_GROUP_LIMIT,
         stageable=extraction.supported
         and bool(prepared)

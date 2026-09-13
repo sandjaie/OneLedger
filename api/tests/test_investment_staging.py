@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, fields
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import get_args
 from uuid import UUID
 
 import pytest
@@ -14,6 +15,7 @@ from oneledger.investments.adapters import (
     EvidenceDraft,
     InvestmentEventDraft,
     PositionCheckpointDraft,
+    ReviewReason,
     SafeReason,
     SourceEventIdentity,
     SourceTarget,
@@ -26,6 +28,23 @@ from oneledger.investments.staging import (
     PreparedTarget,
     TargetResolution,
     prepare_import,
+)
+
+_BLOCKING_REASONS: tuple[ReviewReason, ...] = (
+    "unknown_security",
+    "ambiguous_account",
+    "ambiguous_identifier",
+    "duplicate_conflict",
+    "unit_mismatch",
+    "cost_mismatch",
+    "unrecognized_event",
+    "unsupported_format",
+)
+_ADVISORY_REASONS: tuple[ReviewReason, ...] = (
+    "missing_price",
+    "unmatched_cash",
+    "incomplete_lot_allocation",
+    "stale_valuation",
 )
 
 
@@ -315,17 +334,64 @@ def test_correlated_blocker_blocks_the_pair_while_an_unrelated_group_remains_usa
     assert unrelated.targets[0].source_group_number == 3
 
 
-def test_nonblocking_reason_is_preserved_without_blocking_a_resolved_group() -> None:
+def test_review_reason_matrix_covers_every_fixed_reason() -> None:
+    """An omitted reason would silently inherit whichever behavior callers assume."""
+    assert set(_BLOCKING_REASONS).isdisjoint(_ADVISORY_REASONS)
+    assert set(_BLOCKING_REASONS) | set(_ADVISORY_REASONS) == set(get_args(ReviewReason.__value__))
+
+
+@pytest.mark.parametrize("reason", _BLOCKING_REASONS)
+def test_every_blocking_reason_blocks_a_resolved_group_and_counts_once(
+    reason: ReviewReason,
+) -> None:
+    prepared = prepare_import(
+        _extraction((_group(1, reasons=(SafeReason(reason, 1, 1),)),)),
+        (_resolution(1),),
+    )
+
+    assert prepared.stageable is True
+    assert prepared.groups[0].stageable is False
+    assert prepared.groups[0].reasons == (SafeReason(reason, 1, 1),)
+    assert prepared.total_blocker_count == 1
+
+
+@pytest.mark.parametrize("reason", _ADVISORY_REASONS)
+def test_every_advisory_reason_is_preserved_without_blocking_a_resolved_group(
+    reason: ReviewReason,
+) -> None:
     """Treating every review reason as blocking would stop usable facts with advisory evidence."""
     prepared = prepare_import(
-        _extraction((_group(1, reasons=(SafeReason("unmatched_cash", 1, 1),)),)),
+        _extraction((_group(1, reasons=(SafeReason(reason, 1, 1),)),)),
         (_resolution(1),),
     )
 
     assert prepared.stageable is True
     assert prepared.groups[0].stageable is True
-    assert prepared.groups[0].reasons == (SafeReason("unmatched_cash", 1, 1),)
+    assert prepared.groups[0].reasons == (SafeReason(reason, 1, 1),)
     assert prepared.total_blocker_count == 0
+
+
+def test_blocker_total_counts_each_group_and_extraction_reason() -> None:
+    """Collapsing blocker counts hides distinct review work within one prepared group."""
+    group_reasons = (
+        SafeReason("unknown_security", 1, 1),
+        SafeReason("cost_mismatch", 1, 2),
+        SafeReason("unrecognized_event", 1, 3),
+    )
+    extraction_reasons = (
+        SafeReason("ambiguous_account", 2, 1),
+        SafeReason("duplicate_conflict", 2, 2),
+        SafeReason("missing_price", 2, 3),
+    )
+
+    prepared = prepare_import(
+        _extraction((_group(1, reasons=group_reasons),), reasons=extraction_reasons),
+        (_resolution(1),),
+    )
+
+    assert prepared.groups[0].stageable is False
+    assert prepared.stageable is False
+    assert prepared.total_blocker_count == 5
 
 
 def test_component_and_target_order_are_deterministic_when_resolutions_are_reordered() -> None:
@@ -340,20 +406,26 @@ def test_component_and_target_order_are_deterministic_when_resolutions_are_reord
     assert [group.group_number for group in first.groups] == [1, 2, 3]
 
 
-def test_preview_is_bounded_without_discarding_the_full_prepared_plan() -> None:
+@pytest.mark.parametrize(
+    ("group_count", "preview_truncated"),
+    ((50, False), (51, True), (52, True)),
+)
+def test_preview_is_bounded_without_discarding_the_full_prepared_plan(
+    group_count: int, preview_truncated: bool
+) -> None:
     """Returning every group could make a large statement response unbounded."""
-    extraction = _extraction(tuple(_group(number) for number in range(1, 53)))
-    resolutions = tuple(_resolution(number) for number in range(1, 53))
+    extraction = _extraction(tuple(_group(number) for number in range(1, group_count + 1)))
+    resolutions = tuple(_resolution(number) for number in range(1, group_count + 1))
 
     prepared = prepare_import(extraction, resolutions)
 
-    assert len(prepared.groups) == 52
+    assert len(prepared.groups) == group_count
     assert len(prepared.preview_groups) == 50
     assert [group.group_number for group in prepared.preview_groups] == list(range(1, 51))
-    assert prepared.total_group_count == 52
-    assert prepared.total_draft_count == 52
+    assert prepared.total_group_count == group_count
+    assert prepared.total_draft_count == group_count
     assert prepared.total_blocker_count == 0
-    assert prepared.preview_truncated is True
+    assert prepared.preview_truncated is preview_truncated
     assert prepared.stageable is True
 
 
