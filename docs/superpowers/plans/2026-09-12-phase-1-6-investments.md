@@ -75,9 +75,10 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 12.2 | idempotent atomic persistence | `feature/p1-6l2-investment-staging-persistence` | 460 | 690 | 4, 12.1 |
 | 12.3 | owner API and cancellation | `feature/p1-6l3-investment-staging-api` | 340 | 560 | 12.2 |
 | 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12.3 |
-| 14 | cash lifecycle and lot allocation | `feature/p1-6n-investment-cash-lifecycle` | 680 | 900 | 4, 6–7 |
-| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14 |
-| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13–15 |
+| 14.1 | disposal and income lifecycle | `feature/p1-6n1-investment-cash-events` | 560 | 760 | 4, 6 |
+| 14.2 | evidenced lot and cash allocation | `feature/p1-6n2-investment-cash-allocations` | 480 | 720 | 7, 14.1 |
+| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14.2 |
+| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.2, 15 |
 | 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
 | 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
 | 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
@@ -376,21 +377,48 @@ matched/mismatched detailed+summary, duplicate/overlap, unknown security and no-
 tests/test_investment_checkpoints.py tests/test_investment_checkpoints_live.py)`. Acceptance: a
 summary confirms positions without becoming transaction history or terminal price.
 
-## Task 14 — sales, distributions, charges and lot allocations
+Task 14 was split at dispatch. Its four domain/API surfaces and four focused suites reforecast to
+900–1,150 production lines and 1,200–1,600 test lines, beyond one reviewable branch. The split keeps
+event semantics independently reviewable before allocation evidence is allowed to make basis or
+funding claims.
 
-**Branch/base/target:** `feature/p1-6n-investment-cash-lifecycle` / `develop` / `develop`.
+## Task 14.1 — disposal and income lifecycle
+
+**Branch/base/target:** `feature/p1-6n1-investment-cash-events` / `develop` / `develop`.
 **Files:** `api/oneledger/investments/cash_lifecycle.py`,
-`api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_events.py`,
-`api/oneledger/routes/investment_funding.py`, `api/tests/test_investment_cash_lifecycle.py`,
+`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_cash_lifecycle.py`,
+`api/tests/test_investment_cash_lifecycle_live.py`; shared API/type/schema/status paths.
+**Contract/tests:** Owner-authorized sale, redemption and maturity events change units and cash;
+cash distributions and interest, standalone charges and withheld tax retain their distinct economic
+meaning. Partial sale, closed/reopened history, exact event-kind fields, append-only corrections,
+one-count charges/tax and external-flow boundary RED cases. A disposal without evidenced lot
+selection commits its units and cash but creates one `incomplete_lot_allocation` review and exposes
+neither realised cost/gain nor remaining basis.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, then `(cd api && uv run
+pytest -q tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py)`;
+reuse it with `scripts/test-db.sh env` and tear it down once. Acceptance: every cash lifecycle event
+is exact, reconstructs units, preserves closed history and never counts proceeds, income, charges or
+tax twice.
+
+## Task 14.2 — evidenced lot and cash allocation
+
+**Branch/base/target:** `feature/p1-6n2-investment-cash-allocations` / `develop` / `develop`.
+**Files:** `api/oneledger/investments/cash_lifecycle.py`,
+`api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_funding.py`,
+`api/tests/test_investment_cash_lifecycle.py`,
 `api/tests/test_investment_cash_lifecycle_live.py`, `api/tests/test_investment_funding.py`,
 `api/tests/test_investment_funding_live.py`; shared API/type/schema/testing/status paths.
-**Contract/tests:** Sale/redemption/maturity, distributions, charges/tax and evidenced
-lot allocation. Partial sale, closed/reopened history, missing allocation availability, cash roles,
-one-count fees/tax, corrections and flow-boundary RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
-tests/test_investment_funding.py tests/test_investment_funding_live.py)`; shared types.
-Acceptance: units/cash commit and basis claims require lot evidence.
+**Contract/tests:** Explicit owner evidence allocates disposal units to acquisition lots and cash
+transactions to purchase funding, sale proceeds, distributions, charges and tax using the fixed V33
+roles. Cover full and partial sale evidence, missing allocation availability, many-to-many cash
+roles, over-allocation, cross-household and wrong-currency refusal, correction/unlink restoration,
+and one-count flow totals. No FIFO, average-cost or jurisdiction rule is inferred.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`, then `(cd api && uv run
+pytest -q tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
+tests/test_investment_funding.py tests/test_investment_funding_live.py)`; reuse it with
+`scripts/test-db.sh env` and tear it down once. Acceptance: confirmed lot and cash evidence makes
+only its supported basis/funding claims available; unresolved evidence withholds only the dependent
+claim.
 
 ## Task 15 — splits, bonuses, switches and platform transfers
 
