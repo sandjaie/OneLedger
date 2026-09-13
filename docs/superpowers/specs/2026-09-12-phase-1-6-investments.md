@@ -180,6 +180,12 @@ Event invariants constrain unit direction, required cash values and permitted nu
 Imported events are immutable. A correction appends a superseding/reversal relation and the exact
 replacement fact; it does not overwrite the original or edit aggregate holding units.
 
+Splits and platform transfers fix the unit and lot history before their date. A new unit- or
+lot-affecting event dated before an active split or platform transfer in its holding, or a
+correction of one dated on or before it, fails closed. Cash-only events and an exact replay of
+existing evidence are unaffected. On the action's own date, events committed before it precede it
+and events committed after it follow it.
+
 ### Acquisition lots and disposal allocation
 
 Every acquisition event creates an acquisition lot carrying its original date, units, evidenced
@@ -187,11 +193,32 @@ cost and origin transaction. Partial sales and redemptions may allocate units to
 the statement or owner provides that evidence. The implementation does not silently impose FIFO,
 average cost or a jurisdiction-specific tax rule.
 
+Lots are immutable. A split or platform transfer consumes each affected open lot and creates a
+successor lot that keeps the predecessor's acquisition date. Open basis is
+`round(basis × open units / acquired units, 4)`; a successor's basis is its predecessor's open basis
+before the action minus its open basis after, so any rounding residual stays with the source and
+total open basis is preserved exactly. A corrected action's consumption and successors remain as
+history outside current reads, and lot capacity counts allocations only from active events.
+
 A full platform transfer moves every open lot while preserving its origin date and cost. A partial
-transfer without evidenced lot selection creates a review item. Splits transform open-lot units by
-the evidenced ratio and preserve total basis. Bonus units become an evidenced zero-cash lot. An
-unrecognized corporate action blocks affected realised-cost and return claims from its effective
-date.
+transfer without evidenced lot selection fails closed and writes nothing. A full transfer from a
+lot-incomplete source, where an earlier disposal lacks complete lot allocation, also fails closed
+unless explicit lot selection covers the transferred units. A transfer involving a holding whose lot
+lineage is unavailable fails closed.
+
+A split's holding unit effect is current units × (ratio − 1) and must be exact at eight decimal
+places, or the split fails closed. On a lot-complete holding whose every transformed lot is exact,
+the split transforms open-lot units by the evidenced ratio and preserves total basis. Otherwise it
+commits the exact unit effect without successor lineage and opens an `incomplete_lot_allocation`
+review. From that split's date the holding's remaining basis, open-lot reads and dependent realised
+claims are unavailable, and lot allocation for a disposal dated on or after it is refused until a
+later delivery completes the lineage.
+
+Bonus units become an evidenced zero-cash lot. A switch or systematic transfer is a disposal and an
+acquisition of equal gross value; its realised cost and gain are unavailable in Phase 1.6, and a
+switch carrying an exit load or stamp duty fails closed because the event matrix cannot record that
+charge. An unrecognized corporate action blocks affected realised-cost and return claims from its
+effective date.
 
 Phase 1.6 may report holding- and portfolio-level money-weighted returns when cash-flow history is
 complete even if tax-lot disposal selection is unresolved. It must label realised cost/gain as
@@ -299,9 +326,13 @@ Import severity is fixed. An unknown unit-affecting action, unit mismatch or amb
 security blocks the atomic group and its dependent return. A missing funding link commits otherwise
 complete statement facts, creates review and withholds only the funding-path claim. A missing
 disposal-lot allocation commits units and cash, creates review, and withholds realised and remaining
-basis without blocking XIRR by itself. A summary checkpoint mismatch creates no manufactured event
-and remains in review. Conflicting dedupe evidence attaches nothing silently and stops only the
-affected group.
+basis without blocking XIRR by itself. A split that cannot transform its lots commits exact units
+under the same review and withholds only lot-dependent claims. An imported partial platform
+transfer without evidenced lot selection, or a full transfer from a lot-incomplete source without
+it, commits nothing: its out-leg draft records an incomplete-lot-allocation review that holds the
+group uncommitted until explicit lot evidence commits the transfer or the import is cancelled. A
+summary checkpoint mismatch creates no manufactured event and remains in review. Conflicting dedupe
+evidence attaches nothing silently and stops only the affected group.
 
 ## Reconciliation invariants
 

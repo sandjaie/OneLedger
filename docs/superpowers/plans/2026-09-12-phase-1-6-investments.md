@@ -78,12 +78,16 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 14.1 | cash-lifecycle database operation | `feature/p1-6n1-investment-cash-event-operation` | 300 | 420 | 4, 6 |
 | 14.2 | disposal and income owner API | `feature/p1-6n2-investment-cash-events` | 560 | 800 | 14.1 |
 | 14.3 | evidenced lot and cash allocation | `feature/p1-6n3-investment-cash-allocations` | 650 | 1150 | 7, 14.2 |
-| 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14.3 |
-| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.3, 15 |
+| 15.1 | lot lineage read model and guards | `feature/p1-6o1-investment-lot-lineage` | 500 | 780 | 4, 14.3 |
+| 15.2 | unit-action append and exact split | `feature/p1-6o2-investment-split-operation` | 465 | 680 | 15.1 |
+| 15.3 | bonus, rights and split owner API | `feature/p1-6o3-investment-unit-actions` | 505 | 900 | 15.2 |
+| 15.4 | paired switch and platform-transfer operation | `feature/p1-6o4-investment-transfer-operation` | 355 | 905 | 15.2 |
+| 15.5 | switch and transfer owner API | `feature/p1-6o5-investment-transfers` | 405 | 880 | 15.3–15.4 |
+| 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.3, 15.5 |
 | 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
 | 18 | review/commit web flow | `feature/p1-6r-investment-review-web` | 620 | 580 | 16–17 |
 | 19 | official prices and refresh | `feature/p1-6s-investment-prices` | 620 | 880 | 5, 8 |
-| 20 | allocation and XIRR engine | `feature/p1-6t-investment-returns` | 500 | 850 | 15, 19 |
+| 20 | allocation and XIRR engine | `feature/p1-6t-investment-returns` | 500 | 850 | 15.4, 19 |
 | 21 | portfolio analytics API | `feature/p1-6u-investment-analytics-api` | 500 | 680 | 20 |
 | 22 | history/data-quality API | `feature/p1-6v-investment-history-api` | 520 | 680 | 16, 20–21 |
 | 23 | portfolio web flow | `feature/p1-6w-investment-portfolio-web` | 580 | 520 | 18, 21 |
@@ -92,8 +96,9 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 Task 11 was split at dispatch after a 2,150–2,800-line reforecast exposed the draft-ratio
 contract below. Task 12 was split after its 2,350–3,310-line dispatch reforecast exposed the
 evidence-scope correction below. Task 14 was split after its 2,100–2,750-line reforecast exposed
-the missing database operation below. Tasks 15 and 19 still need dispatch-time reforecasting and
-must split before exceeding 1,600 lines.
+the missing database operation below. Task 15 was split after its 4,050–5,250-line reforecast
+exposed the lot-lineage and paired-leg contracts below. Task 19 still needs dispatch-time
+reforecasting and must split before exceeding 1,600 lines.
 
 ## Task 1 — instruments and dated values
 
@@ -452,30 +457,224 @@ that same server and tear it down once with `scripts/test-db.sh down`. Acceptanc
 cash evidence makes only its supported basis/funding claims available; unresolved evidence withholds
 only the dependent claim.
 
-## Task 15 — splits, bonuses, switches and platform transfers
+Task 15 was split at dispatch, and plan review added the lineage guards and refusal matrix below.
+The five tasks forecast 1,800–2,250 production lines and 3,300–4,150 test lines. V31 lots are
+immutable and holding-bound, and the V37 append boundary carries neither a split ratio nor a paired
+leg. Lineage reads and guards therefore land before any operation can create lineage, each
+operation precedes the owner API that calls it, and splits land before paired transfers reuse them.
 
-**Branch/base/target:** `feature/p1-6o-investment-corporate-actions` / `develop` / `develop`.
-**Files:** `db/migrations/V40__investment_unit_lifecycle.sql`,
-`db/tests/0037_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
-`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py`,
-`api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/schema/status paths.
-**Contract/tests:** A forward owner-authorized database operation admits evidenced split, bonus,
-rights, switch and platform-transfer kinds that V31 currently refuses. Cover switch atomicity, full
-lot-preserving transfer, refused ambiguous partial transfer and unknown action block;
-basis/value/history, corrections, review and no contribution/return RED cases.
-**RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
-tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)`; shared types.
-Acceptance: P12 transfer/split meaning is preserved before its later distribution calculation.
+## Task 15.1 — lot lineage read model and guards
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6o1-investment-lot-lineage` / `develop` / `develop`.
+**Depends:** Tasks 4 and 14.3. **Forecast:** 430–500 production, 620–780 tests. **Size:** above
+1,000 lines because every lot read, capacity check and correction guard must change together.
+**Files:** create `db/migrations/V40__investment_lot_lineage.sql` and
+`db/tests/0037_investment_lot_lineage.sql`; update `api/oneledger/investments/staging.py`,
+`api/oneledger/investments/funding.py`, `api/tests/test_investment_checkpoints_live.py` and
+`api/tests/test_investment_funding_live.py`; shared schema/data-model/testing/status paths.
+**Contract/tests:** V40 adds nullable `acquisition_lot.predecessor_lot_id` (household-scoped self FK;
+`(origin_transaction_id, predecessor_lot_id)` unique, nulls not distinct) and
+`investment_transaction.counterpart_transaction_id` (household-scoped FK, unique, present exactly
+for paired `*_in` kinds). Lineage kinds are `split`, `platform_transfer_in` and
+`platform_transfer_out`. A BEFORE INSERT order guard on unit- or lot-affecting rows (`units` present
+or `split`) raises `investment_unit_event_order` when a row is dated before an active lineage event
+in its holding or corrects an event dated on or before one, excluding the corrected event itself.
+Same-day rows committed after a lineage event follow it; cash-only kinds are exempt; exact dedupe
+replay returns before the guard. `investment_lot_lineage_available(p_holding_id UUID,
+p_as_of DATE) RETURNS BOOLEAN` is false from the date of an active split with no successor lot.
+`investment_open_lots(p_holding_id UUID, p_as_of DATE)` returns lot, acquisition date, open units
+and `round(basis × open / acquired, 4)`; a lot or allocation counts only when its creating event is
+active and dated on or before `p_as_of`, and nothing returns while lineage is unavailable. Lot
+capacity in `allocate_investment_lots_v33`, `guard_correction_unfunded_event`, lot proposal state in
+`funding.py` and staging checkpoint basis count allocations from active events only. Allocation
+refuses a successor lot for a disposal dated before its creating event and any lot for a disposal
+dated on or after an unavailable-lineage split; `confirm_investment_lot_allocation` then withholds
+remaining basis. The correction guard exempts a corrected split's or transfer out-leg's own
+consumption and refuses once its successor lots are allocated or consumed by an active event. SQL
+fixtures create lineage rows only under the append guard. RED cases: capacity restored after a
+corrected consumer, as-of successor and consumption exclusion, backdated, same-day and cash-only
+order, replay overlap, withheld-lineage allocation, proposal and basis, direct DML on new columns
+and lots, and member/cross-household reads.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh` and `(cd api && uv run
+pytest -q tests/test_investment_checkpoints_live.py tests/test_investment_funding_live.py)`; run
+`scripts/verify.sh` on that same server, which tears it down.
+Acceptance: lot reads, capacity, proposals, decisions and correction guards agree on active lineage,
+and existing acquisition, disposal and allocation results are unchanged.
+
+## Task 15.2 — unit-action append and exact split operation
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6o2-investment-split-operation` / `develop` / `develop`.
+**Depends:** Task 15.1. **Forecast:** 375–465 production, 540–680 tests. **Size:** above 1,000
+lines because the moved append body must ship with its first ratio-bearing caller.
+**Files:** create `db/migrations/V41__investment_split_operation.sql` and
+`db/tests/0038_investment_split_operation.sql`; update the enum-typed function teardown in
+`db/tests/0027_investment_instruments_and_valuations.sql`; shared schema/data-model/status paths.
+**Contract/tests:** The append body moves to revoked `append_investment_transaction_v40(<V37
+arguments>, p_unit_ratio NUMERIC, p_counterpart_transaction_id UUID) RETURNS UUID`, which refuses
+ratio precision beyond scale 10 before storage and includes ratio and counterpart in replay identity.
+The unchanged 23-argument `append_investment_transaction` wraps it, adds `bonus` and `rights`, and
+refuses split and paired kinds and their corrections. Owner-only `append_investment_split(
+p_account_id UUID, p_security_id UUID, p_event_date DATE, p_unit_ratio NUMERIC, p_source_kind
+investment_event_source, p_source_contract TEXT, p_source_event_id TEXT, p_dedupe_version TEXT,
+p_dedupe_fingerprint TEXT, p_corrects_transaction_id UUID, p_correction_reason TEXT) RETURNS UUID`
+takes event advisory locks, then account, holding, lot and review locks, so it serializes with
+appends, allocations and corrections. It requires an open holding and raises
+`investment_lineage_is_latest` when another active unit- or lot-affecting event is dated after it,
+or on or after a corrected split. Holding units × (ratio − 1) must be exact at scale 8
+(`investment_split_units_are_exact`). With available lineage, open-lot units equal to holding units
+and every `open × ratio` exact, it consumes each open lot and creates successors under the
+specification's basis rule; otherwise it commits only the exact unit effect and one
+`incomplete_lot_allocation` review on the split. A replacement split keeps the original event,
+consumption and successors as a corrected leaf and is refused once they are used; any failure after
+lineage writes rolls back every row. RED cases: bonus zero-cost lot, fundable rights, excess ratio
+precision, inexact holding effect, lineage withheld by an unallocated disposal and by one inexact
+lot, later event, replay/conflict, concurrent split and allocation, late-failure rollback, correction
+before and after use, member/cross-household and internal-function refusal, and no cash role or FX.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh`; run `scripts/verify.sh` on
+that same server, which tears it down.
+Acceptance: an exact split preserves units, origin dates and total open basis; a lot-incomplete
+split commits exact units and withholds only lot-dependent claims.
+
+## Task 15.3 — bonus, rights and split owner API
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6o3-investment-unit-actions` / `develop` / `develop`.
+**Depends:** Task 15.2. **Forecast:** 400–505 production, 720–900 tests. **Size:** above 1,000
+lines because bonus, rights and split share one route pair, loader and live fixture.
+**Files:** create `api/oneledger/investments/unit_lifecycle.py`,
+`api/tests/test_investment_unit_lifecycle.py` and `api/tests/test_investment_unit_lifecycle_live.py`;
+update `api/oneledger/investments/schemas.py`, `api/oneledger/investments/commands.py` and
+`api/oneledger/routes/investment_events.py`; shared API/type/status paths.
+**Contract/tests:** Owner-only `POST /investment-events/unit-actions` and
+`POST /investment-events/{event_id}/unit-action-corrections` accept strict `bonus`, `rights` and
+`split` bodies with exact decimal strings, canonical dates and an idempotency key; corrections add
+`expectedCorrectionState` and a screened reason and keep the original kind. Bonus and rights call
+the 23-argument append, with rights freezing its funded flow; split calls `append_investment_split`.
+Reuse the cash-lifecycle idempotency, reporting-pair, frozen-flow, reason-screening and translation
+helpers. Responses return the event, exact `unitRatio`, holding units, lots created by the event and
+open review reasons, so a withheld split shows `incomplete_lot_allocation` and no lots; a replacement
+resolves the corrected split's review as `event_corrected`. `investment_split_units_are_exact`,
+`investment_unit_event_order` and `investment_lineage_is_latest` map to fixed 422 reasons
+`inexact_split` and `event_order_conflict`; identity conflicts map to 409 and foreign references to
+404. RED cases: field matrix and precision, bonus zero-cost lot, rights funding eligibility, exact
+and withheld split, inexact split, event order, identical retry 200, conflicting key 409, stale
+`expectedCorrectionState` 409, concurrent identical retries, concurrent split and sale, late
+database-failure rollback, member/cross-household, Unicode reason leakage and unchanged reportable
+flows.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
+tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)` and the shared
+types command; run `scripts/verify.sh` on that same server, which tears it down.
+Acceptance: the owner records and corrects bonuses, rights and splits exactly and idempotently
+without manufacturing cash, basis or contributions.
+
+## Task 15.4 — paired switch and platform-transfer operation
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6o4-investment-transfer-operation` / `develop` / `develop`.
+**Depends:** Task 15.2. **Forecast:** 295–355 production, 705–905 tests. **Size:** above 1,000
+lines because both legs, lineage writes and the refusal matrix form one atomic operation.
+**Files:** create `db/migrations/V42__investment_transfer_operation.sql`,
+`db/tests/0039_investment_transfer_operation.sql` and
+`api/tests/test_investment_transfer_operation_live.py`; update the `0027` function teardown; shared
+schema/data-model/testing/status paths.
+**Contract/tests:** Owner-only `append_investment_unit_transfer(p_out_kind investment_event_kind,
+p_event_date DATE, p_out_account_id UUID, p_out_security_id UUID, p_out_units NUMERIC,
+p_out_price NUMERIC, p_out_gross_amount NUMERIC, p_in_account_id UUID, p_in_security_id UUID,
+p_in_units NUMERIC, p_in_price NUMERIC, p_in_gross_amount NUMERIC, p_currency CHAR(3),
+p_lot_ids UUID[], p_lot_units NUMERIC[], p_source_kind investment_event_source,
+p_source_contract TEXT, p_out_source_event_id TEXT, p_out_dedupe_version TEXT,
+p_out_dedupe_fingerprint TEXT, p_in_source_event_id TEXT, p_in_dedupe_version TEXT,
+p_in_dedupe_fingerprint TEXT, p_corrects_out_transaction_id UUID, p_correction_reason TEXT)
+RETURNS TABLE (out_event_id UUID, in_event_id UUID)` writes both legs or raises with nothing
+written; the in leg names its out counterpart. Units, price, gross and selected units pass scale
+checks before any write. Switch and systematic legs share an account, differ in security and have
+equal gross; platform legs share a security, differ in account and have opposite units; every
+account and security is in the owner's household. After event advisory locks, accounts, holdings,
+lots and reviews lock in UUID order, so opposite-direction transfers cannot deadlock. Selected lots
+must be open source lots summing exactly to the out units. A switch without selection commits with
+one out-leg `incomplete_lot_allocation` review, resolved as `event_corrected` by correcting the pair
+while its switch-in lot is unused; with selection it calls `allocate_investment_lots`. A platform
+transfer raises `investment_transfer_lineage_unavailable` unless both holdings have available
+lineage and `investment_lineage_is_latest` when either holding has a later unit- or lot-affecting
+event. It consumes selected lots, or every open lot for a full transfer from a lot-complete source,
+and creates destination successors under the basis rule. Without selection, a partial transfer
+raises `investment_transfer_requires_lot_selection` and a full transfer from a lot-incomplete source
+raises `investment_transfer_source_lots_incomplete`. Corrections replace both legs; transfer
+out-legs share the split consumption exemption. A pair is used once its switch-out leg has an
+allocation or any in-leg lot is allocated or consumed by an active event. A trigger refuses V39
+decisions for switch, systematic and platform out-legs. RED cases: precision, second-leg rollback,
+value/unit/account mismatch, foreign in-leg account, replay and per-leg conflict, full-transfer
+dates and cost, partial selection with the rounding residual kept by the source, each refusal
+writing nothing, concurrent opposite-direction transfers, one-leg or used correction, direct DML on
+successor lots, member/cross-household, and no cash role, contribution or realised decision.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `scripts/hooks/db-tests.sh` and
+`(cd api && uv run pytest -q tests/test_investment_transfer_operation_live.py)`; run
+`scripts/verify.sh` on that same server, which tears it down.
+Acceptance: one database call moves units and lots across both legs atomically, preserves every
+transferred lot's origin date and exact total open basis, and refuses each ambiguity distinctly.
+
+## Task 15.5 — switch and transfer owner API
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-6o5-investment-transfers` / `develop` / `develop`.
+**Depends:** Tasks 15.3 and 15.4. **Forecast:** 325–405 production, 700–880 tests. **Size:** above
+1,000 lines because both leg shapes and every refusal share one route pair and live fixture.
+**Files:** update `api/oneledger/investments/unit_lifecycle.py`,
+`api/oneledger/investments/schemas.py`, `api/oneledger/investments/commands.py`,
+`api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py` and
+`api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/status paths.
+**Contract/tests:** Owner-only `POST /investment-events/unit-transfers` and
+`POST /investment-events/{event_id}/unit-transfer-corrections` accept one kind family, event date,
+strict out and in legs, optional `lotSelections` of `{acquisitionLotId, units}` and one idempotency
+key from which both leg identities derive deterministically; corrections target the out leg with
+`expectedCorrectionState` and a screened reason. Each request calls
+`append_investment_unit_transfer` once. Responses return both legs, holding units, switch or
+successor lots and review reasons. V42 refusals write nothing and map to fixed 422 reasons
+`lot_selection_required`, `source_lots_incomplete`, `lot_lineage_unavailable` and
+`event_order_conflict`; review creation for an imported ambiguous transfer belongs to Task 16. RED
+cases: leg matrix and pairing, exact strings, switch with and without selection, full and partial
+platform transfer, each refusal reason, retry 200, conflict 409, stale `expectedCorrectionState` 409,
+one-leg correction, Unicode reason leakage, concurrent retries and opposite-direction transfers,
+late database-failure rollback, member/cross-household and unchanged reportable flows.
+**RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
+`eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
+tests/test_investment_unit_lifecycle.py tests/test_investment_unit_lifecycle_live.py)` and the shared
+types command; run `scripts/verify.sh` on that same server, which tears it down.
+Acceptance: the owner records and corrects switches and platform transfers through authenticated
+operations, and P12 transfer/split meaning is preserved before later distribution calculations.
 
 ## Task 16 — review decisions and atomic import commit
 
 **Branch/base/target:** `feature/p1-6p-investment-commit` / `develop` / `develop`.
 **Files:** `api/oneledger/investments/commit.py`, `api/oneledger/routes/investment_imports.py`,
-`api/tests/test_investment_commit.py`, `api/tests/test_investment_commit_live.py`; shared
-API/type/ingestion/status paths.
+`api/tests/test_investment_commit.py`, `api/tests/test_investment_commit_live.py`,
+`db/migrations/V43__investment_import_lot_review.sql`,
+`db/tests/0040_investment_import_lot_review.sql`; shared API/type/ingestion/schema/status paths.
+Reforecast at dispatch; the migration was added by the Task 15 plan review, and its version must be
+rechecked if Task 19 lands a migration first.
 **Contract/tests:** Expected-state decisions; re-resolve/reconcile/commit per group; manual fallback
-calls existing commands; summary creates no event. Matrix, concurrency, rollback, monthly
-overlap, review closure, cancel and unknown-action dependent-return RED cases.
+calls existing commands; summary creates no event. A refused ambiguous or lot-incomplete transfer
+rolls back every financial write of its group; afterwards, in the same owner transaction, one open
+`incomplete_lot_allocation` review is recorded with `import_id`, `group_id` and the out-leg
+`draft_id`, reusing an existing open review on retry. V43 extends `apply_investment_review_block` so
+that review moves its group to `blocked` (held) even when the group is already `ready`, and extends
+the group-transition guard so, while that open lot review exists, its group can leave `blocked` only
+directly to `committed` or `cancelled`. With lot evidence, one transaction writes both legs and the
+complete lot allocation, resolves the review as `lot_allocated` referencing that in-transaction
+out-leg, then moves the group from `blocked` to `committed`. V43 adds resolution kind
+`import_cancelled` (referenced only from function bodies in that migration), keeps V39's
+event-scoped resolution branches unchanged, and
+refuses any other resolution of a draft-scoped lot review; `cancel_staged_import` resolves it as
+`import_cancelled` referencing the import in the cancellation transaction. Matrix, concurrency,
+rollback, monthly overlap, review closure, cancel, held group starting `ready`, repeated refusal,
+evidence commit and retry after late failure, ambiguous-transfer and unknown-action dependent-return
+RED cases.
 **RED/GREEN:** `eval "$(scripts/test-db.sh up)" && (cd api && uv run pytest -q
 tests/test_investment_commit.py tests/test_investment_commit_live.py)`; shared types. Acceptance:
 valid groups commit once and invalid groups remain safe/actionable independently.

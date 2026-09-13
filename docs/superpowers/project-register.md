@@ -5,7 +5,7 @@ action. The [roadmap](../product/roadmap.html) owns approved product outcomes, t
 [master implementation plan](../product/master-implementation-plan.html) owns delivery order, and
 [progress](progress.md) owns live implementation state.
 
-Updated: 12 September 2026.
+Updated: 13 September 2026.
 
 ## How entries move
 
@@ -28,6 +28,8 @@ an inferred institution identity.
 | 12 Sep 2026 | Remove a harmless repeated-header word from one encrypted layout's narration | Acceptance reconciles, but the retained description can be cleaner | Address with Phase 1.8 mapping diagnostics |
 | 12 Sep 2026 | Surface card metadata-read failures on the import screen | The backend reports the condition but the import screen does not | Include in the next focused import-screen delivery |
 | 12 Sep 2026 | Capture transfer fees when a trustworthy source supplies them | Current statement evidence does not expose a reliable fee value | Reconsider when a source document or owner-entered path exists |
+| 13 Sep 2026 | Complete lot lineage for a split recorded on a lot-incomplete holding | Phase 1.6 commits the split's exact units but withholds successor lots, remaining basis and dependent realised claims when an earlier disposal lacks lot evidence or one transformed lot is inexact | When lot evidence completes the earlier disposal, or before Phase 1.6 acceptance |
+| 13 Sep 2026 | Correct a switch after its lots are used | A switch without lot evidence resolves its review only by correcting the pair while its switch-in lot is unused | When owner lot evidence exists for a switch whose lots are already allocated or transferred |
 
 ## Unapproved discoveries and improvement candidates
 
@@ -45,6 +47,7 @@ change the roadmap.
 | 6 Sep 2026 | Confirm whether a real loan exists | Loan support is conditional and must not be speculative | Before activating Phase 4.6 |
 | 6 Sep 2026 | Confirm whether real property evidence exists | Property uses dated valuation snapshots, but no asset should be created without owner evidence | Before property enters Phase 2.1 coverage |
 | 6 Sep 2026 | Decide whether emergency handover ever permits another person access | This changes the single-owner privacy boundary | Only through a separate product and privacy decision |
+| 13 Sep 2026 | Confirm the lot-incomplete split default | Plan review chose to commit a split's exact units and withhold lot lineage rather than refuse the split, keeping units reconciled while basis stays unavailable | Before Task 15.2 dispatch |
 
 The detailed scoping-question record remains in [questions](questions.html). A question is linked
 from an implementation specification when it becomes a prerequisite; this register does not mirror

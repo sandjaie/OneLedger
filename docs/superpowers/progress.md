@@ -15,7 +15,7 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Deliver Task 15 — splits, bonuses, switches and platform transfers | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-15--splits-bonuses-switches-and-platform-transfers) |
+| Next product action | Deliver Task 15.1 — lot lineage read model and guards | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
 | Current implementation task | Task 14.3 is complete: explicit owner evidence links all fixed investment cash roles and disposal lots without inferring cash meaning or basis | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-143--evidenced-lot-and-cash-allocation) |
 
 ## Canonical phase status
@@ -90,7 +90,8 @@ requires a separate owner request.
 | Phase 1.6 Task 14.1 | **Complete** — V37 admits exact cash distributions, interest, reinvested distributions, standalone charges and withheld tax through one atomic owner-authorized operation without manufacturing cash, units or lots | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-141--cash-lifecycle-database-operation) |
 | Phase 1.6 Task 14.2 | **Complete** — owner-authenticated disposal and cash-lifecycle APIs retain exact frozen facts, count embedded tax once, append corrections and use V38 to resolve superseded incomplete-lot review without reopening history or exposing inferred basis or gain | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-142--disposal-and-income-owner-api) |
 | Phase 1.6 Task 14.3 | **Complete** — all four V33 cash roles share explicit proposal/confirmation and exact unlink restoration; V39 adds database-owned immutable lot decisions, replay-safe dated proposals, active-leaf allocation/correction serialization, canonical evidenced-basis claims and complete-review resolution without guessing lot order | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-143--evidenced-lot-and-cash-allocation) |
-| Phase 1.6 positions disposal fix | **Deviation from Task 8** — positions now value units from every active unit effect, so disposals and reinvestments change current value and net worth; gain is withheld once any non-purchase event is active | [development cycle](../development-cycle.md) |
+| Phase 1.6 positions disposal fix | **Deviation from Task 8** — positions now value units from every active unit effect, so disposals and reinvestments change current value and net worth; gain is withheld once any non-purchase event is active | [PR #193](https://github.com/sandjaie/OneLedger/pull/193) |
+| Phase 1.6 Task 15 | **Split before implementation** — a 4,050–5,250-line dispatch reforecast exceeded the review budget and plan review added lineage guards; Tasks 15.1–15.5 now separate lineage reads and guards, the exact split operation, the bonus/rights/split owner API, the paired switch and platform-transfer operation, and its owner API | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-151--lot-lineage-read-model-and-guards) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
