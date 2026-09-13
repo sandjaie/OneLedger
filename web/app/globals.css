@@ -1648,10 +1648,88 @@ body { background: #eef2f0; }
   color: var(--green); background: rgba(29, 92, 68, 0.06); font-size: 0.76rem;
 }
 
+.investment-funding-panel {
+  display: grid; gap: 16px; padding: 22px 24px;
+  border: 1px solid var(--rule); border-top: 4px solid var(--blue);
+  border-radius: 10px; background: var(--surface);
+}
+.investment-funding-panel h2 {
+  margin: 3px 0 0; font-family: var(--serif); font-size: 1.45rem;
+  font-weight: 400; letter-spacing: -0.025em;
+}
+.investment-funding-panel .investment-docket-head > small {
+  max-width: 440px; margin: 0; color: var(--muted); font-size: 0.7rem; line-height: 1.5;
+}
+.investment-funding-panel > .text-action { justify-self: start; }
+.investment-funding-drafts { display: grid; gap: 12px; }
+.investment-funding-drafts fieldset {
+  display: grid; grid-template-columns: minmax(180px, 0.85fr) minmax(260px, 1.4fr) minmax(150px, 0.6fr) auto;
+  gap: 12px; align-items: end; margin: 0; padding: 15px;
+  border: 1px solid var(--rule); border-radius: 7px; background: #f8faf9;
+}
+.investment-funding-drafts legend,
+.investment-funding-proposal legend,
+.investment-funding-removal legend {
+  padding: 0 8px; color: var(--ink); font-family: var(--mono);
+  font-size: 0.62rem; letter-spacing: 0.09em; text-transform: uppercase;
+}
+.investment-funding-drafts .text-field,
+.investment-funding-drafts .select-field {
+  display: grid; gap: 5px; color: var(--muted); font-size: 0.66rem; font-weight: 600;
+}
+.investment-funding-drafts input,
+.investment-funding-drafts select {
+  width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--rule);
+  border-radius: 5px; color: var(--ink); background: #fff;
+  font-family: var(--mono); font-size: 0.68rem;
+}
+.investment-funding-drafts fieldset > .text-action { margin-bottom: 1px; }
+.investment-funding-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.investment-funding-actions .primary-action,
+.investment-funding-actions .text-action { margin: 0; }
+.investment-transfer-chain {
+  padding: 12px 14px; border-left: 3px solid var(--blue); background: rgba(29, 78, 120, 0.06);
+}
+.investment-transfer-chain p { display: grid; gap: 3px; margin: 0; }
+.investment-transfer-chain strong { font-size: 0.76rem; }
+.investment-transfer-chain span,
+.investment-transfer-chain small { color: var(--muted); font-size: 0.66rem; line-height: 1.45; }
+.investment-funding-proposal,
+.investment-funding-removal {
+  display: grid; gap: 13px; margin: 0; padding: 18px;
+  border: 1px solid rgba(29, 92, 68, 0.35); border-radius: 7px;
+  background: #fbfcfb;
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+.investment-funding-proposal > p,
+.investment-funding-removal > p,
+.investment-funding-stale p { margin: 0; color: var(--muted); font-size: 0.73rem; line-height: 1.5; }
+.investment-funding-proposal dl { display: grid; gap: 9px; margin: 0; }
+.investment-funding-proposal dl > div { padding: 10px 0; border-top: 1px solid var(--rule); }
+.investment-funding-proposal dt { font-weight: 600; }
+.investment-funding-proposal dd { margin: 4px 0 0; font-family: var(--mono); font-size: 0.66rem; }
+.investment-funding-confirmed { display: grid; gap: 10px; }
+.investment-funding-confirmed article {
+  display: grid; gap: 6px; padding: 15px 16px; border: 1px solid var(--rule);
+  border-left: 4px solid var(--green); border-radius: 7px; background: #f3f7f5;
+}
+.investment-funding-confirmed h3 { margin: 0; font-size: 0.84rem; }
+.investment-funding-confirmed p { margin: 0; color: var(--muted); font-size: 0.68rem; line-height: 1.45; }
+.investment-funding-confirmed .text-action { justify-self: start; margin-top: 4px; }
+.investment-removal-result { display: grid; gap: 4px; }
+.investment-removal-result strong,
+.investment-funding-removal > strong { font-family: var(--mono); font-size: 0.68rem; }
+.investment-funding-stale {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 15px; border-left: 3px solid var(--danger); background: rgba(177, 69, 58, 0.07);
+}
+.investment-funding-stale > .inline-alert { width: 100%; margin: 0; }
+
 @media (max-width: 1050px) {
   .investment-purchase-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .investment-valuation-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .investment-valuation-fields p { grid-column: 1 / -1; margin-top: 0; }
+  .investment-funding-drafts fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -1661,7 +1739,8 @@ body { background: #eef2f0; }
   .investment-instrument-fields,
   .investment-purchase-fields,
   .investment-valuation-fields,
-  .investment-confirmation dl { grid-template-columns: 1fr; }
+  .investment-confirmation dl,
+  .investment-funding-drafts fieldset { grid-template-columns: 1fr; }
   .investment-holding-value { text-align: left; }
   .investment-instrument-fields > .text-action { justify-self: start; }
   .investment-valuation-fields p { grid-column: auto; }
