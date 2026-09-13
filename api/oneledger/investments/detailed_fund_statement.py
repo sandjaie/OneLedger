@@ -22,6 +22,7 @@ from .adapters import (
     EvidenceDraft,
     InvestmentEventDraft,
     InvestmentEventKind,
+    PositionCheckpointDraft,
     SafeReason,
     SourceEventIdentity,
     SourceTarget,
@@ -33,7 +34,7 @@ SOURCE_CONTRACT = "detailed_fund_statement_v1"
 EXTRACTION_VERSION = "1"
 FINGERPRINT_VERSION = "typed_event_v1"
 _TITLE = "DETAILED INVESTMENT STATEMENT V1"
-_HEADERS = (
+_HEADERS: tuple[str, ...] = (
     "DATE",
     "EVENT",
     "UNITS",
@@ -45,12 +46,26 @@ _HEADERS = (
     "CURRENCY",
     "REFERENCE",
 )
+_POSITION_HEADERS: tuple[str, ...] = (
+    "AS_OF",
+    "UNITS",
+    "COST",
+    "VALUE",
+    "CURRENCY",
+    "NAV",
+    "REFERENCE",
+)
 _KINDS: dict[str, InvestmentEventKind] = {
     "PURCHASE": "purchase",
     "RECURRING_PURCHASE": "recurring_purchase",
     "SALE": "sale",
     "REDEMPTION": "redemption",
     "MATURITY": "maturity",
+    "CASH_DISTRIBUTION": "cash_distribution",
+    "INTEREST": "interest",
+    "REINVESTED_DISTRIBUTION": "reinvested_distribution",
+    "CHARGE": "charge",
+    "WITHHELD_TAX": "withheld_tax",
 }
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
@@ -64,6 +79,7 @@ class _RowRefusal(ValueError):
 class _GroupBuilder:
     target: SourceTarget
     drafts: list[InvestmentEventDraft] = field(default_factory=list)
+    checkpoints: list[PositionCheckpointDraft] = field(default_factory=list)
     reasons: list[SafeReason] = field(default_factory=list)
 
 
@@ -75,15 +91,25 @@ def _normalized_text(line: Line) -> str:
     return " ".join(unicodedata.normalize("NFKC", _line_text(line)).upper().split())
 
 
-def _header_anchors(line: Line) -> tuple[float, ...] | None:
+def _anchors(line: Line, headers: tuple[str, ...]) -> tuple[float, ...] | None:
     by_name = {word.text.upper(): word.x0 for word in line.words}
-    if any(header not in by_name for header in _HEADERS):
+    if any(header not in by_name for header in headers):
         return None
-    anchors = tuple(by_name[header] for header in _HEADERS)
+    anchors = tuple(by_name[header] for header in headers)
     return anchors if tuple(sorted(anchors)) == anchors else None
 
 
-def _cells(line: Line, anchors: tuple[float, ...]) -> dict[str, str]:
+def _header_anchors(line: Line) -> tuple[float, ...] | None:
+    return _anchors(line, _HEADERS)
+
+
+def _position_anchors(line: Line) -> tuple[float, ...] | None:
+    return _anchors(line, _POSITION_HEADERS)
+
+
+def _cells(
+    line: Line, anchors: tuple[float, ...], headers: tuple[str, ...] = _HEADERS
+) -> dict[str, str]:
     boundaries = tuple(
         (left + right) / 2 for left, right in zip(anchors, anchors[1:], strict=False)
     )
@@ -91,9 +117,7 @@ def _cells(line: Line, anchors: tuple[float, ...]) -> dict[str, str]:
     for word in line.words:
         midpoint = (word.x0 + word.x1) / 2
         cells[bisect_right(boundaries, midpoint)].append(word.text)
-    return {
-        heading: " ".join(parts).strip() for heading, parts in zip(_HEADERS, cells, strict=True)
-    }
+    return {heading: " ".join(parts).strip() for heading, parts in zip(headers, cells, strict=True)}
 
 
 def _decimal(value: str, *, integer_digits: int, scale: int, allow_negative: bool) -> Decimal:
@@ -107,6 +131,18 @@ def _decimal(value: str, *, integer_digits: int, scale: int, allow_negative: boo
     if not parsed.is_finite():
         raise _RowRefusal
     return parsed
+
+
+def _optional_decimal(
+    value: str, *, integer_digits: int, scale: int, allow_negative: bool
+) -> Decimal | None:
+    return (
+        None
+        if not value
+        else _decimal(
+            value, integer_digits=integer_digits, scale=scale, allow_negative=allow_negative
+        )
+    )
 
 
 def _event_date(value: str) -> date:
@@ -156,6 +192,25 @@ def event_fingerprint(target: SourceTarget, draft: InvestmentEventDraft) -> str:
     return hashlib.sha256("\x1f".join(values).encode()).hexdigest()
 
 
+def _checkpoint_fingerprint(
+    target: SourceTarget, checkpoint: PositionCheckpointDraft, statement_nav: Decimal | None
+) -> str:
+    values = (
+        SOURCE_CONTRACT,
+        _target_key(target.account_identifier),
+        _security_key(target.security_reference),
+        "checkpoint",
+        checkpoint.as_of_date.isoformat(),
+        _canonical(checkpoint.reported_units),
+        _canonical(checkpoint.reported_cost_native),
+        _canonical(checkpoint.reported_value_native),
+        checkpoint.currency or "<null>",
+        str(checkpoint.declared_unit_scale),
+        _canonical(statement_nav),
+    )
+    return hashlib.sha256("\x1f".join(values).encode()).hexdigest()
+
+
 def _target(account_line: str, security_line: str) -> SourceTarget:
     account = account_line.split(maxsplit=3)
     if (
@@ -190,20 +245,62 @@ def _draft(
         kind = _KINDS[values["EVENT"]]
     except KeyError:
         raise _RowRefusal from None
-    units = _decimal(values["UNITS"], integer_digits=20, scale=8, allow_negative=True)
-    price = _decimal(values["PRICE"], integer_digits=14, scale=6, allow_negative=False)
-    gross = _decimal(values["GROSS"], integer_digits=16, scale=4, allow_negative=False)
+    units = _optional_decimal(values["UNITS"], integer_digits=20, scale=8, allow_negative=True)
+    price = _optional_decimal(values["PRICE"], integer_digits=14, scale=6, allow_negative=False)
+    gross = _optional_decimal(values["GROSS"], integer_digits=16, scale=4, allow_negative=False)
     charges = _decimal(values["CHARGES"], integer_digits=16, scale=4, allow_negative=False)
     tax = _decimal(values["TAX"], integer_digits=16, scale=4, allow_negative=False)
     net = _decimal(values["NET"], integer_digits=16, scale=4, allow_negative=True)
     currency = values["CURRENCY"]
-    if _CURRENCY.fullmatch(currency) is None or price <= 0 or gross <= 0 or charges < 0 or tax < 0:
+    if (
+        _CURRENCY.fullmatch(currency) is None
+        or (price is not None and price <= 0)
+        or (gross is not None and gross <= 0)
+        or charges < 0
+        or tax < 0
+    ):
         raise _RowRefusal
     acquisition = kind in {"purchase", "recurring_purchase"}
     if acquisition:
-        if units <= 0 or net != -(gross + charges + tax):
+        if units is None or units <= 0 or price is None or gross is None:
             raise _RowRefusal
-    elif units >= 0 or net != gross - charges - tax or net <= 0:
+        valid = net == -(gross + charges + tax)
+    elif kind in {"sale", "redemption", "maturity"}:
+        if units is None or units >= 0 or price is None or gross is None:
+            raise _RowRefusal
+        valid = net == gross - charges - tax and net > 0
+    elif kind in {"cash_distribution", "interest"}:
+        if units is not None or price is not None or gross is None:
+            raise _RowRefusal
+        valid = net == gross - charges - tax and net > 0
+    elif kind == "reinvested_distribution":
+        valid = (
+            units is not None
+            and units > 0
+            and price is not None
+            and gross is not None
+            and charges == 0
+            and net == 0
+        )
+    elif kind == "charge":
+        valid = (
+            units is None
+            and price is None
+            and gross is None
+            and charges > 0
+            and tax == 0
+            and net == -charges
+        )
+    else:
+        valid = (
+            units is None
+            and price is None
+            and gross is None
+            and charges == 0
+            and tax > 0
+            and net == -tax
+        )
+    if not valid:
         raise _RowRefusal
     try:
         source_event_id = SourceEventIdentity(values["REFERENCE"]) if values["REFERENCE"] else None
@@ -233,6 +330,61 @@ def _draft(
     return draft
 
 
+def _checkpoint(
+    values: dict[str, str],
+    target: SourceTarget,
+    *,
+    source_order: int,
+    page_number: int,
+    row_number: int,
+) -> PositionCheckpointDraft:
+    units = _optional_decimal(values["UNITS"], integer_digits=20, scale=8, allow_negative=False)
+    cost = _optional_decimal(values["COST"], integer_digits=16, scale=4, allow_negative=False)
+    value = _optional_decimal(values["VALUE"], integer_digits=16, scale=4, allow_negative=False)
+    nav = _optional_decimal(values["NAV"], integer_digits=14, scale=6, allow_negative=False)
+    currency = values["CURRENCY"] or None
+    if (
+        units is cost is value is None
+        or any(item is not None and item < 0 for item in (units, cost, value))
+        or (nav is not None and nav <= 0)
+        or (currency is not None and _CURRENCY.fullmatch(currency) is None)
+        or ((cost is not None or value is not None) and currency is None)
+    ):
+        raise _RowRefusal
+    try:
+        source_id = SourceEventIdentity(values["REFERENCE"]) if values["REFERENCE"] else None
+    except ValueError:
+        raise _RowRefusal from None
+    scale = len(values["UNITS"].partition(".")[2]) if units is not None else None
+    evidence = EvidenceDraft(page_number, row_number, source_id, "typed_checkpoint_v1", "")
+    checkpoint = PositionCheckpointDraft(
+        source_order,
+        _event_date(values["AS_OF"]),
+        units,
+        cost,
+        value,
+        currency,
+        scale,
+        evidence,
+    )
+    return PositionCheckpointDraft(
+        source_order,
+        checkpoint.as_of_date,
+        units,
+        cost,
+        value,
+        currency,
+        scale,
+        EvidenceDraft(
+            page_number,
+            row_number,
+            source_id,
+            "typed_checkpoint_v1",
+            _checkpoint_fingerprint(target, checkpoint, nav),
+        ),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class DetailedFundStatementAdapter:
     source_contract: str = SOURCE_CONTRACT
@@ -241,7 +393,8 @@ class DetailedFundStatementAdapter:
     def matches(self, pages: Sequence[Page]) -> bool:
         lines = tuple(line for page in pages for line in page.lines)
         return any(_normalized_text(line) == _TITLE for line in lines) and any(
-            _header_anchors(line) is not None for line in lines
+            _header_anchors(line) is not None or _position_anchors(line) is not None
+            for line in lines
         )
 
     def extract(self, pages: Sequence[Page]) -> StatementExtraction:
@@ -251,6 +404,8 @@ class DetailedFundStatementAdapter:
         current_security: str | None = None
         target_ready = False
         anchors: tuple[float, ...] | None = None
+        headers: tuple[str, ...] = _HEADERS
+        position = False
         source_order = 0
         for page_number, page in enumerate(pages, start=1):
             for row_number, line in enumerate(page.lines, start=1):
@@ -271,16 +426,25 @@ class DetailedFundStatementAdapter:
                 header = _header_anchors(line)
                 if header is not None:
                     anchors = header
+                    headers = _HEADERS
+                    position = False
+                    continue
+                header = _position_anchors(line)
+                if header is not None:
+                    anchors = header
+                    headers = _POSITION_HEADERS
+                    position = True
                     continue
                 if (
                     anchors is None
                     or not line.words
                     or not text
-                    or text in {_TITLE, "TRANSACTIONS"}
+                    or text in {_TITLE, "TRANSACTIONS", "END POSITION"}
                 ):
                     continue
-                values = _cells(line, anchors)
-                if not values["DATE"]:
+                values = _cells(line, anchors, headers)
+                date_column = "AS_OF" if position else "DATE"
+                if not values[date_column]:
                     continue
                 source_order += 1
                 if current_account is None or current_security is None:
@@ -298,6 +462,22 @@ class DetailedFundStatementAdapter:
                     _security_key(target.security_reference),
                 )
                 builder = builders.setdefault(key, _GroupBuilder(target=target))
+                if position:
+                    try:
+                        builder.checkpoints.append(
+                            _checkpoint(
+                                values,
+                                target,
+                                source_order=source_order,
+                                page_number=page_number,
+                                row_number=row_number,
+                            )
+                        )
+                    except _RowRefusal:
+                        builder.reasons.append(
+                            SafeReason("unrecognized_event", page_number, row_number)
+                        )
+                    continue
                 try:
                     parsed = _draft(
                         values,
@@ -337,6 +517,7 @@ class DetailedFundStatementAdapter:
                 group_number=index,
                 target=builder.target,
                 drafts=tuple(builder.drafts),
+                checkpoints=tuple(builder.checkpoints),
                 reasons=tuple(builder.reasons),
             )
             for index, builder in enumerate(builders.values(), start=1)
