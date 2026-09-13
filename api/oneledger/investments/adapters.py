@@ -94,6 +94,12 @@ class SourceTarget:
     account_identifier: Identifier
     security_reference: str
 
+    def __repr__(self) -> str:
+        return (
+            f"SourceTarget(account_identifier={self.account_identifier!r}, "
+            "security_reference=<private>)"
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class EvidenceDraft:
@@ -109,10 +115,10 @@ class InvestmentEventDraft:
     source_order: int
     event_date: date
     event_kind: InvestmentEventKind
-    units: Decimal
+    units: Decimal | None
     unit_ratio: Decimal | None
-    price: Decimal
-    gross_amount: Decimal
+    price: Decimal | None
+    gross_amount: Decimal | None
     charges: Decimal
     withheld_tax: Decimal
     net_amount: Decimal

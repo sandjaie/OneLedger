@@ -35,13 +35,17 @@ class InvestmentEventLine:
     source_event_id: str = "SYNTHETIC-EVENT"
 
 
-def _page_header(page: int, *, account_kind: str, security_reference: str) -> list[Placement]:
+def _page_header(
+    page: int, *, account_reference: str | None, security_reference: str | None
+) -> list[Placement]:
     placements = [
         Placement(page=page, x=20, y=760, text="DETAILED INVESTMENT STATEMENT V1"),
-        Placement(page=page, x=20, y=730, text=f"ACCOUNT {account_kind} MASKED ****A1B2"),
-        Placement(page=page, x=20, y=700, text=f"SECURITY {security_reference}"),
         Placement(page=page, x=20, y=670, text="TRANSACTIONS"),
     ]
+    if account_reference is not None:
+        placements.append(Placement(page=page, x=20, y=730, text=f"ACCOUNT {account_reference}"))
+    if security_reference is not None:
+        placements.append(Placement(page=page, x=20, y=700, text=f"SECURITY {security_reference}"))
     placements.extend(Placement(page=page, x=x, y=640, text=heading) for x, heading in _COLUMNS)
     return placements
 
@@ -52,6 +56,7 @@ def build_detailed_investment_pdf(
     rows_per_page: int | None = None,
     account_kind: str = "folio",
     security_reference: str = "SYNTHETIC-SECURITY-A",
+    page_targets: list[tuple[str | None, str | None]] | None = None,
 ) -> bytes:
     """Return synthetic bytes; no source PDF or provider-specific format is retained."""
     if rows_per_page is not None and rows_per_page < 1:
@@ -59,8 +64,13 @@ def build_detailed_investment_pdf(
     page_count = 1 if rows_per_page is None else max(1, (len(events) - 1) // rows_per_page + 1)
     placements: list[Placement] = []
     for page in range(page_count):
+        account, security = (
+            page_targets[page]
+            if page_targets is not None
+            else (f"{account_kind} MASKED ****A1B2", security_reference)
+        )
         placements.extend(
-            _page_header(page, account_kind=account_kind, security_reference=security_reference)
+            _page_header(page, account_reference=account, security_reference=security)
         )
 
     per_page = rows_per_page or max(1, len(events))

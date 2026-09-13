@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import get_type_hints
 
 import pytest
 
 from oneledger.ingest.words import Page, extract_pages
-from oneledger.investments.adapters import extract_statement
+from oneledger.investments.adapters import (
+    EvidenceDraft,
+    InvestmentEventDraft,
+    InvestmentEventKind,
+    extract_statement,
+)
+from oneledger.investments.detailed_fund_statement import event_fingerprint
 from tests.fixtures.investment_pdf import InvestmentEventLine, build_detailed_investment_pdf
 from tests.fixtures.synthetic_pdf import Placement, build_pdf
 
@@ -36,6 +44,30 @@ def _purchase(**changes: str) -> InvestmentEventLine:
     }
     values.update(changes)
     return InvestmentEventLine(**values)
+
+
+def _future_event(
+    kind: InvestmentEventKind,
+    *,
+    units: Decimal | None,
+    price: Decimal | None,
+    gross: Decimal | None,
+    unit_ratio: Decimal | None = None,
+) -> InvestmentEventDraft:
+    return InvestmentEventDraft(
+        1,
+        date(2026, 1, 2),
+        kind,
+        units,
+        unit_ratio,
+        price,
+        gross,
+        Decimal("0"),
+        Decimal("0"),
+        Decimal("1"),
+        "XAA",
+        EvidenceDraft(1, 1, None, "typed_event_v1", ""),
+    )
 
 
 def test_unsupported_content_abstains_with_only_a_fixed_safe_reason(tmp_path: Path) -> None:
@@ -243,6 +275,32 @@ def test_public_security_reference_preserves_source_case(tmp_path: Path) -> None
     assert result.groups[0].target.security_reference == "Synthetic-Security-a"
 
 
+@pytest.mark.parametrize(
+    "security_reference",
+    ["SYNTHETIC12345678", "SYNTHETIC-1234-5678", "ＳＹＮＴＨＥＴＩＣ１２３４５６７８"],
+)
+def test_security_evidence_is_accessible_but_never_in_ordinary_representations(
+    tmp_path: Path, security_reference: str
+) -> None:
+    """Recursive dataclass reprs must not disclose identifier-like security evidence."""
+    path = tmp_path / "private-target.pdf"
+    path.write_bytes(
+        build_detailed_investment_pdf(
+            [_purchase(event_kind="UNKNOWN_UNIT_ACTION")],
+            security_reference=security_reference,
+        )
+    )
+
+    result = extract_statement(extract_pages(path))
+    group = result.groups[0]
+
+    assert group.target.security_reference == security_reference
+    assert security_reference not in repr(group.target)
+    assert security_reference not in repr(group)
+    assert security_reference not in repr(result)
+    assert security_reference not in str(group.reasons[0])
+
+
 def test_typed_fingerprint_distinguishes_account_identifier_kinds(tmp_path: Path) -> None:
     """Dropping identifier kind could merge distinct account evidence with the same suffix."""
     event = _purchase()
@@ -260,6 +318,103 @@ def test_typed_fingerprint_distinguishes_account_identifier_kinds(tmp_path: Path
         folio.groups[0].drafts[0].evidence.fingerprint
         != brokerage.groups[0].drafts[0].evidence.fingerprint
     )
+
+
+def test_future_event_contract_preserves_nullable_database_facts(tmp_path: Path) -> None:
+    """The frozen draft must distinguish unknown facts from exact numeric zero."""
+    income = _future_event("cash_distribution", units=None, price=None, gross=Decimal("1"))
+    charge = _future_event("charge", units=None, price=None, gross=None)
+    action = _future_event("split", units=None, unit_ratio=Decimal("2"), price=None, gross=None)
+
+    hints = get_type_hints(InvestmentEventDraft)
+    assert hints["units"] == Decimal | None
+    assert hints["price"] == Decimal | None
+    assert hints["gross_amount"] == Decimal | None
+    assert (income.units, income.price, charge.gross_amount, action.unit_ratio) == (
+        None,
+        None,
+        None,
+        Decimal("2"),
+    )
+    target = extract_statement(_pages(tmp_path, [_purchase()])).groups[0].target
+    assert event_fingerprint(target, charge) != event_fingerprint(
+        target, replace(charge, gross_amount=Decimal("0"))
+    )
+
+
+@pytest.mark.parametrize(
+    "page_targets",
+    [
+        [
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
+            ("folio MASKED ****B2C3", None),
+        ],
+        [
+            ("folio MASKED ****A1B2", "SYNTHETIC-SECURITY-A"),
+            (None, "SYNTHETIC-SECURITY-B"),
+        ],
+    ],
+)
+def test_new_target_marker_invalidates_the_stale_counterpart(
+    tmp_path: Path, page_targets: list[tuple[str | None, str | None]]
+) -> None:
+    """A half-new section must abstain instead of combining targets across sections."""
+    path = tmp_path / "section-order.pdf"
+    path.write_bytes(
+        build_detailed_investment_pdf(
+            [_purchase(source_event_id=""), _purchase(source_event_id="")],
+            rows_per_page=1,
+            page_targets=page_targets,
+        )
+    )
+
+    result = extract_statement(extract_pages(path))
+
+    assert len(result.groups) == 1
+    assert sum(len(group.drafts) for group in result.groups) == 1
+    assert result.groups[0].target.account_identifier.masked_value == "****A1B2"
+    assert result.groups[0].target.security_reference == "SYNTHETIC-SECURITY-A"
+    assert [reason.code for reason in result.reasons] == ["ambiguous_account"]
+
+
+def test_equivalent_security_spellings_share_group_and_typed_fingerprint(tmp_path: Path) -> None:
+    """Source spelling stays intact while contract-specific identity is canonical."""
+    references = ("Synthetic Security a", "Ｓｙｎｔｈｅｔｉｃ Security ａ")
+    event = _purchase(source_event_id="")
+    separate = []
+    for index, reference in enumerate(references):
+        path = tmp_path / f"spelling-{index}.pdf"
+        path.write_bytes(build_detailed_investment_pdf([event], security_reference=reference))
+        separate.append(extract_statement(extract_pages(path)))
+
+    assert tuple(result.groups[0].target.security_reference for result in separate) == references
+    assert (
+        separate[0].groups[0].drafts[0].evidence.fingerprint
+        == separate[1].groups[0].drafts[0].evidence.fingerprint
+    )
+    spaced_target = replace(
+        separate[0].groups[0].target, security_reference="Synthetic   Security   a"
+    )
+    assert spaced_target.security_reference == "Synthetic   Security   a"
+    assert event_fingerprint(spaced_target, separate[0].groups[0].drafts[0]) == (
+        separate[0].groups[0].drafts[0].evidence.fingerprint
+    )
+
+    combined_path = tmp_path / "equivalent-sections.pdf"
+    combined_path.write_bytes(
+        build_detailed_investment_pdf(
+            [event, event],
+            rows_per_page=1,
+            page_targets=[
+                ("folio MASKED ****A1B2", references[0]),
+                ("folio MASKED ****A1B2", references[1]),
+            ],
+        )
+    )
+    combined = extract_statement(extract_pages(combined_path))
+
+    assert len(combined.groups) == 1
+    assert len(combined.groups[0].drafts) == 2
 
 
 @pytest.mark.parametrize(

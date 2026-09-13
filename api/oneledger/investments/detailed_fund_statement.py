@@ -121,7 +121,9 @@ def _event_date(value: str) -> date:
         raise _RowRefusal from None
 
 
-def _canonical(value: Decimal) -> str:
+def _canonical(value: Decimal | None) -> str:
+    if value is None:
+        return "<null>"
     normalized = value.normalize()
     return "0" if normalized == 0 else format(normalized, "f")
 
@@ -132,11 +134,15 @@ def _target_key(identifier: Identifier) -> str:
     return f"{identifier.kind}:masked:{identifier.visible_suffix}"
 
 
-def _fingerprint(target: SourceTarget, draft: InvestmentEventDraft) -> str:
+def _security_key(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).upper().split())
+
+
+def event_fingerprint(target: SourceTarget, draft: InvestmentEventDraft) -> str:
     values = (
         SOURCE_CONTRACT,
         _target_key(target.account_identifier),
-        target.security_reference,
+        _security_key(target.security_reference),
         draft.event_date.isoformat(),
         draft.event_kind,
         _canonical(draft.units),
@@ -243,6 +249,7 @@ class DetailedFundStatementAdapter:
         result_reasons: list[SafeReason] = []
         current_account: str | None = None
         current_security: str | None = None
+        target_ready = False
         anchors: tuple[float, ...] | None = None
         source_order = 0
         for page_number, page in enumerate(pages, start=1):
@@ -250,10 +257,16 @@ class DetailedFundStatementAdapter:
                 source_text = _line_text(line)
                 text = _normalized_text(line)
                 if text.startswith("ACCOUNT "):
+                    if target_ready:
+                        current_security = None
                     current_account = source_text
+                    target_ready = current_security is not None
                     continue
                 if text.startswith("SECURITY "):
+                    if target_ready:
+                        current_account = None
                     current_security = source_text
+                    target_ready = current_account is not None
                     continue
                 header = _header_anchors(line)
                 if header is not None:
@@ -280,7 +293,10 @@ class DetailedFundStatementAdapter:
                         SafeReason("ambiguous_identifier", page_number, row_number)
                     )
                     continue
-                key = (_target_key(target.account_identifier), target.security_reference)
+                key = (
+                    _target_key(target.account_identifier),
+                    _security_key(target.security_reference),
+                )
                 builder = builders.setdefault(key, _GroupBuilder(target=target))
                 try:
                     parsed = _draft(
@@ -312,7 +328,7 @@ class DetailedFundStatementAdapter:
                             row_number=parsed.evidence.row_number,
                             source_event_id=parsed.evidence.source_event_id,
                             fingerprint_version=FINGERPRINT_VERSION,
-                            fingerprint=_fingerprint(target, parsed),
+                            fingerprint=event_fingerprint(target, parsed),
                         ),
                     )
                 )
