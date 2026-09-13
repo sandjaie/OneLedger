@@ -77,7 +77,7 @@ After focused commands: full `/verify`, review, fix, reverify, confirm, first pu
 | 13 | summary checkpoints | `feature/p1-6m-investment-checkpoints` | 400 | 580 | 11.3, 12.3 |
 | 14.1 | cash-lifecycle database operation | `feature/p1-6n1-investment-cash-event-operation` | 300 | 420 | 4, 6 |
 | 14.2 | disposal and income owner API | `feature/p1-6n2-investment-cash-events` | 560 | 800 | 14.1 |
-| 14.3 | evidenced lot and cash allocation | `feature/p1-6n3-investment-cash-allocations` | 480 | 720 | 7, 14.2 |
+| 14.3 | evidenced lot and cash allocation | `feature/p1-6n3-investment-cash-allocations` | 650 | 1150 | 7, 14.2 |
 | 15 | corporate actions and transfers | `feature/p1-6o-investment-corporate-actions` | 540 | 760 | 4, 14.3 |
 | 16 | review and atomic commit | `feature/p1-6p-investment-commit` | 620 | 820 | 12.3, 13, 14.3, 15 |
 | 17 | upload web flow | `feature/p1-6q-investment-import-web` | 480 | 450 | 12.3, 13 |
@@ -428,7 +428,8 @@ proceeds, income, reinvestment, charges or tax twice.
 ## Task 14.3 — evidenced lot and cash allocation
 
 **Branch/base/target:** `feature/p1-6n3-investment-cash-allocations` / `develop` / `develop`.
-**Files:** `api/oneledger/investments/cash_lifecycle.py`,
+**Files:** `db/migrations/V39__investment_lot_review_resolution.sql`,
+`db/tests/0036_investment_lot_review_resolution.sql`, `api/oneledger/investments/cash_lifecycle.py`,
 `api/oneledger/investments/funding.py`, `api/oneledger/routes/investment_funding.py`,
 `api/tests/test_investment_cash_lifecycle.py`,
 `api/tests/test_investment_cash_lifecycle_live.py`, `api/tests/test_investment_funding.py`,
@@ -437,7 +438,12 @@ proceeds, income, reinvestment, charges or tax twice.
 transactions to purchase funding, sale proceeds, distributions, charges and tax using the fixed V33
 roles. Cover full and partial sale evidence, missing allocation availability, many-to-many cash
 roles, over-allocation, cross-household and wrong-currency refusal, correction/unlink restoration,
-and one-count flow totals. No FIFO, average-cost or jurisdiction rule is inferred.
+and one-count flow totals. Lot confirmations carry bounded idempotency and exact expected state;
+only active disposal and acquisition leaves participate, allocation/correction share the database's
+event-to-holding-to-lot/review lock order, and retained evidence must be removed before correction.
+The database alone derives and immutably retains the allocation decision and its exact nullable
+claims. Proposal state includes the disposal date and refuses any acquisition lot dated after it.
+No FIFO, average-cost or jurisdiction rule is inferred.
 **RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
 `eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
 tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py
@@ -449,8 +455,8 @@ only the dependent claim.
 ## Task 15 — splits, bonuses, switches and platform transfers
 
 **Branch/base/target:** `feature/p1-6o-investment-corporate-actions` / `develop` / `develop`.
-**Files:** `db/migrations/V39__investment_unit_lifecycle.sql`,
-`db/tests/0036_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
+**Files:** `db/migrations/V40__investment_unit_lifecycle.sql`,
+`db/tests/0037_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
 `api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py`,
 `api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/schema/status paths.
 **Contract/tests:** A forward owner-authorized database operation admits evidenced split, bonus,

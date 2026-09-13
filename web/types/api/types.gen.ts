@@ -1425,7 +1425,7 @@ export type ConfirmedFundingAllocation = {
     /**
      * Role
      */
-    role: 'funding';
+    role: 'funding' | 'proceeds' | 'cash_distribution' | 'fee';
     /**
      * Allocatedamount
      */
@@ -1437,7 +1437,21 @@ export type ConfirmedFundingAllocation = {
     /**
      * Cashtransactiontype
      */
-    cashTransactionType: 'investment_buy';
+    cashTransactionType: 'investment_buy' | 'investment_sell' | 'investment_income' | 'investment_fee';
+};
+
+/**
+ * ConfirmedLotAllocation
+ */
+export type ConfirmedLotAllocation = {
+    /**
+     * Acquisitionlotid
+     */
+    acquisitionLotId: string;
+    /**
+     * Allocatedunits
+     */
+    allocatedUnits: string;
 };
 
 /**
@@ -1767,6 +1781,10 @@ export type FundingProposalAllocation = {
      * Priortransactiontype
      */
     priorTransactionType: string;
+    /**
+     * Role
+     */
+    role: 'funding' | 'proceeds' | 'cash_distribution' | 'fee';
 };
 
 /**
@@ -2941,6 +2959,112 @@ export type LayoutProposal = {
      * Rows
      */
     rows: Array<ProposedRawRow>;
+};
+
+/**
+ * LotAllocationConfirmationRequest
+ */
+export type LotAllocationConfirmationRequest = {
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<LotAllocationInput>;
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * LotAllocationInput
+ */
+export type LotAllocationInput = {
+    /**
+     * Acquisitionlotid
+     */
+    acquisitionLotId: string;
+    /**
+     * Allocatedunits
+     */
+    allocatedUnits: string;
+};
+
+/**
+ * LotAllocationProposalResponse
+ */
+export type LotAllocationProposalResponse = {
+    /**
+     * State
+     */
+    state?: 'ready';
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<ConfirmedLotAllocation>;
+};
+
+/**
+ * LotAllocationRequest
+ */
+export type LotAllocationRequest = {
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<LotAllocationInput>;
+};
+
+/**
+ * LotAllocationResponse
+ */
+export type LotAllocationResponse = {
+    /**
+     * State
+     */
+    state?: 'confirmed';
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<ConfirmedLotAllocation>;
+    /**
+     * Realisedcostnative
+     */
+    realisedCostNative: string | null;
+    /**
+     * Realisedgainnative
+     */
+    realisedGainNative: string | null;
+    /**
+     * Remainingbasisnative
+     */
+    remainingBasisNative: string | null;
+    /**
+     * Reviewreasons
+     */
+    reviewReasons: Array<'incomplete_lot_allocation'>;
 };
 
 /**
@@ -6469,6 +6593,56 @@ export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactio
 };
 
 export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponse = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses];
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostData = {
+    body: LotAllocationRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-funding/lot-allocation-proposals';
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostError = ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors[keyof ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors];
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LotAllocationProposalResponse;
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponse = ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses[keyof ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses];
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostData = {
+    body: LotAllocationConfirmationRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-funding/lot-allocations';
+};
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostError = ConfirmLotAllocationInvestmentFundingLotAllocationsPostErrors[keyof ConfirmLotAllocationInvestmentFundingLotAllocationsPostErrors];
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: LotAllocationResponse;
+};
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostResponse = ConfirmLotAllocationInvestmentFundingLotAllocationsPostResponses[keyof ConfirmLotAllocationInvestmentFundingLotAllocationsPostResponses];
 
 export type ParseInvestmentStatementInvestmentImportsParsePostData = {
     body: BodyParseInvestmentStatementInvestmentImportsParsePost;

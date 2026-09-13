@@ -18,6 +18,10 @@ def _allocation() -> dict[str, object]:
     }
 
 
+def _lot_allocation() -> dict[str, object]:
+    return {"acquisitionLotId": str(uuid4()), "allocatedUnits": "1.00000000"}
+
+
 @pytest.fixture
 def owner_override() -> Iterator[None]:
     app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
@@ -39,6 +43,21 @@ def owner_override() -> Iterator[None]:
             {"allocations": [_allocation()], "expectedState": "0" * 64},
         ),
         ("delete", f"/investment-funding/cash-transactions/{uuid4()}", None),
+        (
+            "post",
+            "/investment-funding/lot-allocation-proposals",
+            {"disposalEventId": str(uuid4()), "allocations": [_lot_allocation()]},
+        ),
+        (
+            "post",
+            "/investment-funding/lot-allocations",
+            {
+                "disposalEventId": str(uuid4()),
+                "allocations": [_lot_allocation()],
+                "expectedState": "0" * 64,
+                "idempotencyKey": str(uuid4()),
+            },
+        ),
     ],
 )
 def test_every_funding_route_requires_an_owner_session(
@@ -97,3 +116,49 @@ def test_callers_cannot_supply_a_different_cash_role(owner_override: None) -> No
     assert response.status_code == 422
     assert "proceeds" not in response.text
     assert response.json()["detail"][0]["loc"] == ["body", "allocations", 0, "field"]
+
+
+@pytest.mark.parametrize("value", [1, 1.0, "0", "-1.00000000", "1.000000001", "1e0"])
+def test_lot_units_are_positive_scale_eight_strings(owner_override: None, value: object) -> None:
+    response = TestClient(app).post(
+        "/investment-funding/lot-allocations",
+        json={
+            "disposalEventId": str(uuid4()),
+            "allocations": [{**_lot_allocation(), "allocatedUnits": value}],
+            "expectedState": "0" * 64,
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_duplicate_lot_allocations_are_refused_before_the_database(owner_override: None) -> None:
+    allocation = _lot_allocation()
+    response = TestClient(app).post(
+        "/investment-funding/lot-allocations",
+        json={
+            "disposalEventId": str(uuid4()),
+            "allocations": [allocation, allocation],
+            "expectedState": "0" * 64,
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body"]
+
+
+def test_lot_confirmation_requires_idempotency_and_exact_expected_state(
+    owner_override: None,
+) -> None:
+    base = {"disposalEventId": str(uuid4()), "allocations": [_lot_allocation()]}
+    for additions in (
+        {"idempotencyKey": str(uuid4())},
+        {"expectedState": "0" * 64},
+        {"idempotencyKey": str(uuid4()), "expectedState": "short"},
+    ):
+        response = TestClient(app).post(
+            "/investment-funding/lot-allocations", json={**base, **additions}
+        )
+        assert response.status_code == 422

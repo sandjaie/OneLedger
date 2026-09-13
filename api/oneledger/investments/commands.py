@@ -139,6 +139,10 @@ def _screen_correction_reason(cur: psycopg.Cursor[Any], reason: str) -> None:
         raise InvestmentCommandError(422, "correction reason must not contain private information")
 
 
+def _lock_event_mutation(cur: psycopg.Cursor[Any], event_id: UUID) -> None:
+    cur.execute("SELECT lock_investment_event_mutations(ARRAY[%s]::UUID[])", (event_id,))
+
+
 def _stored_frozen_flow(cur: psycopg.Cursor[Any], household_id: UUID, event_id: UUID) -> FrozenFlow:
     cur.execute(
         """SELECT fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
@@ -247,6 +251,7 @@ def correct_acquisition(
     try:
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
+            _lock_event_mutation(cur, event_id)
             reporting_pair = _lock_reporting_pair(cur, owner.household_id)
             cur.execute(
                 """SELECT event_kind::text FROM investment_transaction

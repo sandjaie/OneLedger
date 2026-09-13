@@ -720,6 +720,7 @@ DROP FUNCTION allocate_investment_lots(UUID, UUID[], NUMERIC[]);
 DROP FUNCTION unlink_investment_cash_allocations(UUID);
 DROP FUNCTION confirm_investment_cash_allocations(
   UUID[], UUID[], investment_cash_allocation_role[], NUMERIC[]);
+DROP TABLE investment_lot_allocation_decision;
 DROP TABLE investment_lot_allocation;
 DROP TABLE investment_cash_allocation;
 DROP FUNCTION guard_investment_lot_allocation_write();

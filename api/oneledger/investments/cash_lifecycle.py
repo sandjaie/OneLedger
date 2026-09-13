@@ -13,6 +13,7 @@ import psycopg
 from ..auth import OwnerSession
 from ..db import connect, scope_to_owner
 from ..money import _frozen, translate
+from . import commands as investment_commands
 from .commands import InvestmentCommandError, _screen_correction_reason, _translate_database_error
 from .schemas import (
     AcquisitionLotRow,
@@ -303,6 +304,7 @@ def correct_cash_lifecycle_event(
     try:
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
+            investment_commands._lock_event_mutation(cur, event_id)
             reporting_pair = _reporting_pair(cur, owner.household_id)
             cur.execute(
                 """SELECT event_kind::text FROM investment_transaction

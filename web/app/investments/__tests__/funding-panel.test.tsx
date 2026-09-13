@@ -116,6 +116,7 @@ function proposal(overrides: Partial<FundingProposalResponse> = {}): FundingProp
       cashAmount: "30.0000",
       currency: "XAA",
       priorTransactionType: "expense",
+      role: "funding",
     }],
     ...overrides,
   };
