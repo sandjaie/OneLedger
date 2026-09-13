@@ -88,7 +88,7 @@ def test_core_and_new_content_report_the_coverage_extraction_version(
 ) -> None:
     result = _extract(tmp_path, events=[event])
 
-    assert result.extraction_version == "2"
+    assert result.extraction_version == "3"
 
 
 @pytest.mark.parametrize(
