@@ -634,6 +634,11 @@ mask returns <code>source_mask_only</code>; OneLedger never manufactures its mis
 five-to-sixty-four ASCII-alphanumeric rule. Catalogue resolution and manual prices do not accept or
 return those private values: public security identities are separate, shared rows are read-only,
 and a manual observation is scoped to a household-owned security.</p>
+<p>The investment-import preview and staging route accepts only group numbers and explicit UUIDs as
+resolution input. Its ordinary response may show the account&#39;s stored safe mask, exact typed facts
+and fixed reason codes, but never echoes the upload name, complete identifier, source security
+reference, raw row, correlation, source-event identity or fingerprint. Dry runs store nothing;
+staging re-extracts the owner&#39;s upload and validates every UUID inside the household boundary.</p>
 <p>The same treatment applies to PAN, Emirates ID and passport numbers — last four for human
 recognition, nothing more.</p>
 <hr>

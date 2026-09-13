@@ -28,6 +28,7 @@ from .routes import (
     investment_catalogue,
     investment_events,
     investment_funding,
+    investment_imports,
     layouts,
     merchant_knowledge,
     portfolio,
@@ -187,6 +188,7 @@ app.include_router(identity_backfill.router)
 app.include_router(investment_catalogue.router)
 app.include_router(investment_events.router)
 app.include_router(investment_funding.router)
+app.include_router(investment_imports.router)
 app.include_router(portfolio.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
