@@ -868,10 +868,16 @@ replay is idempotent; conflicting evidence attaches nothing.</td></tr>
 <tr><td><code>investment_review_item</code></td><td>An append-only fixed-reason issue whose generated
 severity is blocking or advisory. Resolution metadata cannot be written without a later validated
 domain operation.</td></tr>
-</tbody></table><p>Once events exist, parent security-currency and account date or valuation-mode
+</tbody></table><p>The acquisition-only position service rebuilds as-of units and cumulative
+contributions from active immutable purchase leaves, retains each event&#39;s frozen reporting
+contribution, and values those units with the latest accepted non-future price plus current as-of
+FX. Missing, stale and future-only evidence remain typed states rather than zero. The dashboard
+uses the dated <code>account_valuation_period</code> as an exclusive switch: ledger balance, structured
+holdings or the latest frozen snapshot inside the active period contributes, never two of them.</p>
+<p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V32</code>.</p>
+<code>V30</code>–<code>V34</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0
