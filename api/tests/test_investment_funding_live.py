@@ -504,6 +504,79 @@ def _append_split_without_successor(fixture: FundingFixture, *, event_date: str)
     fixture.connection.commit()
 
 
+def _append_split_with_successor(
+    fixture: FundingFixture,
+    *,
+    predecessor_lot_id: UUID,
+    event_date: str,
+    ratio: str = "2",
+    units: str = "20.00000000",
+    basis: str = "100.0000",
+) -> tuple[UUID, UUID]:
+    """Insert a split and its successor lot directly. No operation creates one until Task 15.2."""
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
+        cur.execute(
+            """SELECT holding_id FROM investment_transaction
+                 WHERE household_id = %s AND account_id = %s AND security_id = %s LIMIT 1""",
+            (fixture.owner.household_id, fixture.investment_account_id, fixture.security_id),
+        )
+        holding_row = cur.fetchone()
+        assert holding_row is not None
+        cur.execute(
+            "SELECT acquisition_date, currency FROM acquisition_lot WHERE id = %s",
+            (predecessor_lot_id,),
+        )
+        predecessor_row = cur.fetchone()
+        assert predecessor_row is not None
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        cur.execute(
+            """INSERT INTO investment_transaction (
+                 household_id, account_id, holding_id, security_id, event_date, event_kind,
+                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+               ) VALUES (
+                 %s, %s, %s, %s, %s, 'split', %s, 0, %s, 'statement', 'funding_test_v1', %s)
+               RETURNING id""",
+            (
+                fixture.owner.household_id,
+                fixture.investment_account_id,
+                holding_row[0],
+                fixture.security_id,
+                event_date,
+                Decimal(ratio),
+                predecessor_row[1],
+                f"SYNTHETIC-SPLIT-{uuid4()}",
+            ),
+        )
+        split_row = cur.fetchone()
+        assert split_row is not None
+        split_id = UUID(str(split_row[0]))
+        # The split's own AFTER INSERT trigger refreshes the holding projection, which resets the
+        # append guard to 'off' at its end; re-arm it for the successor-lot insert below.
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        cur.execute(
+            """INSERT INTO acquisition_lot (
+                 household_id, holding_id, origin_transaction_id, acquisition_date,
+                 acquired_units, cost_basis_native, currency, predecessor_lot_id
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (
+                fixture.owner.household_id,
+                holding_row[0],
+                split_id,
+                predecessor_row[0],
+                Decimal(units),
+                Decimal(basis),
+                predecessor_row[1],
+                predecessor_lot_id,
+            ),
+        )
+        successor_row = cur.fetchone()
+        assert successor_row is not None
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'off', true)")
+    fixture.connection.commit()
+    return split_id, UUID(str(successor_row[0]))
+
+
 def _lot_id(fixture: FundingFixture, origin_transaction_id: UUID) -> UUID:
     with fixture.connection.cursor() as cur:
         cur.execute(
@@ -1053,6 +1126,30 @@ def test_disposal_lot_allocation_proposes_and_confirms_exact_basis(
     assert body["reviewReasons"] == []
 
 
+def test_remaining_basis_is_unbounded_and_includes_a_later_acquisition(
+    live_funding: FundingFixture,
+) -> None:
+    purchase = _append_lot_purchase(
+        live_funding, units="10.00000000", gross="100.0000", event_date="2026-01-01"
+    )
+    lot_id = _lot_id(live_funding, purchase)
+    # A later acquisition, created before the disposal is confirmed, must still count toward
+    # remaining basis: V39's remaining-basis claim is an unbounded current-state total, not as of
+    # the disposal's own date.
+    _append_lot_purchase(live_funding, units="5.00000000", gross="50.0000", event_date="2026-03-01")
+    disposal = _append_lot_sale(
+        live_funding, units="4.00000000", gross="12.0000", event_date="2026-02-01"
+    )
+    allocations = [{"acquisitionLotId": str(lot_id), "allocatedUnits": "4.00000000"}]
+
+    proposed = _propose_lot_allocation(disposal, allocations)
+    assert proposed.status_code == 200, proposed.text
+    confirmed = _confirm_lot_allocation(disposal, allocations, proposed.json()["expectedState"])
+
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json()["remainingBasisNative"] == "110.0000"
+
+
 def test_disposal_dated_on_or_after_an_unavailable_lineage_split_refuses_allocation(
     live_funding: FundingFixture,
 ) -> None:
@@ -1065,11 +1162,59 @@ def test_disposal_dated_on_or_after_an_unavailable_lineage_split_refuses_allocat
     allocations = [{"acquisitionLotId": str(lot_id), "allocatedUnits": "3.00000000"}]
 
     proposed = _propose_lot_allocation(disposal, allocations)
-    assert proposed.status_code == 200, proposed.text
-    confirmed = _confirm_lot_allocation(disposal, allocations, proposed.json()["expectedState"])
 
-    assert confirmed.status_code == 422, confirmed.text
-    assert confirmed.json() == {"detail": "lot allocation is not eligible"}
+    assert proposed.status_code == 422, proposed.text
+    assert proposed.json() == {"detail": "lot allocation is not eligible"}
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM investment_lot_allocation WHERE disposal_transaction_id = %s",
+            (disposal,),
+        )
+        assert cur.fetchone() == (0,)
+        cur.execute("SELECT count(*) FROM investment_lot_allocation_decision")
+        assert cur.fetchone() == (0,)
+
+
+def test_successor_lot_before_its_creating_event_refuses_allocation_at_proposal(
+    live_funding: FundingFixture,
+) -> None:
+    purchase = _append_lot_purchase(live_funding, units="10.00000000", gross="100.0000")
+    lot_id = _lot_id(live_funding, purchase)
+    disposal = _append_lot_sale(
+        live_funding, units="3.00000000", gross="9.0000", event_date="2026-01-10"
+    )
+    _split_id, successor_id = _append_split_with_successor(
+        live_funding, predecessor_lot_id=lot_id, event_date="2026-01-20"
+    )
+    allocations = [{"acquisitionLotId": str(successor_id), "allocatedUnits": "3.00000000"}]
+
+    proposed = _propose_lot_allocation(disposal, allocations)
+
+    assert proposed.status_code == 422, proposed.text
+    assert proposed.json() == {"detail": "lot allocation is not eligible"}
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM investment_lot_allocation WHERE disposal_transaction_id = %s",
+            (disposal,),
+        )
+        assert cur.fetchone() == (0,)
+
+
+def test_consumed_predecessor_refuses_allocation_at_proposal(
+    live_funding: FundingFixture,
+) -> None:
+    purchase = _append_lot_purchase(live_funding, units="10.00000000", gross="100.0000")
+    lot_id = _lot_id(live_funding, purchase)
+    _append_split_with_successor(live_funding, predecessor_lot_id=lot_id, event_date="2026-02-01")
+    disposal = _append_lot_sale(
+        live_funding, units="3.00000000", gross="9.0000", event_date="2026-03-01"
+    )
+    allocations = [{"acquisitionLotId": str(lot_id), "allocatedUnits": "3.00000000"}]
+
+    proposed = _propose_lot_allocation(disposal, allocations)
+
+    assert proposed.status_code == 422, proposed.text
+    assert proposed.json() == {"detail": "lot allocation is not eligible"}
     with live_funding.connection.cursor() as cur:
         cur.execute(
             "SELECT count(*) FROM investment_lot_allocation WHERE disposal_transaction_id = %s",

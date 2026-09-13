@@ -856,9 +856,11 @@ event a later active lineage event already fixed; cash-only kinds and exact dedu
 Rebuilds exclude an effect only when an appended correction replaces its source event.</td></tr>
 <tr><td><code>acquisition_lot</code></td><td>The immutable date, units, evidenced native basis and origin
 event of an acquisition. Closing a holding never deletes its acquisition history. An optional,
-household- and holding-scoped <code>predecessor_lot_id</code> names the open lot a split or platform
-transfer consumed to create this successor, which keeps the predecessor&#39;s acquisition date; one
-lineage event creates at most one successor per predecessor.</td></tr>
+household-scoped <code>predecessor_lot_id</code>, spanning any holding of that household, names the
+open lot a split or platform transfer consumed to create this successor &mdash; a platform transfer's
+successor lives in the destination holding, not the source &mdash; and the successor keeps the
+predecessor&#39;s acquisition date; one lineage event creates at most one successor per
+predecessor.</td></tr>
 <tr><td><code>investment_import</code></td><td>The one retained import parent for an investment document,
 with immutable bounded source-contract and extraction-version identity but no copied filename.</td></tr>
 <tr><td><code>investment_import_group</code></td><td>An independently reviewable atomic group for events
@@ -892,16 +894,24 @@ the exact disposed units. The same event/reason identity cannot later be reopene
 created only by the owner-authorized lot-confirmation operation. The database derives its actor,
 request hash, completeness and exact nullable claims; direct authenticated insert, update and delete
 are refused. Incomplete decisions claim no cost, gain or remaining basis. Complete decisions retain
-realised cost and gain, while remaining basis remains unavailable if any active disposal evidence is
-incomplete. Proposal state includes the disposal date and rejects a later-dated acquisition lot; a
-successor lot dated before the lineage event that created it, and any lot for a disposal dated on or
-after a split whose lineage is unavailable, are refused before either allocation or remaining basis.</td></tr>
+realised cost and gain, while remaining basis keeps V39's unbounded current-state meaning &mdash; a
+later acquisition in the same holding still contributes to it, so it is read from
+<code>investment_open_lots</code> as of <code>'infinity'::date</code>, not the disposal's own date
+&mdash; and remains unavailable if any active disposal evidence is incomplete or lineage is
+unavailable. Proposal state includes the disposal date and rejects a later-dated acquisition lot; a
+successor lot dated before the lineage event that created it, a predecessor already consumed by
+another active lineage event, and any lot for a disposal dated on or after a split whose lineage is
+unavailable, are refused before either allocation or remaining basis.</td></tr>
 <tr><td><code>investment_open_lots</code></td><td>A read-only function, not a table: for a holding and
-as-of date, the tip lot of each lineage chain, its preserved acquisition date, open units and rounded
-open basis, counting only a lot whose creating event is active and dated on or before the as-of date
-and an allocation from an active disposal dated on or before it. It returns nothing while
+as-of date, the tip lot of each lineage chain, its preserved acquisition date, open units and open
+basis rounded from an exact wide intermediate product rather than PostgreSQL's truncated
+division-scale heuristic, counting only a lot whose creating event is active and dated on or before
+the as-of date and an allocation from an active disposal dated on or before it. Tip detection spans
+every lot in the household, because a platform transfer's successor can live in a different holding,
+and only the destination holding reports it. It returns nothing while
 <code>investment_lot_lineage_available</code> is false for that holding and date &mdash; from the date
-of an active split with no successor lot, until a later delivery completes the lineage.</td></tr>
+of an active split with no successor lot, until a later delivery completes the lineage; callers must
+check that explicitly rather than reading an empty result as "no open lots".</td></tr>
 </tbody></table><p>The position service rebuilds as-of units from every active unit effect and
 cumulative contributions from active immutable purchase leaves, retains each event&#39;s frozen
 reporting contribution, withholds gain once any non-purchase event is active, and values those units

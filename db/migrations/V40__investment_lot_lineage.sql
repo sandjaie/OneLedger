@@ -1,15 +1,17 @@
 -- Phase 1.6 Task 15.1: lot lineage read model, order guard and active-event capacity.
 -- No operation yet creates lineage rows; V41/V42 append successor lots and paired legs.
 
+-- A predecessor is household-scoped, not holding-scoped: a platform transfer's successor lives in
+-- the destination holding, so this cannot reuse V33's (household_id, id, holding_id) uniqueness.
 ALTER TABLE acquisition_lot
   ADD COLUMN predecessor_lot_id UUID,
-  ADD CONSTRAINT uq_acquisition_lot_holding_id UNIQUE (household_id, holding_id, id);
+  ADD CONSTRAINT uq_acquisition_lot_household_id UNIQUE (household_id, id);
 
 ALTER TABLE acquisition_lot
   DROP CONSTRAINT uq_acquisition_lot_origin,
   ADD CONSTRAINT fk_acquisition_lot_predecessor_scope
-    FOREIGN KEY (household_id, holding_id, predecessor_lot_id)
-    REFERENCES acquisition_lot(household_id, holding_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (household_id, predecessor_lot_id)
+    REFERENCES acquisition_lot(household_id, id) ON DELETE RESTRICT,
   ADD CONSTRAINT uq_acquisition_lot_origin_predecessor
     UNIQUE NULLS NOT DISTINCT (origin_transaction_id, predecessor_lot_id);
 
@@ -46,18 +48,27 @@ $$;
 
 -- Open lots as of a date: the tip of each lineage chain whose creating event is active and dated
 -- on or before p_as_of, less units allocated to active disposals dated on or before p_as_of.
--- Basis follows the same round(basis * open / acquired, 4) rule used across the lot model.
+-- Basis follows the same round(basis * open / acquired, 4) rule used across the lot model, cast to
+-- a wide intermediate scale first so PostgreSQL's division-scale heuristic cannot truncate
+-- significant digits before the final round. A platform transfer's successor can live in a
+-- different holding of the same household, so tip detection spans every lot in the household and
+-- only the final holding_id = p_holding_id filter selects this holding's own open lots. Returns no
+-- rows while investment_lot_lineage_available is false for this holding and date; callers must
+-- check it explicitly rather than reading an empty result as "no open lots".
 CREATE FUNCTION investment_open_lots(p_holding_id UUID, p_as_of DATE) RETURNS TABLE (
   acquisition_lot_id UUID, acquisition_date DATE,
   open_units NUMERIC(28,8), open_basis_native NUMERIC(20,4)
 ) LANGUAGE sql STABLE SET search_path = public, pg_temp AS $$
-  WITH active_lot AS (
-    SELECT lot.id, lot.acquisition_date, lot.acquired_units, lot.cost_basis_native
+  WITH scope AS (
+    SELECT household_id FROM holding WHERE id = p_holding_id
+  ),
+  active_lot AS (
+    SELECT lot.id, lot.holding_id, lot.acquisition_date, lot.acquired_units, lot.cost_basis_native
       FROM acquisition_lot lot
+      JOIN scope ON scope.household_id = lot.household_id
       JOIN investment_transaction origin
         ON origin.household_id = lot.household_id AND origin.id = lot.origin_transaction_id
-     WHERE lot.holding_id = p_holding_id
-       AND origin.event_date <= p_as_of
+     WHERE origin.event_date <= p_as_of
        AND NOT EXISTS (
          SELECT FROM investment_transaction correction
           WHERE correction.corrects_transaction_id = origin.id)
@@ -83,23 +94,36 @@ CREATE FUNCTION investment_open_lots(p_holding_id UUID, p_as_of DATE) RETURNS TA
   )
   SELECT tip.id, tip.acquisition_date,
          (tip.acquired_units - COALESCE(allocated.units, 0))::NUMERIC(28,8),
-         round(tip.cost_basis_native
-               * (tip.acquired_units - COALESCE(allocated.units, 0))
+         round((tip.cost_basis_native
+                * (tip.acquired_units - COALESCE(allocated.units, 0)))::NUMERIC(80,40)
                / tip.acquired_units, 4)::NUMERIC(20,4)
     FROM tip_lot tip
     LEFT JOIN allocated ON allocated.acquisition_lot_id = tip.id
-   WHERE investment_lot_lineage_available(p_holding_id, p_as_of)
+   WHERE tip.holding_id = p_holding_id
+     AND investment_lot_lineage_available(p_holding_id, p_as_of)
      AND (tip.acquired_units - COALESCE(allocated.units, 0)) > 0
 $$;
 
 -- Splits and platform transfers fix unit/lot history before their date. A new unit- or
 -- lot-affecting row cannot predate an active lineage event in its holding, and a correction
--- cannot retarget an event a later active lineage event already fixed (excluding itself).
+-- cannot retarget an event a later active lineage event already fixed (excluding the event it
+-- targets from both comparisons, since that event is still "active" during its own replacement's
+-- insert). The cash-only exemption requires BOTH the new row and any corrected event to be
+-- cash-only: a cash-only correction of a unit-bearing original must not silently bypass the guard.
 CREATE FUNCTION guard_investment_unit_event_order() RETURNS TRIGGER
   LANGUAGE plpgsql AS $$
-DECLARE corrected_date DATE;
+DECLARE corrected_date DATE; corrected_units NUMERIC(28,8); corrected_kind investment_event_kind;
 BEGIN
-  IF NEW.units IS NULL AND NEW.event_kind <> 'split' THEN
+  IF NEW.corrects_transaction_id IS NOT NULL THEN
+    SELECT event_date, units, event_kind
+      INTO corrected_date, corrected_units, corrected_kind
+      FROM investment_transaction
+     WHERE household_id = NEW.household_id AND id = NEW.corrects_transaction_id;
+  END IF;
+
+  IF (NEW.units IS NULL AND NEW.event_kind <> 'split')
+     AND (NEW.corrects_transaction_id IS NULL
+          OR (corrected_units IS NULL AND corrected_kind <> 'split')) THEN
     RETURN NEW;
   END IF;
 
@@ -109,6 +133,7 @@ BEGIN
        AND lineage.holding_id = NEW.holding_id
        AND lineage.event_kind IN ('split', 'platform_transfer_in', 'platform_transfer_out')
        AND lineage.event_date > NEW.event_date
+       AND (NEW.corrects_transaction_id IS NULL OR lineage.id <> NEW.corrects_transaction_id)
        AND NOT EXISTS (
          SELECT FROM investment_transaction correction
           WHERE correction.corrects_transaction_id = lineage.id)
@@ -117,10 +142,7 @@ BEGIN
       USING ERRCODE = '23514', CONSTRAINT = 'investment_unit_event_order';
   END IF;
 
-  IF NEW.corrects_transaction_id IS NOT NULL THEN
-    SELECT event_date INTO corrected_date FROM investment_transaction
-     WHERE household_id = NEW.household_id AND id = NEW.corrects_transaction_id;
-    IF corrected_date IS NOT NULL AND EXISTS (
+  IF NEW.corrects_transaction_id IS NOT NULL AND corrected_date IS NOT NULL AND EXISTS (
       SELECT FROM investment_transaction lineage
        WHERE lineage.household_id = NEW.household_id
          AND lineage.holding_id = NEW.holding_id
@@ -130,10 +152,9 @@ BEGIN
          AND NOT EXISTS (
            SELECT FROM investment_transaction correction
             WHERE correction.corrects_transaction_id = lineage.id)
-    ) THEN
-      RAISE EXCEPTION 'correction targets an event an active lineage event already fixed'
-        USING ERRCODE = '23514', CONSTRAINT = 'investment_unit_event_order';
-    END IF;
+  ) THEN
+    RAISE EXCEPTION 'correction targets an event an active lineage event already fixed'
+      USING ERRCODE = '23514', CONSTRAINT = 'investment_unit_event_order';
   END IF;
 
   RETURN NEW;
@@ -232,6 +253,21 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'a successor lot cannot fund a disposal before its creating event'
       USING ERRCODE = '23514', CONSTRAINT = 'investment_lot_succeeds_creating_event';
+  END IF;
+  IF EXISTS (
+    SELECT FROM acquisition_lot lot
+    JOIN acquisition_lot successor ON successor.predecessor_lot_id = lot.id
+    JOIN investment_transaction succ_origin
+      ON succ_origin.household_id = successor.household_id
+     AND succ_origin.id = successor.origin_transaction_id
+     WHERE lot.id = ANY(p_acquisition_lot_ids)
+       AND succ_origin.event_date <= disposal.event_date
+       AND NOT EXISTS (
+         SELECT FROM investment_transaction correction
+          WHERE correction.corrects_transaction_id = succ_origin.id)
+  ) THEN
+    RAISE EXCEPTION 'a lot consumed by an active lineage event cannot fund a disposal'
+      USING ERRCODE = '23514', CONSTRAINT = 'investment_lot_consumed_by_lineage';
   END IF;
   IF COALESCE((SELECT sum(allocated_units) FROM investment_lot_allocation
                 WHERE disposal_transaction_id = disposal.id), 0)
@@ -348,9 +384,11 @@ BEGIN
           WHERE allocation.household_id = active_disposal.household_id
             AND allocation.disposal_transaction_id = active_disposal.id), 0)
              <> abs(active_disposal.units)
-    ) AND investment_lot_lineage_available(disposal.holding_id, disposal.event_date) THEN
+    ) AND investment_lot_lineage_available(disposal.holding_id, 'infinity'::date) THEN
+      -- Remaining basis is V39's unbounded current-state claim, not as-of the disposal date: a
+      -- later acquisition in the same holding still contributes to it.
       SELECT COALESCE(sum(open_basis_native), 0) INTO remaining
-        FROM investment_open_lots(disposal.holding_id, disposal.event_date);
+        FROM investment_open_lots(disposal.holding_id, 'infinity'::date);
     END IF;
     SELECT review.id INTO review_id FROM investment_review_item review
      WHERE review.household_id = owner_household
