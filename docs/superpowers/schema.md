@@ -1761,8 +1761,9 @@ The owner-authorized `append_investment_transaction` operation is the only inser
 locks the account/holding, rejects excess decimal scale before PostgreSQL can round it, verifies
 the holdings valuation period and household scope, and writes the event, unit effect, acquisition
 lot and holding projection atomically. Task 2 enables purchase, recurring-purchase, sale,
-redemption and maturity appends; later lifecycle operations use the already constrained vocabulary
-rather than accepting a meaning-free adjustment.
+redemption and maturity appends. V37 extends that same operation to cash distributions, interest,
+reinvested distributions, standalone charges and withheld tax; later unit actions use the already
+constrained vocabulary rather than accepting a meaning-free adjustment.
 
 ```sql
 CREATE TYPE investment_event_kind AS ENUM (
@@ -2092,6 +2093,21 @@ fingerprint replay explicitly scoped by household, document and source contract.
 household/source-contract indexes cover typed source-event identity and versioned fingerprint
 overlap across documents. A typed source-event identity is authoritative when present; only
 evidence without one uses the fingerprint fallback. Existing attachments remain unchanged.
+
+---
+
+## `V37` (applied)
+
+### Investment cash lifecycle
+
+V37 admits cash distributions, interest, reinvested distributions, standalone charges and withheld
+tax through the existing owner-authorized atomic investment append operation. Cash distributions
+and interest retain their exact positive external cash flow; charges and withheld tax retain their
+exact negative external cash flow. A reinvested distribution instead creates its evidenced positive
+unit effect and acquisition-origin lot with gross amount as cost basis, while all external cash-flow
+fields remain absent. Cash-only history can retain a zero-unit holding without manufacturing a unit
+effect or acquisition lot. The existing household scope, RLS, immutable facts, append-only
+corrections, dedupe, precision and atomic-refusal boundaries remain unchanged.
 
 ---
 
