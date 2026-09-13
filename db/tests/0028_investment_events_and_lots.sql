@@ -574,12 +574,12 @@ BEGIN
 
   BEGIN
     PERFORM append_investment_transaction(
-      f.account_1, f.security_1, '2026-02-05', 'cash_distribution',
-      NULL, NULL, 1.0000, 0.0000, 0.0000, 1.0000, f.base,
-      '2026-02-05', 1.0000000000, 1.0000000000, 1.0000, 1.0000,
+      f.account_1, f.security_1, '2026-02-05', 'split',
+      NULL, NULL, NULL, 0.0000, 0.0000, 0.0000, f.base,
+      NULL, NULL, NULL, NULL, NULL,
       'statement', 'matrix_v1', 'matrix-deferred', NULL, NULL, NULL, NULL
     );
-    RAISE EXCEPTION 'a deferred lifecycle kind was appended prematurely';
+    RAISE EXCEPTION 'a deferred unit-action kind was appended prematurely';
   EXCEPTION WHEN feature_not_supported THEN
     GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
     ASSERT refusal LIKE '%requires a later lifecycle operation%', refusal;
