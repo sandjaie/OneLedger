@@ -2962,6 +2962,28 @@ export type LayoutProposal = {
 };
 
 /**
+ * LotAllocationConfirmationRequest
+ */
+export type LotAllocationConfirmationRequest = {
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<LotAllocationInput>;
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
  * LotAllocationInput
  */
 export type LotAllocationInput = {
@@ -2973,6 +2995,28 @@ export type LotAllocationInput = {
      * Allocatedunits
      */
     allocatedUnits: string;
+};
+
+/**
+ * LotAllocationProposalResponse
+ */
+export type LotAllocationProposalResponse = {
+    /**
+     * State
+     */
+    state?: 'ready';
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+    /**
+     * Disposaleventid
+     */
+    disposalEventId: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<ConfirmedLotAllocation>;
 };
 
 /**
@@ -6550,8 +6594,33 @@ export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactio
 
 export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponse = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses];
 
-export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostData = {
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostData = {
     body: LotAllocationRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-funding/lot-allocation-proposals';
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostError = ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors[keyof ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostErrors];
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: LotAllocationProposalResponse;
+};
+
+export type ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponse = ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses[keyof ProposeDisposalLotAllocationInvestmentFundingLotAllocationProposalsPostResponses];
+
+export type ConfirmLotAllocationInvestmentFundingLotAllocationsPostData = {
+    body: LotAllocationConfirmationRequest;
     path?: never;
     query?: never;
     url: '/investment-funding/lot-allocations';

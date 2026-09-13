@@ -2138,6 +2138,14 @@ active disposal has exact positive allocation rows totalling all disposed units.
 foreign or wrong-event evidence leaves the review open; identical resolution replay retains its
 original resolver and timestamp. Allocation rows and event facts remain immutable.
 
+Lot allocation confirmations retain one household-scoped `investment_lot_allocation_decision`
+per UUID idempotency key. Its request hash and exact nullable claims make identical replay stable
+and conflicting reuse atomic. V39 serializes allocation and correction through an event advisory
+mutex followed by event, holding, lot and review row locks. Every selected disposal and acquisition
+origin must still be an active correction-chain leaf; retained allocation evidence makes either
+origin ineligible for correction. Remaining basis includes active acquisition origins and
+allocations from active disposals only, applying `ROUND_HALF_UP` at four decimals per lot.
+
 ---
 
 ## `0013`

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from ..auth import OwnerSession, require_owner
 from ..investments.funding import (
@@ -13,11 +13,14 @@ from ..investments.funding import (
     FundingProposalRequest,
     FundingProposalResponse,
     FundingUnlinkResponse,
+    LotAllocationConfirmationRequest,
+    LotAllocationProposalResponse,
     LotAllocationRequest,
     LotAllocationResponse,
     allocate_lots,
     confirm_funding,
     propose_funding,
+    propose_lot_allocation,
     unlink_funding,
 )
 
@@ -62,15 +65,33 @@ def unlink_purchase_funding(
 
 
 @router.post(
+    "/lot-allocation-proposals",
+    response_model=LotAllocationProposalResponse,
+)
+def propose_disposal_lot_allocation(
+    body: LotAllocationRequest,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> LotAllocationProposalResponse:
+    try:
+        return propose_lot_allocation(owner, body)
+    except FundingError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+
+
+@router.post(
     "/lot-allocations",
     response_model=LotAllocationResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def confirm_lot_allocation(
-    body: LotAllocationRequest,
+    body: LotAllocationConfirmationRequest,
+    response: Response,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> LotAllocationResponse:
     try:
-        return allocate_lots(owner, body)
+        result = allocate_lots(owner, body)
     except FundingError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.response

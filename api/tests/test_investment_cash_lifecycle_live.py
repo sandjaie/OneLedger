@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from datetime import date
+from threading import Event
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -14,6 +17,7 @@ from fastapi.testclient import TestClient
 from httpx import Response
 
 from oneledger import auth
+from oneledger.investments import cash_lifecycle, funding
 from oneledger.main import app
 
 from .live_database import connect_to_test_database
@@ -233,19 +237,41 @@ def _post(body: dict[str, object]) -> Response:
     return cast(Response, TestClient(app).post("/investment-events/cash-lifecycle", json=body))
 
 
-def _allocate_lots(disposal_id: str, allocations: list[tuple[str, str]]) -> Response:
+def _lot_body(disposal_id: str, allocations: list[tuple[str, str]]) -> dict[str, object]:
+    return {
+        "disposalEventId": disposal_id,
+        "allocations": [
+            {"acquisitionLotId": lot_id, "allocatedUnits": units} for lot_id, units in allocations
+        ],
+    }
+
+
+def _propose_lots(disposal_id: str, allocations: list[tuple[str, str]]) -> Response:
+    return cast(
+        Response,
+        TestClient(app).post(
+            "/investment-funding/lot-allocation-proposals",
+            json=_lot_body(disposal_id, allocations),
+        ),
+    )
+
+
+def _confirm_lots(body: dict[str, object], expected_state: str, key: UUID) -> Response:
     return cast(
         Response,
         TestClient(app).post(
             "/investment-funding/lot-allocations",
-            json={
-                "disposalEventId": disposal_id,
-                "allocations": [
-                    {"acquisitionLotId": lot_id, "allocatedUnits": units}
-                    for lot_id, units in allocations
-                ],
-            },
+            json={**body, "expectedState": expected_state, "idempotencyKey": str(key)},
         ),
+    )
+
+
+def _allocate_lots(disposal_id: str, allocations: list[tuple[str, str]]) -> Response:
+    proposal = _propose_lots(disposal_id, allocations)
+    if proposal.status_code != 200:
+        return proposal
+    return _confirm_lots(
+        _lot_body(disposal_id, allocations), proposal.json()["expectedState"], uuid4()
     )
 
 
@@ -537,6 +563,254 @@ def test_lot_overallocation_and_foreign_evidence_refuse_atomically(
             ),
         )
         assert cur.fetchone() == (0, 1)
+
+
+def test_corrected_disposal_and_superseded_acquisition_lot_are_not_allocation_evidence(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    original_purchase = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    corrected_purchase = TestClient(app).post(
+        f"/investment-events/{original_purchase.json()['id']}/corrections",
+        json={
+            **_acquisition(live_lifecycle),
+            "price": "3.000000",
+            "grossAmount": "30.0000",
+            "netAmount": "-30.0000",
+            "idempotencyKey": str(uuid4()),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic active acquisition",
+        },
+    )
+    original_sale = _post(_lifecycle(live_lifecycle, "sale"))
+    corrected_sale = TestClient(app).post(
+        f"/investment-events/{original_sale.json()['id']}/cash-lifecycle-corrections",
+        json={
+            **_lifecycle(live_lifecycle, "sale"),
+            "idempotencyKey": str(uuid4()),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic active disposal",
+        },
+    )
+    assert corrected_purchase.status_code == corrected_sale.status_code == 201
+
+    old_disposal = _propose_lots(
+        original_sale.json()["id"],
+        [(corrected_purchase.json()["lot"]["id"], "1.00000000")],
+    )
+    old_lot = _propose_lots(
+        corrected_sale.json()["id"],
+        [(original_purchase.json()["lot"]["id"], "1.00000000")],
+    )
+    assert old_disposal.status_code == 422
+    assert old_lot.status_code == 422
+
+    confirmed = _allocate_lots(
+        corrected_sale.json()["id"],
+        [(corrected_purchase.json()["lot"]["id"], "1.00000000")],
+    )
+    assert confirmed.status_code == 201, confirmed.text
+    assert confirmed.json()["realisedCostNative"] == "3.0000"
+    assert confirmed.json()["realisedGainNative"] == "0.0000"
+    assert confirmed.json()["remainingBasisNative"] == "27.0000"
+
+
+@pytest.mark.parametrize("allocated_units", ["0.50000000", "1.00000000"])
+def test_retained_partial_or_full_lot_evidence_refuses_either_event_correction(
+    live_lifecycle: LifecycleFixture, allocated_units: str
+) -> None:
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    sale_body = _lifecycle(live_lifecycle, "sale")
+    sale = _post(sale_body)
+    allocated = _allocate_lots(
+        sale.json()["id"], [(acquisition.json()["lot"]["id"], allocated_units)]
+    )
+    assert allocated.status_code == 201, allocated.text
+    before = allocated.json()
+
+    acquisition_correction = TestClient(app).post(
+        f"/investment-events/{acquisition.json()['id']}/corrections",
+        json={
+            **_acquisition(live_lifecycle),
+            "idempotencyKey": str(uuid4()),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic allocated origin correction",
+        },
+    )
+    disposal_correction = TestClient(app).post(
+        f"/investment-events/{sale.json()['id']}/cash-lifecycle-corrections",
+        json={
+            **sale_body,
+            "idempotencyKey": str(uuid4()),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic allocated disposal correction",
+        },
+    )
+    assert acquisition_correction.status_code == 422
+    assert disposal_correction.status_code == 422
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(*), sum(allocated_units)::text
+                 FROM investment_lot_allocation WHERE disposal_transaction_id = %s""",
+            (UUID(sale.json()["id"]),),
+        )
+        assert cur.fetchone() == (1, allocated_units)
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                WHERE corrects_transaction_id IN (%s, %s)""",
+            (UUID(acquisition.json()["id"]), UUID(sale.json()["id"])),
+        )
+        assert cur.fetchone() == (0,)
+    assert before["reviewReasons"] == (
+        ["incomplete_lot_allocation"] if allocated_units == "0.50000000" else []
+    )
+
+
+def test_lot_confirmation_is_idempotent_and_stale_state_is_atomic(
+    live_lifecycle: LifecycleFixture,
+) -> None:
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    sale_body = _lifecycle(live_lifecycle, "sale")
+    sale = _post(sale_body)
+    choice = [(acquisition.json()["lot"]["id"], "1.00000000")]
+    body = _lot_body(sale.json()["id"], choice)
+    proposal = _propose_lots(sale.json()["id"], choice)
+    key = uuid4()
+    created = _confirm_lots(body, proposal.json()["expectedState"], key)
+    replay = _confirm_lots(body, proposal.json()["expectedState"], key)
+    conflict = _confirm_lots(
+        _lot_body(sale.json()["id"], [(acquisition.json()["lot"]["id"], "0.50000000")]),
+        proposal.json()["expectedState"],
+        key,
+    )
+    assert created.status_code == 201, created.text
+    assert replay.status_code == 200
+    assert replay.json() == created.json()
+    assert conflict.status_code == 409
+
+    second_sale_body = {**sale_body, "idempotencyKey": str(uuid4())}
+    second_sale = _post(second_sale_body)
+    second_choice = [(acquisition.json()["lot"]["id"], "1.00000000")]
+    stale_proposal = _propose_lots(second_sale.json()["id"], second_choice)
+    correction = TestClient(app).post(
+        f"/investment-events/{second_sale.json()['id']}/cash-lifecycle-corrections",
+        json={
+            **second_sale_body,
+            "idempotencyKey": str(uuid4()),
+            "expectedCorrectionState": "uncorrected",
+            "correctionReason": "Synthetic stale lot state",
+        },
+    )
+    assert correction.status_code == 201, correction.text
+    stale = _confirm_lots(
+        _lot_body(second_sale.json()["id"], second_choice),
+        stale_proposal.json()["expectedState"],
+        uuid4(),
+    )
+    assert stale.status_code == 409
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM investment_lot_allocation WHERE disposal_transaction_id = %s",
+            (UUID(second_sale.json()["id"]),),
+        )
+        assert cur.fetchone() == (0,)
+
+
+@pytest.mark.parametrize("winner", ["allocation", "correction"])
+def test_lot_allocation_and_correction_serialize_to_one_valid_state(
+    live_lifecycle: LifecycleFixture, monkeypatch: pytest.MonkeyPatch, winner: str
+) -> None:
+    acquisition = TestClient(app).post(
+        "/investment-events/acquisitions", json=_acquisition(live_lifecycle)
+    )
+    sale_body = _lifecycle(live_lifecycle, "sale")
+    sale = _post(sale_body)
+    choice = [(acquisition.json()["lot"]["id"], "1.00000000")]
+    proposal = _propose_lots(sale.json()["id"], choice)
+    confirmation_body = _lot_body(sale.json()["id"], choice)
+    correction_body = {
+        **sale_body,
+        "idempotencyKey": str(uuid4()),
+        "expectedCorrectionState": "uncorrected",
+        "correctionReason": "Synthetic allocation race correction",
+    }
+    locked, release = Event(), Event()
+    real_lock = funding._lock_lot_state
+    real_append = cash_lifecycle._append
+
+    def pause_allocation(*args: Any, **kwargs: Any) -> funding._LotState:  # noqa: ANN401
+        state = real_lock(*args, **kwargs)
+        locked.set()
+        assert release.wait(timeout=5)
+        return state
+
+    def pause_correction(*args: Any, **kwargs: Any) -> UUID:  # noqa: ANN401
+        event_id = real_append(*args, **kwargs)
+        if args[3] is not None:
+            locked.set()
+            assert release.wait(timeout=5)
+        return event_id
+
+    if winner == "allocation":
+        monkeypatch.setattr(funding, "_lock_lot_state", pause_allocation)
+    else:
+        monkeypatch.setattr(cash_lifecycle, "_append", pause_correction)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = (
+                pool.submit(
+                    _confirm_lots,
+                    confirmation_body,
+                    proposal.json()["expectedState"],
+                    uuid4(),
+                )
+                if winner == "allocation"
+                else pool.submit(
+                    TestClient(app).post,
+                    f"/investment-events/{sale.json()['id']}/cash-lifecycle-corrections",
+                    json=correction_body,
+                )
+            )
+            assert locked.wait(timeout=5)
+            second = (
+                pool.submit(
+                    TestClient(app).post,
+                    f"/investment-events/{sale.json()['id']}/cash-lifecycle-corrections",
+                    json=correction_body,
+                )
+                if winner == "allocation"
+                else pool.submit(
+                    _confirm_lots,
+                    confirmation_body,
+                    proposal.json()["expectedState"],
+                    uuid4(),
+                )
+            )
+            with pytest.raises(FutureTimeoutError):
+                second.result(timeout=0.2)
+            release.set()
+            first_response, second_response = first.result(timeout=5), second.result(timeout=5)
+    finally:
+        release.set()
+    allocation_response = first_response if winner == "allocation" else second_response
+    correction_response = second_response if winner == "allocation" else first_response
+    assert allocation_response.status_code == (201 if winner == "allocation" else 409)
+    assert correction_response.status_code == (422 if winner == "allocation" else 201)
+    with live_lifecycle.connection.cursor() as cur:
+        cur.execute(
+            """SELECT
+                 (SELECT count(*) FROM investment_lot_allocation
+                   WHERE disposal_transaction_id = %s),
+                 (SELECT count(*) FROM investment_transaction
+                   WHERE corrects_transaction_id = %s)""",
+            (UUID(sale.json()["id"]), UUID(sale.json()["id"])),
+        )
+        assert cur.fetchone() == ((1, 0) if winner == "allocation" else (0, 1))
 
 
 def test_disposal_correction_resolves_original_review_and_retry_cannot_reopen_it(

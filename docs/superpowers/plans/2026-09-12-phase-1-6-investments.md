@@ -438,7 +438,10 @@ proceeds, income, reinvestment, charges or tax twice.
 transactions to purchase funding, sale proceeds, distributions, charges and tax using the fixed V33
 roles. Cover full and partial sale evidence, missing allocation availability, many-to-many cash
 roles, over-allocation, cross-household and wrong-currency refusal, correction/unlink restoration,
-and one-count flow totals. No FIFO, average-cost or jurisdiction rule is inferred.
+and one-count flow totals. Lot confirmations carry bounded idempotency and exact expected state;
+only active disposal and acquisition leaves participate, allocation/correction share the database's
+event-to-holding-to-lot/review lock order, and retained evidence must be removed before correction.
+No FIFO, average-cost or jurisdiction rule is inferred.
 **RED/GREEN:** start one server with `eval "$(scripts/test-db.sh up)"`; in every fresh shell use
 `eval "$(scripts/test-db.sh env)"`, then run `(cd api && uv run pytest -q
 tests/test_investment_cash_lifecycle.py tests/test_investment_cash_lifecycle_live.py

@@ -45,8 +45,18 @@ def owner_override() -> Iterator[None]:
         ("delete", f"/investment-funding/cash-transactions/{uuid4()}", None),
         (
             "post",
-            "/investment-funding/lot-allocations",
+            "/investment-funding/lot-allocation-proposals",
             {"disposalEventId": str(uuid4()), "allocations": [_lot_allocation()]},
+        ),
+        (
+            "post",
+            "/investment-funding/lot-allocations",
+            {
+                "disposalEventId": str(uuid4()),
+                "allocations": [_lot_allocation()],
+                "expectedState": "0" * 64,
+                "idempotencyKey": str(uuid4()),
+            },
         ),
     ],
 )
@@ -115,6 +125,8 @@ def test_lot_units_are_positive_scale_eight_strings(owner_override: None, value:
         json={
             "disposalEventId": str(uuid4()),
             "allocations": [{**_lot_allocation(), "allocatedUnits": value}],
+            "expectedState": "0" * 64,
+            "idempotencyKey": str(uuid4()),
         },
     )
 
@@ -125,8 +137,28 @@ def test_duplicate_lot_allocations_are_refused_before_the_database(owner_overrid
     allocation = _lot_allocation()
     response = TestClient(app).post(
         "/investment-funding/lot-allocations",
-        json={"disposalEventId": str(uuid4()), "allocations": [allocation, allocation]},
+        json={
+            "disposalEventId": str(uuid4()),
+            "allocations": [allocation, allocation],
+            "expectedState": "0" * 64,
+            "idempotencyKey": str(uuid4()),
+        },
     )
 
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"] == ["body"]
+
+
+def test_lot_confirmation_requires_idempotency_and_exact_expected_state(
+    owner_override: None,
+) -> None:
+    base = {"disposalEventId": str(uuid4()), "allocations": [_lot_allocation()]}
+    for additions in (
+        {"idempotencyKey": str(uuid4())},
+        {"expectedState": "0" * 64},
+        {"idempotencyKey": str(uuid4()), "expectedState": "short"},
+    ):
+        response = TestClient(app).post(
+            "/investment-funding/lot-allocations", json={**base, **additions}
+        )
+        assert response.status_code == 422
