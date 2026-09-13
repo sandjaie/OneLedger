@@ -494,7 +494,15 @@ def _load_lot_state(
              LEFT JOIN investment_lot_allocation allocation
                ON allocation.household_id = lot.household_id
               AND allocation.acquisition_lot_id = lot.id
+             LEFT JOIN investment_transaction alloc_disposal
+               ON alloc_disposal.household_id = allocation.household_id
+              AND alloc_disposal.id = allocation.disposal_transaction_id
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = alloc_disposal.household_id
+                   AND correction.corrects_transaction_id = alloc_disposal.id)
             WHERE lot.household_id = %s AND lot.id = ANY(%s::UUID[])
+              AND (allocation.acquisition_lot_id IS NULL OR alloc_disposal.id IS NOT NULL)
             GROUP BY lot.id, origin.id ORDER BY lot.id""",
         (owner.household_id, lot_ids),
     )

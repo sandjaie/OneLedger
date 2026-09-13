@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, localcontext
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal, cast
 from uuid import UUID
 
@@ -982,19 +982,14 @@ def _checkpoint_actuals(
     ) and set(allocations_by_lot).issubset(active_lot_ids)
     if not complete:
         return holding_id, units, None
-    with localcontext() as context:
-        context.prec = 80
-        cost = sum(
-            (
-                (
-                    basis
-                    * (acquired_units - allocations_by_lot.get(lot_id, Decimal(0)))
-                    / acquired_units
-                ).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
-                for lot_id, acquired_units, basis in lots
-            ),
-            Decimal(0),
-        )
+    cur.execute("SELECT investment_lot_lineage_available(%s, %s)", (holding_id, as_of_date))
+    if not bool(cur.fetchone()[0]):  # type: ignore[index]
+        return holding_id, units, None
+    cur.execute(
+        "SELECT COALESCE(sum(open_basis_native), 0) FROM investment_open_lots(%s, %s)",
+        (holding_id, as_of_date),
+    )
+    cost = Decimal(cur.fetchone()[0])  # type: ignore[index]
     return holding_id, units, cost
 
 

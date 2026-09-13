@@ -1816,7 +1816,9 @@ CREATE TABLE investment_transaction (
   dedupe_version          TEXT,
   dedupe_fingerprint      TEXT,
   corrects_transaction_id UUID,
-  correction_reason       TEXT
+  correction_reason       TEXT,
+  counterpart_transaction_id UUID  -- present only for paired switch_in/systematic_transfer_in/
+                                    -- platform_transfer_in kinds, added by V40
 );
 
 CREATE TABLE investment_unit_effect (
@@ -1838,7 +1840,10 @@ CREATE TABLE acquisition_lot (
   acquired_units        NUMERIC(28,8) NOT NULL,
   cost_basis_native     NUMERIC(20,4) NOT NULL,
   currency              CHAR(3) NOT NULL REFERENCES currency(code),
-  UNIQUE (origin_transaction_id)
+  predecessor_lot_id    UUID REFERENCES acquisition_lot(id),  -- added by V40
+  UNIQUE NULLS NOT DISTINCT (origin_transaction_id, predecessor_lot_id)  -- V40 replaces the
+                                                                          -- single-row-per-origin
+                                                                          -- uniqueness below
 );
 ```
 
@@ -2154,6 +2159,30 @@ active correction-chain leaf; retained allocation evidence makes either origin i
 correction. A proposal includes the immutable disposal date in its expected state and refuses an
 acquisition lot dated after that disposal. Remaining basis includes active acquisition origins and
 allocations from active disposals only, applying `ROUND_HALF_UP` at four decimals per lot.
+
+V40 adds the lot lineage read model ahead of any operation that creates lineage (Task 15.2's split
+and Task 15.4's paired transfer). `acquisition_lot.predecessor_lot_id` is a nullable, household- and
+holding-scoped self reference: a successor lot keeps its predecessor's `acquisition_date`, and
+`(origin_transaction_id, predecessor_lot_id)` is unique with nulls not distinct so one lineage event
+creates at most one successor per predecessor. `investment_transaction.counterpart_transaction_id`
+is a nullable, household-scoped, unique self reference present exactly for the paired `switch_in`,
+`systematic_transfer_in` and `platform_transfer_in` kinds; the future paired operation names the in
+leg's out counterpart there. A `BEFORE INSERT` order guard on `investment_transaction` raises
+`investment_unit_event_order` when a unit- or lot-affecting row (`units` present, or `event_kind =
+'split'`) predates an active `split`/`platform_transfer_in`/`platform_transfer_out` event in its
+holding, or corrects an event an active lineage event already fixed (excluding the corrected event
+itself); cash-only kinds and exact dedupe replay are exempt. `investment_lot_lineage_available(
+holding_id, as_of)` is false from the date of an active split with no successor lot.
+`investment_open_lots(holding_id, as_of)` returns each lineage chain's tip lot, its preserved
+acquisition date, open units and `round(basis * open / acquired, 4)`, counting only a lot whose
+creating event is active and dated on or before `as_of` and an allocation from an active disposal
+dated on or before `as_of`; it returns nothing while lineage is unavailable. `allocate_investment_lots_v33`
+counts lot capacity from active disposals only, refuses a successor lot for a disposal dated before
+its creating event, and refuses any lot once lineage is unavailable as of the disposal date;
+`confirm_investment_lot_allocation` derives remaining basis from `investment_open_lots` so it
+withholds under the same condition. `guard_correction_unfunded_event` exempts a corrected split's or
+transfer out-leg's own predecessor consumption but still refuses once that event's own successor
+lots are allocated or consumed by another active lineage event.
 
 ---
 

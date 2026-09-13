@@ -111,6 +111,41 @@ def _append_disposal(
     fixture.connection.commit()
 
 
+def _append_split_without_successor(
+    fixture: StagingFixture, *, event_date: str = "2026-04-01"
+) -> None:
+    """Insert an incomplete-lineage split directly. No operation creates one until Task 15.2."""
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(fixture.owner.user_id),))
+        cur.execute(
+            """SELECT holding_id FROM investment_transaction
+                 WHERE household_id = %s AND account_id = %s AND security_id = %s
+                 LIMIT 1""",
+            (fixture.owner.household_id, fixture.account_id, fixture.security_id),
+        )
+        holding_row = cur.fetchone()
+        assert holding_row is not None
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'on', true)")
+        cur.execute(
+            """INSERT INTO investment_transaction (
+                 household_id, account_id, holding_id, security_id, event_date, event_kind,
+                 unit_ratio, net_amount, currency, source_kind, source_contract, source_event_id
+               ) VALUES (
+                 %s, %s, %s, %s, %s, 'split', 2, 0, %s, 'statement',
+                 'detailed_fund_statement_v1', 'SYNTHETIC-INCOMPLETE-SPLIT')""",
+            (
+                fixture.owner.household_id,
+                fixture.account_id,
+                holding_row[0],
+                fixture.security_id,
+                event_date,
+                fixture.currency,
+            ),
+        )
+        cur.execute("SELECT set_config('oneledger.investment_event_append', 'off', true)")
+    fixture.connection.commit()
+
+
 def _prepared_checkpoint(
     fixture: StagingFixture,
     *,
@@ -432,6 +467,34 @@ def test_value_only_checkpoint_remains_evidence_without_event_or_price(
     assert result.pending == 1
     assert result.matched == 0
     assert _financial_counts(live_staging) == (0, 0, 0, 0)
+
+
+def test_incomplete_split_lineage_withholds_remaining_basis_from_its_date(
+    live_staging: StagingFixture,
+) -> None:
+    _append_purchase(live_staging, units="10.00000000", gross="100.0000")
+    _append_split_without_successor(live_staging, event_date="2026-04-01")
+    staged = staging.stage_prepared_import(
+        live_staging.owner,
+        live_staging.document_ids[0],
+        _prepared_checkpoint(
+            live_staging, units="10.00000000", cost="100.0000", as_of_date=date(2026, 6, 30)
+        ),
+    )
+
+    result = staging.reconcile_staged_checkpoints(live_staging.owner, staged.import_id)
+
+    assert result.matched == 0
+    assert result.mismatched == 0
+    assert result.pending == 1
+    with live_staging.connection.cursor() as cur:
+        cur.execute(
+            """SELECT checkpoint.reconciliation_status::text
+                 FROM investment_position_checkpoint checkpoint
+                WHERE checkpoint.group_id = %s""",
+            (staged.group_ids[0],),
+        )
+        assert cur.fetchone() == ("pending",)
 
 
 def test_retained_basis_rounds_each_lot_before_summing(
