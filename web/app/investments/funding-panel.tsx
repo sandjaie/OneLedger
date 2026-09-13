@@ -11,8 +11,6 @@ import type {
   InvestmentEventRow,
   TransactionRow,
   TransactionsResponse,
-  TransferRow,
-  TransfersResponse,
 } from "@/types/api";
 
 type Props = {
@@ -22,9 +20,11 @@ type Props = {
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type AllocationDraft = FundingAllocationInput & { key: number };
+type UnverifiedOutcome = { kind: "confirmation" | "removal"; detail: string };
+type RemovalResult = { transaction: TransactionRow; response: FundingUnlinkResponse };
 
-const TRANSACTION_QUERY = "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50";
-const TRANSFER_QUERY = "/transfers?status=confirmed&limit=50";
+const TRANSACTION_QUERY = "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=";
+const MAX_AUTO_PAGES = 4;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function refusalText(error: unknown, fallback: string) {
@@ -40,6 +40,13 @@ function cashLabel(transaction: TransactionRow) {
   return `${transaction.bookedDate} · ${transaction.accountName} · ${transaction.descriptionRaw} · ${transaction.currency} ${transaction.amount}`;
 }
 
+function isEligible(transaction: TransactionRow) {
+  return transaction.amount.startsWith("-")
+    && transaction.transferId === null
+    && !transaction.isSplitParent
+    && !transaction.txnType.startsWith("investment_");
+}
+
 function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDraft {
   return {
     key,
@@ -52,11 +59,16 @@ function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDra
 export function FundingPanel({ events, request }: Props) {
   const nextKey = useRef(2);
   const inFlight = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
   const confirmButton = useRef<HTMLButtonElement>(null);
   const removeButton = useRef<HTMLButtonElement>(null);
+  const reloadButton = useRef<HTMLButtonElement>(null);
+  const removalOrigin = useRef<HTMLButtonElement>(null);
+  const restoreRemovalFocus = useRef(false);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [transactions, setTransactions] = useState<Array<TransactionRow>>([]);
-  const [transferPaths, setTransferPaths] = useState<Array<TransferRow>>([]);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [transactionTotal, setTransactionTotal] = useState(0);
   const [drafts, setDrafts] = useState<Array<AllocationDraft>>([newDraft(1, events)]);
   const [proposal, setProposal] = useState<FundingProposalResponse>();
   const [confirmed, setConfirmed] = useState<FundingConfirmationResponse>();
@@ -64,6 +76,8 @@ export function FundingPanel({ events, request }: Props) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [stale, setStale] = useState(false);
+  const [unverified, setUnverified] = useState<UnverifiedOutcome>();
+  const [removalResult, setRemovalResult] = useState<RemovalResult>();
   const [feedback, setFeedback] = useState("");
 
   useEffect(() => {
@@ -74,13 +88,19 @@ export function FundingPanel({ events, request }: Props) {
     if (removingCashId) removeButton.current?.focus();
   }, [removingCashId]);
 
-  const eligible = transactions.filter((transaction) => (
-    transaction.amount.startsWith("-")
-    && transaction.transferId === null
-    && !transaction.isSplitParent
-    && !transaction.txnType.startsWith("investment_")
-  ));
-  const transferLegs = transactions.filter((transaction) => transaction.transferId !== null);
+  useEffect(() => {
+    if (unverified) reloadButton.current?.focus();
+  }, [unverified]);
+
+  useEffect(() => {
+    if (removingCashId || !restoreRemovalFocus.current) return;
+    restoreRemovalFocus.current = false;
+    if (removalOrigin.current?.isConnected) removalOrigin.current.focus();
+    else heading.current?.focus();
+  }, [removingCashId, confirmed]);
+
+  const eligible = transactions.filter(isEligible);
+  const hasMoreTransactions = nextOffset < transactionTotal;
   const draftsComplete = drafts.length > 0 && drafts.every((draft) => (
     draft.investmentEventId && draft.cashTransactionId && draft.allocatedAmount
   ));
@@ -99,19 +119,41 @@ export function FundingPanel({ events, request }: Props) {
     setBusy(false);
   }
 
-  async function loadTransactions() {
+  async function readCandidatePages(offset: number, existing: Array<TransactionRow>) {
+    const collected = [...existing];
+    let cursor = offset;
+    let total = transactionTotal;
+    for (let page = 0; page < MAX_AUTO_PAGES; page += 1) {
+      const response = await request<TransactionsResponse>(`${TRANSACTION_QUERY}${cursor}`);
+      collected.push(...response.transactions);
+      total = response.total;
+      cursor += response.transactions.length;
+      if (response.transactions.length === 0 || cursor >= total || collected.some(isEligible)) break;
+    }
+    return { collected, cursor, total };
+  }
+
+  async function loadTransactions({ append = false, recovery = false } = {}) {
     if (!begin()) return;
     setLoadState("loading");
     try {
-      const [cashResponse, transferResponse] = await Promise.all([
-        request<TransactionsResponse>(TRANSACTION_QUERY),
-        request<TransfersResponse>(TRANSFER_QUERY),
-      ]);
-      setTransactions(cashResponse.transactions);
-      setTransferPaths(transferResponse.transfers);
+      const result = await readCandidatePages(append ? nextOffset : 0, append ? transactions : []);
+      setTransactions(result.collected);
+      setNextOffset(result.cursor);
+      setTransactionTotal(result.total);
       setLoadState("ready");
+      if (recovery) {
+        setUnverified(undefined);
+        setProposal(undefined);
+        setConfirmed(undefined);
+        setRemovingCashId("");
+        setDrafts([newDraft(1, events)]);
+        setFeedback("Cash evidence reloaded. Review the current rows before another funding action.");
+      }
     } catch (error) {
-      setProblem(refusalText(error, "Cash entries could not be loaded. Retry."));
+      const detail = refusalText(error, "Cash entries could not be loaded. Retry.");
+      if (recovery && unverified) setUnverified({ ...unverified, detail });
+      else setProblem(detail);
       setLoadState("error");
     } finally {
       end();
@@ -152,7 +194,7 @@ export function FundingPanel({ events, request }: Props) {
   }
 
   async function propose() {
-    if (!draftsComplete || !begin()) return;
+    if (unverified || !draftsComplete || !begin()) return;
     try {
       const response = await request<FundingProposalResponse>("/investment-funding/proposals", {
         method: "POST",
@@ -169,7 +211,7 @@ export function FundingPanel({ events, request }: Props) {
   }
 
   async function confirm() {
-    if (!proposal || !begin()) return;
+    if (unverified || !proposal || !begin()) return;
     try {
       const response = await request<FundingConfirmationResponse>("/investment-funding/confirmations", {
         method: "POST",
@@ -183,23 +225,38 @@ export function FundingPanel({ events, request }: Props) {
       setProposal(undefined);
       setFeedback("Funding confirmed from the reviewed server proposal.");
     } catch (error) {
-      setProblem(refusalText(error, "The funding proposal could not be confirmed."));
       setProposal(undefined);
-      setStale(true);
+      const detail = refusalText(error, "The funding confirmation response was not received.");
+      if ((error as { status?: unknown } | null)?.status === 409
+        && detail === "funding proposal state changed") {
+        setProblem(detail);
+        setStale(true);
+      } else {
+        setProblem("");
+        setUnverified({ kind: "confirmation", detail });
+      }
     } finally {
       end();
     }
   }
 
-  function reviewRemoval(cashTransactionId: string) {
+  function reviewRemoval(cashTransactionId: string, origin: HTMLButtonElement) {
+    removalOrigin.current = origin;
     setRemovingCashId(cashTransactionId);
     setProblem("");
     setFeedback("");
+    setRemovalResult(undefined);
+  }
+
+  function closeRemoval() {
+    restoreRemovalFocus.current = true;
+    setRemovingCashId("");
   }
 
   async function unlink() {
-    if (!removingCashId || !begin()) return;
+    if (unverified || !removingCashId || !begin()) return;
     const cashId = removingCashId;
+    const transaction = transactionFor(cashId);
     try {
       const response = await request<FundingUnlinkResponse>(
         `/investment-funding/cash-transactions/${cashId}`,
@@ -210,12 +267,15 @@ export function FundingPanel({ events, request }: Props) {
         const allocations = current.allocations.filter((allocation) => allocation.cashTransactionId !== cashId);
         return allocations.length > 0 ? { ...current, allocations } : undefined;
       });
-      setRemovingCashId("");
-      setFeedback(
-        `${response.removedAllocationCount} funding allocation${response.removedAllocationCount === 1 ? "" : "s"} removed. Cash entry restored to ${response.restoredTransactionType}.`,
-      );
+      if (transaction) setRemovalResult({ transaction, response });
+      closeRemoval();
     } catch (error) {
-      setProblem(refusalText(error, "The funding link could not be removed."));
+      setProblem("");
+      setRemovingCashId("");
+      setUnverified({
+        kind: "removal",
+        detail: refusalText(error, "The funding removal response was not received."),
+      });
     } finally {
       end();
     }
@@ -232,56 +292,67 @@ export function FundingPanel({ events, request }: Props) {
   const confirmedCashIds = Array.from(new Set(
     confirmed?.allocations.map((allocation) => allocation.cashTransactionId) ?? [],
   ));
+  const removingTransaction = transactionFor(removingCashId);
 
   return (
     <section aria-labelledby="funding-title" className="investment-funding-panel">
       <div className="investment-docket-head">
         <div>
           <p className="section-label">Cash evidence</p>
-          <h2 id="funding-title">Purchase funding</h2>
+          <h2 id="funding-title" ref={heading} tabIndex={-1}>Purchase funding</h2>
         </div>
         <small>A proposal checks exact ledger rows. Only your confirmation creates links.</small>
       </div>
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {feedback && <p className="investment-feedback" role="status">{feedback}</p>}
+      {removalResult && (
+        <p className="investment-feedback investment-removal-result" role="status">
+          <strong>{cashLabel(removalResult.transaction)}</strong>
+          <span>{removalResult.response.removedAllocationCount} funding allocation{removalResult.response.removedAllocationCount === 1 ? "" : "s"} removed. Cash entry restored to {removalResult.response.restoredTransactionType}.</span>
+        </p>
+      )}
 
-      {loadState === "idle" && (
+      {unverified && (
+        <div className="investment-funding-stale">
+          <p className="inline-alert" role="alert">
+            {unverified.kind === "confirmation" ? "Confirmation" : "Removal"} outcome not verified. {unverified.detail}
+          </p>
+          <p>No claim is made about whether the funding state changed.</p>
+          <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ recovery: true })} ref={reloadButton} type="button">
+            Reload cash evidence
+          </button>
+        </div>
+      )}
+
+      {!unverified && loadState === "idle" && (
         <button className="text-action" onClick={() => void loadTransactions()} type="button">
           Find cash entries
         </button>
       )}
       {loadState === "loading" && <p className="investment-state" role="status">Loading cash entries…</p>}
-      {loadState === "error" && (
+      {!unverified && loadState === "error" && (
         <button className="text-action" onClick={() => void loadTransactions()} type="button">
           Try cash entries again
         </button>
       )}
 
-      {loadState === "ready" && eligible.length === 0 && (
+      {!unverified && loadState === "ready" && eligible.length === 0 && !hasMoreTransactions && (
         <p className="investment-state">No eligible cash debits are recorded.</p>
       )}
+      {!unverified && loadState === "ready" && eligible.length === 0 && hasMoreTransactions && (
+        <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">
+          Continue searching cash entries
+        </button>
+      )}
 
-      {loadState === "ready" && (transferPaths.length > 0 || transferLegs.length > 0) && (
-        <aside className="investment-transfer-chain" aria-label="Confirmed transfer chain">
-          {transferPaths.map((transfer) => (
-            <p key={transfer.id}>
-              <strong>Confirmed transfer path · {transfer.transferDate}</strong>
-              <span>{transfer.sourceCurrency} {transfer.sourceAmount} → {transfer.destinationCurrency} {transfer.destinationAmount}</span>
-              <small>This transfer remains its own ledger path. Funding links only the final same-currency cash debit to a purchase.</small>
-            </p>
-          ))}
-          {transferLegs.map((transaction) => (
-            <p key={transaction.id}>
-              <strong>{transaction.descriptionRaw}</strong>
-              <span>{transaction.bookedDate} · {transaction.accountName}</span>
-              <small>Keep this confirmed transfer chain separate. Select the final same-currency debit recorded after the transfer.</small>
-            </p>
-          ))}
+      {!unverified && loadState === "ready" && (
+        <aside className="investment-transfer-chain" aria-label="Funding and transfer paths">
+          <p>Confirmed transfers remain separate ledger paths. Select only the final same-currency cash debit. This screen does not infer a funding path from date or amount.</p>
         </aside>
       )}
 
-      {loadState === "ready" && eligible.length > 0 && !confirmed && !proposal && !stale && (
+      {!unverified && loadState === "ready" && eligible.length > 0 && !confirmed && !proposal && !stale && (
         <div className="investment-funding-drafts">
           {drafts.map((draft, index) => {
             const event = eventFor(draft.investmentEventId);
@@ -331,6 +402,9 @@ export function FundingPanel({ events, request }: Props) {
             );
           })}
           <div className="investment-funding-actions">
+            {hasMoreTransactions && (
+              <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">Load more cash entries</button>
+            )}
             <button className="text-action" disabled={busy} onClick={addDraft} type="button">Add allocation row</button>
             <button className="primary-action" disabled={busy || !draftsComplete} onClick={() => void propose()} type="button">
               {busy ? "Checking exact rows…" : "Review funding proposal"}
@@ -339,7 +413,7 @@ export function FundingPanel({ events, request }: Props) {
         </div>
       )}
 
-      {stale && (
+      {!unverified && stale && (
         <div className="investment-funding-stale">
           <p>The reviewed state is no longer current. No funding link was created.</p>
           <button className="text-action" disabled={busy} onClick={() => void propose()} type="button">
@@ -348,7 +422,7 @@ export function FundingPanel({ events, request }: Props) {
         </div>
       )}
 
-      {proposal && (
+      {!unverified && proposal && (
         <fieldset aria-label="Confirm funding" className="investment-funding-proposal">
           <legend>Server-checked proposal</legend>
           <p>Server accepted every selected cash leaf as fully allocated.</p>
@@ -370,7 +444,7 @@ export function FundingPanel({ events, request }: Props) {
         </fieldset>
       )}
 
-      {confirmed && confirmed.allocations.length > 0 && (
+      {!unverified && confirmed && confirmed.allocations.length > 0 && (
         <div className="investment-funding-confirmed" aria-label="Confirmed funding links">
           {confirmedCashIds.map((cashId) => {
             const transaction = transactionFor(cashId);
@@ -385,22 +459,29 @@ export function FundingPanel({ events, request }: Props) {
                   </p>
                 ))}
                 <p>{allocations.length} recorded allocation{allocations.length === 1 ? "" : "s"}. The purchase and any confirmed transfer chain remain separate ledger records.</p>
-                <button className="text-action" disabled={busy} onClick={() => reviewRemoval(cashId)} type="button">Review removal</button>
+                <button
+                  aria-label={`Review removal for ${transaction?.descriptionRaw ?? "cash entry"}`}
+                  className="text-action"
+                  disabled={busy}
+                  onClick={(event) => reviewRemoval(cashId, event.currentTarget)}
+                  type="button"
+                >Review removal</button>
               </article>
             );
           })}
         </div>
       )}
 
-      {removingCashId && (
+      {!unverified && removingCashId && (
         <fieldset aria-label="Confirm funding removal" className="investment-funding-removal">
           <legend>Remove cash-leaf allocations</legend>
+          {removingTransaction && <strong>{cashLabel(removingTransaction)}</strong>}
           <p>This removes every funding allocation on this cash leaf and restores its recorded prior type. It does not remove the purchase or transfer chain.</p>
           <div className="investment-confirm-actions">
             <button className="primary-action" disabled={busy} onClick={() => void unlink()} ref={removeButton} type="button">
               {busy ? "Removing funding link…" : "Remove funding link"}
             </button>
-            <button className="text-action" disabled={busy} onClick={() => setRemovingCashId("")} type="button">Keep funding link</button>
+            <button className="text-action" disabled={busy} onClick={closeRemoval} type="button">Keep funding link</button>
           </div>
         </fieldset>
       )}

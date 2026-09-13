@@ -12,8 +12,6 @@ import type {
   InvestmentEventRow,
   TransactionRow,
   TransactionsResponse,
-  TransferRow,
-  TransfersResponse,
 } from "@/types/api";
 
 const EVENT_A = "00000000-0000-4000-8000-000000000101";
@@ -99,39 +97,9 @@ const transactions: TransactionsResponse = {
   total: 3,
 };
 
-const transfer: TransferRow = {
-  id: "00000000-0000-4000-8000-000000000501",
-  sourceAccountId: "00000000-0000-4000-8000-000000000401",
-  destinationAccountId: "00000000-0000-4000-8000-000000000402",
-  sourceTransactionId: CASH_TRANSFER,
-  destinationTransactionId: "00000000-0000-4000-8000-000000000204",
-  sourceAmount: "12.0000",
-  sourceCurrency: "XBB",
-  destinationAmount: "24.0000",
-  destinationCurrency: "XAA",
-  transferDate: "2026-04-07",
-  settlementDate: "2026-04-08",
-  impliedRate: "2.0000000000",
-  marketRate: "2.0000000000",
-  fxSpreadPct: "0.0000",
-  fxSpreadCostSource: "0.0000",
-  explicitFeeAmount: null,
-  explicitFeeCurrency: null,
-  totalCostSource: "0.0000",
-  transferKind: "remittance",
-  provider: null,
-  matchConfidence: null,
-  matchMethod: "manual",
-  status: "confirmed",
-  notes: null,
-  costIsApproximate: false,
-};
-
-function candidateReads(rows = transactions, paths: Array<TransferRow> = [transfer]) {
-  const transfers: TransfersResponse = { transfers: paths, total: paths.length };
+function candidateReads(rows = transactions) {
   return {
-    "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50": rows,
-    "GET /transfers?status=confirmed&limit=50": transfers,
+    "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0": rows,
   };
 }
 
@@ -181,9 +149,16 @@ function fillAllocation(index: number, eventId: string, cashId: string, amount: 
 afterEach(cleanup);
 
 describe("investment funding", () => {
-  it("loads owner-visible debit candidates only when asked and never chooses one automatically", async () => {
+  it("loads owner-visible debit candidates only when asked and never invents a transfer correlation", async () => {
     const request = routes({
       ...candidateReads(),
+      "GET /transfers?status=confirmed&limit=50": { transfers: [{
+        id: "unrelated-transfer",
+        sourceAmount: "12.0000",
+        sourceCurrency: "XBB",
+        destinationAmount: "24.0000",
+        destinationCurrency: "XAA",
+      }], total: 1 },
     });
     renderPanel(request);
 
@@ -192,11 +167,66 @@ describe("investment funding", () => {
 
     const group = await screen.findByRole("group", { name: "Funding allocation 1" });
     expect((within(group).getByLabelText("Cash entry for allocation 1") as HTMLSelectElement).value).toBe("");
-    expect(screen.getByText("Synthetic confirmed transfer leg")).toBeTruthy();
-    expect(screen.getByText("XBB 12.0000 → XAA 24.0000")).toBeTruthy();
-    expect(screen.getByText(/Keep this confirmed transfer chain separate/)).toBeTruthy();
+    expect(screen.queryByText("Synthetic confirmed transfer leg")).toBeNull();
+    expect(screen.queryByText("XBB 12.0000 → XAA 24.0000")).toBeNull();
+    expect(screen.getByText(/This screen does not infer a funding path from date or amount/)).toBeTruthy();
     expect(document.body.textContent).not.toContain(CASH_A);
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues through transaction pages before declaring candidate coverage exhausted", async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) => cash({
+      id: `synthetic-transfer-leg-${index}`,
+      descriptionRaw: `Synthetic ineligible row ${index}`,
+      transferId: `synthetic-transfer-${index}`,
+    }));
+    const request = routes({
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0": {
+        transactions: firstPage,
+        total: 51,
+      },
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=50": {
+        transactions: [cash({ id: CASH_B, descriptionRaw: "Synthetic page two eligible debit" })],
+        total: 51,
+      },
+    });
+    renderPanel(request);
+
+    fireEvent.click(screen.getByRole("button", { name: "Find cash entries" }));
+
+    const cashSelect = await screen.findByLabelText("Cash entry for allocation 1");
+    expect(within(cashSelect).getByRole("option", { name: /Synthetic page two eligible debit/ })).toBeTruthy();
+    expect(screen.queryByText("No eligible cash debits are recorded.")).toBeNull();
+    expect(request.mock.calls.map(([path]) => path)).toEqual([
+      "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0",
+      "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=50",
+    ]);
+  });
+
+  it("offers another bounded search when four pages still contain no eligible debit", async () => {
+    const ineligiblePage = (page: number) => Array.from({ length: 50 }, (_, index) => cash({
+      id: `synthetic-ineligible-${page}-${index}`,
+      transferId: `synthetic-transfer-${page}-${index}`,
+    }));
+    const request = routes({
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0": { transactions: ineligiblePage(1), total: 201 },
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=50": { transactions: ineligiblePage(2), total: 201 },
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=100": { transactions: ineligiblePage(3), total: 201 },
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=150": { transactions: ineligiblePage(4), total: 201 },
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=200": {
+        transactions: [cash({ id: CASH_B, descriptionRaw: "Synthetic bounded-search debit" })],
+        total: 201,
+      },
+    });
+    renderPanel(request);
+    fireEvent.click(screen.getByRole("button", { name: "Find cash entries" }));
+
+    const more = await screen.findByRole("button", { name: "Continue searching cash entries" });
+    expect(screen.queryByText("No eligible cash debits are recorded.")).toBeNull();
+    fireEvent.click(more);
+
+    const select = await screen.findByLabelText("Cash entry for allocation 1");
+    expect(within(select).getByRole("option", { name: /Synthetic bounded-search debit/ })).toBeTruthy();
   });
 
   it("posts exact owner-entered strings to create a proposal and does not auto-confirm it", async () => {
@@ -298,7 +328,123 @@ describe("investment funding", () => {
     expect(proposals).toBe(2);
   });
 
-  it("confirms the exact proposal once and removes a cash leaf only after a second explicit action", async () => {
+  it("treats a non-conflict confirmation failure as an unverified outcome and blocks reposting", async () => {
+    const request = routes({
+      ...candidateReads(),
+      "POST /investment-funding/proposals": proposal(),
+      "POST /investment-funding/confirmations": new ApiError(503, "confirmation response unavailable"),
+    });
+    renderPanel(request);
+    await loadCandidates();
+    fillAllocation(1, EVENT_A, CASH_A, "30.0000");
+    fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm funding" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Confirmation outcome not verified");
+    expect(alert.textContent).toContain("confirmation response unavailable");
+    expect(document.body.textContent).not.toContain("No funding link was created");
+    expect(screen.queryByRole("button", { name: "Confirm funding" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review current state" })).toBeNull();
+    expect(request.mock.calls.filter(([path]) => path === "/investment-funding/confirmations")).toHaveLength(1);
+
+    const reload = screen.getByRole("button", { name: "Reload cash evidence" });
+    expect(document.activeElement).toBe(reload);
+    fireEvent.click(reload);
+    await screen.findByRole("group", { name: "Funding allocation 1" });
+    expect(request.mock.calls.filter(([path]) => path.startsWith("/transactions?"))).toHaveLength(2);
+  });
+
+  it("targets one confirmed cash leaf for reviewed removal and preserves its context and focus", async () => {
+    const twoRows = [
+      ...proposal().allocations,
+      { ...proposal().allocations[0], cashTransactionId: CASH_B, allocatedAmount: "11.0000", cashAmount: "11.0000" },
+    ];
+    const confirmed: FundingConfirmationResponse = {
+      state: "confirmed",
+      allocations: [
+        {
+          id: "00000000-0000-4000-8000-000000000601",
+          investmentEventId: EVENT_A,
+          cashTransactionId: CASH_A,
+          role: "funding",
+          allocatedAmount: "30.0000",
+          priorTransactionType: "expense",
+          cashTransactionType: "investment_buy",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000602",
+          investmentEventId: EVENT_A,
+          cashTransactionId: CASH_B,
+          role: "funding",
+          allocatedAmount: "11.0000",
+          priorTransactionType: "fee",
+          cashTransactionType: "investment_buy",
+        },
+      ],
+    };
+    const unlinked: FundingUnlinkResponse = {
+      state: "unlinked",
+      cashTransactionId: CASH_B,
+      restoredTransactionType: "fee",
+      removedAllocationCount: 3,
+    };
+    let releaseConfirmation!: (value: FundingConfirmationResponse) => void;
+    const request = routes({
+      ...candidateReads(),
+      "POST /investment-funding/proposals": proposal({ allocations: twoRows }),
+      "POST /investment-funding/confirmations": () => new Promise((resolve) => {
+        releaseConfirmation = resolve;
+      }),
+      [`DELETE /investment-funding/cash-transactions/${CASH_B}`]: unlinked,
+    });
+    renderPanel(request);
+    await loadCandidates();
+    fillAllocation(1, EVENT_A, CASH_A, "30.0000");
+    fireEvent.click(screen.getByRole("button", { name: "Add allocation row" }));
+    fillAllocation(2, EVENT_A, CASH_B, "11.0000");
+    fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
+    const confirmButton = await screen.findByRole("button", { name: "Confirm funding" });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+    releaseConfirmation(confirmed);
+
+    const record = await screen.findByRole("article", { name: "Confirmed funding for Synthetic investment debit" });
+    expect(within(record).getByText("XAA 30.0000")).toBeTruthy();
+    const confirmationPosts = request.mock.calls.filter(([path]) => path === "/investment-funding/confirmations");
+    expect(confirmationPosts).toHaveLength(1);
+    expect(JSON.parse(String(confirmationPosts[0][1]?.body))).toEqual({
+      allocations: [
+        { investmentEventId: EVENT_A, cashTransactionId: CASH_A, allocatedAmount: "30.0000" },
+        { investmentEventId: EVENT_A, cashTransactionId: CASH_B, allocatedAmount: "11.0000" },
+      ],
+      expectedState: "a".repeat(64),
+    });
+
+    const secondRecord = screen.getByRole("article", { name: "Confirmed funding for Synthetic second debit" });
+    const secondReview = within(secondRecord).getByRole("button", { name: "Review removal for Synthetic second debit" });
+    fireEvent.click(secondReview);
+    expect(request.mock.calls.some(([path]) => path.includes("cash-transactions"))).toBe(false);
+    const removal = screen.getByRole("group", { name: "Confirm funding removal" });
+    expect(within(removal).getByText(/Synthetic second debit/)).toBeTruthy();
+    expect(within(removal).getByText(/XAA -11.0000/)).toBeTruthy();
+    expect(within(removal).queryByText(/Synthetic investment debit/)).toBeNull();
+    expect(document.activeElement).toBe(within(removal).getByRole("button", { name: "Remove funding link" }));
+    fireEvent.click(within(removal).getByRole("button", { name: "Keep funding link" }));
+    expect(document.activeElement).toBe(secondReview);
+
+    fireEvent.click(secondReview);
+    const confirmedRemoval = screen.getByRole("group", { name: "Confirm funding removal" });
+    fireEvent.click(within(confirmedRemoval).getByRole("button", { name: "Remove funding link" }));
+    const result = await screen.findByRole("status");
+    expect(result.textContent).toContain("Synthetic second debit");
+    expect(result.textContent).toContain("3 funding allocations removed. Cash entry restored to fee.");
+    expect(screen.getByRole("article", { name: "Confirmed funding for Synthetic investment debit" })).toBeTruthy();
+    expect(screen.queryByRole("article", { name: "Confirmed funding for Synthetic second debit" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Purchase funding" }));
+  });
+
+  it("treats a non-conflict unlink failure as an unverified outcome and requires a reload", async () => {
     const confirmed: FundingConfirmationResponse = {
       state: "confirmed",
       allocations: [{
@@ -311,58 +457,42 @@ describe("investment funding", () => {
         cashTransactionType: "investment_buy",
       }],
     };
-    const unlinked: FundingUnlinkResponse = {
-      state: "unlinked",
-      cashTransactionId: CASH_A,
-      restoredTransactionType: "expense",
-      removedAllocationCount: 1,
-    };
-    let releaseConfirmation!: (value: FundingConfirmationResponse) => void;
     const request = routes({
       ...candidateReads(),
       "POST /investment-funding/proposals": proposal(),
-      "POST /investment-funding/confirmations": () => new Promise((resolve) => {
-        releaseConfirmation = resolve;
-      }),
-      [`DELETE /investment-funding/cash-transactions/${CASH_A}`]: unlinked,
+      "POST /investment-funding/confirmations": confirmed,
+      [`DELETE /investment-funding/cash-transactions/${CASH_A}`]: new ApiError(503, "removal response unavailable"),
     });
     renderPanel(request);
     await loadCandidates();
     fillAllocation(1, EVENT_A, CASH_A, "30.0000");
     fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
-    const confirmButton = await screen.findByRole("button", { name: "Confirm funding" });
-    fireEvent.click(confirmButton);
-    fireEvent.click(confirmButton);
-    releaseConfirmation(confirmed);
-
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm funding" }));
     const record = await screen.findByRole("article", { name: "Confirmed funding for Synthetic investment debit" });
-    expect(within(record).getByText("XAA 30.0000")).toBeTruthy();
-    const confirmationPosts = request.mock.calls.filter(([path]) => path === "/investment-funding/confirmations");
-    expect(confirmationPosts).toHaveLength(1);
-    expect(JSON.parse(String(confirmationPosts[0][1]?.body))).toEqual({
-      allocations: [{ investmentEventId: EVENT_A, cashTransactionId: CASH_A, allocatedAmount: "30.0000" }],
-      expectedState: "a".repeat(64),
-    });
+    fireEvent.click(within(record).getByRole("button", { name: /Review removal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove funding link" }));
 
-    fireEvent.click(within(record).getByRole("button", { name: "Review removal" }));
-    expect(request.mock.calls.some(([path]) => path.includes("cash-transactions"))).toBe(false);
-    const removal = screen.getByRole("group", { name: "Confirm funding removal" });
-    expect(document.activeElement).toBe(within(removal).getByRole("button", { name: "Remove funding link" }));
-    fireEvent.click(within(removal).getByRole("button", { name: "Remove funding link" }));
-    expect(await screen.findByText("1 funding allocation removed. Cash entry restored to expense.")).toBeTruthy();
-    expect(screen.queryByRole("article", { name: /Confirmed funding/ })).toBeNull();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Removal outcome not verified");
+    expect(alert.textContent).toContain("removal response unavailable");
+    expect(document.body.textContent).not.toMatch(/allocation removed|cash entry restored/i);
+    expect(screen.queryByRole("button", { name: "Remove funding link" })).toBeNull();
+    expect(request.mock.calls.filter(([path]) => path.includes("cash-transactions"))).toHaveLength(1);
+    const reload = screen.getByRole("button", { name: "Reload cash evidence" });
+    expect(document.activeElement).toBe(reload);
+    fireEvent.click(reload);
+    await screen.findByRole("group", { name: "Funding allocation 1" });
   });
 
   it("shows loading, empty and retryable candidate states", async () => {
     let attempts = 0;
     let release!: (value: TransactionsResponse) => void;
     const request = routes({
-      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50": () => {
+      "GET /transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0": () => {
         attempts += 1;
         if (attempts === 1) throw new ApiError(403, "owner session required");
         return new Promise((resolve) => { release = resolve; });
       },
-      "GET /transfers?status=confirmed&limit=50": { transfers: [], total: 0 },
     });
     renderPanel(request);
     fireEvent.click(screen.getByRole("button", { name: "Find cash entries" }));
