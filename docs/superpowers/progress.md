@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Confirm the dispatch-time Task 11 split, then deliver Task 11.1 — core detailed extraction | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-111--adapter-contract-and-core-detailed-extraction) |
-| Current implementation task | Task 10 is complete; Task 11 reforecast at 2,150–2,800 counted lines and is split into three sequential, reviewable branches before extraction implementation begins | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-111--adapter-contract-and-core-detailed-extraction) |
+| Next product action | Deliver Task 11.2 — income, checkpoints and hostile evidence | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-112--income-checkpoints-and-hostile-evidence) |
+| Current implementation task | Task 11.2 extends the merged core investment extraction contract with income, checkpoints and hostile-evidence coverage | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-112--income-checkpoints-and-hostile-evidence) |
 
 ## Canonical phase status
 
@@ -78,6 +78,7 @@ requires a separate owner request.
 | Phase 1.6 Task 9 | **Complete via PR #174** — catalogue resolution, explicit acquisition confirmation, optional dated price entry and resulting holding display are on `develop` | [PR #174](https://github.com/sandjaie/OneLedger/pull/174) |
 | Phase 1.6 Task 10 | **Complete via PR #175** — exact cash candidates, explicit many-to-many proposals/confirmation, truthful uncertain-outcome recovery and reviewed unlink are on `develop` | [PR #175](https://github.com/sandjaie/OneLedger/pull/175) |
 | Phase 1.6 Task 11 | **Split before implementation** — dispatch reforecast exceeded the review budget; Tasks 11.1–11.3 now separate core extraction, evidence coverage and grouped unit actions/staged ratios | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-111--adapter-contract-and-core-detailed-extraction) |
+| Phase 1.6 Task 11.1 | **Complete** — pure content selection, frozen versioned results, exact core event drafts, safe abstention and private evidence representations are on `develop` | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-111--adapter-contract-and-core-detailed-extraction) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.
