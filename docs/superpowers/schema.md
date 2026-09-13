@@ -2044,6 +2044,22 @@ without that column, then drops it. `classification_state_is_valid` now admits `
 
 ---
 
+## `V34` (applied)
+
+### Investment funding and correction serialization
+
+V34 makes only the active leaf of an acquisition-correction chain eligible for cash funding. An
+allocation insert locks its event and refuses one that already has a correction; a correction insert
+locks its original and refuses one that already has cash allocations. Both checks are database
+triggers inside the existing atomic operations, so a concurrent correction and confirmation
+serialize on the same event row and exactly one may commit. The active replacement remains eligible.
+
+Unlink discovers and locks every referenced investment event in UUID order before it locks and
+restores the cash leaf. This matches confirmation's event-then-cash protocol and retains V33's exact
+prior-type restoration and owner/household boundary.
+
+---
+
 ## `0013`
 
 ### Loans

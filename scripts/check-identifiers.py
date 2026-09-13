@@ -213,6 +213,8 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/classification_review.py",
     # Transfer matching looks for unlinked legs, which the reportable view drops by design.
     "api/oneledger/routes/transfers.py",
+    # Funding decisions inspect and relabel exact cash leaves; they are not flow reports.
+    "api/oneledger/investments/funding.py",
     # A balance and the guards on an account's anchor must include every movement, transfers too.
     "api/oneledger/routes/accounts.py",
     # Data Quality counts the rows a backup does not hold, and a backup holds every row.
