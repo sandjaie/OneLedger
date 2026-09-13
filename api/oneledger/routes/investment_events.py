@@ -1,4 +1,4 @@
-"""Owner-only acquisition and append-only correction routes."""
+"""Owner-only investment event and append-only correction routes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from ..auth import OwnerSession, require_owner
+from ..investments.cash_lifecycle import (
+    correct_cash_lifecycle_event,
+    create_cash_lifecycle_event,
+)
 from ..investments.commands import (
     InvestmentCommandError,
     correct_acquisition,
@@ -16,6 +20,9 @@ from ..investments.commands import (
 from ..investments.schemas import (
     AcquisitionCorrectionCreate,
     AcquisitionCreate,
+    CashLifecycleCorrectionCreate,
+    CashLifecycleCreate,
+    CashLifecycleEventRow,
     InvestmentEventRow,
 )
 
@@ -56,6 +63,47 @@ def append_acquisition_correction(
 ) -> InvestmentEventRow:
     try:
         result = correct_acquisition(owner, event_id, body)
+    except InvestmentCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.event
+
+
+@router.post(
+    "/cash-lifecycle",
+    response_model=CashLifecycleEventRow,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": CashLifecycleEventRow, "description": "Identical retry"}},
+)
+def append_cash_lifecycle_event(
+    body: CashLifecycleCreate,
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> CashLifecycleEventRow:
+    try:
+        result = create_cash_lifecycle_event(owner, body)
+    except InvestmentCommandError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not result.created:
+        response.status_code = status.HTTP_200_OK
+    return result.event
+
+
+@router.post(
+    "/{event_id}/cash-lifecycle-corrections",
+    response_model=CashLifecycleEventRow,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": CashLifecycleEventRow, "description": "Identical retry"}},
+)
+def append_cash_lifecycle_correction(
+    event_id: UUID,
+    body: CashLifecycleCorrectionCreate,
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> CashLifecycleEventRow:
+    try:
+        result = correct_cash_lifecycle_event(owner, event_id, body)
     except InvestmentCommandError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
     if not result.created:

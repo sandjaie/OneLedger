@@ -408,7 +408,9 @@ holding/lot effects without manufacturing external cash.
 **Files:** `api/oneledger/investments/cash_lifecycle.py`,
 `api/oneledger/investments/schemas.py`, `api/oneledger/routes/investment_events.py`,
 `api/tests/test_investment_cash_lifecycle.py`,
-`api/tests/test_investment_cash_lifecycle_live.py`; shared API/type/schema/status paths.
+`api/tests/test_investment_cash_lifecycle_live.py`,
+`db/migrations/V38__investment_review_resolution.sql`,
+`db/tests/0035_investment_review_resolution.sql`; shared API/type/schema/status paths.
 **Contract/tests:** Owner-authorized sale, redemption and maturity events change units and cash;
 cash distributions, interest, reinvested distributions, standalone charges and withheld tax retain
 their distinct economic meaning. Partial sale, closed/reopened history, exact event-kind fields,
@@ -447,8 +449,8 @@ only the dependent claim.
 ## Task 15 — splits, bonuses, switches and platform transfers
 
 **Branch/base/target:** `feature/p1-6o-investment-corporate-actions` / `develop` / `develop`.
-**Files:** `db/migrations/V38__investment_unit_lifecycle.sql`,
-`db/tests/0035_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
+**Files:** `db/migrations/V39__investment_unit_lifecycle.sql`,
+`db/tests/0036_investment_unit_lifecycle.sql`, `api/oneledger/investments/unit_lifecycle.py`,
 `api/oneledger/routes/investment_events.py`, `api/tests/test_investment_unit_lifecycle.py`,
 `api/tests/test_investment_unit_lifecycle_live.py`; shared API/type/schema/status paths.
 **Contract/tests:** A forward owner-authorized database operation admits evidenced split, bonus,

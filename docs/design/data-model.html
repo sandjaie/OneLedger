@@ -876,8 +876,10 @@ replay is idempotent; conflicting evidence attaches nothing. Fingerprints are sc
 and source contract, while indexed cross-document overlap lets a new document attach evidence to
 an already committed immutable event without creating another draft.</td></tr>
 <tr><td><code>investment_review_item</code></td><td>An append-only fixed-reason issue whose generated
-severity is blocking or advisory. Resolution metadata cannot be written without a later validated
-domain operation.</td></tr>
+severity is blocking or advisory. Resolution metadata cannot be written directly. A validated
+owner operation may retain and close a superseded disposal&#39;s incomplete-lot review as
+<code>event_corrected</code> only when its resolution reference is the immutable replacement event;
+the same event/reason identity cannot later be reopened.</td></tr>
 </tbody></table><p>The acquisition-only position service rebuilds as-of units and cumulative
 contributions from active immutable purchase leaves, retains each event&#39;s frozen reporting
 contribution, and values those units with the latest accepted non-future price plus current as-of
@@ -887,7 +889,7 @@ holdings or the latest frozen snapshot inside the active period contributes, nev
 <p>Once events exist, parent security-currency and account date or valuation-mode
 edits are refused when they would relabel or strand that retained history.</p>
 <p class="ddl-ref">Applied DDL: <a href="../superpowers/schema.md">schema.md</a>
-<code>V30</code>–<code>V36</code>.</p>
+<code>V30</code>–<code>V38</code>.</p>
 <h3 id="xirr">XIRR</h3>
 <p>Computed from the holding&#39;s signed cash flows plus current value as a terminal inflow, solving:</p>
 <pre><code>Σ  CFᵢ / (1 + r)^(dᵢ − d₀)/365  =  0

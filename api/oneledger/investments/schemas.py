@@ -6,18 +6,34 @@ import re
 import unicodedata
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator, model_validator
 
 AcquisitionKind = Literal["purchase", "recurring_purchase"]
+CashLifecycleKind = Literal[
+    "sale",
+    "redemption",
+    "maturity",
+    "cash_distribution",
+    "interest",
+    "reinvested_distribution",
+    "charge",
+    "withheld_tax",
+]
 
 _UNITS_PATTERN = r"^\d{1,20}(?:\.\d{1,8})?$"
 _PRICE_PATTERN = r"^\d{1,14}(?:\.\d{1,6})?$"
 _MONEY_PATTERN = r"^\d{1,16}(?:\.\d{1,4})?$"
 _NEGATIVE_MONEY_PATTERN = r"^-\d{1,16}(?:\.\d{1,4})?$"
 _DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SIGNED_UNITS_PATTERN = r"^-?\d{1,20}(?:\.\d{1,8})?$"
+_SIGNED_MONEY_PATTERN = r"^-?\d{1,16}(?:\.\d{1,4})?$"
+SignedUnits = Annotated[StrictStr, Field(pattern=_SIGNED_UNITS_PATTERN)]
+Price = Annotated[StrictStr, Field(pattern=_PRICE_PATTERN)]
+Money = Annotated[StrictStr, Field(pattern=_MONEY_PATTERN)]
+SignedMoney = Annotated[StrictStr, Field(pattern=_SIGNED_MONEY_PATTERN)]
 
 
 def _decimal(value: str) -> Decimal:
@@ -116,3 +132,135 @@ class InvestmentEventRow(BaseModel):
     correctionState: Literal["uncorrected", "corrected"]
     currentUnits: str
     lot: AcquisitionLotRow
+
+
+class CashLifecycleCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    accountId: UUID
+    securityId: UUID
+    eventDate: date
+    eventKind: CashLifecycleKind
+    units: SignedUnits | None
+    price: Price | None
+    grossAmount: Money | None
+    charges: Money
+    withheldTax: Money
+    netAmount: SignedMoney
+    currency: StrictStr = Field(pattern=r"^[A-Z]{3}$")
+    idempotencyKey: UUID
+
+    @field_validator("eventDate", mode="before")
+    @classmethod
+    def canonical_event_date(cls, value: object) -> date:
+        try:
+            if not isinstance(value, str) or _DATE_PATTERN.fullmatch(value) is None:
+                raise ValueError
+            parsed = date.fromisoformat(value)
+            if parsed.isoformat() != value:
+                raise ValueError
+        except ValueError:
+            raise ValueError("must be a canonical YYYY-MM-DD date string") from None
+        return parsed
+
+    @model_validator(mode="after")
+    def lifecycle_fields_agree(self) -> CashLifecycleCreate:
+        units = None if self.units is None else _decimal(self.units)
+        price = None if self.price is None else _decimal(self.price)
+        gross = None if self.grossAmount is None else _decimal(self.grossAmount)
+        charges = _decimal(self.charges)
+        withheld = _decimal(self.withheldTax)
+        net = _decimal(self.netAmount)
+        zero_is_canonical = not (net == 0 and self.netAmount.startswith("-"))
+        if self.eventKind in {"sale", "redemption", "maturity"}:
+            valid = (
+                units is not None
+                and units < 0
+                and price is not None
+                and price > 0
+                and gross is not None
+                and gross > 0
+                and net == gross - charges - withheld
+                and net > 0
+            )
+        elif self.eventKind in {"cash_distribution", "interest"}:
+            valid = (
+                units is None
+                and price is None
+                and gross is not None
+                and gross > 0
+                and net == gross - charges - withheld
+                and net > 0
+            )
+        elif self.eventKind == "reinvested_distribution":
+            valid = (
+                units is not None
+                and units > 0
+                and price is not None
+                and price > 0
+                and gross is not None
+                and gross > 0
+                and charges == 0
+                and net == 0
+            )
+        elif self.eventKind == "charge":
+            valid = (
+                units is None
+                and price is None
+                and gross is None
+                and charges > 0
+                and withheld == 0
+                and net == -charges
+            )
+        else:
+            valid = (
+                units is None
+                and price is None
+                and gross is None
+                and charges == 0
+                and withheld > 0
+                and net == -withheld
+            )
+        if charges < 0 or withheld < 0 or not zero_is_canonical or not valid:
+            raise ValueError("cash lifecycle event fields do not match their kind")
+        return self
+
+
+class CashLifecycleCorrectionCreate(CashLifecycleCreate):
+    expectedCorrectionState: Literal["uncorrected"]
+    correctionReason: StrictStr = Field(min_length=1, max_length=500)
+
+    @field_validator("correctionReason")
+    @classmethod
+    def normalized_correction_reason(cls, value: str) -> str:
+        normalized = " ".join(unicodedata.normalize("NFKC", value).split())
+        if not normalized:
+            raise ValueError("must not be blank")
+        return normalized
+
+
+class CashLifecycleEventRow(BaseModel):
+    id: UUID
+    holdingId: UUID
+    accountId: UUID
+    securityId: UUID
+    eventDate: date
+    eventKind: CashLifecycleKind
+    units: str | None
+    price: str | None
+    grossAmount: str | None
+    charges: str
+    withheldTax: str
+    netAmount: str
+    currency: str
+    fxRateDate: date | None
+    fxRateToBase: str | None
+    fxRateToSecondary: str | None
+    netAmountBase: str | None
+    netAmountSecondary: str | None
+    sourceKind: Literal["owner_entered"]
+    correctsEventId: UUID | None
+    correctionState: Literal["uncorrected", "corrected"]
+    currentUnits: str
+    lot: AcquisitionLotRow | None
+    reviewReasons: list[Literal["incomplete_lot_allocation"]]

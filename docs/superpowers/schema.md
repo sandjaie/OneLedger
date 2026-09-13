@@ -1989,9 +1989,11 @@ a discrepancy marks it `mismatched` and appends the checkpoint-scoped `unit_mism
 
 The twelve review reasons have database-fixed severity. Eight data-integrity reasons block their
 group; missing price, unmatched cash, incomplete lot allocation and stale valuation are advisory.
-Review rows cannot be deleted or marked resolved directly. A later validated resolution operation
-must prove the underlying invariant before closing one. A group with any open blocking item cannot
-be marked ready or committed.
+Review rows cannot be deleted or marked resolved directly. V38's validated operation may close an
+event-scoped incomplete-lot review as `event_corrected` only after proving that its retained
+resolution reference is the immutable replacement event. The same event/reason identity cannot be
+reopened after resolution. Later domain operations must prove their own invariants before closing
+other review kinds. A group with any open blocking item cannot be marked ready or committed.
 
 ---
 
@@ -2110,6 +2112,19 @@ Task 14.2 must surface it once and must not manufacture a second standalone tax 
 history can retain a zero-unit holding without manufacturing a unit effect or acquisition lot. The
 existing household scope, RLS, immutable facts, append-only
 corrections, dedupe, precision and atomic-refusal boundaries remain unchanged.
+
+---
+
+## `V38` (applied)
+
+### Validated investment-event review resolution
+
+V38 adds the owner-authorized `resolve_investment_review_item` operation. Its first supported
+transition closes an event-scoped `incomplete_lot_allocation` item as `event_corrected` only when
+the referenced immutable event directly corrects the reviewed disposal. The operation retains the
+review row and records its resolver, reference and timestamp; direct state mutation and deletion
+remain refused. A historical unique event/reason identity prevents an exact event retry from
+reopening a resolved question.
 
 ---
 
