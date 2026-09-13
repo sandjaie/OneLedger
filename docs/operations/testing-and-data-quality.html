@@ -634,7 +634,10 @@ market/FX effects are counted once; platform transfers preserve acquisition hist
 suite proves exact full-leaf cash allocation, report exclusion and unlink restoration, event/lot
 capacity and temporal eligibility, split-leaf behavior and split-parent refusal, owner authorization
 and household isolation. A separate rollback-scoped rehearsal applies the real V33 file to populated
-V32 state and proves the legacy guard fails before any V33 surface persists.</li>
+V32 state and proves the legacy guard fails before any V33 surface persists. The Task 7 API suite
+additionally proves proposals are read-only, confirmation detects stale state, one-to-many and
+many-to-one allocations remain atomic, transfer legs are ineligible while the final debit is eligible,
+and unlink restores one selected leaf without changing income or net worth.</li>
 <li>Phase 3.1 / Phase 3.2: account-level shortfalls remain visible; purchases and card settlements have distinct
 spending/cash timing; actual payments clear future commitments; actions resolve without duplicates.</li>
 <li>Phase 3.3 / Phase 3.4: resources cannot be reserved twice; emergency coverage uses a visible baseline;

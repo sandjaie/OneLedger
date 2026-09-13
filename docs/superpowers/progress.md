@@ -15,8 +15,8 @@ Updated: 13 September 2026.
 | Current outcome | **Phase 1.6 — investments** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
 | Outcome state | **Implementation active** — design, owner approval and plan review are complete | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Controller review and delivery of Task 6 — acquisition entry and corrections | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-6--acquisition-entry-and-correction-framework) |
-| Current implementation task | Task 6 adds exact owner-entered acquisitions and idempotent append-only acquisition corrections; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-6--acquisition-entry-and-correction-framework) |
+| Next product action | Controller review and delivery of Task 7 — purchase funding confirmation | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
+| Current implementation task | Task 7 adds read-only purchase-funding proposals, explicit atomic confirmation and exact prior-type unlink; local implementation verification is complete and controller review remains | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
 
 ## Canonical phase status
 
@@ -72,7 +72,8 @@ requires a separate owner request.
 | Phase 1.6 Task 3 | **Complete via PR #167** — V32 and its invariant suite passed full `/verify`; all four local-review findings were resolved and confirmation review found no remaining issues | [PR #167](https://github.com/sandjaie/OneLedger/pull/167) |
 | Phase 1.6 Task 4 | **Complete via PR #169** — V33 enforces owner-authorized many-to-many cash links, exact unlink restoration, disposal-lot allocation and legacy-column retirement | [PR #169](https://github.com/sandjaie/OneLedger/pull/169) |
 | Phase 1.6 Task 5 | **Complete via PR #170** — catalogue resolution, private investment identifiers and append-only manual price observations are on `develop` | [PR #170](https://github.com/sandjaie/OneLedger/pull/170) |
-| Phase 1.6 Task 6 | **Implementation ready for controller review** — exact acquisition entry, idempotent append-only corrections, stale-state refusal and atomic projection are committed on the task branch; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-6--acquisition-entry-and-correction-framework) |
+| Phase 1.6 Task 6 | **Complete via PR #171** — exact owner-entered acquisitions and idempotent append-only corrections are on <code>develop</code> | [PR #171](https://github.com/sandjaie/OneLedger/pull/171) |
+| Phase 1.6 Task 7 | **Implementation ready for controller review** — read-only proposals, stale-state confirmation, atomic full-leaf allocation, final-debit selection and exact prior-type unlink are implemented locally; no push or PR yet | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md#task-7--purchase-funding-confirmation) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

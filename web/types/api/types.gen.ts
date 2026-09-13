@@ -1034,6 +1034,40 @@ export type CommitResult = {
 };
 
 /**
+ * ConfirmedFundingAllocation
+ */
+export type ConfirmedFundingAllocation = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Investmenteventid
+     */
+    investmentEventId: string;
+    /**
+     * Cashtransactionid
+     */
+    cashTransactionId: string;
+    /**
+     * Role
+     */
+    role: 'funding';
+    /**
+     * Allocatedamount
+     */
+    allocatedAmount: string;
+    /**
+     * Priortransactiontype
+     */
+    priorTransactionType: string;
+    /**
+     * Cashtransactiontype
+     */
+    cashTransactionType: 'investment_buy';
+};
+
+/**
  * CurrencyRow
  */
 export type CurrencyRow = {
@@ -1229,6 +1263,136 @@ export type Finding = {
      * Message
      */
     message: string;
+};
+
+/**
+ * FundingAllocationInput
+ */
+export type FundingAllocationInput = {
+    /**
+     * Investmenteventid
+     */
+    investmentEventId: string;
+    /**
+     * Cashtransactionid
+     */
+    cashTransactionId: string;
+    /**
+     * Allocatedamount
+     */
+    allocatedAmount: string;
+};
+
+/**
+ * FundingConfirmationRequest
+ */
+export type FundingConfirmationRequest = {
+    /**
+     * Allocations
+     */
+    allocations: Array<FundingAllocationInput>;
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+};
+
+/**
+ * FundingConfirmationResponse
+ */
+export type FundingConfirmationResponse = {
+    /**
+     * State
+     */
+    state?: 'confirmed';
+    /**
+     * Allocations
+     */
+    allocations: Array<ConfirmedFundingAllocation>;
+};
+
+/**
+ * FundingProposalAllocation
+ */
+export type FundingProposalAllocation = {
+    /**
+     * Investmenteventid
+     */
+    investmentEventId: string;
+    /**
+     * Cashtransactionid
+     */
+    cashTransactionId: string;
+    /**
+     * Allocatedamount
+     */
+    allocatedAmount: string;
+    /**
+     * Eventremainingamount
+     */
+    eventRemainingAmount: string;
+    /**
+     * Cashamount
+     */
+    cashAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Priortransactiontype
+     */
+    priorTransactionType: string;
+};
+
+/**
+ * FundingProposalRequest
+ */
+export type FundingProposalRequest = {
+    /**
+     * Allocations
+     */
+    allocations: Array<FundingAllocationInput>;
+};
+
+/**
+ * FundingProposalResponse
+ */
+export type FundingProposalResponse = {
+    /**
+     * State
+     */
+    state?: 'ready';
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+    /**
+     * Allocations
+     */
+    allocations: Array<FundingProposalAllocation>;
+};
+
+/**
+ * FundingUnlinkResponse
+ */
+export type FundingUnlinkResponse = {
+    /**
+     * State
+     */
+    state?: 'unlinked';
+    /**
+     * Cashtransactionid
+     */
+    cashTransactionId: string;
+    /**
+     * Restoredtransactiontype
+     */
+    restoredTransactionType: string;
+    /**
+     * Removedallocationcount
+     */
+    removedAllocationCount: number;
 };
 
 /**
@@ -5509,6 +5673,86 @@ export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostRes
 };
 
 export type AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponse = AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses[keyof AppendAcquisitionCorrectionInvestmentEventsEventIdCorrectionsPostResponses];
+
+export type ProposePurchaseFundingInvestmentFundingProposalsPostData = {
+    body: FundingProposalRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-funding/proposals';
+};
+
+export type ProposePurchaseFundingInvestmentFundingProposalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ProposePurchaseFundingInvestmentFundingProposalsPostError = ProposePurchaseFundingInvestmentFundingProposalsPostErrors[keyof ProposePurchaseFundingInvestmentFundingProposalsPostErrors];
+
+export type ProposePurchaseFundingInvestmentFundingProposalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FundingProposalResponse;
+};
+
+export type ProposePurchaseFundingInvestmentFundingProposalsPostResponse = ProposePurchaseFundingInvestmentFundingProposalsPostResponses[keyof ProposePurchaseFundingInvestmentFundingProposalsPostResponses];
+
+export type ConfirmPurchaseFundingInvestmentFundingConfirmationsPostData = {
+    body: FundingConfirmationRequest;
+    path?: never;
+    query?: never;
+    url: '/investment-funding/confirmations';
+};
+
+export type ConfirmPurchaseFundingInvestmentFundingConfirmationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmPurchaseFundingInvestmentFundingConfirmationsPostError = ConfirmPurchaseFundingInvestmentFundingConfirmationsPostErrors[keyof ConfirmPurchaseFundingInvestmentFundingConfirmationsPostErrors];
+
+export type ConfirmPurchaseFundingInvestmentFundingConfirmationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: FundingConfirmationResponse;
+};
+
+export type ConfirmPurchaseFundingInvestmentFundingConfirmationsPostResponse = ConfirmPurchaseFundingInvestmentFundingConfirmationsPostResponses[keyof ConfirmPurchaseFundingInvestmentFundingConfirmationsPostResponses];
+
+export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Cash Transaction Id
+         */
+        cash_transaction_id: string;
+    };
+    query?: never;
+    url: '/investment-funding/cash-transactions/{cash_transaction_id}';
+};
+
+export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteError = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteErrors[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteErrors];
+
+export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: FundingUnlinkResponse;
+};
+
+export type UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponse = UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses[keyof UnlinkPurchaseFundingInvestmentFundingCashTransactionsCashTransactionIdDeleteResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
