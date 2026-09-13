@@ -71,7 +71,7 @@ and verified in the tree. Do not report formatter-owned style or speculative pos
 
 - **CRITICAL:** security/never-store breach, destructive behavior or corrupted money.
 - **HIGH:** likely functional failure, money/authorization contract violation, invalid migration,
-  or an untested money/authorization/database path.
+  or a major money/authorization/database write with no test.
 - **MEDIUM:** real edge-case defect or thin regression proof elsewhere.
 - **LOW:** minor engineering issue.
 

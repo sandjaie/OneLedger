@@ -6,7 +6,7 @@ This file owns when OneLedger's gates run and what they produce.
 OneLedger is a single-owner personal application. Each branch gets one defect-finding pass and one
 exact-head proof:
 
-> phase plan reviewed once → TDD on money, authorization and database paths → local commit →
+> phase plan reviewed once → implement with tests for major behavior → local commit →
 > one review → one repair → `scripts/verify.sh` once → first push → PR → merge
 
 ## Safety floor
@@ -18,7 +18,7 @@ No schedule pressure or process change relaxes these:
 - Flyway migrations are forward-only and an applied migration is never edited;
 - real financial data, filenames, complete identifiers and secrets never enter code, fixtures,
   commits, logs, errors or agent messages;
-- money, authorization and database behavior is test-driven;
+- major money, authorization and database behavior has tests;
 - each branch receives one code review and one `scripts/verify.sh` run.
 
 ## Gate responsibilities
@@ -50,15 +50,10 @@ and status updates never need a documentation-only PR or another plan review.
 
 ## 2. Implement with focused feedback
 
-Use the branch declared by the plan and one implementation writer. For money, authorization and
-database behavior:
-
-1. Write the smallest failing test and observe the intended failure.
-2. Implement the minimum behavior.
-3. Run that affected test until green.
-
-Screens and plumbing may be tested after they are written, provided each test fails when its
-behavior is removed. Commit the coherent branch locally.
+Use the branch declared by the plan and one implementation writer. Write tests for the major
+behavior — money totals, authorization, household isolation and database writes — after or
+alongside the code; test-first is optional. Obvious code, simple screens and plumbing need no
+dedicated test. Run the affected tests until green and commit the coherent branch locally.
 
 Run affected tests directly; `scripts/verify.sh` is reserved for the final gate. A necessary
 deviation from a plan is recorded in the PR and `docs/superpowers/progress.md`, not retrofitted
