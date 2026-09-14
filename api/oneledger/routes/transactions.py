@@ -63,6 +63,9 @@ class TransactionRow(BaseModel):
     classifiedBy: str
     source: str
     notes: str | None
+    sourceDocumentId: UUID | None
+    sourcePageNumber: int | None
+    sourceRowNumber: int | None
 
 
 class TransactionsResponse(BaseModel):
@@ -115,7 +118,8 @@ COLUMNS = """t.id, t.account_id, a.name, t.booked_date, t.description_raw, t.des
              t.transfer_id, t.parent_transaction_id,
              EXISTS (SELECT 1 FROM transaction c WHERE c.parent_transaction_id = t.id),
              t.is_excluded, t.classified_by::text,
-             t.source::text, t.notes"""
+             t.source::text, t.notes,
+             t.source_document_id, t.source_page_number, t.source_row_number"""
 
 FROM = (
     "FROM transaction t"
@@ -151,6 +155,9 @@ FIELDS = [
     "classifiedBy",
     "source",
     "notes",
+    "sourceDocumentId",
+    "sourcePageNumber",
+    "sourceRowNumber",
 ]
 MONEY_FIELDS = {
     "amount",

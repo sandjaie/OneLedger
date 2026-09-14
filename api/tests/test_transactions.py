@@ -59,6 +59,9 @@ FETCHED_ROW = (
     "user_manual",
     "manual",
     None,
+    None,
+    None,
+    None,
 )
 
 

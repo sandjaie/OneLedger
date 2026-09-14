@@ -68,6 +68,9 @@ function leg(overrides: Partial<TransactionRow>): TransactionRow {
     classifiedBy: "unclassified",
     source: "statement_import",
     notes: null,
+    sourceDocumentId: null,
+    sourcePageNumber: null,
+    sourceRowNumber: null,
     ...overrides,
   };
 }

@@ -5,12 +5,20 @@ proof runs."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
+
+from oneledger import auth
+from oneledger.main import app
 
 from .live_database import connect_to_test_database
+from .test_import_review_live import Staged, _all_row_ids
+from .test_import_review_live import _connect as _connect_review
+from .test_ingest_route_live import ORIGIN, SALT, _clean, _statement
 
 
 def _connect() -> psycopg.Connection:
@@ -97,3 +105,60 @@ def test_a_frozen_write_waits_for_an_in_flight_pair_change() -> None:
         writer.rollback()
         changer.close()
         writer.close()
+
+
+def test_committed_rows_and_transfer_legs_carry_source_provenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`TransactionRow` gained `sourceDocumentId`/`sourcePageNumber`/`sourceRowNumber`, appended
+    to the shared `COLUMNS`/`FIELDS` lists together — this proves both that `GET /transactions`
+    decodes them and that `transfers.py`, which slices the same lists by width, still decodes a
+    leg (Phase 1.8 Task 2)."""
+    monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
+    monkeypatch.setenv("ACCOUNT_HASH_SALT", SALT)
+    conn = _connect_review()
+    try:
+        fixture = Staged(conn)
+        app.dependency_overrides[auth.require_owner] = fixture.owner
+        try:
+            batch = fixture.stage(statement=_statement())
+            rows = _all_row_ids(fixture, batch)
+            accepted = fixture.patch(batch, {"rowIds": rows, "decision": "accepted"})
+            assert accepted.status_code == 200, accepted.text
+            committed = fixture.commit(batch)
+            assert committed.status_code == 200, committed.text
+
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT t.id, t.source_document_id, t.source_page_number,
+                              t.source_row_number
+                         FROM transaction t
+                        WHERE t.import_batch_id = %s
+                        ORDER BY t.source_row_number LIMIT 1""",
+                    (batch,),
+                )
+                transaction_id, document_id, page_number, row_number = cur.fetchone()  # type: ignore[misc]
+
+            listed = TestClient(app).get(
+                "/transactions", params={"sourceDocumentId": str(document_id)}, headers=ORIGIN
+            )
+            assert listed.status_code == 200, listed.text
+            listed_rows = listed.json()["transactions"]
+            assert listed_rows
+            assert all(row["sourceDocumentId"] == str(document_id) for row in listed_rows)
+            found = next(row for row in listed_rows if row["id"] == str(transaction_id))
+            assert found["sourcePageNumber"] == page_number
+            assert found["sourceRowNumber"] == row_number
+
+            candidates = TestClient(app).get(
+                f"/transactions/{transaction_id}/transfer-candidates", headers=ORIGIN
+            )
+            assert candidates.status_code == 200, candidates.text
+        finally:
+            app.dependency_overrides.clear()
+            with conn.cursor() as cur:
+                _clean(cur)
+                cur.execute("DELETE FROM app_user WHERE email LIKE 'review-%@example.invalid'")
+            conn.commit()
+    finally:
+        conn.close()

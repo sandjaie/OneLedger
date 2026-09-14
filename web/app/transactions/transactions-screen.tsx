@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { type apiFetch } from "@/lib/api/client";
+import { apiUrl } from "@/lib/api/url";
 import { ClassifyPrompt } from "@/app/transactions/classify-prompt";
 import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
 import { formatMoney } from "@/lib/money/format";
@@ -26,6 +27,9 @@ type Props = {
   currency: HouseholdCurrency;
   request: typeof apiFetch;
   onChanged: () => void;
+  // Carried from `/transactions?sourceDocumentId=…` — the Documents screen's own link — so the
+  // filter that already produced the first page is what the form shows too.
+  initialSourceDocumentId?: string;
 };
 
 // The manual-entry set: linked types (transfers, investments, loans) arrive with their
@@ -124,13 +128,17 @@ export function TransactionsScreen({
   currency,
   request,
   onChanged,
+  initialSourceDocumentId,
 }: Props) {
+  const initialFilters: Filters = initialSourceDocumentId
+    ? { ...NO_FILTERS, sourceDocumentId: initialSourceDocumentId }
+    : NO_FILTERS;
   const [rows, setRows] = useState(transactions);
   const [count, setCount] = useState(total);
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [filters, setFilters] = useState<Filters>(initialFilters);
   // Pagination continues the APPLIED set: edited-but-unapplied controls must not leak into
   // "Load more", or the ledger would append one result set onto another.
-  const [applied, setApplied] = useState<Filters>(NO_FILTERS);
+  const [applied, setApplied] = useState<Filters>(initialFilters);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [entryOpen, setEntryOpen] = useState(false);
@@ -677,6 +685,19 @@ export function TransactionsScreen({
                   )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
+                  {row.sourceDocumentId && (
+                    <small>
+                      {" "}
+                      ·{" "}
+                      <a
+                        href={apiUrl(`/documents/${row.sourceDocumentId}/original`)}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        Page {row.sourcePageNumber} · row {row.sourceRowNumber}
+                      </a>
+                    </small>
+                  )}
                   <label className="text-field">
                     <span className="visually-hidden">Note for {row.descriptionRaw}</span>
                     <input

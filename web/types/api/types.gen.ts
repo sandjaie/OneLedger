@@ -2048,6 +2048,109 @@ export type DocumentIdentityPreview = {
 };
 
 /**
+ * DocumentPeriod
+ */
+export type DocumentPeriod = {
+    /**
+     * Start
+     */
+    start: string | null;
+    /**
+     * End
+     */
+    end: string | null;
+    /**
+     * Isderived
+     */
+    isDerived: boolean | null;
+};
+
+/**
+ * DocumentRow
+ */
+export type DocumentRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Documenttype
+     */
+    documentType: string;
+    /**
+     * Pagecount
+     */
+    pageCount: number | null;
+    /**
+     * Ispasswordprotected
+     */
+    isPasswordProtected: boolean;
+    /**
+     * Parsedstatus
+     */
+    parsedStatus: string;
+    /**
+     * Uploadedon
+     */
+    uploadedOn: string;
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * Accountnumbermasked
+     */
+    accountNumberMasked: string | null;
+    period: DocumentPeriod;
+    /**
+     * Importkind
+     */
+    importKind: string;
+    /**
+     * Importid
+     */
+    importId: string | null;
+    /**
+     * Importstatus
+     */
+    importStatus: string | null;
+    /**
+     * Reconciliationstatus
+     */
+    reconciliationStatus: string | null;
+    /**
+     * Layoutid
+     */
+    layoutId: string | null;
+    /**
+     * Layoutversion
+     */
+    layoutVersion: number | null;
+    /**
+     * Newerlayoutid
+     */
+    newerLayoutId: string | null;
+};
+
+/**
+ * DocumentsResponse
+ */
+export type DocumentsResponse = {
+    /**
+     * Documents
+     */
+    documents: Array<DocumentRow>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
  * DraftResponse
  */
 export type DraftResponse = {
@@ -6261,6 +6364,18 @@ export type TransactionRow = {
      * Notes
      */
     notes: string | null;
+    /**
+     * Sourcedocumentid
+     */
+    sourceDocumentId: string | null;
+    /**
+     * Sourcepagenumber
+     */
+    sourcePageNumber: number | null;
+    /**
+     * Sourcerownumber
+     */
+    sourceRowNumber: number | null;
 };
 
 /**
@@ -8161,6 +8276,88 @@ export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses = {
 };
 
 export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponse = ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses[keyof ReparseDescriptionsImportBatchIdReparseDescriptionsPostResponses];
+
+export type ListDocumentsDocumentsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Documenttype
+         */
+        documentType?: string | null;
+        /**
+         * Accountid
+         */
+        accountId?: string | null;
+        /**
+         * Periodfrom
+         */
+        periodFrom?: string | null;
+        /**
+         * Periodto
+         */
+        periodTo?: string | null;
+        /**
+         * Importstatus
+         */
+        importStatus?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/documents';
+};
+
+export type ListDocumentsDocumentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListDocumentsDocumentsGetError = ListDocumentsDocumentsGetErrors[keyof ListDocumentsDocumentsGetErrors];
+
+export type ListDocumentsDocumentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DocumentsResponse;
+};
+
+export type ListDocumentsDocumentsGetResponse = ListDocumentsDocumentsGetResponses[keyof ListDocumentsDocumentsGetResponses];
+
+export type DownloadOriginalDocumentsDocumentIdOriginalGetData = {
+    body?: never;
+    path: {
+        /**
+         * Document Id
+         */
+        document_id: string;
+    };
+    query?: never;
+    url: '/documents/{document_id}/original';
+};
+
+export type DownloadOriginalDocumentsDocumentIdOriginalGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DownloadOriginalDocumentsDocumentIdOriginalGetError = DownloadOriginalDocumentsDocumentIdOriginalGetErrors[keyof DownloadOriginalDocumentsDocumentIdOriginalGetErrors];
+
+export type DownloadOriginalDocumentsDocumentIdOriginalGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type PreviewIdentityBackfillAccountIdentifiersBackfillPreviewPostData = {
     body: IdentityBackfillPreviewRequest;

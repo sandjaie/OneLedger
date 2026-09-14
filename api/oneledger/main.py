@@ -21,6 +21,7 @@ from .routes import (
     dashboard,
     description_reparse,
     doctor,
+    documents,
     fx,
     household,
     identity_backfill,
@@ -187,6 +188,7 @@ app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
 app.include_router(description_reparse.router)
+app.include_router(documents.router)
 app.include_router(identity_backfill.router)
 app.include_router(investment_catalogue.router)
 app.include_router(investment_events.router)

@@ -22,7 +22,7 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..ingest import engine, normalize, reconcile
 from ..ingest.normalize import NormalizedRow
-from ..ingest.storage import _documents_root
+from ..ingest.storage import StorageError, _documents_root
 from ..ingest.words import ExtractionError, PdfPasswordError
 from ..ingest.words import extract_pages as read_pdf_pages
 from . import layouts
@@ -83,7 +83,12 @@ def _batch(
 
 
 def _stored_original(storage_path: str) -> Path:
-    root = _documents_root().resolve()
+    try:
+        root = _documents_root().resolve()
+    except StorageError:
+        raise HTTPException(
+            status_code=409, detail="the stored original could not be read"
+        ) from None
     candidate = Path(storage_path)
     candidate = candidate if candidate.is_absolute() else root / candidate
     if candidate.is_symlink():
@@ -99,10 +104,12 @@ def _stored_original(storage_path: str) -> Path:
     return resolved
 
 
-@contextmanager
-def _verified_pages(
-    storage_path: str, expected_sha256: str, password: str | None
-) -> Iterator[list[Any]]:
+def verified_original(storage_path: str, expected_sha256: str) -> bytes:
+    """The bytes behind a document's `storage_path`, proven to be exactly what was recorded.
+
+    Shared by this route's re-read and `routes/documents.py`'s original download: both trust a
+    stored original only after the same path and integrity checks, never before.
+    """
     try:
         data = _stored_original(storage_path).read_bytes()
     except OSError:
@@ -113,7 +120,14 @@ def _verified_pages(
         raise HTTPException(
             status_code=409, detail="the stored original failed its integrity check"
         )
+    return data
 
+
+@contextmanager
+def _verified_pages(
+    storage_path: str, expected_sha256: str, password: str | None
+) -> Iterator[list[Any]]:
+    data = verified_original(storage_path, expected_sha256)
     temporary_path: Path | None = None
     try:
         with NamedTemporaryFile(prefix="oneledger-reparse-", suffix=".pdf", delete=False) as temp:
