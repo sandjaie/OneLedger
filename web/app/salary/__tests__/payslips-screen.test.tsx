@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { CurrencyRow, PayslipImportResponse, PayslipRow, PayslipsResponse } from "@/types/api";
+import type {
+  CurrencyRow,
+  DepositCandidate,
+  PayslipImportResponse,
+  PayslipRow,
+  PayslipsResponse,
+} from "@/types/api";
 
 type Request = typeof apiFetch;
 
@@ -122,5 +128,71 @@ describe("salary screen", () => {
 
     await screen.findByText("Reconciles");
     expect(screen.getByRole("button", { name: "Import reconciling months" })).toBeTruthy();
+  });
+
+  it("links a candidate only after explicit confirmation", async () => {
+    const candidate: DepositCandidate = {
+      transactionId: "00000000-0000-4000-8000-000000000002",
+      accountId: "00000000-0000-4000-8000-000000000003",
+      accountName: "Synthetic checking",
+      bookedDate: "2026-02-03",
+      amount: "4000.0000",
+      currency: "XAA",
+      description: "SYNTHETIC SALARY CREDIT",
+    };
+    let linkCalls = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
+      if (path === `/payslips/${payslip.id}/deposit-candidates`) return { candidates: [candidate] };
+      if (path === `/payslips/${payslip.id}/deposit` && init?.method === "PUT") {
+        linkCalls += 1;
+        expect(JSON.parse(String(init.body))).toEqual({ transactionId: candidate.transactionId });
+        return { ...payslip, deposit: { ...candidate, eligible: true } };
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen currencies={currencies} request={request} />);
+    await screen.findByText("2026-01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Find net-pay credit" }));
+    await screen.findByText(/SYNTHETIC SALARY CREDIT/);
+    expect(linkCalls).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    await screen.findByText(/Link the credit on 2026-02-03/);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm link" }));
+
+    await waitFor(() => expect(linkCalls).toBe(1));
+  });
+
+  it("unlinks a linked payslip", async () => {
+    const linked: PayslipRow = {
+      ...payslip,
+      deposit: {
+        transactionId: "00000000-0000-4000-8000-000000000002",
+        accountId: "00000000-0000-4000-8000-000000000003",
+        accountName: "Synthetic checking",
+        bookedDate: "2026-02-03",
+        amount: "4000.0000",
+        eligible: true,
+      },
+    };
+    let unlinkCalls = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips" && (!init || init.method === undefined)) {
+        return { payslips: [unlinkCalls > 0 ? payslip : linked], total: 1 } satisfies PayslipsResponse;
+      }
+      if (path === `/payslips/${payslip.id}/deposit` && init?.method === "DELETE") {
+        unlinkCalls += 1;
+        return { ...payslip, deposit: null };
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen currencies={currencies} request={request} />);
+    await screen.findByText("Linked · 2026-02-03");
+
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+    await waitFor(() => expect(unlinkCalls).toBe(1));
+    await screen.findByText("Not linked");
   });
 });

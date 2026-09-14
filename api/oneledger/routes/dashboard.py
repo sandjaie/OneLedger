@@ -153,6 +153,20 @@ class DashboardResponse(BaseModel):
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
 
+# The valuation period covering `a.id` at a given date: the active period effective then, or —
+# for a date before any period started — the account's first period. Shared with
+# `routes/plans.py`'s forecast (spec "Forecast computation" rule 1) so both read the same
+# account's mode the same way; two `%s` placeholders (the date, twice) precede the household
+# filter wherever this is embedded.
+VALUATION_PERIOD_FOR_ACCOUNT = """coalesce(
+                    (SELECT active.id FROM account_valuation_period active
+                      WHERE active.account_id = a.id AND %s >= active.effective_from
+                        AND (active.effective_to IS NULL OR %s <= active.effective_to)
+                      ORDER BY active.effective_from DESC LIMIT 1),
+                    (SELECT initial.id FROM account_valuation_period initial
+                      WHERE initial.account_id = a.id
+                      ORDER BY initial.effective_from LIMIT 1))"""
+
 NET_WORTH = """
     WITH values (account_class, is_liquid, value_base, value_secondary) AS (
         SELECT * FROM unnest(%s::account_class[], %s::boolean[], %s::numeric[], %s::numeric[])
@@ -261,14 +275,7 @@ def _net_worth(
                    period.valuation_mode::text, period.effective_from
               FROM account a
               JOIN account_valuation_period period
-                ON period.id = coalesce(
-                    (SELECT active.id FROM account_valuation_period active
-                      WHERE active.account_id = a.id AND %s >= active.effective_from
-                        AND (active.effective_to IS NULL OR %s <= active.effective_to)
-                      ORDER BY active.effective_from DESC LIMIT 1),
-                    (SELECT initial.id FROM account_valuation_period initial
-                      WHERE initial.account_id = a.id
-                      ORDER BY initial.effective_from LIMIT 1))
+                ON period.id = {VALUATION_PERIOD_FOR_ACCOUNT}
              WHERE {_COUNTED} ORDER BY a.id""",
         (as_of, as_of, household_id),
     )

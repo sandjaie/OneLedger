@@ -1543,6 +1543,142 @@ export type CommitResult = {
 };
 
 /**
+ * CommitmentCreate
+ */
+export type CommitmentCreate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Cadence
+     */
+    cadence: 'once' | 'monthly' | 'annual';
+    /**
+     * Firstdate
+     */
+    firstDate: string;
+    /**
+     * Enddate
+     */
+    endDate?: string | null;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * CommitmentRow
+ */
+export type CommitmentRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Cadence
+     */
+    cadence: 'once' | 'monthly' | 'annual';
+    /**
+     * Firstdate
+     */
+    firstDate: string;
+    /**
+     * Enddate
+     */
+    endDate: string | null;
+    /**
+     * Archivedat
+     */
+    archivedAt: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+};
+
+/**
+ * CommitmentUpdate
+ */
+export type CommitmentUpdate = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Cadence
+     */
+    cadence: 'once' | 'monthly' | 'annual';
+    /**
+     * Firstdate
+     */
+    firstDate: string;
+    /**
+     * Enddate
+     */
+    endDate?: string | null;
+};
+
+/**
+ * CommitmentsResponse
+ */
+export type CommitmentsResponse = {
+    /**
+     * Commitments
+     */
+    commitments: Array<CommitmentRow>;
+};
+
+/**
  * CommittedGroupResponse
  */
 export type CommittedGroupResponse = {
@@ -1929,6 +2065,46 @@ export type DraftResponse = {
 };
 
 /**
+ * ExcludedAccount
+ */
+export type ExcludedAccount = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Reason
+     */
+    reason: 'not_ledger_valued' | 'no_balance_date' | 'balance_after_as_of';
+};
+
+/**
+ * ExcludedCommitment
+ */
+export type ExcludedCommitment = {
+    /**
+     * Commitmentid
+     */
+    commitmentId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Reason
+     */
+    reason: 'account_closed' | 'account_excluded' | 'currency_mismatch';
+};
+
+/**
  * Finding
  */
 export type Finding = {
@@ -1940,6 +2116,110 @@ export type Finding = {
      * Message
      */
     message: string;
+};
+
+/**
+ * ForecastAccount
+ */
+export type ForecastAccount = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Accountclass
+     */
+    accountClass: 'asset' | 'liability';
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Startbalance
+     */
+    startBalance: string;
+    /**
+     * Balancedate
+     */
+    balanceDate: string;
+    /**
+     * Points
+     */
+    points: Array<ForecastPoint>;
+    /**
+     * Occurrences
+     */
+    occurrences: Array<ForecastOccurrence>;
+};
+
+/**
+ * ForecastOccurrence
+ */
+export type ForecastOccurrence = {
+    /**
+     * Commitmentid
+     */
+    commitmentId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Duebyasof
+     */
+    dueByAsOf: boolean;
+};
+
+/**
+ * ForecastPoint
+ */
+export type ForecastPoint = {
+    /**
+     * Days
+     */
+    days: number;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Balance
+     */
+    balance: string;
+};
+
+/**
+ * ForecastResponse
+ */
+export type ForecastResponse = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Accounts
+     */
+    accounts: Array<ForecastAccount>;
+    /**
+     * Excludedaccounts
+     */
+    excludedAccounts: Array<ExcludedAccount>;
+    /**
+     * Excludedcommitments
+     */
+    excludedCommitments: Array<ExcludedCommitment>;
 };
 
 /**
@@ -8653,6 +8933,151 @@ export type LinkDepositPayslipsPayslipIdDepositPutResponses = {
 };
 
 export type LinkDepositPayslipsPayslipIdDepositPutResponse = LinkDepositPayslipsPayslipIdDepositPutResponses[keyof LinkDepositPayslipsPayslipIdDepositPutResponses];
+
+export type ListCommitmentsCommitmentsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Includearchived
+         */
+        includeArchived?: boolean;
+    };
+    url: '/commitments';
+};
+
+export type ListCommitmentsCommitmentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListCommitmentsCommitmentsGetError = ListCommitmentsCommitmentsGetErrors[keyof ListCommitmentsCommitmentsGetErrors];
+
+export type ListCommitmentsCommitmentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentsResponse;
+};
+
+export type ListCommitmentsCommitmentsGetResponse = ListCommitmentsCommitmentsGetResponses[keyof ListCommitmentsCommitmentsGetResponses];
+
+export type CreateCommitmentCommitmentsPostData = {
+    body: CommitmentCreate;
+    path?: never;
+    query?: never;
+    url: '/commitments';
+};
+
+export type CreateCommitmentCommitmentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCommitmentCommitmentsPostError = CreateCommitmentCommitmentsPostErrors[keyof CreateCommitmentCommitmentsPostErrors];
+
+export type CreateCommitmentCommitmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentRow;
+};
+
+export type CreateCommitmentCommitmentsPostResponse = CreateCommitmentCommitmentsPostResponses[keyof CreateCommitmentCommitmentsPostResponses];
+
+export type UpdateCommitmentCommitmentsCommitmentIdPutData = {
+    body: CommitmentUpdate;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}';
+};
+
+export type UpdateCommitmentCommitmentsCommitmentIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCommitmentCommitmentsCommitmentIdPutError = UpdateCommitmentCommitmentsCommitmentIdPutErrors[keyof UpdateCommitmentCommitmentsCommitmentIdPutErrors];
+
+export type UpdateCommitmentCommitmentsCommitmentIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentRow;
+};
+
+export type UpdateCommitmentCommitmentsCommitmentIdPutResponse = UpdateCommitmentCommitmentsCommitmentIdPutResponses[keyof UpdateCommitmentCommitmentsCommitmentIdPutResponses];
+
+export type ArchiveCommitmentCommitmentsCommitmentIdArchivePostData = {
+    body?: never;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}/archive';
+};
+
+export type ArchiveCommitmentCommitmentsCommitmentIdArchivePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ArchiveCommitmentCommitmentsCommitmentIdArchivePostError = ArchiveCommitmentCommitmentsCommitmentIdArchivePostErrors[keyof ArchiveCommitmentCommitmentsCommitmentIdArchivePostErrors];
+
+export type ArchiveCommitmentCommitmentsCommitmentIdArchivePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentRow;
+};
+
+export type ArchiveCommitmentCommitmentsCommitmentIdArchivePostResponse = ArchiveCommitmentCommitmentsCommitmentIdArchivePostResponses[keyof ArchiveCommitmentCommitmentsCommitmentIdArchivePostResponses];
+
+export type ReadForecastForecastGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/forecast';
+};
+
+export type ReadForecastForecastGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadForecastForecastGetError = ReadForecastForecastGetErrors[keyof ReadForecastForecastGetErrors];
+
+export type ReadForecastForecastGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ForecastResponse;
+};
+
+export type ReadForecastForecastGetResponse = ReadForecastForecastGetResponses[keyof ReadForecastForecastGetResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;

@@ -552,6 +552,7 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── net_worth_snapshot
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               (V42, applied)
+            ├── commitment                              (V43, applied)
             └── audit_log
 
 fx_rate                          -- global, not household-scoped
@@ -1029,6 +1030,12 @@ are added to Phase 0.</p>
 <p>Existing later-phase reference shapes: <code>recurring_series</code> (cadence, expected amount, tolerances, confidence), and <code>budget_period</code> and <code>budget_line</code> (per category or per bucket, with rollover).</p><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0017</code>.</p><p><code>payslip</code> and <code>payslip_line</code> — line items rather than fixed columns, because UAE and
 Indian payslips differ too much for one schema — have moved out of this speculative set: Phase 1.7
 Task 1 applies them exactly, through <code>record_payslip()</code>. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V42</code> (applied).</p>
+<p>A thin <code>commitment</code> table — one-off, monthly or annual signed amounts the owner enters, not
+inferred from the ledger — has also moved out of this speculative set: Phase 1.7 Task 2 applies it
+to drive the read-only 30/60/90-day forecast in <code>routes/plans.py</code>. It carries no
+<code>SECURITY DEFINER</code> function; the owner assumption is replaced in place and archiving is
+terminal. Certainty, source, settlement and next-occurrence lifecycle stay the Phase 3.1 commitments
+and actions concept above and may extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</code> (applied).</p>
 <hr>
 <h2 id="15-audit-log">15. Audit log</h2>
 <h3 id="why-every-child-table-carries-household_id">Why every child table carries <code>household_id</code></h3>
@@ -1167,6 +1174,8 @@ V34__investment_funding_correction_safety.sql
   ... V35–V41 land further holding-level investment actions and lot lineage (applied; see schema.md) ...
 V42__payslips.sql                     payslip, payslip_line, record_payslip() and the deposit-link
                                       immutability and eligibility triggers (applied)
+V43__commitments.sql                  commitment: one-off, monthly or annual signed amounts driving
+                                      the read-only forecast; no write function (applied)
 
   then, in this order, numbered as they land:
 
