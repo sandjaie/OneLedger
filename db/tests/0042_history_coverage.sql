@@ -96,6 +96,30 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- uq_coverage_gap_month's NULLS NOT DISTINCT: a payslips-subject row has no account_id at all,
+-- so two rows for the same household/month would otherwise both hold NULL there and never
+-- collide on an ordinary unique index (NULL is never equal to NULL). A second raw INSERT for the
+-- same month, not the route's own ON CONFLICT upsert, proves the index itself refuses the
+-- duplicate rather than relying on the route to avoid ever attempting one.
+BEGIN;
+DO $$
+DECLARE f RECORD; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0042_fixture();
+  INSERT INTO coverage_gap_acknowledgement (household_id, subject, account_id, month, reason)
+  VALUES (f.h1, 'payslips', NULL, DATE '2024-01-01', 'not_issued');
+  BEGIN
+    INSERT INTO coverage_gap_acknowledgement (household_id, subject, account_id, month, reason)
+    VALUES (f.h1, 'payslips', NULL, DATE '2024-01-01', 'unobtainable');
+    RAISE EXCEPTION 'a second payslips row for the same household and month must be refused';
+  EXCEPTION WHEN unique_violation THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%uq_coverage_gap_month%', refusal;
+  END;
+  RAISE NOTICE 'PASS 0042 NULL-account uniqueness';
+END $$;
+ROLLBACK;
+
 -- Owner, member, foreign and anonymous RLS: only the owning household's authenticated owner
 -- reads or writes its own coverage_gap_acknowledgement rows.
 BEGIN;

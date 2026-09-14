@@ -90,10 +90,10 @@ RLS on the new table follows V43: `household_isolation FOR ALL TO authenticated 
 | `PUT /coverage/acknowledgements` | Body `{subject, accountId?, month, reason, note?}` upserts; month must be inside the grid and, for accounts, inside the account's life; covered months are refused (409) |
 | `DELETE /coverage/acknowledgements` | Query `subject`, `accountId?`, `month`; idempotent |
 
-All three use `require_owner` and household filters; a foreign account is 404. `GET /doctor` gains a
-**Coverage** section with one warning finding per row that has missing or partial months ("N months
-missing, M partial, earliest YYYY-MM", with the account name) and one `ok` finding when every row is
-reconciled or acknowledged.
+All three use `require_owner` and household filters. `PUT`: foreign account 404; `DELETE` is
+idempotent (204). `GET /doctor` gains a **Coverage** section with one warning finding per row that
+has missing or partial months ("N months missing, M partial, earliest YYYY-MM", with the account
+name) and one `ok` finding when every row is reconciled or acknowledged.
 
 ## Web
 

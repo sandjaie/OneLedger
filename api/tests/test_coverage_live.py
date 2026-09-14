@@ -26,7 +26,7 @@ from oneledger import auth
 from oneledger.db import scope_to_owner
 from oneledger.main import app
 
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 ORIGIN = {"Origin": "http://localhost:3000"}
 
@@ -39,6 +39,7 @@ class CoverageFixture:
     unopened_account_id: UUID
     late_opened_account_id: UUID
     other_account_id: UUID
+    non_statement_account_id: UUID
     currency: str
 
 
@@ -55,12 +56,13 @@ def _account(
     *,
     opened_on: date | None,
     opening_balance_date: date,
+    account_type: str = "savings",
 ) -> UUID:
     cur.execute(
         """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
                                  country, opened_on, opening_balance, opening_balance_date)
-           VALUES (%s, %s, %s, 'savings', %s, 'XZ', %s, 0, %s) RETURNING id""",
-        (household_id, person_id, name, currency, opened_on, opening_balance_date),
+           VALUES (%s, %s, %s, %s::account_type, %s, 'XZ', %s, 0, %s) RETURNING id""",
+        (household_id, person_id, name, account_type, currency, opened_on, opening_balance_date),
     )
     found = cur.fetchone()
     assert found is not None
@@ -160,6 +162,18 @@ def live() -> Iterator[CoverageFixture]:
             opened_on=date(2024, 1, 1),
             opening_balance_date=date(2024, 1, 1),
         )
+        # Brokerage is not in STATEMENT_SOURCED_TYPES: no coverage row exists for it, so it must
+        # 404 exactly as a foreign account does (OL-001).
+        non_statement_account_id = _account(
+            cur,
+            household_id,
+            person_id,
+            "Synthetic brokerage account",
+            base,
+            opened_on=date(2024, 1, 1),
+            opening_balance_date=date(2024, 1, 1),
+            account_type="brokerage",
+        )
 
         # January reconciled by one batch; February split across two batches; March partial;
         # April "covered" only by a cancelled batch, which counts nothing; May has no evidence.
@@ -205,12 +219,26 @@ def live() -> Iterator[CoverageFixture]:
             unopened_account_id=unopened_account_id,
             late_opened_account_id=late_opened_account_id,
             other_account_id=other_account_id,
+            non_statement_account_id=non_statement_account_id,
             currency=base,
         )
     finally:
         app.dependency_overrides.clear()
+        households = [household_id, other_household_id]
         with connection.cursor() as cur:
-            cur.execute("TRUNCATE coverage_gap_acknowledgement CASCADE")
+            # coverage_gap_acknowledgement cascades from account on delete, but is truncated
+            # directly since a foreign-key delete order would otherwise have to run last anyway.
+            # payslip is TRUNCATEd rather than DELETEd: `preserve_payslip` blocks UPDATE/DELETE
+            # but not TRUNCATE, matching `test_payslips_live.py`'s own teardown. import_batch,
+            # account, app_user, person and household are then deleted in FK-dependency order so
+            # this fixture leaves nothing behind for a later suite to trip over.
+            cur.execute("TRUNCATE coverage_gap_acknowledgement, payslip_line, payslip CASCADE")
+            clear_synthetic_account_valuation_periods(cur)
+            cur.execute("DELETE FROM import_batch WHERE household_id = ANY(%s)", (households,))
+            cur.execute("DELETE FROM account WHERE household_id = ANY(%s)", (households,))
+            cur.execute("DELETE FROM app_user WHERE household_id = ANY(%s)", (households,))
+            cur.execute("DELETE FROM person WHERE household_id = ANY(%s)", (households,))
+            cur.execute("DELETE FROM household WHERE id = ANY(%s)", (households,))
         connection.commit()
         connection.close()
 
@@ -394,6 +422,20 @@ def test_acknowledging_a_foreign_account_is_404(live: CoverageFixture) -> None:
     assert response.status_code == 404
 
 
+def test_acknowledging_a_non_statement_sourced_account_is_404(live: CoverageFixture) -> None:
+    response = client().put(
+        "/coverage/acknowledgements",
+        json={
+            "subject": "account",
+            "accountId": str(live.non_statement_account_id),
+            "month": "2024-02-01",
+            "reason": "not_issued",
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 404
+
+
 def test_acknowledging_before_an_accounts_life_is_refused(live: CoverageFixture) -> None:
     response = client().put(
         "/coverage/acknowledgements",
@@ -415,7 +457,7 @@ def test_doctor_reports_a_coverage_finding(live: CoverageFixture) -> None:
     assert "Coverage" in sections
     messages = [finding["message"] for finding in sections["Coverage"]["findings"]]
     pattern = re.compile(
-        r"Synthetic never-opened coverage account: \d+ months missing, \d+ partial, "
+        r"Synthetic never-opened coverage account: \d+ months? missing, \d+ partial, "
         r"earliest \d{4}-\d{2}\."
     )
     assert any(pattern.search(message) for message in messages)

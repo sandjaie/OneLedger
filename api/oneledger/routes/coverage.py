@@ -242,9 +242,13 @@ def _assert_month_in_grid(month: date) -> None:
 def _account_life_or_404(
     cur: psycopg.Cursor[Any], household_id: UUID, account_id: UUID, month: date, today: date
 ) -> tuple[date, date]:
+    # Same STATEMENT_SOURCED_TYPES filter as `coverage_rows`: an account outside the grid (an
+    # investment account, say) has no coverage row to acknowledge a gap on, so it is 404 here
+    # exactly as a foreign account is, not a row `GET /coverage` never shows.
     cur.execute(
-        "SELECT opened_on, closed_on FROM account WHERE household_id = %s AND id = %s",
-        (household_id, account_id),
+        """SELECT opened_on, closed_on FROM account
+            WHERE household_id = %s AND id = %s AND account_type::text = ANY(%s)""",
+        (household_id, account_id, list(STATEMENT_SOURCED_TYPES)),
     )
     found = cur.fetchone()
     if found is None:

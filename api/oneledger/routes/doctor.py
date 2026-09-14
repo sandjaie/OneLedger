@@ -257,11 +257,12 @@ def coverage_findings(owner: OwnerSession) -> list[Finding]:
             if cell.status in ("missing", "partial")
         )
         label = row.accountName or "Payslips"
+        month_word = "month" if row.counts.missing == 1 else "months"
         findings.append(
             Finding(
                 level="warning",
                 message=(
-                    f"{label}: {row.counts.missing} months missing, {row.counts.partial} "
+                    f"{label}: {row.counts.missing} {month_word} missing, {row.counts.partial} "
                     f"partial, earliest {earliest:%Y-%m}."
                 ),
             )
