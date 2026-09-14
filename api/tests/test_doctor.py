@@ -140,6 +140,7 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
     monkeypatch.setattr(doctor, "connect", lambda: connection)
     monkeypatch.setattr(doctor, "identity_backfills_remaining", lambda _: 0)
     monkeypatch.setattr(doctor, "investment_findings", lambda _: [])
+    monkeypatch.setattr(doctor, "coverage_findings", lambda _: [])
     app.dependency_overrides[auth.require_owner] = owner
     try:
         response = TestClient(app).get("/doctor")
@@ -147,7 +148,7 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    section, identity, investments = response.json()["sections"]
+    section, identity, investments, coverage = response.json()["sections"]
     assert section["title"] == "Backups"
     [finding] = section["findings"]
     assert "12 transactions" in finding["message"]
@@ -159,3 +160,4 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
         ],
     }
     assert investments == {"title": "Investments", "findings": []}
+    assert coverage == {"title": "Coverage", "findings": []}

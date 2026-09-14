@@ -2445,6 +2445,48 @@ pair is left alone by a replayed `DELETE`.
 
 ---
 
+## `V45` (applied)
+
+### History coverage
+
+Phase 2.1 Task 1. `coverage_gap_acknowledgement` is an owner assumption like `commitment` (V43):
+no `SECURITY DEFINER` write path, just household-scoped RLS and a composite foreign key. The
+history anchor itself (1 January 2024, ADR-0011) is not a column — `api/oneledger/coverage.py`
+fixes `HISTORY_ANCHOR` in code so no setting can silently shorten history.
+
+```sql
+CREATE TYPE coverage_gap_reason AS ENUM (
+  'not_issued', 'unobtainable', 'unsupported_format', 'account_not_in_use');
+
+CREATE TABLE coverage_gap_acknowledgement (
+  household_id UUID NOT NULL REFERENCES household(id),
+  subject      TEXT NOT NULL CHECK (subject IN ('account', 'payslips')),
+  account_id   UUID,
+  month        DATE NOT NULL CHECK (month = date_trunc('month', month)::date),
+  reason       coverage_gap_reason NOT NULL,
+  note         TEXT CHECK (note IS NULL OR char_length(note) BETWEEN 1 AND 200),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT coverage_gap_subject_agrees CHECK (
+    (subject = 'account' AND account_id IS NOT NULL)
+    OR (subject = 'payslips' AND account_id IS NULL)),
+  CONSTRAINT fk_coverage_gap_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX uq_coverage_gap_month
+  ON coverage_gap_acknowledgement (household_id, subject, account_id, month) NULLS NOT DISTINCT;
+```
+
+`household_isolation FOR ALL TO authenticated` as on every other household-scoped table; no
+function or trigger. `GET /coverage` computes a month-by-month grid on read from committed
+`import_batch` periods (`status = 'completed'`, a non-null period) and active payslips — nothing
+is stored beyond the owner's acknowledgements. `PUT /coverage/acknowledgements` upserts one row
+per `(subject, account_id, month)`, refusing a month the evidence already reconciles (409) and a
+month outside the grid or the account's life (422); `DELETE` is idempotent. `GET /doctor` reads
+the same computation for its Coverage section, so the two never drift apart.
+
+---
+
 ## `0013`
 
 ### Loans

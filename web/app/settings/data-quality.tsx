@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { type apiFetch, ApiError } from "@/lib/api/client";
 import type { DoctorReport } from "@/types/api";
@@ -40,6 +41,7 @@ export function DataQuality({ request }: Props) {
   return (
     <section aria-labelledby="data-quality-title" className="settings-block">
       <h2 id="data-quality-title">Data Quality</h2>
+      <p><Link href="/coverage">View history coverage</Link></p>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {report?.sections.map((section) => (
         <div key={section.title}>

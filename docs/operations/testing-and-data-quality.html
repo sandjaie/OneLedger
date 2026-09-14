@@ -523,7 +523,7 @@ TRANSFERS
       → likely the missing ICICI August statement
 
 COVERAGE
-  ⚠ 1 account-month with no statement: ICICI Savings, Aug 2026
+  ⚠ ICICI Savings: 1 months missing, 0 partial, earliest 2026-08.
 
 CLASSIFICATION
   ✓ 94.2% classified (18,204 of 19,326)
@@ -550,6 +550,7 @@ INVESTMENTS
 <li><strong>It distinguishes expected from wrong.</strong> 218 carried-forward weekend rates is <code>ℹ</code>, not <code>⚠</code>.</li>
 <li><strong>It runs automatically</strong> after every import, so problems surface while the context is fresh.</li>
 </ol>
+<p>The <code>COVERAGE</code> block above is <code>GET /doctor</code>&#39;s Coverage section (<a href="../design/api-contracts.html">api-contracts.html</a> §2, Phase 2.1 Task 1): one warning per row with a missing or partial month, naming the account or Payslips and its earliest gap month, or one <code>ok</code> finding when every row is reconciled or acknowledged.</p>
 <hr>
 <h2 id="6-test-pyramid">6. Test pyramid</h2>
 <table>

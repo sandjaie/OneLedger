@@ -7,7 +7,7 @@ arrive with Phase 2.
 
 import os
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
@@ -16,7 +16,9 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
+from ..coverage import months_from_anchor
 from ..db import connect, scope_to_owner
+from .coverage import coverage_rows
 
 router = APIRouter(tags=["doctor"])
 
@@ -237,6 +239,40 @@ def investment_findings(owner: OwnerSession) -> list[Finding]:
     return investment_findings_from_counts(investment_counts(owner))
 
 
+def coverage_findings(owner: OwnerSession) -> list[Finding]:
+    """One warning per row with a missing or partial month (spec "API"), the account's name or
+    "Payslips" for the payslip row; one `ok` finding when every row is reconciled or
+    acknowledged. Reads `routes/coverage.py`'s own row computation, not a second copy of it."""
+    as_of = date.today()
+    months = months_from_anchor(as_of)
+    with connect() as conn, conn.cursor() as cur:
+        rows = coverage_rows(cur, owner.household_id, as_of)
+    findings: list[Finding] = []
+    for row in rows:
+        if not row.counts.missing and not row.counts.partial:
+            continue
+        earliest = next(
+            month
+            for month, cell in zip(months, row.months, strict=True)
+            if cell.status in ("missing", "partial")
+        )
+        label = row.accountName or "Payslips"
+        findings.append(
+            Finding(
+                level="warning",
+                message=(
+                    f"{label}: {row.counts.missing} months missing, {row.counts.partial} "
+                    f"partial, earliest {earliest:%Y-%m}."
+                ),
+            )
+        )
+    if not findings:
+        findings.append(
+            Finding(level="ok", message="Every coverage row is reconciled or acknowledged.")
+        )
+    return findings
+
+
 @router.get("/doctor")
 def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorReport:
     newest = newest_backup(backup_dir(), os.environ.get("BACKUP_PREFIX") or "oneledger")
@@ -251,5 +287,6 @@ def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorRepo
                 findings=[identity_backfill_finding(identity_backfills_remaining(owner))],
             ),
             DoctorSection(title="Investments", findings=investment_findings(owner)),
+            DoctorSection(title="Coverage", findings=coverage_findings(owner)),
         ]
     )

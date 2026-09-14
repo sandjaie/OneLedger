@@ -553,6 +553,7 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               (V42, applied)
             ├── commitment                              (V43, applied)
+            ├── coverage_gap_acknowledgement            (V45, applied)
             └── audit_log
 
 fx_rate                          -- global, not household-scoped
@@ -1036,6 +1037,15 @@ to drive the read-only 30/60/90-day forecast in <code>routes/plans.py</code>. It
 <code>SECURITY DEFINER</code> function; the owner assumption is replaced in place and archiving is
 terminal. Certainty, source, settlement and next-occurrence lifecycle stay the Phase 3.1 commitments
 and actions concept above and may extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</code> (applied).</p>
+<p><code>coverage_gap_acknowledgement</code> holds the owner's declared reason a month has no importable
+evidence — <code>not_issued</code>, <code>unobtainable</code>, <code>unsupported_format</code> or
+<code>account_not_in_use</code> — for one account or for payslips. Phase 2.1 Task 1 applies it: the
+month-by-month coverage grid itself (<code>GET /coverage</code>) is computed on read from committed
+<code>import_batch</code> periods and active payslips, never stored, so this table holds only the
+owner's gaps. It carries no <code>SECURITY DEFINER</code> function, following
+<code>commitment</code>'s convention. The history anchor (1 January 2024) is fixed in code
+(<a href="../adr/0011-36-month-history-horizon.html">ADR-0011</a>), not a column, so no setting can
+silently shorten history. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V45</code> (applied).</p>
 <hr>
 <h2 id="15-audit-log">15. Audit log</h2>
 <h3 id="why-every-child-table-carries-household_id">Why every child table carries <code>household_id</code></h3>

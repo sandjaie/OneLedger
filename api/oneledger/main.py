@@ -17,6 +17,7 @@ from .routes import (
     categories,
     classification_decisions,
     classification_review,
+    coverage,
     currencies,
     dashboard,
     description_reparse,
@@ -187,6 +188,7 @@ app.include_router(rules.router)
 app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
+app.include_router(coverage.router)
 app.include_router(description_reparse.router)
 app.include_router(documents.router)
 app.include_router(identity_backfill.router)

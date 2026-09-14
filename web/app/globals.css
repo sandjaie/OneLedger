@@ -1808,3 +1808,14 @@ body { background: #eef2f0; }
 .holding-screen dt { color: var(--muted); }
 .holding-screen dl.portfolio-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .holding-screen dl.portfolio-metrics div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule); }
+
+/* Coverage grid — a text-labelled month-by-month table (spec: colour is never the only signal). */
+.coverage-screen { max-width: 100%; }
+.coverage-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 14px; padding: 0; list-style: none; color: var(--muted); font-size: 0.72rem; }
+.coverage-table-wrap { overflow-x: auto; }
+.coverage-table { border-collapse: collapse; font-size: 0.76rem; }
+.coverage-table th, .coverage-table td { border: 1px solid var(--rule); padding: 6px 8px; white-space: nowrap; }
+.coverage-table th[scope="row"] { text-align: left; font-weight: 500; }
+.coverage-cell { padding: 2px 6px; border: none; background: none; font: inherit; color: inherit; cursor: pointer; }
+.coverage-cell:disabled { cursor: default; color: var(--muted); }
+.coverage-dialog { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--surface); max-width: 420px; }
