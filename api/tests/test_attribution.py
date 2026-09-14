@@ -13,9 +13,12 @@ sign or an omitted bridge term shows up as a nonzero residual here, not just a w
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 from oneledger.attribution import Attribution, Flow, HoldingFunding, Position, attribute
+from oneledger.routes.wealth_history import _mode_mismatch_reasons, _StoredPosition
 
 BASE = "XAB"
 SEC = "XCD"
@@ -124,6 +127,18 @@ def _attribute_base() -> Attribution:
 def test_dated_cash_flow_fixture_reconciles_with_zero_residual() -> None:
     result = _attribute_base()
     assert result.available
+    # `available` alone doesn't narrow the Decimal | None fields for mypy; the Attribution
+    # contract guarantees they're all set together, so assert that explicitly once.
+    assert (
+        result.retained_income is not None
+        and result.investment_income is not None
+        and result.internal_movements_and_costs is not None
+        and result.other_external_changes is not None
+        and result.market_movement is not None
+        and result.asset_revaluation is not None
+        and result.fx_translation is not None
+        and result.residual is not None
+    )
 
     assert result.opening == Decimal("3500.0000")
     assert result.closing == Decimal("4003.9500")
@@ -224,6 +239,37 @@ def test_flow_classification_first_match_order() -> None:
     assert result.investment_income == Decimal("30.0000")
     assert result.internal_movements_and_costs == Decimal("-15.0000")
     assert result.other_external_changes == Decimal("20.0000") + Decimal("-45.0000")
+
+
+def test_a_valuation_mode_change_between_t0_and_t1_is_a_mode_mismatch_reason() -> None:
+    """OL-005 (review repair round): the route's own pure `_mode_mismatch_reasons` helper, unit
+    tested directly against hand-built `_StoredPosition` rows — no database needed. An account
+    that was `ledger_balance` at t0 and `holdings` at t1 has no single honest formula, so it must
+    be named, not silently attributed under whichever end's kind happened to be picked."""
+    account_id = uuid4()
+    t0, t1 = date(2023, 12, 31), date(2024, 1, 31)
+
+    def row(mode: str) -> _StoredPosition:
+        return _StoredPosition(
+            account_id=account_id,
+            account_name="Synthetic switched account",
+            holding_id=None,
+            valuation_mode=mode,
+            currency=BASE,
+            native_value=Decimal("100.0000"),
+            rate_to_base=Decimal("1"),
+            rate_to_secondary=Decimal("1"),
+            value_base=Decimal("100.0000"),
+            value_secondary=Decimal("100.0000"),
+            status="available",
+        )
+
+    reasons = _mode_mismatch_reasons([row("ledger_balance")], [row("holdings")], t0, t1)
+    assert reasons == [f"Synthetic switched account changed valuation mode between {t0} and {t1}"]
+
+    # Same kind at both ends, or absent at one end: no mismatch to report.
+    assert _mode_mismatch_reasons([row("ledger_balance")], [row("ledger_balance")], t0, t1) == []
+    assert _mode_mismatch_reasons([], [row("holdings")], t0, t1) == []
 
 
 if __name__ == "__main__":

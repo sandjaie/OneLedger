@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -66,6 +66,10 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   const [monthState, setMonthState] = useState<MonthState>("idle");
   const [waterfall, setWaterfall] = useState<MonthAttributionResponse>();
   const [waterfallState, setWaterfallState] = useState<MonthState>("idle");
+  // OL-007 (review repair round): a token per selectMonth call, so a slow, now-superseded
+  // response (the owner clicked a second month before the first one's positions/attribution
+  // came back) is dropped instead of clobbering what's now on screen.
+  const selectionRef = useRef(0);
 
   useEffect(() => {
     let current = true;
@@ -99,30 +103,35 @@ export function WealthScreen({ currency, currencies, request }: Props) {
     }
   }
 
-  async function loadWaterfall(monthEnd: string) {
+  async function loadWaterfall(monthEnd: string, token: number) {
     setWaterfallState("loading");
     try {
       const loaded = await request<MonthAttributionResponse>(
         `/wealth-history/${encodeURIComponent(monthEnd)}/attribution`,
       );
+      if (selectionRef.current !== token) return; // a later selectMonth superseded this one
       setWaterfall(loaded);
       setWaterfallState("ready");
     } catch {
-      setWaterfallState("error");
+      if (selectionRef.current === token) setWaterfallState("error");
     }
   }
 
   function selectMonth(monthEnd: string) {
+    const token = ++selectionRef.current;
     setSelected(monthEnd);
     setMonthState("loading");
     request<MonthPositionsResponse>(`/wealth-history/${encodeURIComponent(monthEnd)}`)
       .then((loaded) => {
+        if (selectionRef.current !== token) return;
         setMonth(loaded);
         setMonthState("ready");
       })
-      .catch(() => setMonthState("error"));
+      .catch(() => {
+        if (selectionRef.current === token) setMonthState("error");
+      });
 
-    void loadWaterfall(monthEnd);
+    void loadWaterfall(monthEnd, token);
   }
 
   return (
@@ -201,7 +210,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
               <h2 id="wealth-month-title">{selected} positions</h2>
               {monthState === "loading" && <p role="status">Loading {selected}&rsquo;s positions…</p>}
               {monthState === "error" && (
-                <p className="inline-alert" role="alert">This month&rsquo;s positions could not be loaded.</p>
+                <p className="inline-alert" role="alert">
+                  This month&rsquo;s positions could not be loaded.{" "}
+                  <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                    Try again
+                  </button>
+                </p>
               )}
               {monthState === "ready" && month && (
                 <div className="wealth-positions-wrap">
@@ -252,7 +266,10 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                 )}
                 {waterfallState === "error" && (
                   <p className="inline-alert" role="alert">
-                    This month&rsquo;s attribution could not be loaded.
+                    This month&rsquo;s attribution could not be loaded.{" "}
+                    <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                      Try again
+                    </button>
                   </p>
                 )}
                 {waterfallState === "ready" && waterfall && (() => {
@@ -271,15 +288,27 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                     <dl className="wealth-waterfall-list">
                       <div>
                         <dt>Opening</dt>
-                        <dd>{moneyText(leg.opening ?? "0", currency.code, currencies)}</dd>
+                        <dd>
+                          {leg.opening === null
+                            ? "—"
+                            : moneyText(leg.opening, currency.code, currencies)}
+                        </dd>
                       </div>
                       <div>
                         <dt>Closing</dt>
-                        <dd>{moneyText(leg.closing ?? "0", currency.code, currencies)}</dd>
+                        <dd>
+                          {leg.closing === null
+                            ? "—"
+                            : moneyText(leg.closing, currency.code, currencies)}
+                        </dd>
                       </div>
                       <div>
                         <dt>Actual change</dt>
-                        <dd>{moneyText(leg.actualChange ?? "0", currency.code, currencies)}</dd>
+                        <dd>
+                          {leg.actualChange === null
+                            ? "—"
+                            : moneyText(leg.actualChange, currency.code, currencies)}
+                        </dd>
                       </div>
                       {WATERFALL_LINES.map(([key, label]) => {
                         const value = leg[key] as string | null;

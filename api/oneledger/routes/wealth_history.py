@@ -215,7 +215,8 @@ def read_month_positions(
 # --- Phase 2.2 Task 2: GET /wealth-history/{monthEnd}/attribution (spec "Attribution for one
 # month"). `attribution.attribute` is pure; this route's own job is loading the two stored month
 # ends, the window's frozen flows and funding events, and the closing rates it needs, once per
-# reporting currency (`_LEG` below), and shaping the result.
+# reporting currency (`leg="base"`/`leg="secondary"` in `_attribute_leg` below), and shaping the
+# result.
 
 
 @dataclass(frozen=True)
@@ -226,6 +227,8 @@ class _StoredPosition:
     valuation_mode: str
     currency: str
     native_value: Decimal | None
+    rate_to_base: Decimal | None
+    rate_to_secondary: Decimal | None
     value_base: Decimal | None
     value_secondary: Decimal | None
     status: str
@@ -233,6 +236,23 @@ class _StoredPosition:
 
 def _position_key(account_id: UUID, holding_id: UUID | None) -> str:
     return str(account_id) if holding_id is None else f"{account_id}:{holding_id}"
+
+
+def _mode_mismatch_reasons(
+    opening_rows: list[_StoredPosition], closing_rows: list[_StoredPosition], t0: date, t1: date
+) -> list[str]:
+    """OL-005 (review repair round): a position whose valuation mode changed between t0 and t1 —
+    an account switched, say, from ledger to holdings mode — has no single honest formula, since
+    `attribution.attribute` picks one kind's rules per position, never a transition between two.
+    Pure (no DB) so it is unit-tested directly against hand-built `_StoredPosition` rows."""
+    opening_by_key = {_position_key(r.account_id, r.holding_id): r for r in opening_rows}
+    closing_by_key = {_position_key(r.account_id, r.holding_id): r for r in closing_rows}
+    return [
+        f"{opening.account_name} changed valuation mode between {t0} and {t1}"
+        for key, opening in opening_by_key.items()
+        if (closing := closing_by_key.get(key)) is not None
+        and closing.valuation_mode != opening.valuation_mode
+    ]
 
 
 def _load_positions(
@@ -248,6 +268,8 @@ def _load_positions(
             valuation_mode=row[4],
             currency=str(row[5]).strip(),
             native_value=row[6],
+            rate_to_base=row[8],
+            rate_to_secondary=row[11],
             value_base=row[14],
             value_secondary=row[15],
             status=row[16],
@@ -411,6 +433,15 @@ def _attribute_leg(
     )
 
 
+# OL-001 (review repair round): a fixed reason for a month the household has never computed, or
+# no longer covers — a stale request against a month before the last refresh's own horizon, or a
+# monthEnd that is not a real calendar month end at all. Also excludes 31 December 2023, the
+# opening anchor point stored_month_ends always includes: it has no t0 of its own before it, so it
+# is never itself attributable.
+_NOT_COMPUTED_REASON = "month not computed; refresh wealth history"
+_OPENING_ANCHOR = date(2023, 12, 31)
+
+
 @router.get("/wealth-history/{monthEnd}/attribution")
 def read_month_attribution(
     monthEnd: date, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -421,17 +452,29 @@ def read_month_attribution(
         cur.execute("SET TRANSACTION READ ONLY")
         base, secondary = _household_pair(cur, owner.household_id)
 
-        opening_rows = _load_positions(cur, owner.household_id, t0)
-        closing_rows = _load_positions(cur, owner.household_id, t1)
-        reasons = [
-            f"{row.account_name} is {row.status} at {t0}"
-            for row in opening_rows
-            if row.status != "available"
-        ] + [
-            f"{row.account_name} is {row.status} at {t1}"
-            for row in closing_rows
-            if row.status != "available"
-        ]
+        cur.execute(_REFRESH_STATE, (owner.household_id,))
+        state = cur.fetchone()
+        month_is_computed = (
+            state is not None and t1 != _OPENING_ANCHOR and t1 in stored_month_ends(state[0])
+        )
+
+        opening_rows: list[_StoredPosition] = []
+        closing_rows: list[_StoredPosition] = []
+        if not month_is_computed:
+            reasons = [_NOT_COMPUTED_REASON]
+        else:
+            opening_rows = _load_positions(cur, owner.household_id, t0)
+            closing_rows = _load_positions(cur, owner.household_id, t1)
+            reasons = [
+                f"{row.account_name} is {row.status} at {t0}"
+                for row in opening_rows
+                if row.status != "available"
+            ] + [
+                f"{row.account_name} is {row.status} at {t1}"
+                for row in closing_rows
+                if row.status != "available"
+            ]
+            reasons += _mode_mismatch_reasons(opening_rows, closing_rows, t0, t1)
 
         ledger_account_ids = sorted(
             {
@@ -451,6 +494,8 @@ def read_month_attribution(
         )
         flow_rows: list[tuple[Any, ...]] = []
         funding_rows: list[tuple[Any, ...]] = []
+        base_rates: dict[str, Decimal] = {}
+        secondary_rates: dict[str, Decimal] = {}
         if not reasons:
             if ledger_account_ids:
                 cur.execute(_WINDOW_FLOWS, (owner.household_id, ledger_account_ids, t0, t1))
@@ -459,21 +504,30 @@ def read_month_attribution(
                 cur.execute(_WINDOW_FUNDING, (owner.household_id, holding_ids, t0, t1))
                 funding_rows = cur.fetchall()
 
+            # OL-006: a position held at t1 already carries the exact rate its own stored row
+            # was translated with — reuse it rather than asking current_rate_pair to look the
+            # same rate up again. current_rate_pair is only for a currency this month needs but
+            # no t1 position carries: one only flowing or funding in the window, or one held only
+            # at t0 (the position closed within the window).
+            stored_currencies: set[str] = set()
+            for row in closing_rows:
+                if row.status == "available":
+                    assert row.rate_to_base is not None and row.rate_to_secondary is not None
+                    base_rates[row.currency] = row.rate_to_base
+                    secondary_rates[row.currency] = row.rate_to_secondary
+                    stored_currencies.add(row.currency)
+
             needed_currencies = (
                 {row.currency for row in (*opening_rows, *closing_rows)}
                 | {str(row[1]).strip() for row in flow_rows}
                 | {str(row[2]).strip() for row in funding_rows}
             )
-            base_rates: dict[str, Decimal] = {}
-            secondary_rates: dict[str, Decimal] = {}
-            for currency in needed_currencies:
+            for currency in needed_currencies - stored_currencies:
                 pair = current_rate_pair(cur, currency, base, secondary, t1)
                 if pair.to_base is not None:
                     base_rates[currency] = pair.to_base.rate
                 if pair.to_secondary is not None:
                     secondary_rates[currency] = pair.to_secondary.rate
-        else:
-            base_rates = secondary_rates = {}
 
     base_leg = _attribute_leg(
         opening_rows, closing_rows, flow_rows, funding_rows, base_rates, reasons, leg="base"

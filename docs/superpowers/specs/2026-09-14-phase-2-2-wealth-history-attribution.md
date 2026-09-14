@@ -128,8 +128,14 @@ position's or flow's currency; a missing `r1` for any held or flowing currency m
 - Postings on holdings-mode or snapshot-mode accounts are never flows, so nothing is counted both as
   a flow and as market movement or revaluation.
 - **FX translation** = for every position with `V0_nat ≠ 0`, `round(V0_nat × r1, 4) − value_C(t0)`;
-  plus, for every ledger flow and every holding funding amount, its closing-rate value minus its
-  frozen value: `round(x_nat × r1, 4) − x_C`.
+  plus, for every ledger flow, its closing-rate value minus its frozen value:
+  `round(x_nat × r1, 4) − x_C` where `x_nat` is the flow's own native amount and `x_C` its own
+  frozen reporting amount; plus, for every holding funding event, the same bridge taken on the
+  **same signed figures its own lines above use** — `x_nat = −net_amount`, `x_C = −net_amount_C`,
+  matching `F_nat` and internal movements and costs — so it adds `net_amount_C − round(net_amount ×
+  r1, 4)`. Bridging the raw, unnegated `net_amount` here would double-count against the funding
+  event's own internal-movements line whenever its frozen rate differs from `r1`, leaving a
+  residual under a rate move that complete synthetic data must not produce.
 - **Residual** = actual change − sum of all lines, displayed. For complete synthetic data it is
   exactly zero apart from 4-place rounding differences, which stay inside the residual.
 
