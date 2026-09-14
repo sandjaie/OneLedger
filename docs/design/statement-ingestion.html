@@ -874,6 +874,26 @@ and fingerprints. A first stage stores the original blob and creates the documen
 in one database transaction; a later database refusal may leave only that inert content-addressed
 blob. Exact replay is idempotent, changed replay conflicts, and owner-scoped cancellation is
 idempotent and terminal while retaining provenance.</p>
+<h3 id="payslip-staging">Payslip staging</h3>
+<p><code>api/oneledger/payslip_pdf.py</code> is a capability-neutral content-selected adapter (ADR-0012),
+like the investment adapters above: its markers are generic pay-advice vocabulary, never an employer,
+institution or country name. A file is selected only when it carries a <code>PAY ADVICE FOR &lt;month&gt;
+&lt;year&gt;</code> line, a side-by-side <code>Payments Amount Deductions Amount</code> table and an
+<code>All amounts in &lt;code&gt;</code> line; a month block runs from its marker, across pages, to the
+next marker or the file&#39;s end. Table lines split at the header&#39;s <code>Deductions</code> word into a
+payment side and a deduction side, each a label then a trailing positive amount; the row beginning
+<code>Total</code> ends the table and supplies the stated payments and deductions totals. Net pay comes
+only from the first line after <code>Net Pay Amount</code> with a word at or right of that header&#39;s
+own <code>Net</code> word — bank, branch and account text sits to its left and is never parsed or
+retained, nor are employee, position or organization lines. A repeated <code>Element Remarks Amount</code>
+deduction-detail block, wherever it appears, is ignored entirely. A month reconciles only when its
+payment lines sum to the stated payments total, its deduction lines to the stated deductions total,
+and payments less deductions equal the stated net pay exactly; otherwise it carries one fixed reason
+and nothing is stored for it. <code>POST /payslips/import</code> is the route boundary: a preview
+writes nothing, and a commit records each reconciling month through <code>record_payslip()</code> in
+its own savepoint, keyed by <code>uuid5</code> of the extraction version, household, month, currency,
+net pay and every ordered line — so the same file, or a month a manual entry already recorded,
+creates nothing twice.</p>
 <hr>
 <h2 id="10-stage-10--review">10. Stage 10 — Review</h2>
 <p>The screen where a month&#39;s import is confirmed. It should be fast enough to be pleasant, because

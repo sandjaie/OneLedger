@@ -658,6 +658,16 @@ spending/cash timing; actual payments clear future commitments; actions resolve 
 <li>Phase 3.3 / Phase 3.4: resources cannot be reserved twice; emergency coverage uses a visible baseline;
 partial claims settle without creating duplicate income; renewals and maturities surface actions.</li>
 <li>Phase 1.8: the owner can interpret exported records independently and unauthorized sessions cannot retrieve them.</li>
+<li>Phase 1.7 Task 1: a payslip is stored only when its lines reconcile exactly to the stated gross,
+deductions and net pay, entered or imported; re-importing a multi-month file creates nothing twice;
+a correction supersedes without editing the original; and net pay links to exactly one eligible
+ledger credit, unlinking with income, spending and net worth unchanged. The V42 SQL suite proves
+owner/member/foreign/anonymous isolation on both tables, a totals mismatch refused at constraint
+time with nothing stored, and immutability of every field but the deposit link. The live API suite
+proves exact round trips, idempotent replay and conflicting-key refusal, a multi-month import
+committing only reconciling months in one request, a manually entered month reporting
+<code>already_recorded</code> on a later import, deposit-candidate window edges, and a linked
+credit reading <code>eligible: false</code> once it becomes a transfer leg.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

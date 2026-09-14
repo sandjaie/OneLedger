@@ -641,6 +641,12 @@ reference, raw row, correlation, source-event identity or fingerprint. Dry runs 
 staging re-extracts the owner&#39;s upload and validates every UUID inside the household boundary.</p>
 <p>The same treatment applies to PAN, Emirates ID and passport numbers — last four for human
 recognition, nothing more.</p>
+<p><strong>Owner decision (Phase 1.7 Task 1):</strong> a payslip line&#39;s label is stored exactly as the
+owner enters it or the source PDF prints it, bounded only by length — the owner chose not to mask
+or screen it, unlike an account or card identifier. The payslip PDF adapter never reads employee,
+position, organization, bank, branch or account text at all: its extraction touches only the pay
+month, the payments/deductions table, the net-pay column and the stated currency, so there is
+nothing of that kind to redact on the way in.</p>
 <hr>
 <h2 id="5-data-protection">5. Data protection</h2>
 <table>

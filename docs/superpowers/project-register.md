@@ -35,7 +35,10 @@ an inferred institution identity.
 | 14 Sep 2026 | Switch charges (exit load, stamp duty) | The event matrix records no switch charge, so such a switch fails closed | When real evidence contains one |
 | 14 Sep 2026 | Backdated unit events before a platform transfer | V40's order guard refuses them although holding-level transfers carry explicit units | Phase 2.1 planning |
 | 14 Sep 2026 | Persist the price-source check time | Refresh throttling lives in process memory, so a restart refetches once | If refetches become noticeable |
-| 14 Sep 2026 | Extract payslips from documents | Phase 1.7 records payslips by owner entry at personal scale | After Phase 1.8, when owner entry proves tedious |
+| 14 Sep 2026 | Scanned payslips and payslip layouts other than the supported monthly pay advice | Phase 1.7 imports one content-selected text-PDF layout; other files are reported unsupported | When the owner receives a payslip in another layout |
+| 14 Sep 2026 | Withdraw a payslip entered in error without a replacement | Phase 1.7 corrections only supersede; an exact duplicate month is refused at entry | When a mistaken payslip must be removed |
+| 14 Sep 2026 | Employer-contribution and reimbursement payslip lines | Phase 1.7 records payment and deduction lines only | Phase 4.2 planning |
+| 14 Sep 2026 | Keep a linked payslip credit eligible when its ledger row is reclassified | Phase 1.7 checks eligibility when linking and reports it on read | Phase 4.2 planning |
 | 14 Sep 2026 | Search document contents | Phase 1.8 filters documents by type, account, period and import status; indexing statement text widens the private-data surface | Only through a separate privacy decision |
 
 ## Unapproved discoveries and improvement candidates

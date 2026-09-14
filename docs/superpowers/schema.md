@@ -2250,6 +2250,97 @@ No Phase 1.6 action yet creates a successor lot or selects a transferred lot;
 
 ---
 
+## `V42` (applied)
+
+### Payslips
+
+Phase 1.7 Task 1. A payslip covers one calendar month (stored as its first day; the supported
+source prints no pay date) and is immutable except its deposit link.
+
+```sql
+CREATE TYPE payslip_line_kind AS ENUM ('earning', 'deduction');
+
+CREATE TABLE payslip (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id           UUID NOT NULL REFERENCES household(id),
+  idempotency_key        UUID NOT NULL,
+  supersedes_payslip_id  UUID,
+  source_document_id     UUID,
+  pay_month              DATE NOT NULL,
+  currency               CHAR(3) NOT NULL REFERENCES currency(code),
+  gross_earnings         NUMERIC(20,4) NOT NULL,
+  total_deductions       NUMERIC(20,4) NOT NULL,
+  net_pay                NUMERIC(20,4) NOT NULL,
+  deposit_transaction_id UUID,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_payslip_household_id UNIQUE (household_id, id),
+  CONSTRAINT uq_payslip_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT uq_payslip_supersedes UNIQUE (supersedes_payslip_id),
+  CONSTRAINT fk_payslip_supersedes_scope FOREIGN KEY (household_id, supersedes_payslip_id)
+    REFERENCES payslip (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_payslip_document_scope FOREIGN KEY (household_id, source_document_id)
+    REFERENCES document (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_payslip_deposit_scope FOREIGN KEY (household_id, deposit_transaction_id)
+    REFERENCES transaction (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT payslip_month_is_first_day CHECK (pay_month = date_trunc('month', pay_month)::date),
+  CONSTRAINT payslip_amounts_are_valid CHECK (
+    gross_earnings > 0 AND total_deductions >= 0 AND net_pay >= 0),
+  CONSTRAINT payslip_net_is_gross_less_deductions CHECK (
+    net_pay = gross_earnings - total_deductions)
+);
+CREATE UNIQUE INDEX uq_payslip_deposit ON payslip (deposit_transaction_id)
+  WHERE deposit_transaction_id IS NOT NULL;
+
+CREATE TABLE payslip_line (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES household(id),
+  payslip_id   UUID NOT NULL,
+  line_no      SMALLINT NOT NULL,
+  kind         payslip_line_kind NOT NULL,
+  label        TEXT NOT NULL,
+  amount       NUMERIC(20,4) NOT NULL,
+  CONSTRAINT fk_payslip_line_payslip_scope FOREIGN KEY (household_id, payslip_id)
+    REFERENCES payslip (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT uq_payslip_line_no UNIQUE (payslip_id, line_no),
+  CONSTRAINT payslip_line_no_is_bounded CHECK (line_no BETWEEN 1 AND 40),
+  CONSTRAINT payslip_line_amount_is_positive CHECK (amount > 0),
+  CONSTRAINT payslip_line_label_is_bounded CHECK (
+    char_length(label) BETWEEN 1 AND 80 AND label = btrim(label))
+);
+```
+
+`record_payslip(p_idempotency_key, p_supersedes_payslip_id, p_source_document_id, p_pay_month,
+p_currency, p_gross_earnings, p_total_deductions, p_net_pay, p_line_kinds, p_line_labels,
+p_line_amounts) RETURNS TABLE (recorded_payslip_id, created)` is the one write path for entry,
+correction and import. `SECURITY DEFINER`; calls `assert_is_owner()` and locks the household row;
+refuses amounts off scale 4 and line arrays of unequal length, with a null, or outside 1–40
+entries; replays an identical idempotency key (supersession, month, currency, amounts and ordered
+lines — the source document is not compared) and otherwise raises `payslip_idempotency_conflict`;
+for a correction raises `no_data_found` outside the household and `payslip_is_linked` for a linked
+payslip (a second correction fails on `uq_payslip_supersedes`); for a new payslip raises
+`payslip_duplicate` when an active payslip already shares its month, currency and net pay.
+`payslip_totals_agree` is one `DEFERRABLE INITIALLY DEFERRED` constraint trigger (both tables share
+the name so one `SET CONSTRAINTS` governs both) that `record_payslip` defers before its inserts and
+makes immediate after them, so several payslips recorded in one transaction — an import's per-month
+savepoints — are each checked complete on their own. `preserve_payslip` refuses deletion and any
+update except `deposit_transaction_id`; `preserve_payslip_line` refuses every update and delete.
+`assert_payslip_deposit` runs before a non-null `deposit_transaction_id` is set: it raises
+`payslip_is_superseded` for a superseded payslip and `payslip_deposit_is_eligible` unless
+`v_transaction_reportable` holds that row in the household with `txn_type = 'income'`, the
+payslip's currency and `amount = net_pay`; no trigger touches `transaction` itself, so a linked
+credit later reclassified, excluded or confirmed as a transfer leg simply reads `eligible: false`.
+Both tables carry `household_isolation FOR ALL TO authenticated`; every trigger function is
+revoked from `PUBLIC`.
+
+`api/oneledger/payslip_pdf.py` extracts `PayslipExtraction(supported, extraction_version, months)`
+of `PayslipMonthDraft(pay_month, currency, gross_earnings, total_deductions, net_pay, lines,
+reason)` from a content-selected pay-advice layout (a `PAY ADVICE FOR <month> <year>` marker, a
+side-by-side `Payments Amount Deductions Amount` table ending at a `Total` row, a `Net Pay Amount`
+column and an `All amounts in <code>` line); `routes/payslips.py` applies the `unknown_currency`
+check against the currency table after extraction, since the adapter has no database access.
+
+---
+
 ## `0013`
 
 ### Loans
@@ -2466,37 +2557,10 @@ CREATE TABLE budget_line (
   CONSTRAINT one_target CHECK (num_nonnulls(category_id, bucket) = 1)
 );
 
-CREATE TABLE payslip (
-  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id           UUID NOT NULL REFERENCES household(id),
-  person_id              UUID NOT NULL REFERENCES person(id),
-  employer_institution_id UUID REFERENCES institution(id),
-  pay_period_start       DATE NOT NULL,
-  pay_period_end         DATE NOT NULL,
-  pay_date               DATE NOT NULL,
-  currency               CHAR(3) NOT NULL,
-  gross_earnings         NUMERIC(20,4) NOT NULL,
-  total_deductions       NUMERIC(20,4) NOT NULL DEFAULT 0,
-  net_pay                NUMERIC(20,4) NOT NULL,
-  source_document_id     UUID REFERENCES document(id),
-  deposit_transaction_id UUID REFERENCES transaction(id),
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (person_id, pay_period_start, pay_period_end)
-);
-
--- Line items, not fixed columns: UAE and Indian payslips differ too much for a fixed schema
-CREATE TABLE payslip_line (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id UUID NOT NULL REFERENCES household(id),
-  payslip_id   UUID NOT NULL REFERENCES payslip(id) ON DELETE CASCADE,
-  line_type    TEXT NOT NULL,   -- earning|deduction|employer_contribution|reimbursement
-  code         TEXT,
-  label        TEXT NOT NULL,   -- 'Basic'|'Housing Allowance'|'PF Employee'|'Gratuity Accrual'
-  amount       NUMERIC(20,4) NOT NULL,
-  is_recurring BOOLEAN NOT NULL DEFAULT true,
-  sort_order   SMALLINT NOT NULL DEFAULT 0
-);
 ```
+
+Phase 1.7 Task 1 replaced the payslip shapes originally planned here with V42's exact,
+reconciling design — see that section.
 
 ---
 

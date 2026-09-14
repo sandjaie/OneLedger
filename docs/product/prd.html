@@ -859,11 +859,14 @@ Subscriptions       500        460     −40
 software from repeating amount/merchant/cadence patterns.</p>
 <p>Output: <strong>&quot;Your committed recurring expenses for October are AED X before any discretionary
 spending.&quot;</strong> Plus detection of price increases and of subscriptions that quietly kept charging.</p>
-<h3 id="516-salary-intelligence--phase-42">5.16 Salary Intelligence — <em>Phase 4.2</em></h3>
+<h3 id="516-salary-intelligence--phase-17-and-phase-42">5.16 Salary Intelligence — <em>Phase 1.7 and Phase 4.2</em></h3>
 <p>Payslip extraction into line items rather than fixed columns — UAE and Indian payslips differ too
-much for a fixed schema. Separates <strong>annual compensation</strong> (including employer contributions and
-accrued bonus) from <strong>actual cash received</strong>. Yields bonus history, increment history and
-compensation trend.</p>
+much for a fixed schema — moved from Phase 4.2 to Phase 1.7: the owner
+enters a payslip or imports a supported text PDF, a payslip is stored only when its lines reconcile
+exactly to the stated gross, deductions and net pay, and net pay links to the one ledger credit that
+received it. Separating <strong>annual compensation</strong> (including employer contributions and accrued
+bonus) from <strong>actual cash received</strong>, and yielding bonus history, increment history and
+compensation trend, remain Phase 4.2.</p>
 <h3 id="finance-os-additions">Finance OS additions — Phase 3.x and Phase 4.x</h3>
 <p><a href="./finance-os.html#next-month">Phase 3.1 and Phase 3.2</a> deliver confirmed commitments,
 a 30–90-day cash forecast by account and currency, and actions with due dates and resolution states.
