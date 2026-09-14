@@ -33,7 +33,7 @@ A plan is an execution map, not a pre-written patch. Each task states:
 Use code only for an exact interface or schema contract, a non-obvious invariant, or a tiny
 deterministic change. Put durable design rationale in a spec, design document or ADR. Size and
 group branches to the diff budget in `docs/git-workflow.md`. `/oneledger-plan-review` checks a new
-phase plan once.
+phase group's plans once.
 
 Repository reality may change implementation details, but not approved contracts. Record a
 necessary deviation in the PR and `docs/superpowers/progress.md`; do not rewrite a dispatched
