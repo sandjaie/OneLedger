@@ -62,9 +62,11 @@ A suggestion is a candidate rule the owner has not created, derived only from ow
   shows.
 
 Creating a suggested rule uses `POST /rules` (future rows only). Applying it to past rows is a
-separate owner step: the web builds classification-run items from the matched transaction ids in
-chunks of at most 200, one preview/apply run per chunk, and shows rows the preview refuses as
-unresolved.
+separate owner step reusing the existing `POST /classify?ruleId=` cascade pass: the web previews
+first (`?preview=true`, reporting `considered`/`changed` and a redacted sample) and only calls the
+non-preview pass once the owner confirms. This reaches only rows still `classified_by =
+'unclassified'`, not every row the rule matches, and is not undoable — the same scope and the same
+guarantee `POST /classify?ruleId=` already gives the transactions screen's classify prompt.
 
 ## Review queue ordering
 
@@ -76,8 +78,8 @@ count. The review screen offers the sort.
 
 Settings › Rules gains a **Coverage and analytics** panel (coverage and confidence figures, per-rule
 hits, last hit, disagreements with their redacted sample rows, and top unclassified descriptions) and
-a **Suggested rules** list (create for future rows; "Apply to past rows" runs the chunked
-preview/apply flow). Server strings only.
+a **Suggested rules** list (create for future rows; a separate "check past rows" preview followed by
+an explicit "apply N changes" confirm, through `POST /classify?ruleId=`). Server strings only.
 
 ## Required test evidence
 
@@ -90,7 +92,7 @@ creating a suggestion changes no existing row until an explicit apply.
 
 Through the application: the rules screen shows coverage, hits, disagreements and top unclassified
 descriptions; repeated corrections produce a narrow suggestion with an accurate affected count; past
-rows change only after a previewed, undoable apply.
+rows change only after a previewed confirm, reaching only currently-unclassified rows, with no undo.
 
 ## Non-goals
 

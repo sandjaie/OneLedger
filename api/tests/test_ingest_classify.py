@@ -37,7 +37,7 @@ from oneledger.ingest.classify import (
     rule_matches,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 ACCOUNT = UUID("11111111-1111-1111-1111-111111111111")
 OTHER_ACCOUNT = UUID("22222222-2222-2222-2222-222222222222")
@@ -432,7 +432,7 @@ def test_proposed_pattern_agrees_with_the_web_twin_on_every_shared_vector() -> N
     """`classify-prompt.tsx`'s `proposedPattern` and this function must always agree — Phase 2.3's
     `GET /rules/suggestions` groups owner corrections by this function's answer, and a suggestion
     named differently than the pattern the classify prompt would have proposed is a lie."""
-    vectors = json.loads((REPO_ROOT / "proposed-pattern-vectors.json").read_text())
+    vectors = json.loads((FIXTURES / "proposed-pattern-vectors.json").read_text())
 
     for vector in vectors:
         assert proposed_pattern(vector["description"]) == vector["pattern"], vector

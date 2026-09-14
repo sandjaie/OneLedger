@@ -289,6 +289,59 @@ def test_rule_hits_last_hit_date_and_disagreements(live: Fixture) -> None:
     assert hit["disagreementSample"][0]["bookedDate"] == "2026-02-03"
 
 
+def test_disagreement_is_counted_only_on_the_earlier_priority_rule(live: Fixture) -> None:
+    """Two active rules both match the same row; `_first_matching` picks exactly one winner per
+    row within a priority group, so a disagreement can only ever land on the rule the cascade
+    would actually have chosen — never on the rule priority order never reaches."""
+    earlier_cat = a_category(live, "overlap-earlier")
+    later_cat = a_category(live, "overlap-later")
+    stored_cat = a_category(live, "overlap-stored")
+    earlier = (
+        client()
+        .post(
+            "/rules",
+            json={
+                "matchDescriptionPattern": "GROCER",
+                "matchPatternKind": "contains",
+                "setCategoryId": str(earlier_cat),
+                "priority": 10,
+            },
+            headers=ORIGIN,
+        )
+        .json()
+    )
+    later = (
+        client()
+        .post(
+            "/rules",
+            json={
+                "matchDescriptionPattern": "GROCER",
+                "matchPatternKind": "contains",
+                "setCategoryId": str(later_cat),
+                "priority": 20,
+            },
+            headers=ORIGIN,
+        )
+        .json()
+    )
+    # Stored by hand, under neither rule's own category: both rules would dispute this row if
+    # priority order did not decide a single winner.
+    a_transaction(
+        live,
+        "GROCER MARKET",
+        classified_by="user_manual",
+        category_id=stored_cat,
+        classification_confidence=Decimal("1.000"),
+        booked_date=date(2026, 9, 1),
+    )
+
+    analytics = client().get("/rules/analytics", headers=ORIGIN).json()
+    by_id = {rule["ruleId"]: rule for rule in analytics["rules"]}
+
+    assert by_id[earlier["id"]]["disagreements"] == 1
+    assert by_id[later["id"]]["disagreements"] == 0
+
+
 def test_top_unclassified_descriptions_are_grouped_counted_and_redacted(live: Fixture) -> None:
     a_transaction(live, "REPEATED SHOP", amount=Decimal("-10.0000"), booked_date=date(2026, 3, 1))
     # Case and spacing differ, but the normalised identity is the same narration.
@@ -389,6 +442,39 @@ def test_suggestions_need_three_corrections_and_never_duplicate_an_active_rule(
     )
     assert coffee["affected"] == previewed["affected"] == 4
     assert coffee["unclassified"] == previewed["unclassified"] == 1
+
+
+def test_suggestions_stay_hidden_for_a_category_only_rule_on_the_same_pattern(
+    live: Fixture,
+) -> None:
+    """`classify-prompt.tsx`'s own `ruleBody()` never sets a transaction type — only a category
+    — so a rule silent on type must still read as already covering a suggestion's outcome, or
+    every rule the classify prompt creates would keep re-suggesting itself forever."""
+    cat = a_category(live, "sugg-category-only")
+    client().post(
+        "/rules",
+        json={
+            "matchDescriptionPattern": "BAKERY",
+            "matchPatternKind": "contains",
+            "matchDirection": "debit",
+            "setCategoryId": str(cat),
+            # No setTxnType: exactly the shape classify-prompt.tsx's ruleBody() creates.
+        },
+        headers=ORIGIN,
+    )
+    for day in (1, 2, 3):
+        a_transaction(
+            live,
+            "BAKERY",
+            classified_by="user_manual",
+            category_id=cat,
+            classification_confidence=Decimal("1.000"),
+            booked_date=date(2026, 8, day),
+        )
+
+    suggestions = client().get("/rules/suggestions", headers=ORIGIN).json()["suggestions"]
+
+    assert "BAKERY" not in {suggestion["pattern"] for suggestion in suggestions}
 
 
 def test_suggestions_are_ordered_by_evidence_rows_and_capped(live: Fixture) -> None:

@@ -7,7 +7,7 @@ import { proposedPattern } from "@/app/transactions/classify-prompt";
 type Vector = { description: string; pattern: string };
 
 const vectors: Array<Vector> = JSON.parse(
-  readFileSync(`${process.cwd()}/../proposed-pattern-vectors.json`, "utf8"),
+  readFileSync(`${process.cwd()}/../api/tests/fixtures/proposed-pattern-vectors.json`, "utf8"),
 );
 
 describe("proposedPattern", () => {

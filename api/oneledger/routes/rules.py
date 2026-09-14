@@ -721,12 +721,15 @@ def _coverage(cur: psycopg.Cursor[Any], household_id: UUID, today: date) -> Rule
     by_band = dict(cur.fetchall())
     # `v_transaction_reportable` already carries the reportable predicate (I3); reading it here
     # is cheaper and more honest than re-deriving that predicate from `REPORT_EXCLUDING_TYPES`.
+    # Its own count, not `total`, is this figure's denominator: "reportable rows with no
+    # category" is a question about reportable rows, and a household with many transfers would
+    # otherwise show a percentage no reportable-row count actually supports.
     cur.execute(
-        "SELECT count(*) FROM v_transaction_reportable"
-        " WHERE household_id = %s AND booked_date BETWEEN %s AND %s AND category_id IS NULL",
+        "SELECT count(*), count(*) FILTER (WHERE category_id IS NULL)"
+        " FROM v_transaction_reportable WHERE household_id = %s AND booked_date BETWEEN %s AND %s",
         window,
     )
-    uncategorized = cur.fetchone()[0]  # type: ignore[index]
+    reportable_total, uncategorized = cur.fetchone()  # type: ignore[misc]
     return RuleAnalyticsCoverage(
         totalRows=total,
         byClassifiedBy={
@@ -736,7 +739,7 @@ def _coverage(cur: psycopg.Cursor[Any], household_id: UUID, today: date) -> Rule
         confidenceBands={
             band: _count_and_percent(by_band.get(band, 0), total) for band in CONFIDENCE_BANDS
         },
-        reportableUncategorized=_count_and_percent(uncategorized, total),
+        reportableUncategorized=_count_and_percent(uncategorized, reportable_total),
     )
 
 
@@ -936,14 +939,20 @@ def _already_covered(
     txn_type: str,
 ) -> bool:
     """An active rule already produces this exact outcome for this exact pattern — the reason a
-    suggestion built from the same corrections would be redundant."""
+    suggestion built from the same corrections would be redundant.
+
+    A rule silent on transaction type — every rule the classify prompt itself creates, which sets
+    only a category (`classify-prompt.tsx`'s `ruleBody`) — is not thereby claiming "no type": it
+    is claiming every type, so it already covers a suggestion regardless of that suggestion's
+    transaction type.
+    """
     return (
         rule.match_pattern_kind == "contains"
         and rule.match_description_pattern is not None
         and rule.match_description_pattern.casefold() == pattern.casefold()
         and rule.match_direction in ("any", direction)
         and rule.set_category_id == category_id
-        and rule.set_txn_type == txn_type
+        and (rule.set_txn_type is None or rule.set_txn_type == txn_type)
     )
 
 
@@ -957,8 +966,9 @@ def rule_suggestions(
 ) -> RuleSuggestionsResponse:
     """A suggestion is a candidate rule derived only from owner corrections the owner has not
     already turned into a rule. Never writes a rule; creating one still goes through
-    `POST /rules`, and applying it to past rows is a separate, previewed, undoable owner step
-    through `/classification-runs` (`classification.html` §7)."""
+    `POST /rules`, and applying it to past rows is a separate owner step through the existing
+    `POST /classify?ruleId=` cascade pass — previewed (`?preview=true`) before it writes, and
+    reaching only rows that are currently `unclassified` (`classification.html` §7)."""
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT t.description_raw, t.description_clean, t.amount, t.category_id, c.name,

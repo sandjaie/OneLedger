@@ -355,13 +355,28 @@ describe("coverage and analytics", () => {
 });
 
 describe("suggested rules", () => {
-  it("creates the suggested rule, then applies it to past rows on request", async () => {
+  it("creates the suggested rule, previews past rows, and only writes on confirm", async () => {
     const created = rule({ id: "rule-99", name: "Mark Food & Dining" });
     const { request, calls } = serving([], {
       "/rules/analytics": {},
       "/rules/suggestions": { suggestions: [suggestion()] },
       "/rules": created,
-      "/classify?ruleId=rule-99": { considered: 5, changed: 4 },
+      "/classify?ruleId=rule-99&preview=true": {
+        considered: 5,
+        changed: 4,
+        applied: false,
+        sample: [
+          {
+            id: "t1",
+            bookedDate: "2026-05-01",
+            descriptionRaw: "COFFEEHOUSE",
+            amount: "-4.5000",
+            currency: "XAE",
+            classifiedBy: "unclassified",
+          },
+        ],
+      },
+      "/classify?ruleId=rule-99": { considered: 5, changed: 4, applied: true, sample: [] },
     });
     mount(request);
 
@@ -384,10 +399,26 @@ describe("suggested rules", () => {
     expect(createBody.setCategoryId).toBe("cat-dining");
     expect(createBody.setTxnType).toBe("expense");
 
-    fireEvent.click(await within(region).findByRole("button", { name: "Apply to past rows" }));
+    fireEvent.click(await within(region).findByRole("button", { name: "Check past rows" }));
+
+    expect(
+      await within(region).findByText(/4 of 5 unclassified rows would change/),
+    ).toBeTruthy();
+    expect(within(region).getByText(/2026-05-01/)).toBeTruthy();
+    // Nothing is written by the preview: the exact non-preview path was never called.
+    expect(calls.some((call) => call.path === "/classify?ruleId=rule-99")).toBe(false);
+
+    fireEvent.click(
+      within(region).getByRole("button", { name: "Apply 4 changes" }),
+    );
 
     expect(await within(region).findByText("4 of 5 unclassified rows updated.")).toBeTruthy();
-    expect(calls.some((call) => call.path === "/classify?ruleId=rule-99")).toBe(true);
+    const previewIndex = calls.findIndex(
+      (call) => call.path === "/classify?ruleId=rule-99&preview=true",
+    );
+    const applyIndex = calls.findIndex((call) => call.path === "/classify?ruleId=rule-99");
+    expect(previewIndex).toBeGreaterThanOrEqual(0);
+    expect(applyIndex).toBeGreaterThan(previewIndex);
   });
 
   it("says so when there are no suggestions yet", async () => {

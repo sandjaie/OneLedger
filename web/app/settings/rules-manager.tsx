@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
-import type { CategoryRow, RuleAnalytics, RuleRow, RuleSuggestion, RuleSuggestionsResponse } from "@/types/api";
+import type {
+  CategoryRow,
+  ClassifyResult,
+  RuleAnalytics,
+  RuleRow,
+  RuleSuggestion,
+  RuleSuggestionsResponse,
+} from "@/types/api";
 
 type Props = {
   categories: Array<CategoryRow>;
@@ -201,16 +208,16 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
   );
 }
 
-type ClassifyPass = { considered: number; changed: number };
-
-/** One suggestion: create the future-only rule, then optionally apply it to past rows.
+/** One suggestion: create the future-only rule, then preview and separately confirm applying it
+ * to past rows.
  *
  * ponytail: "apply to past rows" reuses the existing, already-guarded `/classify?ruleId=`
  * cascade pass (preview, then apply) rather than the classification-runs preview/apply flow —
  * that flow needs an evidenced `knowledgeVersionId`, which a plain classification rule has no
  * way to carry. `/classify?ruleId=` never touches a row that already has an answer, which is
  * the same safety property; it only reaches currently-unclassified rows, not every row the rule
- * matches, and that is the deliberate scope of this simpler path.
+ * matches, and that is the deliberate scope of this simpler path. Nothing is written until the
+ * owner has seen the preview's count and sample and presses the separate confirm.
  */
 function SuggestedRuleCard({
   categories,
@@ -224,7 +231,8 @@ function SuggestedRuleCard({
   suggestion: RuleSuggestion;
 }) {
   const [rule, setRule] = useState<RuleRow>();
-  const [applied, setApplied] = useState<ClassifyPass>();
+  const [preview, setPreview] = useState<ClassifyResult>();
+  const [applied, setApplied] = useState<ClassifyResult>();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
 
@@ -260,12 +268,28 @@ function SuggestedRuleCard({
     }
   }
 
-  async function applyToPastRows() {
+  async function checkPastRows() {
     if (!rule) return;
     setBusy(true);
     setProblem(undefined);
     try {
-      const result = await request<ClassifyPass>(`/classify?ruleId=${rule.id}`, {
+      const result = await request<ClassifyResult>(`/classify?ruleId=${rule.id}&preview=true`, {
+        method: "POST",
+      });
+      setPreview(result);
+    } catch (error) {
+      setProblem(errorText(error, "Past rows could not be checked. Retry."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyPastRows() {
+    if (!rule || !preview) return;
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const result = await request<ClassifyResult>(`/classify?ruleId=${rule.id}`, {
         method: "POST",
       });
       setApplied(result);
@@ -291,14 +315,38 @@ function SuggestedRuleCard({
           Create rule
         </button>
       )}
-      {rule && !applied && (
-        <button disabled={busy} onClick={() => void applyToPastRows()} type="button">
-          Apply to past rows
+      {rule && !preview && (
+        <button disabled={busy} onClick={() => void checkPastRows()} type="button">
+          Check past rows
         </button>
+      )}
+      {preview && !applied && (
+        <>
+          <p role="status">
+            {preview.changed} of {preview.considered} unclassified{" "}
+            {preview.considered === 1 ? "row" : "rows"} would change. Checking changes nothing;
+            nothing is applied until confirmed.
+          </p>
+          {preview.sample.length > 0 && (
+            <ul className="rule-sample">
+              {preview.sample.map((row) => (
+                <li key={row.id}>
+                  {row.bookedDate} · {row.descriptionRaw}
+                </li>
+              ))}
+            </ul>
+          )}
+          {preview.changed > 0 && (
+            <button disabled={busy} onClick={() => void applyPastRows()} type="button">
+              Apply {preview.changed} {preview.changed === 1 ? "change" : "changes"}
+            </button>
+          )}
+        </>
       )}
       {applied && (
         <p role="status">
-          {applied.changed} of {applied.considered} unclassified {applied.considered === 1 ? "row" : "rows"} updated.
+          {applied.changed} of {applied.considered} unclassified{" "}
+          {applied.considered === 1 ? "row" : "rows"} updated.
         </p>
       )}
     </li>
