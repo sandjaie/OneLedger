@@ -206,7 +206,15 @@ export function SecurityForm({
       onChange(fromRow(row));
       setCreating(false);
     } catch (error) {
-      setCreateProblem(detail(error, "This security could not be created."));
+      // A 409 here always means the ISIN collision this route documents — its own detail is a
+      // structured `{message, existingSecurityId}` object, not the plain sentence `detail()`
+      // reads, so a fixed sentence stands in for it. The draft is left exactly as typed: the
+      // owner's next move is to look the existing security up, not to redo this form.
+      setCreateProblem(
+        error instanceof ApiError && error.status === 409
+          ? "A security with this ISIN already exists — use Find instrument to select it."
+          : detail(error, "This security could not be created."),
+      );
     } finally {
       setCreateBusy(false);
     }

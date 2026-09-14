@@ -91,14 +91,39 @@ function reasonsList(reasons: Array<ReasonResponse>) {
   );
 }
 
+// Units and an amount are two different facts and never share one label: "10.00000000 units"
+// is a count, "1000.0000 INR" is money, and a statement row can carry either, both or neither.
+function draftAmountText(draft: TargetResponse["drafts"][number]) {
+  const amount = draft.grossAmount ?? draft.netAmount ?? null;
+  const parts: Array<string> = [];
+  if (draft.units !== null) parts.push(`${draft.units} units`);
+  if (amount !== null) parts.push(`${amount} ${draft.currency}`);
+  return parts.join(" · ");
+}
+
 function draftLine(draft: TargetResponse["drafts"][number]) {
-  const amount = draft.units ?? draft.grossAmount ?? draft.netAmount ?? "";
-  return `${draft.eventDate} · ${draft.eventKind.replaceAll("_", " ")} · ${amount} ${draft.currency}`.trim();
+  return [draft.eventDate, draft.eventKind.replaceAll("_", " "), draftAmountText(draft)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function checkpointAmountText(checkpoint: TargetResponse["checkpoints"][number]) {
+  const parts: Array<string> = [];
+  if (checkpoint.reportedUnits !== null) parts.push(`${checkpoint.reportedUnits} units`);
+  if (checkpoint.reportedValueNative !== null) {
+    parts.push(
+      checkpoint.currency
+        ? `${checkpoint.reportedValueNative} ${checkpoint.currency}`
+        : checkpoint.reportedValueNative,
+    );
+  }
+  return parts.join(" · ");
 }
 
 function checkpointLine(checkpoint: TargetResponse["checkpoints"][number]) {
-  const value = checkpoint.reportedValueNative ?? checkpoint.reportedUnits ?? "";
-  return `As of ${checkpoint.asOfDate} · ${value} ${checkpoint.currency ?? ""}`.trim();
+  return [`As of ${checkpoint.asOfDate}`, checkpointAmountText(checkpoint)]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 // A `Map` rather than a plain object: an object's keys are always strings, and turning one back
@@ -417,6 +442,12 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
             {preview.totalBlockerCount} blocking {preview.totalBlockerCount === 1 ? "reason" : "reasons"}
           </p>
           {reasonsList(preview.reasons)}
+          {preview.previewTruncated && (
+            <p className="inline-alert" role="alert">
+              This statement has more groups than the preview shows; staging is unavailable for it
+              here.
+            </p>
+          )}
           {preview.groups.map((group) => (
             <PreviewGroup
               accounts={investmentAccounts}
@@ -430,7 +461,12 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
           ))}
           <button
             className="primary-action"
-            disabled={busy || !preview.supported || !everyTargetResolved(preview.groups, resolutions)}
+            disabled={
+              busy
+              || !preview.supported
+              || preview.previewTruncated
+              || !everyTargetResolved(preview.groups, resolutions)
+            }
             onClick={() => void stage()}
             type="button"
           >{busy ? "Staging…" : "Stage import"}</button>

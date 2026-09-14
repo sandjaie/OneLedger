@@ -240,6 +240,24 @@ describe("investment statement import", () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it("blocks staging when the preview has more groups than it shows", async () => {
+    const truncated: InvestmentParseResponse = {
+      ...unresolvedPreview(),
+      groups: [],
+      previewTruncated: true,
+    };
+    const request = vi.fn().mockResolvedValueOnce(truncated);
+
+    render(<InvestmentImportScreen accounts={[account]} request={request as never} />);
+    fireEvent.change(screen.getByLabelText("Statement file"), { target: { files: [pdf()] } });
+    fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
+
+    await screen.findByText(
+      "This statement has more groups than the preview shows; staging is unavailable for it here.",
+    );
+    expect(screen.getByRole("button", { name: "Stage import" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("writes nothing to browser storage while staging and committing", async () => {
     const setLocal = vi.spyOn(Storage.prototype, "setItem");
     const request = vi

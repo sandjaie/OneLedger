@@ -322,10 +322,13 @@ def _response(
     )
 
 
-# A bare multi-type `except (ValidationError, ValueError):` round-trips through this pinned
-# ruff's formatter as `except ValidationError, ValueError:` — Python 2 syntax that fails to
-# import at all (`_ERRORS` has no `as` binding, which is what actually triggers ruff's bug; a
-# tuple named ahead of the clause sidesteps it without disabling the hook).
+# This project targets Python 3.14 (`pyproject.toml`), where PEP 758 makes a bare
+# `except A, B:` valid — no parentheses required — so `except (ValidationError, ValueError):`
+# still imports and runs fine either way. This repo's pinned ruff formats to that bare style
+# whenever there is no `as` binding to keep, which is a real behaviour change to notice if you
+# are reading this on an older Python. Naming the tuple ahead of the clause is a formatter-
+# stability workaround only, so the source reads the same regardless of which style a given
+# ruff/Python version prefers — not a fix for any failure to import.
 _RESOLUTIONS_ERRORS = (ValidationError, ValueError)
 
 
