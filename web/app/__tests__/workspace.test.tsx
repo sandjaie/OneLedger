@@ -525,6 +525,58 @@ describe("authenticated workspace", () => {
     expect(screen.getByLabelText("Statement files")).toBeTruthy();
   });
 
+  it("renders the documents screen and marks the nav current", async () => {
+    const documents = {
+      documents: [
+        {
+          id: "doc-1",
+          documentType: "bank_statement",
+          pageCount: 2,
+          isPasswordProtected: false,
+          parsedStatus: "parsed",
+          uploadedOn: "2026-03-10T12:00:00Z",
+          accountId: null,
+          accountName: null,
+          accountNumberMasked: null,
+          period: { start: null, end: null, isDerived: null },
+          importKind: "statement",
+          importId: null,
+          importStatus: null,
+          reconciliationStatus: null,
+          layoutId: null,
+          layoutVersion: null,
+          newerLayoutId: null,
+        },
+      ],
+      total: 1,
+    };
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    render(
+      <Workspace
+        section="documents"
+        request={requestThat(household, documents, inventory)}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Documents" })).getAttribute("aria-current")).toBe(
+      "page",
+    );
+    expect(screen.getByText("1 document")).toBeTruthy();
+  });
+
+  it("forwards a source-document id from the transactions URL to its first ledger request", async () => {
+    window.history.replaceState(null, "", "/transactions?sourceDocumentId=doc-9");
+    const ledger = { transactions: [], total: 0 };
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    const request = requestThat(household, ledger, [], inventory, catalogue);
+    render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Transactions" });
+    const paths = (request as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    expect(paths).toContain("/transactions?limit=50&offset=0&sourceDocumentId=doc-9");
+  });
+
   it("renders the review screen for the batch it was given", async () => {
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     const staged = {

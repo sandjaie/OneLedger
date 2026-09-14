@@ -113,6 +113,9 @@ function transaction(overrides: Partial<TransactionRow>): TransactionRow {
     classifiedBy: "user_manual",
     source: "manual",
     notes: null,
+    sourceDocumentId: null,
+    sourcePageNumber: null,
+    sourceRowNumber: null,
     ...overrides,
   };
 }
@@ -337,6 +340,36 @@ it("round-trips merchant and source-document filters", async () => {
   const url = (request.mock.calls[0] as Array<string>)[0];
   expect(url).toContain("merchantId=m-1");
   expect(url).toContain("sourceDocumentId=doc-1");
+});
+
+it("pre-fills the source-document filter carried from the Documents screen's URL", () => {
+  render(
+    <TransactionsScreen
+      accounts={[account]}
+      categories={[food, groceries, coffee]}
+      currencies={currencies}
+      currency={reporting}
+      household={household}
+      initialSourceDocumentId="doc-9"
+      onChanged={vi.fn()}
+      request={vi.fn()}
+      total={1}
+      transactions={[transaction({})]}
+    />,
+  );
+
+  expect((screen.getByLabelText("Source document id") as HTMLInputElement).value).toBe("doc-9");
+});
+
+it("links an imported row's page and row number to its original", () => {
+  renderScreen(
+    [transaction({ sourceDocumentId: "doc-1", sourcePageNumber: 2, sourceRowNumber: 5 })],
+    1,
+  );
+
+  const link = screen.getByRole("link", { name: "Page 2 · row 5" });
+  expect(link.getAttribute("href")).toBe("http://localhost:8000/documents/doc-1/original");
+  expect(link.getAttribute("target")).toBe("_blank");
 });
 
 it("filters offer every ledger type while entry stays manual-only", () => {

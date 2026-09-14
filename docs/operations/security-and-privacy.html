@@ -417,6 +417,19 @@ invented digits. The same confirmed apply may retain a redaction-safe public iss
 label as a household alias for the institution already bound by that completed import; the digest
 binds that private assessment without returning the label. No backup or encryption-key check gates
 the owner's local data.</p>
+<p>The document library (<code>GET /documents</code>) is owner-only and read-only. Its row never carries the
+original filename, title, storage location, hash, size, notes, tags, parse error or extracted
+metadata — only safe UUIDs, fixed type/status vocabularies, the account's ordinary mask and the
+period the document covers. Its own original is served only through
+<code>GET /documents/{documentId}/original</code>, which requires <code>storage_bucket = 'documents'</code> and
+proves the same path, symbolic-link, escape and SHA-256 checks the identity-backfill preview and
+the description re-read already trust their originals to before returning bytes; any failure is a
+fixed 409 rather than a path or filesystem detail. A successful download carries
+<code>Content-Disposition: attachment</code> naming a fixed <code>document.pdf</code>, never the stored masked
+filename, plus <code>Cache-Control: no-store</code>, <code>Pragma: no-cache</code> and
+<code>X-Content-Type-Options: nosniff</code>. Every imported ledger row carries its own
+<code>sourceDocumentId</code>/<code>sourcePageNumber</code>/<code>sourceRowNumber</code>, so a row's provenance always
+resolves back through this one guarded route rather than a stored path ever reaching the browser.</p>
 <p><strong>Even a full application compromise must not provide a password, PIN, CVV or OTP capable of
 moving an asset.</strong> Read exposure is still serious, which is why ordinary views remain masked and
 reveal is an explicit owner-only operation.</p>

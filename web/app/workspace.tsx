@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
+import { DocumentsScreen } from "@/app/documents/documents-screen";
 import { OverviewScreen } from "@/app/overview/overview-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
 import { DataQuality } from "@/app/settings/data-quality";
@@ -24,6 +25,7 @@ import type {
   AccountsResponse,
   CategoryRow,
   CurrencyRow,
+  DocumentsResponse,
   FxRateResponse,
   HouseholdCurrency,
   HouseholdResponse,
@@ -35,7 +37,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -78,6 +80,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
+  if (window.location.pathname === "/documents") return "documents";
   if (window.location.pathname.startsWith("/investments/import")) return "investments-import";
   if (window.location.pathname === "/investments/entry") return "investments-entry";
   if (window.location.pathname === "/investments") return "investments";
@@ -87,6 +90,11 @@ function sectionFromPath() {
   if (window.location.pathname === "/salary") return "salary";
   if (window.location.pathname === "/plans") return "plans";
   return "overview";
+}
+
+function sourceDocumentIdFromLocation() {
+  if (typeof window === "undefined") return undefined;
+  return new URLSearchParams(window.location.search).get("sourceDocumentId") ?? undefined;
 }
 
 function fxStatusText(fx: FxState) {
@@ -112,6 +120,7 @@ export function Workspace({
   const [inventory, setInventory] = useState<AccountsResponse>();
   const [institutions, setInstitutions] = useState<Array<InstitutionRow>>();
   const [ledger, setLedger] = useState<TransactionsResponse>();
+  const [documents, setDocuments] = useState<DocumentsResponse>();
   const [categories, setCategories] = useState<Array<CategoryRow>>();
   const [currency, setCurrency] = useState<HouseholdCurrency>();
   const [state, setState] = useState<"loading" | "ready" | "service" | "leaving">("loading");
@@ -146,7 +155,12 @@ export function Workspace({
           setCategories(taxonomy);
         }
         if (activeSection === "transactions") {
-          const page = await request<TransactionsResponse>("/transactions?limit=50&offset=0");
+          const sourceDocumentId = sourceDocumentIdFromLocation();
+          const page = await request<TransactionsResponse>(
+            sourceDocumentId
+              ? `/transactions?limit=50&offset=0&sourceDocumentId=${encodeURIComponent(sourceDocumentId)}`
+              : "/transactions?limit=50&offset=0",
+          );
           if (!current) return;
           const taxonomy = await request<Array<CategoryRow>>("/categories");
           if (!current) return;
@@ -158,6 +172,14 @@ export function Workspace({
           setCategories(taxonomy);
           setInventory(nextInventory);
           setCurrencies(catalogue);
+        }
+        if (activeSection === "documents") {
+          const page = await request<DocumentsResponse>("/documents?limit=50&offset=0");
+          if (!current) return;
+          const nextInventory = await request<AccountsResponse>("/accounts");
+          if (!current) return;
+          setDocuments(page);
+          setInventory(nextInventory);
         }
         if (activeSection === "classification-review") {
           const taxonomy = await request<Array<CategoryRow>>("/categories");
@@ -243,6 +265,7 @@ export function Workspace({
       setInventory(undefined);
       setInstitutions(undefined);
       setLedger(undefined);
+      setDocuments(undefined);
       setCategories(undefined);
       setState("leaving");
       setDestination("/login");
@@ -254,6 +277,7 @@ export function Workspace({
         setInventory(undefined);
         setInstitutions(undefined);
         setLedger(undefined);
+        setDocuments(undefined);
         setCategories(undefined);
         setState("leaving");
         setDestination(next);
@@ -279,6 +303,7 @@ export function Workspace({
     setInventory(undefined);
     setInstitutions(undefined);
     setLedger(undefined);
+    setDocuments(undefined);
     setCategories(undefined);
     setState("leaving");
     setDestination(path);
@@ -361,6 +386,7 @@ export function Workspace({
               href="/import"
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
+            <Link aria-current={activeSection === "documents" ? "page" : undefined} href="/documents">Documents</Link>
             <Link
               aria-current={
                 activeSection === "investments"
@@ -459,6 +485,7 @@ export function Workspace({
               currencies={currencies}
               currency={currency}
               household={household}
+              initialSourceDocumentId={sourceDocumentIdFromLocation()}
               onChanged={() => setAttempt((value) => value + 1)}
               request={async (path, init) => {
                 try {
@@ -471,6 +498,23 @@ export function Workspace({
               }}
               total={ledger.total}
               transactions={ledger.transactions}
+            />
+          )}
+
+          {activeSection === "documents" && documents && inventory && (
+            <DocumentsScreen
+              accounts={inventory.accounts}
+              documents={documents.documents}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+              total={documents.total}
             />
           )}
 
