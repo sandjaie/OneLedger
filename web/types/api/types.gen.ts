@@ -3685,7 +3685,11 @@ export type LayoutProfile = {
 /**
  * LayoutProposal
  *
- * POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation.
+ * POST /layouts/propose response.
+ *
+ * `reconciliation`, `failures`, `rowsExtracted`, `identifies` and `accountNumberCaptures` are
+ * null (or empty) for a proposal and filled only for a `draft` preview (Phase 1.8 Task 1) —
+ * a draft mode reads no database connection, so these are computed from the file alone.
  */
 export type LayoutProposal = {
     /**
@@ -3696,6 +3700,23 @@ export type LayoutProposal = {
      * Rows
      */
     rows: Array<ProposedRawRow>;
+    reconciliation?: Reconciliation | null;
+    /**
+     * Failures
+     */
+    failures?: Array<ParseFailure>;
+    /**
+     * Rowsextracted
+     */
+    rowsExtracted?: number | null;
+    /**
+     * Identifies
+     */
+    identifies?: boolean | null;
+    /**
+     * Accountnumbercaptures
+     */
+    accountNumberCaptures?: number | null;
 };
 
 /**
@@ -4126,6 +4147,10 @@ export type PackRule = {
  * ParseFailure
  *
  * A line that extracted and would not normalize. The panel shows these beside the rows.
+ *
+ * Moved here unchanged from `routes/ingest.py` (Phase 1.8 Task 1): the draft preview needs the
+ * same shape `POST /parse` reports, and `ingest.py` imports it back so its own OpenAPI name is
+ * unchanged.
  */
 export type ParseFailure = {
     /**
@@ -4879,6 +4904,8 @@ export type ReasonResponse = {
  * On a `running_balance_break` the three closing fields are row-level rather than
  * statement-level, so a consumer must read `status` first — the same warning the dataclass
  * carries, restated here because this is the shape the panel actually receives.
+ *
+ * Moved here unchanged from `routes/ingest.py` (Phase 1.8 Task 1); see `ParseFailure`.
  */
 export type Reconciliation = {
     /**

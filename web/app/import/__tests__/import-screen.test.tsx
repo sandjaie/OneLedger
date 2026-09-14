@@ -9,6 +9,9 @@ import type {
   AccountRow,
   CurrencyRow,
   HouseholdCurrency,
+  LayoutCreate,
+  LayoutProfile,
+  LayoutProposal,
   ParseResponse,
 } from "@/types/api";
 
@@ -149,6 +152,68 @@ function createdAccount(id = "acct-created"): AccountRow {
 
 function pdf(name: string) {
   return new File([new Uint8Array([37, 80, 68, 70])], name, { type: "application/pdf" });
+}
+
+function layoutDraft(overrides: Partial<LayoutCreate> = {}): LayoutCreate {
+  return {
+    name: "Mapped layout",
+    institutionId: null,
+    accountType: null,
+    fingerprints: ["Synthetic Bank"],
+    headerRowPattern: "Date\\s+Description\\s+Amount",
+    columns: [
+      { field: "booked_date", xMin: 0, xMax: 50, label: null },
+      { field: "description", xMin: 50, xMax: 200, label: null },
+      { field: "amount", xMin: 200, xMax: 260, label: null },
+    ],
+    dateFormat: "dd/MM/yyyy",
+    signConvention: "signed",
+    invertsSign: false,
+    chronologicalOrder: "ascending",
+    rowStartRule: "has_date_and_amount",
+    continuationRule: null,
+    skipLinePatterns: [],
+    openingBalancePattern: null,
+    closingBalancePattern: null,
+    hasRunningBalance: false,
+    quirks: [],
+    metadataPatterns: null,
+    ...overrides,
+  };
+}
+
+function layoutProposal(overrides: Partial<LayoutProposal> = {}): LayoutProposal {
+  return {
+    draft: layoutDraft({ accountType: "savings" }),
+    rows: [],
+    reconciliation: {
+      status: "matched",
+      declaredOpening: "1000.0000",
+      openingIsDerived: false,
+      declaredClosing: "1490.0000",
+      computedClosing: "1490.0000",
+      delta: "0.0000",
+      firstDivergentRow: null,
+      previousBalance: null,
+      amount: null,
+      candidateRows: [],
+      message: "opening 1000.0000 plus 2 rows reaches the declared closing",
+    },
+    failures: [],
+    rowsExtracted: 2,
+    identifies: true,
+    accountNumberCaptures: 1,
+    ...overrides,
+  };
+}
+
+function savedLayoutProfile(overrides: Partial<LayoutProfile> = {}): LayoutProfile {
+  return {
+    id: "layout-1",
+    version: 1,
+    ...layoutDraft({ accountType: "savings" }),
+    ...overrides,
+  } as unknown as LayoutProfile;
 }
 
 function choose(files: Array<File>) {
@@ -924,6 +989,121 @@ describe("an account proposed by a statement", () => {
       "statement-secret",
     ]);
     expect(within(item).queryByLabelText(/password/i)).toBeNull();
+  });
+});
+
+describe("mapping an unseen statement layout", () => {
+  it("offers Map this layout on the two refusal sentences, and re-checks after saving", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          throw new ApiError(
+            422,
+            "no layouts are saved yet — map this statement first, then parse it",
+          );
+        }
+        return parsed();
+      }
+      if (path === "/layouts") {
+        if (init?.method === "POST") return savedLayoutProfile();
+        return [];
+      }
+      if (path === "/layouts/propose") {
+        const body = init?.body as FormData;
+        return body.get("draft") ? layoutProposal() : { draft: layoutDraft() };
+      }
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("unmapped.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const item = await screen.findByRole("listitem", { name: /unmapped\.pdf/ });
+    expect(within(item).getByText(/no layouts are saved yet/)).toBeTruthy();
+
+    fireEvent.click(await within(item).findByRole("button", { name: /map this layout/i }));
+    const nameField = await within(item).findByLabelText<HTMLInputElement>("Name (required)");
+    expect(nameField.disabled).toBe(false);
+    expect(nameField.value).toBe("Mapped layout");
+
+    fireEvent.change(within(item).getByLabelText("Account type (required)"), {
+      target: { value: "savings" },
+    });
+    fireEvent.click(within(item).getByRole("button", { name: /^preview$/i }));
+    await within(item).findByText(/reaches the declared closing/);
+    fireEvent.click(within(item).getByRole("button", { name: /save layout/i }));
+
+    await within(item).findByRole("button", { name: /stage batch/i });
+    expect(parseCalls).toBe(2);
+    expect(request.mock.calls.some(([path]) => path === "/layouts")).toBe(true);
+  });
+
+  it("seeds a blank draft with the reason when the automatic proposal is refused", async () => {
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/parse") {
+        throw new ApiError(422, "no saved layout identifies this statement — scored: none");
+      }
+      if (path === "/layouts") return [];
+      if (path === "/layouts/propose") throw new ApiError(422, "date format is ambiguous");
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("unrecognisable.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const item = await screen.findByRole("listitem", { name: /unrecognisable\.pdf/ });
+    fireEvent.click(await within(item).findByRole("button", { name: /map this layout/i }));
+
+    expect(await within(item).findByText("date format is ambiguous")).toBeTruthy();
+    expect((await within(item).findByLabelText<HTMLInputElement>("Name (required)")).value)
+      .toBe("");
+  });
+});
+
+describe("remapping a layout that cannot stage", () => {
+  it("offers Remap this layout for a checked file that cannot stage, name locked, then re-checks", async () => {
+    let parseCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/parse") {
+        parseCalls += 1;
+        if (parseCalls === 1) {
+          return parsed({
+            reconciliation: {
+              ...parsed().reconciliation,
+              status: "mismatched",
+              message: "the statement does not add up",
+            },
+          });
+        }
+        return parsed();
+      }
+      if (path === "/layouts") {
+        if (init?.method === "POST") return savedLayoutProfile();
+        return [savedLayoutProfile()];
+      }
+      if (path === "/layouts/propose") return layoutProposal();
+      throw new Error(`Unexpected path ${path} ${init?.method ?? "GET"}`);
+    });
+    renderScreen(request);
+    choose([pdf("cannot-stage.pdf")]);
+    fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
+
+    const item = await screen.findByRole("listitem", { name: /cannot-stage\.pdf/ });
+    expect(within(item).queryByRole("button", { name: /stage batch/i })).toBeNull();
+
+    fireEvent.click(await within(item).findByRole("button", { name: /remap this layout/i }));
+    const nameField = await within(item).findByLabelText<HTMLInputElement>("Name (required)");
+    expect(nameField.disabled).toBe(true);
+    expect(nameField.value).toBe(savedLayoutProfile().name);
+
+    fireEvent.click(within(item).getByRole("button", { name: /^preview$/i }));
+    await within(item).findByText(/reaches the declared closing/);
+    fireEvent.click(within(item).getByRole("button", { name: /save layout/i }));
+
+    await within(item).findByRole("button", { name: /stage batch/i });
+    expect(parseCalls).toBe(2);
   });
 });
 

@@ -119,12 +119,35 @@ describe("apiFetch", () => {
     });
   });
 
-  it("falls back to the status text when the envelope carries no sentence", async () => {
-    // main.py answers a validation failure with a list of field diagnostics rather than a
-    // sentence. Rendering "[object Object]" is worse than saying nothing, so a detail that is
-    // not a string is treated as no detail at all.
+  it("joins a list detail's msg strings with '; '", async () => {
+    // main.py answers a validation failure — the layout mapper's own draft included — with a
+    // list of field diagnostics rather than one sentence. Rendering "[object Object]" is worse
+    // than saying nothing, and showing only the first diagnostic hides the rest of what failed,
+    // so every msg is read out and joined.
     const request = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: [{ type: "missing", loc: ["body"], msg: "required" }] }), {
+      new Response(
+        JSON.stringify({
+          detail: [
+            { type: "missing", loc: ["body", "name"], msg: "field required" },
+            { type: "value_error", loc: ["body", "dateFormat"], msg: "dateFormat must be one of: dd/MM/yyyy" },
+          ],
+        }),
+        { status: 422, statusText: "Unprocessable Content", headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", request);
+
+    const error = await apiFetch("/layouts").catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({
+      status: 422,
+      detail: "field required; dateFormat must be one of: dd/MM/yyyy",
+    });
+  });
+
+  it("falls back to the status text when a list detail carries no msg strings", async () => {
+    const request = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: [{ type: "missing", loc: ["body"] }] }), {
         status: 422,
         statusText: "Unprocessable Content",
         headers: { "Content-Type": "application/json" },

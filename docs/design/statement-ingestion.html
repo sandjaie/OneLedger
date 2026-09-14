@@ -484,10 +484,20 @@ proposal state.</p>
 <p><strong>2. Filename ignored.</strong> A filename is owner- or download-site-chosen, can contain a private
 identifier and is not statement evidence. It contributes nothing to layout, institution or account
 resolution.</p>
-<p><strong>3. Stop on an unsupported format.</strong> If no saved profile matches, the import screen names the
-format as unsupported and writes nothing. The four current producer formats are supported. A future
-issuer or changed PDF format receives a focused layout PR with a synthetic fixture and regression
-evidence; the application does not claim universal format inference.</p>
+<p><strong>3. Map an unsupported format.</strong> If no saved profile matches, <code>POST /parse</code> refuses with a
+422 naming the gap — no layouts are saved yet, or none identified this statement unambiguously — and
+writes nothing. The import screen offers <strong>Map this layout</strong> on either refusal, and
+<strong>Remap this layout</strong> for a checked file whose saved layout identified it but cannot stage
+(Phase 1.8): a form over every <code>LayoutCreate</code> field, seeded from the engine's own proposal or,
+for a remap, from the saved profile without its <code>id</code> and <code>version</code>. Preview posts the
+form as a <code>draft</code> to <code>POST /layouts/propose</code> and renders the same non-blocking verdict
+the draft preview always has; Save is gated on that preview still matching the form, reconciling with no
+failures, identifying the file and capturing exactly one account number. Saving inserts the layout — the
+next version of an existing name under Remap — and the file is checked again, through the ordinary
+account proposal, staging and review path. Dragging column bands over a rendered page remains deferred
+through the project register (<a href="../adr/0012-statement-layouts-as-data.html">ADR-0012</a>); a
+format whose bands cannot be described this way still receives a focused layout PR with a synthetic
+fixture and regression evidence.</p>
 <p><strong>Account resolution.</strong> Once a supported layout captures the issuer, aliases resolve that PDF
 evidence to an institution UUID. A complete account identifier matches its normalized local value. A
 source mask may match only one active account with the same institution, account type and visible

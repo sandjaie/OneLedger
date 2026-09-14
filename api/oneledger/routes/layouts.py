@@ -22,8 +22,12 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
-from ..ingest import engine, normalize
+from ..ingest import engine, normalize, reconcile
+from ..ingest.pipeline import IDENTIFICATION_FLOOR, _page_one_text
+from ..ingest.reconcile import Verdict
 from ..ingest.words import ExtractionError
+from ..ingest.words import extract_pages as read_pdf_pages
+from ..money import _out
 
 router = APIRouter(tags=["layouts"])
 
@@ -91,7 +95,10 @@ def _compiled(pattern: str) -> re.Pattern[str]:
     try:
         return re.compile(pattern)
     except re.error as exc:
-        raise ValueError(f"not a valid regular expression: {pattern!r} ({exc})") from exc
+        # The pattern itself is omitted: a household-typed regex can carry the same identifier
+        # it was meant to capture, and an error message is exactly the kind of place spec §5.6
+        # forbids it from reaching.
+        raise ValueError(f"not a valid regular expression: {exc}") from exc
 
 
 def _first_line(exc: Exception) -> str:
@@ -340,11 +347,73 @@ class ProposedRawRow(BaseModel):
     fields: dict[str, str]
 
 
+class ParseFailure(BaseModel):
+    """A line that extracted and would not normalize. The panel shows these beside the rows.
+
+    Moved here unchanged from `routes/ingest.py` (Phase 1.8 Task 1): the draft preview needs the
+    same shape `POST /parse` reports, and `ingest.py` imports it back so its own OpenAPI name is
+    unchanged.
+    """
+
+    sourcePageNumber: int | None
+    sourceRowNumber: int
+    reason: str
+
+
+class Reconciliation(BaseModel):
+    """`reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.
+
+    On a `running_balance_break` the three closing fields are row-level rather than
+    statement-level, so a consumer must read `status` first — the same warning the dataclass
+    carries, restated here because this is the shape the panel actually receives.
+
+    Moved here unchanged from `routes/ingest.py` (Phase 1.8 Task 1); see `ParseFailure`.
+    """
+
+    status: str
+    declaredOpening: str | None
+    openingIsDerived: bool
+    declaredClosing: str | None
+    computedClosing: str | None
+    delta: str | None
+    firstDivergentRow: int | None
+    previousBalance: str | None
+    amount: str | None
+    candidateRows: list[int]
+    message: str
+
+
+def _reconciliation(verdict: Verdict) -> Reconciliation:
+    return Reconciliation(
+        status=verdict.status,
+        declaredOpening=_out(verdict.declared_opening),
+        openingIsDerived=verdict.opening_is_derived,
+        declaredClosing=_out(verdict.declared_closing),
+        computedClosing=_out(verdict.computed_closing),
+        delta=_out(verdict.delta),
+        firstDivergentRow=verdict.first_divergent_row,
+        previousBalance=_out(verdict.previous_balance),
+        amount=_out(verdict.amount),
+        candidateRows=verdict.candidate_rows,
+        message=verdict.message,
+    )
+
+
 class LayoutProposal(BaseModel):
-    """POST /layouts/propose response. Task 5 later adds normalized preview and reconciliation."""
+    """POST /layouts/propose response.
+
+    `reconciliation`, `failures`, `rowsExtracted`, `identifies` and `accountNumberCaptures` are
+    null (or empty) for a proposal and filled only for a `draft` preview (Phase 1.8 Task 1) —
+    a draft mode reads no database connection, so these are computed from the file alone.
+    """
 
     draft: engine.LayoutDraft | LayoutCreate
     rows: list[ProposedRawRow]
+    reconciliation: Reconciliation | None = None
+    failures: list[ParseFailure] = Field(default_factory=list)
+    rowsExtracted: int | None = None
+    identifies: bool | None = None
+    accountNumberCaptures: int | None = None
 
 
 COLUMNS = """id, name, version, institution_id, account_type::text, fingerprints,
@@ -432,9 +501,37 @@ def _one(cur: psycopg.Cursor[Any], layout_id: UUID, household_id: UUID) -> Layou
     return _row_to_profile(row)
 
 
+REDACTED_PLACEHOLDER = "[redacted]"
+
+
+def _contains_redacted(value: object) -> bool:
+    if isinstance(value, str):
+        return REDACTED_PLACEHOLDER in value
+    if isinstance(value, list):
+        return any(_contains_redacted(item) for item in value)
+    if isinstance(value, dict):
+        return any(
+            _contains_redacted(key) or _contains_redacted(item) for key, item in value.items()
+        )
+    return False
+
+
+def _refuse_redacted(draft: LayoutCreate) -> None:
+    """Refuse a literal `[redacted]` the owner typed rather than rewrote (Phase 1.8 Task 1).
+
+    Checked explicitly at the two places a draft is *submitted* — never on the echoed preview
+    draft, which is redacted output re-validated as the same model and must not fail on the very
+    placeholder it was given to produce.
+    """
+    if _contains_redacted(draft.model_dump()):
+        raise HTTPException(status_code=422, detail="a redacted value cannot be saved; rewrite it")
+
+
 def _parse_draft(value: str) -> LayoutCreate:
     try:
-        return LayoutCreate.model_validate_json(value)
+        parsed = LayoutCreate.model_validate_json(value)
+        _refuse_redacted(parsed)
+        return parsed
     except ValidationError as exc:
         redact = _preview_redactor(None)
         detail = [
@@ -557,6 +654,11 @@ def propose_layout(
     del owner
     parsed_draft = _parse_draft(draft) if draft is not None else None
     temporary_path: Path | None = None
+    reconciliation: Reconciliation | None = None
+    failures: list[ParseFailure] = []
+    rows_extracted: int | None = None
+    identifies: bool | None = None
+    account_number_captures: int | None = None
     try:
         with NamedTemporaryFile(prefix="oneledger-layout-", suffix=".pdf", delete=False) as temp:
             temporary_path = Path(temp.name)
@@ -567,9 +669,48 @@ def propose_layout(
             sensitive_account_capture = None
         else:
             response_draft = parsed_draft
-            extraction = engine.extract(parsed_draft, temporary_path, password)
+            # Read once, without a database connection (Phase 1.8 Task 1): the same pages feed
+            # extraction, the fingerprint score and the non-blocking verdict below.
+            pages = read_pdf_pages(temporary_path, password=password)
+            extraction = engine.extract_pages(parsed_draft, pages)
+            if not extraction.has_text:
+                raise ExtractionError("scanned PDFs are unsupported")
             rows = extraction.rows
             sensitive_account_capture = extraction.account_number_raw
+            account_number_captures = extraction.account_number_capture_count
+            identifies = (
+                engine.matches(parsed_draft, _page_one_text(pages), file.filename or "")
+                >= IDENTIFICATION_FLOOR
+            )
+            batch = normalize.normalize(parsed_draft, extraction, account_currency="")
+            verdict = reconcile.reconcile(
+                parsed_draft,
+                batch.rows,
+                declared_opening=extraction.declared_opening,
+                declared_closing=extraction.declared_closing,
+            )
+            rows_extracted = len(batch.rows) + len(batch.failures)
+            redact = _preview_redactor(sensitive_account_capture)
+            verdict_public = _reconciliation(verdict)
+            # Every string field but `status` — row numbers and candidate rows travel unchanged
+            # (statement-ingestion.html's draft preview section): a shifted band could otherwise
+            # put the account number inside a declared balance, and this is the one place that
+            # verdict renders before the owner has confirmed anything about the file.
+            reconciliation = verdict_public.model_copy(
+                update={
+                    field_name: redact(field_value)
+                    for field_name, field_value in verdict_public.model_dump().items()
+                    if field_name != "status" and isinstance(field_value, str)
+                }
+            )
+            failures = [
+                ParseFailure(
+                    sourcePageNumber=failure.source_page_number,
+                    sourceRowNumber=failure.source_row_number,
+                    reason=redact(failure.reason),
+                )
+                for failure in batch.failures
+            ]
         public_draft = _redact_draft(
             response_draft.model_dump()
             if isinstance(response_draft, LayoutCreate)
@@ -580,6 +721,11 @@ def propose_layout(
             {
                 "draft": public_draft,
                 "rows": _public_rows(rows, sensitive_account_capture),
+                "reconciliation": reconciliation,
+                "failures": failures,
+                "rowsExtracted": rows_extracted,
+                "identifies": identifies,
+                "accountNumberCaptures": account_number_captures,
             }
         )
     except ExtractionError as exc:
@@ -616,6 +762,7 @@ def list_layouts(
 def create_layout(
     body: LayoutCreate, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> LayoutProfile:
+    _refuse_redacted(body)
     columns_payload = [
         {"field": c.field, "x_min": c.xMin, "x_max": c.xMax, "label": c.label} for c in body.columns
     ]

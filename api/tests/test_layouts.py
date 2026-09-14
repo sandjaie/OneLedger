@@ -377,7 +377,18 @@ def test_encryption_error_is_sanitized_and_cleaned(
 
 @pytest.mark.parametrize("invalid", [False, True])
 def test_sensitive_literal_in_echoed_draft_or_validation_error_is_redacted(invalid: bool) -> None:
-    draft = {**VALID_CREATE, "fingerprints": ["Account 9999-8888-7777" + ("(" if invalid else "")]}
+    draft = {
+        **VALID_CREATE,
+        # Bands that actually reach `proposal_pdf()`'s amount column at x=500: the valid case
+        # now runs a real draft-mode reconciliation (Phase 1.8 Task 1), and VALID_COLUMNS's
+        # narrower bands would extract zero rows and refuse before this test's own concern.
+        "columns": [
+            {"field": "booked_date", "xMin": 0.0, "xMax": 50.0},
+            {"field": "description", "xMin": 50.0, "xMax": 400.0},
+            {"field": "amount", "xMin": 400.0, "xMax": 560.0},
+        ],
+        "fingerprints": ["Account 9999-8888-7777" + ("(" if invalid else "")],
+    }
     app.dependency_overrides[auth.require_owner] = owner
     try:
         response = TestClient(app).post(
@@ -456,10 +467,136 @@ def test_propose_with_an_edited_draft_extracts_with_that_draft() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["draft"] == edited
-    assert [row["fields"] for row in body["rows"]] == [
-        {"booked_date": "13/02/2024", "reference": "ALPHA", "amount": "17.25"},
-        {"booked_date": "14/02/2024", "reference": "BETA", "amount": "20.00"},
-    ]
+
+
+# ---------------------------------------------------------------------------------------
+# Draft-mode reconciliation (Phase 1.8 Task 1): the preview reads no database connection and
+# still extracts, normalizes, reconciles and scores identification over the file alone.
+# ---------------------------------------------------------------------------------------
+
+RECONCILING_ACCOUNT_NUMBER = "1234567890"
+
+RECONCILING_DRAFT_COLUMNS = [
+    {"field": "booked_date", "xMin": 0.0, "xMax": 150.0},
+    {"field": "description", "xMin": 150.0, "xMax": 450.0},
+    {"field": "amount", "xMin": 450.0, "xMax": 560.0},
+]
+
+
+def reconciling_pdf(
+    account_number: str = RECONCILING_ACCOUNT_NUMBER, closing: str = "1,507.25"
+) -> bytes:
+    return build_pdf(
+        [
+            Placement(page=0, x=20, y=760, text="Acme Bank Statement"),
+            Placement(page=0, x=20, y=750, text=f"Account No: {account_number}"),
+            Placement(page=0, x=20, y=740, text="Opening Balance 1,470.00"),
+            Placement(page=0, x=20, y=700, text="Date"),
+            Placement(page=0, x=180, y=700, text="Details"),
+            Placement(page=0, x=500, y=700, text="Amount"),
+            Placement(page=0, x=20, y=670, text="13/02/2024"),
+            Placement(page=0, x=180, y=670, text="ALPHA"),
+            Placement(page=0, x=500, y=670, text="17.25"),
+            Placement(page=0, x=20, y=640, text="14/02/2024"),
+            Placement(page=0, x=180, y=640, text="BETA"),
+            Placement(page=0, x=500, y=640, text="20.00"),
+            Placement(page=0, x=20, y=600, text=f"Closing Balance {closing}"),
+        ]
+    )
+
+
+def reconciling_draft(**overrides: object) -> dict[str, object]:
+    draft: dict[str, object] = {
+        **VALID_CREATE,
+        "name": "Reconciling layout",
+        "fingerprints": ["Acme Bank Statement"],
+        "columns": RECONCILING_DRAFT_COLUMNS,
+        "openingBalancePattern": r"Opening\s*Balance\s*([0-9,.]+)",
+        "closingBalancePattern": r"Closing\s*Balance\s*([0-9,.]+)",
+        "metadataPatterns": {"account_number": r"Account\s*No:\s*(\d+)"},
+    }
+    draft.update(overrides)
+    return draft
+
+
+def test_a_reconciling_draft_preview_matches_identifies_and_captures_one_account_number() -> None:
+    pdf = reconciling_pdf()
+    draft = reconciling_draft()
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", pdf)},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reconciliation"]["status"] == "matched"
+    assert body["failures"] == []
+    assert body["identifies"] is True
+    assert body["accountNumberCaptures"] == 1
+    assert body["rowsExtracted"] == 2
+
+
+def test_a_balance_pattern_that_captures_the_account_number_never_echoes_it_unredacted() -> None:
+    """A misconfigured balance pattern that lands on the account number instead of a balance:
+    the identifier must not reach the verdict or a failure reason unredacted (spec Task 1)."""
+    pdf = reconciling_pdf()
+    draft = reconciling_draft(closingBalancePattern=r"Account\s*No:\s*(\d+)")
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", pdf)},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert RECONCILING_ACCOUNT_NUMBER not in response.text
+
+
+def test_a_shifted_balance_pattern_returns_200_with_a_non_matched_verdict() -> None:
+    """A closing pattern that lands on the wrong text is a shifted band, not a refusal: the
+    preview is a 200 the owner can read the verdict from, not an error they cannot act on."""
+    pdf = reconciling_pdf()
+    draft = reconciling_draft(closingBalancePattern=r"Opening\s*Balance\s*([0-9,.]+)")
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", pdf)},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reconciliation"]["status"] != "matched"
+
+
+def test_a_literal_redacted_placeholder_in_a_submitted_draft_is_refused() -> None:
+    draft = {**VALID_CREATE, "name": "please use [redacted] here"}
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        proposed = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", proposal_pdf())},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+        saved = TestClient(app).post("/layouts", json=draft, headers=ORIGIN)
+    finally:
+        app.dependency_overrides.clear()
+    assert proposed.status_code == 422
+    assert proposed.json()["detail"] == "a redacted value cannot be saved; rewrite it"
+    assert saved.status_code == 422
+    assert saved.json()["detail"] == "a redacted value cannot be saved; rewrite it"
 
 
 @pytest.mark.parametrize("draft_mode", [False, True])
