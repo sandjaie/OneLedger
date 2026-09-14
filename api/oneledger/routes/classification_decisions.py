@@ -246,7 +246,7 @@ def _references_exist(cur: psycopg.Cursor[Any], household_id: UUID, state: dict[
         if reference is None:
             continue
         cur.execute(
-            f"SELECT 1 FROM {table} WHERE id = %s AND ({household_clause})",  # noqa: S608
+            f"SELECT 1 FROM {table} WHERE id = %s AND ({household_clause})",
             (reference, household_id),
         )
         if cur.fetchone() is None:
@@ -472,7 +472,7 @@ def preview(
             cur.execute(
                 f"""SELECT t.updated_at, t.dedupe_hash, t.transfer_id, {state_sql}
                        FROM transaction t
-                      WHERE t.id = %s AND t.household_id = %s""",  # noqa: S608
+                      WHERE t.id = %s AND t.household_id = %s""",
                 (requested.transactionId, owner.household_id),
             )
             row = cur.fetchone()
@@ -601,7 +601,7 @@ def apply(
                      ORDER BY d.id LIMIT 1
                   ) latest ON true
                  WHERE i.run_id = %s AND i.household_id = %s
-                 ORDER BY i.transaction_id FOR UPDATE OF t""",  # noqa: S608
+                 ORDER BY i.transaction_id FOR UPDATE OF t""",
             (run_id, owner.household_id),
         )
         rows = cur.fetchall()
@@ -770,7 +770,7 @@ def undo(
                   JOIN transaction t ON t.id = d.transaction_id
                                     AND t.household_id = d.household_id
                  WHERE d.run_id = %s AND d.household_id = %s
-                 ORDER BY d.transaction_id FOR UPDATE OF t""",  # noqa: S608
+                 ORDER BY d.transaction_id FOR UPDATE OF t""",
             (run_id, owner.household_id),
         )
         rows = cur.fetchall()

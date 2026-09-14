@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, first_line
 from ..money import RATE, _frozen, _money, _out, translate
 from .layouts import _preview_redactor
 
@@ -29,10 +29,6 @@ router = APIRouter(tags=["transactions"])
 # dropdown mirrors this list; the API is the boundary.
 MANUAL_TYPES = frozenset({"expense", "income", "fee", "interest", "tax", "refund"})
 _DESCRIPTION_REDACTOR = _preview_redactor(None)
-
-
-def _first_line(exc: Exception) -> str:
-    return str(exc).splitlines()[0]
 
 
 class TransactionRow(BaseModel):
@@ -492,7 +488,7 @@ def list_transactions(
             )
             rows = [public_transaction_row(transaction_row(row)) for row in cur.fetchall()]
     except psycopg.errors.InvalidTextRepresentation as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc
     return TransactionsResponse(transactions=rows, total=total)
 
 
@@ -525,7 +521,7 @@ def create_transaction(
         psycopg.errors.RaiseException,
         psycopg.errors.NumericValueOutOfRange,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc
 
 
 @router.patch("/transactions/{transaction_id}")
@@ -603,4 +599,4 @@ def update_transaction(
         psycopg.errors.ForeignKeyViolation,
         psycopg.errors.RaiseException,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc

@@ -12,13 +12,12 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from ..identifiers import (
-    CompleteIdentifier,
-    Identifier,
     IdentifierValueError,
     identifier_from_source,
 )
 from ..ingest.words import Line, Page
 from .adapters import (
+    ISO_DATE,
     EvidenceDraft,
     PositionCheckpointDraft,
     SafeReason,
@@ -26,6 +25,11 @@ from .adapters import (
     SourceTarget,
     StatementExtraction,
     StatementGroup,
+    canonical_decimal,
+    identifier_key,
+    line_text,
+    normalized_line_text,
+    security_key,
 )
 
 SOURCE_CONTRACT = "summary_fund_statement_v1"
@@ -33,7 +37,6 @@ EXTRACTION_VERSION = "1"
 FINGERPRINT_VERSION = "typed_summary_checkpoint_v1"
 _TITLE = "SUMMARY INVESTMENT STATEMENT V1"
 _HEADERS = ("AS_OF", "UNITS", "COST", "VALUE", "CURRENCY", "REFERENCE")
-_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 
 
@@ -50,14 +53,6 @@ class _GroupBuilder:
     target: SourceTarget
     checkpoints: list[PositionCheckpointDraft] = field(default_factory=list)
     reasons: list[SafeReason] = field(default_factory=list)
-
-
-def _line_text(line: Line) -> str:
-    return " ".join(word.text for word in line.words).strip()
-
-
-def _normalized_text(line: Line) -> str:
-    return " ".join(unicodedata.normalize("NFKC", _line_text(line)).upper().split())
 
 
 def _anchors(line: Line) -> tuple[float, ...] | None:
@@ -97,7 +92,7 @@ def _decimal(value: str, *, integer_digits: int, scale: int) -> Decimal | None:
 
 def _as_of_date(value: str) -> date:
     try:
-        if _DATE.fullmatch(value) is None:
+        if ISO_DATE.fullmatch(value) is None:
             raise ValueError
         parsed = date.fromisoformat(value)
         if parsed.isoformat() != value:
@@ -134,32 +129,15 @@ def _target(account_line: str, security_line: str) -> SourceTarget:
     return SourceTarget(identifier, security)
 
 
-def _target_key(identifier: Identifier) -> str:
-    if isinstance(identifier, CompleteIdentifier):
-        return f"{identifier.kind}:complete:{identifier.normalized_value}"
-    return f"{identifier.kind}:masked:{identifier.visible_suffix}"
-
-
-def _security_key(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", value).upper().split())
-
-
-def _canonical(value: Decimal | None) -> str:
-    if value is None:
-        return "<null>"
-    normalized = value.normalize()
-    return "0" if normalized == 0 else format(normalized, "f")
-
-
 def _fingerprint(target: SourceTarget, checkpoint: PositionCheckpointDraft) -> str:
     values = (
         SOURCE_CONTRACT,
-        _target_key(target.account_identifier),
-        _security_key(target.security_reference),
+        identifier_key(target.account_identifier),
+        security_key(target.security_reference),
         checkpoint.as_of_date.isoformat(),
-        _canonical(checkpoint.reported_units),
-        _canonical(checkpoint.reported_cost_native),
-        _canonical(checkpoint.reported_value_native),
+        canonical_decimal(checkpoint.reported_units),
+        canonical_decimal(checkpoint.reported_cost_native),
+        canonical_decimal(checkpoint.reported_value_native),
         checkpoint.currency or "<null>",
         str(checkpoint.declared_unit_scale),
     )
@@ -231,7 +209,7 @@ class SummaryFundStatementAdapter:
 
     def matches(self, pages: Sequence[Page]) -> bool:
         lines = tuple(line for page in pages for line in page.lines)
-        return any(_normalized_text(line) == _TITLE for line in lines) and any(
+        return any(normalized_line_text(line) == _TITLE for line in lines) and any(
             _anchors(line) is not None for line in lines
         )
 
@@ -245,8 +223,8 @@ class SummaryFundStatementAdapter:
         source_order = 0
         for page_number, page in enumerate(pages, start=1):
             for row_number, line in enumerate(page.lines, start=1):
-                source_text = _line_text(line)
-                text = _normalized_text(line)
+                source_text = line_text(line)
+                text = normalized_line_text(line)
                 if text.startswith("ACCOUNT "):
                     if target_ready:
                         current_security = None
@@ -289,8 +267,8 @@ class SummaryFundStatementAdapter:
                     reasons.append(SafeReason("ambiguous_identifier", page_number, row_number))
                     continue
                 key = (
-                    _target_key(target.account_identifier),
-                    _security_key(target.security_reference),
+                    identifier_key(target.account_identifier),
+                    security_key(target.security_reference),
                 )
                 builder = builders.setdefault(key, _GroupBuilder(target))
                 try:

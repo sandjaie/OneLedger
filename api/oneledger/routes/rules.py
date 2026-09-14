@@ -32,11 +32,10 @@ from ..ingest.classify import (
 )
 from ..ingest.knowledge import load_knowledge
 from .layouts import _preview_redactor
+from .transactions import _assert_category_allowed
 
 router = APIRouter(tags=["rules"])
 
-PATTERN_KINDS: frozenset[str] = frozenset({"exact", "prefix", "contains", "regex"})
-DIRECTIONS: frozenset[str] = frozenset({"debit", "credit", "any"})
 # `origin` is not settable through this module. A rule the owner writes is `user_created`; the
 # seed pack sets `seed` when it loads (3a4), and `learned_from_correction` is Phase 2's.
 ORIGIN_USER = "user_created"
@@ -189,25 +188,6 @@ def rule_row(values: tuple[Any, ...]) -> RuleRow:
         timesApplied=values[23],
         lastAppliedAt=values[24].isoformat() if values[24] is not None else None,
     )
-
-
-def _assert_category_allowed(
-    cur: psycopg.Cursor[Any], category_id: UUID | None, household_id: UUID
-) -> None:
-    """The same predicate `routes/transactions.py` applies to a transaction's category, for the
-    same reason: the foreign key is not tenant-aware, so this is the boundary."""
-    if category_id is None:
-        return
-    cur.execute(
-        """SELECT 1 FROM category c
-             LEFT JOIN category_override o
-                    ON o.category_id = c.id AND o.household_id = %s
-            WHERE c.id = %s AND (c.household_id IS NULL OR c.household_id = %s)
-              AND COALESCE(o.is_active, c.is_active)""",
-        (household_id, category_id, household_id),
-    )
-    if cur.fetchone() is None:
-        raise HTTPException(status_code=422, detail="category is not available to this household")
 
 
 def _assert_owned(

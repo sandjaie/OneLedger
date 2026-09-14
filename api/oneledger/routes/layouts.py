@@ -21,13 +21,14 @@ from psycopg.types.json import Json
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, first_line
 from ..ingest import engine, normalize, reconcile
 from ..ingest.pipeline import IDENTIFICATION_FLOOR, _page_one_text
 from ..ingest.reconcile import Verdict
 from ..ingest.words import ExtractionError
 from ..ingest.words import extract_pages as read_pdf_pages
 from ..money import _out
+from .accounts import _assert_institution_allowed
 
 router = APIRouter(tags=["layouts"])
 
@@ -99,10 +100,6 @@ def _compiled(pattern: str) -> re.Pattern[str]:
         # it was meant to capture, and an error message is exactly the kind of place spec §5.6
         # forbids it from reaching.
         raise ValueError(f"not a valid regular expression: {exc}") from exc
-
-
-def _first_line(exc: Exception) -> str:
-    return str(exc).splitlines()[0]
 
 
 class LayoutColumn(BaseModel):
@@ -473,23 +470,6 @@ def _row_to_profile(row: tuple[Any, ...]) -> LayoutProfile:
     )
 
 
-def _assert_institution_allowed(
-    cur: psycopg.Cursor[Any], institution_id: UUID | None, household_id: UUID
-) -> None:
-    """Shared seeds or this household's own — the pattern routes/accounts.py already uses."""
-    if institution_id is None:
-        return
-    cur.execute(
-        """SELECT 1 FROM institution
-            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
-        (institution_id, household_id),
-    )
-    if cur.fetchone() is None:
-        raise HTTPException(
-            status_code=422, detail="institution is not available to this household"
-        )
-
-
 def _one(cur: psycopg.Cursor[Any], layout_id: UUID, household_id: UUID) -> LayoutProfile:
     cur.execute(
         f"SELECT {COLUMNS} FROM statement_layout WHERE id = %s AND household_id = %s",
@@ -843,4 +823,4 @@ def _create_layout_once(
         psycopg.errors.CheckViolation,
         psycopg.errors.ForeignKeyViolation,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc

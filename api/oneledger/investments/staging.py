@@ -14,7 +14,6 @@ import psycopg
 
 from ..auth import OwnerSession
 from ..db import connect, scope_to_owner
-from ..identifiers import CompleteIdentifier, Identifier
 from .adapters import (
     EvidenceDraft,
     InvestmentEventDraft,
@@ -265,28 +264,6 @@ def prepare_import(
     )
 
 
-def resolve_existing_investment_account(owner: OwnerSession, identifier: Identifier) -> UUID | None:
-    """Reuse only one active household account named by complete normalized evidence."""
-    if not isinstance(identifier, CompleteIdentifier):
-        return None
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute(
-            """SELECT account.id
-                 FROM account_identifier identity
-                 JOIN account ON account.household_id = identity.household_id
-                             AND account.id = identity.account_id
-                WHERE identity.household_id = %s AND identity.kind = %s
-                  AND identity.normalized_value = %s AND identity.is_active
-                  AND account.is_active
-                  AND account.account_type IN ('brokerage', 'mutual_fund_folio')
-                ORDER BY account.id""",
-            (owner.household_id, identifier.kind, identifier.normalized_value),
-        )
-        rows = cur.fetchall()
-    return UUID(str(rows[0][0])) if len(rows) == 1 else None
-
-
 def _expected_state(cur: psycopg.Cursor[Any], household_id: UUID, import_id: UUID) -> str:
     """An opaque staleness token, stable across a commit's own forward progress.
 
@@ -420,7 +397,7 @@ def _committed_overlap(
                AND event.id = evidence.investment_transaction_id
              WHERE evidence.household_id = %s AND evidence.source_contract = %s
                AND {predicate}
-             ORDER BY evidence.created_at, evidence.id LIMIT 1""",  # noqa: S608 - fixed predicates
+             ORDER BY evidence.created_at, evidence.id LIMIT 1""",  # fixed predicates
         params,
     )
     return cur.fetchone()

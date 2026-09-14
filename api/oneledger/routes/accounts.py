@@ -4,7 +4,6 @@ rate and a coverage label, which is M9a's contract (multi-currency-and-fx.html s
 
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -15,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, first_line
 from ..identifiers import (
     CompleteIdentifier,
     Identifier,
@@ -24,11 +23,10 @@ from ..identifiers import (
     complete_identifier,
     identifier_kind_for_account_type,
 )
+from ..money import _money, _out
 
 router = APIRouter(tags=["accounts"])
 
-# Money crosses the wire as a decimal string in both directions. api-contracts.html section 6.
-MONEY = re.compile(r"-?\d{1,16}(\.\d{1,4})?")
 # Same set as set_account_class() in V3. A second copy is the drift risk we accept so a
 # positive liability cannot increase net worth before the trigger runs.
 LIABILITY_TYPES = frozenset(
@@ -45,14 +43,6 @@ LIABILITY_TYPES = frozenset(
 )
 
 
-def _money(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if not isinstance(value, str) or not MONEY.fullmatch(value):
-        raise ValueError("money must be a decimal string with at most four decimal places")
-    return value
-
-
 def _identifier_kind(account_type: str) -> IdentifierKind:
     return identifier_kind_for_account_type(account_type)
 
@@ -65,14 +55,6 @@ def _body_identifier(body: AccountCreate | AccountUpdate) -> Identifier | None:
     except IdentifierValueError as exc:
         raise ValueError(str(exc)) from None
     return None
-
-
-def _out(value: Decimal | None) -> str | None:
-    return None if value is None else str(value)
-
-
-def _first_line(exc: Exception) -> str:
-    return str(exc).splitlines()[0]
 
 
 def _account_write_error(exc: psycopg.Error) -> str:
@@ -323,22 +305,6 @@ def _one(cur: psycopg.Cursor[Any], account_id: UUID, household_id: UUID) -> Acco
     if row is None:
         raise HTTPException(status_code=404, detail="no such account")
     return account_row(row)
-
-
-def resolve_account_by_identifier(
-    cur: psycopg.Cursor[Any], kind: IdentifierKind, normalized_value: str, household_id: UUID
-) -> AccountRow | None:
-    cur.execute(
-        f"""SELECT {COLUMNS} {FROM}
-              WHERE a.household_id = %s
-                AND EXISTS (
-                  SELECT FROM account_identifier ai
-                   WHERE ai.household_id = a.household_id AND ai.account_id = a.id
-                     AND ai.kind = %s AND ai.normalized_value = %s AND ai.is_active)""",
-        (household_id, kind, normalized_value),
-    )
-    row = cur.fetchone()
-    return None if row is None else account_row(row)
 
 
 def _insert_account_identifier(
@@ -816,4 +782,4 @@ def create_institution(
             i, n, s, c, t = created
             return InstitutionRow(id=i, name=n, shortName=s, country=c, institutionType=t)
     except (psycopg.errors.CheckViolation, psycopg.errors.UniqueViolation) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc

@@ -106,23 +106,6 @@ def read_status(cur: psycopg.Cursor[Any], household_id: UUID) -> PriceStatus:
     return _status(cur, household_id, checked_at=_last_success.get(household_id))
 
 
-class _Savepoint:
-    """A named savepoint so one failed insert cannot abort the whole refresh transaction."""
-
-    def __init__(self, cur: psycopg.Cursor[Any], name: str) -> None:
-        self._cur = cur
-        self._name = name
-
-    def __enter__(self) -> None:
-        self._cur.execute(f"SAVEPOINT {self._name}")
-
-    def __exit__(self, exc_type: object, exc: object, tb: object) -> None:
-        if exc_type is None:
-            self._cur.execute(f"RELEASE SAVEPOINT {self._name}")
-        else:
-            self._cur.execute(f"ROLLBACK TO SAVEPOINT {self._name}")
-
-
 def _auto_map(
     cur: psycopg.Cursor[Any],
     household_id: UUID,
@@ -144,7 +127,7 @@ def _auto_map(
         if len(candidates) != 1 or str(currency).strip() != source_currency:
             continue
         try:
-            with _Savepoint(cur, "price_mapping"):
+            with cur.connection.transaction(savepoint_name="price_mapping"):
                 cur.execute(
                     """INSERT INTO security_price_source (
                            household_id, security_id, source_key, source_version,

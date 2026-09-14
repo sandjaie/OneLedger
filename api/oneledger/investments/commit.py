@@ -355,22 +355,19 @@ def _commit_group(
     source_contract: str,
     reporting_pair: tuple[str, str],
 ) -> CommittedGroupOutcome:
-    savepoint = f"investment_commit_group_{group_number}"
-    cur.execute(f"SAVEPOINT {savepoint}")  # noqa: S608 - fixed identifier, not user input
     try:
-        drafts = _ready_drafts(cur, owner.household_id, group_id)
-        _commit_drafts(cur, owner, drafts, source_contract, reporting_pair)
-        cur.execute(
-            """UPDATE investment_import_group
-                  SET status = 'committed', committed_at = now(), updated_at = now()
-                WHERE household_id = %s AND id = %s""",
-            (owner.household_id, group_id),
-        )
-        cur.execute(f"RELEASE SAVEPOINT {savepoint}")  # noqa: S608
+        # A nested transaction block is a savepoint: a refused group rolls back alone.
+        with cur.connection.transaction(savepoint_name=f"investment_commit_group_{group_number}"):
+            drafts = _ready_drafts(cur, owner.household_id, group_id)
+            _commit_drafts(cur, owner, drafts, source_contract, reporting_pair)
+            cur.execute(
+                """UPDATE investment_import_group
+                      SET status = 'committed', committed_at = now(), updated_at = now()
+                    WHERE household_id = %s AND id = %s""",
+                (owner.household_id, group_id),
+            )
         return CommittedGroupOutcome(group_number, "committed")
     except (psycopg.Error, HTTPException, DecimalException, _CommitDataError) as exc:
-        cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")  # noqa: S608
-        cur.execute(f"RELEASE SAVEPOINT {savepoint}")  # noqa: S608
         # The group is deliberately left exactly as it was (still 'ready'): a missing FX rate or
         # a transient database refusal describes today's attempt, not the group's staged content,
         # so a later commit call — the rate backfilled, the conflicting fact corrected — retries

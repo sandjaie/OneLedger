@@ -94,7 +94,7 @@ def test_every_rule_in_a_pack_is_a_body_the_endpoint_accepts(path: Path) -> None
             body["setCategoryId"] = str(RESOLVED)
         try:
             RuleBody.model_validate(body)
-        except Exception as refused:  # noqa: BLE001 - the message is the point
+        except Exception as refused:  # the message is the point
             pytest.fail(f"{path.name} rule {index} ({rule.get('name')}): {refused}")
 
 
