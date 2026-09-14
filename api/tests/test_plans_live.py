@@ -323,6 +323,47 @@ def test_not_ledger_valued_account_is_excluded(live: PlansFixture) -> None:
     assert excluded["reason"] == "not_ledger_valued"
 
 
+def test_snapshot_mode_account_is_excluded_as_not_ledger_valued(live: PlansFixture) -> None:
+    with live.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(live.owner.user_id),))
+        cur.execute(
+            "SELECT transition_account_valuation_mode(%s, 'snapshot', '2026-01-02')",
+            (live.account_id,),
+        )
+    live.connection.commit()
+    response = client().get("/forecast?asOf=2026-03-01", headers=ORIGIN)
+    assert response.status_code == 200
+    body = response.json()
+    assert not any(a["accountId"] == str(live.account_id) for a in body["accounts"])
+    excluded = next(a for a in body["excludedAccounts"] if a["accountId"] == str(live.account_id))
+    assert excluded["reason"] == "not_ledger_valued"
+
+
+def test_commitment_on_a_holdings_mode_account_is_excluded_as_account_excluded(
+    live: PlansFixture,
+) -> None:
+    created = client().post("/commitments", json=_body(live), headers=ORIGIN)
+    commitment_id = created.json()["id"]
+    with live.connection.cursor() as cur:
+        cur.execute("SELECT set_config('app.user_id', %s, true)", (str(live.owner.user_id),))
+        cur.execute(
+            "SELECT transition_account_valuation_mode(%s, 'holdings', '2026-01-02')",
+            (live.account_id,),
+        )
+    live.connection.commit()
+    response = client().get("/forecast?asOf=2026-03-01", headers=ORIGIN)
+    assert response.status_code == 200
+    body = response.json()
+    account_excluded = next(
+        a for a in body["excludedAccounts"] if a["accountId"] == str(live.account_id)
+    )
+    assert account_excluded["reason"] == "not_ledger_valued"
+    commitment_excluded = next(
+        c for c in body["excludedCommitments"] if c["commitmentId"] == commitment_id
+    )
+    assert commitment_excluded["reason"] == "account_excluded"
+
+
 def test_no_balance_date_and_balance_after_as_of_are_excluded(live: PlansFixture) -> None:
     with live.connection.cursor() as cur:
         cur.execute(

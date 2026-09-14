@@ -113,6 +113,8 @@ export function PayslipsScreen({ currencies, request }: Props) {
   const [candidatesProblem, setCandidatesProblem] = useState<string>();
   const [confirmingCandidate, setConfirmingCandidate] = useState<DepositCandidate>();
   const [linkBusy, setLinkBusy] = useState(false);
+  const [unlinkFor, setUnlinkFor] = useState<string>();
+  const [unlinkProblem, setUnlinkProblem] = useState<string>();
 
   useEffect(() => {
     let current = true;
@@ -242,12 +244,14 @@ export function PayslipsScreen({ currencies, request }: Props) {
 
   async function unlink(payslip: PayslipRow) {
     setLinkBusy(true);
-    setProblem(undefined);
+    setUnlinkFor(payslip.id);
+    setUnlinkProblem(undefined);
     try {
       await request<PayslipRow>(`/payslips/${payslip.id}/deposit`, { method: "DELETE" });
+      setUnlinkFor(undefined);
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This payslip could not be unlinked."));
+      setUnlinkProblem(detail(error, "This payslip could not be unlinked."));
     } finally {
       setLinkBusy(false);
     }
@@ -357,12 +361,17 @@ export function PayslipsScreen({ currencies, request }: Props) {
 
                   {!payslip.supersededByPayslipId && (
                     payslip.deposit ? (
-                      <button
-                        className="text-action"
-                        disabled={linkBusy}
-                        onClick={() => void unlink(payslip)}
-                        type="button"
-                      >Unlink</button>
+                      <>
+                        <button
+                          className="text-action"
+                          disabled={linkBusy}
+                          onClick={() => void unlink(payslip)}
+                          type="button"
+                        >Unlink</button>
+                        {unlinkFor === payslip.id && unlinkProblem && (
+                          <p className="inline-alert" role="alert">{unlinkProblem}</p>
+                        )}
+                      </>
                     ) : (
                       <button
                         className="text-action"

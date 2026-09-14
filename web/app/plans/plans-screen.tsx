@@ -79,12 +79,15 @@ function formFromCommitment(commitment: CommitmentRow): FormState {
 }
 
 export function PlansScreen({ accounts, currencies, request }: Props) {
+  // A closed account cannot receive a new commitment (the route refuses it, 422), so the picker
+  // and its default only ever offer an active one.
+  const activeAccounts = accounts.filter((account) => account.isActive);
   const [forecast, setForecast] = useState<ForecastResponse>();
   const [forecastState, setForecastState] = useState<"loading" | "ready" | "error">("loading");
   const [commitments, setCommitments] = useState<Array<CommitmentRow>>();
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<CommitmentRow>();
-  const [form, setForm] = useState<FormState>(() => emptyForm(accounts));
+  const [form, setForm] = useState<FormState>(() => emptyForm(activeAccounts));
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -124,7 +127,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
   function cancelEdit() {
     setEditing(undefined);
-    setForm(emptyForm(accounts));
+    setForm(emptyForm(activeAccounts));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
   }
@@ -171,7 +174,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         setFeedback("Commitment added.");
       }
       setEditing(undefined);
-      setForm(emptyForm(accounts));
+      setForm(emptyForm(activeAccounts));
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
     } catch (error) {
@@ -334,7 +337,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         <label className="select-field">
           <span>Account</span>
           <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
-            {accounts.map((account) => (
+            {activeAccounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
           </select>
