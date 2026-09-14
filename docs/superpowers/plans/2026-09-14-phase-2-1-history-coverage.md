@@ -39,18 +39,19 @@ small acknowledgement table records owner-declared gaps; the doctor summarises g
 `api/oneledger/coverage.py`, `api/oneledger/routes/coverage.py`, `api/tests/test_coverage.py`,
 `api/tests/test_coverage_live.py`, `web/app/coverage/page.tsx`,
 `web/app/coverage/coverage-screen.tsx` and its test; update `api/oneledger/main.py`,
-`api/oneledger/routes/household.py`, `api/oneledger/routes/doctor.py`, `web/app/workspace.tsx`,
-settings household form and data-quality link; generated types; the specification's documents.
+`api/oneledger/routes/doctor.py`, `web/app/workspace.tsx` and the settings data-quality link;
+generated types; the specification's documents.
 **Contract:**
 
 - V45 exactly as specified.
 - `coverage.py` holds pure functions over dates and period intervals:
   `month_statuses(months: Sequence[date], life_start: date, life_end: date,
-  periods: Sequence[tuple[date, date, bool]], acknowledged: Mapping[date, str], as_of: date) ->
-  list[str]` implementing the first-match status order (the bool is "matched").
+  periods: Sequence[tuple[date, date]], acknowledged: Mapping[date, str], as_of: date) ->
+  list[str]` implementing the first-match status order; `HISTORY_ANCHOR = date(2024, 1, 1)`
+  cites ADR-0011.
 - `routes/coverage.py` serves the three routes, reading completed batches with non-null periods and
   active payslips in one query each, household-scoped.
-- The doctor adds the Coverage section; the household route reads and validates `historyAnchor`.
+- The doctor adds the Coverage section.
 - The web grid follows the specification with an accessible table and a status legend.
 
 **Tests:** unit status order and edge cases (split month, partial, outside life, current month);

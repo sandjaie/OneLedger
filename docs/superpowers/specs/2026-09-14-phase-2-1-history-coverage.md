@@ -25,10 +25,10 @@ shortening history.
 
 ## Data (V45)
 
-```sql
-ALTER TABLE household ADD COLUMN history_anchor DATE NOT NULL DEFAULT DATE '2024-01-01'
-  CHECK (history_anchor = date_trunc('month', history_anchor)::date);
+The anchor is not configurable: `api/oneledger/coverage.py` defines
+`HISTORY_ANCHOR = date(2024, 1, 1)` citing ADR-0011, so no setting can silently shorten history.
 
+```sql
 CREATE TYPE coverage_gap_reason AS ENUM (
   'not_issued', 'unobtainable', 'unsupported_format', 'account_not_in_use');
 
@@ -51,8 +51,8 @@ CREATE UNIQUE INDEX uq_coverage_gap_month
   ON coverage_gap_acknowledgement (household_id, subject, account_id, month) NULLS NOT DISTINCT;
 ```
 
-RLS `household_isolation FOR ALL TO authenticated` on the new table. `PATCH /household` accepts
-`historyAnchor` (first day of a month, not in the future) and `GET /household` returns it.
+RLS on the new table follows V43: `household_isolation FOR ALL TO authenticated USING
+(household_id = current_household_id()) WITH CHECK (household_id = current_household_id())`.
 
 ## Coverage computation
 
@@ -60,25 +60,27 @@ RLS `household_isolation FOR ALL TO authenticated` on the new table. `PATCH /hou
 `months` (first days from the anchor through the month of `asOf`) and `rows`.
 
 - **Account rows:** every active or closed account whose type is statement-sourced (`current`,
-  `savings`, `salary`, `credit_card`) in `GET /accounts` order. The account's life runs from the
-  later of its `opened_on` and `opening_balance_date` to `closed_on` (or `asOf`).
-- **Evidence:** completed `import_batch` rows for the account with a non-null period. A day is
-  covered when a batch period contains it.
+  `savings`, `salary`, `credit_card`) in `GET /accounts` order. The account's life runs from
+  `opened_on` (the anchor when null) to `closed_on` (`asOf` when null). The opening-balance date
+  does not shorten life: months before it are evidence gaps the owner can acknowledge, as ADR-0011
+  requires.
+- **Evidence:** `import_batch` rows for the account with `status = 'completed'` and a non-null
+  period (never filtered on `completed_at`, which cancellation also sets). A day is covered when a
+  batch period contains it; overlapping batches form a union. A completed batch is always
+  reconciled, because V18 `commit_import_batch` refuses any other reconciliation status.
 - **Month status**, first match wins:
   1. `outside_account_life` — the month lies wholly before the life start or after its end;
-  2. `acknowledged` — an acknowledgement exists for the month (returns `reason` and `note`);
-  3. `reconciled` — every in-life day of the month is covered and every covering batch has
-     `reconciliation_status = 'matched'`;
-  4. `unreconciled` — every in-life day is covered but a covering batch is not `matched`;
-  5. `partial` — some but not all in-life days are covered;
+  2. `reconciled` — every in-life day of the month is covered;
+  3. `acknowledged` — an acknowledgement exists for the month (returns `reason` and `note`);
+  4. `partial` — some but not all in-life days are covered;
+  5. `in_progress` — the month of `asOf` while `asOf` is before its last day;
   6. `missing` — no in-life day is covered.
-- Each account row also returns `lifeStart`, `anchorAfterHistory` (life start later than the anchor,
-  the ADR-0011 visible-gap case), and counts per status.
-- **Payslip row:** subject `payslips`; a month is `covered` when an active payslip exists for it,
-  `acknowledged` when acknowledged, `missing` otherwise; months before the earliest payslip's month
-  are still reported, because salary history starts at the anchor.
-- The current month is never `missing` or `partial` while `asOf` is before its last day; it reports
-  `in_progress` instead unless it is covered or acknowledged.
+- Each account row also returns `lifeStart`, `openingBalanceDate`, `anchorAfterHistory`
+  (`opening_balance_date` later than the anchor, the ADR-0011 visible-gap case) and counts per
+  status.
+- **Payslip row:** subject `payslips`; a month is `reconciled` when an active (unsuperseded) payslip
+  exists for it, otherwise `acknowledged`, `in_progress` or `missing` by the same order; months
+  before the earliest payslip are still reported, because salary history starts at the anchor.
 
 ## API
 
@@ -89,8 +91,9 @@ RLS `household_isolation FOR ALL TO authenticated` on the new table. `PATCH /hou
 | `DELETE /coverage/acknowledgements` | Query `subject`, `accountId?`, `month`; idempotent |
 
 All three use `require_owner` and household filters; a foreign account is 404. `GET /doctor` gains a
-**Coverage** section: one finding per account or payslip row with missing, partial or unreconciled
-months, stating the counts and the earliest affected month.
+**Coverage** section with one warning finding per row that has missing or partial months ("N months
+missing, M partial, earliest YYYY-MM", with the account name) and one `ok` finding when every row is
+reconciled or acknowledged.
 
 ## Web
 
@@ -102,18 +105,20 @@ Quality:
 - clicking a `missing` or `partial` cell offers **Import statements** (the import screen) and
   **Acknowledge gap** (reason and optional note); an acknowledged cell offers **Remove
   acknowledgement**;
-- the history anchor is shown and editable from household settings.
+- the history anchor is shown read-only.
 
 Server strings only; no browser storage.
 
 ## Required test evidence
 
 - Coverage statuses for a synthetic account: reconciled month, month split across two batches,
-  mismatched batch, partial month, missing month, month outside account life, acknowledged month,
-  current month in progress, and an account whose life starts after the anchor.
+  a cancelled batch that covers nothing, partial month, missing month, month outside account life,
+  acknowledged month, a later import outranking an acknowledgement, current month in progress, and
+  an account with a null `opened_on` and a 2025 opening balance whose 2024 months are missing and can
+  be acknowledged as `unobtainable`.
 - Payslip row covered, missing and acknowledged months.
 - Acknowledgement upsert, idempotent delete, covered-month refusal, foreign account 404, RLS on the
-  table (SQL test), anchor validation.
+  table (SQL test).
 - Doctor coverage findings; web grid labels and the acknowledge flow.
 
 ## Acceptance
