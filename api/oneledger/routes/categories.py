@@ -15,15 +15,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..db import connect, first_line
 
 router = APIRouter(tags=["categories"])
 
 BUCKETS = frozenset({"need", "want", "investment", "debt_service", "income", "ignore"})
-
-
-def _first_line(exc: Exception) -> str:
-    return str(exc).splitlines()[0]
 
 
 def _slug(name: str) -> str:
@@ -155,7 +151,7 @@ def create_category(
         psycopg.errors.UniqueViolation,
         psycopg.errors.RaiseException,
     ) as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc
 
 
 @router.patch("/categories/{category_id}")
@@ -223,4 +219,4 @@ def update_category(
                 raise HTTPException(status_code=404, detail="no such category")
             return category_row(updated)
     except psycopg.errors.InvalidTextRepresentation as exc:
-        raise HTTPException(status_code=422, detail=_first_line(exc)) from exc
+        raise HTTPException(status_code=422, detail=first_line(exc)) from exc

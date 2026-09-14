@@ -552,6 +552,8 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── net_worth_snapshot
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               (V42, applied)
+            │                 └── payslip_line_posting  (V44, applied)
+            ├── payslip_deduction_rule                  (V44, applied)
             ├── commitment                              (V43, applied)
             ├── coverage_gap_acknowledgement            (V45, applied)
             └── audit_log
@@ -858,11 +860,11 @@ event a later active lineage event already fixed; cash-only kinds and exact dedu
 Rebuilds exclude an effect only when an appended correction replaces its source event.</td></tr>
 <tr><td><code>acquisition_lot</code></td><td>The immutable date, units, evidenced native basis and origin
 event of an acquisition. Closing a holding never deletes its acquisition history. An optional,
-household-scoped <code>predecessor_lot_id</code>, spanning any holding of that household, names the
-open lot a split or platform transfer consumed to create this successor &mdash; a platform transfer's
-successor lives in the destination holding, not the source &mdash; and the successor keeps the
-predecessor&#39;s acquisition date; one lineage event creates at most one successor per
-predecessor.</td></tr>
+household-scoped <code>predecessor_lot_id</code>, spanning any holding of that household, is reserved
+for per-lot lineage: it would name the open lot a split or platform transfer consumed to create a
+successor lot. No operation writes it &mdash; Phase 1.6 records corporate actions at holding level and
+per-lot lineage is deferred in the <a href="../superpowers/project-register.md">project register</a> &mdash;
+so it is null on every row.</td></tr>
 <tr><td><code>investment_import</code></td><td>The one retained import parent for an investment document,
 with immutable bounded source-contract and extraction-version identity but no copied filename.</td></tr>
 <tr><td><code>investment_import_group</code></td><td>An independently reviewable atomic group for events
@@ -914,7 +916,7 @@ every lot in the household, because a platform transfer's successor can live in 
 and only the destination holding reports it. It returns nothing while
 <code>investment_lot_lineage_available</code> is false for that holding and date &mdash; from the date
 of an active split with no successor lot, or of an active switch, systematic transfer or platform
-transfer leg, until a later delivery completes the split/platform lineage; callers must check that
+transfer leg, for as long as per-lot lineage stays deferred; callers must check that
 explicitly rather than reading an empty result as "no open lots". A <code>BEFORE INSERT</code>
 trigger on <code>investment_lot_allocation</code> enforces the same rule at the table itself.</td></tr>
 </tbody></table><p>The position service rebuilds as-of units from every active unit effect and
@@ -1037,6 +1039,12 @@ to drive the read-only 30/60/90-day forecast in <code>routes/plans.py</code>. It
 <code>SECURITY DEFINER</code> function; the owner assumption is replaced in place and archiving is
 terminal. Certainty, source, settlement and next-occurrence lifecycle stay the Phase 3.1 commitments
 and actions concept above and may extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</code> (applied).</p>
+<p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
+<code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
+deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
+no <code>SECURITY DEFINER</code> write path; a trigger refuses a posting on anything but a deduction line.
+Unticking a line removes its pair and its label's rule. Full DDL:
+<a href="../superpowers/schema.md">schema.md</a> <code>V44</code> (applied).</p>
 <p><code>coverage_gap_acknowledgement</code> holds the owner's declared reason a month has no importable
 evidence — <code>not_issued</code>, <code>unobtainable</code>, <code>unsupported_format</code> or
 <code>account_not_in_use</code> — for one account or for payslips. Phase 2.1 Task 1 applies it: the
@@ -1186,6 +1194,10 @@ V42__payslips.sql                     payslip, payslip_line, record_payslip() an
                                       immutability and eligibility triggers (applied)
 V43__commitments.sql                  commitment: one-off, monthly or annual signed amounts driving
                                       the read-only forecast; no write function (applied)
+V44__payslip_deduction_spending.sql   payslip_deduction_rule and payslip_line_posting: deductions
+                                      counted as spending through a balanced pair (applied)
+V45__history_coverage.sql             coverage_gap_acknowledgement: owner-declared history gaps;
+                                      the coverage grid is computed on read (applied)
 
   then, in this order, numbered as they land:
 

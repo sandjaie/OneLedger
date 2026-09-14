@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney, formatOwed } from "@/lib/money/format";
+import { EyeIcon } from "@/app/accounts/eye-icon";
+import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
+import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
+import { formatOwed, moneyText } from "@/lib/money/format";
 import type {
   AccountCreate,
   AccountGroupTotal,
@@ -42,55 +44,6 @@ type Draft = {
   openingBalanceNote: string;
   creditLimit: string;
 };
-
-const INSTITUTION_TYPES = [
-  "bank",
-  "card_issuer",
-  "broker",
-  "fund_house",
-  "lender",
-  "govt",
-  "insurer",
-  "employer",
-  "exchange_house",
-  "other",
-] as const;
-
-export const ACCOUNT_TYPES = [
-  "cash",
-  "current",
-  "savings",
-  "salary",
-  "fixed_deposit",
-  "recurring_deposit",
-  "credit_card",
-  "personal_loan",
-  "home_loan",
-  "auto_loan",
-  "education_loan",
-  "gold_loan",
-  "loan_other",
-  "brokerage",
-  "mutual_fund_folio",
-  "retirement",
-  "property",
-  "precious_metal",
-  "crypto",
-  "other_asset",
-  "receivable",
-  "payable",
-] as const;
-
-export const LIABILITY_TYPES: ReadonlySet<string> = new Set([
-  "credit_card",
-  "personal_loan",
-  "home_loan",
-  "auto_loan",
-  "education_loan",
-  "gold_loan",
-  "loan_other",
-  "payable",
-]);
 
 const MONTHS: Record<string, string> = {
   "01": "Jan",
@@ -168,22 +121,11 @@ function latestBalanceDate(rows: Array<AccountRow>) {
   return dates.length > 0 ? formatDay(dates[dates.length - 1]) : null;
 }
 
-function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
-  return (
-    currencies.find((row) => row.code === code) ?? {
-      code,
-      name: code,
-      symbol: code,
-      decimals: 2,
-      numberFormat: "international",
-    }
-  );
-}
-
 function unsigned(value: string) {
   return value.startsWith("-") ? value.slice(1) : value;
 }
 
+// The write side, not display: a liability's opening is entered as owed and sent negative.
 function signedOpening(accountType: string, value: string) {
   if (!LIABILITY_TYPES.has(accountType) || value === "" || value.startsWith("-")) {
     return value;
@@ -273,16 +215,6 @@ function revealFailure(kind: AccountIdentifierRow["kind"]) {
   if (kind === "iban") return "The IBAN could not be revealed.";
   if (kind === "card") return "The card number could not be revealed.";
   return "The account number could not be revealed.";
-}
-
-function EyeIcon({ hidden }: { hidden: boolean }) {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.75" />
-      {hidden && <path d="m4 4 16 16" />}
-    </svg>
-  );
 }
 
 function AccountIdentifierValue({
@@ -462,7 +394,7 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The account could not be created. Try again.");
+      setProblem(errorText(error, "The account could not be created. Try again."));
     } finally {
       setBusy(false);
     }
@@ -485,7 +417,7 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The account could not be saved. Try again.");
+      setProblem(errorText(error, "The account could not be saved. Try again."));
     } finally {
       setBusy(false);
     }
@@ -504,7 +436,7 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The opening balance could not be acknowledged.");
+      setProblem(errorText(error, "The opening balance could not be acknowledged."));
     } finally {
       setBusy(false);
     }
@@ -523,7 +455,7 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The account could not be closed.");
+      setProblem(errorText(error, "The account could not be closed."));
     } finally {
       setBusy(false);
     }
@@ -542,7 +474,7 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The account could not be reopened.");
+      setProblem(errorText(error, "The account could not be reopened."));
     } finally {
       setBusy(false);
     }
@@ -570,17 +502,18 @@ export function AccountsScreen({
       onChanged();
     } catch (error) {
       if (isAuthError(error)) return;
-      setProblem(error instanceof ApiError ? error.detail : "The institution could not be created.");
+      setProblem(errorText(error, "The institution could not be created."));
     } finally {
       setBusy(false);
     }
   }
 
   function balanceLabel(account: AccountRow) {
-    const currency = currencyOf(currencies, account.currency);
-    return account.accountClass === "liability"
-      ? formatOwed(account.currentBalance, currency)
-      : formatMoney(account.currentBalance, currency);
+    const currency = currencies.find((row) => row.code === account.currency);
+    if (account.accountClass !== "liability" || !currency) {
+      return moneyText(account.currentBalance, account.currency, currencies);
+    }
+    return formatOwed(account.currentBalance, currency);
   }
 
   function renderForm() {
@@ -917,11 +850,12 @@ export function AccountsScreen({
                 {groupTotals.map((row, index) => (
                   <span key={`${row.currency}-${row.total}`}>
                     {index > 0 ? " · " : ""}
-                    {formatMoney(
+                    {moneyText(
                       row.accountClass === "liability" && row.total.startsWith("-")
                         ? unsigned(row.total)
                         : row.total,
-                      currencyOf(currencies, row.currency),
+                      row.currency,
+                      currencies,
                     )}
                     {row.accountClass === "liability" && row.total.startsWith("-") ? " owed" : ""}
                     {asOfFor(rows, row.currency)}

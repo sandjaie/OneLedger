@@ -220,11 +220,11 @@ def build_encrypted_pdf(
     import re as _re
 
     plain = build_pdf(placements, page_count=page_count, page_size=page_size)
-    document_id = hashlib.md5(plain).digest()  # noqa: S324 - revision 2 specifies MD5
+    document_id = hashlib.md5(plain).digest()  # revision 2 specifies MD5
 
-    owner_key = hashlib.md5(_padded(password)).digest()[:5]  # noqa: S324
+    owner_key = hashlib.md5(_padded(password)).digest()[:5]
     owner_entry = _rc4(owner_key, _padded(password))
-    encryption_key = hashlib.md5(  # noqa: S324
+    encryption_key = hashlib.md5(
         _padded(password)
         + owner_entry
         + (_PERMISSIONS & 0xFFFFFFFF).to_bytes(4, "little")
@@ -233,7 +233,7 @@ def build_encrypted_pdf(
     user_entry = _rc4(encryption_key, _PAD)
 
     def object_key(number: int) -> bytes:
-        return hashlib.md5(  # noqa: S324
+        return hashlib.md5(
             encryption_key + number.to_bytes(3, "little") + (0).to_bytes(2, "little")
         ).digest()[:10]
 

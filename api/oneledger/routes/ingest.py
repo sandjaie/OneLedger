@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from dataclasses import replace
 from datetime import date
 from typing import Annotated, Any, Literal
@@ -32,9 +31,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, Field, ValidationError
 
 from ..account_resolution import AccountResolution as ResolvedAccount
-from ..account_resolution import proposal_group_key, resolve_statement_account
+from ..account_resolution import legacy_account_salt, proposal_group_key, resolve_statement_account
 from ..auth import OwnerSession, require_owner, session_secret
-from ..db import connect, scope_to_owner
+from ..db import connect, first_line, scope_to_owner
 from ..fxrange import FxCoverageError
 from ..identifiers import (
     CompleteIdentifier,
@@ -261,7 +260,7 @@ def _resolver(cur: psycopg.Cursor[Any], household_id: UUID) -> pipeline.AccountR
                 currency=extraction.metadata.get("currency"),
                 captured_value=account_number_raw,
                 source_is_masked=extraction.account_number_is_masked,
-                legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                legacy_salt=legacy_account_salt(),
             )
         except IdentifierValueError:
             return None
@@ -361,7 +360,7 @@ def _institution_account_acceptor(household_id: UUID) -> pipeline.AccountAccepto
                 currency=analysis.metadata.get("currency"),
                 captured_value=raw,
                 source_is_masked=analysis.account_number_is_masked,
-                legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                legacy_salt=legacy_account_salt(),
             )
         except IdentifierValueError:
             return False
@@ -425,7 +424,7 @@ def _resolved_identity(
             currency=result.analysis.metadata.get("currency"),
             captured_value=raw,
             source_is_masked=result.analysis.account_number_is_masked,
-            legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+            legacy_salt=legacy_account_salt(),
         )
     except IdentifierValueError:
         raise HTTPException(
@@ -965,7 +964,7 @@ def confirm_statement_account(
                         currency=body.currency,
                         captured_value=captured,
                         source_is_masked=result.analysis.account_number_is_masked,
-                        legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                        legacy_salt=legacy_account_salt(),
                     )
                     if duplicate.account_action != "create":
                         name = (
@@ -1056,7 +1055,7 @@ def confirm_statement_account(
                     currency=str(account_currency).strip(),
                     captured_value=captured,
                     source_is_masked=result.analysis.account_number_is_masked,
-                    legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+                    legacy_salt=legacy_account_salt(),
                 )
                 if accountId not in {candidate.id for candidate in adoption.candidates}:
                     raise HTTPException(
@@ -1373,7 +1372,7 @@ def _write_card_cycle(
         raise HTTPException(
             status_code=409,
             detail=f"the statement's cycle could not be recorded, so nothing was committed: "
-            f"{_first_line(exc)}",
+            f"{first_line(exc)}",
         ) from None
     written = cur.fetchone()
     assert written is not None
@@ -1673,11 +1672,11 @@ def commit_import(
         except psycopg.errors.RaiseException as exc:
             # V14 raises with a sentence written for the owner. Its own message is the detail;
             # the database's context and position are not echoed.
-            raise HTTPException(status_code=409, detail=_first_line(exc)) from None
+            raise HTTPException(status_code=409, detail=first_line(exc)) from None
         except psycopg.errors.InsufficientPrivilege as exc:
             raise HTTPException(status_code=404, detail="no such import batch") from exc
         except psycopg.Error as exc:
-            raise HTTPException(status_code=409, detail=_first_line(exc)) from None
+            raise HTTPException(status_code=409, detail=first_line(exc)) from None
         row = cur.fetchone()
         imported = int(row[0]) if row is not None else 0
 
@@ -1786,9 +1785,3 @@ def cancel_import(
         )
         discarded = cur.rowcount
     return CancelResult(batchId=batch_id, status=CANCELLED, rowsDiscarded=discarded)
-
-
-def _first_line(exc: Exception) -> str:
-    """The refusal's own sentence. Postgres appends CONTEXT and a query position, and the query
-    text can carry the parameters that caused the failure."""
-    return str(exc).splitlines()[0].strip()

@@ -6,7 +6,7 @@ import { type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { ClassifyPrompt } from "@/app/transactions/classify-prompt";
 import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
-import { formatMoney } from "@/lib/money/format";
+import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
   CategoryRow,
@@ -170,18 +170,14 @@ export function TransactionsScreen({
 
   // Original currency first, converted second — never the conversion alone (UI section 4).
   function original(row: TransactionRow) {
-    const native = currencies.find(({ code }) => code === row.currency);
-    return native ? formatMoney(row.amount, native) : `${row.amount} ${row.currency}`;
+    return moneyText(row.amount, row.currency, currencies);
   }
 
   // The bank's own conversion, when it made one: the merchant-currency figure that the
   // account amount settled (product contract: the actual original stays visible).
   function bankOriginal(row: TransactionRow) {
     if (!row.originalAmount || !row.originalCurrency) return undefined;
-    const native = currencies.find(({ code }) => code === row.originalCurrency);
-    return native
-      ? formatMoney(row.originalAmount, native)
-      : `${row.originalAmount} ${row.originalCurrency}`;
+    return moneyText(row.originalAmount, row.originalCurrency, currencies);
   }
 
   function converted(row: TransactionRow) {

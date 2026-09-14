@@ -180,8 +180,7 @@ class BackfillFixture(Fixture):
         with self.conn.cursor() as cur:
             for table in tables:
                 cur.execute(
-                    f"SELECT to_jsonb(row) FROM {table} row WHERE household_id = %s"  # noqa: S608
-                    " ORDER BY id",
+                    f"SELECT to_jsonb(row) FROM {table} row WHERE household_id = %s ORDER BY id",
                     (self.household_id,),
                 )
                 snapshot[table] = cur.fetchall()

@@ -4,12 +4,11 @@ import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { LayoutMapper, type LayoutMapperSeed } from "@/app/import/layout-mapper";
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { type apiFetch, errorText } from "@/lib/api/client";
+import { moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
   CurrencyRow,
-  HouseholdCurrency,
   LayoutCreate,
   LayoutProfile,
   ParseResponse,
@@ -18,7 +17,6 @@ import type {
 type Props = {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
-  currency: HouseholdCurrency;
   request: typeof apiFetch;
 };
 
@@ -171,13 +169,6 @@ function candidate(file: File, index: number): Candidate {
   };
 }
 
-function detail(error: unknown, fallback: string) {
-  // An ApiError carries the service's own sentence, which for this route is written for the
-  // owner — the layout scores, the date a duplicate first arrived, the reconciliation refusal.
-  // Anything else is the network or the browser, and has nothing to say about the statement.
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
 function body(item: Candidate, stage: boolean, accountId: string) {
   const form = new FormData();
   form.append("file", item.file);
@@ -221,7 +212,7 @@ function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
   return first?.key === item.key;
 }
 
-export function ImportScreen({ accounts, currencies, currency, request }: Props) {
+export function ImportScreen({ accounts, currencies, request }: Props) {
   const [candidates, setCandidates] = useState<Array<Candidate>>([]);
   const [accountId, setAccountId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -261,7 +252,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
         accountCurrency: resolved?.currency ?? item.accountCurrency,
       });
     } catch (error) {
-      const problem = detail(error, "This file could not be checked. Try again.");
+      const problem = errorText(error, "This file could not be checked. Try again.");
       // `locked` is sticky: a wrong password answers with the same sentence, and the field has
       // to survive that or the owner gets one attempt and no way to make a second.
       update(item.key, { state: "chosen", problem, locked: item.locked || problem === LOCKED });
@@ -325,12 +316,12 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
           mapperSeed: {
             draft: BLANK_DRAFT,
             remap: false,
-            reason: detail(error, "This file could not be proposed for mapping."),
+            reason: errorText(error, "This file could not be proposed for mapping."),
           },
         });
       }
     } catch (error) {
-      update(item.key, { problem: detail(error, "Saved layouts could not be loaded.") });
+      update(item.key, { problem: errorText(error, "Saved layouts could not be loaded.") });
     } finally {
       setBusy(false);
     }
@@ -378,7 +369,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
       // it was refused is what the owner needs beside it.
       update(item.key, {
         state: "checked",
-        problem: detail(error, "This file could not be staged. Try again."),
+        problem: errorText(error, "This file could not be staged. Try again."),
       });
     }
   }
@@ -422,7 +413,7 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
           parsed: undefined,
           accountId: account.id,
           accountCurrency: account.currency,
-          problem: detail(error, "This file could not be re-checked with its account."),
+          problem: errorText(error, "This file could not be re-checked with its account."),
         });
       }
     }
@@ -559,7 +550,6 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               <Summary
                 accounts={accounts}
                 currencies={currencies}
-                currency={currency}
                 item={item}
                 parsed={item.parsed}
               />
@@ -641,13 +631,11 @@ function stateLabel(item: Candidate) {
 function Summary({
   accounts,
   currencies,
-  currency,
   item,
   parsed,
 }: {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
-  currency: HouseholdCurrency;
   item: Candidate;
   parsed: ParseResponse;
 }) {
@@ -655,10 +643,8 @@ function Summary({
   // one — read from the catalogue row, never from a union of codes (ADR-0012). Taken from the
   // account the parse resolved rather than from a preview row, because the preview is capped
   // and a statement whose rows all failed to normalize still declares a closing balance.
-  // Falling back to the household's display currency means an account the catalogue does not
-  // cover still formats with real grouping rather than printing raw.
+  // A code the catalogue does not cover prints raw rather than under the household's symbol.
   const code = item.accountCurrency ?? accounts.find(({ id }) => id === parsed.accountId)?.currency;
-  const shown = currencies.find(({ code: option }) => option === code) ?? currency;
   const reconciliation = parsed.reconciliation;
   const identity = parsed.identityResolution;
   const matchedAccount = identity.candidates.at(0)
@@ -679,7 +665,7 @@ function Summary({
         {reconciliation.declaredClosing !== null && (
           <div>
             <dt>Declared closing</dt>
-            <dd>{formatMoney(reconciliation.declaredClosing, shown)}</dd>
+            <dd>{moneyText(reconciliation.declaredClosing, code, currencies)}</dd>
           </div>
         )}
       </dl>

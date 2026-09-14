@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type {
   CategoryRow,
   ClassificationReviewGroup,
@@ -36,10 +36,6 @@ const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
   unclassified: "Unclassified",
 };
 
-function problemText(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
 function key(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -59,7 +55,7 @@ function proposedChanges(group: ClassificationReviewGroup): DerivedChanges {
   return changes;
 }
 
-function ownerChanges(group: ClassificationReviewGroup, categoryId: string): DerivedChanges {
+function ownerChanges(categoryId: string): DerivedChanges {
   return {
     categoryId,
     classifiedBy: "merchant_alias",
@@ -158,7 +154,7 @@ function GroupCard({
       if (knowledgeVersionId === null) {
         const knowledge = await createKnowledge();
         knowledgeVersionId = knowledge.knowledgeVersionId;
-        changes = ownerChanges(group, categoryId);
+        changes = ownerChanges(categoryId);
       }
       const result = await postJson<PreviewResult>(
         request,
@@ -167,7 +163,7 @@ function GroupCard({
       );
       setPreview(result);
     } catch (error) {
-      setProblem(problemText(error, "The proposed changes could not be previewed."));
+      setProblem(errorText(error, "The proposed changes could not be previewed."));
     } finally {
       setBusy(false);
     }
@@ -192,7 +188,7 @@ function GroupCard({
         );
       }
     } catch (error) {
-      setProblem(problemText(error, "The preview could not be applied."));
+      setProblem(errorText(error, "The preview could not be applied."));
     } finally {
       setBusy(false);
     }
@@ -215,7 +211,7 @@ function GroupCard({
           group,
           knowledge.knowledgeVersionId,
           [group.transactionIds[0]],
-          ownerChanges(group, categoryId),
+          ownerChanges(categoryId),
         ),
       );
       const result = await postJson<RunResult>(
@@ -229,7 +225,7 @@ function GroupCard({
         setMessage("The one-row answer was not applied because the transaction changed.");
       }
     } catch (error) {
-      setProblem(problemText(error, "The one-row answer could not be applied."));
+      setProblem(errorText(error, "The one-row answer could not be applied."));
     } finally {
       if (knowledge) {
         try {
@@ -259,7 +255,7 @@ function GroupCard({
       );
       if (!result.conflicted && !result.unresolved) setAppliedRunId(undefined);
     } catch (error) {
-      setProblem(problemText(error, "The application could not be undone."));
+      setProblem(errorText(error, "The application could not be undone."));
     } finally {
       setBusy(false);
     }

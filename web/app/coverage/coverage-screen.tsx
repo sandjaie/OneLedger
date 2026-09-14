@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type { AcknowledgementIn, CoverageResponse, CoverageRow, MonthCell } from "@/types/api";
 
 type Props = {
@@ -34,10 +34,6 @@ const REASON_LABEL: Record<Reason, string> = {
   unsupported_format: "Unsupported format",
   account_not_in_use: "Account not in use",
 };
-
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
 
 function rowLabel(row: CoverageRow): string {
   return row.accountName ?? "Payslips";
@@ -111,7 +107,7 @@ export function CoverageScreen({ request }: Props) {
       setSelected(undefined);
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This gap could not be acknowledged."));
+      setProblem(errorText(error, "This gap could not be acknowledged."));
     } finally {
       setBusy(false);
     }
@@ -129,7 +125,7 @@ export function CoverageScreen({ request }: Props) {
       setSelected(undefined);
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This acknowledgement could not be removed."));
+      setProblem(errorText(error, "This acknowledgement could not be removed."));
     } finally {
       setBusy(false);
     }

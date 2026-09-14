@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import type { apiFetch } from "@/lib/api/client";
+import { dateLabel } from "@/lib/format/date";
 import type {
   AcquisitionPosition,
   PortfolioPositions,
@@ -33,15 +34,6 @@ const XIRR_REASON_TEXT: Record<string, string> = {
 function reasonText(reason: string | null) {
   if (!reason) return "";
   return XIRR_REASON_TEXT[reason] ?? reason.replaceAll("_", " ");
-}
-
-function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function isRefreshDue(status: PriceStatus) {

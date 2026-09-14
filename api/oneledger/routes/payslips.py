@@ -327,8 +327,8 @@ def _load_payslips(
     lines_by_id: dict[UUID, list[PayslipLineOut]] = {pid: [] for pid in payslip_ids}
     # countedAsSpending is whether a pair is actually posted for this line; categoryId comes
     # from that posting, else from a matching but not-yet-posted rule (spec "Deductions counted
-    # as spending": "categoryId (from the posting, else the matching rule)") — a rule surviving
-    # a DELETE toggle (so a later payslip still auto-posts) must not make the toggle look on.
+    # as spending": "categoryId (from the posting, else the matching rule)") — a rule surviving an
+    # unlink or correction (so a later payslip still auto-posts) must not make the toggle look on.
     spending: dict[UUID, tuple[bool, UUID | None]] = {}
     if payslip_ids:
         cur.execute(
@@ -552,31 +552,28 @@ def _commit_month(
     index: int,
     document_id: UUID | None,
 ) -> tuple[Literal["imported", "already_imported", "already_recorded"], UUID | None]:
-    savepoint = f"payslip_import_month_{index}"
-    cur.execute(f"SAVEPOINT {savepoint}")  # noqa: S608 - fixed identifier, not user input
+    assert month.pay_month is not None  # only a month with a resolved block reaches commit
     try:
-        assert month.pay_month is not None  # only a month with a resolved block reaches commit
-        key = _import_key(household_id, month)
-        payslip_id, created = _record(
-            cur,
-            key,
-            None,
-            document_id,
-            month.pay_month,
-            month.currency,
-            str(month.gross_earnings),
-            str(month.total_deductions),
-            str(month.net_pay),
-            [
-                PayslipLineIn(kind=line.kind, label=line.label, amount=str(line.amount))
-                for line in month.lines
-            ],
-        )
-        cur.execute(f"RELEASE SAVEPOINT {savepoint}")  # noqa: S608
+        # A nested transaction block is a savepoint: one refused month rolls back alone.
+        with cur.connection.transaction(savepoint_name=f"payslip_import_month_{index}"):
+            key = _import_key(household_id, month)
+            payslip_id, created = _record(
+                cur,
+                key,
+                None,
+                document_id,
+                month.pay_month,
+                month.currency,
+                str(month.gross_earnings),
+                str(month.total_deductions),
+                str(month.net_pay),
+                [
+                    PayslipLineIn(kind=line.kind, label=line.label, amount=str(line.amount))
+                    for line in month.lines
+                ],
+            )
         return ("imported" if created else "already_imported"), payslip_id
     except psycopg.Error as exc:
-        cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")  # noqa: S608
-        cur.execute(f"RELEASE SAVEPOINT {savepoint}")  # noqa: S608
         if exc.diag.constraint_name == "payslip_duplicate":
             return "already_recorded", None
         raise
@@ -1147,13 +1144,19 @@ def stop_counting_line_as_spending(
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
             cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-            line_id, _label, _amount, kind = _payslip_line(
+            line_id, label, _amount, kind = _payslip_line(
                 cur, owner.household_id, payslip_id, line_no
             )
             if kind != "deduction":
                 raise HTTPException(
                     status_code=422, detail="only a deduction line can count as spending"
                 )
+            # Unticking is the owner saying this label is not spending: the saved rule goes too,
+            # or it would silently re-post the label on every later payslip link.
+            cur.execute(
+                "DELETE FROM payslip_deduction_rule WHERE household_id = %s AND label = %s",
+                (owner.household_id, label),
+            )
             cur.execute(
                 """SELECT income_transaction_id, expense_transaction_id
                      FROM payslip_line_posting

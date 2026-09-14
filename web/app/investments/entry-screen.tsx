@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { FundingPanel } from "@/app/investments/funding-panel";
+import { InstrumentCandidate } from "@/app/investments/security-form";
+import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import type { apiFetch } from "@/lib/api/client";
+import { dateLabel } from "@/lib/format/date";
 import type {
   AccountRow,
   AcquisitionCreate,
@@ -56,20 +59,9 @@ const EMPTY_DRAFT: Draft = {
   valuationPrice: "",
 };
 
-const INVESTMENT_ACCOUNT_TYPES = new Set(["brokerage", "mutual_fund_folio"]);
-
 function accountLabel(account: AccountRow) {
   const masked = account.identifiers.find(({ isActive }) => isActive)?.masked;
   return masked ? `${account.name} · ${masked}` : account.name;
-}
-
-function dateLabel(value: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
 }
 
 function coverageMessages(position: AcquisitionPosition) {
@@ -83,18 +75,6 @@ function coverageMessages(position: AcquisitionPosition) {
     messages.push("The exact value is outside the supported reporting range.");
   }
   return messages.length > 0 ? messages : ["Dated value available."];
-}
-
-function InstrumentCandidate({ candidate }: { candidate: SecurityCandidate }) {
-  const publicIdentity = candidate.isin
-    ?? (candidate.ticker && candidate.exchange ? `${candidate.ticker} · ${candidate.exchange}` : null);
-  return (
-    <span className="investment-candidate-copy">
-      <strong>{candidate.name}</strong>
-      <small>{candidate.securityType.replaceAll("_", " ")} · {candidate.currency}</small>
-      {publicIdentity && <small>{publicIdentity}</small>}
-    </span>
-  );
 }
 
 export function InvestmentEntryScreen({

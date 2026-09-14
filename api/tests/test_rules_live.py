@@ -116,9 +116,7 @@ def a_transaction(live: Fixture, description: str, **columns: object) -> UUID:
 
 def snapshot(live: Fixture) -> list[tuple[Any, ...]]:
     with live.conn.cursor() as cur:
-        cur.execute(
-            f"SELECT id, {', '.join(CLASSIFIABLE)} FROM transaction ORDER BY id"  # noqa: S608
-        )
+        cur.execute(f"SELECT id, {', '.join(CLASSIFIABLE)} FROM transaction ORDER BY id")
         return list(cur.fetchall())
 
 

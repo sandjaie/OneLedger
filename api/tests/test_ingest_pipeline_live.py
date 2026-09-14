@@ -181,7 +181,7 @@ class Fixture:
         with self.conn.cursor() as cur:
             found = {}
             for table in ("document", "import_batch", "staged_transaction"):
-                cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 - fixed table names
+                cur.execute(f"SELECT count(*) FROM {table}")  # fixed table names
                 found[table] = cur.fetchone()[0]  # type: ignore[index]
             return found
 

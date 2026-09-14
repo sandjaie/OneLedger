@@ -12,14 +12,13 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from ..identifiers import (
-    CompleteIdentifier,
-    Identifier,
     IdentifierValueError,
     identifier_from_source,
 )
 from ..ingest.words import Line, Page
 from . import detailed_fund_actions as actions
 from .adapters import (
+    ISO_DATE,
     EvidenceDraft,
     InvestmentEventDraft,
     InvestmentEventKind,
@@ -29,6 +28,11 @@ from .adapters import (
     SourceTarget,
     StatementExtraction,
     StatementGroup,
+    canonical_decimal,
+    identifier_key,
+    line_text,
+    normalized_line_text,
+    security_key,
 )
 
 SOURCE_CONTRACT = "detailed_fund_statement_v1"
@@ -68,7 +72,6 @@ _KINDS: dict[str, InvestmentEventKind] = {
     "CHARGE": "charge",
     "WITHHELD_TAX": "withheld_tax",
 }
-_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 
 
@@ -82,14 +85,6 @@ class _GroupBuilder:
     drafts: list[InvestmentEventDraft] = field(default_factory=list)
     checkpoints: list[PositionCheckpointDraft] = field(default_factory=list)
     reasons: list[SafeReason] = field(default_factory=list)
-
-
-def _line_text(line: Line) -> str:
-    return " ".join(word.text for word in line.words).strip()
-
-
-def _normalized_text(line: Line) -> str:
-    return " ".join(unicodedata.normalize("NFKC", _line_text(line)).upper().split())
 
 
 def _anchors(line: Line, headers: tuple[str, ...]) -> tuple[float, ...] | None:
@@ -148,7 +143,7 @@ def _optional_decimal(
 
 def _event_date(value: str) -> date:
     try:
-        if _DATE.fullmatch(value) is None:
+        if ISO_DATE.fullmatch(value) is None:
             raise ValueError
         parsed = date.fromisoformat(value)
         if parsed.isoformat() != value:
@@ -158,36 +153,19 @@ def _event_date(value: str) -> date:
         raise _RowRefusal from None
 
 
-def _canonical(value: Decimal | None) -> str:
-    if value is None:
-        return "<null>"
-    normalized = value.normalize()
-    return "0" if normalized == 0 else format(normalized, "f")
-
-
-def _target_key(identifier: Identifier) -> str:
-    if isinstance(identifier, CompleteIdentifier):
-        return f"{identifier.kind}:complete:{identifier.normalized_value}"
-    return f"{identifier.kind}:masked:{identifier.visible_suffix}"
-
-
-def _security_key(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", value).upper().split())
-
-
 def event_fingerprint(target: SourceTarget, draft: InvestmentEventDraft) -> str:
     values = (
         SOURCE_CONTRACT,
-        _target_key(target.account_identifier),
-        _security_key(target.security_reference),
+        identifier_key(target.account_identifier),
+        security_key(target.security_reference),
         draft.event_date.isoformat(),
         draft.event_kind,
-        _canonical(draft.units),
-        _canonical(draft.price),
-        _canonical(draft.gross_amount),
-        _canonical(draft.charges),
-        _canonical(draft.withheld_tax),
-        _canonical(draft.net_amount),
+        canonical_decimal(draft.units),
+        canonical_decimal(draft.price),
+        canonical_decimal(draft.gross_amount),
+        canonical_decimal(draft.charges),
+        canonical_decimal(draft.withheld_tax),
+        canonical_decimal(draft.net_amount),
         draft.currency,
     )
     return hashlib.sha256("\x1f".join(values).encode()).hexdigest()
@@ -198,16 +176,16 @@ def _checkpoint_fingerprint(
 ) -> str:
     values = (
         SOURCE_CONTRACT,
-        _target_key(target.account_identifier),
-        _security_key(target.security_reference),
+        identifier_key(target.account_identifier),
+        security_key(target.security_reference),
         "checkpoint",
         checkpoint.as_of_date.isoformat(),
-        _canonical(checkpoint.reported_units),
-        _canonical(checkpoint.reported_cost_native),
-        _canonical(checkpoint.reported_value_native),
+        canonical_decimal(checkpoint.reported_units),
+        canonical_decimal(checkpoint.reported_cost_native),
+        canonical_decimal(checkpoint.reported_value_native),
         checkpoint.currency or "<null>",
         str(checkpoint.declared_unit_scale),
-        _canonical(statement_nav),
+        canonical_decimal(statement_nav),
     )
     return hashlib.sha256("\x1f".join(values).encode()).hexdigest()
 
@@ -393,7 +371,7 @@ class DetailedFundStatementAdapter:
 
     def matches(self, pages: Sequence[Page]) -> bool:
         lines = tuple(line for page in pages for line in page.lines)
-        return any(_normalized_text(line) == _TITLE for line in lines) and any(
+        return any(normalized_line_text(line) == _TITLE for line in lines) and any(
             _header_anchors(line) is not None
             or _position_anchors(line) is not None
             or _anchors(line, actions.ACTION_HEADERS) is not None
@@ -414,8 +392,8 @@ class DetailedFundStatementAdapter:
         parsed_actions: list[actions.ParsedAction] = []
         for page_number, page in enumerate(pages, start=1):
             for row_number, line in enumerate(page.lines, start=1):
-                source_text = _line_text(line)
-                text = _normalized_text(line)
+                source_text = line_text(line)
+                text = normalized_line_text(line)
                 if text.startswith("ACCOUNT "):
                     if target_ready:
                         current_security = None
@@ -472,8 +450,8 @@ class DetailedFundStatementAdapter:
                     )
                     continue
                 key = (
-                    _target_key(target.account_identifier),
-                    _security_key(target.security_reference),
+                    identifier_key(target.account_identifier),
+                    security_key(target.security_reference),
                 )
                 builder = builders.setdefault(key, _GroupBuilder(target=target))
                 if action:

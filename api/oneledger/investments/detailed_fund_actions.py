@@ -4,27 +4,28 @@ from __future__ import annotations
 
 import hashlib
 import re
-import unicodedata
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 
-from ..identifiers import CompleteIdentifier, Identifier
 from .adapters import (
+    ISO_DATE,
     EvidenceDraft,
     InvestmentEventDraft,
     InvestmentEventKind,
     SourceEventIdentity,
     SourceTarget,
+    canonical_decimal,
+    identifier_key,
+    security_key,
 )
 
 ACTION_HEADERS = tuple(
     "DATE EVENT UNITS RATIO PRICE GROSS CHARGES TAX NET CURRENCY ACTION_REF REFERENCE".split()
 )
 _FINGERPRINT_VERSION = "typed_action_v1"
-_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 _KINDS: dict[str, InvestmentEventKind] = {
     "SPLIT": "split",
@@ -72,7 +73,7 @@ def _optional_decimal(value: str, *, digits: int, scale: int, signed: bool) -> D
 
 def _event_date(value: str) -> date:
     try:
-        if _DATE.fullmatch(value) is None:
+        if ISO_DATE.fullmatch(value) is None:
             raise ValueError
         result = date.fromisoformat(value)
         if result.isoformat() != value:
@@ -80,23 +81,6 @@ def _event_date(value: str) -> date:
         return result
     except ValueError:
         raise ActionRefusal from None
-
-
-def _canonical(value: Decimal | None) -> str:
-    if value is None:
-        return "<null>"
-    normalized = value.normalize()
-    return "0" if normalized == 0 else format(normalized, "f")
-
-
-def _identifier_key(identifier: Identifier) -> str:
-    if isinstance(identifier, CompleteIdentifier):
-        return f"{identifier.kind}:complete:{identifier.normalized_value}"
-    return f"{identifier.kind}:masked:{identifier.visible_suffix}"
-
-
-def _security_key(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", value).upper().split())
 
 
 def _fingerprint(
@@ -107,18 +91,18 @@ def _fingerprint(
 ) -> str:
     values = (
         source_contract,
-        _identifier_key(target.account_identifier),
-        _security_key(target.security_reference),
+        identifier_key(target.account_identifier),
+        security_key(target.security_reference),
         action_reference.value,
         draft.event_date.isoformat(),
         draft.event_kind,
-        _canonical(draft.units),
-        _canonical(draft.unit_ratio),
-        _canonical(draft.price),
-        _canonical(draft.gross_amount),
-        _canonical(draft.charges),
-        _canonical(draft.withheld_tax),
-        _canonical(draft.net_amount),
+        canonical_decimal(draft.units),
+        canonical_decimal(draft.unit_ratio),
+        canonical_decimal(draft.price),
+        canonical_decimal(draft.gross_amount),
+        canonical_decimal(draft.charges),
+        canonical_decimal(draft.withheld_tax),
+        canonical_decimal(draft.net_amount),
         draft.currency,
     )
     return hashlib.sha256("\x1f".join(values).encode()).hexdigest()

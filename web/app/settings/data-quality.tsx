@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
-import { type apiFetch, ApiError } from "@/lib/api/client";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type { DoctorReport } from "@/types/api";
 
 type Props = {
@@ -30,7 +30,7 @@ export function DataQuality({ request }: Props) {
       .catch((error: unknown) => {
         if (!current) return;
         setProblem(
-          error instanceof ApiError ? error.detail : "The data-quality report could not be loaded.",
+          errorText(error, "The data-quality report could not be loaded."),
         );
       });
     return () => {

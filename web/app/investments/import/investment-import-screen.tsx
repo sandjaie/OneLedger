@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+import { reasonText } from "@/app/investments/review-reasons";
 import { SecurityForm } from "@/app/investments/security-form";
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
+import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
 import type {
   AccountRow,
   CommittedGroupResponse,
@@ -12,7 +14,6 @@ import type {
   InvestmentCommitResponse,
   InvestmentParseResponse,
   ReasonResponse,
-  ReviewReason,
   SecurityCandidate,
   StagedGroupStatus,
   TargetResponse,
@@ -26,29 +27,11 @@ type Props = {
   request: typeof apiFetch;
 };
 
-// Same holding-account types `entry-screen.tsx` offers for a purchase: an investment import can
-// only ever resolve a target onto one of these, so the picker offers no account it could not use.
-const INVESTMENT_ACCOUNT_TYPES = new Set(["brokerage", "mutual_fund_folio"]);
-
 // `uploaded_pages`' own sentence for a file it cannot open, shared with `import-screen.tsx` — a
 // 422 covers every parse refusal this route makes, and only this one is something the owner can
 // answer with a password.
 const LOCKED = "PDF is encrypted or the password is incorrect";
 
-const REASON_TEXT: Record<ReviewReason, string> = {
-  unsupported_format: "This statement's layout is not supported yet.",
-  unknown_security: "The security referenced here is not in your catalogue yet.",
-  ambiguous_account: "More than one of your accounts could match this statement.",
-  ambiguous_identifier: "This statement's account identifier matches more than one account.",
-  unrecognized_event: "This row's transaction type is not recognized.",
-  duplicate_conflict: "This event conflicts with one already recorded.",
-  unit_mismatch: "The reported units do not reconcile with the statement.",
-  cost_mismatch: "The reported cost does not reconcile with the statement.",
-  missing_price: "No price is recorded for this date.",
-  unmatched_cash: "This cash movement has no matching event.",
-  incomplete_lot_allocation: "This disposal is not fully allocated to existing lots.",
-  stale_valuation: "The recorded valuation is older than expected.",
-};
 
 const GROUP_STATUS_TEXT: Record<StagedGroupStatus, string> = {
   draft: "Not yet staged",
@@ -68,14 +51,6 @@ const COMMIT_REASON_TEXT: Record<string, string> = {
 const TERMINAL: ReadonlySet<string> = new Set(["completed", "cancelled", "failed"]);
 
 type Resolution = { accountId: string; securityId: string };
-
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
-function reasonText(reason: ReviewReason) {
-  return REASON_TEXT[reason] ?? reason.replaceAll("_", " ");
-}
 
 function reasonsList(reasons: Array<ReasonResponse>) {
   if (reasons.length === 0) return null;
@@ -178,7 +153,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
         if (current) setImported(result);
       })
       .catch((error: unknown) => {
-        if (current) setProblem(detail(error, "This import could not be loaded."));
+        if (current) setProblem(errorText(error, "This import could not be loaded."));
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -224,7 +199,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       setPreview(result);
       setLocked(false);
     } catch (error) {
-      const message = detail(error, "This statement could not be checked.");
+      const message = errorText(error, "This statement could not be checked.");
       setProblem(message);
       if (message === LOCKED) setLocked(true);
     } finally {
@@ -254,7 +229,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
         setProblem("This statement was not staged. Resolve what is flagged below and try again.");
       }
     } catch (error) {
-      setProblem(detail(error, "This statement could not be staged."));
+      setProblem(errorText(error, "This statement could not be staged."));
     } finally {
       setBusy(false);
     }
@@ -265,7 +240,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       const result = await request<InvestmentParseResponse>(`/investment-imports/${id}`);
       setImported(result);
     } catch (error) {
-      setProblem(detail(error, "This import could not be reloaded."));
+      setProblem(errorText(error, "This import could not be reloaded."));
     }
   }
 
@@ -289,7 +264,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
         setProblem("This import changed since it was loaded. It has been refreshed below.");
         await refresh(imported.importId);
       } else {
-        setProblem(detail(error, "This import could not be committed."));
+        setProblem(errorText(error, "This import could not be committed."));
       }
     } finally {
       setBusy(false);
@@ -309,7 +284,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       setCancelled(true);
       setConfirmingCancel(false);
     } catch (error) {
-      setProblem(detail(error, "This import could not be cancelled."));
+      setProblem(errorText(error, "This import could not be cancelled."));
       setConfirmingCancel(false);
     } finally {
       setBusy(false);

@@ -12,6 +12,11 @@ status.
 
 All **new specifications** live in `docs/superpowers/specs/`.
 
+Plans and specifications for delivered phases (through Phase 2.1) are history and are not
+rewritten. Many were written and reviewed under the process of their time (Codex review, older diff
+budgets, test-first evidence). [development-cycle.md](../development-cycle.md) and
+[git-workflow.md](../git-workflow.md) govern current work.
+
 The existing [Phase 0 task plan](phase-0-foundations.md) and
 [PR breakdown](phase-0-pull-requests.md) remain as historical evidence. The
 [schema](schema.md), [test suite](test-suite.md), and [question record](questions.html) are

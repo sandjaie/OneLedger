@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 from uuid import UUID
@@ -20,6 +21,11 @@ from .institutions import InstitutionResolution, normalize_institution_name
 type ResolutionStatus = Literal["matched", "needs_confirmation", "ambiguous"]
 type InstitutionAction = Literal["reuse", "create", "choose"]
 type AccountAction = Literal["reuse", "enrich", "create", "choose"]
+
+
+def legacy_account_salt() -> str | None:
+    """The deprecated pre-V29 fingerprint salt, while legacy identities await guarded backfill."""
+    return os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None
 
 
 @dataclass(frozen=True)

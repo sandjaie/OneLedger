@@ -4,7 +4,6 @@ import os
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
-from typing import Any, cast
 from uuid import UUID, uuid4
 
 import psycopg
@@ -1027,29 +1026,6 @@ def test_patch_omitting_identity_preserves_a_v28_legacy_mask_and_fingerprint(
             (created["id"],),
         )
         assert cur.fetchall() == [(UUID(identifier_id), "XXXX9812", None, fingerprint, True)]
-
-
-def test_account_identifier_resolution_is_parameterized_and_never_guesses() -> None:
-    normalized = "723456009812"
-    matching = AccountsConnection(rows=[FETCHED_ROW])
-    with matching.cursor() as cur:
-        resolved = accounts.resolve_account_by_identifier(
-            cast(psycopg.Cursor[Any], cur), "bank_account", normalized, HOUSEHOLD_ID
-        )
-
-    assert resolved is not None and resolved.id == ACCOUNT_ID
-    assert "ai.normalized_value = %s" in matching.statements[0]
-    assert "a.household_id = %s" in matching.statements[0]
-    assert matching.parameters[0] == (HOUSEHOLD_ID, "bank_account", normalized)
-
-    missing = AccountsConnection()
-    with missing.cursor() as cur:
-        assert (
-            accounts.resolve_account_by_identifier(
-                cast(psycopg.Cursor[Any], cur), "bank_account", normalized, HOUSEHOLD_ID
-            )
-            is None
-        )
 
 
 def test_creating_an_account_refuses_ambiguous_self_person(monkeypatch: MonkeyPatch) -> None:

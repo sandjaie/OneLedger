@@ -297,11 +297,9 @@ describe("reading a batch", () => {
     ).toBeTruthy();
   });
 
-  it("falls back to the account's currency for a row the catalogue does not hold", async () => {
-    // `display` prefers the row's own code, so this fires only for a currency no catalogue row
-    // covers. The account's is the closer guess than the household's: the row is that account's,
-    // and reaching past it to the base currency is how the converted figure came to be formatted
-    // with the wrong one in the first place.
+  it("prints a row's amount raw with its code when the catalogue does not hold it", async () => {
+    // Borrowing the account's or the household's symbol would put real money under the wrong
+    // currency; the raw decimal and its own code are the honest fallback (ADR-0012).
     const request = vi.fn().mockResolvedValue(
       batch({
         accountId: "acct-savings",
@@ -312,7 +310,7 @@ describe("reading a batch", () => {
 
     const first = await screen.findByRole("listitem", { name: /row 1/i });
 
-    expect(within(first).getByText("-I 10.00", { selector: ".review-amount" })).toBeTruthy();
+    expect(within(first).getByText("-10.0000 XZZ", { selector: ".review-amount" })).toBeTruthy();
     expect(within(first).getByText("-A 40.00", { selector: ".review-converted" })).toBeTruthy();
   });
 

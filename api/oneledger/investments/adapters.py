@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -9,8 +10,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
-from ..identifiers import Identifier
-from ..ingest.words import Page
+from ..identifiers import CompleteIdentifier, Identifier
+from ..ingest.words import Line, Page
 
 type InvestmentEventKind = Literal[
     "purchase",
@@ -198,3 +199,33 @@ def extract_statement(
     if len(matching) != 1:
         return _unsupported()
     return matching[0].extract(pages)
+
+
+# Text and fingerprint helpers shared by every statement adapter. A fingerprint built from them is
+# persisted as dedupe identity, so changing any output here re-identifies already-imported events.
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def line_text(line: Line) -> str:
+    return " ".join(word.text for word in line.words).strip()
+
+
+def normalized_line_text(line: Line) -> str:
+    return " ".join(unicodedata.normalize("NFKC", line_text(line)).upper().split())
+
+
+def canonical_decimal(value: Decimal | None) -> str:
+    if value is None:
+        return "<null>"
+    normalized = value.normalize()
+    return "0" if normalized == 0 else format(normalized, "f")
+
+
+def identifier_key(identifier: Identifier) -> str:
+    if isinstance(identifier, CompleteIdentifier):
+        return f"{identifier.kind}:complete:{identifier.normalized_value}"
+    return f"{identifier.kind}:masked:{identifier.visible_suffix}"
+
+
+def security_key(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).upper().split())

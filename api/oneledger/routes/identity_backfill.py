@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
@@ -15,7 +14,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AwareDatetime, BaseModel, Field
 
-from ..account_resolution import resolve_statement_account
+from ..account_resolution import legacy_account_salt, resolve_statement_account
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
 from ..identifiers import (
@@ -428,7 +427,7 @@ def _assess_for_household(
             currency=extraction.metadata.get("currency"),
             captured_value=raw,
             source_is_masked=extraction.account_number_is_masked,
-            legacy_salt=os.environ.get("ACCOUNT_HASH_SALT", "").strip() or None,
+            legacy_salt=legacy_account_salt(),
         )
     except IdentifierValueError:
         return _result(source.document_id, "missing", "identity_missing")

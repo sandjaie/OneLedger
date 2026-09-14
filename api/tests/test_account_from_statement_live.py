@@ -188,7 +188,7 @@ class Fixture:
                 "fx_rate",
             ):
                 predicate = " WHERE name LIKE 'proposal test%'" if table == "account" else ""
-                cur.execute(f"SELECT count(*) FROM {table}{predicate}")  # noqa: S608
+                cur.execute(f"SELECT count(*) FROM {table}{predicate}")
                 count = cur.fetchone()
                 assert count is not None
                 values.append(count[0])

@@ -60,9 +60,9 @@ whose tests still pass when its behavior is removed is HIGH. Elsewhere, status-o
 over-mocking or a skipped negative case are MEDIUM. Never accept weakened tests or invariants as a
 repair.
 
-On the review pass, inspect focused RED/GREEN evidence. Run only a narrow reproducer needed
-to prove or disprove a possible finding. On confirmation, inspect the repair range and evidence for
-its affected tests. The final verifier belongs after confirmation.
+On the review pass, inspect the affected-test evidence for major behaviour. Run only a narrow
+reproducer needed to prove or disprove a possible finding. On confirmation, inspect the repair
+range and evidence for its affected tests. The final verifier belongs after confirmation.
 
 ## Findings
 

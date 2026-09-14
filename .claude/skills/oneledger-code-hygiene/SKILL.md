@@ -1,22 +1,22 @@
 ---
 name: oneledger-code-hygiene
-description: Audit of OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. It produces findings for another agent to patch and does not modify code; the cleanup ships as its own chore branch. Use at milestone boundaries, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
+description: Audit of OneLedger for accumulated cruft — dead or unused code, duplication that should be shared, code rot, leftover migration and seed cruft, stale TODOs, orphaned files, and documentation that has drifted from the tree. It produces findings for another agent to patch and does not modify code; the cleanup ships as its own chore branch. Use at the end of a phase group, or when asked for a hygiene audit, to find dead code, find rot, find unwanted code, or clean up leftovers.
 ---
 
 # oneledger-code-hygiene
 
-Rot accumulates between milestones, not inside one. Run this **at a milestone boundary or on
+Rot accumulates between phase groups, not inside one. Run this **at the end of a phase group or on
 request** — never as part of a feature branch. Hygiene findings that ride along in a feature PR
-widen the diff, spend the size budget, and buy exactly the extra review rounds the budget exists
-to prevent.
+widen the diff and spend the size budget the feature needs.
 
 **Produce findings another agent can patch. Do not modify code** unless the user explicitly
 commands fix mode. A sweep that removes what it finds gives nobody the chance to
 say "that one is load-bearing"; the cleanup ships as its own `chore/<name>` branch through the
 normal cycle.
 
-It is gate 8 of [docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is a
-milestone closing, or an explicit request.
+It is the `/oneledger-code-hygiene` row of the gate table in
+[docs/development-cycle.md](../../../docs/development-cycle.md); its trigger is a phase group
+closing, or an explicit request.
 
 ## 1. Sweep
 
@@ -87,7 +87,7 @@ by mechanical (safe to remove: unused import, unreachable branch, stale marker) 
 (needs a decision: shared helper, dropped column, superseded fixture).
 
 Then propose one `chore/` branch, sized to the same budget every other branch obeys
-([docs/git-workflow.md](../../../docs/git-workflow.md) owns it) — if the cleanup is over 800
-production lines, propose several, in the order they should ship. Whoever
+([docs/git-workflow.md](../../../docs/git-workflow.md) owns it) — if the cleanup would pass
+that file's hard stop, propose several, in the order they should ship. Whoever
 implements it goes through the same cycle as any other branch, `/oneledger-code-review` included:
 a deletion is a change like any other, and this report is not a licence to skip the gate.

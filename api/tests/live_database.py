@@ -64,7 +64,7 @@ def connect_to_test_database() -> psycopg.Connection:
             "classification_rule",
             "transfer",
         ):
-            cur.execute(f"SELECT count(*) FROM {table}")  # noqa: S608 - fixed table names
+            cur.execute(f"SELECT count(*) FROM {table}")  # fixed table names
             row = cur.fetchone()
             if row is not None and row[0] > 0:
                 connection.close()

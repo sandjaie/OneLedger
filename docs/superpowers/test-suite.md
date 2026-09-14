@@ -4,8 +4,8 @@
 > invariants are the tests that matter, is in
 > [testing-and-data-quality.html](../operations/testing-and-data-quality.html).
 >
-> Tests are written task-by-task in the milestone plans, following TDD. This file is the reference
-> the plans draw from, so the assertions stay consistent as they get distributed across milestones.
+> Tests for major behaviour are written with each phase plan's tasks. This file is the reference
+> the plans draw from, so the assertions stay consistent as they get distributed across phases.
 >
 > **Since [ADR-0013](../adr/0013-python-backend-service.html) the suite is Python** — `pytest` and
 > `hypothesis` in `api/tests/`, plus SQL tests in `db/tests/` for constraints, triggers, views and

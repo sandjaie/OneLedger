@@ -974,6 +974,34 @@ def test_unlink_removes_the_pair_and_a_saved_rule_auto_posts_on_a_later_link(
     assert _posting_count(live) == 0
 
 
+def test_unticking_a_deduction_line_also_removes_its_saved_rule(live: PayslipFixture) -> None:
+    """A rule left behind would silently re-post the label on every later link."""
+    flights_category = _category_id(live, "travel-flights")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    deposit = f"/payslips/{payslip['id']}/deposit"
+    spending = f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending"
+    client().put(deposit, json={"transactionId": str(credit)}, headers=ORIGIN)
+    client().post(spending, json={"categoryId": str(flights_category)}, headers=ORIGIN)
+    assert client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"] != []
+
+    unticked = client().delete(spending, headers=ORIGIN)
+
+    assert unticked.status_code == 200
+    assert _posting_count(live) == 0
+    assert client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"] == []
+    client().delete(deposit, headers=ORIGIN)
+    relink = client().put(deposit, json={"transactionId": str(credit)}, headers=ORIGIN)
+    assert relink.status_code == 200
+    relinked = next(
+        line for line in relink.json()["lines"] if line["lineNo"] == flights_line["lineNo"]
+    )
+    assert relinked["countedAsSpending"] is False
+    assert _posting_count(live) == 0
+
+
 def test_earning_line_and_foreign_line_spending_are_refused(live: PayslipFixture) -> None:
     flights_category = _category_id(live, "travel-flights")
     payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()

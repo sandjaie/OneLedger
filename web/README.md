@@ -1,6 +1,6 @@
 # OneLedger web
 
-Phase 0 web code is a Next.js App Router app that talks only to the FastAPI service. The API
+The web app is a Next.js App Router app that talks only to the FastAPI service. The API
 service owns authentication and financial access control; the browser uses `apiFetch` with cookies
 and generated OpenAPI response types.
 
@@ -23,15 +23,14 @@ npm run dev
 Open <http://localhost:3000>.
 
 The root route is an owner-only workspace. It checks `GET /household` through the browser client,
-uses the returned reporting pair for the persisted currency preference and exact formatting preview,
-and sends 401/403 responses to `/login` or `/unauthorized`. The sign-in link performs a top-level
+uses the returned reporting pair for the persisted currency preference, and sends 401/403 responses
+to `/login` or `/unauthorized`. The sign-in link performs a top-level
 navigation to the API's `GET /auth/login`; `POST /auth/logout` must succeed before the owner view is
 cleared. A transient API or logout failure stays visible with a retry action.
 
-Activity, planning, ledger import and financial views are not available in Phase 0. Settings is
-available as a protected route with an FX inspector that reads `GET /fx/{date}` and displays stored
-rate provenance for the requested date. The overview amount is explicitly a synthetic formatting
-preview rather than account data.
+The workspace sections — overview, accounts, transactions, review, import, documents, investments,
+salary, plans, coverage and settings — each read their own API routes; money arrives as decimal
+strings and is only formatted in `lib/money/format.ts`, never computed.
 
 ## API Types
 
@@ -69,8 +68,7 @@ npm run build
 
 `typecheck` runs the current native TypeScript 7 compiler. `typecheck:compat` keeps the documented
 TypeScript 6 compiler-API compatibility check for Next.js and ESLint consumers. `npm run build`
-uses the default Next.js production build. On a host affected by the local Turbopack/PostCSS
-port-binding panic, use `npm run build -- --webpack` as a diagnostic fallback only.
+runs `next build --webpack`.
 
 ## Container
 
@@ -98,7 +96,8 @@ directories. Next.js telemetry is disabled in build and runtime stages.
   against TypeScript 5.
 - The narrow `js-yaml` 4.3.1 override patches `@hey-api/json-schema-ref-parser`'s exact 4.2.0
   transitive dependency and keeps `npm audit` clean without `--force` or legacy peer resolution.
-- Vitest runs the browser API client and money formatter contract suites in Node.
+- Vitest runs the API client and money formatter suites and the jsdom component tests beside each
+  screen in `__tests__/`.
 - Testing Library 16.3.3 and its DOM package exercise rendered React interactions. Their React 19
   peer ranges match the runtime; jsdom 30.0.1 supplies the browser test environment and supports the
   pinned Node 24.20 runtime.

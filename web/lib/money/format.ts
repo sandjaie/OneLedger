@@ -158,8 +158,21 @@ export function formatPercent(value: string, decimals = 2): string {
   return `${parts.negative ? "-" : ""}${parts.whole}${parts.fraction ? `.${parts.fraction}` : ""}%`;
 }
 
-/** A liability's balance — negative in the ledger — shown as what is owed. The one place a sign
- * is flipped for display (ADR-0010); the value stays signed everywhere else. */
+/** An amount in the currency its code names. A code the catalogue does not hold prints raw with
+ * that code — never with invented decimals or another currency's symbol (ADR-0012). */
+export function moneyText(
+  value: string,
+  code: string | undefined,
+  currencies: ReadonlyArray<Currency>,
+): string {
+  const currency = currencies.find((row) => row.code === code);
+  if (currency) return formatMoney(value, currency);
+  return code ? `${value} ${code}` : value;
+}
+
+/** A liability's balance — negative in the ledger — shown as what is owed (ADR-0010). The value
+ * stays signed on the wire; display flips a sign only to show what is owed, here and in the
+ * account group totals' " owed" suffix (`accounts-screen.tsx`). */
 export function formatOwed(value: string, currency: Currency): string {
   return value.startsWith("-")
     ? `You owe ${formatMoney(value.slice(1), currency)}`

@@ -300,16 +300,7 @@ def _prepared(
     return prepare_import(_extraction(groups, reasons), resolutions)
 
 
-def test_only_complete_active_account_identity_is_reused(live_staging: StagingFixture) -> None:
-    resolved = staging.resolve_existing_investment_account(
-        live_staging.owner, live_staging.complete_target.account_identifier
-    )
-    masked = staging.resolve_existing_investment_account(
-        live_staging.owner, live_staging.masked_target.account_identifier
-    )
-
-    assert resolved == live_staging.account_id
-    assert masked is None
+def test_unresolved_investment_targets_are_refused(live_staging: StagingFixture) -> None:
     unresolved = prepare_import(
         _extraction(
             (

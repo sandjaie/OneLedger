@@ -14,7 +14,13 @@ from ..auth import OwnerSession
 from ..db import connect, scope_to_owner
 from ..money import _frozen, translate
 from . import commands as investment_commands
-from .commands import InvestmentCommandError, _screen_correction_reason, _translate_database_error
+from .commands import (
+    InvestmentCommandError,
+    _existing_key,
+    _lock_reporting_pair,
+    _screen_correction_reason,
+    _translate_database_error,
+)
 from .schemas import (
     AcquisitionLotRow,
     CashLifecycleCorrectionCreate,
@@ -38,30 +44,6 @@ FrozenFlow = tuple[
 class CashLifecycleResult:
     event: CashLifecycleEventRow
     created: bool
-
-
-def _existing_key(
-    cur: psycopg.Cursor[Any], household_id: UUID, source_contract: str, key: UUID
-) -> UUID | None:
-    cur.execute(
-        """SELECT id FROM investment_transaction
-             WHERE household_id = %s AND source_contract = %s AND source_event_id = %s""",
-        (household_id, source_contract, str(key)),
-    )
-    row = cur.fetchone()
-    return None if row is None else UUID(str(row[0]))
-
-
-def _reporting_pair(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        """SELECT base_currency, secondary_currency FROM household
-             WHERE id = %s FOR UPDATE""",
-        (household_id,),
-    )
-    row = cur.fetchone()
-    if row is None:
-        raise InvestmentCommandError(404, "household not found")
-    return str(row[0]).strip(), str(row[1]).strip()
 
 
 def _derive_frozen_flow(
@@ -275,7 +257,7 @@ def create_cash_lifecycle_event(
     try:
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
-            reporting_pair = _reporting_pair(cur, owner.household_id)
+            reporting_pair = _lock_reporting_pair(cur, owner.household_id)
             existing = _existing_key(cur, owner.household_id, _SOURCE, body.idempotencyKey)
             event_id = _append(
                 cur,
@@ -305,7 +287,7 @@ def correct_cash_lifecycle_event(
         with connect() as conn, conn.cursor() as cur:
             scope_to_owner(conn, owner.user_id)
             investment_commands._lock_event_mutation(cur, event_id)
-            reporting_pair = _reporting_pair(cur, owner.household_id)
+            reporting_pair = _lock_reporting_pair(cur, owner.household_id)
             cur.execute(
                 """SELECT event_kind::text FROM investment_transaction
                      WHERE household_id = %s AND id = %s FOR UPDATE""",

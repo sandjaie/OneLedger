@@ -57,3 +57,9 @@ def scope_to_owner(conn: psycopg.Connection, user_id: UUID) -> None:
     so a pooled connection never carries one request's identity into the next.
     """
     conn.execute("SELECT set_config('app.user_id', %s, true)", (str(user_id),))
+
+
+def first_line(exc: Exception) -> str:
+    """A refusal's own sentence. Postgres appends DETAIL, CONTEXT and a query position on later
+    lines, and those can carry the parameters that caused the failure."""
+    return str(exc).splitlines()[0].strip()

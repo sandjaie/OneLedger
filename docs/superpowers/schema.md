@@ -9,17 +9,17 @@
 > So a migration having more than this file shows is expected. A migration *disagreeing* with it is
 > not: a change to a table edits the migration and this file in the same commit.
 
-**Product-review scope (2026-09-06):** V1–V5 are the completed Phase 0 schema work. Later
-sections are reference designs, not a claim that every accepted capability already has a table.
+Sections marked applied match a Flyway migration. Unnumbered `00NN` sections are reference
+designs, not a claim that every accepted capability already has a table.
 [Finance OS requirements](../product/finance-os.html) govern household outflows, consolidated
-attribution, commitments, actions, reservations, goals and protection records. In particular, the
-unapplied `0015` attribution shape must be reconciled with F03 before implementation. Update the
-relevant reference sections alongside each feature's forward migration; do not rewrite V1–V4.
+attribution, commitments, actions, reservations, goals and protection records; the unapplied `0015`
+attribution shape must be reconciled with F03 before implementation. Update the relevant section
+alongside each feature's forward migration.
 
 Applied migrations use their Flyway names. V1–V5 are Phase 0. V6–V8 are Phase 1 M1a: the
 current-balance derivation, household configuration, and the account inventory. V9–V11 are
 M1b: categories, merchants and the seed taxonomy; the transaction ledger; and the household's
-category overrides. The unapplied reference sequence in this file now begins at `0008`;
+category overrides. The unapplied reference sequence in this file begins at `0010`;
 deferred foreign keys remain `0018`.
 
 ---
@@ -347,7 +347,7 @@ CREATE TABLE transaction (
   original_amount           NUMERIC(20,4),
   original_currency         CHAR(3),
 
-  -- frozen translations (see 04-multi-currency-and-fx.md §2)
+  -- frozen translations (see docs/design/multi-currency-and-fx.html §2)
   fx_rate_date              DATE NOT NULL,
   fx_rate_is_carried        BOOLEAN NOT NULL DEFAULT false,
   fx_rate_to_base           NUMERIC(20,10) NOT NULL,
@@ -1514,7 +1514,7 @@ CREATE TABLE transfer (
   transfer_date             DATE NOT NULL,
   settlement_date           DATE,
 
-  -- FX truth (see 04-multi-currency-and-fx.md §5)
+  -- FX truth (see docs/design/multi-currency-and-fx.html §5)
   implied_rate              NUMERIC(20,10),
   market_rate               NUMERIC(20,10),
   fx_spread_pct             NUMERIC(9,4),
@@ -1699,7 +1699,8 @@ CREATE TABLE price_snapshot (
 CREATE TABLE valuation_snapshot (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id         UUID NOT NULL REFERENCES household(id),
-  account_id           UUID NOT NULL,
+  account_id           UUID,  -- V31 drops NOT NULL: exactly one of account_id/holding_id
+  holding_id           UUID,  -- added by V31; FOREIGN KEY (household_id, holding_id) → holding
   as_of_date           DATE NOT NULL,
   value_native         NUMERIC(20,4) NOT NULL,
   currency             CHAR(3) NOT NULL REFERENCES currency(code),
@@ -1715,7 +1716,10 @@ CREATE TABLE valuation_snapshot (
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (household_id, source_document_id)
     REFERENCES document(household_id, id),
-  CHECK (fx_rate_date <= as_of_date)
+  CHECK (fx_rate_date <= as_of_date),
+  CHECK (num_nonnulls(account_id, holding_id) = 1)  -- V31; V31 also replaces the account/date
+                                                     -- unique constraint with partial unique
+                                                     -- indexes per account and per holding
 );
 ```
 
@@ -1784,6 +1788,8 @@ CREATE TABLE holding (
   current_units NUMERIC(28,8) NOT NULL,
   opened_on     DATE NOT NULL,
   closed_on     DATE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (household_id, account_id) REFERENCES account(household_id, id),
   UNIQUE (household_id, account_id, security_id),
   CHECK (current_units >= 0)
@@ -1817,6 +1823,7 @@ CREATE TABLE investment_transaction (
   dedupe_fingerprint      TEXT,
   corrects_transaction_id UUID,
   correction_reason       TEXT,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
   counterpart_transaction_id UUID  -- present only for paired switch_in/systematic_transfer_in/
                                     -- platform_transfer_in kinds, added by V40
 );
@@ -1828,6 +1835,7 @@ CREATE TABLE investment_unit_effect (
   investment_transaction_id UUID NOT NULL,
   effect_date               DATE NOT NULL,
   signed_units              NUMERIC(28,8) NOT NULL,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (investment_transaction_id)
 );
 
@@ -1840,8 +1848,9 @@ CREATE TABLE acquisition_lot (
   acquired_units        NUMERIC(28,8) NOT NULL,
   cost_basis_native     NUMERIC(20,4) NOT NULL,
   currency              CHAR(3) NOT NULL REFERENCES currency(code),
-  predecessor_lot_id    UUID,  -- added by V40; household-scoped, any holding (a platform
-                                -- transfer's successor lives in the destination holding)
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  predecessor_lot_id    UUID,  -- added by V40 and reserved: no operation writes it yet; household-
+                                -- scoped, any holding (a transfer successor's destination holding)
   FOREIGN KEY (household_id, predecessor_lot_id) REFERENCES acquisition_lot(household_id, id),
   UNIQUE (household_id, id),  -- V40; backs the household-scoped self reference above
   UNIQUE NULLS NOT DISTINCT (origin_transaction_id, predecessor_lot_id)  -- V40 replaces V31's
@@ -1872,6 +1881,31 @@ Typed event drafts and end-position checkpoints remain separate: a checkpoint ca
 units, cost or value the source stated and never creates investment history.
 
 ```sql
+CREATE TYPE investment_import_status AS ENUM (
+  'staged', 'awaiting_review', 'partially_committed', 'completed', 'cancelled', 'failed'
+);
+CREATE TYPE investment_group_status AS ENUM (
+  'draft', 'ready', 'blocked', 'committed', 'cancelled'
+);
+CREATE TYPE investment_draft_status AS ENUM (
+  'pending', 'ready', 'duplicate', 'conflict', 'blocked', 'committed'
+);
+CREATE TYPE investment_checkpoint_status AS ENUM (
+  'pending', 'matched', 'mismatched', 'blocked'
+);
+CREATE TYPE investment_review_reason AS ENUM (
+  'unsupported_format', 'unknown_security', 'ambiguous_account',
+  'ambiguous_identifier', 'unrecognized_event', 'duplicate_conflict',
+  'unit_mismatch', 'cost_mismatch', 'missing_price', 'unmatched_cash',
+  'incomplete_lot_allocation', 'stale_valuation'
+);
+CREATE TYPE investment_review_status AS ENUM ('open', 'resolved');
+CREATE TYPE investment_review_resolution_kind AS ENUM (
+  'account_resolved', 'security_resolved', 'event_corrected',
+  'evidence_confirmed', 'checkpoint_reconciled', 'price_recorded',
+  'funding_linked', 'lot_allocated', 'unsupported_acknowledged'
+);
+
 CREATE TABLE investment_import (
   id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id       UUID NOT NULL REFERENCES household(id),
@@ -1880,6 +1914,8 @@ CREATE TABLE investment_import (
   extraction_version TEXT NOT NULL,
   status             investment_import_status NOT NULL DEFAULT 'staged',
   completed_at       TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (household_id, document_id) REFERENCES document(household_id, id),
   UNIQUE (document_id)
 );
@@ -1891,6 +1927,8 @@ CREATE TABLE investment_import_group (
   group_number INTEGER NOT NULL,
   status       investment_group_status NOT NULL DEFAULT 'draft',
   committed_at TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (household_id, import_id)
     REFERENCES investment_import(household_id, id),
   UNIQUE (import_id, group_number)
@@ -1914,7 +1952,9 @@ CREATE TABLE investment_event_draft (
   net_amount     NUMERIC(20,4),
   currency       CHAR(3),
   state          investment_draft_status NOT NULL DEFAULT 'pending',
-  committed_transaction_id UUID
+  committed_transaction_id UUID,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE investment_position_checkpoint (
@@ -1931,7 +1971,9 @@ CREATE TABLE investment_position_checkpoint (
   reported_value_native NUMERIC(20,4),
   currency              CHAR(3),
   declared_unit_scale   SMALLINT,
-  reconciliation_status investment_checkpoint_status NOT NULL DEFAULT 'pending'
+  reconciliation_status investment_checkpoint_status NOT NULL DEFAULT 'pending',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE investment_evidence (
@@ -1949,6 +1991,7 @@ CREATE TABLE investment_evidence (
   source_event_id           TEXT,
   fingerprint_version       TEXT NOT NULL,
   evidence_fingerprint      TEXT NOT NULL,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (num_nonnulls(draft_id, checkpoint_id, investment_transaction_id) = 1)
 );
 
@@ -1967,7 +2010,8 @@ CREATE TABLE investment_review_item (
   resolution_kind           investment_review_resolution_kind,
   resolution_reference_id   UUID,
   resolved_by               UUID,
-  resolved_at               TIMESTAMPTZ
+  resolved_at               TIMESTAMPTZ,
+  created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
@@ -2017,6 +2061,10 @@ positive `NUMERIC(20,4)` magnitude, the leaf's prior `txn_type`, and the owner w
 with exact positive `NUMERIC(28,8)` units and owner provenance.
 
 ```sql
+CREATE TYPE investment_cash_allocation_role AS ENUM (
+  'funding', 'proceeds', 'cash_distribution', 'fee'
+);
+
 CREATE TABLE investment_cash_allocation (
   id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id              UUID NOT NULL REFERENCES household(id),
@@ -2156,6 +2204,33 @@ and conflicting reuse atomic without permitting callers to fabricate a result. N
 allocation arrays, complete unique lot references and positive units at no more than eight decimal
 places are validated before either canonical hashing or retained-decision replay.
 
+```sql
+CREATE TABLE investment_lot_allocation_decision (
+  household_id             UUID NOT NULL REFERENCES household(id),
+  idempotency_key          UUID NOT NULL,
+  request_hash             TEXT NOT NULL,
+  disposal_transaction_id  UUID NOT NULL,
+  realised_cost_native     NUMERIC(20,4),
+  realised_gain_native     NUMERIC(20,4),
+  remaining_basis_native   NUMERIC(20,4),
+  allocation_complete      BOOLEAN NOT NULL,
+  decided_by               UUID NOT NULL,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, idempotency_key),
+  FOREIGN KEY (household_id, disposal_transaction_id)
+    REFERENCES investment_transaction(household_id, id),
+  FOREIGN KEY (household_id, decided_by) REFERENCES app_user(household_id, id),
+  CONSTRAINT investment_lot_decision_hash_is_sha256 CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT investment_lot_decision_claims_match_completion CHECK (
+    (NOT allocation_complete AND realised_cost_native IS NULL
+      AND realised_gain_native IS NULL AND remaining_basis_native IS NULL)
+    OR (allocation_complete AND realised_cost_native IS NOT NULL
+      AND realised_gain_native IS NOT NULL)),
+  CONSTRAINT investment_lot_decision_basis_is_nonnegative CHECK (
+    realised_cost_native >= 0 AND remaining_basis_native >= 0)
+);
+```
+
 V39 serializes allocation and correction through an event advisory mutex followed by event,
 holding, lot and review row locks. Every selected disposal and acquisition origin must still be an
 active correction-chain leaf; retained allocation evidence makes either origin ineligible for
@@ -2163,8 +2238,10 @@ correction. A proposal includes the immutable disposal date in its expected stat
 acquisition lot dated after that disposal. Remaining basis includes active acquisition origins and
 allocations from active disposals only, applying `ROUND_HALF_UP` at four decimals per lot.
 
-V40 adds the lot lineage read model ahead of any operation that creates lineage (Task 15.2's split
-and Task 15.4's paired transfer). `acquisition_lot.predecessor_lot_id` is a nullable, household-scoped
+V40 adds the lot lineage read model. No operation writes lineage: Phase 1.6 was re-scoped to
+holding-level corporate actions, so per-lot lineage is deferred in the
+[project register](project-register.md); the column is reserved.
+`acquisition_lot.predecessor_lot_id` is a nullable, household-scoped
 self reference spanning any holding, because a platform transfer's successor lives in the destination
 holding, not the source: a successor lot keeps its predecessor's `acquisition_date`, and
 `(origin_transaction_id, predecessor_lot_id)` is unique with nulls not distinct so one lineage event
@@ -2246,7 +2323,7 @@ pending, while a holding-level corporate action withholds cost silently — the 
 matches once its reported units (if any) agree, with no review.
 
 No Phase 1.6 action yet creates a successor lot or selects a transferred lot;
-`acquisition_lot.predecessor_lot_id` stays null until a later task fills it in.
+`acquisition_lot.predecessor_lot_id` stays null: per-lot lineage is deferred in the project register.
 
 ---
 
@@ -2438,8 +2515,9 @@ line is not a `deduction` line of the same household (the composite foreign key 
 identically instead of through a second copy. `PUT /payslips/deduction-rules/{label}` saves a rule
 (upsert); linking net pay auto-posts a pair for every deduction line with a matching rule;
 `POST /payslips/{payslipId}/lines/{lineNo}/spending` counts one line (saving its rule) and posts
-its pair when linked; `DELETE` on the same path stops counting it. Unlinking and superseding a
-payslip remove every pair it posted; the rule survives so a later payslip still auto-posts. Every
+its pair when linked; `DELETE` on the same path stops counting it and removes its label's rule.
+Unlinking and superseding a payslip remove every pair it posted; the rule survives so a later
+payslip still auto-posts. Every
 write is idempotent: a line already paired is left alone by a replayed `POST`, and a line with no
 pair is left alone by a replayed `DELETE`.
 
