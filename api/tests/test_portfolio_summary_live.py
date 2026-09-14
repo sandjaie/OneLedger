@@ -15,6 +15,7 @@ from oneledger.main import app
 from oneledger.routes import dashboard, investment_catalogue, portfolio
 
 from .live_database import connect_to_test_database
+from .test_ingest_route_live import ORIGIN
 from .test_investment_events_live import EventFixture
 from .test_portfolio_live import _acquire, _dispose, _price
 
@@ -111,6 +112,66 @@ def test_summary_xirr_equals_the_returns_engine_for_the_same_flows(
         None if expected.rate_percent is None else str(expected.rate_percent)
     )
     assert summary["xirrReason"] == expected.reason
+
+
+def test_summary_excludes_a_priced_holding_with_no_base_fx_from_valuation(
+    summary_live: EventFixture,
+) -> None:
+    """OL-002: a native price without a base FX leg must not count as valued at zero, and must
+    not let the valued subset show a false 100% ratio either."""
+    _acquire(summary_live)
+    _price(summary_live, date(2026, 2, 1), "6.000000")
+
+    with summary_live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT code FROM currency WHERE code NOT IN (%s, %s) ORDER BY code LIMIT 1",
+            (summary_live.currency, summary_live.secondary_currency),
+        )
+        row = cur.fetchone()
+        assert row is not None, "the currency catalogue needs a third seeded code for this"
+        foreign_currency = str(row[0]).strip()
+        cur.execute(
+            """INSERT INTO security (household_id, security_type, name, currency, country,
+                                      asset_class)
+               VALUES (%s, 'mutual_fund', 'Synthetic foreign-currency security', %s, 'XZ',
+                       'equity')
+               RETURNING id""",
+            (summary_live.owner.household_id, foreign_currency),
+        )
+        security_row = cur.fetchone()
+        assert security_row is not None
+        foreign_security_id = security_row[0]
+        cur.execute(
+            """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
+               VALUES ('2026-02-01', %s, %s, 1.5000000000, 'manual')""",
+            (foreign_currency, summary_live.currency),
+        )
+    summary_live.connection.commit()
+
+    _acquire(summary_live, securityId=str(foreign_security_id), currency=foreign_currency)
+    price_response = _client().post(
+        f"/investment-catalogue/securities/{foreign_security_id}/manual-prices",
+        json={"priceDate": "2026-02-01", "price": "9.000000"},
+        headers=ORIGIN,
+    )
+    assert price_response.status_code == 201, price_response.text
+
+    # The acquisition already froze its historical contribution; deleting this rate only
+    # removes the CURRENT base leg a live read would otherwise look up.
+    with summary_live.connection.cursor() as cur:
+        cur.execute(
+            "DELETE FROM fx_rate WHERE base_currency = %s AND quote_currency = %s",
+            (foreign_currency, summary_live.currency),
+        )
+    summary_live.connection.commit()
+
+    summary = _summary()
+
+    assert summary["valuedCount"] == 1
+    assert summary["unvaluedCount"] == 1
+    assert summary["allocationComplete"] is False
+    assert all(group["ratio"] is None for group in summary["allocationByAssetClass"])
+    assert all(group["ratio"] is None for group in summary["allocationByAccount"])
 
 
 def test_summary_with_no_holdings_states_zero_rather_than_erroring(

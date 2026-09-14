@@ -215,6 +215,9 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/transfers.py",
     # Funding decisions inspect and relabel exact cash leaves; they are not flow reports.
     "api/oneledger/investments/funding.py",
+    # Holding detail reads one confirmed cash leaf's own currency; those leaves are excluded
+    # from the reportable view by design (I3), so reading it there would find nothing.
+    "api/oneledger/investments/portfolio.py",
     # A balance and the guards on an account's anchor must include every movement, transfers too.
     "api/oneledger/routes/accounts.py",
     # Data Quality counts the rows a backup does not hold, and a backup holds every row.

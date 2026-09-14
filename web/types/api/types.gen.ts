@@ -2057,6 +2057,10 @@ export type HoldingCashLink = {
      * Allocatedamount
      */
     allocatedAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
 };
 
 /**

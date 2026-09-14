@@ -12,6 +12,7 @@ that decide what counts as a flow are unit-testable without a database.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -32,6 +33,11 @@ _RESIDUAL_TOLERANCE = Decimal("1E-24")
 _PERCENT_QUANT = Decimal("0.00000001")  # 8 dp — NUMERIC(20,8)
 _ALLOCATION_QUANT = Decimal("0.0000000001")  # 10 dp — NUMERIC(20,10)
 _BISECTION_STEPS = 200
+# A grid point's float residual below this (normalized, i.e. already divided by scale) is not
+# trusted for its sign — re-evaluated with the exact 50-digit `_residual` instead. Float64 error
+# on a sum of a few thousand terms stays many orders below this, so a genuine root always falls
+# under it and gets an exact evaluation; a genuinely nonzero point never does.
+_FLOAT_NEAR_ZERO = 1e-9
 
 XirrReason = Literal[
     "no_sign_change",
@@ -131,6 +137,28 @@ def _residual(days: Sequence[tuple[int, Decimal]], rate: Decimal, scale: Decimal
     return total / scale
 
 
+def _float_residual(float_days: Sequence[tuple[int, float]], rate: float, scale: float) -> float:
+    """A fast, inexact stand-in for `_residual`, used only to read one grid point's SIGN.
+
+    Same shape as `_residual` (one `exp`/`log1p` for the daily factor, an integer power per
+    flow) but in float64 instead of 50-digit `Decimal` — orders of magnitude cheaper per call.
+    `math.nan` signals "don't trust this" (domain error or overflow); the caller re-evaluates
+    that point exactly rather than guessing its sign.
+    """
+    if rate <= -1.0:
+        return math.nan
+    try:
+        daily_factor = math.exp(-math.log1p(rate) / 365)
+        total = 0.0
+        for days_i, amount in float_days:
+            total += amount * daily_factor**days_i
+        if not math.isfinite(total):
+            return math.nan
+        return total / scale
+    except ValueError, OverflowError:
+        return math.nan
+
+
 def _bisect(
     residual: Callable[[Decimal], Decimal], lo_r: Decimal, hi_r: Decimal, lo_f: Decimal
 ) -> tuple[Decimal, bool]:
@@ -173,6 +201,21 @@ def xirr(flows: Sequence[CashFlow]) -> XirrResult:
         def residual(rate: Decimal) -> Decimal:
             return _residual(days, rate, scale)
 
+        # The grid scan below only needs each of the 4,097 points' SIGN, not its exact value —
+        # computing that in float first (cheap: one exp/log1p and N float multiplications) and
+        # falling back to the exact Decimal `residual` only near zero or on overflow turns an
+        # O(grid × flows) 50-digit computation into one that is exact only where it must be.
+        # `test_investment_returns.py` proves this produces bit-identical results to always
+        # using `residual` directly.
+        float_days = [(days_i, float(amount)) for days_i, amount in days]
+        scale_float = float(scale)
+
+        def grid_value(rate: Decimal) -> Decimal:
+            approx = _float_residual(float_days, float(rate), scale_float)
+            if not math.isfinite(approx) or abs(approx) <= _FLOAT_NEAR_ZERO:
+                return residual(rate)
+            return Decimal(approx)
+
         y_min = (_RATE_MIN + 1).ln()
         y_max = (_RATE_MAX + 1).ln()
         step = (y_max - y_min) / _GRID_STEPS
@@ -182,7 +225,7 @@ def xirr(flows: Sequence[CashFlow]) -> XirrResult:
         for i in range(_GRID_STEPS + 1):
             r = (y_min + step * i).exp() - 1
             grid_r.append(r)
-            grid_f.append(residual(r))
+            grid_f.append(grid_value(r))
 
         roots: list[Decimal] = [
             grid_r[i] for i, value in enumerate(grid_f) if abs(value) <= _RESIDUAL_TOLERANCE
@@ -431,7 +474,9 @@ def allocation(
             value_base=Decimal(position.currentValueBase)
             if position.currentValueBase is not None
             else Decimal(0),
-            is_valued=position.valueStatus == "available",
+            # A holding with a native price but no base FX leg has `valueStatus ==
+            # "available"` yet `currentValueBase is None` — it must not count as valued at 0.
+            is_valued=position.currentValueBase is not None,
         )
         for position in positions
     ]

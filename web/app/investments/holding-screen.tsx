@@ -133,7 +133,7 @@ export function HoldingScreen({ holdingId, request }: Props) {
                 {detail.cashLinks.map((link) => (
                   <div key={`${link.investmentEventId}:${link.cashTransactionId}`}>
                     <dt>{link.role.replaceAll("_", " ")}</dt>
-                    <dd>{link.allocatedAmount}</dd>
+                    <dd>{link.currency} {link.allocatedAmount}</dd>
                   </div>
                 ))}
               </dl>

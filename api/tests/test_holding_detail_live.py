@@ -91,3 +91,17 @@ def test_holding_detail_lists_events_prices_and_no_lot_or_evidence_fields(
     assert forbidden.isdisjoint(detail)
     for event in detail["events"]:
         assert forbidden.isdisjoint(event)
+
+
+def test_a_fully_closed_holdings_units_render_as_an_exact_zero(
+    holding_live: EventFixture,
+) -> None:
+    """OL-003: `str()` on an exact-zero NUMERIC(28,8) prints as "0E-8", not "0.00000000"."""
+    acquired = _acquire(holding_live)
+    _price(holding_live, date(2026, 2, 1), "6.000000")
+    _dispose(holding_live, date(2026, 2, 2), "4.00000000", "24.0000")
+
+    detail = _detail(acquired["holdingId"])
+
+    assert detail["units"] == "0.00000000"
+    assert "0E-8" not in str(detail)

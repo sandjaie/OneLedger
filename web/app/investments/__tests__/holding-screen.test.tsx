@@ -62,6 +62,7 @@ function detail(overrides: Partial<HoldingDetail> = {}): HoldingDetail {
         cashTransactionId: "00000000-0000-4000-8000-000000000070",
         role: "funding",
         allocatedAmount: "101.0000",
+        currency: "XAA",
       },
     ],
     prices: [{ priceDate: "2026-02-06", price: "10.500000" }],
@@ -94,7 +95,7 @@ describe("HoldingScreen", () => {
     expect(screen.getByText("Events (1)")).toBeTruthy();
     expect(screen.getByLabelText("purchase on 2026-01-05")).toBeTruthy();
     expect(screen.getByText("funding")).toBeTruthy();
-    expect(screen.getByText("101.0000")).toBeTruthy();
+    expect(screen.getByText("XAA 101.0000")).toBeTruthy();
     expect(screen.getByText("XAA 10.500000")).toBeTruthy();
   });
 

@@ -57,10 +57,19 @@ class PortfolioSummary(BaseModel):
     priceStatus: PriceStatus
 
 
+_ACCOUNT_NAMES_SQL = "SELECT id, name FROM account WHERE household_id = %s"
+
+
+def _account_names(cur: psycopg.Cursor[Any], household_id: UUID) -> dict[UUID, str]:
+    cur.execute(_ACCOUNT_NAMES_SQL, (household_id,))
+    return {row[0]: row[1] for row in cur.fetchall()}
+
+
 def read_summary(
     cur: psycopg.Cursor[Any], household_id: UUID, base: str, secondary: str, as_of: date
 ) -> PortfolioSummary:
     positions = read_positions(cur, household_id, base, secondary, as_of)
+    account_names = _account_names(cur, household_id)
 
     value_base = sum(
         (Decimal(p.currentValueBase) for p in positions if p.currentValueBase is not None),
@@ -102,21 +111,24 @@ def read_summary(
         result = xirr(flows.flows)
         xirr_percent, xirr_reason = _out(result.rate_percent), result.reason
 
+    # A holding is "valued" for allocation/count purposes only once it has a base-currency
+    # value: a holding with a native price but no base FX leg has `valueStatus == "available"`
+    # yet `currentValueBase is None`, and must not be silently counted as valued at 0 (OL-002).
     allocation = group_allocation(
         [
             PositionValue(
                 label_asset_class=p.assetClass,
-                label_account=str(p.accountId),
+                label_account=account_names.get(p.accountId, str(p.accountId)),
                 value_base=Decimal(p.currentValueBase)
                 if p.currentValueBase is not None
                 else Decimal(0),
-                is_valued=p.valueStatus == "available",
+                is_valued=p.currentValueBase is not None,
             )
             for p in positions
         ]
     )
 
-    valued_count = sum(1 for p in positions if p.valueStatus == "available")
+    valued_count = sum(1 for p in positions if p.currentValueBase is not None)
 
     return PortfolioSummary(
         asOf=as_of,
@@ -152,6 +164,7 @@ class HoldingCashLink(BaseModel):
     cashTransactionId: UUID
     role: str
     allocatedAmount: str
+    currency: str
 
 
 class HoldingPriceRow(BaseModel):
@@ -217,10 +230,12 @@ _EVENTS_SQL = """
 
 _CASH_LINKS_SQL = """
     SELECT ica.investment_transaction_id, ica.cash_transaction_id, ica.role::text,
-           ica.allocated_amount
+           ica.allocated_amount, cash.currency
       FROM investment_cash_allocation ica
       JOIN investment_transaction t
         ON t.id = ica.investment_transaction_id AND t.household_id = ica.household_id
+      JOIN transaction cash
+        ON cash.id = ica.cash_transaction_id AND cash.household_id = ica.household_id
      WHERE ica.household_id = %s AND t.holding_id = %s
      ORDER BY t.event_date DESC
 """
@@ -302,6 +317,7 @@ def read_holding_detail(
             cashTransactionId=r[1],
             role=r[2],
             allocatedAmount=_out(Decimal(r[3])) or "0",
+            currency=str(r[4]).strip(),
         )
         for r in cur.fetchall()
     ]
@@ -321,7 +337,10 @@ def read_holding_detail(
         securityName=holding.name,
         assetClass=holding.asset_class,
         currency=holding.currency,
-        units=str(holding.units),
+        # `str()` on an exact-zero NUMERIC(28,8) prints as "0E-8" (Decimal's to-string rule
+        # switches to scientific notation once the adjusted exponent is below -6) — the same
+        # fix positions.py applies for a closed holding's units.
+        units=format(holding.units, "f"),
         openedOn=holding.opened_on,
         closedOn=holding.closed_on,
         events=events,
