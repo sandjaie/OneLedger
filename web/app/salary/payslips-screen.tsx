@@ -6,6 +6,7 @@ import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
   CurrencyRow,
+  DepositCandidate,
   PayslipCreate,
   PayslipImportResponse,
   PayslipLineIn,
@@ -106,6 +107,15 @@ export function PayslipsScreen({ currencies, request }: Props) {
   const [importBusy, setImportBusy] = useState(false);
   const [importProblem, setImportProblem] = useState<string>();
 
+  const [candidatesFor, setCandidatesFor] = useState<string>();
+  const [candidates, setCandidates] = useState<Array<DepositCandidate>>();
+  const [candidatesBusy, setCandidatesBusy] = useState(false);
+  const [candidatesProblem, setCandidatesProblem] = useState<string>();
+  const [confirmingCandidate, setConfirmingCandidate] = useState<DepositCandidate>();
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [unlinkFor, setUnlinkFor] = useState<string>();
+  const [unlinkProblem, setUnlinkProblem] = useState<string>();
+
   useEffect(() => {
     let current = true;
     request<PayslipsResponse>("/payslips")
@@ -185,6 +195,65 @@ export function PayslipsScreen({ currencies, request }: Props) {
       setProblem(detail(error, "This payslip could not be recorded."));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function findCandidates(payslip: PayslipRow) {
+    setCandidatesFor(payslip.id);
+    setCandidates(undefined);
+    setConfirmingCandidate(undefined);
+    setCandidatesBusy(true);
+    setCandidatesProblem(undefined);
+    try {
+      const result = await request<{ candidates: Array<DepositCandidate> }>(
+        `/payslips/${payslip.id}/deposit-candidates`,
+      );
+      setCandidates(result.candidates);
+    } catch (error) {
+      setCandidatesProblem(detail(error, "Candidates could not be loaded."));
+    } finally {
+      setCandidatesBusy(false);
+    }
+  }
+
+  function cancelCandidates() {
+    setCandidatesFor(undefined);
+    setCandidates(undefined);
+    setConfirmingCandidate(undefined);
+    setCandidatesProblem(undefined);
+  }
+
+  async function confirmLink(payslip: PayslipRow) {
+    if (!confirmingCandidate) return;
+    setLinkBusy(true);
+    setCandidatesProblem(undefined);
+    try {
+      await request<PayslipRow>(`/payslips/${payslip.id}/deposit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionId: confirmingCandidate.transactionId }),
+      });
+      cancelCandidates();
+      setAttempt((value) => value + 1);
+    } catch (error) {
+      setCandidatesProblem(detail(error, "This credit could not be linked."));
+    } finally {
+      setLinkBusy(false);
+    }
+  }
+
+  async function unlink(payslip: PayslipRow) {
+    setLinkBusy(true);
+    setUnlinkFor(payslip.id);
+    setUnlinkProblem(undefined);
+    try {
+      await request<PayslipRow>(`/payslips/${payslip.id}/deposit`, { method: "DELETE" });
+      setUnlinkFor(undefined);
+      setAttempt((value) => value + 1);
+    } catch (error) {
+      setUnlinkProblem(detail(error, "This payslip could not be unlinked."));
+    } finally {
+      setLinkBusy(false);
     }
   }
 
@@ -289,6 +358,61 @@ export function PayslipsScreen({ currencies, request }: Props) {
                     onClick={() => startCorrection(payslip)}
                     type="button"
                   >{payslip.deposit ? "Unlink before correcting" : "Correct"}</button>
+
+                  {!payslip.supersededByPayslipId && (
+                    payslip.deposit ? (
+                      <>
+                        <button
+                          className="text-action"
+                          disabled={linkBusy}
+                          onClick={() => void unlink(payslip)}
+                          type="button"
+                        >Unlink</button>
+                        {unlinkFor === payslip.id && unlinkProblem && (
+                          <p className="inline-alert" role="alert">{unlinkProblem}</p>
+                        )}
+                      </>
+                    ) : (
+                      <button
+                        className="text-action"
+                        disabled={candidatesBusy}
+                        onClick={() => void findCandidates(payslip)}
+                        type="button"
+                      >Find net-pay credit</button>
+                    )
+                  )}
+
+                  {candidatesFor === payslip.id && (
+                    <div className="salary-deposit-candidates">
+                      {candidatesBusy && <p role="status">Looking for candidates…</p>}
+                      {candidatesProblem && <p className="inline-alert" role="alert">{candidatesProblem}</p>}
+                      {candidates && candidates.length === 0 && <p>No eligible credit was found.</p>}
+                      {candidates && candidates.length > 0 && (
+                        <ul>
+                          {candidates.map((candidate) => (
+                            <li key={candidate.transactionId}>
+                              <span>{candidate.bookedDate} · {formatMoney(candidate.amount, currencyOf(currencies, candidate.currency))} · {candidate.description}</span>
+                              <button
+                                className="text-action"
+                                onClick={() => setConfirmingCandidate(candidate)}
+                                type="button"
+                              >Link</button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {confirmingCandidate && (
+                        <div role="alertdialog">
+                          <p>Link the credit on {confirmingCandidate.bookedDate} to this payslip&rsquo;s net pay?</p>
+                          <button className="primary-action" disabled={linkBusy} onClick={() => void confirmLink(payslip)} type="button">
+                            {linkBusy ? "Linking…" : "Confirm link"}
+                          </button>
+                          <button className="text-action" onClick={() => setConfirmingCandidate(undefined)} type="button">Cancel</button>
+                        </div>
+                      )}
+                      <button className="text-action" onClick={cancelCandidates} type="button">Close</button>
+                    </div>
+                  )}
                 </li>
               );
             })}

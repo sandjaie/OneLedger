@@ -16,6 +16,7 @@ import { InvestmentImportScreen } from "@/app/investments/import/investment-impo
 import { PortfolioScreen } from "@/app/investments/portfolio-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
+import { PlansScreen } from "@/app/plans/plans-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
@@ -34,7 +35,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -84,6 +85,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/import") return "import";
   if (window.location.pathname === "/review") return "classification-review";
   if (window.location.pathname === "/salary") return "salary";
+  if (window.location.pathname === "/plans") return "plans";
   return "overview";
 }
 
@@ -191,6 +193,14 @@ export function Workspace({
         if (activeSection === "salary") {
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
           if (!current) return;
+          setCurrencies(catalogue);
+        }
+        if (activeSection === "plans") {
+          const nextInventory = await request<AccountsResponse>("/accounts");
+          if (!current) return;
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setInventory(nextInventory);
           setCurrencies(catalogue);
         }
         setState("ready");
@@ -361,9 +371,7 @@ export function Workspace({
             <Link aria-current={activeSection === "investments-import" ? "page" : undefined} href="/investments/import">Import investments</Link>
             <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
             <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
-            <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
-              <span>Plans</span><small>Available after ledger import</small>
-            </button>
+            <Link aria-current={activeSection === "plans" ? "page" : undefined} href="/plans">Plans</Link>
             <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
           </nav>
 
@@ -525,6 +533,22 @@ export function Workspace({
 
           {activeSection === "salary" && currencies && (
             <PayslipsScreen
+              currencies={currencies}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "plans" && inventory && currencies && (
+            <PlansScreen
+              accounts={inventory.accounts}
               currencies={currencies}
               request={async (path, init) => {
                 try {

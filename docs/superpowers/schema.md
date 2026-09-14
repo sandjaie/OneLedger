@@ -2341,6 +2341,55 @@ check against the currency table after extraction, since the adapter has no data
 
 ---
 
+## `V43` (applied)
+
+### Commitments
+
+Phase 1.7 Task 2. A commitment is an owner assumption, not an evidenced fact: it carries no
+`SECURITY DEFINER` write path, is replaced in place by an ordinary owner-scoped `UPDATE`, and
+archiving is terminal.
+
+```sql
+CREATE TYPE commitment_cadence AS ENUM ('once', 'monthly', 'annual');
+
+CREATE TABLE commitment (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id    UUID NOT NULL REFERENCES household(id),
+  idempotency_key UUID NOT NULL,
+  account_id      UUID NOT NULL,
+  label           TEXT NOT NULL,
+  amount          NUMERIC(20,4) NOT NULL,
+  currency        CHAR(3) NOT NULL REFERENCES currency(code),
+  cadence         commitment_cadence NOT NULL,
+  first_date      DATE NOT NULL,
+  end_date        DATE,
+  archived_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fk_commitment_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT uq_commitment_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT commitment_amount_is_nonzero CHECK (amount <> 0),
+  CONSTRAINT commitment_end_date_agrees CHECK (
+    end_date IS NULL OR (cadence <> 'once' AND end_date >= first_date)),
+  CONSTRAINT commitment_label_is_bounded CHECK (
+    char_length(label) BETWEEN 1 AND 80 AND label = btrim(label))
+);
+```
+
+`household_isolation FOR ALL TO authenticated` as on every other household-scoped table; no
+function or trigger. `routes/plans.py` writes directly under explicit `household_id` filters — a
+household-row lock precedes every write, `POST /commitments` replays an identical idempotency key
+by comparing the stored row's fields and otherwise conflicts, and `PUT` refuses an archived row.
+`GET /forecast` opens `SET TRANSACTION READ ONLY` before any other statement and calls
+`api/oneledger/forecast.py`'s pure `occurrence_dates`/`project_balances` over each active,
+ledger-valued account's `current_balance`/`current_balance_as_of` and its unarchived commitments,
+reading the same valuation-period selection as `GET /dashboard`
+(`routes/dashboard.VALUATION_PERIOD_FOR_ACCOUNT`, extracted there so both routes choose an
+account's mode identically). It writes nothing and reads no other route's data.
+
+---
+
 ## `0013`
 
 ### Loans

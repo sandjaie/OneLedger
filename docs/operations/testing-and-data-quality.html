@@ -668,6 +668,17 @@ proves exact round trips, idempotent replay and conflicting-key refusal, a multi
 committing only reconciling months in one request, a manually entered month reporting
 <code>already_recorded</code> on a later import, deposit-candidate window edges, and a linked
 credit reading <code>eligible: false</code> once it becomes a transfer leg.</li>
+<li>Phase 1.7 Task 2: a commitment moves its account&#39;s 30/60/90-day forecast balances exactly and
+<code>GET /forecast</code> changes no row, balance or dashboard figure — proved by re-running
+<code>GET /dashboard</code> and counting <code>commitment</code> rows before and after. The unit
+suite proves occurrence-date month-end and 29 February clamping, an inclusive end date, the
+exclusive-balance-date/inclusive-day-90 window and exact four-place <code>Decimal</code> sums. The
+V43 SQL suite proves owner/member/foreign/anonymous isolation and a cross-household account
+reference refused by its composite foreign key. The live API suite proves create/replay/conflict,
+an archived commitment refusing further edits, excess precision refused with no row, and every
+forecast exclusion reason: <code>not_ledger_valued</code>, <code>no_balance_date</code>,
+<code>balance_after_as_of</code> for accounts and <code>account_closed</code>,
+<code>account_excluded</code>, <code>currency_mismatch</code> for commitments.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

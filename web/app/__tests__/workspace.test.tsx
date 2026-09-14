@@ -181,7 +181,7 @@ describe("authenticated workspace", () => {
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
     expect(screen.getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe("/accounts");
     expect(screen.getByRole("link", { name: "Import" }).getAttribute("href")).toBe("/import");
-    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Plans.*unavailable/i }).disabled).toBe(true);
+    expect(screen.getByRole("link", { name: "Plans" }).getAttribute("href")).toBe("/plans");
   });
 
   it("identifies the owner in the persistent product-mock toolbar", async () => {
@@ -587,6 +587,48 @@ describe("authenticated workspace", () => {
     expect((await screen.findByRole("link", { name: "Salary" })).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("heading", { name: "Salary" })).toBeTruthy();
     expect(await screen.findByText("No payslips are recorded yet.")).toBeTruthy();
+  });
+
+  it("renders the plans screen with the account and currency catalogue and marks the nav current", async () => {
+    const inventory: AccountsResponse = {
+      accounts: [{
+        id: "acct-plans",
+        name: "Plans Savings",
+        institutionId: null,
+        institutionName: null,
+        accountType: "savings",
+        accountClass: "asset",
+        accountSubtype: null,
+        currency: "XIN",
+        country: "XB",
+        openedOn: "2024-01-01",
+        closedOn: null,
+        isActive: true,
+        includeInNetWorth: true,
+        isLiquid: true,
+        openingBalance: "250000.0000",
+        openingBalanceDate: "2024-01-01",
+        openingBalanceNote: null,
+        openingBalanceConfirmedAt: null,
+        currentBalance: "250000.0000",
+        currentBalanceAsOf: "2024-01-01T00:00:00Z",
+        creditLimit: null,
+        identifiers: [],
+      }],
+      totals: [],
+    };
+    const forecast = { asOf: "2026-03-01", accounts: [], excludedAccounts: [], excludedCommitments: [] };
+    render(
+      <Workspace
+        section="plans"
+        request={requestThat(household, inventory, catalogue, forecast, { commitments: [] })}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Plans" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Plans" })).toBeTruthy();
+    expect(await screen.findByText("No account can be forecast yet.")).toBeTruthy();
   });
 
   it.each([

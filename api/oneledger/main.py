@@ -33,6 +33,7 @@ from .routes import (
     layouts,
     merchant_knowledge,
     payslips,
+    plans,
     portfolio,
     rules,
     transactions,
@@ -193,6 +194,7 @@ app.include_router(investment_funding.router)
 app.include_router(investment_imports.router)
 app.include_router(investment_prices.router)
 app.include_router(payslips.router)
+app.include_router(plans.router)
 app.include_router(portfolio.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
