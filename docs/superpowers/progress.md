@@ -12,11 +12,11 @@ Updated: 14 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 1.7 — salary and a thin forecast** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Implementation complete**; owner acceptance open — Task 1 (payslips), Task 2 (commitments and forecast) and Task 3 (deductions counted as spending) are all delivered; Phase 1.6 owner acceptance remains open in parallel | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md) · [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md) |
+| Current outcome | **Phase 1.8 — layout mapper and documents** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
+| Outcome state | **Implementation active** — planned at personal scale on 14 Sep 2026; Phases 1.6 and 1.7 owner acceptance remain open | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Owner acceptance: real payslips, commitments and deduction spending run through the application, structural pass/fail counts recorded | [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md#task-3--deductions-counted-as-spending) |
-| Current implementation task | Task 3 delivered on `feature/p1-7c-payslip-deduction-spending`; Task 2 delivered on `feature/p1-7b-commitments-forecast`; Task 1 delivered on `feature/p1-7a-payslips`; Phase 1.6 implementation is complete via PRs #194–#201 | [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md#task-3--deductions-counted-as-spending) |
+| Next product action | Deliver Task 1 — layout mapper | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md#task-1--layout-mapper) |
+| Current implementation task | Task 1 — layout mapper on `feature/p1-8a-layout-mapper`; Phase 1.7 implementation complete via PRs #202–#204 | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md#task-1--layout-mapper) |
 
 ## Canonical phase status
 
@@ -34,7 +34,7 @@ Updated: 14 September 2026.
 | 1.5 — statement-guided onboarding and owner decisions | **Accepted, 12 Sep 2026** | [identity specification](specs/2026-09-11-local-statement-identities.md) · [ADR-0021](../adr/0021-local-owner-financial-identifiers.html) |
 | 1.6 — investments | **Implementation complete; owner acceptance open** | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | 1.7 — salary and a thin forecast | **Implementation complete; owner acceptance open** | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md) · [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md) |
-| 1.8 — layout mapper and documents | **Planned** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
+| 1.8 — layout mapper and documents | **In progress** | [Phase 1.8 specification](specs/2026-09-14-phase-1-8-layout-mapper-documents.md) · [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
 | 2.1 — complete historical coverage | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | 2.2 — wealth history and attribution | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | 2.3 — classification learning and review depth | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
