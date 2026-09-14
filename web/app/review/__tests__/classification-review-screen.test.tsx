@@ -357,6 +357,21 @@ describe("grouped classification review", () => {
     expect(await screen.findByRole("article", { name: "SECOND MARKET" })).toBeTruthy();
   });
 
+  it("re-fetches with sort=impact when the owner switches sort order", async () => {
+    const impactOnly = response([group({ groupKey: "group-2", description: "BIG SPEND" })]);
+    const request = vi.fn(async (path: string) => {
+      if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);
+      if (path === "/classification-review/groups?limit=50&offset=0&sort=impact") return impactOnly;
+      throw new Error(`Unexpected path ${path}`);
+    });
+    render(<ClassificationReviewScreen categories={categories} request={request as never} />);
+    await screen.findByRole("article", { name: "SAMPLE MARKET" });
+
+    fireEvent.change(screen.getByLabelText("Sort"), { target: { value: "impact" } });
+
+    expect(await screen.findByRole("article", { name: "BIG SPEND" })).toBeTruthy();
+  });
+
   it("keeps stale and manually protected preview results visibly unapplied", async () => {
     const request = vi.fn(async (path: string) => {
       if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);

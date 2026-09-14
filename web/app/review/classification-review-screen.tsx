@@ -22,8 +22,11 @@ type Props = {
 
 const PAGE_SIZE = 50;
 
-function groupsPath(offset: number) {
-  return `/classification-review/groups?limit=${PAGE_SIZE}&offset=${offset}`;
+type Sort = "default" | "impact";
+
+function groupsPath(offset: number, sort: Sort) {
+  const base = `/classification-review/groups?limit=${PAGE_SIZE}&offset=${offset}`;
+  return sort === "impact" ? `${base}&sort=impact` : base;
 }
 
 const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
@@ -365,15 +368,16 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreProblem, setMoreProblem] = useState<string>();
+  const [sort, setSort] = useState<Sort>("default");
 
   useEffect(() => {
     let current = true;
-    request<ClassificationReviewResponse>(groupsPath(0))
+    request<ClassificationReviewResponse>(groupsPath(0, sort))
       .then((result) => { if (current) setPage(result); })
       .catch(() => { if (current) setProblem("The review queue could not be loaded."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [attempt, request]);
+  }, [attempt, request, sort]);
 
   function retry() {
     setLoading(true);
@@ -381,12 +385,21 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
     setAttempt((value) => value + 1);
   }
 
+  function changeSort(next: Sort) {
+    setLoading(true);
+    setProblem(undefined);
+    setPage(undefined);
+    setSort(next);
+  }
+
   async function loadMore() {
     if (!page) return;
     setLoadingMore(true);
     setMoreProblem(undefined);
     try {
-      const next = await request<ClassificationReviewResponse>(groupsPath(page.groups.length));
+      const next = await request<ClassificationReviewResponse>(
+        groupsPath(page.groups.length, sort),
+      );
       setPage((current) => {
         if (!current) return next;
         const seen = new Set(current.groups.map((group) => group.groupKey));
@@ -419,6 +432,18 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
           </div>
         )}
       </header>
+
+      <label className="classification-sort">
+        Sort
+        <select
+          disabled={loading}
+          onChange={(event) => changeSort(event.target.value as Sort)}
+          value={sort}
+        >
+          <option value="default">Most urgent first</option>
+          <option value="impact">Largest amount first</option>
+        </select>
+      </label>
 
       {loading && <p className="classification-state">Loading review queue…</p>}
       {!loading && problem && (

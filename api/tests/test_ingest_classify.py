@@ -10,7 +10,9 @@ Every id here is invented and no figure is a real balance.
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -31,8 +33,11 @@ from oneledger.ingest.classify import (
     Rule,
     classify_row,
     matches_pattern,
+    proposed_pattern,
     rule_matches,
 )
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 ACCOUNT = UUID("11111111-1111-1111-1111-111111111111")
 OTHER_ACCOUNT = UUID("22222222-2222-2222-2222-222222222222")
@@ -421,3 +426,13 @@ def test_money_stays_decimal_through_every_comparison() -> None:
 
     assert rule_matches(exact, row(description_clean="X", amount=Decimal("-120.0000")))
     assert not rule_matches(exact, row(description_clean="X", amount=Decimal("-120.0001")))
+
+
+def test_proposed_pattern_agrees_with_the_web_twin_on_every_shared_vector() -> None:
+    """`classify-prompt.tsx`'s `proposedPattern` and this function must always agree — Phase 2.3's
+    `GET /rules/suggestions` groups owner corrections by this function's answer, and a suggestion
+    named differently than the pattern the classify prompt would have proposed is a lie."""
+    vectors = json.loads((FIXTURES / "proposed-pattern-vectors.json").read_text())
+
+    for vector in vectors:
+        assert proposed_pattern(vector["description"]) == vector["pattern"], vector

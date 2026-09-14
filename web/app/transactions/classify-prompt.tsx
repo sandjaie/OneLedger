@@ -20,8 +20,14 @@ type Props = {
   row: TransactionRow;
 };
 
-/** Longest usable substring of this one row, never an identifier-bearing pattern. */
-function proposedPattern(description: string): string {
+/**
+ * Longest usable substring of this one row, never an identifier-bearing pattern.
+ *
+ * Exported so `__tests__/proposed-pattern.test.ts` can prove it against the same vectors as
+ * `api/oneledger/ingest/classify.py`'s `proposed_pattern` twin, which `GET /rules/suggestions`
+ * uses to group owner corrections — the two must always agree on what a rule would be named.
+ */
+export function proposedPattern(description: string): string {
   return description
     .split(/[\p{Nd}\/*#:]+/u)
     .map((part) => part.trim())

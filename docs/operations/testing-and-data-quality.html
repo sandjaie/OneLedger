@@ -689,6 +689,16 @@ an archived commitment refusing further edits, excess precision refused with no 
 forecast exclusion reason: <code>not_ledger_valued</code>, <code>no_balance_date</code>,
 <code>balance_after_as_of</code> for accounts and <code>account_closed</code>,
 <code>account_excluded</code>, <code>currency_mismatch</code> for commitments.</li>
+<li>Phase 2.3: <code>GET /rules/analytics</code> and <code>GET /rules/suggestions</code> change no transaction
+row. The live suite proves coverage counts and percentages over the anchor window, per-rule hits,
+last-hit date and disagreements for a synthetic rule, a suggestion appearing only from three or more
+owner corrections (never from two, never duplicating an active rule&#39;s exact pattern and outcome)
+with <code>affected</code>/<code>unclassified</code> equal to what <code>POST /rules/preview</code>
+reports for the same rule body, and owner/household isolation. The Python <code>proposed_pattern</code>
+twin and the web&#39;s <code>proposedPattern</code> are proven identical on one shared vectors file
+consumed by both a pytest and a vitest suite. <code>GET /classification-review/groups?sort=impact</code>
+is proven to order groups by total absolute <code>amount_base</code> then occurrence count, distinct
+from the default severity/date order.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

@@ -21,6 +21,7 @@ entry point is `classify_row`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from decimal import Decimal
 from difflib import SequenceMatcher
@@ -183,6 +184,40 @@ def matches_pattern(pattern: str, kind: PatternKind, text: str) -> bool:
     if kind == "regex":
         return re.search(pattern, text, re.IGNORECASE) is not None
     return needle in haystack
+
+
+def proposed_pattern(description: str) -> str:
+    """The Python twin of `classify-prompt.tsx`'s `proposedPattern`: the longest usable
+    substring of one row's description, never an identifier-bearing one.
+
+    Splits on runs of Unicode decimal digits (any script, matching the web's `\\p{Nd}`) and of
+    `/ * # :`, trims each piece, keeps only pieces of at least 3 characters, and returns the
+    longest — the first one seen when two tie, exactly as `Array.reduce`'s `>` does. Proven
+    identical to the web function on the shared vectors in `proposed-pattern-vectors.json`
+    (`tests/test_ingest_classify.py`, `app/transactions/__tests__/proposed-pattern.test.ts`).
+    """
+
+    def is_separator(ch: str) -> bool:
+        return ch in "/*#:" or unicodedata.category(ch) == "Nd"
+
+    parts: list[str] = []
+    current: list[str] = []
+    for ch in description:
+        if is_separator(ch):
+            if current:
+                parts.append("".join(current))
+                current = []
+        else:
+            current.append(ch)
+    if current:
+        parts.append("".join(current))
+
+    longest = ""
+    for part in parts:
+        trimmed = part.strip()
+        if len(trimmed) >= 3 and len(trimmed) > len(longest):
+            longest = trimmed
+    return longest
 
 
 def _amount_matches(rule: Rule, amount: Decimal) -> bool:

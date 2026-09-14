@@ -33,6 +33,7 @@ def candidate(**changes: object) -> ReviewCandidate:
         "account_name": "Synthetic current account",
         "description": "SYNTHETIC CORNER SHOP",
         "amount": Decimal("-12.0000"),
+        "amount_base": Decimal("-12.0000"),
         "currency": "XTS",
         "reference_raw": None,
         "country": None,
@@ -300,6 +301,43 @@ def test_group_identity_separates_account_direction_and_question() -> None:
 
     assert len(groups) == 4
     assert len({group.groupKey for group in groups}) == 4
+
+
+def test_impact_sort_orders_by_total_absolute_base_amount_then_occurrences() -> None:
+    """`sort=impact` orders by the group's total absolute `amount_base`, not by recency — the
+    opposite order from the default severity/date sort proves the two are actually different."""
+    small_but_recent = candidate(
+        description="SMALL RECENT SHOP",
+        amount=Decimal("-1.0000"),
+        amount_base=Decimal("-1.0000"),
+        booked_date=date(2026, 8, 20),
+    )
+    large_but_old = candidate(
+        description="LARGE OLD SHOP",
+        amount=Decimal("-900.0000"),
+        amount_base=Decimal("-900.0000"),
+        booked_date=date(2026, 1, 5),
+    )
+
+    default_order = build_review_groups(
+        HOUSEHOLD_ID, [small_but_recent, large_but_old], Knowledge(), category_names={}
+    )
+    impact_order = build_review_groups(
+        HOUSEHOLD_ID,
+        [small_but_recent, large_but_old],
+        Knowledge(),
+        category_names={},
+        sort="impact",
+    )
+
+    assert [group.description for group in default_order] == [
+        "SMALL RECENT SHOP",
+        "LARGE OLD SHOP",
+    ]
+    assert [group.description for group in impact_order] == [
+        "LARGE OLD SHOP",
+        "SMALL RECENT SHOP",
+    ]
 
 
 def test_classification_review_requires_an_owner_session() -> None:

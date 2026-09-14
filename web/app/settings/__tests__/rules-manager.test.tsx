@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RulesManager } from "@/app/settings/rules-manager";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { CategoryRow, RuleRow } from "@/types/api";
+import type { CategoryRow, RuleAnalytics, RuleRow, RuleSuggestion } from "@/types/api";
 
 type Request = typeof apiFetch;
 
@@ -214,6 +214,7 @@ describe("editing a rule", () => {
     const { request } = serving([rule()], {});
     const refusing = vi.fn(async (path: string, init?: RequestInit) => {
       if (path === "/rules" && (init?.method ?? "GET") === "GET") return [rule()];
+      if (path === "/rules/analytics" || path === "/rules/suggestions") return {};
       throw new ApiError(
         409,
         "this rule classified rows that are already in the ledger, and they name it as the "
@@ -268,5 +269,168 @@ describe("the unclassified pass", () => {
     await screen.findByText(/the rules decide 0 of them/);
 
     expect(screen.queryByRole("button", { name: /^Apply to/ })).toBeNull();
+  });
+});
+
+function analytics(overrides: Partial<RuleAnalytics> = {}): RuleAnalytics {
+  return {
+    coverage: {
+      totalRows: 10,
+      byClassifiedBy: {
+        user_manual: { count: 4, percent: "40.00" },
+        user_rule: { count: 3, percent: "30.00" },
+        merchant_alias: { count: 0, percent: "0.00" },
+        recurring_series: { count: 0, percent: "0.00" },
+        prior_match: { count: 0, percent: "0.00" },
+        seed_rule: { count: 0, percent: "0.00" },
+        unclassified: { count: 3, percent: "30.00" },
+        ai: { count: 0, percent: "0.00" },
+      },
+      confidenceBands: {
+        none: { count: 0, percent: "0.00" },
+        "below_0.5": { count: 1, percent: "10.00" },
+        "0.5_to_0.8": { count: 1, percent: "10.00" },
+        "above_0.8": { count: 8, percent: "80.00" },
+      },
+      reportableUncategorized: { count: 2, percent: "20.00" },
+    },
+    rules: [
+      {
+        ruleId: "rule-1",
+        name: "Synthetic groceries rule",
+        origin: "user_created",
+        hits: 5,
+        lastHitDate: "2026-08-01",
+        disagreements: 1,
+        disagreementSample: [
+          { bookedDate: "2026-07-20", description: "SYNTHETIC GROCER SHOP", amount: "-12.0000" },
+        ],
+      },
+    ],
+    topUnclassified: [{ description: "SYNTHETIC UNKNOWN VENDOR", count: 4, totalAbsAmountBase: "88.0000" }],
+    ...overrides,
+  } as RuleAnalytics;
+}
+
+function suggestion(overrides: Partial<RuleSuggestion> = {}): RuleSuggestion {
+  return {
+    pattern: "COFFEEHOUSE",
+    direction: "debit",
+    categoryId: "cat-dining",
+    categoryName: "Food & Dining",
+    txnType: "expense",
+    evidenceRows: 3,
+    affected: 4,
+    unclassified: 1,
+    ...overrides,
+  };
+}
+
+describe("coverage and analytics", () => {
+  it("renders server figures for coverage, rule hits and top unclassified descriptions", async () => {
+    const { request } = serving([], {
+      "/rules/analytics": analytics(),
+      "/rules/suggestions": { suggestions: [] },
+    });
+    mount(request);
+
+    const region = await screen.findByRole("region", { name: "Coverage and analytics" });
+    expect(within(region).getByText("10 rows counted.")).toBeTruthy();
+    expect(within(region).getByText("40.00%")).toBeTruthy();
+    expect(within(region).getByText("Synthetic groceries rule")).toBeTruthy();
+    expect(within(region).getByText(/5 hits/)).toBeTruthy();
+    expect(within(region).getByText(/1 disagreement/)).toBeTruthy();
+    expect(within(region).getByText(/SYNTHETIC GROCER SHOP/)).toBeTruthy();
+    expect(within(region).getByText(/SYNTHETIC UNKNOWN VENDOR/)).toBeTruthy();
+    expect(within(region).getByText(/2 reportable rows have no category \(20.00%\)/)).toBeTruthy();
+  });
+
+  it("shows nothing when the analytics endpoint answers with an unexpected shape", async () => {
+    const { request } = serving([], { "/rules/analytics": {}, "/rules/suggestions": {} });
+    mount(request);
+    await screen.findByText("No rules yet.");
+
+    expect(screen.queryByRole("region", { name: "Coverage and analytics" })).toBeNull();
+  });
+});
+
+describe("suggested rules", () => {
+  it("creates the suggested rule, previews past rows, and only writes on confirm", async () => {
+    const created = rule({ id: "rule-99", name: "Mark Food & Dining" });
+    const { request, calls } = serving([], {
+      "/rules/analytics": {},
+      "/rules/suggestions": { suggestions: [suggestion()] },
+      "/rules": created,
+      "/classify?ruleId=rule-99&preview=true": {
+        considered: 5,
+        changed: 4,
+        applied: false,
+        sample: [
+          {
+            id: "t1",
+            bookedDate: "2026-05-01",
+            descriptionRaw: "COFFEEHOUSE",
+            amount: "-4.5000",
+            currency: "XAE",
+            classifiedBy: "unclassified",
+          },
+        ],
+      },
+      "/classify?ruleId=rule-99": { considered: 5, changed: 4, applied: true, sample: [] },
+    });
+    mount(request);
+
+    const region = await screen.findByRole("region", { name: "Suggested rules" });
+    expect(within(region).getByText(/COFFEEHOUSE/)).toBeTruthy();
+    expect(within(region).getByText(/3 corrections · 4 affected · 1 unclassified/)).toBeTruthy();
+
+    fireEvent.click(within(region).getByRole("button", { name: "Create rule" }));
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/rules" && call.init?.method === "POST")).toBe(
+        true,
+      ),
+    );
+    const createCall = calls.find(
+      (call) => call.path === "/rules" && call.init?.method === "POST",
+    );
+    const createBody = JSON.parse(String(createCall?.init?.body));
+    expect(createBody.matchDescriptionPattern).toBe("COFFEEHOUSE");
+    expect(createBody.matchDirection).toBe("debit");
+    expect(createBody.setCategoryId).toBe("cat-dining");
+    expect(createBody.setTxnType).toBe("expense");
+
+    fireEvent.click(await within(region).findByRole("button", { name: "Check past rows" }));
+
+    expect(
+      await within(region).findByText(/4 of 5 unclassified rows would change/),
+    ).toBeTruthy();
+    expect(within(region).getByText(/2026-05-01/)).toBeTruthy();
+    // Nothing is written by the preview: the exact non-preview path was never called.
+    expect(calls.some((call) => call.path === "/classify?ruleId=rule-99")).toBe(false);
+
+    fireEvent.click(
+      within(region).getByRole("button", { name: "Apply 4 changes" }),
+    );
+
+    expect(await within(region).findByText("4 of 5 unclassified rows updated.")).toBeTruthy();
+    const previewIndex = calls.findIndex(
+      (call) => call.path === "/classify?ruleId=rule-99&preview=true",
+    );
+    const applyIndex = calls.findIndex((call) => call.path === "/classify?ruleId=rule-99");
+    expect(previewIndex).toBeGreaterThanOrEqual(0);
+    expect(applyIndex).toBeGreaterThan(previewIndex);
+  });
+
+  it("says so when there are no suggestions yet", async () => {
+    const { request } = serving([], {
+      "/rules/analytics": {},
+      "/rules/suggestions": { suggestions: [] },
+    });
+    mount(request);
+
+    const region = await screen.findByRole("region", { name: "Suggested rules" });
+    expect(
+      within(region).getByText("No suggestions yet — repeated corrections will appear here."),
+    ).toBeTruthy();
   });
 });

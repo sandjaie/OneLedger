@@ -1,0 +1,14 @@
+[
+  { "description": "GROCER MARKET 1234", "pattern": "GROCER MARKET" },
+  { "description": "AMZN*MKTP US 12/03", "pattern": "MKTP US" },
+  { "description": "REF#98765 AIRLINE TICKETS", "pattern": "AIRLINE TICKETS" },
+  { "description": "12345678901234", "pattern": "" },
+  { "description": "AB 12 CD", "pattern": "" },
+  { "description": "STARBUCKS COFFEE CO", "pattern": "STARBUCKS COFFEE CO" },
+  { "description": "  PADDED SPACE  99", "pattern": "PADDED SPACE" },
+  { "description": "SHORT 1 AA 2 LONGERWORD", "pattern": "LONGERWORD" },
+  { "description": "٥٦٧٨ GROCER ٩٠١٢", "pattern": "GROCER" },
+  { "description": "TIE ABC 999 TIE DEF", "pattern": "TIE ABC" },
+  { "description": "ATM WDL:12345:MAIN BRANCH OFFICE", "pattern": "MAIN BRANCH OFFICE" },
+  { "description": "", "pattern": "" }
+]
