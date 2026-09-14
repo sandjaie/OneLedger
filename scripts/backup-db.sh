@@ -66,8 +66,6 @@ tmp_manifest="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
 fifo_dir=
 psql_pid=
 psql_started=
-plain_docs=
-docs_extract=
 cleanup() {
   # An EXIT trap's own exit status becomes the script's, so the real one is captured first and
   # returned last — otherwise a harmless false test below (nothing left to clean up) would
@@ -79,37 +77,27 @@ cleanup() {
     wait "$psql_pid" 2>/dev/null || true
   fi
   [ -n "$fifo_dir" ] && rm -rf "$fifo_dir"
-  # An unencrypted copy of the documents archive, or its extracted contents, must never survive
-  # a failure — that would defeat "encrypted before it touches disk" as surely as publishing one.
-  [ -n "$plain_docs" ] && rm -f "$plain_docs"
-  [ -n "$docs_extract" ] && rm -rf "$docs_extract"
   return "$status"
 }
 trap cleanup EXIT
 
-# The documents archive, and the two structural facts the manifest records about it, computed
-# from that same archive's own contents rather than a second, separate directory listing — a
-# plain file count and the SHA-256 of the sorted list of each file's own SHA-256 (order-
-# independent, so it does not depend on filesystem traversal order, and a fixed value — the
-# empty-input hash — when there are no documents yet). The tar is built once, unencrypted, into a
-# temp file; the count and hash are read back from exactly what that tar holds; only then is it
-# encrypted and the plaintext copy removed — so the manifest and the archive can never disagree
-# about what is in it. They can still disagree about what is in DOCUMENTS_DIR at the moment the
-# database snapshot below is taken a few lines later: reading the documents and taking the
-# snapshot are not one atomic action, so a document added or removed in that narrow window is
-# reflected in at most one of the two.
-plain_docs="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
-tar -C "$DOCUMENTS_DIR" -cf "$plain_docs" .
-docs_extract="$(mktemp -d "${TMPDIR:-/tmp}/oneledger-backup-docs.XXXXXXXX")"
-tar -xf "$plain_docs" -C "$docs_extract"
-docs_count="$(find "$docs_extract" -type f | wc -l | tr -d ' ')"
-docs_hash="$(find "$docs_extract" -type f -exec sha256sum {} + 2>/dev/null |
+# The documents archive and the two structural facts the manifest records about it: a plain file
+# count and the SHA-256 of the sorted list of each file's own SHA-256 — order-independent, so it
+# does not depend on filesystem traversal order, and a fixed value (the empty-input hash) when
+# there are no documents yet. Counted straight from DOCUMENTS_DIR, not from the archive: `tar`
+# is piped directly into `openssl` below with no unencrypted copy ever written to disk (§6/§9 —
+# a plaintext tar surviving a SIGKILL or `docker compose stop` mid-run would be exactly the
+# violation this rule exists to prevent), so there is no archive file to count or hash from
+# instead. This does mean the count/hash and the archive are two independent reads of the same
+# directory rather than one — a document added or removed between them, or before the database
+# snapshot a few lines below is taken, is reflected in at most one of the manifest, the archive
+# and the dump. Accepted: closing that fully would need a second unencrypted pass, which is the
+# exposure being avoided in the first place.
+docs_count="$(find "$DOCUMENTS_DIR" -type f | wc -l | tr -d ' ')"
+docs_hash="$(find "$DOCUMENTS_DIR" -type f -exec sha256sum {} + 2>/dev/null |
   awk '{print $1}' | sort | sha256sum | awk '{print $1}')"
-rm -rf "$docs_extract"
-docs_extract=
-openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -in "$plain_docs" -out "$tmp_docs"
-rm -f "$plain_docs"
-plain_docs=
+tar -C "$DOCUMENTS_DIR" -cf - . |
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp_docs"
 
 # The REPEATABLE READ session: a long-lived psql process so its transaction — and the snapshot
 # it exports — stays open across the `pg_dump` call below, which is a separate process this

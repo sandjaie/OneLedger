@@ -10,6 +10,7 @@ test_backup_drill_live.py; this file is only about the schedule and the retentio
 
 import os
 import shutil
+import signal
 import subprocess
 import time
 from datetime import UTC, datetime, timedelta
@@ -240,3 +241,48 @@ def test_a_hand_run_in_a_scratch_shell_names_its_dump_after_that_project(tree: P
     taken = names(tree)
     assert len(taken) == 3
     assert all(name.startswith("oneledger-verify-") for name in taken)
+
+
+def test_a_killed_run_never_leaves_an_unencrypted_documents_archive(tree: Path) -> None:
+    """OL-005 regression: the documents archive must be encrypted as it is written, never
+    written to disk first and encrypted after (security-and-privacy.html §6/§9 — a plaintext
+    tar surviving a SIGKILL or `docker compose stop` mid-run is exactly the violation "encrypted
+    before it touches disk" exists to prevent). `tar` is piped straight into a (here, faked and
+    deliberately slow) `openssl`, so killing the whole process group mid-run must find nothing
+    with a tar header — `ustar` at byte offset 257 — anywhere `backups/` holds, complete or
+    partial, and no stray plaintext temp file either."""
+    (tree / "documents" / "statement.pdf").write_bytes(b"synthetic statement bytes " * 1000)
+    openssl = tree / "bin" / "openssl"
+    openssl.write_text("#!/bin/sh\nsleep 30\n")
+    openssl.chmod(0o755)
+    env = {
+        "PATH": f"{tree / 'bin'}:{os.environ['PATH']}",
+        "BACKUP_PASSPHRASE": PASSPHRASE,
+        "DATABASE_URL": "postgresql://synthetic.invalid/none",
+        "DOCUMENTS_DIR": str(tree / "documents"),
+    }
+
+    process = subprocess.Popen(
+        ["bash", str(tree / "scripts" / "backup-db.sh")],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        time.sleep(1)  # long enough to be blocked inside the faked, sleeping openssl
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait(timeout=5)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+    # iterdir, not glob("*") — the temp files mktemp creates start with a dot, and glob's "*"
+    # does not match those.
+    checked = 0
+    for path in (tree / "backups").iterdir():
+        if path.is_file():
+            checked += 1
+            assert path.read_bytes()[257:262] != b"ustar", f"{path.name} holds a plaintext tar"
+    assert checked >= 1, "expected at least the empty temp file openssl was writing into"
