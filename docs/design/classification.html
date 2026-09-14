@@ -889,6 +889,20 @@ returns nothing instead.</p>
 <p>Measurement: <strong>Settings › Rules</strong> reports coverage, rule hit counts, override counts and the top
 unclassified descriptions by frequency — which is also the
 best list of rules worth writing next.</p>
+<p>Definitions (<code>GET /rules/analytics</code>, Phase 2.3): a <strong>hit</strong> is a row whose stored
+<code>classified_by</code> is <code>user_rule</code> or <code>seed_rule</code> and whose <code>classification_rule_id</code>
+names the rule. A <strong>disagreement</strong> is a row for which the rule is the first match by
+priority within its own origin group — the same <code>_first_matching</code> evaluation
+<code>classify_row</code> itself calls, over the household's user rules or seed rules exactly as the
+cascade separates them — whose stored category or transaction type differs from what the rule
+would set, and whose stored <code>classification_rule_id</code> names a different rule (or none). A
+rule silent on a field never disputes it: disagreement is judged only on the fields the rule
+actually decides. The four <strong>confidence bands</strong> are <code>none</code> (no stored confidence),
+below 0.5, 0.5 through 0.8 and above 0.8 — the same threshold <code>PRE_TICK_THRESHOLD</code> fixes.
+Repeated owner corrections that share a proposed pattern, direction, category and transaction
+type — at least three, and only where no active rule already produces that outcome — surface as
+a <strong>suggested rule</strong> (<code>GET /rules/suggestions</code>) the owner may create and, separately,
+apply to past rows.</p>
 <hr>
 <h2 id="8-what-phase-53-would-add">8. What Phase 5.3 would add</h2>
 <p>Recorded so the boundary stays clear, not as a commitment.</p>

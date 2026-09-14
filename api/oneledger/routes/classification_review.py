@@ -85,6 +85,7 @@ class ReviewCandidate:
     account_name: str
     description: str
     amount: Decimal
+    amount_base: Decimal
     currency: str
     reference_raw: str | None
     country: str | None
@@ -157,6 +158,7 @@ class _GroupAccumulator:
     occurrences: int
     first_date: date
     last_date: date
+    total_abs_amount_base: Decimal
 
 
 def _question(row: ReviewCandidate, answer: Classification) -> ReviewReason | None:
@@ -235,6 +237,7 @@ def build_review_groups(
     knowledge: Knowledge,
     *,
     category_names: dict[UUID, str],
+    sort: Literal["default", "impact"] = "default",
 ) -> list[ClassificationReviewGroup]:
     """Resolve rows exactly as import does, then group identical unanswered questions."""
     grouped: dict[tuple[object, ...], _GroupAccumulator] = {}
@@ -254,50 +257,55 @@ def build_review_groups(
                 occurrences=1,
                 first_date=row.booked_date,
                 last_date=row.booked_date,
+                total_abs_amount_base=abs(row.amount_base),
             )
             continue
         existing.occurrences += 1
         existing.first_date = min(existing.first_date, row.booked_date)
         existing.last_date = max(existing.last_date, row.booked_date)
+        existing.total_abs_amount_base += abs(row.amount_base)
         if len(existing.transaction_ids) < MAX_GROUP_TRANSACTION_IDS:
             existing.transaction_ids.append(row.transaction_id)
 
-    result: list[ClassificationReviewGroup] = []
+    result: list[tuple[_GroupAccumulator, ClassificationReviewGroup]] = []
     for identity, group in grouped.items():
         row, answer = group.row, group.answer
         result.append(
-            ClassificationReviewGroup(
-                groupKey=_opaque_key(identity),
-                reason=group.reason,
-                explanation=EXPLANATIONS[group.reason],
-                accountId=row.account_id,
-                accountName=row.account_name,
-                direction="debit" if row.amount < 0 else "credit",
-                description=_DESCRIPTION_REDACTOR(row.description),
-                occurrences=group.occurrences,
-                firstBookedDate=group.first_date,
-                lastBookedDate=group.last_date,
-                transactionIds=group.transaction_ids,
-                transactionIdsTruncated=group.occurrences > len(group.transaction_ids),
-                currentCategoryId=row.category_id,
-                currentCategoryName=row.category_name,
-                currentTxnType=row.txn_type,
-                currentPaymentMethod=row.payment_method,
-                currentClassifiedBy=row.classified_by,
-                proposedCategoryId=answer.category_id,
-                proposedCategoryName=(
-                    category_names.get(answer.category_id)
-                    if answer.category_id is not None
-                    else None
+            (
+                group,
+                ClassificationReviewGroup(
+                    groupKey=_opaque_key(identity),
+                    reason=group.reason,
+                    explanation=EXPLANATIONS[group.reason],
+                    accountId=row.account_id,
+                    accountName=row.account_name,
+                    direction="debit" if row.amount < 0 else "credit",
+                    description=_DESCRIPTION_REDACTOR(row.description),
+                    occurrences=group.occurrences,
+                    firstBookedDate=group.first_date,
+                    lastBookedDate=group.last_date,
+                    transactionIds=group.transaction_ids,
+                    transactionIdsTruncated=group.occurrences > len(group.transaction_ids),
+                    currentCategoryId=row.category_id,
+                    currentCategoryName=row.category_name,
+                    currentTxnType=row.txn_type,
+                    currentPaymentMethod=row.payment_method,
+                    currentClassifiedBy=row.classified_by,
+                    proposedCategoryId=answer.category_id,
+                    proposedCategoryName=(
+                        category_names.get(answer.category_id)
+                        if answer.category_id is not None
+                        else None
+                    ),
+                    proposedMerchantId=answer.merchant_id,
+                    proposedTxnType=answer.txn_type,
+                    proposedPaymentMethod=answer.payment_method,
+                    proposedClassifiedBy=answer.classified_by,
+                    proposedConfidence=f"{answer.classification_confidence:.3f}",
+                    knowledgeVersionId=answer.knowledge_version_id,
+                    rememberable=group.reason
+                    not in {"conflicting_knowledge", "conflicting_prior", "recognized_pending"},
                 ),
-                proposedMerchantId=answer.merchant_id,
-                proposedTxnType=answer.txn_type,
-                proposedPaymentMethod=answer.payment_method,
-                proposedClassifiedBy=answer.classified_by,
-                proposedConfidence=f"{answer.classification_confidence:.3f}",
-                knowledgeVersionId=answer.knowledge_version_id,
-                rememberable=group.reason
-                not in {"conflicting_knowledge", "conflicting_prior", "recognized_pending"},
             )
         )
     severity = {
@@ -309,15 +317,22 @@ def build_review_groups(
         "recognized_pending": 5,
         "unclassified": 6,
     }
-    return sorted(
-        result,
-        key=lambda group: (
-            severity[group.reason],
-            -group.lastBookedDate.toordinal(),
-            group.description.casefold(),
-            group.groupKey,
-        ),
-    )
+    if sort == "impact":
+        ordered = sorted(
+            result,
+            key=lambda item: (-item[0].total_abs_amount_base, -item[0].occurrences),
+        )
+    else:
+        ordered = sorted(
+            result,
+            key=lambda item: (
+                severity[item[1].reason],
+                -item[1].lastBookedDate.toordinal(),
+                item[1].description.casefold(),
+                item[1].groupKey,
+            ),
+        )
+    return [group for _, group in ordered]
 
 
 def _row(values: tuple[Any, ...]) -> ReviewCandidate:
@@ -328,20 +343,21 @@ def _row(values: tuple[Any, ...]) -> ReviewCandidate:
         account_name=values[3],
         description=values[4],
         amount=values[5],
-        currency=str(values[6]).strip(),
-        reference_raw=values[7],
-        country=values[8],
-        txn_type=values[9],
-        category_id=values[10],
-        category_name=values[11],
-        merchant_id=values[12],
-        payment_method=values[13],
-        is_excluded=values[14],
-        classified_by=values[15],
-        classification_confidence=values[16],
-        is_reviewed=values[17],
-        transfer_id=values[18],
-        is_split_parent=values[19],
+        amount_base=values[6],
+        currency=str(values[7]).strip(),
+        reference_raw=values[8],
+        country=values[9],
+        txn_type=values[10],
+        category_id=values[11],
+        category_name=values[12],
+        merchant_id=values[13],
+        payment_method=values[14],
+        is_excluded=values[15],
+        classified_by=values[16],
+        classification_confidence=values[17],
+        is_reviewed=values[18],
+        transfer_id=values[19],
+        is_split_parent=values[20],
     )
 
 
@@ -352,6 +368,7 @@ def review_groups(
     dateTo: Annotated[date | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
+    sort: Annotated[Literal["default", "impact"], Query()] = "default",
 ) -> ClassificationReviewResponse:
     if dateFrom is not None and dateTo is not None and dateFrom > dateTo:
         raise HTTPException(status_code=422, detail="dateFrom must not be after dateTo")
@@ -374,7 +391,8 @@ def review_groups(
         knowledge = load_knowledge(cur, owner.household_id)
         cur.execute(
             f"""SELECT t.id, t.booked_date, t.account_id, a.name,
-                       COALESCE(t.description_clean, t.description_raw), t.amount, t.currency,
+                       COALESCE(t.description_clean, t.description_raw), t.amount, t.amount_base,
+                       t.currency,
                        t.reference_raw, t.country, t.txn_type::text, t.category_id, c.name,
                        t.merchant_id, t.payment_method::text, t.is_excluded,
                        t.classified_by::text,
@@ -397,7 +415,9 @@ def review_groups(
         )
         category_names = {row[0]: row[1] for row in cur.fetchall()}
 
-    groups = build_review_groups(owner.household_id, rows, knowledge, category_names=category_names)
+    groups = build_review_groups(
+        owner.household_id, rows, knowledge, category_names=category_names, sort=sort
+    )
     return ClassificationReviewResponse(
         groups=groups[offset : offset + limit],
         totalGroups=len(groups),

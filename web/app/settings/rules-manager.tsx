@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
-import type { CategoryRow, RuleRow } from "@/types/api";
+import type { CategoryRow, RuleAnalytics, RuleRow, RuleSuggestion, RuleSuggestionsResponse } from "@/types/api";
 
 type Props = {
   categories: Array<CategoryRow>;
@@ -85,6 +85,273 @@ function body(draft: Draft) {
     matchAmountMax: draft.matchAmountMax || null,
     setCategoryId: draft.setCategoryId || null,
   };
+}
+
+const CLASSIFIED_BY_LABELS: Record<string, string> = {
+  user_manual: "Set by hand",
+  user_rule: "Your rules",
+  merchant_alias: "Known merchants",
+  recurring_series: "Recurring series",
+  prior_match: "Matched history",
+  seed_rule: "Starter rules",
+  unclassified: "Unclassified",
+  ai: "AI",
+};
+
+/**
+ * Coverage, per-rule hits/disagreements and the top unclassified descriptions — server strings
+ * and server figures only, nothing computed in the browser. Loads its own data and renders
+ * nothing until it has the shape it expects, so a caller that has not wired `/rules/analytics`
+ * into its mock (most existing tests) sees no panel rather than a crash.
+ */
+function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
+  const [analytics, setAnalytics] = useState<RuleAnalytics>();
+  const [problem, setProblem] = useState<string>();
+
+  useEffect(() => {
+    let current = true;
+    void request<RuleAnalytics>("/rules/analytics")
+      .then((result) => { if (current) setAnalytics(result); })
+      .catch((error: unknown) => {
+        if (current) setProblem(errorText(error, "Coverage could not be loaded."));
+      });
+    return () => { current = false; };
+  }, [request]);
+
+  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
+  if (!analytics?.coverage) return null;
+
+  const { coverage, rules, topUnclassified } = analytics;
+
+  return (
+    <section aria-labelledby="rules-analytics-title" className="settings-block">
+      <h2 id="rules-analytics-title">Coverage and analytics</h2>
+      <p className="lede">{coverage.totalRows} rows counted.</p>
+
+      <table className="rules-analytics-table">
+        <caption>By classified by</caption>
+        <tbody>
+          {Object.entries(coverage.byClassifiedBy).map(([status, figure]) => (
+            <tr key={status}>
+              <td>{CLASSIFIED_BY_LABELS[status] ?? status}</td>
+              <td>{figure.count}</td>
+              <td>{figure.percent === null ? "—" : `${figure.percent}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <table className="rules-analytics-table">
+        <caption>By confidence</caption>
+        <tbody>
+          {Object.entries(coverage.confidenceBands).map(([band, figure]) => (
+            <tr key={band}>
+              <td>{band}</td>
+              <td>{figure.count}</td>
+              <td>{figure.percent === null ? "—" : `${figure.percent}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <p>
+        {coverage.reportableUncategorized.count} reportable{" "}
+        {coverage.reportableUncategorized.count === 1 ? "row has" : "rows have"} no category
+        {coverage.reportableUncategorized.percent === null
+          ? ""
+          : ` (${coverage.reportableUncategorized.percent}%)`}.
+      </p>
+
+      <h3>Rule hits and disagreements</h3>
+      {rules.length === 0 && <p className="lede">No active rules yet.</p>}
+      {rules.length > 0 && (
+        <ul className="rules-analytics-hits">
+          {rules.map((rule) => (
+            <li key={rule.ruleId}>
+              <span className="rule-name">{rule.name ?? "Unnamed rule"}</span>
+              <span>{rule.hits} {rule.hits === 1 ? "hit" : "hits"}</span>
+              <span>{rule.lastHitDate ? `last hit ${rule.lastHitDate}` : "never hit"}</span>
+              <span>{rule.disagreements} {rule.disagreements === 1 ? "disagreement" : "disagreements"}</span>
+              {rule.disagreementSample.length > 0 && (
+                <ul className="rule-sample">
+                  {rule.disagreementSample.map((sample) => (
+                    <li key={`${sample.bookedDate}-${sample.description}-${sample.amount}`}>
+                      {sample.bookedDate} · {sample.description} · {sample.amount}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>Top unclassified descriptions</h3>
+      {topUnclassified.length === 0 && <p className="lede">Nothing unclassified.</p>}
+      {topUnclassified.length > 0 && (
+        <ul className="rules-analytics-top">
+          {topUnclassified.map((row) => (
+            <li key={row.description}>
+              {row.description} · {row.count} {row.count === 1 ? "row" : "rows"} · {row.totalAbsAmountBase}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+type ClassifyPass = { considered: number; changed: number };
+
+/** One suggestion: create the future-only rule, then optionally apply it to past rows.
+ *
+ * ponytail: "apply to past rows" reuses the existing, already-guarded `/classify?ruleId=`
+ * cascade pass (preview, then apply) rather than the classification-runs preview/apply flow —
+ * that flow needs an evidenced `knowledgeVersionId`, which a plain classification rule has no
+ * way to carry. `/classify?ruleId=` never touches a row that already has an answer, which is
+ * the same safety property; it only reaches currently-unclassified rows, not every row the rule
+ * matches, and that is the deliberate scope of this simpler path.
+ */
+function SuggestedRuleCard({
+  categories,
+  onRuleCreated,
+  request,
+  suggestion,
+}: {
+  categories: Array<CategoryRow>;
+  onRuleCreated: () => void;
+  request: typeof apiFetch;
+  suggestion: RuleSuggestion;
+}) {
+  const [rule, setRule] = useState<RuleRow>();
+  const [applied, setApplied] = useState<ClassifyPass>();
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string>();
+
+  const categoryName =
+    categories.find((category) => category.id === suggestion.categoryId)?.name ??
+    suggestion.categoryName ??
+    "Uncategorised";
+
+  async function create() {
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const saved = await request<RuleRow>("/rules", {
+        method: "POST",
+        body: JSON.stringify({
+          name: `Mark ${categoryName}`,
+          priority: 100,
+          isActive: true,
+          matchDescriptionPattern: suggestion.pattern,
+          matchPatternKind: "contains",
+          matchDirection: suggestion.direction,
+          setCategoryId: suggestion.categoryId,
+          setTxnType: suggestion.txnType,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      setRule(saved);
+      onRuleCreated();
+    } catch (error) {
+      setProblem(errorText(error, "This rule was not saved. Retry."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyToPastRows() {
+    if (!rule) return;
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const result = await request<ClassifyPass>(`/classify?ruleId=${rule.id}`, {
+        method: "POST",
+      });
+      setApplied(result);
+    } catch (error) {
+      setProblem(errorText(error, "Past rows were not updated. Retry."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="rule-suggestion">
+      <span className="rule-describes">
+        narration contains “{suggestion.pattern}”, {suggestion.direction} → {categoryName}
+      </span>
+      <span className="section-label">
+        {suggestion.evidenceRows} corrections · {suggestion.affected} affected ·{" "}
+        {suggestion.unclassified} unclassified
+      </span>
+      {problem && <p className="inline-alert" role="alert">{problem}</p>}
+      {!rule && (
+        <button disabled={busy} onClick={() => void create()} type="button">
+          Create rule
+        </button>
+      )}
+      {rule && !applied && (
+        <button disabled={busy} onClick={() => void applyToPastRows()} type="button">
+          Apply to past rows
+        </button>
+      )}
+      {applied && (
+        <p role="status">
+          {applied.changed} of {applied.considered} unclassified {applied.considered === 1 ? "row" : "rows"} updated.
+        </p>
+      )}
+    </li>
+  );
+}
+
+function SuggestedRules({
+  categories,
+  onRuleCreated,
+  request,
+}: {
+  categories: Array<CategoryRow>;
+  onRuleCreated: () => void;
+  request: typeof apiFetch;
+}) {
+  const [data, setData] = useState<RuleSuggestionsResponse>();
+  const [problem, setProblem] = useState<string>();
+
+  useEffect(() => {
+    let current = true;
+    void request<RuleSuggestionsResponse>("/rules/suggestions")
+      .then((result) => { if (current) setData(result); })
+      .catch((error: unknown) => {
+        if (current) setProblem(errorText(error, "Suggested rules could not be loaded."));
+      });
+    return () => { current = false; };
+  }, [request]);
+
+  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
+  if (!data?.suggestions) return null;
+
+  return (
+    <section aria-labelledby="rules-suggestions-title" className="settings-block">
+      <h2 id="rules-suggestions-title">Suggested rules</h2>
+      <p className="lede">Derived only from your own corrections. Nothing here is created or applied automatically.</p>
+      {data.suggestions.length === 0 && (
+        <p className="lede">No suggestions yet — repeated corrections will appear here.</p>
+      )}
+      {data.suggestions.length > 0 && (
+        <ul className="rule-suggestions-list">
+          {data.suggestions.map((suggestion) => (
+            <SuggestedRuleCard
+              categories={categories}
+              key={`${suggestion.pattern}-${suggestion.direction}-${suggestion.categoryId}-${suggestion.txnType}`}
+              onRuleCreated={onRuleCreated}
+              request={request}
+              suggestion={suggestion}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 /**
@@ -376,6 +643,16 @@ export function RulesManager({ categories, request, onChanged }: Props) {
           </button>
         )}
       </div>
+
+      <RuleAnalyticsPanel request={request} />
+      <SuggestedRules
+        categories={categories}
+        onRuleCreated={() => {
+          void reload();
+          onChanged();
+        }}
+        request={request}
+      />
     </section>
   );
 }

@@ -1855,6 +1855,20 @@ export type ConfirmedLotAllocation = {
 };
 
 /**
+ * CountAndPercent
+ */
+export type CountAndPercent = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Percent
+     */
+    percent: string | null;
+};
+
+/**
  * CoverageCounts
  */
 export type CoverageCounts = {
@@ -2202,6 +2216,24 @@ export type DescriptionReparseResult = {
      * Rowsqueuedforreview
      */
     rowsQueuedForReview: number;
+};
+
+/**
+ * DisagreementSample
+ */
+export type DisagreementSample = {
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Amount
+     */
+    amount: string;
 };
 
 /**
@@ -5816,6 +5848,44 @@ export type RowDecision = {
 };
 
 /**
+ * RuleAnalytics
+ */
+export type RuleAnalytics = {
+    coverage: RuleAnalyticsCoverage;
+    /**
+     * Rules
+     */
+    rules: Array<RuleHit>;
+    /**
+     * Topunclassified
+     */
+    topUnclassified: Array<TopUnclassifiedDescription>;
+};
+
+/**
+ * RuleAnalyticsCoverage
+ */
+export type RuleAnalyticsCoverage = {
+    /**
+     * Totalrows
+     */
+    totalRows: number;
+    /**
+     * Byclassifiedby
+     */
+    byClassifiedBy: {
+        [key: string]: CountAndPercent;
+    };
+    /**
+     * Confidencebands
+     */
+    confidenceBands: {
+        [key: string]: CountAndPercent;
+    };
+    reportableUncategorized: CountAndPercent;
+};
+
+/**
  * RuleBody
  *
  * Everything a rule can say. Sent in full on create and on edit, as `AccountUpdate` is:
@@ -5906,6 +5976,40 @@ export type RuleBody = {
      * Setcounterpartyaccountid
      */
     setCounterpartyAccountId?: string | null;
+};
+
+/**
+ * RuleHit
+ */
+export type RuleHit = {
+    /**
+     * Ruleid
+     */
+    ruleId: string;
+    /**
+     * Name
+     */
+    name: string | null;
+    /**
+     * Origin
+     */
+    origin: string;
+    /**
+     * Hits
+     */
+    hits: number;
+    /**
+     * Lasthitdate
+     */
+    lastHitDate: string | null;
+    /**
+     * Disagreements
+     */
+    disagreements: number;
+    /**
+     * Disagreementsample
+     */
+    disagreementSample: Array<DisagreementSample>;
 };
 
 /**
@@ -6015,6 +6119,54 @@ export type RuleRow = {
      * Lastappliedat
      */
     lastAppliedAt: string | null;
+};
+
+/**
+ * RuleSuggestion
+ */
+export type RuleSuggestion = {
+    /**
+     * Pattern
+     */
+    pattern: string;
+    /**
+     * Direction
+     */
+    direction: 'debit' | 'credit';
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Txntype
+     */
+    txnType: string;
+    /**
+     * Evidencerows
+     */
+    evidenceRows: number;
+    /**
+     * Affected
+     */
+    affected: number;
+    /**
+     * Unclassified
+     */
+    unclassified: number;
+};
+
+/**
+ * RuleSuggestionsResponse
+ */
+export type RuleSuggestionsResponse = {
+    /**
+     * Suggestions
+     */
+    suggestions: Array<RuleSuggestion>;
 };
 
 /**
@@ -6587,6 +6739,24 @@ export type TargetResponse = {
      * Reasons
      */
     reasons: Array<ReasonResponse>;
+};
+
+/**
+ * TopUnclassifiedDescription
+ */
+export type TopUnclassifiedDescription = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Totalabsamountbase
+     */
+    totalAbsAmountBase: string;
 };
 
 /**
@@ -8001,6 +8171,10 @@ export type ReviewGroupsClassificationReviewGroupsGetData = {
          * Offset
          */
         offset?: number;
+        /**
+         * Sort
+         */
+        sort?: 'default' | 'impact';
     };
     url: '/classification-review/groups';
 };
@@ -8419,6 +8593,56 @@ export type ClassifyUnclassifiedClassifyPostResponses = {
 };
 
 export type ClassifyUnclassifiedClassifyPostResponse = ClassifyUnclassifiedClassifyPostResponses[keyof ClassifyUnclassifiedClassifyPostResponses];
+
+export type RuleAnalyticsRulesAnalyticsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/rules/analytics';
+};
+
+export type RuleAnalyticsRulesAnalyticsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RuleAnalyticsRulesAnalyticsGetError = RuleAnalyticsRulesAnalyticsGetErrors[keyof RuleAnalyticsRulesAnalyticsGetErrors];
+
+export type RuleAnalyticsRulesAnalyticsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RuleAnalytics;
+};
+
+export type RuleAnalyticsRulesAnalyticsGetResponse = RuleAnalyticsRulesAnalyticsGetResponses[keyof RuleAnalyticsRulesAnalyticsGetResponses];
+
+export type RuleSuggestionsRulesSuggestionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/rules/suggestions';
+};
+
+export type RuleSuggestionsRulesSuggestionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RuleSuggestionsRulesSuggestionsGetError = RuleSuggestionsRulesSuggestionsGetErrors[keyof RuleSuggestionsRulesSuggestionsGetErrors];
+
+export type RuleSuggestionsRulesSuggestionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RuleSuggestionsResponse;
+};
+
+export type RuleSuggestionsRulesSuggestionsGetResponse = RuleSuggestionsRulesSuggestionsGetResponses[keyof RuleSuggestionsRulesSuggestionsGetResponses];
 
 export type ListCandidatesTransfersCandidatesGetData = {
     body?: never;

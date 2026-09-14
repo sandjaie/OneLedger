@@ -12,6 +12,9 @@ cascade is re-run only when the owner asks for it, by the route 3a3b adds.
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, ClassVar, Literal
 from uuid import UUID
@@ -21,12 +24,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
+from ..coverage import HISTORY_ANCHOR
 from ..db import connect
 from ..ingest.classify import (
     Candidate,
     PatternKind,
     Rule,
+    _first_matching,
     classify_row,
+    proposed_pattern,
     rule_matches,
     validate_pattern,
 )
@@ -649,3 +655,395 @@ def classify_unclassified(
         sample=[_matched_row(row) for row, _ in changed[:SAMPLE_ROWS]],
         applied=not preview,
     )
+
+
+# ---------------------------------------------------------------------------------------
+# Phase 2.3: read-only measurement over what the cascade has already decided (coverage, per-rule
+# hits and disagreements, the top unclassified descriptions), and read-only suggestions of narrow
+# rules derived only from the owner's own corrections. Neither route writes a rule or a
+# transaction; every count a suggestion carries is computed the same way `POST /rules/preview`
+# already computes `affected`/`unclassified`, over the same base-table row set, so the figures a
+# suggestion shows are exactly what creating and previewing that rule would show.
+# ---------------------------------------------------------------------------------------
+
+CLASSIFIED_BY_VALUES = (
+    "user_manual",
+    "user_rule",
+    "merchant_alias",
+    "recurring_series",
+    "prior_match",
+    "seed_rule",
+    "unclassified",
+    "ai",
+)
+CONFIDENCE_BANDS = ("none", "below_0.5", "0.5_to_0.8", "above_0.8")
+
+
+class CountAndPercent(BaseModel):
+    count: int
+    percent: str | None
+
+
+def _count_and_percent(count: int, total: int) -> CountAndPercent:
+    if total == 0:
+        return CountAndPercent(count=count, percent=None)
+    percent = (Decimal(count) * 100 / total).quantize(Decimal("0.01"))
+    return CountAndPercent(count=count, percent=str(percent))
+
+
+class RuleAnalyticsCoverage(BaseModel):
+    totalRows: int
+    byClassifiedBy: dict[str, CountAndPercent]
+    confidenceBands: dict[str, CountAndPercent]
+    reportableUncategorized: CountAndPercent
+
+
+def _coverage(cur: psycopg.Cursor[Any], household_id: UUID, today: date) -> RuleAnalyticsCoverage:
+    window = (household_id, HISTORY_ANCHOR, today)
+    cur.execute(
+        "SELECT classified_by::text, count(*) FROM v_transaction_posting"
+        " WHERE household_id = %s AND booked_date BETWEEN %s AND %s GROUP BY classified_by",
+        window,
+    )
+    by_status = dict(cur.fetchall())
+    total = sum(by_status.values())
+    cur.execute(
+        """SELECT CASE WHEN classification_confidence IS NULL THEN 'none'
+                        WHEN classification_confidence < 0.5 THEN 'below_0.5'
+                        WHEN classification_confidence < 0.8 THEN '0.5_to_0.8'
+                        ELSE 'above_0.8' END,
+                  count(*)
+             FROM v_transaction_posting
+            WHERE household_id = %s AND booked_date BETWEEN %s AND %s
+            GROUP BY 1""",
+        window,
+    )
+    by_band = dict(cur.fetchall())
+    # `v_transaction_reportable` already carries the reportable predicate (I3); reading it here
+    # is cheaper and more honest than re-deriving that predicate from `REPORT_EXCLUDING_TYPES`.
+    cur.execute(
+        "SELECT count(*) FROM v_transaction_reportable"
+        " WHERE household_id = %s AND booked_date BETWEEN %s AND %s AND category_id IS NULL",
+        window,
+    )
+    uncategorized = cur.fetchone()[0]  # type: ignore[index]
+    return RuleAnalyticsCoverage(
+        totalRows=total,
+        byClassifiedBy={
+            status: _count_and_percent(by_status.get(status, 0), total)
+            for status in CLASSIFIED_BY_VALUES
+        },
+        confidenceBands={
+            band: _count_and_percent(by_band.get(band, 0), total) for band in CONFIDENCE_BANDS
+        },
+        reportableUncategorized=_count_and_percent(uncategorized, total),
+    )
+
+
+class DisagreementSample(BaseModel):
+    bookedDate: str
+    description: str
+    amount: str
+
+
+class RuleHit(BaseModel):
+    ruleId: UUID
+    name: str | None
+    origin: str
+    hits: int
+    lastHitDate: str | None
+    disagreements: int
+    disagreementSample: list[DisagreementSample]
+
+
+ANALYTICS_ROW_COLUMNS = """id, booked_date, description_raw, description_clean, amount, currency,
+                           account_id, reference_raw, country, category_id, txn_type::text,
+                           classification_rule_id"""
+
+
+def _rule_outcome_differs(rule: Rule, category_id: UUID | None, txn_type: str | None) -> bool:
+    """Only the fields the rule actually decides count as a disagreement — a rule silent on
+    category was never claiming one, so a row that merely has some category is not a dispute."""
+    if rule.set_category_id is not None and category_id != rule.set_category_id:
+        return True
+    return rule.set_txn_type is not None and txn_type != rule.set_txn_type
+
+
+def _rule_hits(cur: psycopg.Cursor[Any], household_id: UUID) -> list[RuleHit]:
+    cur.execute(
+        f"SELECT {COLUMNS} FROM classification_rule"
+        " WHERE household_id = %s AND is_active ORDER BY priority, id",
+        (household_id,),
+    )
+    active = [rule_row(row) for row in cur.fetchall()]
+    if not active:
+        return []
+
+    knowledge = load_knowledge(cur, household_id)
+
+    cur.execute(
+        """SELECT classification_rule_id, count(*), max(booked_date)
+             FROM v_transaction_posting
+            WHERE household_id = %s AND classified_by IN ('user_rule', 'seed_rule')
+            GROUP BY classification_rule_id""",
+        (household_id,),
+    )
+    hit_stats = {row[0]: (row[1], row[2]) for row in cur.fetchall()}
+
+    cur.execute(
+        f"SELECT {ANALYTICS_ROW_COLUMNS} FROM v_transaction_posting"
+        " WHERE household_id = %s ORDER BY booked_date DESC, id",
+        (household_id,),
+    )
+    disagreement_samples: dict[UUID, list[tuple[Any, ...]]] = defaultdict(list)
+    for values in cur.fetchall():
+        (
+            _id,
+            booked_date,
+            description_raw,
+            description_clean,
+            amount,
+            currency,
+            account_id,
+            reference_raw,
+            country,
+            category_id,
+            txn_type,
+            classification_rule_id,
+        ) = values
+        candidate = Candidate(
+            account_id=account_id,
+            description_clean=description_clean or description_raw,
+            amount=amount,
+            currency=currency,
+            reference_raw=reference_raw,
+            country=country,
+        )
+        # Each rule origin only ever competes within its own group in the real cascade (user
+        # rules at step 2, seed rules at step 5) — `_first_matching` per group is what the
+        # classifier actually evaluates, so disagreements are computed the same way per group.
+        for group in (knowledge.user_rules, knowledge.seed_rules):
+            chosen = _first_matching(group, candidate)
+            if (
+                chosen is not None
+                and _rule_outcome_differs(chosen, category_id, txn_type)
+                and classification_rule_id != chosen.id
+            ):
+                disagreement_samples[chosen.id].append((booked_date, description_raw, amount))
+
+    result: list[RuleHit] = []
+    for rule in active:
+        hits, last_hit = hit_stats.get(rule.id, (0, None))
+        samples = disagreement_samples.get(rule.id, [])
+        result.append(
+            RuleHit(
+                ruleId=rule.id,
+                name=rule.name,
+                origin=rule.origin,
+                hits=hits,
+                lastHitDate=last_hit.isoformat() if last_hit is not None else None,
+                disagreements=len(samples),
+                disagreementSample=[
+                    DisagreementSample(
+                        bookedDate=booked.isoformat(),
+                        description=_DESCRIPTION_REDACTOR(description),
+                        amount=str(amount),
+                    )
+                    for booked, description, amount in samples[:SAMPLE_ROWS]
+                ],
+            )
+        )
+    return result
+
+
+class TopUnclassifiedDescription(BaseModel):
+    description: str
+    count: int
+    totalAbsAmountBase: str
+
+
+def _normalise_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _top_unclassified(
+    cur: psycopg.Cursor[Any], household_id: UUID
+) -> list[TopUnclassifiedDescription]:
+    # Ordered so that, among rows a whitespace/case difference groups together, the group's
+    # displayed text is always the same one — the earliest booked row's — rather than whichever
+    # row the database happens to return first.
+    cur.execute(
+        "SELECT description_raw, description_clean, amount_base FROM v_transaction_posting"
+        " WHERE household_id = %s AND classified_by = 'unclassified'"
+        " ORDER BY booked_date, id",
+        (household_id,),
+    )
+    groups: dict[str, dict[str, Any]] = {}
+    for description_raw, description_clean, amount_base in cur.fetchall():
+        text = _normalise_whitespace(description_clean or description_raw)
+        key = text.casefold()
+        bucket = groups.setdefault(key, {"description": text, "count": 0, "total": Decimal(0)})
+        bucket["count"] += 1
+        bucket["total"] += abs(amount_base)
+    ordered = sorted(groups.values(), key=lambda g: (-g["count"], -g["total"]))
+    return [
+        TopUnclassifiedDescription(
+            description=_DESCRIPTION_REDACTOR(g["description"]),
+            count=g["count"],
+            totalAbsAmountBase=str(g["total"]),
+        )
+        for g in ordered[:SAMPLE_ROWS]
+    ]
+
+
+class RuleAnalytics(BaseModel):
+    coverage: RuleAnalyticsCoverage
+    rules: list[RuleHit]
+    topUnclassified: list[TopUnclassifiedDescription]
+
+
+@router.get("/rules/analytics")
+def rule_analytics(owner: Annotated[OwnerSession, Depends(require_owner)]) -> RuleAnalytics:
+    """Owner-only, read-only measurement of what the cascade has already decided. Nothing here
+    writes a rule or a transaction (`classification.html` §7's measurement section)."""
+    with connect() as conn, conn.cursor() as cur:
+        coverage = _coverage(cur, owner.household_id, date.today())
+        rules = _rule_hits(cur, owner.household_id)
+        top_unclassified = _top_unclassified(cur, owner.household_id)
+    return RuleAnalytics(coverage=coverage, rules=rules, topUnclassified=top_unclassified)
+
+
+class RuleSuggestion(BaseModel):
+    pattern: str
+    direction: Literal["debit", "credit"]
+    categoryId: UUID | None
+    categoryName: str | None
+    txnType: str
+    evidenceRows: int
+    affected: int
+    unclassified: int
+
+
+class RuleSuggestionsResponse(BaseModel):
+    suggestions: list[RuleSuggestion]
+
+
+def _already_covered(
+    rule: Rule,
+    pattern: str,
+    direction: Literal["debit", "credit"],
+    category_id: UUID | None,
+    txn_type: str,
+) -> bool:
+    """An active rule already produces this exact outcome for this exact pattern — the reason a
+    suggestion built from the same corrections would be redundant."""
+    return (
+        rule.match_pattern_kind == "contains"
+        and rule.match_description_pattern is not None
+        and rule.match_description_pattern.casefold() == pattern.casefold()
+        and rule.match_direction in ("any", direction)
+        and rule.set_category_id == category_id
+        and rule.set_txn_type == txn_type
+    )
+
+
+MIN_SUGGESTION_EVIDENCE = 3
+MAX_SUGGESTIONS = 20
+
+
+@router.get("/rules/suggestions")
+def rule_suggestions(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> RuleSuggestionsResponse:
+    """A suggestion is a candidate rule derived only from owner corrections the owner has not
+    already turned into a rule. Never writes a rule; creating one still goes through
+    `POST /rules`, and applying it to past rows is a separate, previewed, undoable owner step
+    through `/classification-runs` (`classification.html` §7)."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT t.description_raw, t.description_clean, t.amount, t.category_id, c.name,
+                      t.txn_type::text
+                 FROM v_transaction_reportable t
+            LEFT JOIN category c ON c.id = t.category_id
+                WHERE t.household_id = %s AND t.classified_by = 'user_manual'
+                ORDER BY t.booked_date, t.id""",
+            (owner.household_id,),
+        )
+        manual_rows = cur.fetchall()
+        knowledge = load_knowledge(cur, owner.household_id)
+        active_rules = [*knowledge.user_rules, *knowledge.seed_rules]
+
+        groups: dict[tuple[str, str, UUID | None, str], dict[str, Any]] = {}
+        for (
+            description_raw,
+            description_clean,
+            amount,
+            category_id,
+            category_name,
+            txn_type,
+        ) in manual_rows:
+            pattern = proposed_pattern(description_clean or description_raw)
+            if not pattern:
+                continue
+            direction = "debit" if amount < 0 else "credit"
+            key = (pattern.casefold(), direction, category_id, txn_type)
+            bucket = groups.setdefault(
+                key,
+                {
+                    "pattern": pattern,
+                    "direction": direction,
+                    "categoryId": category_id,
+                    "categoryName": category_name,
+                    "txnType": txn_type,
+                    "evidenceRows": 0,
+                },
+            )
+            bucket["evidenceRows"] += 1
+
+        candidates = [
+            group for group in groups.values() if group["evidenceRows"] >= MIN_SUGGESTION_EVIDENCE
+        ]
+        candidates = [
+            group
+            for group in candidates
+            if not any(
+                _already_covered(
+                    rule,
+                    group["pattern"],
+                    group["direction"],
+                    group["categoryId"],
+                    group["txnType"],
+                )
+                for rule in active_rules
+            )
+        ]
+        candidates.sort(key=lambda group: (-group["evidenceRows"], group["pattern"].casefold()))
+        candidates = candidates[:MAX_SUGGESTIONS]
+
+        rows = _candidates(cur, owner.household_id, unclassified_only=False)
+        suggestions = []
+        for group in candidates:
+            draft = Rule(
+                id=UUID(int=0),
+                priority=100,
+                origin=ORIGIN_USER,
+                match_description_pattern=group["pattern"],
+                match_pattern_kind="contains",
+                match_direction=group["direction"],
+                set_category_id=group["categoryId"],
+                set_txn_type=group["txnType"],
+            )
+            matched = [row for row in rows if rule_matches(draft, _as_candidate(row))]
+            suggestions.append(
+                RuleSuggestion(
+                    pattern=group["pattern"],
+                    direction=group["direction"],
+                    categoryId=group["categoryId"],
+                    categoryName=group["categoryName"],
+                    txnType=group["txnType"],
+                    evidenceRows=group["evidenceRows"],
+                    affected=len(matched),
+                    unclassified=sum(row[5] == "unclassified" for row in matched),
+                )
+            )
+    return RuleSuggestionsResponse(suggestions=suggestions)
