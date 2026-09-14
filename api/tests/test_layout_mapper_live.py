@@ -111,7 +111,11 @@ def _run_mapping_chain(client: TestClient, live: Fixture, pdf: bytes) -> None:  
     draft["closingBalancePattern"] = r"Closing\s*Balance\s*([0-9,.]+)"
     draft["metadataPatterns"] = {
         "institution_name": r"(Acme\s*Bank)",
-        "account_number": r"Account\s*Number\s*([0-9]+)",
+        # A real space between "Account" and "Number", unlike `\s*`: this is the shape
+        # `engine.CONTEXTUAL_SECRET` itself matches as a label, and the fix under test
+        # (`LayoutProposal.model_construct`, never re-validating the echoed draft) is proven
+        # against exactly this pattern, not a spelling that happens to dodge it.
+        "account_number": r"Account Number ([0-9]+)",
     }
 
     # Preview: the draft reconciles against the same file before anything is saved.
@@ -128,7 +132,13 @@ def _run_mapping_chain(client: TestClient, live: Fixture, pdf: bytes) -> None:  
     assert preview_body["identifies"] is True
     assert preview_body["accountNumberCaptures"] == 1
     assert preview_body["rowsExtracted"] == 2
-    assert preview_body["draft"] == draft
+    # The echo, not the draft that was saved below: "Account Number ([0-9]+)" is itself a string
+    # `engine.CONTEXTUAL_SECRET` reads as a label, so the preview redactor strips its own capture
+    # group from the echoed pattern text. Extraction still ran on the real, submitted draft — the
+    # facts above prove that — and `POST /layouts` below is given the real draft, not this echo.
+    echoed = {**draft, "metadataPatterns": {**draft["metadataPatterns"]}}
+    echoed["metadataPatterns"]["account_number"] = "Account Number [redacted]"
+    assert preview_body["draft"] == echoed
 
     # Save: the mapping becomes a real layout row.
     saved = client.post("/layouts", json=draft, headers=ORIGIN)

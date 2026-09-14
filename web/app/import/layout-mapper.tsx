@@ -219,6 +219,23 @@ export function LayoutMapper({
     && preview.identifies === true
     && preview.accountNumberCaptures === 1
     && Boolean(draft.accountType);
+  // Named in the same order Save actually checks it, so the one line shown is always the next
+  // thing standing between this draft and a save rather than a fact already fixed.
+  const saveDisabledReason = canSave
+    ? undefined
+    : previewedJson === undefined
+      ? "Preview this draft before saving."
+      : !matchesPreview
+        ? "Preview again after editing."
+        : preview === undefined || preview.reconciliation?.status !== "matched"
+          ? "The preview does not reconcile."
+          : (preview.failures ?? []).length > 0
+            ? "Resolve the rows the preview could not map."
+            : preview.identifies !== true
+              ? "This draft does not identify the file."
+              : preview.accountNumberCaptures !== 1
+                ? "The draft must capture exactly one account number."
+                : "Choose an account type.";
 
   return (
     <section className="account-proposal layout-mapper" aria-labelledby={headingId}>
@@ -516,6 +533,7 @@ export function LayoutMapper({
           type="button"
         >{saveBusy ? "Saving…" : "Save layout"}</button>
         <button className="text-action" onClick={onCancel} type="button">Cancel</button>
+        {saveDisabledReason && !saveBusy && <small>{saveDisabledReason}</small>}
       </div>
     </section>
   );

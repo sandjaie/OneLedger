@@ -717,16 +717,23 @@ def propose_layout(
             else asdict(response_draft),
             _preview_redactor(sensitive_account_capture),
         )
-        return LayoutProposal.model_validate(
-            {
-                "draft": public_draft,
-                "rows": _public_rows(rows, sensitive_account_capture),
-                "reconciliation": reconciliation,
-                "failures": failures,
-                "rowsExtracted": rows_extracted,
-                "identifies": identifies,
-                "accountNumberCaptures": account_number_captures,
-            }
+        # `model_construct`, never `model_validate`: the echoed draft is already-redacted output,
+        # not fresh input, and redaction can strip a metadata pattern's own capture group — an
+        # `Account No: (\d+)` fingerprint with a real space matches `CONTEXTUAL_SECRET`'s own
+        # label and loses its `(\d+)`, which `model_validate` would then refuse as a reserved key
+        # with no capture group. The pattern must not fail the response it was screened for, so
+        # `draft` is left as the plain dict `_redact_draft` produced: pydantic serializes it as
+        # its own JSON either way (a Pydantic serializer warning, logged and harmless, is the
+        # trade — reconstructing it as a typed model only moved the same mismatch onto its
+        # nested `columns`, for no gain).
+        return LayoutProposal.model_construct(
+            draft=public_draft,
+            rows=_public_rows(rows, sensitive_account_capture),
+            reconciliation=reconciliation,
+            failures=failures,
+            rowsExtracted=rows_extracted,
+            identifies=identifies,
+            accountNumberCaptures=account_number_captures,
         )
     except ExtractionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None

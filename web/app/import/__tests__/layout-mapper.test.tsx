@@ -91,22 +91,26 @@ describe("LayoutMapper", () => {
     );
 
     expect(saveButton().disabled).toBe(true);
+    expect(screen.getByText("Preview this draft before saving.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
     await screen.findByText(/reaches the declared closing/);
 
     // The preview matches, but no account type is chosen yet.
     expect(saveButton().disabled).toBe(true);
+    expect(screen.getByText("Choose an account type.")).toBeTruthy();
 
     // Choosing it now is itself an edit, so the preview must be run again against it.
     fireEvent.change(screen.getByLabelText("Account type (required)"), {
       target: { value: "savings" },
     });
     expect(saveButton().disabled).toBe(true);
+    expect(screen.getByText("Preview again after editing.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /^preview$/i }));
     await screen.findByText(/reaches the declared closing/);
     expect(saveButton().disabled).toBe(false);
+    expect(screen.queryByText("Preview again after editing.")).toBeNull();
   });
 
   it("disables Save again once the form is edited after a matching preview", async () => {

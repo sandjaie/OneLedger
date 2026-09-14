@@ -541,6 +541,32 @@ def test_a_reconciling_draft_preview_matches_identifies_and_captures_one_account
     assert body["rowsExtracted"] == 2
 
 
+def test_a_metadata_pattern_whose_label_matches_a_contextual_secret_still_previews() -> None:
+    """`Account No: (\\d+)` reads, as a *string*, as a label `engine.CONTEXTUAL_SECRET` also
+    matches (a real space between `Account` and `No`, unlike `reconciling_draft`'s own
+    `Account\\s*No:` pattern). Redacting the echoed draft can then strip the capture group right
+    out of the pattern text; the echoed draft is redacted output and must not be re-validated
+    against `LayoutCreate`'s reserved-key capture-group rule because of it (a 500, not a 422)."""
+    pdf = reconciling_pdf()
+    draft = reconciling_draft(metadataPatterns={"account_number": r"Account No: (\d+)"})
+    app.dependency_overrides[auth.require_owner] = owner
+    try:
+        response = TestClient(app).post(
+            "/layouts/propose",
+            files={"file": ("statement.pdf", pdf)},
+            data={"draft": json.dumps(draft)},
+            headers=ORIGIN,
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reconciliation"]["status"] == "matched"
+    assert body["identifies"] is True
+    assert body["accountNumberCaptures"] == 1
+    assert RECONCILING_ACCOUNT_NUMBER not in response.text
+
+
 def test_a_balance_pattern_that_captures_the_account_number_never_echoes_it_unredacted() -> None:
     """A misconfigured balance pattern that lands on the account number instead of a balance:
     the identifier must not reach the verdict or a failure reason unredacted (spec Task 1)."""
