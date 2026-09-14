@@ -12,9 +12,9 @@ Updated: 14 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 2.1 — complete historical coverage** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| Outcome state | **Implementation complete; owner acceptance open** — Task 1 merged via PR #207; Phases 1.6–1.8 owner acceptance also remain open | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
-| Next product action | Owner acceptance of Phases 1.6–2.1 (gates below), then one plan review for the Phase 2.2–2.4 group | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md#acceptance) |
+| Current outcome | **Phase 2.2 — wealth history and attribution** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| Outcome state | **Implementation active** — Phases 2.2–2.4 planned together and reviewed once on 14 Sep 2026 | [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
+| Next product action | Deliver Phase 2.2 Task 1 — month-end positions and wealth history | [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md#task-1--month-end-positions-and-wealth-history) |
 | Current implementation task | Phase 1 hygiene on `chore/phase-1-hygiene`; no feature task is in progress | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
 
 ## Canonical phase status
@@ -35,9 +35,9 @@ Updated: 14 September 2026.
 | 1.7 — salary and a thin forecast | **Implementation complete; owner acceptance open** | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md) · [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md) |
 | 1.8 — layout mapper and documents | **Implementation complete; owner acceptance open** | [Phase 1.8 specification](specs/2026-09-14-phase-1-8-layout-mapper-documents.md) · [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
 | 2.1 — complete historical coverage | **Implementation complete; owner acceptance open** | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md) · [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
-| 2.2 — wealth history and attribution | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| 2.3 — classification learning and review depth | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| 2.4 — data quality and recovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| 2.2 — wealth history and attribution | **In progress** | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md) · [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
+| 2.3 — classification learning and review depth | **Planned** | [Phase 2.3 plan](plans/2026-09-14-phase-2-3-classification-learning.md) |
+| 2.4 — data quality and recovery | **Planned** | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
 | 3.1 — commitments and actions | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.2 — cash forecast and monthly review | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.3 — goals and emergency reserve | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
