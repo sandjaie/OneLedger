@@ -580,9 +580,13 @@ JOIN   fx_rate fx
 <p>Viewing net worth as of 30 Jun 2026 uses 30 Jun 2026&#39;s rates for every account — not today&#39;s.
 The historical net-worth curve is therefore reproducible: recomputing it a year from now gives
 the same shape it gave when first drawn.</p>
-<p><strong>Materialisation:</strong> month-end snapshots are stored in <code>net_worth_snapshot</code> with the rates used,
-so the trend chart doesn&#39;t recompute from the full ledger each time and so the figure shown last
-month is provably the figure that was shown last month.</p>
+<p><strong>Materialisation (Phase 2.2 Task 1, implemented):</strong> month-end positions are stored in
+<code>month_end_position</code> — one row per counted account or holding, not one row per household — with
+each account&#39;s own native value, evidence date and translation rates, so wealth history doesn&#39;t
+recompute from the full ledger each time and so the figure shown last month is provably the
+figure that was shown last month. <code>wealth_history.refresh</code> replaces a household&#39;s rows in one
+transaction; <code>GET /wealth-history</code> and <code>GET /wealth-history/{monthEnd}</code> only ever read what
+the last refresh stored (<a href="../superpowers/schema.md">schema.md</a> <code>V46</code>).</p>
 <hr>
 <h2 id="7-net-worth-attribution-the-decomposition">7. Net-worth attribution: the decomposition</h2>
 <p>The &quot;why did it change&quot; breakdown, done in a way that reconciles exactly rather than

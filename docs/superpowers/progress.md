@@ -12,10 +12,10 @@ Updated: 14 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 2.1 — complete historical coverage** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| Outcome state | **Implementation complete; owner acceptance open** — Task 1 merged via PR #207; Phases 1.6–1.8 owner acceptance also remain open | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
-| Next product action | Owner acceptance of Phases 1.6–2.1 (gates below), then one plan review for the Phase 2.2–2.4 group | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md#acceptance) |
-| Current implementation task | Phase 1 hygiene on `chore/phase-1-hygiene`; no feature task is in progress | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
+| Current outcome | **Phase 2.2 — wealth history and attribution** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| Outcome state | **Implementation active** — Phases 2.2–2.4 planned together and reviewed once on 14 Sep 2026 | [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
+| Next product action | Deliver Phase 2.2 Task 1 — month-end positions and wealth history | [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md#task-1--month-end-positions-and-wealth-history) |
+| Current implementation task | Phase 2.2 Task 1 delivered on `feature/p2-2a-month-end-positions`, reviewed once with one repair round applied (not yet pushed or merged); Task 2 (attribution) is next | [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md#task-2--monthly-attribution-waterfall) |
 
 ## Canonical phase status
 
@@ -35,9 +35,9 @@ Updated: 14 September 2026.
 | 1.7 — salary and a thin forecast | **Implementation complete; owner acceptance open** | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md) · [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md) |
 | 1.8 — layout mapper and documents | **Implementation complete; owner acceptance open** | [Phase 1.8 specification](specs/2026-09-14-phase-1-8-layout-mapper-documents.md) · [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
 | 2.1 — complete historical coverage | **Implementation complete; owner acceptance open** | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md) · [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
-| 2.2 — wealth history and attribution | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| 2.3 — classification learning and review depth | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| 2.4 — data quality and recovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| 2.2 — wealth history and attribution | **In progress** | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md) · [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
+| 2.3 — classification learning and review depth | **Planned** | [Phase 2.3 plan](plans/2026-09-14-phase-2-3-classification-learning.md) |
+| 2.4 — data quality and recovery | **Planned** | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
 | 3.1 — commitments and actions | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.2 — cash forecast and monthly review | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.3 — goals and emergency reserve | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
@@ -73,6 +73,7 @@ the pre-structure narrative lives in the [12 September delivery history](reports
 | Phase 1.7 owner acceptance | **Open** — delivered via PRs #202–#204; deviation from Task 3 on `chore/phase-1-hygiene`: unticking a deduction line also removes its label's saved rule, so it is not re-posted on a later link; run real payslips through the application and record only structural pass/fail counts | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md#acceptance) |
 | Phase 1.8 owner acceptance | **Open** — delivered via PRs #205–#206; criteria 1–3 are exercised by the automated suites; criterion 4 is owner-operated: remap the encrypted layout whose narration keeps a repeated header word, then re-read descriptions for its completed imports, recording only structural counts (rows compared, descriptions changed, rows queued) and never real narration text | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md#acceptance) |
 | Phase 2.1 owner acceptance | **Open** — delivered via PR #207; after importing all available real statements, record the structural counts per coverage status only | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md#acceptance) |
+| Phase 2.2 Task 1 | **Delivered on `feature/p2-2a-month-end-positions`, reviewed once** — `month_end_position` (V46) stores every counted account's and holding's month-end value with its evidence date, translation rates and status from 31 December 2023 through the last completed month; `wealth_history_refresh` records when a household last refreshed, so `GET /wealth-history` lists every month end through that point even where a month holds no positions; `POST /wealth-history/refresh`, `GET /wealth-history` (fails closed to null totals on an incomplete month) and `GET /wealth-history/{monthEnd}`, and a Wealth screen. Review repair round: seeded-month and secondary-currency/no-rate-holding test proof, the fail-closed contract, `wealth_history_refresh`, other-household isolation and two corrected comments. Not yet pushed or merged | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md#month-end-positions) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

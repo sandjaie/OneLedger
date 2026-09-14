@@ -21,6 +21,7 @@ import { ClassificationReviewScreen } from "@/app/review/classification-review-s
 import { PlansScreen } from "@/app/plans/plans-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
+import { WealthScreen } from "@/app/wealth/wealth-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import type {
   AccountsResponse,
@@ -38,7 +39,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -91,6 +92,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/salary") return "salary";
   if (window.location.pathname === "/plans") return "plans";
   if (window.location.pathname === "/coverage") return "coverage";
+  if (window.location.pathname === "/wealth") return "wealth";
   return "overview";
 }
 
@@ -228,6 +230,11 @@ export function Workspace({
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
           if (!current) return;
           setInventory(nextInventory);
+          setCurrencies(catalogue);
+        }
+        if (activeSection === "wealth") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
           setCurrencies(catalogue);
         }
         setState("ready");
@@ -404,6 +411,7 @@ export function Workspace({
             <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
             <Link aria-current={activeSection === "plans" ? "page" : undefined} href="/plans">Plans</Link>
             <Link aria-current={activeSection === "coverage" ? "page" : undefined} href="/coverage">Coverage</Link>
+            <Link aria-current={activeSection === "wealth" ? "page" : undefined} href="/wealth">Wealth</Link>
             <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
           </nav>
 
@@ -614,6 +622,22 @@ export function Workspace({
 
           {activeSection === "coverage" && (
             <CoverageScreen
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "wealth" && currencies && (
+            <WealthScreen
+              currencies={currencies}
+              currency={currency}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

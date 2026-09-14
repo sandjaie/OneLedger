@@ -549,7 +549,8 @@ personal finance software, and it is designed out here rather than tested for.</
             │                                      ├── investment_position_checkpoint
             │                                      ├── investment_evidence
             │                                      └── investment_review_item
-            ├── net_worth_snapshot
+            ├── month_end_position                      (V46, applied)
+            ├── wealth_history_refresh                  (V46, applied)
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               (V42, applied)
             │                 └── payslip_line_posting  (V44, applied)
@@ -1019,11 +1020,13 @@ broader planned <code>audit_log</code>, and V23 adds no mutation API or backgrou
 <p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V23</code>.</p>
 <hr>
 <h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>net_worth_snapshot</code></td><td>Month-end totals in both currencies, broken out by cash, investments, property, other assets, loans and card debt — <em>with the rates used</em>, so a past figure is reproducible.</td></tr><tr><td><code>net_worth_attribution</code></td><td>The consolidated decomposition: retained income, market appreciation, asset revaluation, FX translation, other identified external changes and <code>unexplained_base</code>. Internal investment funding and principal reduction are supporting movements that cancel their cash legs, not additive wealth creation (F03).</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>0015</code>.</p>
-<p>Method in <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7. <code>unexplained_base</code> is
-displayed in the UI (Invariant I7) — a non-trivial residual indicates missing data, which is
-exactly what the user needs to know.</p>
-<p>The unapplied attribution table in <a href="../superpowers/schema.md">schema.md</a> is an earlier reference shape. Align it with F03 during Phase 2.2 design before writing its migration; preserve applied V1–V5.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>month_end_position</code></td><td>One row per counted account, or per holding of a counted holdings-mode account, at a month end: native value, evidence date, translation rates to both reporting currencies with their dates and carried flags, translated values and a status — <em>with the rates used</em>, so a past figure is reproducible. A recomputable cache, replaced in one transaction by <code>wealth_history.refresh</code>, not edited in place.</td></tr><tr><td><code>wealth_history_refresh</code></td><td>One row per household: when it was last refreshed (<code>computed_at</code>) and through which month end (<code>computed_through</code>). <code>GET /wealth-history</code> lists every month from the history anchor through <code>computed_through</code> from this row, including a month with no <code>month_end_position</code> row, and a household with no row here has never refreshed.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V46</code>.</p>
+<p>Monthly attribution (Phase 2.2 Task 2) is computed on read from two months' stored positions
+and the window's frozen flows — it is never stored as its own table, so the earlier planned
+<code>net_worth_attribution</code> shape this section once described is retired rather than carried
+forward. Method in <a href="./multi-currency-and-fx.html">multi-currency-and-fx.html</a> §7; the
+residual is displayed in the UI (Invariant I7) — a non-trivial residual indicates missing data,
+which is exactly what the user needs to know.</p>
 <h3 id="phase-2-tables">Phase 2 tables</h3>
 <p><strong>Planning boundary:</strong> Phase 0 applies V1–V5. The table shapes below describe later
 work, not already-applied migrations. The accepted <a href="../product/finance-os.html">finance OS
@@ -1122,7 +1125,9 @@ application role.</p>
 </tr>
 <tr>
 <td>I7 — labelled derivations</td>
-<td><code>is_carried_forward</code>, <code>is_projected</code>, <code>confidence</code>, <code>unexplained_base</code> are all <code>NOT NULL</code></td>
+<td><code>is_carried_forward</code>, <code>is_projected</code> and <code>confidence</code> are all
+<code>NOT NULL</code>; the monthly attribution residual (Phase 2.2 Task 2) is computed on read and
+always shown, never stored or suppressed</td>
 </tr>
 <tr>
 <td>I8 — reconciliation</td>

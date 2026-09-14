@@ -40,6 +40,7 @@ from .routes import (
     rules,
     transactions,
     transfers,
+    wealth_history,
 )
 
 # Fail at startup, not on the first request. A service that boots without the key that signs
@@ -189,6 +190,7 @@ app.include_router(transfers.router)
 app.include_router(dashboard.router)
 app.include_router(card_cycles.router)
 app.include_router(coverage.router)
+app.include_router(wealth_history.router)
 app.include_router(description_reparse.router)
 app.include_router(documents.router)
 app.include_router(identity_backfill.router)

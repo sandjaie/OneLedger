@@ -488,6 +488,15 @@ invisible:</p>
 <td>Exactly one source in both reporting currencies</td>
 </tr>
 <tr>
+<td><strong>Month-end positions</strong></td>
+<td>Stored ledger balance against <code>assert_account_reconciles</code>&#39; own figure (including a row
+booked on the opening date); a closed account keeps the months it was open; a holding valued with
+the month-end price and rate, fully sold to zero; a snapshot carried forward and translated at
+each month&#39;s own rate; a refresh replayed twice is identical, and a failure partway through
+leaves the previous rows intact (Phase 2.2 Task 1)</td>
+<td>Exact to the stored money scale; a late failure changes nothing</td>
+</tr>
+<tr>
 <td><strong>Savings rate</strong></td>
 <td>Hand-tallied month</td>
 <td>Exact</td>

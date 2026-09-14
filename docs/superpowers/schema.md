@@ -2565,6 +2565,83 @@ the same computation for its Coverage section, so the two never drift apart.
 
 ---
 
+## `V46` (applied)
+
+### Month-end positions
+
+Phase 2.2 Task 1. `month_end_position` is a recomputable cache of wealth-history evidence, not
+history: `api/oneledger/wealth_history.py`'s `refresh` replaces a household's rows in one
+transaction, so a late failure leaves the previous refresh's rows intact. No `SECURITY DEFINER`
+write path, the same convention as `commitment` (V43) and `coverage_gap_acknowledgement` (V45):
+household-scoped RLS and explicit `household_id` filters, enforced by `require_owner` in
+`routes/wealth_history.py`.
+
+```sql
+CREATE TYPE month_end_position_status AS ENUM (
+  'available', 'missing_price', 'missing_rate', 'no_snapshot', 'before_opening');
+
+CREATE TABLE month_end_position (
+  household_id        UUID NOT NULL REFERENCES household(id),
+  month_end           DATE NOT NULL,
+  account_id          UUID NOT NULL,
+  holding_id          UUID,
+  valuation_mode      account_valuation_mode NOT NULL,
+  currency            CHAR(3) NOT NULL REFERENCES currency(code),
+  native_value        NUMERIC(20,4),
+  evidence_date       DATE,
+  rate_to_base        NUMERIC(20,10),
+  rate_to_base_date   DATE,
+  rate_to_base_carried BOOLEAN,
+  rate_to_secondary   NUMERIC(20,10),
+  rate_to_secondary_date DATE,
+  rate_to_secondary_carried BOOLEAN,
+  value_base          NUMERIC(20,4),
+  value_secondary     NUMERIC(20,4),
+  status              month_end_position_status NOT NULL,
+  computed_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fk_month_end_position_account FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE CASCADE,
+  CONSTRAINT fk_month_end_position_holding FOREIGN KEY (household_id, holding_id)
+    REFERENCES holding (household_id, id) ON DELETE CASCADE,
+  CONSTRAINT month_end_position_values_agree CHECK (
+    (status = 'available' AND native_value IS NOT NULL AND value_base IS NOT NULL
+      AND value_secondary IS NOT NULL)
+    OR (status <> 'available' AND value_base IS NULL AND value_secondary IS NULL))
+);
+CREATE UNIQUE INDEX uq_month_end_position
+  ON month_end_position (household_id, month_end, account_id, holding_id) NULLS NOT DISTINCT;
+
+CREATE TABLE wealth_history_refresh (
+  household_id     UUID PRIMARY KEY REFERENCES household(id),
+  computed_through DATE NOT NULL,
+  computed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+`household_isolation FOR ALL TO authenticated` on both tables, as on every other
+household-scoped table; no function or trigger. A position is one counted account, or one
+holding of a counted holdings-mode account, at a month end — wealth history's own lifetime
+predicate (`include_in_net_worth AND (opened_on IS NULL OR opened_on <= t) AND (closed_on IS NULL
+OR closed_on >= t)`), not the dashboard's `is_active` filter, so a closed account keeps the
+months it was open. `wealth_history.refresh(cur, household_id, base, secondary, through)`
+computes 31 December 2023 and every month end from `coverage.HISTORY_ANCHOR` through the last
+month fully completed as of `through` (`wealth_history.stored_month_ends`), reusing
+`investments.positions.read_positions` (a new `lifetime` keyword swaps its account filter for the
+predicate above, and `include_closed=True` so a fully sold holding reports zero) and
+`current_rate_pair`, and replaces the household's `month_end_position` rows and upserts its one
+`wealth_history_refresh` row in the same transaction under the household lock.
+
+`POST /wealth-history/refresh` is owner-only and returns counts. `GET /wealth-history` reads
+`wealth_history_refresh` for the household — an empty list before any refresh — then lists every
+month end it names, including one with no stored position row (totals `0.0000`, `complete` true,
+empty status counts): totals are null on an incomplete month, never a partial sum (fail closed),
+and every month in one response carries the same `computedAt`, the refresh's own timestamp, not a
+per-month `max(computed_at)`. `GET /wealth-history/{monthEnd}` returns that month's stored
+positions with account and security names, rates, dates, carried flags and status. Neither `GET`
+route recomputes — both read exactly what the last refresh stored.
+
+---
+
 ## `0013`
 
 ### Loans
@@ -2652,60 +2729,16 @@ section above. V31 adds holding targets without creating a second valuation tabl
 
 ---
 
-## `0015`
+## `0015` (historical planned slot)
 
 ### Net worth
 
-```sql
-CREATE TABLE net_worth_snapshot (
-  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id           UUID NOT NULL REFERENCES household(id),
-  as_of_date             DATE NOT NULL,
-
-  net_worth_base         NUMERIC(20,4) NOT NULL,
-  net_worth_secondary    NUMERIC(20,4) NOT NULL,
-  total_assets_base      NUMERIC(20,4) NOT NULL,
-  total_liabilities_base NUMERIC(20,4) NOT NULL,
-  liquid_net_worth_base  NUMERIC(20,4) NOT NULL,
-
-  cash_base              NUMERIC(20,4) NOT NULL DEFAULT 0,
-  investments_base       NUMERIC(20,4) NOT NULL DEFAULT 0,
-  property_base          NUMERIC(20,4) NOT NULL DEFAULT 0,
-  other_assets_base      NUMERIC(20,4) NOT NULL DEFAULT 0,
-  loans_base             NUMERIC(20,4) NOT NULL DEFAULT 0,
-  credit_card_debt_base  NUMERIC(20,4) NOT NULL DEFAULT 0,
-
-  fx_rates_used          JSONB NOT NULL,   -- {"AED": 0.0441, "USD": 83.3196} → base
-
-  has_stale_valuations   BOOLEAN NOT NULL DEFAULT false,
-  is_month_end           BOOLEAN NOT NULL DEFAULT false,
-  computed_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  UNIQUE (household_id, as_of_date)
-);
-
-CREATE TABLE net_worth_attribution (
-  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id             UUID NOT NULL REFERENCES household(id),
-  period_start             DATE NOT NULL,
-  period_end               DATE NOT NULL,
-
-  opening_net_worth_base   NUMERIC(20,4) NOT NULL,
-  closing_net_worth_base   NUMERIC(20,4) NOT NULL,
-  actual_change_base       NUMERIC(20,4) NOT NULL,
-
-  net_cash_saved_base      NUMERIC(20,4) NOT NULL DEFAULT 0,
-  investment_contrib_base  NUMERIC(20,4) NOT NULL DEFAULT 0,
-  market_appreciation_base NUMERIC(20,4) NOT NULL DEFAULT 0,
-  principal_reduction_base NUMERIC(20,4) NOT NULL DEFAULT 0,
-  asset_revaluation_base   NUMERIC(20,4) NOT NULL DEFAULT 0,
-  fx_translation_base      NUMERIC(20,4) NOT NULL DEFAULT 0,
-  unexplained_base         NUMERIC(20,4) NOT NULL DEFAULT 0,   -- shown, never hidden
-
-  computed_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (household_id, period_start, period_end)
-);
-```
+Retired by Phase 2.2. The planned `net_worth_snapshot` table above this note is superseded by
+V46's `month_end_position` — one row per counted account or holding, not one row per household
+per date, so each account's own evidence date and rate survive rather than being reduced to a
+single `fx_rates_used` blob. The planned `net_worth_attribution` table is retired outright:
+`api/oneledger/attribution.py` (Phase 2.2 Task 2) computes the monthly waterfall on read from two
+months of stored positions and the window's frozen flows, and nothing about it is stored.
 
 ---
 
