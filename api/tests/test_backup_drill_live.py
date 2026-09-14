@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -23,14 +24,17 @@ PASSPHRASE = "synthetic-drill-passphrase"
 
 @pytest.fixture
 def dsn() -> str:
-    """The `db-test` container's own `oneledger_test` database — not pytest's own throwaway
-    per-session database (conftest.py): that one is seeded by executing the migration files
-    directly and has no `flyway_schema_history` table, while `scripts/test-db.sh up` migrates
-    this one with real Flyway, exactly as every other environment is. `_test_dsn()` still gates
-    on a reachable server, matching every other `*_live.py` file's skip."""
-    _test_dsn()
-    port = os.environ.get("POSTGRES_PORT") or "55434"
-    return f"postgresql://oneledger:oneledger@127.0.0.1:{port}/oneledger_test"
+    """`ONELEDGER_TEST_DSN`'s own server, but its `oneledger_test` database rather than its own
+    database name: `_test_dsn()` (this project's usual live-test gate, so this file skips exactly
+    like every other `*_live.py` one) can point at pytest's own throwaway per-session database
+    (conftest.py), which is seeded by executing the migration files directly and has no
+    `flyway_schema_history` table. `scripts/test-db.sh up` migrates `oneledger_test` with real
+    Flyway, exactly as every other environment is, so the manifest's `flywayVersion` query has
+    something to read — everything else (host, port, user, password) still comes from the DSN
+    the environment actually gave us, not a hardcoded guess."""
+    shared = _test_dsn()
+    server = shared.rsplit("/", 1)[0]
+    return f"{server}/oneledger_test"
 
 
 @pytest.fixture
@@ -142,6 +146,131 @@ def test_a_tampered_document_is_a_failed_drill_with_a_nonzero_exit(stack: dict[s
     assert result.returncode != 0
     drill = read_drill(stack)
     assert drill["result"] == "fail"
+
+
+def test_a_manifest_mismatch_is_a_failed_drill_naming_the_item(stack: dict[str, str]) -> None:
+    """Decrypt+restore succeed, but the recorded manifest was tampered after the fact (not the
+    ciphertext this time — the plaintext content) — proves the comparison itself, not just the
+    decrypt/restore/extract steps."""
+    assert run_backup(stack).returncode == 0
+    [manifest_enc] = stamp_files(stack, "manifest.json.enc")
+    env = {**os.environ, "BACKUP_PASSPHRASE": PASSPHRASE}
+    decrypted = subprocess.run(
+        [
+            "openssl",
+            "enc",
+            "-d",
+            "-aes-256-cbc",
+            "-pbkdf2",
+            "-pass",
+            "env:BACKUP_PASSPHRASE",
+            "-in",
+            str(manifest_enc),
+        ],
+        env=env,
+        capture_output=True,
+        check=True,
+    ).stdout
+    manifest = json.loads(decrypted)
+    manifest["flywayVersion"] = "tampered-not-the-real-version"
+    subprocess.run(
+        [
+            "openssl",
+            "enc",
+            "-aes-256-cbc",
+            "-pbkdf2",
+            "-salt",
+            "-pass",
+            "env:BACKUP_PASSPHRASE",
+            "-out",
+            str(manifest_enc),
+        ],
+        input=json.dumps(manifest).encode(),
+        env=env,
+        check=True,
+    )
+
+    result = run_drill(stack)
+
+    assert result.returncode != 0
+    drill = read_drill(stack)
+    assert drill["result"] == "fail"
+    items = drill["items"]
+    assert isinstance(items, dict)
+    assert items["flywayVersion"] == "fail"
+    assert items["decryptAndRestoreDump"] == "pass"
+    assert items["decryptAndExtractDocuments"] == "pass"
+
+
+def test_the_drill_only_matches_this_stacks_own_prefix(stack: dict[str, str]) -> None:
+    """A prefix that merely extends this one — `<prefix>-verify-…`, the way a scratch stack's own
+    backups sit beside the ledger's (OL-002) — must never be picked as if it were this stack's
+    newest stamp, even when it sorts later. A garbage decoy proves it: if the loose old pattern
+    ever came back, the drill would try to restore the decoy and fail."""
+    assert run_backup(stack).returncode == 0
+    decoy_prefix = stack["BACKUP_PREFIX"] + "-verify"
+    decoy_stamp = "99991231T235959Z"  # sorts after any real stamp
+    backups_dir = Path(stack["BACKUP_DIR"])
+    for suffix in ("dump.enc", "documents.tar.enc", "manifest.json.enc"):
+        (backups_dir / f"{decoy_prefix}-{decoy_stamp}.{suffix}").write_bytes(b"not a real backup")
+
+    result = run_drill(stack)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    drill = read_drill(stack)
+    assert drill["stamp"] != decoy_stamp
+    assert drill["result"] == "pass"
+    assert (backups_dir / f"{stack['BACKUP_PREFIX']}-{drill['stamp']}.drill.json").exists()
+    assert not (backups_dir / f"{decoy_prefix}-{decoy_stamp}.drill.json").exists()
+
+
+def test_the_embedded_python_has_no_311_only_imports() -> None:
+    """OL-001: the owner's host `python3` may be older than this checkout's pinned 3.14 — 3.9, in
+    particular, has no `datetime.UTC` (added in 3.11). A crash here must not be the reason a
+    drill.json never gets written."""
+    text = (REPO / "scripts" / "restore-drill.sh").read_text()
+    assert "from datetime import UTC" not in text
+    assert ", UTC" not in text
+    assert "timezone.utc" in text
+
+
+def test_a_createdb_failure_still_writes_a_failing_drill_json(
+    stack: dict[str, str], tmp_path: Path
+) -> None:
+    """Any failure once a stamp is picked must still leave `<prefix>-<stamp>.drill.json` (spec
+    step 5) — not just a tampered file, which the script already handles item by item. A fake
+    `docker` ahead of the real one on PATH fails exactly the `createdb` call and passes every
+    other invocation straight through, simulating the database being briefly unable to create a
+    new database without needing to guess the script's own unpredictable temp_db name."""
+    assert run_backup(stack).returncode == 0
+    real_docker = shutil.which("docker")
+    assert real_docker is not None
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    wrapper = fake_bin / "docker"
+    wrapper.write_text(
+        f'#!/bin/sh\ncase " $* " in\n  *" createdb "*) exit 7 ;;\nesac\nexec "{real_docker}" "$@"\n'
+    )
+    wrapper.chmod(0o755)
+    env = {**os.environ, **stack}
+    env.pop("DATABASE_URL", None)
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+    result = subprocess.run(
+        ["bash", str(REPO / "scripts" / "restore-drill.sh")],
+        cwd=REPO,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    drill = read_drill(stack)
+    assert drill["result"] == "fail"
+    items = drill["items"]
+    assert isinstance(items, dict)
+    assert any("temporary database" in key for key in items)
 
 
 def test_the_drill_refuses_anything_but_the_isolated_test_server() -> None:
