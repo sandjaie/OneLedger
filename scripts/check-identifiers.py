@@ -226,7 +226,15 @@ BASE_TABLE_READERS = {
 }
 
 # Rule 4's freeze sites: the definition, and the one function that applies it.
-RATE_MULTIPLIERS = {"db/migrations/", "api/oneledger/money.py", "api/oneledger/ingest/"}
+# `attribution.py` multiplies a flow's or holding funding event's frozen native amount by the
+# closing rate on purpose — the spec's FX bridge, moving FX on intra-period flows out of their
+# own line and into FX translation (Phase 2.2 spec "Attribution for one month").
+RATE_MULTIPLIERS = {
+    "db/migrations/",
+    "api/oneledger/money.py",
+    "api/oneledger/ingest/",
+    "api/oneledger/attribution.py",
+}
 
 # Tests build ledgers and re-derive frozen figures on purpose; they report nothing.
 TEST_CODE = ("api/tests/", "db/tests/", "/__tests__/")

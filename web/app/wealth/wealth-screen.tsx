@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
+  AttributionLeg,
   CurrencyRow,
   HouseholdCurrency,
+  MonthAttributionResponse,
   MonthEndPosition,
   MonthPositionsResponse,
   MonthSummary,
@@ -36,6 +38,23 @@ function positionValue(
   return currency.code === month.baseCurrency ? position.valueBase : position.valueSecondary;
 }
 
+function attributionLeg(body: MonthAttributionResponse, currency: HouseholdCurrency): AttributionLeg {
+  return currency.code === body.baseCurrency ? body.base : body.secondary;
+}
+
+// Spec "Attribution for one month": the waterfall's own line order, residual last and always
+// shown. `null` is `unavailable`'s own contract, not a formatting choice — the row still renders.
+const WATERFALL_LINES: Array<[keyof AttributionLeg, string]> = [
+  ["retainedIncome", "Retained income"],
+  ["investmentIncome", "Investment income"],
+  ["internalMovementsAndCosts", "Internal movements and costs"],
+  ["otherExternalChanges", "Other external changes"],
+  ["marketMovement", "Market movement"],
+  ["assetRevaluation", "Asset revaluation"],
+  ["fxTranslation", "FX translation"],
+  ["residual", "Residual"],
+];
+
 export function WealthScreen({ currency, currencies, request }: Props) {
   const [history, setHistory] = useState<WealthHistoryResponse>();
   const [state, setState] = useState<State>("loading");
@@ -45,6 +64,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   const [selected, setSelected] = useState<string>();
   const [month, setMonth] = useState<MonthPositionsResponse>();
   const [monthState, setMonthState] = useState<MonthState>("idle");
+  const [waterfall, setWaterfall] = useState<MonthAttributionResponse>();
+  const [waterfallState, setWaterfallState] = useState<MonthState>("idle");
+  // OL-007 (review repair round): a token per selectMonth call, so a slow, now-superseded
+  // response (the owner clicked a second month before the first one's positions/attribution
+  // came back) is dropped instead of clobbering what's now on screen.
+  const selectionRef = useRef(0);
 
   useEffect(() => {
     let current = true;
@@ -78,15 +103,35 @@ export function WealthScreen({ currency, currencies, request }: Props) {
     }
   }
 
+  async function loadWaterfall(monthEnd: string, token: number) {
+    setWaterfallState("loading");
+    try {
+      const loaded = await request<MonthAttributionResponse>(
+        `/wealth-history/${encodeURIComponent(monthEnd)}/attribution`,
+      );
+      if (selectionRef.current !== token) return; // a later selectMonth superseded this one
+      setWaterfall(loaded);
+      setWaterfallState("ready");
+    } catch {
+      if (selectionRef.current === token) setWaterfallState("error");
+    }
+  }
+
   function selectMonth(monthEnd: string) {
+    const token = ++selectionRef.current;
     setSelected(monthEnd);
     setMonthState("loading");
     request<MonthPositionsResponse>(`/wealth-history/${encodeURIComponent(monthEnd)}`)
       .then((loaded) => {
+        if (selectionRef.current !== token) return;
         setMonth(loaded);
         setMonthState("ready");
       })
-      .catch(() => setMonthState("error"));
+      .catch(() => {
+        if (selectionRef.current === token) setMonthState("error");
+      });
+
+    void loadWaterfall(monthEnd, token);
   }
 
   return (
@@ -165,7 +210,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
               <h2 id="wealth-month-title">{selected} positions</h2>
               {monthState === "loading" && <p role="status">Loading {selected}&rsquo;s positions…</p>}
               {monthState === "error" && (
-                <p className="inline-alert" role="alert">This month&rsquo;s positions could not be loaded.</p>
+                <p className="inline-alert" role="alert">
+                  This month&rsquo;s positions could not be loaded.{" "}
+                  <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                    Try again
+                  </button>
+                </p>
               )}
               {monthState === "ready" && month && (
                 <div className="wealth-positions-wrap">
@@ -208,6 +258,71 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                   </table>
                 </div>
               )}
+
+              <section aria-labelledby="wealth-waterfall-title" className="wealth-waterfall">
+                <h3 id="wealth-waterfall-title">What changed, in {currency.code}</h3>
+                {waterfallState === "loading" && (
+                  <p role="status">Loading {selected}&rsquo;s attribution…</p>
+                )}
+                {waterfallState === "error" && (
+                  <p className="inline-alert" role="alert">
+                    This month&rsquo;s attribution could not be loaded.{" "}
+                    <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                      Try again
+                    </button>
+                  </p>
+                )}
+                {waterfallState === "ready" && waterfall && (() => {
+                  const leg = attributionLeg(waterfall, currency);
+                  if (!leg.available) {
+                    return (
+                      <div role="alert">
+                        <p>Attribution is unavailable for {selected}.</p>
+                        <ul>
+                          {leg.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                        </ul>
+                      </div>
+                    );
+                  }
+                  return (
+                    <dl className="wealth-waterfall-list">
+                      <div>
+                        <dt>Opening</dt>
+                        <dd>
+                          {leg.opening === null
+                            ? "—"
+                            : moneyText(leg.opening, currency.code, currencies)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Closing</dt>
+                        <dd>
+                          {leg.closing === null
+                            ? "—"
+                            : moneyText(leg.closing, currency.code, currencies)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Actual change</dt>
+                        <dd>
+                          {leg.actualChange === null
+                            ? "—"
+                            : moneyText(leg.actualChange, currency.code, currencies)}
+                        </dd>
+                      </div>
+                      {WATERFALL_LINES.map(([key, label]) => {
+                        const value = leg[key] as string | null;
+                        return (
+                          <div key={key}>
+                            <dt>{label}</dt>
+                            <dd>{value === null ? "—" : moneyText(value, currency.code, currencies)}</dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
+                  );
+                })()}
+              </section>
             </section>
           )}
         </>

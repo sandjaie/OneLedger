@@ -648,9 +648,19 @@ force them into market appreciation or the residual.</p>
 household waterfall, also allocate FX movement on intra-period flows to the FX component. For
 example, an income flow valued at its closing rate in the identity must have its closing-minus-booked
 translation difference removed from retained income and included in FX. Cross-currency internal
-legs must be matched so spread/fees and translation effects remain identified. Phase 2.2's detailed plan
-must specify this bridge and prove it with dated cash-flow fixtures; a row labelled contributions
-cannot substitute for it. See <a href="../product/finance-os.html#financial-meaning">F03</a>.</p>
+legs must be matched so spread/fees and translation effects remain identified. See
+<a href="../product/finance-os.html#financial-meaning">F03</a>.</p>
+<p><strong>Implemented (Phase 2.2 Task 2).</strong> <code>api/oneledger/attribution.py</code>'s pure
+<code>attribute()</code> is exactly this bridge: for every ledger flow and every holding funding event, its
+closing-rate value minus its frozen value is added to FX translation, so a spread, a fee or a rate
+move between booking and the month end never distorts retained income, internal movements or market
+movement. A holding funding event bridges the same signed figure its own lines use (negated
+<code>net_amount</code>, matching <code>F_nat</code>), not the raw stored amount, or a rate move between the
+funding event and the closing rate would leave a spurious residual on that position.
+<code>tests/test_attribution.py</code>'s dated cash-flow fixture — income, spending, a cross-currency
+transfer with spread, a cross-currency holding purchase, a full sale, market movement, a snapshot
+revaluation, a liability, a base-currency account, a mid-window account opening and a rate move —
+proves the residual is exactly zero.</p>
 <p>A non-trivial residual means something real: a missing statement, an unimported month, an
 unlinked transfer, a stale valuation. It is a data-quality signal, so hiding it would discard the
 most useful diagnostic the product has. Invariant I7.</p>

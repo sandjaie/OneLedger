@@ -8,6 +8,7 @@ import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   CurrencyRow,
   HouseholdCurrency,
+  MonthAttributionResponse,
   MonthPositionsResponse,
   RefreshCounts,
   WealthHistoryResponse,
@@ -162,5 +163,111 @@ describe("wealth screen", () => {
     await waitFor(() =>
       expect(within(positions).getAllByText("AED 1,800.0000").length).toBeGreaterThan(0),
     );
+  });
+
+  it("selecting a month shows the attribution waterfall with the residual, from server strings", async () => {
+    const attributionBody: MonthAttributionResponse = {
+      monthEnd: "2024-01-31",
+      baseCurrency: "AED",
+      secondaryCurrency: "USD",
+      base: {
+        available: true,
+        reasons: [],
+        opening: "1000.0000",
+        closing: "1500.0000",
+        actualChange: "500.0000",
+        retainedIncome: "500.0000",
+        investmentIncome: "0.0000",
+        internalMovementsAndCosts: "0.0000",
+        otherExternalChanges: "0.0000",
+        marketMovement: "0.0000",
+        assetRevaluation: "0.0000",
+        fxTranslation: "0.0000",
+        residual: "0.0000",
+      },
+      secondary: {
+        available: true,
+        reasons: [],
+        opening: "500.0000",
+        closing: "750.0000",
+        actualChange: "250.0000",
+        retainedIncome: "250.0000",
+        investmentIncome: "0.0000",
+        internalMovementsAndCosts: "0.0000",
+        otherExternalChanges: "0.0000",
+        marketMovement: "0.0000",
+        assetRevaluation: "0.0000",
+        fxTranslation: "0.0000",
+        residual: "0.0000",
+      },
+    };
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-01-31") return january;
+      if (path === "/wealth-history/2024-01-31/attribution") return attributionBody;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "2024-01-31" }));
+
+    const waterfall = await screen.findByText("Retained income");
+    const section = waterfall.closest("dl");
+    expect(section).toBeTruthy();
+    expect(within(section as HTMLElement).getAllByText("AED 500.0000").length).toBeGreaterThan(0);
+    expect(within(section as HTMLElement).getByText("Residual")).toBeTruthy();
+    expect(within(section as HTMLElement).getAllByText("AED 0.0000").length).toBeGreaterThan(0);
+  });
+
+  it("labels an unavailable month's attribution with its reasons instead of a waterfall", async () => {
+    const unavailable: MonthAttributionResponse = {
+      monthEnd: "2024-01-31",
+      baseCurrency: "AED",
+      secondaryCurrency: "USD",
+      base: {
+        available: false,
+        reasons: ["Synthetic savings account is before_opening at 2024-01-31"],
+        opening: null,
+        closing: null,
+        actualChange: null,
+        retainedIncome: null,
+        investmentIncome: null,
+        internalMovementsAndCosts: null,
+        otherExternalChanges: null,
+        marketMovement: null,
+        assetRevaluation: null,
+        fxTranslation: null,
+        residual: null,
+      },
+      secondary: {
+        available: false,
+        reasons: ["Synthetic savings account is before_opening at 2024-01-31"],
+        opening: null,
+        closing: null,
+        actualChange: null,
+        retainedIncome: null,
+        investmentIncome: null,
+        internalMovementsAndCosts: null,
+        otherExternalChanges: null,
+        marketMovement: null,
+        assetRevaluation: null,
+        fxTranslation: null,
+        residual: null,
+      },
+    };
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-01-31") return january;
+      if (path === "/wealth-history/2024-01-31/attribution") return unavailable;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "2024-01-31" }));
+
+    expect(await screen.findByText("Attribution is unavailable for 2024-01-31.")).toBeTruthy();
+    expect(
+      screen.getByText("Synthetic savings account is before_opening at 2024-01-31"),
+    ).toBeTruthy();
   });
 });
