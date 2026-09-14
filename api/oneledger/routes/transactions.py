@@ -206,10 +206,15 @@ def _money_query(value: str | None) -> Decimal | None:
 
 
 def _assert_category_allowed(
-    cur: psycopg.Cursor[Any], category_id: UUID | None, household_id: UUID
+    cur: psycopg.Cursor[Any],
+    category_id: UUID | None,
+    household_id: UUID,
+    kind: str | None = None,
 ) -> None:
     """The category foreign key is not tenant-aware; the boundary is this predicate. Only the
-    seeded taxonomy and the household's own categories may be assigned."""
+    seeded taxonomy and the household's own categories may be assigned. `kind`, when given,
+    additionally requires the category's kind to match — the payslip deduction-spending rules
+    need an expense category specifically, not any visible one."""
     if category_id is None:
         return
     cur.execute(
@@ -217,11 +222,159 @@ def _assert_category_allowed(
              LEFT JOIN category_override o
                     ON o.category_id = c.id AND o.household_id = %s
             WHERE c.id = %s AND (c.household_id IS NULL OR c.household_id = %s)
+              AND (%s::category_kind IS NULL OR c.kind = %s::category_kind)
               AND COALESCE(o.is_active, c.is_active)""",
-        (household_id, category_id, household_id),
+        (household_id, category_id, household_id, kind, kind),
     )
     if cur.fetchone() is None:
         raise HTTPException(status_code=422, detail="category is not available to this household")
+
+
+def post_ledger_transaction(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    account_id: UUID,
+    booked_date: date,
+    description: str,
+    amount: Decimal,
+    txn_type: str,
+    category_id: UUID | None,
+    *,
+    country: str | None = None,
+    payment_method: str | None = None,
+    notes: str | None = None,
+) -> UUID:
+    """The manual posting path (household lock, account lifetime/anchor, category check, frozen
+    FX freeze, dedupe hash, insert) — factored out of `create_transaction` so the payslip
+    deduction-spending pair freezes money identically (I5) rather than through a second copy.
+    Raises the same `HTTPException`s `create_transaction` would for an invalid account, date or
+    category; the caller (a route already inside its own try/except) translates them."""
+    cur.execute(
+        "SELECT base_currency, secondary_currency FROM household WHERE id = %s FOR UPDATE",
+        (household_id,),
+    )
+    pair = cur.fetchone()
+    if pair is None:
+        raise HTTPException(status_code=409, detail="no household row")
+    base, secondary = str(pair[0]).strip(), str(pair[1]).strip()
+
+    cur.execute(
+        """SELECT currency, opened_on, closed_on, opening_balance_date FROM account
+            WHERE id = %s AND household_id = %s""",
+        (account_id, household_id),
+    )
+    account = cur.fetchone()
+    if account is None:
+        raise HTTPException(status_code=404, detail="no such account")
+    currency = str(account[0]).strip()
+    opened_on, closed_on, anchor = account[1], account[2], account[3]
+    if opened_on is not None and booked_date < opened_on:
+        raise HTTPException(status_code=422, detail=f"the account opened on {opened_on}")
+    if closed_on is not None and booked_date > closed_on:
+        raise HTTPException(status_code=422, detail=f"the account closed on {closed_on}")
+    if anchor is not None and booked_date < anchor:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"the balance is anchored on {anchor}; earlier movements are already "
+                "inside the opening balance"
+            ),
+        )
+    _assert_category_allowed(cur, category_id, household_id)
+
+    rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
+        cur, booked_date, currency, base, secondary
+    )
+    try:
+        rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
+        rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
+        amount_base = translate(amount, rate_to_base)
+        amount_secondary = translate(amount, rate_to_secondary)
+    except InvalidOperation as exc:
+        raise HTTPException(
+            status_code=422, detail="the converted amount exceeds the storable range"
+        ) from exc
+
+    cur.execute(
+        """SELECT count(*) FROM transaction
+            WHERE household_id = %s AND account_id = %s AND booked_date = %s
+              AND amount = %s AND description_raw = %s""",
+        (household_id, account_id, booked_date, amount, description),
+    )
+    counted = cur.fetchone()
+    occurrence = int(counted[0]) if counted else 0
+    while True:
+        dedupe = hashlib.sha256(
+            "|".join(
+                [
+                    str(account_id),
+                    booked_date.isoformat(),
+                    str(amount),
+                    description,
+                    str(occurrence),
+                ]
+            ).encode()
+        ).hexdigest()
+        cur.execute(
+            """SELECT 1 FROM transaction
+                WHERE household_id = %s AND account_id = %s AND dedupe_hash = %s""",
+            (household_id, account_id, dedupe),
+        )
+        if cur.fetchone() is None:
+            break
+        occurrence += 1
+
+    cur.execute(
+        """INSERT INTO transaction (
+               household_id, account_id, booked_date, description_raw, amount,
+               currency, fx_rate_date, fx_rate_is_carried, fx_rate_to_base,
+               fx_rate_to_secondary, amount_base, amount_secondary, txn_type,
+               category_id, country, payment_method, source, dedupe_hash,
+               classified_by, classification_confidence, is_reviewed, notes)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::txn_type,
+                   %s, %s, %s::payment_method, 'manual', %s, %s::classified_by, %s, %s, %s)
+           RETURNING id""",
+        (
+            household_id,
+            account_id,
+            booked_date,
+            description,
+            amount,
+            currency,
+            rate_date,
+            carried,
+            rate_to_base,
+            rate_to_secondary,
+            amount_base,
+            amount_secondary,
+            txn_type,
+            category_id,
+            country,
+            payment_method,
+            dedupe,
+            "user_manual" if category_id is not None else "unclassified",
+            Decimal("1.000") if category_id is not None else Decimal("0.000"),
+            category_id is not None,
+            notes,
+        ),
+    )
+    created = cur.fetchone()
+    if created is None:
+        raise HTTPException(status_code=500, detail="the transaction could not be created")
+    return UUID(str(created[0]))
+
+
+def delete_ledger_transaction(
+    cur: psycopg.Cursor[Any], household_id: UUID, transaction_id: UUID
+) -> None:
+    """Removes one posting this module wrote. The V10 balance trigger restores
+    `current_balance` on delete the same way it applies it on insert, so undoing a payslip
+    deduction pair leaves the account balance exactly where it was."""
+    cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (household_id,))
+    cur.execute(
+        "DELETE FROM transaction WHERE household_id = %s AND id = %s",
+        (household_id, transaction_id),
+    )
 
 
 @router.get("/transactions")
@@ -343,140 +496,20 @@ def create_transaction(
     amount = Decimal(body.amount)
     try:
         with connect() as conn, conn.cursor() as cur:
-            # B3.5: every writer of a frozen amount takes the household row lock BEFORE
-            # reading the reporting pair, so a pair change cannot interleave with this freeze.
-            cur.execute(
-                """SELECT base_currency, secondary_currency FROM household
-                    WHERE id = %s FOR UPDATE""",
-                (owner.household_id,),
+            new_id = post_ledger_transaction(
+                cur,
+                owner.household_id,
+                body.accountId,
+                body.bookedDate,
+                body.description,
+                amount,
+                body.txnType,
+                body.categoryId,
+                country=body.country,
+                payment_method=body.paymentMethod,
+                notes=body.notes,
             )
-            pair = cur.fetchone()
-            if pair is None:
-                raise HTTPException(status_code=409, detail="no household row")
-            base, secondary = str(pair[0]).strip(), str(pair[1]).strip()
-
-            cur.execute(
-                """SELECT currency, opened_on, closed_on, opening_balance_date FROM account
-                    WHERE id = %s AND household_id = %s""",
-                (body.accountId, owner.household_id),
-            )
-            account = cur.fetchone()
-            if account is None:
-                raise HTTPException(status_code=404, detail="no such account")
-            currency = str(account[0]).strip()
-            opened_on, closed_on, anchor = account[1], account[2], account[3]
-            # The UI's active-account picker is not the boundary: a posting outside the
-            # account's lifetime would move the balance of an account that did not exist yet
-            # or was already closed.
-            if opened_on is not None and body.bookedDate < opened_on:
-                raise HTTPException(status_code=422, detail=f"the account opened on {opened_on}")
-            if closed_on is not None and body.bookedDate > closed_on:
-                raise HTTPException(status_code=422, detail=f"the account closed on {closed_on}")
-            # The balance equation is opening + the sum of LATER movements: a posting before
-            # the anchor is already inside the opening balance and would count twice.
-            if anchor is not None and body.bookedDate < anchor:
-                raise HTTPException(
-                    status_code=422,
-                    detail=(
-                        f"the balance is anchored on {anchor}; earlier movements are already "
-                        "inside the opening balance"
-                    ),
-                )
-            _assert_category_allowed(cur, body.categoryId, owner.household_id)
-
-            rate_to_base, rate_to_secondary, carried, rate_date = _frozen(
-                cur, body.bookedDate, currency, base, secondary
-            )
-            # The stored rate is the auditable fact, so it is fixed FIRST (10 dp, half-up)
-            # and the stored amounts derive from it — stored amount must equal
-            # round(stored amount x stored rate), or the frozen facts disagree with each
-            # other. A repeating cross-rate rounded after the multiplication would.
-            try:
-                rate_to_base = rate_to_base.quantize(RATE, rounding=ROUND_HALF_UP)
-                rate_to_secondary = rate_to_secondary.quantize(RATE, rounding=ROUND_HALF_UP)
-                amount_base = translate(amount, rate_to_base)
-                amount_secondary = translate(amount, rate_to_secondary)
-            except InvalidOperation as exc:
-                raise HTTPException(
-                    status_code=422,
-                    detail="the converted amount exceeds the storable range",
-                ) from exc
-
-            # The manual dedupe disambiguator mirrors ingestion section 6: occurrence index
-            # within the day, never a row ordinal.
-            cur.execute(
-                """SELECT count(*) FROM transaction
-                    WHERE household_id = %s AND account_id = %s AND booked_date = %s
-                      AND amount = %s AND description_raw = %s""",
-                (owner.household_id, body.accountId, body.bookedDate, amount, body.description),
-            )
-            counted = cur.fetchone()
-            occurrence = int(counted[0]) if counted else 0
-            # The count is a starting point, not an allocation: after a deletion, a surviving
-            # row may still hold this occurrence's hash. Probe forward to the first free one —
-            # race-free under the household lock held above.
-            while True:
-                dedupe = hashlib.sha256(
-                    "|".join(
-                        [
-                            str(body.accountId),
-                            body.bookedDate.isoformat(),
-                            str(amount),
-                            body.description,
-                            str(occurrence),
-                        ]
-                    ).encode()
-                ).hexdigest()
-                cur.execute(
-                    """SELECT 1 FROM transaction
-                        WHERE household_id = %s AND account_id = %s AND dedupe_hash = %s""",
-                    (owner.household_id, body.accountId, dedupe),
-                )
-                if cur.fetchone() is None:
-                    break
-                occurrence += 1
-
-            cur.execute(
-                """INSERT INTO transaction (
-                       household_id, account_id, booked_date, description_raw, amount,
-                       currency, fx_rate_date, fx_rate_is_carried, fx_rate_to_base,
-                       fx_rate_to_secondary, amount_base, amount_secondary, txn_type,
-                       category_id, country, payment_method, source, dedupe_hash,
-                       classified_by, classification_confidence, is_reviewed, notes)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::txn_type,
-                           %s, %s, %s::payment_method, 'manual', %s, %s::classified_by, %s, %s,
-                           %s)
-                   RETURNING id""",
-                (
-                    owner.household_id,
-                    body.accountId,
-                    body.bookedDate,
-                    body.description,
-                    amount,
-                    currency,
-                    rate_date,
-                    carried,
-                    rate_to_base,
-                    rate_to_secondary,
-                    amount_base,
-                    amount_secondary,
-                    body.txnType,
-                    body.categoryId,
-                    body.country,
-                    body.paymentMethod,
-                    dedupe,
-                    "user_manual" if body.categoryId is not None else "unclassified",
-                    # The classification contract: a user override is confidence 1.000 and
-                    # needs no review; an unclassified row is 0.000 and queues for it.
-                    Decimal("1.000") if body.categoryId is not None else Decimal("0.000"),
-                    body.categoryId is not None,
-                    body.notes,
-                ),
-            )
-            created = cur.fetchone()
-            if created is None:
-                raise HTTPException(status_code=500, detail="the transaction could not be created")
-            return _one(cur, UUID(str(created[0])), owner.household_id)
+            return _one(cur, new_id, owner.household_id)
     except (
         psycopg.errors.InvalidTextRepresentation,
         psycopg.errors.CheckViolation,

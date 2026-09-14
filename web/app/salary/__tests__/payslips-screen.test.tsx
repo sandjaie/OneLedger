@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
+  CategoryRow,
   CurrencyRow,
   DepositCandidate,
   PayslipImportResponse,
@@ -19,6 +20,31 @@ const currencies: Array<CurrencyRow> = [
   { code: "XAA", name: "Synthetic Currency", symbol: "A", decimals: 2, numberFormat: "international" },
 ];
 
+const categories: Array<CategoryRow> = [
+  {
+    id: "00000000-0000-4000-8000-000000000010",
+    parentId: null,
+    name: "Travel",
+    slug: "travel",
+    kind: "expense",
+    bucket: "want",
+    sortOrder: 1,
+    isSystem: true,
+    isActive: true,
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000011",
+    parentId: "00000000-0000-4000-8000-000000000010",
+    name: "Flights",
+    slug: "travel-flights",
+    kind: "expense",
+    bucket: "want",
+    sortOrder: 1,
+    isSystem: true,
+    isActive: true,
+  },
+];
+
 const payslip: PayslipRow = {
   id: "00000000-0000-4000-8000-000000000001",
   payMonth: "2026-01",
@@ -27,8 +53,22 @@ const payslip: PayslipRow = {
   totalDeductions: "1000.0000",
   netPay: "4000.0000",
   lines: [
-    { lineNo: 1, kind: "earning", label: "Basic", amount: "5000.0000" },
-    { lineNo: 2, kind: "deduction", label: "Tax", amount: "1000.0000" },
+    {
+      lineNo: 1,
+      kind: "earning",
+      label: "Basic",
+      amount: "5000.0000",
+      countedAsSpending: false,
+      categoryId: null,
+    },
+    {
+      lineNo: 2,
+      kind: "deduction",
+      label: "Flights",
+      amount: "1000.0000",
+      countedAsSpending: false,
+      categoryId: null,
+    },
   ],
   supersedesPayslipId: null,
   supersededByPayslipId: null,
@@ -52,7 +92,7 @@ describe("salary screen", () => {
       if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
       throw new ApiError(500, "unexpected");
     });
-    render(<PayslipsScreen currencies={currencies} request={request} />);
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
 
     await screen.findByText("2026-01");
     expect(screen.getByText("A 4,000.00 net · A 5,000.00 gross")).toBeTruthy();
@@ -79,7 +119,7 @@ describe("salary screen", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<PayslipsScreen currencies={currencies} request={request} />);
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
     await screen.findByText("No payslips are recorded yet.");
 
     fireEvent.change(screen.getByLabelText("Pay month"), { target: { value: "2026-01" } });
@@ -118,7 +158,7 @@ describe("salary screen", () => {
       if (path === "/payslips/import" && init?.method === "POST") return preview;
       throw new ApiError(500, "unexpected");
     });
-    render(<PayslipsScreen currencies={currencies} request={request} />);
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
     await screen.findByText("No payslips are recorded yet.");
 
     expect(screen.queryByText("Import reconciling months")).toBeNull();
@@ -151,7 +191,7 @@ describe("salary screen", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<PayslipsScreen currencies={currencies} request={request} />);
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
     await screen.findByText("2026-01");
 
     fireEvent.click(screen.getByRole("button", { name: "Find net-pay credit" }));
@@ -188,11 +228,54 @@ describe("salary screen", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<PayslipsScreen currencies={currencies} request={request} />);
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
     await screen.findByText("Linked · 2026-02-03");
 
     fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
     await waitFor(() => expect(unlinkCalls).toBe(1));
     await screen.findByText("Not linked");
+  });
+
+  it("counts a deduction line as spending, defaulting to Travel › Flights, then stops", async () => {
+    let posted: unknown;
+    let deleteCalls = 0;
+    let current = payslip;
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips" && (!init || init.method === undefined)) {
+        return { payslips: [current], total: 1 } satisfies PayslipsResponse;
+      }
+      if (path === "/payslips/00000000-0000-4000-8000-000000000001/lines/2/spending") {
+        if (init?.method === "POST") {
+          posted = JSON.parse(String(init.body));
+          current = {
+            ...current,
+            lines: [current.lines[0], { ...current.lines[1], countedAsSpending: true, categoryId: categories[1].id }],
+          };
+          return current;
+        }
+        if (init?.method === "DELETE") {
+          deleteCalls += 1;
+          current = {
+            ...current,
+            lines: [current.lines[0], { ...current.lines[1], countedAsSpending: false, categoryId: null }],
+          };
+          return current;
+        }
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
+    await screen.findByText("2026-01");
+
+    const checkbox = screen.getByLabelText("Count as spending") as HTMLInputElement;
+    expect(checkbox.disabled).toBe(false);
+    fireEvent.click(checkbox);
+
+    await waitFor(() => expect(posted).toEqual({ categoryId: categories[1].id }));
+    await waitFor(() => expect((screen.getByLabelText("Count as spending") as HTMLInputElement).checked).toBe(true));
+
+    fireEvent.click(screen.getByLabelText("Count as spending"));
+    await waitFor(() => expect(deleteCalls).toBe(1));
+    await waitFor(() => expect((screen.getByLabelText("Count as spending") as HTMLInputElement).checked).toBe(false));
   });
 });

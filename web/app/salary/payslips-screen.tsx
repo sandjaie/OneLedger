@@ -5,17 +5,20 @@ import { useEffect, useState } from "react";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
+  CategoryRow,
   CurrencyRow,
   DepositCandidate,
   PayslipCreate,
   PayslipImportResponse,
   PayslipLineIn,
+  PayslipLineOut,
   PayslipRow,
   PayslipsResponse,
 } from "@/types/api";
 
 type Props = {
   currencies: Array<CurrencyRow>;
+  categories: Array<CategoryRow>;
   request: typeof apiFetch;
 };
 
@@ -88,7 +91,7 @@ function depositState(payslip: PayslipRow) {
     : "Linked, but no longer eligible";
 }
 
-export function PayslipsScreen({ currencies, request }: Props) {
+export function PayslipsScreen({ currencies, categories, request }: Props) {
   const [payslips, setPayslips] = useState<Array<PayslipRow>>();
   const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -115,6 +118,10 @@ export function PayslipsScreen({ currencies, request }: Props) {
   const [linkBusy, setLinkBusy] = useState(false);
   const [unlinkFor, setUnlinkFor] = useState<string>();
   const [unlinkProblem, setUnlinkProblem] = useState<string>();
+
+  const [spendingDraft, setSpendingDraft] = useState<Record<string, string>>({});
+  const [spendingBusy, setSpendingBusy] = useState<string>();
+  const [spendingProblem, setSpendingProblem] = useState<{ key: string; message: string }>();
 
   useEffect(() => {
     let current = true;
@@ -312,6 +319,46 @@ export function PayslipsScreen({ currencies, request }: Props) {
     }
   }
 
+  const categoryName = new Map(categories.map((row) => [row.id, row.name]));
+  function categoryLabel(row: CategoryRow) {
+    if (!row.parentId) return row.name;
+    const parent = categoryName.get(row.parentId);
+    return parent ? `${parent} → ${row.name}` : row.name;
+  }
+  const expenseCategories = categories.filter((row) => row.kind === "expense" && row.isActive);
+  // Spec: the category picker defaults to Travel › Flights when that category exists.
+  const defaultSpendingCategoryId = categories.find((row) => row.slug === "travel-flights")?.id ?? "";
+
+  function spendingCategoryFor(key: string, line: PayslipLineOut) {
+    return spendingDraft[key] ?? line.categoryId ?? defaultSpendingCategoryId;
+  }
+
+  async function toggleSpending(payslip: PayslipRow, line: PayslipLineOut) {
+    const key = `${payslip.id}:${line.lineNo}`;
+    setSpendingBusy(key);
+    setSpendingProblem(undefined);
+    try {
+      if (line.countedAsSpending) {
+        await request<PayslipRow>(`/payslips/${payslip.id}/lines/${line.lineNo}/spending`, {
+          method: "DELETE",
+        });
+      } else {
+        const categoryId = spendingCategoryFor(key, line);
+        if (!categoryId) return;
+        await request<PayslipRow>(`/payslips/${payslip.id}/lines/${line.lineNo}/spending`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ categoryId }),
+        });
+      }
+      setAttempt((value) => value + 1);
+    } catch (error) {
+      setSpendingProblem({ key, message: detail(error, "This could not be saved.") });
+    } finally {
+      setSpendingBusy(undefined);
+    }
+  }
+
   const completeForm = Boolean(
     form.payMonth && form.currency && form.grossEarnings && form.totalDeductions && form.netPay
       && form.lines.some((line) => line.kind === "earning" && line.label && line.amount),
@@ -348,9 +395,44 @@ export function PayslipsScreen({ currencies, request }: Props) {
                     {payslip.imported && <small>Imported</small>}
                   </div>
                   <ul className="salary-payslip-lines">
-                    {payslip.lines.map((line) => (
-                      <li key={line.lineNo}>{line.kind}: {line.label} {formatMoney(line.amount, currency)}</li>
-                    ))}
+                    {payslip.lines.map((line) => {
+                      const key = `${payslip.id}:${line.lineNo}`;
+                      const busy = spendingBusy === key;
+                      const chosenCategory = spendingCategoryFor(key, line);
+                      return (
+                        <li key={line.lineNo}>
+                          <span>{line.kind}: {line.label} {formatMoney(line.amount, currency)}</span>
+                          {line.kind === "deduction" && (
+                            <span className="salary-line-spending">
+                              <label>
+                                <input
+                                  checked={line.countedAsSpending}
+                                  disabled={busy || (!line.countedAsSpending && !chosenCategory)}
+                                  onChange={() => void toggleSpending(payslip, line)}
+                                  type="checkbox"
+                                />
+                                Count as spending
+                              </label>
+                              <select
+                                disabled={line.countedAsSpending || busy}
+                                onChange={(e) =>
+                                  setSpendingDraft((current) => ({ ...current, [key]: e.target.value }))
+                                }
+                                value={chosenCategory}
+                              >
+                                <option value="">Choose a category</option>
+                                {expenseCategories.map((row) => (
+                                  <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
+                                ))}
+                              </select>
+                              {spendingProblem?.key === key && (
+                                <span className="inline-alert" role="alert">{spendingProblem.message}</span>
+                              )}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                   <button
                     className="text-action"

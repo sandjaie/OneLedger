@@ -193,7 +193,10 @@ export function Workspace({
         if (activeSection === "salary") {
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
           if (!current) return;
+          const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
           setCurrencies(catalogue);
+          setCategories(taxonomy);
         }
         if (activeSection === "plans") {
           const nextInventory = await request<AccountsResponse>("/accounts");
@@ -531,9 +534,10 @@ export function Workspace({
             />
           )}
 
-          {activeSection === "salary" && currencies && (
+          {activeSection === "salary" && currencies && categories && (
             <PayslipsScreen
               currencies={currencies}
+              categories={categories}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

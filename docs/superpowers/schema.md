@@ -2390,6 +2390,61 @@ account's mode identically). It writes nothing and reads no other route's data.
 
 ---
 
+## `V44` (applied)
+
+### Payslip deduction spending
+
+Phase 1.7 Task 3. A deduction the owner marks as spending becomes a balanced pair of ordinary
+manual-posting-rule ledger rows (income Salary / expense chosen category) on the linked credit's
+account and date; both tables are plain owner-scoped tables, no `SECURITY DEFINER` write path,
+following V43's `commitment` convention.
+
+```sql
+ALTER TABLE payslip_line ADD CONSTRAINT uq_payslip_line_household_id UNIQUE (household_id, id);
+
+CREATE TABLE payslip_deduction_rule (
+  household_id UUID NOT NULL REFERENCES household(id),
+  label        TEXT NOT NULL,
+  category_id  UUID NOT NULL REFERENCES category(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, label)
+);
+
+CREATE TABLE payslip_line_posting (
+  household_id            UUID NOT NULL REFERENCES household(id),
+  payslip_line_id         UUID NOT NULL,
+  income_transaction_id   UUID NOT NULL,
+  expense_transaction_id  UUID NOT NULL,
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, payslip_line_id),
+  CONSTRAINT fk_payslip_line_posting_line_scope FOREIGN KEY (household_id, payslip_line_id)
+    REFERENCES payslip_line (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_payslip_line_posting_income_scope FOREIGN KEY (household_id, income_transaction_id)
+    REFERENCES transaction (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_payslip_line_posting_expense_scope
+    FOREIGN KEY (household_id, expense_transaction_id)
+    REFERENCES transaction (household_id, id) ON DELETE RESTRICT
+);
+```
+
+A `BEFORE INSERT` trigger, `assert_payslip_line_posting_is_deduction`, refuses a posting whose
+line is not a `deduction` line of the same household (the composite foreign key alone cannot reach
+`payslip_line.kind`). Both tables carry `household_isolation FOR ALL TO authenticated`.
+
+`routes/payslips.py` writes both legs through `routes/transactions.py::post_ledger_transaction` /
+`delete_ledger_transaction` — the same manual-posting helper `create_transaction` itself now calls
+— so the freeze rules (household lock, account lifetime/anchor, frozen FX, dedupe hash) apply
+identically instead of through a second copy. `PUT /payslips/deduction-rules/{label}` saves a rule
+(upsert); linking net pay auto-posts a pair for every deduction line with a matching rule;
+`POST /payslips/{payslipId}/lines/{lineNo}/spending` counts one line (saving its rule) and posts
+its pair when linked; `DELETE` on the same path stops counting it. Unlinking and superseding a
+payslip remove every pair it posted; the rule survives so a later payslip still auto-posts. Every
+write is idempotent: a line already paired is left alone by a replayed `POST`, and a line with no
+pair is left alone by a replayed `DELETE`.
+
+---
+
 ## `0013`
 
 ### Loans
