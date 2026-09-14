@@ -139,7 +139,8 @@ documents.
   lock; create replays by key with field equality; update locks the row and refuses archived rows;
   archive sets `archived_at` once. Forecast opens its transaction with `SET TRANSACTION READ ONLY`
   before any other statement (it calls no SECURITY DEFINER function, so owner scoping by explicit
-  household filters suffices) and applies rules 1–7. Extract the active valuation-period selection from `dashboard.py::_net_worth` into a shared
+  household filters suffices) and applies rules 1–7. Extract the active valuation-period selection
+  from `dashboard.py::_net_worth` into a shared
   SQL constant used by both, with no dashboard behavior change.
 - The Plans screen follows the specification; the workspace replaces the disabled Plans button with
   a `plans` link and loads `/accounts` and `/currencies` for it.
@@ -151,7 +152,8 @@ documents.
   date and inclusive day 90, signed amounts and exact 4-place sums.
 - Live: create 201, replay 200, conflicting key 409, foreign account or commitment 404, currency
   mismatch 422, archived update 409; an amount beyond 4 decimals or 16 integer digits 422 with no
-  row; the signed amount string round-trips exactly through create, update and list; forecast start balance and date, `dueByAsOf`, holdings and
+  row; the signed amount string round-trips exactly through create, update and list; forecast start
+  balance and date, `dueByAsOf`, holdings and
   snapshot accounts `not_ledger_valued`, `balance_after_as_of`, closed-account and mismatch
   commitments, archived ignored, another household's commitments invisible, and row counts, balances
   and `GET /dashboard` unchanged by `GET /forecast`.
