@@ -68,6 +68,9 @@ export function WealthScreen({ currency, currencies, request }: Props) {
     try {
       await request("/wealth-history/refresh", { method: "POST" });
       setAttempt((value) => value + 1);
+      // The month table reloads from the `attempt` effect above; a month already open on screen
+      // would otherwise keep showing its pre-refresh positions until the owner reselects it.
+      if (selected) selectMonth(selected);
     } catch (error) {
       setProblem(errorText(error, "History could not be refreshed."));
     } finally {
@@ -144,8 +147,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                           type="button"
                         >{row.monthEnd}</button>
                       </th>
-                      <td>{total === null ? "—" : moneyText(total, currency.code, currencies)}</td>
-                      <td>{row.complete ? "Complete" : "Incomplete — labelled, not hidden"}</td>
+                      <td>
+                        {total === null
+                          ? "Unavailable — incomplete"
+                          : moneyText(total, currency.code, currencies)}
+                      </td>
+                      <td>{row.complete ? "Complete" : "Incomplete month"}</td>
                     </tr>
                   );
                 })}

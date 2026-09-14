@@ -550,6 +550,7 @@ personal finance software, and it is designed out here rather than tested for.</
             │                                      ├── investment_evidence
             │                                      └── investment_review_item
             ├── month_end_position                      (V46, applied)
+            ├── wealth_history_refresh                  (V46, applied)
             ├── budget_period ──── budget_line          [Phase 2]
             ├── payslip ──── payslip_line               (V42, applied)
             │                 └── payslip_line_posting  (V44, applied)
@@ -1019,7 +1020,7 @@ broader planned <code>audit_log</code>, and V23 adds no mutation API or backgrou
 <p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V23</code>.</p>
 <hr>
 <h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
-<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>month_end_position</code></td><td>One row per counted account, or per holding of a counted holdings-mode account, at a month end: native value, evidence date, translation rates to both reporting currencies with their dates and carried flags, translated values and a status — <em>with the rates used</em>, so a past figure is reproducible. A recomputable cache, replaced in one transaction by <code>wealth_history.refresh</code>, not edited in place.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V46</code>.</p>
+<table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>month_end_position</code></td><td>One row per counted account, or per holding of a counted holdings-mode account, at a month end: native value, evidence date, translation rates to both reporting currencies with their dates and carried flags, translated values and a status — <em>with the rates used</em>, so a past figure is reproducible. A recomputable cache, replaced in one transaction by <code>wealth_history.refresh</code>, not edited in place.</td></tr><tr><td><code>wealth_history_refresh</code></td><td>One row per household: when it was last refreshed (<code>computed_at</code>) and through which month end (<code>computed_through</code>). <code>GET /wealth-history</code> lists every month from the history anchor through <code>computed_through</code> from this row, including a month with no <code>month_end_position</code> row, and a household with no row here has never refreshed.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V46</code>.</p>
 <p>Monthly attribution (Phase 2.2 Task 2) is computed on read from two months' stored positions
 and the window's frozen flows — it is never stored as its own table, so the earlier planned
 <code>net_worth_attribution</code> shape this section once described is retired rather than carried

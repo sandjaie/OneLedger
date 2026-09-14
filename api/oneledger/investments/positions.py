@@ -135,12 +135,7 @@ def calculate_position(
             gain_secondary = (
                 None if secondary is None else _money(secondary - contribution_secondary)
             )
-    except (InvalidOperation, _MoneyOutsideSupportedRange) as exc:
-        # `as exc:`, even unused, is deliberate: this installed ruff's formatter strips the
-        # parentheses off a bare `except (A, B):` with no bound name, corrupting it into
-        # invalid Python 2-only syntax (reproduced against a minimal file; ruff 0.16.6) — the
-        # cause of the syntax error this branch found and fixed in this very function.
-        del exc
+    except InvalidOperation, _MoneyOutsideSupportedRange:
         return PositionCalculation("outside_supported_range", None, None, None, None, None, None)
     return PositionCalculation(
         calculation_status="available",

@@ -4334,11 +4334,11 @@ export type MonthSummary = {
     /**
      * Totalbase
      */
-    totalBase: string;
+    totalBase: string | null;
     /**
      * Totalsecondary
      */
-    totalSecondary: string;
+    totalSecondary: string | null;
     /**
      * Complete
      */

@@ -11,6 +11,11 @@ BEGIN
     'the month_end_position table must exist';
   ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'month_end_position'::regclass),
     'month_end_position must have row level security enabled';
+  ASSERT (SELECT count(*) FROM pg_tables
+           WHERE schemaname = 'public' AND tablename = 'wealth_history_refresh') = 1,
+    'the wealth_history_refresh table must exist';
+  ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'wealth_history_refresh'::regclass),
+    'wealth_history_refresh must have row level security enabled';
   RAISE NOTICE 'PASS 0043 structure';
 END $$;
 
@@ -167,5 +172,42 @@ BEGIN
     'anonymous position reads are empty';
   RESET ROLE;
   RAISE NOTICE 'PASS 0043 owner, member, foreign and anonymous RLS';
+END $$;
+ROLLBACK;
+
+-- Owner, member, foreign and anonymous RLS on wealth_history_refresh, one row per household.
+BEGIN;
+DO $$
+DECLARE f RECORD;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0043_fixture();
+  INSERT INTO wealth_history_refresh (household_id, computed_through)
+  VALUES (f.h1, DATE '2024-01-31');
+  INSERT INTO wealth_history_refresh (household_id, computed_through)
+  VALUES (f.h2, DATE '2024-01-31');
+
+  PERFORM set_config('app.user_id', f.u1::TEXT, true);
+  SET LOCAL ROLE authenticated;
+  ASSERT (SELECT count(*) FROM wealth_history_refresh) = 1,
+    'owner sees only its own household refresh row';
+  RESET ROLE;
+
+  PERFORM set_config('app.user_id', f.m1::TEXT, true);
+  SET LOCAL ROLE authenticated;
+  ASSERT (SELECT count(*) FROM wealth_history_refresh) = 0,
+    'a household member reads no refresh row';
+  RESET ROLE;
+
+  PERFORM set_config('app.user_id', f.u2::TEXT, true);
+  SET LOCAL ROLE authenticated;
+  ASSERT (SELECT count(*) FROM wealth_history_refresh) = 1,
+    'the other household sees only its own refresh row';
+  RESET ROLE;
+
+  SET LOCAL ROLE anon;
+  ASSERT (SELECT count(*) FROM wealth_history_refresh) = 0,
+    'anonymous refresh reads are empty';
+  RESET ROLE;
+  RAISE NOTICE 'PASS 0043 wealth_history_refresh owner, member, foreign and anonymous RLS';
 END $$;
 ROLLBACK;

@@ -2,12 +2,17 @@
 `GET /wealth-history/{monthEnd}` (spec "API"). Owner-only, like `routes/coverage.py`'s
 acknowledgements: no `SECURITY DEFINER` write path, `require_owner` and an explicit
 `household_id` filter are the authorization boundary. `GET` opens `SET TRANSACTION READ ONLY`
-and never recomputes — it reads exactly what the last refresh stored in `month_end_position`.
+and never recomputes — it reads exactly what the last refresh stored in `month_end_position`
+and `wealth_history_refresh` (the household's own `computed_through`/`computed_at`, so every
+month in one response — including one with no position row — carries the one real refresh
+timestamp). An incomplete month's totals are null rather than a partial sum (fail closed): a
+smaller, confident, wrong figure is worse than an absent one.
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -18,15 +23,19 @@ from pydantic import BaseModel
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..money import _out
-from ..wealth_history import RefreshCounts, refresh
+from ..wealth_history import RefreshCounts, refresh, stored_month_ends
 
 router = APIRouter(tags=["wealth-history"])
+
+_ZERO = Decimal("0.0000")
 
 
 class MonthSummary(BaseModel):
     monthEnd: date
-    totalBase: str
-    totalSecondary: str
+    # Null on an incomplete month (fails closed): a partial sum would be a smaller, confident,
+    # wrong figure. `complete` and `statusCounts` say why.
+    totalBase: str | None
+    totalSecondary: str | None
     complete: bool
     statusCounts: dict[str, int]
     computedAt: datetime
@@ -81,16 +90,18 @@ def post_refresh(owner: Annotated[OwnerSession, Depends(require_owner)]) -> Refr
         return refresh(cur, owner.household_id, base, secondary, date.today())
 
 
+_REFRESH_STATE = """
+    SELECT computed_through, computed_at FROM wealth_history_refresh WHERE household_id = %s
+"""
+
 _MONTHS = """
     SELECT month_end,
-           round(coalesce(sum(value_base) FILTER (WHERE status = 'available'), 0), 4),
-           round(coalesce(sum(value_secondary) FILTER (WHERE status = 'available'), 0), 4),
-           bool_and(status = 'available') AS complete,
-           max(computed_at)
+           round(sum(value_base) FILTER (WHERE status = 'available'), 4),
+           round(sum(value_secondary) FILTER (WHERE status = 'available'), 4),
+           bool_and(status = 'available') AS complete
       FROM month_end_position
      WHERE household_id = %s
      GROUP BY month_end
-     ORDER BY month_end
 """
 
 _STATUS_COUNTS = """
@@ -108,22 +119,44 @@ def read_wealth_history(
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
         base, secondary = _household_pair(cur, owner.household_id)
+        cur.execute(_REFRESH_STATE, (owner.household_id,))
+        state = cur.fetchone()
+        if state is None:
+            # Never refreshed: GET never recomputes, so there is nothing to list yet.
+            return WealthHistoryResponse(baseCurrency=base, secondaryCurrency=secondary, months=[])
+        computed_through, computed_at = state
+
         cur.execute(_STATUS_COUNTS, (owner.household_id,))
         counts_by_month: dict[date, dict[str, int]] = {}
         for month_end_value, status, count in cur.fetchall():
             counts_by_month.setdefault(month_end_value, {})[status] = int(count)
+
         cur.execute(_MONTHS, (owner.household_id,))
-        months = [
-            MonthSummary(
-                monthEnd=row[0],
-                totalBase=str(row[1]),
-                totalSecondary=str(row[2]),
-                complete=bool(row[3]),
-                statusCounts=counts_by_month.get(row[0], {}),
-                computedAt=row[4],
+        totals_by_month: dict[date, tuple[Decimal | None, Decimal | None, bool]] = {
+            row[0]: (row[1], row[2], bool(row[3])) for row in cur.fetchall()
+        }
+
+        months = []
+        for month_end_value in stored_month_ends(computed_through):
+            found = totals_by_month.get(month_end_value)
+            total_base: Decimal | None
+            total_secondary: Decimal | None
+            if found is None:
+                # No stored position row at all for this month (e.g. no account existed yet):
+                # nothing was omitted from a sum, so the month is vacuously complete at zero.
+                total_base, total_secondary, complete = _ZERO, _ZERO, True
+            else:
+                total_base, total_secondary, complete = found
+            months.append(
+                MonthSummary(
+                    monthEnd=month_end_value,
+                    totalBase=_out(total_base) if complete else None,
+                    totalSecondary=_out(total_secondary) if complete else None,
+                    complete=complete,
+                    statusCounts=counts_by_month.get(month_end_value, {}),
+                    computedAt=computed_at,
+                )
             )
-            for row in cur.fetchall()
-        ]
     return WealthHistoryResponse(baseCurrency=base, secondaryCurrency=secondary, months=months)
 
 

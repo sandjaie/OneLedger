@@ -2610,23 +2610,35 @@ CREATE TABLE month_end_position (
 );
 CREATE UNIQUE INDEX uq_month_end_position
   ON month_end_position (household_id, month_end, account_id, holding_id) NULLS NOT DISTINCT;
+
+CREATE TABLE wealth_history_refresh (
+  household_id     UUID PRIMARY KEY REFERENCES household(id),
+  computed_through DATE NOT NULL,
+  computed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 ```
 
-`household_isolation FOR ALL TO authenticated` as on every other household-scoped table; no
-function or trigger. A position is one counted account, or one holding of a counted
-holdings-mode account, at a month end — wealth history's own lifetime predicate
-(`include_in_net_worth AND (opened_on IS NULL OR opened_on <= t) AND (closed_on IS NULL OR
-closed_on >= t)`), not the dashboard's `is_active` filter, so a closed account keeps the months it
-was open. `wealth_history.refresh(cur, household_id, base, secondary, through)` computes
-31 December 2023 and every month end from `coverage.HISTORY_ANCHOR` through the last month fully
-completed as of `through`, reusing `investments.positions.read_positions` (a new `lifetime`
-keyword swaps its account filter for the predicate above, and `include_closed=True` so a fully
-sold holding reports zero) and `current_rate_pair`, and replaces the household's rows in one
-transaction under the household lock. `POST /wealth-history/refresh` (owner-only, returns
-counts), `GET /wealth-history` (months with totals in both currencies, `complete`, status counts
-and the last `computed_at`) and `GET /wealth-history/{monthEnd}` (that month's stored positions
-with account and security names, rates, dates, carried flags and status) never recompute — they
-read exactly what the last refresh stored.
+`household_isolation FOR ALL TO authenticated` on both tables, as on every other
+household-scoped table; no function or trigger. A position is one counted account, or one
+holding of a counted holdings-mode account, at a month end — wealth history's own lifetime
+predicate (`include_in_net_worth AND (opened_on IS NULL OR opened_on <= t) AND (closed_on IS NULL
+OR closed_on >= t)`), not the dashboard's `is_active` filter, so a closed account keeps the
+months it was open. `wealth_history.refresh(cur, household_id, base, secondary, through)`
+computes 31 December 2023 and every month end from `coverage.HISTORY_ANCHOR` through the last
+month fully completed as of `through` (`wealth_history.stored_month_ends`), reusing
+`investments.positions.read_positions` (a new `lifetime` keyword swaps its account filter for the
+predicate above, and `include_closed=True` so a fully sold holding reports zero) and
+`current_rate_pair`, and replaces the household's `month_end_position` rows and upserts its one
+`wealth_history_refresh` row in the same transaction under the household lock.
+
+`POST /wealth-history/refresh` is owner-only and returns counts. `GET /wealth-history` reads
+`wealth_history_refresh` for the household — an empty list before any refresh — then lists every
+month end it names, including one with no stored position row (totals `0.0000`, `complete` true,
+empty status counts): totals are null on an incomplete month, never a partial sum (fail closed),
+and every month in one response carries the same `computedAt`, the refresh's own timestamp, not a
+per-month `max(computed_at)`. `GET /wealth-history/{monthEnd}` returns that month's stored
+positions with account and security names, rates, dates, carried flags and status. Neither `GET`
+route recomputes — both read exactly what the last refresh stored.
 
 ---
 

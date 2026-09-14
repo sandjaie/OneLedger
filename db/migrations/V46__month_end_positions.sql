@@ -36,13 +36,31 @@ CREATE TABLE month_end_position (
       AND value_secondary IS NOT NULL)
     OR (status <> 'available' AND value_base IS NULL AND value_secondary IS NULL))
 );
+-- (household_id, month_end) queries (`GET /wealth-history`'s per-month aggregates) are already
+-- served by this index's own leading columns; a separate (household_id, month_end) index would
+-- duplicate it.
 CREATE UNIQUE INDEX uq_month_end_position
   ON month_end_position (household_id, month_end, account_id, holding_id) NULLS NOT DISTINCT;
-CREATE INDEX idx_month_end_position_month
-  ON month_end_position (household_id, month_end);
 
 ALTER TABLE month_end_position ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY household_isolation ON month_end_position FOR ALL TO authenticated
+  USING (household_id = current_household_id())
+  WITH CHECK (household_id = current_household_id());
+
+-- One row per household: when it last refreshed, and through which month end. `GET
+-- /wealth-history` lists every month from the anchor through `computed_through` even where a
+-- month holds no `month_end_position` row (spec "API" via review finding OL-003) — the household
+-- reads a stable, single `computed_at` this way, and a household that has never refreshed simply
+-- has no row here, so `GET /wealth-history` lists no months before any refresh.
+CREATE TABLE wealth_history_refresh (
+  household_id     UUID PRIMARY KEY REFERENCES household(id),
+  computed_through DATE NOT NULL,
+  computed_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE wealth_history_refresh ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY household_isolation ON wealth_history_refresh FOR ALL TO authenticated
   USING (household_id = current_household_id())
   WITH CHECK (household_id = current_household_id());

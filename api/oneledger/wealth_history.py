@@ -32,7 +32,13 @@ from .routes.dashboard import VALUATION_PERIOD_FOR_ACCOUNT
 
 # `read_positions` is re-exported so the live test can monkeypatch this module's own bound name
 # to prove a late refresh failure leaves the previous rows intact.
-__all__ = ["HISTORY_ANCHOR", "RefreshCounts", "read_positions", "refresh"]
+__all__ = [
+    "HISTORY_ANCHOR",
+    "RefreshCounts",
+    "read_positions",
+    "refresh",
+    "stored_month_ends",
+]
 
 # Wealth history's own counted-account predicate (spec "Month-end positions"): three `%s`
 # placeholders in order — household_id, then the as-of date twice.
@@ -74,6 +80,15 @@ def _last_completed_month_end(through: date) -> date:
         return through
     prior_month_last_day = first_of_this_month - timedelta(days=1)
     return month_end(date(prior_month_last_day.year, prior_month_last_day.month, 1))
+
+
+def stored_month_ends(computed_through: date) -> list[date]:
+    """Every month end a refresh through `computed_through` stores or would store: 31 December
+    2023 (the opening point for January 2024) plus each month end from `HISTORY_ANCHOR` through
+    the month `computed_through` falls in. Shared by `refresh` (which computes exactly these) and
+    `GET /wealth-history` (which lists exactly these, whether or not a month holds any position
+    row), so the two can never name a different set of months."""
+    return [date(2023, 12, 31), *(month_end(m) for m in months_from_anchor(computed_through))]
 
 
 _Translated = tuple[
@@ -154,8 +169,9 @@ _LATEST_SNAPSHOT = """
 def _ledger_rows(
     cur: psycopg.Cursor[Any], household_id: UUID, base: str, secondary: str, t: date
 ) -> list[_Row]:
-    # Text order of `%s` placeholders: the LATERAL flow subquery's one date, then
-    # VALUATION_PERIOD_FOR_ACCOUNT's two dates, then _COUNTED's household id and two dates.
+    # Text order of `%s` placeholders: VALUATION_PERIOD_FOR_ACCOUNT's two dates (the JOIN
+    # appears first), then the LATERAL flow subquery's one date, then _COUNTED's household id
+    # and two dates.
     cur.execute(_LEDGER_ACCOUNTS, (t, t, t, household_id, t, t))
     rows: list[_Row] = []
     for (
@@ -351,8 +367,8 @@ def refresh(
     # The household lock is this ledger's serialization point for a write that reads and stores
     # a consistent snapshot of many other tables (spec B3.5 / `commit_import_batch`'s own use).
     cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (household_id,))
-    last_completed = _last_completed_month_end(through)
-    month_ends = [date(2023, 12, 31), *(month_end(m) for m in months_from_anchor(last_completed))]
+    computed_through = _last_completed_month_end(through)
+    month_ends = stored_month_ends(computed_through)
     cur.execute("DELETE FROM month_end_position WHERE household_id = %s", (household_id,))
     by_status: Counter[str] = Counter()
     total = 0
@@ -382,6 +398,16 @@ def refresh(
                     row.status,
                 ),
             )
+    # One row per household recording when it was last refreshed and through which month —
+    # `GET /wealth-history` reads this rather than `max(computed_at)` so every month in one
+    # response carries the same, single refresh timestamp, including a month with no positions.
+    cur.execute(
+        """INSERT INTO wealth_history_refresh (household_id, computed_through, computed_at)
+           VALUES (%s, %s, now())
+           ON CONFLICT (household_id) DO UPDATE
+             SET computed_through = EXCLUDED.computed_through, computed_at = now()""",
+        (household_id, computed_through),
+    )
     return RefreshCounts(
         monthsComputed=len(month_ends), positionsComputed=total, byStatus=dict(by_status)
     )

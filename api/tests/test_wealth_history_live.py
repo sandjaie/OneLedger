@@ -4,12 +4,12 @@
 One synthetic household exercises every stored-position status: a ledger account posted on its
 own opening date and again later (`assert_account_reconciles`'s own figure), an account closed
 mid-history that keeps the months it was open, an account opened after the anchor
-(`before_opening`), a holdings-mode account with a priced holding (later fully sold) and an
-unpriced one (`missing_price`), a snapshot-mode account with a carried snapshot translated at
-each month's own rate, a snapshot-mode account with no snapshot ever (`no_snapshot`), and a
-ledger account in a currency no `fx_rate` row ever covers (`missing_rate`). A second, otherwise
-empty household proves isolation. Skipped when no database is reachable. Every name, security and
-amount is synthetic.
+(`before_opening`), a holdings-mode account with a priced holding (later fully sold), an unpriced
+one (`missing_price`) and one priced in the household's own secondary currency, a snapshot-mode
+account with a carried snapshot translated at each month's own rate, a snapshot-mode account with
+no snapshot ever (`no_snapshot`), a ledger account and a holding in a currency no `fx_rate` row
+ever covers (`missing_rate`). A second, otherwise empty household proves isolation. Skipped when
+no database is reachable. Every name, security and amount is synthetic.
 """
 
 from __future__ import annotations
@@ -47,11 +47,14 @@ class WealthFixture:
     closed_id: UUID
     before_id: UUID
     no_rate_id: UUID
+    secondary_ledger_id: UUID
     holdings_id: UUID
     snapshot_id: UUID
     no_snapshot_id: UUID
     priced_security_id: UUID
     unpriced_security_id: UUID
+    secondary_security_id: UUID
+    no_rate_security_id: UUID
 
 
 def _client() -> TestClient:
@@ -166,6 +169,53 @@ def _sell(
     assert response.status_code == 201, response.text
 
 
+def _acquire_with_no_real_rate(
+    cur: psycopg.Cursor[Any],
+    account_id: UUID,
+    security_id: UUID,
+    event_date: date,
+    units: str,
+    price: str,
+    currency: str,
+) -> None:
+    """A purchase in a currency no `fx_rate` row will ever cover.
+
+    The `/investment-events/acquisitions` route freezes through `money._frozen`, which looks the
+    rate up and refuses the write when none exists — so an acquisition in a truly rateless
+    currency can never reach the ledger through that door at all. `append_investment_transaction`
+    (the same append the route itself calls) takes the frozen rate as a parameter rather than
+    looking it up, so this calls it directly with a self-consistent rate of exactly 1 — the point
+    is a security whose *current* market rate, looked up independently by
+    `wealth_history.current_rate_pair` at each month end, is unavailable; what this one
+    transaction happened to freeze at acquisition time is beside the point and asserted nowhere.
+    """
+    gross = (Decimal(units) * Decimal(price)).quantize(Decimal("0.0001"))
+    net = -gross
+    cur.execute(
+        """SELECT append_investment_transaction(
+             %s, %s, %s, 'purchase'::investment_event_kind,
+             %s, %s, %s, 0, 0, %s, %s,
+             %s, 1, 1, %s, %s,
+             'owner_entered'::investment_event_source, %s, %s,
+             NULL, NULL, NULL, NULL)""",
+        (
+            account_id,
+            security_id,
+            event_date,
+            Decimal(units),
+            Decimal(price),
+            gross,
+            net,
+            currency,
+            event_date,
+            net,
+            net,
+            "owner_acquisition_v1",
+            str(uuid4()),
+        ),
+    )
+
+
 @pytest.fixture
 def live() -> Iterator[WealthFixture]:
     connection = connect_to_test_database()
@@ -271,6 +321,18 @@ def live() -> Iterator[WealthFixture]:
             opening_balance="100",
             opening_balance_date=date(2024, 1, 1),
         )
+        # A ledger account held in the household's own secondary currency: its `rateToBase` is
+        # the real (non-trivial) stored rate, its `rateToSecondary` is the trivial identity leg.
+        secondary_ledger_id = _account(
+            cur,
+            household_id,
+            person_id,
+            "savings",
+            secondary,
+            opened_on=date(2024, 1, 1),
+            opening_balance="200",
+            opening_balance_date=date(2024, 1, 1),
+        )
         holdings_id = _account(
             cur,
             household_id,
@@ -318,6 +380,22 @@ def live() -> Iterator[WealthFixture]:
             (household_id, base),
         )
         unpriced_security_id = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO security (
+                   household_id, security_type, name, currency, country, asset_class)
+               VALUES (%s, 'equity', 'Synthetic secondary-currency security', %s, 'XZ', 'equity')
+               RETURNING id""",
+            (household_id, secondary),
+        )
+        secondary_security_id = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO security (
+                   household_id, security_type, name, currency, country, asset_class)
+               VALUES (%s, 'equity', 'Synthetic no-rate security', %s, 'XZ', 'equity')
+               RETURNING id""",
+            (household_id, third),
+        )
+        no_rate_security_id = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
 
         cur.execute(
             """INSERT INTO valuation_snapshot (
@@ -357,8 +435,19 @@ def live() -> Iterator[WealthFixture]:
     try:
         _acquire(priced_security_id, holdings_id, base, "2024-01-10", "10", "10.000000")
         _acquire(unpriced_security_id, holdings_id, base, "2024-01-10", "5", "1.000000")
+        # 2024-01-10 (not -15): the only exact-date secondary-to-base rate row this fixture
+        # inserted before mid-January, which the route's own freeze requires on the exact day.
+        _acquire(secondary_security_id, holdings_id, secondary, "2024-01-10", "4", "25.000000")
+        scope_to_owner(connection, user_id)
+        with connection.cursor() as raw_cur:
+            _acquire_with_no_real_rate(
+                raw_cur, holdings_id, no_rate_security_id, date(2024, 1, 10), "2", "5.000000", third
+            )
+        connection.commit()
         _price(priced_security_id, "2024-01-31", "12.000000")
         _price(priced_security_id, "2024-02-29", "15.000000")
+        _price(secondary_security_id, "2024-01-31", "25.000000")
+        _price(no_rate_security_id, "2024-01-31", "6.000000")
         _sell(priced_security_id, holdings_id, base, "2024-03-10", "-10", "16.000000")
 
         yield WealthFixture(
@@ -372,11 +461,14 @@ def live() -> Iterator[WealthFixture]:
             closed_id=closed_id,
             before_id=before_id,
             no_rate_id=no_rate_id,
+            secondary_ledger_id=secondary_ledger_id,
             holdings_id=holdings_id,
             snapshot_id=snapshot_id,
             no_snapshot_id=no_snapshot_id,
             priced_security_id=priced_security_id,
             unpriced_security_id=unpriced_security_id,
+            secondary_security_id=secondary_security_id,
+            no_rate_security_id=no_rate_security_id,
         )
     finally:
         app.dependency_overrides.clear()
@@ -439,8 +531,11 @@ def test_ledger_month_end_balance_matches_reconciliation(live: WealthFixture) ->
 
     scope_to_owner(live.connection, live.owner.user_id)
     with live.connection.cursor() as cur:
-        # Raises on mismatch: this is the same figure V14's assert_account_reconciles verifies,
-        # computed independently by the fixture above.
+        # Raises on mismatch: 1500.0000 and 1700.0000 are the same literals already asserted
+        # against the API response above, so this proves V14's own ledger-balance formula
+        # (opening_balance + posted v_transaction_posting rows) agrees with wealth_history's,
+        # not merely that this test's two implementations of the arithmetic agree with each
+        # other.
         cur.execute(
             "SELECT assert_account_reconciles(%s, %s, %s)",
             (live.ledger_id, Decimal("1500.0000"), date(2024, 1, 31)),
@@ -627,3 +722,175 @@ def test_routes_require_owner_session() -> None:
     assert _client().post("/wealth-history/refresh").status_code == 401
     assert _client().get("/wealth-history").status_code == 401
     assert _client().get("/wealth-history/2024-01-31").status_code == 401
+
+
+def test_secondary_currency_position_asserts_exact_rate_real_date_and_carried(
+    live: WealthFixture,
+) -> None:
+    """A position already in the household's own secondary currency: `rateToBase` is the real
+    stored rate — carried forward from its last exact date, 10 March, since nothing was inserted
+    on the 31st — and `rateToSecondary` is the trivial identity leg."""
+    _refresh()
+    march = _month("2024-03-31")
+    row = _position(march, account_id=live.secondary_ledger_id)
+    assert row["currency"] == live.secondary
+    assert row["status"] == "available"
+    assert row["nativeValue"] == "200.0000"
+    assert row["rateToBase"] == "2.5000000000"
+    assert row["rateToBaseDate"] == "2024-03-10"
+    assert row["rateToBaseCarried"] is True
+    assert row["rateToSecondary"] == "1.0000000000"
+    assert row["rateToSecondaryDate"] == "2024-03-31"
+    assert row["rateToSecondaryCarried"] is False
+    assert row["valueBase"] == "500.0000"  # 200 x 2.5
+    assert row["valueSecondary"] == "200.0000"  # 200 x 1
+
+
+def test_holding_priced_in_secondary_currency_asserts_values_and_rates(
+    live: WealthFixture,
+) -> None:
+    _refresh()
+    january = _month("2024-01-31")
+    row = next(
+        p
+        for p in january["positions"]
+        if p["accountId"] == str(live.holdings_id)
+        and p["currency"] == live.secondary
+        and p["status"] == "available"
+    )
+    assert row["nativeValue"] == "100.0000"  # 4 units x 25.0
+    assert row["evidenceDate"] == "2024-01-31"
+    assert row["rateToBase"] == "2.0000000000"
+    assert row["rateToBaseDate"] == "2024-01-10"
+    assert row["rateToBaseCarried"] is True
+    assert row["rateToSecondary"] == "1.0000000000"
+    assert row["rateToSecondaryDate"] == "2024-01-31"
+    assert row["rateToSecondaryCarried"] is False
+    assert row["valueBase"] == "200.0000"  # 100 x 2.0
+    assert row["valueSecondary"] == "100.0000"  # 100 x 1
+
+
+def test_holding_with_no_rate_currency_is_missing_rate_with_native_kept(
+    live: WealthFixture,
+) -> None:
+    _refresh()
+    january = _month("2024-01-31")
+    row = next(
+        p
+        for p in january["positions"]
+        if p["accountId"] == str(live.holdings_id) and p["currency"] == live.third
+    )
+    assert row["status"] == "missing_rate"
+    assert row["nativeValue"] == "12.0000"  # 2 units x 6.0, known even though untranslatable
+    assert row["evidenceDate"] == "2024-01-31"
+    assert row["valueBase"] is None
+    assert row["valueSecondary"] is None
+    assert row["rateToBase"] is None
+    assert row["rateToSecondary"] is None
+
+
+def test_get_wealth_history_matches_seeded_month_summary(live: WealthFixture) -> None:
+    """Every counted position for January, enumerated by hand against the fixture: six
+    available (the two base and one secondary ledger account, the snapshot account, and the two
+    priced holdings), one missing_price, two missing_rate, one before_opening and one
+    no_snapshot — eleven rows, so the month is incomplete and (fail closed, OL-002) its totals
+    are null rather than a partial sum."""
+    _refresh()
+    history = _client().get("/wealth-history", headers=ORIGIN).json()
+    january = next(m for m in history["months"] if m["monthEnd"] == "2024-01-31")
+    assert january["complete"] is False
+    assert january["totalBase"] is None
+    assert january["totalSecondary"] is None
+    assert january["statusCounts"] == {
+        "available": 6,
+        "missing_price": 1,
+        "missing_rate": 2,
+        "before_opening": 1,
+        "no_snapshot": 1,
+    }
+
+
+def test_other_household_refresh_does_not_touch_this_households_rows(
+    live: WealthFixture,
+) -> None:
+    _refresh()
+    before = _month("2024-01-31")
+
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    try:
+        other_refresh = _client().post("/wealth-history/refresh", headers=ORIGIN)
+        assert other_refresh.status_code == 200
+        other_month = _client().get("/wealth-history/2024-01-31", headers=ORIGIN).json()
+        assert other_month["positions"] == []
+    finally:
+        app.dependency_overrides[auth.require_owner] = lambda: live.owner
+
+    after = _month("2024-01-31")
+    assert after == before
+
+
+def test_31_december_2023_is_listed_even_with_no_account_open_that_day() -> None:
+    """`stored_month_ends` always starts at 31 December 2023, the opening point for January
+    2024 — a household whose every account opens exactly on 2024-01-01 (the history anchor, not
+    before it) has no counted position at all on the 31st, and that month must still appear:
+    zero totals, complete, empty status counts — never simply absent."""
+    connection = connect_to_test_database()
+    household_id, person_id, user_id = uuid4(), uuid4(), uuid4()
+    owner = auth.OwnerSession(user_id, household_id, uuid4(), "wealth-anchor-owner@example.invalid")
+    with connection.cursor() as cur:
+        cur.execute("SELECT min(code), max(code) FROM currency")
+        found = cur.fetchone()
+        assert found is not None
+        base, secondary = str(found[0]).strip(), str(found[1]).strip()
+        cur.execute(
+            """INSERT INTO household (id, name, base_currency, secondary_currency)
+               VALUES (%s, 'wealth history anchor household', %s, %s)""",
+            (household_id, base, secondary),
+        )
+        cur.execute(
+            """INSERT INTO person (id, household_id, display_name, is_self)
+               VALUES (%s, %s, 'wealth history anchor owner', true)""",
+            (person_id, household_id),
+        )
+        cur.execute(
+            """INSERT INTO app_user (id, household_id, person_id, email, role)
+               VALUES (%s, %s, %s, %s, 'owner')""",
+            (user_id, household_id, person_id, owner.email),
+        )
+        _account(
+            cur,
+            household_id,
+            person_id,
+            "savings",
+            base,
+            opened_on=date(2024, 1, 1),
+            opening_balance="100",
+            opening_balance_date=date(2024, 1, 1),
+        )
+    connection.commit()
+
+    app.dependency_overrides[auth.require_owner] = lambda: owner
+    try:
+        refreshed = _client().post("/wealth-history/refresh", headers=ORIGIN)
+        assert refreshed.status_code == 200
+
+        history = _client().get("/wealth-history", headers=ORIGIN).json()
+        opening = next(m for m in history["months"] if m["monthEnd"] == "2023-12-31")
+        assert opening["complete"] is True
+        assert opening["totalBase"] == "0.0000"
+        assert opening["totalSecondary"] == "0.0000"
+        assert opening["statusCounts"] == {}
+    finally:
+        app.dependency_overrides.clear()
+        with connection.cursor() as cur:
+            cur.execute(
+                "DELETE FROM wealth_history_refresh WHERE household_id = %s", (household_id,)
+            )
+            cur.execute("DELETE FROM month_end_position WHERE household_id = %s", (household_id,))
+            clear_synthetic_account_valuation_periods(cur)
+            cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM app_user WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
+        connection.commit()
+        connection.close()

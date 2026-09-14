@@ -34,9 +34,10 @@ const history: WealthHistoryResponse = {
       computedAt: "2026-09-14T00:00:00Z",
     },
     {
+      // Fails closed: an incomplete month's totals are null, never a partial sum.
       monthEnd: "2024-02-29",
-      totalBase: "1700.0000",
-      totalSecondary: "680.0000",
+      totalBase: null,
+      totalSecondary: null,
       complete: false,
       statusCounts: { available: 1, before_opening: 1 },
       computedAt: "2026-09-14T00:00:00Z",
@@ -92,7 +93,8 @@ describe("wealth screen", () => {
     expect(within(table).getByText("2024-01-31")).toBeTruthy();
     expect(within(table).getByText("AED 1,500.0000")).toBeTruthy();
     expect(within(table).getByText("Complete")).toBeTruthy();
-    expect(within(table).getByText(/Incomplete/)).toBeTruthy();
+    expect(within(table).getByText("Incomplete month")).toBeTruthy();
+    expect(within(table).getByText("Unavailable — incomplete")).toBeTruthy();
   });
 
   it("selecting a month shows its positions table with server strings only", async () => {
@@ -132,5 +134,33 @@ describe("wealth screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
 
     await waitFor(() => expect(screen.getByText("AED 1,600.0000")).toBeTruthy());
+  });
+
+  it("reloads the selected month's positions after a refresh", async () => {
+    let refreshed = false;
+    const updatedJanuary: MonthPositionsResponse = {
+      ...january,
+      positions: [{ ...january.positions[0], nativeValue: "1800.0000", valueBase: "1800.0000" }],
+    };
+    const request = requestFrom((path, init) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-01-31") return refreshed ? updatedJanuary : january;
+      if (path === "/wealth-history/refresh" && init?.method === "POST") {
+        refreshed = true;
+        return { monthsComputed: 1, positionsComputed: 1, byStatus: { available: 1 } } satisfies RefreshCounts;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "2024-01-31" }));
+    const positions = await screen.findByRole("table", { name: /2024-01-31, one row per/ });
+    expect(within(positions).getAllByText("AED 1,500.0000").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
+
+    await waitFor(() =>
+      expect(within(positions).getAllByText("AED 1,800.0000").length).toBeGreaterThan(0),
+    );
   });
 });
