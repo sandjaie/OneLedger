@@ -135,7 +135,12 @@ def calculate_position(
             gain_secondary = (
                 None if secondary is None else _money(secondary - contribution_secondary)
             )
-    except InvalidOperation, _MoneyOutsideSupportedRange:
+    except (InvalidOperation, _MoneyOutsideSupportedRange) as exc:
+        # `as exc:`, even unused, is deliberate: this installed ruff's formatter strips the
+        # parentheses off a bare `except (A, B):` with no bound name, corrupting it into
+        # invalid Python 2-only syntax (reproduced against a minimal file; ruff 0.16.6) — the
+        # cause of the syntax error this branch found and fixed in this very function.
+        del exc
         return PositionCalculation("outside_supported_range", None, None, None, None, None, None)
     return PositionCalculation(
         calculation_status="available",
@@ -238,7 +243,12 @@ _POSITIONS = """
            ORDER BY snapshot.price_date DESC, snapshot.observed_at DESC, snapshot.id DESC
            LIMIT 1
       ) accepted ON true
-     WHERE (totals.units > 0 OR (%(include_closed)s AND totals.units = 0)) AND a.is_active
+     WHERE (totals.units > 0 OR (%(include_closed)s AND totals.units = 0))
+       AND (
+         (NOT %(lifetime)s AND a.is_active)
+         OR (%(lifetime)s AND (a.opened_on IS NULL OR a.opened_on <= %(as_of)s)
+                           AND (a.closed_on IS NULL OR a.closed_on >= %(as_of)s))
+       )
        AND (NOT %(included_only)s OR a.include_in_net_worth)
      ORDER BY security.name, h.id
 """
@@ -253,6 +263,7 @@ def read_positions(
     *,
     included_only: bool = False,
     include_closed: bool = False,
+    lifetime: bool = False,
 ) -> list[AcquisitionPosition]:
     """Value active unit leaves at accepted dated prices.
 
@@ -261,6 +272,11 @@ def read_positions(
     A fully disposed holding (zero units as of the requested date) is included only when
     `include_closed` is set; its current value is exactly zero rather than omitted, since it
     genuinely holds nothing — never a synthetic "unavailable" state.
+
+    `lifetime` swaps the account filter from the dashboard's `is_active` toggle for wealth
+    history's own counted-account predicate (spec "Month-end positions"): opened on or before,
+    and not yet closed as of, `as_of` — so a closed account still reports the holdings it had
+    while it was open.
     """
     cur.execute(
         _POSITIONS,
@@ -269,6 +285,7 @@ def read_positions(
             "as_of": as_of,
             "included_only": included_only,
             "include_closed": include_closed,
+            "lifetime": lifetime,
         },
     )
     positions: list[AcquisitionPosition] = []

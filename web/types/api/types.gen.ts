@@ -4186,6 +4186,80 @@ export type MonthCell = {
 };
 
 /**
+ * MonthEndPosition
+ */
+export type MonthEndPosition = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Holdingid
+     */
+    holdingId: string | null;
+    /**
+     * Securityname
+     */
+    securityName: string | null;
+    /**
+     * Valuationmode
+     */
+    valuationMode: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Nativevalue
+     */
+    nativeValue: string | null;
+    /**
+     * Evidencedate
+     */
+    evidenceDate: string | null;
+    /**
+     * Ratetobase
+     */
+    rateToBase: string | null;
+    /**
+     * Ratetobasedate
+     */
+    rateToBaseDate: string | null;
+    /**
+     * Ratetobasecarried
+     */
+    rateToBaseCarried: boolean | null;
+    /**
+     * Ratetosecondary
+     */
+    rateToSecondary: string | null;
+    /**
+     * Ratetosecondarydate
+     */
+    rateToSecondaryDate: string | null;
+    /**
+     * Ratetosecondarycarried
+     */
+    rateToSecondaryCarried: boolean | null;
+    /**
+     * Valuebase
+     */
+    valueBase: string | null;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string | null;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
  * MonthFlows
  */
 export type MonthFlows = {
@@ -4225,6 +4299,60 @@ export type MonthFlows = {
      * Savingsratepctsecondary
      */
     savingsRatePctSecondary: string | null;
+};
+
+/**
+ * MonthPositionsResponse
+ */
+export type MonthPositionsResponse = {
+    /**
+     * Monthend
+     */
+    monthEnd: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    /**
+     * Positions
+     */
+    positions: Array<MonthEndPosition>;
+};
+
+/**
+ * MonthSummary
+ */
+export type MonthSummary = {
+    /**
+     * Monthend
+     */
+    monthEnd: string;
+    /**
+     * Totalbase
+     */
+    totalBase: string;
+    /**
+     * Totalsecondary
+     */
+    totalSecondary: string;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Statuscounts
+     */
+    statusCounts: {
+        [key: string]: number;
+    };
+    /**
+     * Computedat
+     */
+    computedAt: string;
 };
 
 /**
@@ -5208,6 +5336,26 @@ export type Reconciliation = {
      * Message
      */
     message: string;
+};
+
+/**
+ * RefreshCounts
+ */
+export type RefreshCounts = {
+    /**
+     * Monthscomputed
+     */
+    monthsComputed: number;
+    /**
+     * Positionscomputed
+     */
+    positionsComputed: number;
+    /**
+     * Bystatus
+     */
+    byStatus: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -6914,6 +7062,24 @@ export type ValidationError = {
 };
 
 /**
+ * WealthHistoryResponse
+ */
+export type WealthHistoryResponse = {
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    /**
+     * Months
+     */
+    months: Array<MonthSummary>;
+};
+
+/**
  * YearToDate
  */
 export type YearToDate = {
@@ -8492,6 +8658,86 @@ export type UpsertAcknowledgementCoverageAcknowledgementsPutResponses = {
 };
 
 export type UpsertAcknowledgementCoverageAcknowledgementsPutResponse = UpsertAcknowledgementCoverageAcknowledgementsPutResponses[keyof UpsertAcknowledgementCoverageAcknowledgementsPutResponses];
+
+export type PostRefreshWealthHistoryRefreshPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/wealth-history/refresh';
+};
+
+export type PostRefreshWealthHistoryRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PostRefreshWealthHistoryRefreshPostError = PostRefreshWealthHistoryRefreshPostErrors[keyof PostRefreshWealthHistoryRefreshPostErrors];
+
+export type PostRefreshWealthHistoryRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RefreshCounts;
+};
+
+export type PostRefreshWealthHistoryRefreshPostResponse = PostRefreshWealthHistoryRefreshPostResponses[keyof PostRefreshWealthHistoryRefreshPostResponses];
+
+export type ReadWealthHistoryWealthHistoryGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/wealth-history';
+};
+
+export type ReadWealthHistoryWealthHistoryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadWealthHistoryWealthHistoryGetError = ReadWealthHistoryWealthHistoryGetErrors[keyof ReadWealthHistoryWealthHistoryGetErrors];
+
+export type ReadWealthHistoryWealthHistoryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WealthHistoryResponse;
+};
+
+export type ReadWealthHistoryWealthHistoryGetResponse = ReadWealthHistoryWealthHistoryGetResponses[keyof ReadWealthHistoryWealthHistoryGetResponses];
+
+export type ReadMonthPositionsWealthHistoryMonthEndGetData = {
+    body?: never;
+    path: {
+        /**
+         * Monthend
+         */
+        monthEnd: string;
+    };
+    query?: never;
+    url: '/wealth-history/{monthEnd}';
+};
+
+export type ReadMonthPositionsWealthHistoryMonthEndGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadMonthPositionsWealthHistoryMonthEndGetError = ReadMonthPositionsWealthHistoryMonthEndGetErrors[keyof ReadMonthPositionsWealthHistoryMonthEndGetErrors];
+
+export type ReadMonthPositionsWealthHistoryMonthEndGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MonthPositionsResponse;
+};
+
+export type ReadMonthPositionsWealthHistoryMonthEndGetResponse = ReadMonthPositionsWealthHistoryMonthEndGetResponses[keyof ReadMonthPositionsWealthHistoryMonthEndGetResponses];
 
 export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostData = {
     body: DescriptionReparseRequest;

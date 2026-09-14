@@ -1,0 +1,176 @@
+"""Phase 2.2 Task 1: `POST /wealth-history/refresh`, `GET /wealth-history` and
+`GET /wealth-history/{monthEnd}` (spec "API"). Owner-only, like `routes/coverage.py`'s
+acknowledgements: no `SECURITY DEFINER` write path, `require_owner` and an explicit
+`household_id` filter are the authorization boundary. `GET` opens `SET TRANSACTION READ ONLY`
+and never recomputes — it reads exactly what the last refresh stored in `month_end_position`.
+"""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+from typing import Annotated, Any
+from uuid import UUID
+
+import psycopg
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
+
+from ..auth import OwnerSession, require_owner
+from ..db import connect
+from ..money import _out
+from ..wealth_history import RefreshCounts, refresh
+
+router = APIRouter(tags=["wealth-history"])
+
+
+class MonthSummary(BaseModel):
+    monthEnd: date
+    totalBase: str
+    totalSecondary: str
+    complete: bool
+    statusCounts: dict[str, int]
+    computedAt: datetime
+
+
+class WealthHistoryResponse(BaseModel):
+    baseCurrency: str
+    secondaryCurrency: str
+    months: list[MonthSummary]
+
+
+class MonthEndPosition(BaseModel):
+    accountId: UUID
+    accountName: str
+    holdingId: UUID | None
+    securityName: str | None
+    valuationMode: str
+    currency: str
+    nativeValue: str | None
+    evidenceDate: date | None
+    rateToBase: str | None
+    rateToBaseDate: date | None
+    rateToBaseCarried: bool | None
+    rateToSecondary: str | None
+    rateToSecondaryDate: date | None
+    rateToSecondaryCarried: bool | None
+    valueBase: str | None
+    valueSecondary: str | None
+    status: str
+
+
+class MonthPositionsResponse(BaseModel):
+    monthEnd: date
+    baseCurrency: str
+    secondaryCurrency: str
+    positions: list[MonthEndPosition]
+
+
+def _household_pair(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
+    cur.execute(
+        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
+    )
+    row = cur.fetchone()
+    assert row is not None
+    return str(row[0]).strip(), str(row[1]).strip()
+
+
+@router.post("/wealth-history/refresh")
+def post_refresh(owner: Annotated[OwnerSession, Depends(require_owner)]) -> RefreshCounts:
+    with connect() as conn, conn.cursor() as cur:
+        base, secondary = _household_pair(cur, owner.household_id)
+        return refresh(cur, owner.household_id, base, secondary, date.today())
+
+
+_MONTHS = """
+    SELECT month_end,
+           round(coalesce(sum(value_base) FILTER (WHERE status = 'available'), 0), 4),
+           round(coalesce(sum(value_secondary) FILTER (WHERE status = 'available'), 0), 4),
+           bool_and(status = 'available') AS complete,
+           max(computed_at)
+      FROM month_end_position
+     WHERE household_id = %s
+     GROUP BY month_end
+     ORDER BY month_end
+"""
+
+_STATUS_COUNTS = """
+    SELECT month_end, status::text, count(*)
+      FROM month_end_position
+     WHERE household_id = %s
+     GROUP BY month_end, status
+"""
+
+
+@router.get("/wealth-history")
+def read_wealth_history(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> WealthHistoryResponse:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        base, secondary = _household_pair(cur, owner.household_id)
+        cur.execute(_STATUS_COUNTS, (owner.household_id,))
+        counts_by_month: dict[date, dict[str, int]] = {}
+        for month_end_value, status, count in cur.fetchall():
+            counts_by_month.setdefault(month_end_value, {})[status] = int(count)
+        cur.execute(_MONTHS, (owner.household_id,))
+        months = [
+            MonthSummary(
+                monthEnd=row[0],
+                totalBase=str(row[1]),
+                totalSecondary=str(row[2]),
+                complete=bool(row[3]),
+                statusCounts=counts_by_month.get(row[0], {}),
+                computedAt=row[4],
+            )
+            for row in cur.fetchall()
+        ]
+    return WealthHistoryResponse(baseCurrency=base, secondaryCurrency=secondary, months=months)
+
+
+_POSITIONS_FOR_MONTH = """
+    SELECT p.account_id, a.name, p.holding_id, security.name, p.valuation_mode::text, p.currency,
+           p.native_value, p.evidence_date, p.rate_to_base, p.rate_to_base_date,
+           p.rate_to_base_carried, p.rate_to_secondary, p.rate_to_secondary_date,
+           p.rate_to_secondary_carried, p.value_base, p.value_secondary, p.status::text
+      FROM month_end_position p
+      JOIN account a ON a.household_id = p.household_id AND a.id = p.account_id
+      LEFT JOIN holding h ON h.household_id = p.household_id AND h.id = p.holding_id
+      LEFT JOIN security ON security.id = h.security_id
+     WHERE p.household_id = %s AND p.month_end = %s
+     ORDER BY a.name, security.name NULLS FIRST
+"""
+
+
+@router.get("/wealth-history/{monthEnd}")
+def read_month_positions(
+    monthEnd: date, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> MonthPositionsResponse:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        base, secondary = _household_pair(cur, owner.household_id)
+        cur.execute(_POSITIONS_FOR_MONTH, (owner.household_id, monthEnd))
+        positions = [
+            MonthEndPosition(
+                accountId=row[0],
+                accountName=row[1],
+                holdingId=row[2],
+                securityName=row[3],
+                valuationMode=row[4],
+                currency=str(row[5]).strip(),
+                nativeValue=_out(row[6]),
+                evidenceDate=row[7],
+                rateToBase=_out(row[8]),
+                rateToBaseDate=row[9],
+                rateToBaseCarried=row[10],
+                rateToSecondary=_out(row[11]),
+                rateToSecondaryDate=row[12],
+                rateToSecondaryCarried=row[13],
+                valueBase=_out(row[14]),
+                valueSecondary=_out(row[15]),
+                status=row[16],
+            )
+            for row in cur.fetchall()
+        ]
+    return MonthPositionsResponse(
+        monthEnd=monthEnd, baseCurrency=base, secondaryCurrency=secondary, positions=positions
+    )

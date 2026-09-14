@@ -716,6 +716,9 @@ ROLLBACK;
 BEGIN;
 -- Later migrations may depend on V30 relations. Remove their objects first so this historical
 -- upgrade test can reconstruct the exact pre-V30 shape it is responsible for proving.
+-- V46's month_end_position references holding and uses account_valuation_mode; dropping the
+-- whole table removes both dependencies in one step.
+DROP TABLE month_end_position;
 DROP FUNCTION allocate_investment_lots(UUID, UUID[], NUMERIC[]);
 DROP FUNCTION unlink_investment_cash_allocations(UUID);
 DROP FUNCTION confirm_investment_cash_allocations(
