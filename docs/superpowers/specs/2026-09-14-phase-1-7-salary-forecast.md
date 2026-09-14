@@ -434,7 +434,6 @@ payment or automatic ledger write.
 
 Task 3 also reconciles `schema.md` (V44) and the payslip rows of `api-contracts.html`.
 
-
 `docs/superpowers/schema.md` (V42, V43; retire the planned `0017` payslip shapes),
 `docs/design/data-model.html` (entity map, semantics, migration list),
 `docs/design/api-contracts.html` (twelve routes), `docs/design/statement-ingestion.html` (the payslip
