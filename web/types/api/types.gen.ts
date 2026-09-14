@@ -1986,6 +1986,7 @@ export type GroupResponse = {
      * Stageable
      */
     stageable: boolean;
+    status: StagedGroupStatus | null;
     /**
      * Targets
      */
@@ -4845,6 +4846,8 @@ export type SplitActionCreate = {
      */
     idempotencyKey: string;
 };
+
+export type StagedGroupStatus = 'draft' | 'ready' | 'blocked' | 'committed' | 'cancelled';
 
 export type StagedImportStatus = 'staged' | 'awaiting_review' | 'partially_committed' | 'completed' | 'cancelled' | 'failed';
 

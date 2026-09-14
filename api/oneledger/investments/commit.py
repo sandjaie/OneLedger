@@ -113,6 +113,20 @@ def _ready_drafts(cur: psycopg.Cursor[Any], household_id: UUID, group_id: UUID) 
     return [_DraftRow.from_row(row) for row in cur.fetchall()]
 
 
+def _dedupe_identity(draft: _DraftRow) -> tuple[str | None, str | None, str | None]:
+    """(source_event_id, dedupe_version, dedupe_fingerprint), honoring their DB exclusivity.
+
+    investment_transaction_dedupe_shape_agrees requires exactly one form: a source event id
+    alone, or a version-and-fingerprint pair alone — never both, even though the evidence row
+    behind a draft always carries a fingerprint regardless of whether it also has a source event
+    id. Passing all three through unconditionally is a CHECK violation on the very statements
+    whose adapter names its own source event ids.
+    """
+    if draft.source_event_id is not None:
+        return draft.source_event_id, None, None
+    return None, draft.dedupe_version, draft.dedupe_fingerprint
+
+
 def _mark_committed(
     cur: psycopg.Cursor[Any], household_id: UUID, draft_id: UUID, event_id: UUID
 ) -> None:
@@ -129,23 +143,22 @@ def _frozen_flow(
     draft: _DraftRow,
     reporting_pair: tuple[str, str],
 ) -> tuple[date | None, Decimal | None, Decimal | None, Decimal | None, Decimal | None]:
+    # A raw DecimalException (translate()'s quantize overflowing) propagates as-is rather than
+    # being wrapped: _commit_group already catches it per group, so one draft's overflow blocks
+    # only its own group instead of the InvestmentCommandError it used to raise, which had no
+    # per-group boundary and would have aborted every other group in the same commit call too.
     if draft.net_amount == 0:
         return None, None, None, None, None
-    try:
-        rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
-            cur, draft.event_date, draft.currency, *reporting_pair
-        )
-        return (
-            rate_date,
-            rate_to_base,
-            rate_to_secondary,
-            translate(draft.net_amount, rate_to_base),
-            translate(draft.net_amount, rate_to_secondary),
-        )
-    except DecimalException:
-        raise InvestmentCommandError(
-            422, "investment reporting amount exceeds the exact range"
-        ) from None
+    rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
+        cur, draft.event_date, draft.currency, *reporting_pair
+    )
+    return (
+        rate_date,
+        rate_to_base,
+        rate_to_secondary,
+        translate(draft.net_amount, rate_to_base),
+        translate(draft.net_amount, rate_to_secondary),
+    )
 
 
 def _commit_simple(
@@ -158,6 +171,7 @@ def _commit_simple(
     fx_date, rate_base, rate_secondary, amount_base, amount_secondary = _frozen_flow(
         cur, draft, reporting_pair
     )
+    source_event_id, dedupe_version, dedupe_fingerprint = _dedupe_identity(draft)
     cur.execute(
         """SELECT append_investment_transaction(
              %s, %s, %s, %s::investment_event_kind,
@@ -182,9 +196,9 @@ def _commit_simple(
             amount_base,
             amount_secondary,
             source_contract,
-            draft.source_event_id,
-            draft.dedupe_version,
-            draft.dedupe_fingerprint,
+            source_event_id,
+            dedupe_version,
+            dedupe_fingerprint,
         ),
     )
     row = cur.fetchone()
@@ -200,6 +214,7 @@ def _commit_split(
     cur: psycopg.Cursor[Any], owner: OwnerSession, draft: _DraftRow, source_contract: str
 ) -> None:
     assert draft.unit_ratio is not None
+    source_event_id, dedupe_version, dedupe_fingerprint = _dedupe_identity(draft)
     cur.execute(
         """SELECT append_investment_split(
              %s, %s, %s, %s, 'statement'::investment_event_source, %s, %s, %s, %s, NULL, NULL)""",
@@ -209,9 +224,9 @@ def _commit_split(
             draft.event_date,
             draft.unit_ratio,
             source_contract,
-            draft.source_event_id,
-            draft.dedupe_version,
-            draft.dedupe_fingerprint,
+            source_event_id,
+            dedupe_version,
+            dedupe_fingerprint,
         ),
     )
     row = cur.fetchone()
@@ -228,6 +243,8 @@ def _commit_transfer(
     in_draft: _DraftRow,
     source_contract: str,
 ) -> None:
+    out_source_event_id, out_dedupe_version, out_dedupe_fingerprint = _dedupe_identity(out_draft)
+    in_source_event_id, in_dedupe_version, in_dedupe_fingerprint = _dedupe_identity(in_draft)
     cur.execute(
         """SELECT out_event_id, in_event_id FROM append_investment_unit_transfer(
              %s::investment_event_kind, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
@@ -248,12 +265,12 @@ def _commit_transfer(
             in_draft.gross_amount,
             out_draft.currency,
             source_contract,
-            out_draft.source_event_id,
-            out_draft.dedupe_version,
-            out_draft.dedupe_fingerprint,
-            in_draft.source_event_id,
-            in_draft.dedupe_version,
-            in_draft.dedupe_fingerprint,
+            out_source_event_id,
+            out_dedupe_version,
+            out_dedupe_fingerprint,
+            in_source_event_id,
+            in_dedupe_version,
+            in_dedupe_fingerprint,
         ),
     )
     row = cur.fetchone()
@@ -262,6 +279,39 @@ def _commit_transfer(
     out_id, in_id = row
     _mark_committed(cur, owner.household_id, out_draft.draft_id, UUID(str(out_id)))
     _mark_committed(cur, owner.household_id, in_draft.draft_id, UUID(str(in_id)))
+
+
+def _leg_match_key(draft: _DraftRow) -> tuple[date, Decimal]:
+    """The invariant a paired leg shares with its counterpart, by the DB's own pair_agrees rule.
+
+    A switch or systematic-transfer pair agrees on gross value (V41: p_out_gross_amount =
+    p_in_gross_amount); its two securities differ, so units legitimately do not match. A
+    platform-transfer pair carries no price or gross at all (CHECK investment_event_kind_
+    fields_agree) and instead agrees on equal-magnitude units. Matching on whichever applies —
+    never blind position — is what lets an ambiguous or mismatched pairing be refused before any
+    append, rather than silently wiring the wrong two legs together.
+    """
+    if draft.gross_amount is not None:
+        return draft.event_date, draft.gross_amount
+    return draft.event_date, abs(draft.units) if draft.units is not None else Decimal(0)
+
+
+def _pair_legs(outs: list[_DraftRow], ins: list[_DraftRow]) -> list[tuple[_DraftRow, _DraftRow]]:
+    if len(outs) != len(ins):
+        raise _CommitDataError("investment transfer legs are unpaired")
+    remaining = list(ins)
+    pairs: list[tuple[_DraftRow, _DraftRow]] = []
+    for out_draft in outs:
+        key = _leg_match_key(out_draft)
+        matches = [in_draft for in_draft in remaining if _leg_match_key(in_draft) == key]
+        if len(matches) != 1:
+            raise _CommitDataError("investment transfer legs are ambiguous")
+        in_draft = matches[0]
+        if out_draft.event_date != in_draft.event_date or out_draft.currency != in_draft.currency:
+            raise _CommitDataError("investment transfer legs disagree on date or currency")
+        remaining.remove(in_draft)
+        pairs.append((out_draft, in_draft))
+    return pairs
 
 
 def _commit_drafts(
@@ -277,15 +327,24 @@ def _commit_drafts(
     for out_kind, in_kind in _LEG_OUT_TO_IN.items():
         outs = by_kind.pop(out_kind, [])
         ins = by_kind.pop(in_kind, [])
-        if len(outs) != len(ins):
-            raise _CommitDataError("investment transfer legs are unpaired")
-        for out_draft, in_draft in zip(outs, ins, strict=True):
+        for out_draft, in_draft in _pair_legs(outs, ins):
             _commit_transfer(cur, owner, out_kind, out_draft, in_draft, source_contract)
     for split_draft in by_kind.pop("split", []):
         _commit_split(cur, owner, split_draft, source_contract)
-    for remaining in by_kind.values():
-        for draft in remaining:
+    for remaining_drafts in by_kind.values():
+        for draft in remaining_drafts:
             _commit_simple(cur, owner, draft, source_contract, reporting_pair)
+
+
+def _classify_refusal(exc: Exception) -> CommitBlockReason:
+    if isinstance(exc, HTTPException):
+        return "missing_fx_rate"
+    if (
+        isinstance(exc, psycopg.Error)
+        and exc.diag.constraint_name == "investment_group_has_open_blocker"
+    ):
+        return "open_review"
+    return "database_refusal"
 
 
 def _commit_group(
@@ -312,15 +371,13 @@ def _commit_group(
     except (psycopg.Error, HTTPException, DecimalException, _CommitDataError) as exc:
         cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")  # noqa: S608
         cur.execute(f"RELEASE SAVEPOINT {savepoint}")  # noqa: S608
-        reason: CommitBlockReason = (
-            "missing_fx_rate" if isinstance(exc, HTTPException) else ("database_refusal")
-        )
-        cur.execute(
-            """UPDATE investment_import_group SET status = 'blocked', updated_at = now()
-                WHERE household_id = %s AND id = %s AND status <> 'committed'""",
-            (owner.household_id, group_id),
-        )
-        return CommittedGroupOutcome(group_number, "blocked", reason)
+        # The group is deliberately left exactly as it was (still 'ready'): a missing FX rate or
+        # a transient database refusal describes today's attempt, not the group's staged content,
+        # so a later commit call — the rate backfilled, the conflicting fact corrected — retries
+        # it rather than finding it already written off as 'blocked'. Only an open blocking
+        # review, which the caller already checked before ever reaching this function, or this
+        # same V32 trigger firing here, means the group cannot commit until that review clears.
+        return CommittedGroupOutcome(group_number, "blocked", _classify_refusal(exc))
 
 
 def _provisional_status(outcomes: list[CommittedGroupOutcome]) -> StagedImportStatus:

@@ -816,13 +816,14 @@ def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixtur
             {
                 "groupNumber": 1,
                 "stageable": False,
+                "status": None,
                 "targets": [
                     {
                         "sourceGroupNumber": 1,
                         "accountId": None,
                         "securityId": None,
-                        "accountMask": None,
-                        "securityLabel": None,
+                        "accountMask": "****A1B2",
+                        "securityLabel": "ＳＥＣＵＲＩＴＹ [redacted]",
                         "isin": None,
                         "securityCandidates": [],
                         "drafts": [
@@ -865,6 +866,31 @@ def test_investment_preview_is_bounded_exact_private_and_write_free(live: Fixtur
     }
 
 
+def test_investment_preview_hint_redacts_digits_and_matches_isin_candidate(
+    live: Fixture,
+) -> None:
+    isin = "US0000000010"
+    hostile_security = f"ＦＵＮＤ ７８９ {isin}"  # fullwidth letters + digit run + embedded ISIN
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE security SET isin = %s WHERE id = %s", (isin, live.security_id))
+    live.conn.commit()
+
+    response = _investment_post(live, _investment_statement(live.base, security=hostile_security))
+
+    assert response.status_code == 200, response.text
+    target = response.json()["groups"][0]["targets"][0]
+    assert target["isin"] == isin
+    assert target["securityCandidates"] == [str(live.security_id)]
+    assert target["securityLabel"] is not None
+    assert isin not in target["securityLabel"]  # the digit-run redactor also screens the ISIN
+    assert "[redacted]" in target["securityLabel"]
+    assert "ＦＵＮＤ" in target["securityLabel"]
+    assert hostile_security not in response.text
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE security SET isin = NULL WHERE id = %s", (live.security_id,))
+    live.conn.commit()
+
+
 def test_investment_resolved_preview_returns_only_uuid_and_safe_mask(live: Fixture) -> None:
     response = _investment_post(
         live,
@@ -902,7 +928,9 @@ def test_investment_preview_accepts_one_resolution_and_preserves_other_target(
     assert resolved["accountMask"] == "****A1B2"
     assert unresolved["accountId"] is None
     assert unresolved["securityId"] is None
-    assert unresolved["accountMask"] is None
+    # Unresolved targets still surface the statement's own mask, exactly what an owner would see
+    # while confirming which account this second group belongs to.
+    assert unresolved["accountMask"] == "****C3D4"
     assert live.investment_counts() == {
         "document": 0,
         "investment_import": 0,
@@ -1045,7 +1073,7 @@ def test_investment_stage_counts_persisted_blocker_beyond_preview_limit() -> Non
         "synthetic-expected-state",
     )
 
-    response = _response(prepared, {}, {}, staged)
+    response = _response(prepared, {}, {}, {}, staged)
 
     assert len(response.groups) == 50
     assert response.previewTruncated is True

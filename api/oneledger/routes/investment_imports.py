@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal, cast
@@ -16,12 +19,19 @@ from ..db import connect, scope_to_owner
 from ..ingest import storage
 from ..ingest.uploads import uploaded_pages
 from ..ingest.words import ExtractionError
-from ..investments.adapters import InvestmentEventKind, ReviewReason, SafeReason, extract_statement
+from ..investments.adapters import (
+    InvestmentEventKind,
+    ReviewReason,
+    SafeReason,
+    StatementExtraction,
+    extract_statement,
+)
 from ..investments.commands import InvestmentCommandError
 from ..investments.commit import CommitOutcome, CommittedGroupOutcome, commit_staged_import
 from ..investments.staging import (
     PreparedImport,
     PreparedTarget,
+    StagedGroupStatus,
     StagedImportResult,
     StagedImportStatus,
     StagingError,
@@ -33,9 +43,13 @@ from ..investments.staging import (
     stage_prepared_import_in_transaction,
     validate_prepared_import,
 )
+from .layouts import _preview_redactor
 
 router = APIRouter(prefix="/investment-imports", tags=["investment imports"])
 _SAFE_DOCUMENT_LABEL = "investment-statement.pdf"
+_ISIN_PATTERN = re.compile(r"\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b")
+_MAX_SECURITY_LABEL_LENGTH = 160
+_SECURITY_LABEL_REDACTOR = _preview_redactor(None)
 
 
 class ResolutionInput(BaseModel):
@@ -94,6 +108,7 @@ class TargetResponse(BaseModel):
 class GroupResponse(BaseModel):
     groupNumber: int
     stageable: bool
+    status: StagedGroupStatus | None
     targets: list[TargetResponse]
     reasons: list[ReasonResponse]
 
@@ -137,23 +152,88 @@ def _reason(reason: SafeReason) -> ReasonResponse:
     )
 
 
+@dataclass(frozen=True, slots=True)
+class _SourceHint:
+    """Unresolved-target hints derived from the extraction's own private source evidence.
+
+    Never a silent decision: `isin` and `security_candidates` are exact ISIN matches for the
+    owner to confirm, and `security_label` is the same statement text already screened by the
+    existing preview redactor — bounded, and never a raw account or security identifier.
+    """
+
+    security_label: str | None
+    isin: str | None
+    security_candidates: tuple[UUID, ...]
+    account_mask: str | None
+
+
+def _extracted_isin(security_reference: str) -> str | None:
+    normalized = unicodedata.normalize("NFKC", security_reference).upper()
+    match = _ISIN_PATTERN.search(normalized)
+    return match.group(0) if match else None
+
+
+def _source_hints(owner: OwnerSession, extraction: StatementExtraction) -> dict[int, _SourceHint]:
+    hints: dict[int, _SourceHint] = {}
+    isin_by_group: dict[int, str] = {}
+    for group in extraction.groups:
+        isin = _extracted_isin(group.target.security_reference)
+        label = _SECURITY_LABEL_REDACTOR(group.target.security_reference)
+        hints[group.group_number] = _SourceHint(
+            security_label=label[:_MAX_SECURITY_LABEL_LENGTH],
+            isin=isin,
+            security_candidates=(),
+            account_mask=group.target.account_identifier.masked_value,
+        )
+        if isin is not None:
+            isin_by_group[group.group_number] = isin
+    if not isin_by_group:
+        return hints
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        for group_number, isin in isin_by_group.items():
+            cur.execute(
+                """SELECT id FROM security
+                     WHERE isin = %s AND (household_id IS NULL OR household_id = %s)
+                     LIMIT 5""",
+                (isin, owner.household_id),
+            )
+            candidates = tuple(UUID(str(row[0])) for row in cur.fetchall())
+            hints[group_number] = replace(hints[group_number], security_candidates=candidates)
+    return hints
+
+
 def _target(
     target: PreparedTarget,
     masks: dict[UUID, str],
     labels: dict[UUID, tuple[str, str | None]],
+    hints: dict[int, _SourceHint],
 ) -> TargetResponse:
-    label = None if target.security_id is None else labels.get(target.security_id)
+    hint = hints.get(target.source_group_number)
+    if target.security_id is not None:
+        # Resolved targets keep their catalogue name: once an owner has confirmed a security,
+        # its own confirmed name and ISIN are shown, never statement text.
+        catalogue = labels.get(target.security_id)
+        security_label = None if catalogue is None else catalogue[0]
+        isin = None if catalogue is None else catalogue[1]
+        security_candidates: tuple[UUID, ...] = ()
+    else:
+        security_label = None if hint is None else hint.security_label
+        isin = None if hint is None else hint.isin
+        security_candidates = () if hint is None else hint.security_candidates
+    account_mask = (
+        masks.get(target.account_id)
+        if target.account_id is not None
+        else (None if hint is None else hint.account_mask)
+    )
     return TargetResponse(
         sourceGroupNumber=target.source_group_number,
         accountId=target.account_id,
         securityId=target.security_id,
-        accountMask=None if target.account_id is None else masks.get(target.account_id),
-        securityLabel=None if label is None else label[0],
-        isin=None if label is None else label[1],
-        # Extraction does not yet carry a safe ISIN to match household securities against, so
-        # candidate suggestion is deferred rather than reinterpreting private statement text;
-        # see the Task 16 commit deviation note in progress.md.
-        securityCandidates=[],
+        accountMask=account_mask,
+        securityLabel=security_label,
+        isin=isin,
+        securityCandidates=list(security_candidates),
         drafts=[
             DraftResponse(
                 eventDate=draft.event_date,
@@ -192,6 +272,7 @@ def _response(
     prepared: PreparedImport,
     masks: dict[UUID, str],
     labels: dict[UUID, tuple[str, str | None]],
+    hints: dict[int, _SourceHint],
     staged: StagedImportResult | None = None,
 ) -> InvestmentParseResponse:
     persisted = (
@@ -217,7 +298,8 @@ def _response(
             GroupResponse(
                 groupNumber=group.group_number,
                 stageable=group.stageable if state is None else state.status == "ready",
-                targets=[_target(target, masks, labels) for target in group.targets],
+                status=None if state is None else state.status,
+                targets=[_target(target, masks, labels, hints) for target in group.targets],
                 reasons=[_reason(reason) for reason in group.reasons]
                 + [
                     ReasonResponse(code=reason, pageNumber=None, rowNumber=None)
@@ -281,11 +363,9 @@ def _masks(owner: OwnerSession, prepared: PreparedImport) -> dict[UUID, str]:
 def _labels(owner: OwnerSession, prepared: PreparedImport) -> dict[UUID, tuple[str, str | None]]:
     """The owner's own catalogue name and ISIN for each already-resolved security.
 
-    Task 16's contract wants a bounded, redacted label straight from the statement text plus
-    ISIN-matched candidates; the extraction contract (adapters.py `SourceTarget`) does not carry
-    a safe form of either today; see docs/superpowers/progress.md for the recorded deviation.
     Once a target is resolved to a household security, its own confirmed catalogue name and
-    ISIN are safe to return as-is — they never came from statement text.
+    ISIN are shown instead of `_source_hints`' statement-derived label — they never came from
+    statement text, so there is nothing left to redact or bound.
     """
     security_ids = tuple(
         {
@@ -380,16 +460,18 @@ def parse_investment_statement(
     try:
         selected = _resolutions(resolutions)
         with uploaded_pages(file, password) as (data, pages):
+            extraction = extract_statement(pages)
             try:
-                prepared = prepare_import(extract_statement(pages), selected)
+                prepared = prepare_import(extraction, selected)
             except ValueError:
                 raise HTTPException(
                     status_code=422, detail="investment target resolutions are invalid"
                 ) from None
+            hints = _source_hints(owner, extraction)
             if not stage:
                 if selected:
                     validate_prepared_import(owner, prepared)
-                return _response(prepared, _masks(owner, prepared), _labels(owner, prepared))
+                return _response(prepared, _masks(owner, prepared), _labels(owner, prepared), hints)
             if not prepared.stageable:
                 raise StagingError("investment import is not stageable")
             validate_prepared_import(owner, prepared)
@@ -402,7 +484,7 @@ def parse_investment_statement(
                 prepared=prepared,
             )
         response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
-        return _response(prepared, _masks(owner, prepared), _labels(owner, prepared), result)
+        return _response(prepared, _masks(owner, prepared), _labels(owner, prepared), hints, result)
     except StagingError as exc:
         raise _staging_error(exc) from None
     except (storage.StorageError, ExtractionError) as exc:
@@ -575,7 +657,7 @@ def _load_import_state(owner: OwnerSession, import_id: UUID) -> InvestmentParseR
             raise StagingError("investment import not found")
         import_status = cast(StagedImportStatus, str(row[0]))
         cur.execute(
-            """SELECT id, group_number FROM investment_import_group
+            """SELECT id, group_number, status::text FROM investment_import_group
                  WHERE household_id = %s AND import_id = %s ORDER BY group_number""",
             (owner.household_id, import_id),
         )
@@ -583,9 +665,15 @@ def _load_import_state(owner: OwnerSession, import_id: UUID) -> InvestmentParseR
         account_ids: set[UUID] = set()
         security_ids: set[UUID] = set()
         raw_groups: list[
-            tuple[int, list[tuple[Any, ...]], list[tuple[Any, ...]], list[ReviewReason]]
+            tuple[
+                int,
+                StagedGroupStatus,
+                list[tuple[Any, ...]],
+                list[tuple[Any, ...]],
+                list[ReviewReason],
+            ]
         ] = []
-        for group_id_raw, group_number in group_rows:
+        for group_id_raw, group_number, group_status in group_rows:
             group_id = UUID(str(group_id_raw))
             cur.execute(
                 """SELECT reason::text FROM investment_review_item
@@ -631,7 +719,15 @@ def _load_import_state(owner: OwnerSession, import_id: UUID) -> InvestmentParseR
             account_ids.update(UUID(str(r[0])) for r in checkpoint_rows)
             security_ids.update(UUID(str(r[1])) for r in draft_rows)
             security_ids.update(UUID(str(r[1])) for r in checkpoint_rows)
-            raw_groups.append((int(group_number), draft_rows, checkpoint_rows, group_reasons))
+            raw_groups.append(
+                (
+                    int(group_number),
+                    cast(StagedGroupStatus, str(group_status)),
+                    draft_rows,
+                    checkpoint_rows,
+                    group_reasons,
+                )
+            )
         cur.execute(
             """SELECT reason::text FROM investment_review_item
                  WHERE household_id = %s AND import_id = %s AND group_id IS NULL
@@ -645,13 +741,14 @@ def _load_import_state(owner: OwnerSession, import_id: UUID) -> InvestmentParseR
     total_draft_count = 0
     total_blocker_count = 0
     groups: list[GroupResponse] = []
-    for group_number, draft_rows, checkpoint_rows, group_reasons in raw_groups:
+    for group_number, group_status, draft_rows, checkpoint_rows, group_reasons in raw_groups:
         total_draft_count += len(draft_rows)
         total_blocker_count += sum(is_blocking_reason(reason) for reason in group_reasons)
         groups.append(
             GroupResponse(
                 groupNumber=group_number,
-                stageable=not any(is_blocking_reason(reason) for reason in group_reasons),
+                stageable=group_status == "ready",
+                status=group_status,
                 targets=_group_targets(group_number, draft_rows, checkpoint_rows, masks, labels),
                 reasons=[
                     ReasonResponse(code=reason, pageNumber=None, rowNumber=None)
