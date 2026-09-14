@@ -105,22 +105,24 @@ run_commit_hooks() {
   SKIP=end-of-file-fixer,trailing-whitespace,ruff,ruff-format pre-commit run --all-files
 }
 
+# Every gate chains its commands with &&: run_stage calls a gate inside `if`, where bash ignores
+# errexit, so a failed command in the middle of an unchained gate would pass silently.
 run_api_gate() (
-  cd api
-  uv run ruff check .
-  uv run ruff format --check .
-  uv run mypy .
-  uv run pytest -q
+  cd api &&
+    uv run ruff check . &&
+    uv run ruff format --check . &&
+    uv run mypy . &&
+    uv run pytest -q
 )
 
 run_web_gate() (
-  cd web
-  npm run lint
-  npm run api:types:check
-  npm run typecheck
-  npm run typecheck:compat
-  npm run test
-  npm run build
+  cd web &&
+    npm run lint &&
+    npm run api:types:check &&
+    npm run typecheck &&
+    npm run typecheck:compat &&
+    npm run test &&
+    npm run build
 )
 
 scan_web_bundle() {

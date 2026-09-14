@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / ".pre-commit-config.yaml"
 CI = ROOT / ".github/workflows/ci.yml"
@@ -254,3 +256,39 @@ def test_web_lint_hook_translates_and_forwards_staged_paths(tmp_path: Path) -> N
         "app/page.tsx",
         "lib/api.ts",
     ]
+
+
+def _gate_function(name: str) -> str:
+    match = re.search(rf"(?ms)^{name}\(\) \(\n.*?^\)\n", VERIFY_RUNNER.read_text())
+    assert match is not None
+    return match.group(0)
+
+
+@pytest.mark.parametrize(
+    ("gate", "tool", "failing"),
+    [("run_api_gate", "uv", "mypy"), ("run_web_gate", "npm", "typecheck")],
+)
+def test_a_failure_inside_a_gate_fails_its_stage(
+    tmp_path: Path, gate: str, tool: str, failing: str
+) -> None:
+    """run_stage calls gates inside `if`, where errexit is ignored; only chaining stops a gate."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (tmp_path / "api").mkdir()
+    (tmp_path / "web").mkdir()
+    stub = bin_dir / tool
+    stub.write_text(f'#!/usr/bin/env bash\ncase " $* " in *" {failing} "*) exit 3;; esac\nexit 0\n')
+    stub.chmod(0o755)
+    stage = re.search(r"(?ms)^run_stage\(\) \{\n.*?^\}\n", VERIFY_RUNNER.read_text())
+    assert stage is not None
+    script = "set -euo pipefail\n" + stage.group(0) + _gate_function(gate)
+    script += f"run_stage gate {gate} && echo SHOULD-NOT-PASS\n"
+    environment = os.environ.copy()
+    environment["PATH"] = f"{bin_dir}:{environment['PATH']}"
+    result = subprocess.run(
+        ["bash", "-c", script], cwd=tmp_path, env=environment, capture_output=True, text=True
+    )
+
+    assert result.returncode != 0
+    assert "SHOULD-NOT-PASS" not in result.stdout
+    assert "FAIL gate" in result.stderr
