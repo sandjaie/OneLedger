@@ -58,9 +58,11 @@ export async function apiFetch<T>(
  * braces and quotes in front of that sentence, so it is unwrapped once here rather than at each
  * of the places that display `ApiError.detail`.
  *
- * Two bodies carry no sentence and must not be shown raw: `main.py` answers a validation failure
- * with a list of field diagnostics, and a proxy or the runtime may answer with HTML. The status
- * text stands in for both — and for itself when HTTP/2 leaves it empty.
+ * `main.py` answers a validation failure with a list of field diagnostics rather than one
+ * sentence — the layout mapper's own draft is validated this way — so a list `detail` is read as
+ * its `msg` strings joined by "; ", which is readable without a bespoke renderer per field. A
+ * proxy or the runtime may also answer with HTML, carrying no sentence at all; the status text
+ * stands in for that case — and for itself when HTTP/2 leaves it empty.
  */
 async function problem(response: Response): Promise<string> {
   const fallback = response.statusText || `Request failed with status ${response.status}`;
@@ -75,5 +77,12 @@ async function problem(response: Response): Promise<string> {
   }
 
   const detail = (parsed as { detail?: unknown } | null)?.detail;
-  return typeof detail === "string" ? detail : fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (item !== null && typeof item === "object" ? (item as { msg?: unknown }).msg : undefined))
+      .filter((msg): msg is string => typeof msg === "string");
+    if (messages.length > 0) return messages.join("; ");
+  }
+  return fallback;
 }

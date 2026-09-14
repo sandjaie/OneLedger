@@ -3,9 +3,17 @@
 import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
+import { LayoutMapper, type LayoutMapperSeed } from "@/app/import/layout-mapper";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
-import type { AccountRow, CurrencyRow, HouseholdCurrency, ParseResponse } from "@/types/api";
+import type {
+  AccountRow,
+  CurrencyRow,
+  HouseholdCurrency,
+  LayoutCreate,
+  LayoutProfile,
+  ParseResponse,
+} from "@/types/api";
 
 type Props = {
   accounts: Array<AccountRow>;
@@ -44,6 +52,11 @@ type Candidate = {
    * is cleared the moment the file is staged, because after that nothing will ask for it again.
    */
   password?: string;
+  /** Open only while the owner is mapping or remapping this file's layout. */
+  mapping?: boolean;
+  mapperSeed?: LayoutMapperSeed;
+  /** Every saved layout name, read once when the mapper opens, for its same-name warning. */
+  savedLayoutNames?: Array<string>;
 };
 
 // `POST /parse` takes a PDF. Refusing anything else here is not validation the API relies on —
@@ -60,6 +73,38 @@ const RECONCILED = "matched";
 // only this one is something the owner can answer.
 const LOCKED = "PDF is encrypted or the password is incorrect";
 
+// `pipeline.LayoutNotIdentified` writes one of these two openings — no saved layout at all, or
+// none that scored unambiguously — and nothing else in `POST /parse` starts a refusal this way.
+// Recognised by prefix because the second sentence names the scored candidates after it.
+const NEEDS_MAPPING = ["no layouts are saved yet", "no saved layout identifies this statement"];
+
+function needsMapping(problem: string | undefined) {
+  return problem !== undefined && NEEDS_MAPPING.some((sentence) => problem.startsWith(sentence));
+}
+
+// A blank starting point for Map when the engine's own proposal is refused (statement-ingestion
+// spec's "Failure behaviour": a blank draft with the reason, never a dead end).
+const BLANK_DRAFT: LayoutCreate = {
+  name: "",
+  institutionId: null,
+  accountType: null,
+  fingerprints: [],
+  headerRowPattern: null,
+  columns: [],
+  dateFormat: "dd/MM/yyyy",
+  signConvention: "signed",
+  invertsSign: false,
+  chronologicalOrder: "ascending",
+  rowStartRule: "has_date_and_amount",
+  continuationRule: null,
+  skipLinePatterns: [],
+  openingBalancePattern: null,
+  closingBalancePattern: null,
+  hasRunningBalance: false,
+  quirks: [],
+  metadataPatterns: null,
+};
+
 function reconciles(parsed: ParseResponse) {
   return parsed.reconciliation.status === RECONCILED;
 }
@@ -73,6 +118,44 @@ function reconciles(parsed: ParseResponse) {
  */
 function canStage(parsed: ParseResponse) {
   return reconciles(parsed) && parsed.failures.length === 0;
+}
+
+// The layout identified this statement — the identity matched too, so this is not an account
+// proposal's problem — and still cannot stage: the mapping itself is what needs fixing.
+function needsRemap(parsed: ParseResponse) {
+  return parsed.identityResolution.status === "matched" && !canStage(parsed);
+}
+
+function mapperBody(item: Candidate) {
+  const form = new FormData();
+  form.append("file", item.file);
+  if (item.password) form.append("password", item.password);
+  return form;
+}
+
+// Remap seeds from the saved profile, without `id` and `version`: saving always inserts that
+// layout's next one (ADR-0012), so the two fields a saved row alone carries have no place here.
+function profileAsDraft(profile: LayoutProfile): LayoutCreate {
+  return {
+    name: profile.name,
+    institutionId: profile.institutionId,
+    accountType: profile.accountType,
+    fingerprints: profile.fingerprints,
+    headerRowPattern: profile.headerRowPattern,
+    columns: profile.columns,
+    dateFormat: profile.dateFormat,
+    signConvention: profile.signConvention,
+    invertsSign: profile.invertsSign,
+    chronologicalOrder: profile.chronologicalOrder,
+    rowStartRule: profile.rowStartRule,
+    continuationRule: profile.continuationRule,
+    skipLinePatterns: profile.skipLinePatterns,
+    openingBalancePattern: profile.openingBalancePattern,
+    closingBalancePattern: profile.closingBalancePattern,
+    hasRunningBalance: profile.hasRunningBalance,
+    quirks: profile.quirks,
+    metadataPatterns: profile.metadataPatterns,
+  };
 }
 
 function candidate(file: File, index: number): Candidate {
@@ -163,6 +246,28 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
     choose(event.dataTransfer.files);
   }
 
+  async function checkOne(item: Candidate) {
+    update(item.key, { state: "checking", problem: undefined });
+    try {
+      const parsed = await request<ParseResponse>("/parse", {
+        method: "POST",
+        body: body(item, false, accountId),
+      });
+      const resolved = accounts.find((account) => account.id === parsed.accountId);
+      update(item.key, {
+        state: "checked",
+        parsed,
+        accountId: item.accountId,
+        accountCurrency: resolved?.currency ?? item.accountCurrency,
+      });
+    } catch (error) {
+      const problem = detail(error, "This file could not be checked. Try again.");
+      // `locked` is sticky: a wrong password answers with the same sentence, and the field has
+      // to survive that or the owner gets one attempt and no way to make a second.
+      update(item.key, { state: "chosen", problem, locked: item.locked || problem === LOCKED });
+    }
+  }
+
   async function checkAll() {
     setBusy(true);
     setCheckingAll(true);
@@ -173,28 +278,71 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
       // A staged file is done. Re-posting its dry run would answer 409 against the document it
       // just stored — a duplicate of itself — and take its review link with it.
       if (item.state === "refused" || item.state === "staged") continue;
-      update(item.key, { state: "checking", problem: undefined });
-      try {
-        const parsed = await request<ParseResponse>("/parse", {
-          method: "POST",
-          body: body(item, false, accountId),
-        });
-        const resolved = accounts.find((account) => account.id === parsed.accountId);
-        update(item.key, {
-          state: "checked",
-          parsed,
-          accountId: item.accountId,
-          accountCurrency: resolved?.currency ?? item.accountCurrency,
-        });
-      } catch (error) {
-        const problem = detail(error, "This file could not be checked. Try again.");
-        // `locked` is sticky: a wrong password answers with the same sentence, and the field has
-        // to survive that or the owner gets one attempt and no way to make a second.
-        update(item.key, { state: "chosen", problem, locked: item.locked || problem === LOCKED });
-      }
+      await checkOne(item);
     }
     setCheckingAll(false);
     setBusy(false);
+  }
+
+  async function openMapper(item: Candidate, remap: boolean) {
+    setBusy(true);
+    update(item.key, { problem: undefined });
+    try {
+      const layouts = await request<Array<LayoutProfile>>("/layouts");
+      const savedLayoutNames = layouts.map((layout) => layout.name);
+      if (remap) {
+        const existing = item.parsed
+          && layouts.find((layout) => layout.id === item.parsed?.layoutId);
+        if (!existing) {
+          update(item.key, { problem: "This layout could not be found to remap." });
+          return;
+        }
+        const draft = profileAsDraft(existing);
+        update(item.key, {
+          mapping: true,
+          savedLayoutNames,
+          mapperSeed: { draft: draft as LayoutCreate, remap: true },
+        });
+        return;
+      }
+      try {
+        const proposal = await request<{ draft: LayoutCreate }>("/layouts/propose", {
+          method: "POST",
+          body: mapperBody(item),
+        });
+        update(item.key, {
+          mapping: true,
+          savedLayoutNames,
+          mapperSeed: {
+            draft: { ...proposal.draft, accountType: proposal.draft.accountType ?? null },
+            remap: false,
+          },
+        });
+      } catch (error) {
+        update(item.key, {
+          mapping: true,
+          savedLayoutNames,
+          mapperSeed: {
+            draft: BLANK_DRAFT,
+            remap: false,
+            reason: detail(error, "This file could not be proposed for mapping."),
+          },
+        });
+      }
+    } catch (error) {
+      update(item.key, { problem: detail(error, "Saved layouts could not be loaded.") });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function closeMapper(item: Candidate) {
+    update(item.key, { mapping: false, mapperSeed: undefined, savedLayoutNames: undefined });
+  }
+
+  async function onLayoutSaved(item: Candidate) {
+    closeMapper(item);
+    await checkOne(item);
   }
 
   async function stage(item: Candidate) {
@@ -377,6 +525,15 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
 
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
 
+            {item.state === "chosen" && needsMapping(item.problem) && !item.mapping && (
+              <button
+                className="text-action"
+                disabled={busy}
+                onClick={() => void openMapper(item, false)}
+                type="button"
+              >Map this layout</button>
+            )}
+
             {item.locked && (
               <label className="password-field">
                 <span>Password for this statement</span>
@@ -434,6 +591,27 @@ export function ImportScreen({ accounts, currencies, currency, request }: Props)
               <button className="primary-action" disabled={busy} onClick={() => stage(item)} type="button">
                 Stage batch
               </button>
+            )}
+
+            {item.state === "checked" && item.parsed && needsRemap(item.parsed) && !item.mapping && (
+              <button
+                className="text-action"
+                disabled={busy}
+                onClick={() => void openMapper(item, true)}
+                type="button"
+              >Remap this layout</button>
+            )}
+
+            {item.mapping && item.mapperSeed && (
+              <LayoutMapper
+                file={item.file}
+                onCancel={() => closeMapper(item)}
+                onSaved={() => onLayoutSaved(item)}
+                password={item.password}
+                request={request}
+                savedNames={item.savedLayoutNames ?? []}
+                seed={item.mapperSeed}
+              />
             )}
 
             {item.state === "staged" && item.batchId && (

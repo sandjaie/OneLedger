@@ -47,7 +47,6 @@ from ..identifiers import (
 from ..ingest import engine, pipeline
 from ..ingest.dedupe import OCCURRENCE, fingerprint
 from ..ingest.engine import ExtractionResult
-from ..ingest.reconcile import Verdict
 from ..ingest.storage import DuplicateDocument, StorageError
 from ..ingest.uploads import uploaded_pages
 from ..ingest.words import ExtractionError
@@ -65,7 +64,14 @@ from .accounts import (
     _one,
     _replace_account_identifier,
 )
-from .layouts import COLUMNS, _preview_redactor, _row_to_profile
+from .layouts import (
+    COLUMNS,
+    ParseFailure,
+    Reconciliation,
+    _preview_redactor,
+    _reconciliation,
+    _row_to_profile,
+)
 
 router = APIRouter(tags=["ingest"])
 
@@ -94,41 +100,12 @@ class ParseRow(BaseModel):
     dedupeHash: str
 
 
-class ParseFailure(BaseModel):
-    """A line that extracted and would not normalize. The panel shows these beside the rows."""
-
-    sourcePageNumber: int | None
-    sourceRowNumber: int
-    reason: str
-
-
 class ParseMetadataFailure(BaseModel):
     """A captured statement fact that would not read. Reported beside the rows; it never stops
     the statement staging, and it never carries the text that was captured."""
 
     key: str
     reason: str
-
-
-class Reconciliation(BaseModel):
-    """`reconcile.Verdict` on the wire. Every figure is a string; TypeScript does no arithmetic.
-
-    On a `running_balance_break` the three closing fields are row-level rather than
-    statement-level, so a consumer must read `status` first — the same warning the dataclass
-    carries, restated here because this is the shape the panel actually receives.
-    """
-
-    status: str
-    declaredOpening: str | None
-    openingIsDerived: bool
-    declaredClosing: str | None
-    computedClosing: str | None
-    delta: str | None
-    firstDivergentRow: int | None
-    previousBalance: str | None
-    amount: str | None
-    candidateRows: list[int]
-    message: str
 
 
 class ParsePeriod(BaseModel):
@@ -349,22 +326,6 @@ def _rows(result: pipeline.ParseResult) -> list[ParseRow]:
             strict=True,
         )
     ]
-
-
-def _reconciliation(verdict: Verdict) -> Reconciliation:
-    return Reconciliation(
-        status=verdict.status,
-        declaredOpening=_out(verdict.declared_opening),
-        openingIsDerived=verdict.opening_is_derived,
-        declaredClosing=_out(verdict.declared_closing),
-        computedClosing=_out(verdict.computed_closing),
-        delta=_out(verdict.delta),
-        firstDivergentRow=verdict.first_divergent_row,
-        previousBalance=_out(verdict.previous_balance),
-        amount=_out(verdict.amount),
-        candidateRows=verdict.candidate_rows,
-        message=verdict.message,
-    )
 
 
 def _institution_account_acceptor(household_id: UUID) -> pipeline.AccountAcceptor:

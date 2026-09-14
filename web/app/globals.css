@@ -439,6 +439,19 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .account-proposal > .primary-action { justify-self: start; margin-top: 0; }
 
+/* Layout mapper — repeatable lists (fingerprints, skip lines, columns, metadata patterns) over
+   the same card and field styling `.account-proposal` already defines. */
+.layout-mapper-quirks { display: grid; gap: 8px; }
+.layout-mapper-list { display: grid; gap: 10px; }
+.layout-mapper-list-row { display: flex; align-items: center; gap: 10px; }
+.layout-mapper-list-row input,
+.layout-mapper-list-row select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px dashed rgba(16, 22, 20, 0.3); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; }
+.layout-mapper-list-row .text-action { flex: 0 0 auto; padding: 6px 10px; margin: 0; }
+.layout-mapper-column-row select { flex: 1.4; }
+.layout-mapper-column-row input[type="number"] { flex: 0.7; }
+.layout-mapper-actions { display: flex; align-items: center; gap: 14px; }
+.layout-mapper-actions .primary-action { margin-top: 0; }
+
 /* Review — grouped by attention needed, not chronologically. The groups arrive in that order
    from the API; the screen renders them as sent rather than sorting again. */
 .review-actions {

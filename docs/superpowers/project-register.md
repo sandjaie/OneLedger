@@ -24,6 +24,8 @@ an inferred institution identity.
 
 | Added | Item | Reason or evidence | Review condition |
 | --- | --- | --- | --- |
+| 14 Sep 2026 | Drag band edges over a rendered page in the layout mapper | Phase 1.8 edits bands as numbers beside a live parsed preview; a rendered page widens the private-data surface | When numeric band entry proves tedious for a real new layout |
+| 14 Sep 2026 | Link investment events to their source document, page and row | Investment evidence retains document, page and row, but no owner read exposes them; Phase 1.8 links ledger rows | When an investment figure needs source inspection, or Phase 4.3 planning |
 | 12 Sep 2026 | Show whether an import period was derived | The review screen does not expose this existing parser fact | Include in the next focused review-screen delivery |
 | 12 Sep 2026 | Remove a harmless repeated-header word from one encrypted layout's narration | Acceptance reconciles, but the retained description can be cleaner | Address with Phase 1.8 mapping diagnostics |
 | 12 Sep 2026 | Surface card metadata-read failures on the import screen | The backend reports the condition but the import screen does not | Include in the next focused import-screen delivery |
