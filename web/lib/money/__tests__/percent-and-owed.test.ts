@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatOwed, formatPercent } from "@/lib/money/format";
+import { formatOwed, formatPercent, moneyText } from "@/lib/money/format";
 
 const row = { code: "XIN", symbol: "₹", decimals: 2, numberFormat: "indian" as const };
 
@@ -18,5 +18,13 @@ describe("formatOwed", () => {
   it("shows a negative balance as what is owed, and leaves a positive one as it is", () => {
     expect(formatOwed("-4500.0000", row)).toBe("You owe ₹4,500.00");
     expect(formatOwed("4500.0000", row)).toBe("₹4,500.00");
+  });
+});
+
+describe("moneyText", () => {
+  it("formats with the code's own catalogue row and prints an unknown code raw", () => {
+    expect(moneyText("-4500.0000", "XIN", [row])).toBe("-₹4,500.00");
+    expect(moneyText("-4500.1234", "XZZ", [row])).toBe("-4500.1234 XZZ");
+    expect(moneyText("12.5000", undefined, [row])).toBe("12.5000");
   });
 });

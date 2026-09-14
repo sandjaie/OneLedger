@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { ApiError } from "@/lib/api/client";
+import { ApiError, errorText } from "@/lib/api/client";
 import type { CurrencyRow, HouseholdResponse, HouseholdUpdate } from "@/types/api";
 
 type Props = {
@@ -48,7 +48,7 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
         return;
       }
       setProblem(
-        error instanceof ApiError ? error.detail : "The household could not be saved. Try again.",
+        errorText(error, "The household could not be saved. Try again."),
       );
     } finally {
       setSaving(false);

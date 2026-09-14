@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type { ClassifyResult, RuleRow, TransactionRow } from "@/types/api";
 
 type Preview = {
@@ -20,12 +20,8 @@ type Props = {
   row: TransactionRow;
 };
 
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
 /** Longest usable substring of this one row, never an identifier-bearing pattern. */
-export function proposedPattern(description: string): string {
+function proposedPattern(description: string): string {
   return description
     .split(/[\p{Nd}\/*#:]+/u)
     .map((part) => part.trim())
@@ -83,7 +79,7 @@ export function ClassifyPrompt({
         if (current) setPreview(next);
       })
       .catch((error: unknown) => {
-        if (current) setProblem(detail(error, "This pattern could not be checked. Retry."));
+        if (current) setProblem(errorText(error, "This pattern could not be checked. Retry."));
       });
     return () => {
       current = false;
@@ -106,7 +102,7 @@ export function ClassifyPrompt({
       setResult(applied);
       await onApplied();
     } catch (error) {
-      setProblem(detail(error, "This category rule was not applied. Retry."));
+      setProblem(errorText(error, "This category rule was not applied. Retry."));
     } finally {
       setBusy(false);
     }
@@ -119,7 +115,7 @@ export function ClassifyPrompt({
       await onJustOne();
       onClose();
     } catch (error) {
-      setProblem(detail(error, "This transaction was not changed. Retry."));
+      setProblem(errorText(error, "This transaction was not changed. Retry."));
       setBusy(false);
     }
   }

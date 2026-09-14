@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { type apiFetch, errorText } from "@/lib/api/client";
+import { moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
   CommitmentCreate,
@@ -39,22 +39,6 @@ const EXCLUDED_COMMITMENT_TEXT: Record<string, string> = {
   account_excluded: "Its account is excluded from the forecast.",
   currency_mismatch: "Its currency no longer matches its account's currency.",
 };
-
-function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
-  return (
-    currencies.find((row) => row.code === code) ?? {
-      code,
-      name: code,
-      symbol: code,
-      decimals: 2,
-      numberFormat: "international",
-    }
-  );
-}
-
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
 
 function emptyForm(accounts: Array<AccountRow>): FormState {
   return {
@@ -178,7 +162,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This commitment could not be saved."));
+      setProblem(errorText(error, "This commitment could not be saved."));
     } finally {
       setBusy(false);
     }
@@ -191,7 +175,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
       await request<CommitmentRow>(`/commitments/${commitment.id}/archive`, { method: "POST" });
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This commitment could not be archived."));
+      setProblem(errorText(error, "This commitment could not be archived."));
     } finally {
       setBusy(false);
     }
@@ -244,17 +228,16 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
             {forecast.accounts.length === 0 && <p>No account can be forecast yet.</p>}
             <ul className="plans-account-list">
               {forecast.accounts.map((account) => {
-                const currency = currencyOf(currencies, account.currency);
                 return (
                   <li key={account.accountId}>
                     <strong>{account.accountName}</strong>
                     <p>
-                      Start {formatMoney(account.startBalance, currency)} as of {account.balanceDate}
+                      Start {moneyText(account.startBalance, account.currency, currencies)} as of {account.balanceDate}
                     </p>
                     <ul className="plans-points">
                       {account.points.map((point) => (
                         <li key={point.days}>
-                          {point.days}d ({point.date}): {formatMoney(point.balance, currency)}
+                          {point.days}d ({point.date}): {moneyText(point.balance, account.currency, currencies)}
                         </li>
                       ))}
                     </ul>
@@ -263,7 +246,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                         {account.occurrences.map((occurrence, index) => (
                           <li key={index}>
                             {occurrence.date} {occurrence.label}{" "}
-                            {formatMoney(occurrence.amount, currency)}
+                            {moneyText(occurrence.amount, account.currency, currencies)}
                             {occurrence.dueByAsOf && <small> · not yet in the ledger</small>}
                           </li>
                         ))}
@@ -307,12 +290,11 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         {commitments && commitments.length > 0 && (
           <ul className="plans-commitment-list">
             {commitments.map((commitment) => {
-              const currency = currencyOf(currencies, commitment.currency);
               return (
                 <li key={commitment.id}>
                   <span>
                     {commitment.accountName} · {commitment.label} ·{" "}
-                    {formatMoney(commitment.amount, currency)} · {commitment.cadence}
+                    {moneyText(commitment.amount, commitment.currency, currencies)} · {commitment.cadence}
                   </span>
                   {commitment.archivedAt ? (
                     <small>Archived</small>

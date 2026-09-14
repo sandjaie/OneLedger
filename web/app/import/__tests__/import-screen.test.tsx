@@ -8,16 +8,13 @@ import { ApiError } from "@/lib/api/client";
 import type {
   AccountRow,
   CurrencyRow,
-  HouseholdCurrency,
   LayoutCreate,
   LayoutProfile,
   LayoutProposal,
   ParseResponse,
 } from "@/types/api";
 
-// `CurrencyRow` is the catalogue row and carries a display name; `HouseholdCurrency` is the
-// subset the formatter reads. Deriving one from the other keeps them from drifting in the
-// fixture the way they cannot drift in the API.
+// `CurrencyRow` is the catalogue row the screen formats an account's figures with.
 const catalogue: CurrencyRow = {
   code: "XAE",
   name: "Synthetic A",
@@ -37,13 +34,6 @@ const other: CurrencyRow = {
 };
 
 const currencies: Array<CurrencyRow> = [catalogue, other];
-const currency: HouseholdCurrency = {
-  code: catalogue.code,
-  symbol: catalogue.symbol,
-  decimals: catalogue.decimals,
-  numberFormat: catalogue.numberFormat,
-};
-
 const accounts = [
   { id: "acct-card", name: "Synthetic Card", currency: "XAE" },
   { id: "acct-savings", name: "Synthetic Savings", currency: "XIN" },
@@ -226,7 +216,6 @@ function renderScreen(request: ReturnType<typeof vi.fn>) {
     <ImportScreen
       accounts={accounts}
       currencies={currencies}
-      currency={currency}
       request={request as never}
     />,
   );

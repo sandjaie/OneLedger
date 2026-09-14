@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { type apiFetch, ApiError } from "@/lib/api/client";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type { CategoryRow, RuleRow } from "@/types/api";
 
 type Props = {
@@ -37,10 +37,6 @@ const PATTERN_KINDS = ["contains", "exact", "prefix", "regex"] as const;
 const DIRECTIONS = ["any", "debit", "credit"] as const;
 
 /** The service's own sentence where there is one; the fallback is for the network. */
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
 /**
  * The rule as a sentence, so the list can be read without opening anything.
  *
@@ -113,7 +109,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
       setRules(loaded);
       return loaded;
     } catch (error) {
-      setProblem(detail(error, "The rules could not be loaded. Retry."));
+      setProblem(errorText(error, "The rules could not be loaded. Retry."));
       return undefined;
     }
   }, [request]);
@@ -128,7 +124,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
         if (current) setRules(loaded);
       })
       .catch((error: unknown) => {
-        if (current) setProblem(detail(error, "The rules could not be loaded. Retry."));
+        if (current) setProblem(errorText(error, "The rules could not be loaded. Retry."));
       });
     return () => {
       current = false;
@@ -141,7 +137,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
     try {
       return await work();
     } catch (error) {
-      setProblem(detail(error, fallback));
+      setProblem(errorText(error, fallback));
       return undefined;
     } finally {
       setBusy(false);

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
 import type {
   AssetClassName,
   SecurityCandidate,
@@ -49,10 +49,6 @@ const ASSET_CLASSES: Array<AssetClassName> = [
   "alternative",
   "other",
 ];
-
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
 
 function fromRow(row: SecurityRow): SecurityCandidate {
   // Just created by this owner in this household, so it is eligible for a manual price the
@@ -207,13 +203,13 @@ export function SecurityForm({
       setCreating(false);
     } catch (error) {
       // A 409 here always means the ISIN collision this route documents — its own detail is a
-      // structured `{message, existingSecurityId}` object, not the plain sentence `detail()`
+      // structured `{message, existingSecurityId}` object, not the plain sentence `errorText()`
       // reads, so a fixed sentence stands in for it. The draft is left exactly as typed: the
       // owner's next move is to look the existing security up, not to redo this form.
       setCreateProblem(
         error instanceof ApiError && error.status === 409
           ? "A security with this ISIN already exists — use Find instrument to select it."
-          : detail(error, "This security could not be created."),
+          : errorText(error, "This security could not be created."),
       );
     } finally {
       setCreateBusy(false);

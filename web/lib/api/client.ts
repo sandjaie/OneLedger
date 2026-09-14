@@ -13,6 +13,13 @@ export class ApiError extends Error {
   }
 }
 
+/** The service's own refusal sentence when the error carries one; otherwise the caller's fallback,
+ * because a network or browser failure has nothing to say about the request. */
+export function errorText(error: unknown, fallback: string): string {
+  const detail = (error as { detail?: unknown } | null)?.detail;
+  return typeof detail === "string" && detail ? detail : fallback;
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},

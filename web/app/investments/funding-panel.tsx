@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import type { apiFetch } from "@/lib/api/client";
+import { errorText, type apiFetch } from "@/lib/api/client";
 import type {
   FundingAllocationInput,
   FundingConfirmationResponse,
@@ -26,11 +26,6 @@ type RemovalResult = { transaction: TransactionRow; response: FundingUnlinkRespo
 const TRANSACTION_QUERY = "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=";
 const MAX_AUTO_PAGES = 4;
 const JSON_HEADERS = { "Content-Type": "application/json" };
-
-function refusalText(error: unknown, fallback: string) {
-  const detail = (error as { detail?: unknown } | null)?.detail;
-  return typeof detail === "string" && detail ? detail : fallback;
-}
 
 function purchaseLabel(event: InvestmentEventRow) {
   return `${event.eventDate} · ${event.eventKind.replaceAll("_", " ")} · ${event.currency} ${event.netAmount}`;
@@ -151,7 +146,7 @@ export function FundingPanel({ events, request }: Props) {
         setFeedback("Cash evidence reloaded. Review the current rows before another funding action.");
       }
     } catch (error) {
-      const detail = refusalText(error, "Cash entries could not be loaded. Retry.");
+      const detail = errorText(error, "Cash entries could not be loaded. Retry.");
       if (recovery && unverified) setUnverified({ ...unverified, detail });
       else setProblem(detail);
       setLoadState("error");
@@ -204,7 +199,7 @@ export function FundingPanel({ events, request }: Props) {
       setProposal(response);
       setStale(false);
     } catch (error) {
-      setProblem(refusalText(error, "The funding proposal was not accepted. Review the exact rows."));
+      setProblem(errorText(error, "The funding proposal was not accepted. Review the exact rows."));
     } finally {
       end();
     }
@@ -226,7 +221,7 @@ export function FundingPanel({ events, request }: Props) {
       setFeedback("Funding confirmed from the reviewed server proposal.");
     } catch (error) {
       setProposal(undefined);
-      const detail = refusalText(error, "The funding confirmation response was not received.");
+      const detail = errorText(error, "The funding confirmation response was not received.");
       if ((error as { status?: unknown } | null)?.status === 409
         && detail === "funding proposal state changed") {
         setProblem(detail);
@@ -274,7 +269,7 @@ export function FundingPanel({ events, request }: Props) {
       setRemovingCashId("");
       setUnverified({
         kind: "removal",
-        detail: refusalText(error, "The funding removal response was not received."),
+        detail: errorText(error, "The funding removal response was not received."),
       });
     } finally {
       end();

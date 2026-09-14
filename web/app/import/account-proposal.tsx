@@ -2,8 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-import { ACCOUNT_TYPES, LIABILITY_TYPES } from "@/app/accounts/accounts-screen";
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { EyeIcon } from "@/app/accounts/eye-icon";
+import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
   AccountCreate,
@@ -61,18 +62,6 @@ function initialDraft(resolution: IdentityResolution): Draft {
 }
 
 const NEW_INSTITUTION = "new";
-const INSTITUTION_TYPES = [
-  "bank",
-  "card_issuer",
-  "broker",
-  "fund_house",
-  "lender",
-  "govt",
-  "insurer",
-  "employer",
-  "exchange_house",
-  "other",
-] as const;
 
 function initialInstitutionChoice(resolution: IdentityResolution) {
   if (resolution.institutionAction === "create") return NEW_INSTITUTION;
@@ -87,10 +76,6 @@ function initialInstitutionDraft(resolution: IdentityResolution): InstitutionCre
     country: resolution.institution.country ?? "",
     institutionType: "bank",
   };
-}
-
-function problemText(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
 }
 
 function statementBody(
@@ -166,16 +151,6 @@ const CONFLICT_TEXT: Record<IdentityResolution["conflicts"][number], string> = {
   currency: "Currency does not match the stored account.",
 };
 
-function EyeIcon({ hidden }: { hidden: boolean }) {
-  return (
-    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
-      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
-      <circle cx="12" cy="12" r="2.75" />
-      {hidden && <path d="m4 4 16 16" />}
-    </svg>
-  );
-}
-
 export function AccountProposalPanel({
   currencies,
   file,
@@ -241,7 +216,7 @@ export function AccountProposalPanel({
       });
       await onResolved(account);
     } catch (error) {
-      setProblem(problemText(error, "The account could not be confirmed from this statement."));
+      setProblem(errorText(error, "The account could not be confirmed from this statement."));
     } finally {
       setBusy(false);
       onBusyChange(false);
@@ -312,7 +287,7 @@ export function AccountProposalPanel({
     } catch (error) {
       if (controller.signal.aborted || revealController.current !== controller) return;
       setRevealed(undefined);
-      setRevealNote(problemText(error, "The account number could not be revealed."));
+      setRevealNote(errorText(error, "The account number could not be revealed."));
     } finally {
       if (revealController.current === controller) {
         revealController.current = undefined;

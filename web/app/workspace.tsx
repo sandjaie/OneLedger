@@ -430,7 +430,6 @@ export function Workspace({
             <ImportScreen
               accounts={inventory.accounts}
               currencies={currencies}
-              currency={currency}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

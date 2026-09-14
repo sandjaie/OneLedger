@@ -2,8 +2,8 @@
 
 import { useId, useState } from "react";
 
-import { ACCOUNT_TYPES } from "@/app/accounts/accounts-screen";
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { ACCOUNT_TYPES } from "@/lib/accounts/types";
+import { type apiFetch, errorText } from "@/lib/api/client";
 import type { LayoutColumn, LayoutCreate, LayoutProfile, LayoutProposal } from "@/types/api";
 
 /** What the form starts from. `remap` locks the name field: saving always creates that
@@ -80,10 +80,6 @@ function metadataPatternsFrom(rows: Array<MetadataRow>): LayoutCreate["metadataP
   return named.length > 0
     ? Object.fromEntries(named.map((row) => [row.key.trim(), row.pattern]))
     : null;
-}
-
-function problemText(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
 }
 
 function previewBody(file: File, password: string | undefined, draft: LayoutCreate) {
@@ -186,7 +182,7 @@ export function LayoutMapper({
     } catch (error) {
       setPreview(undefined);
       setPreviewedJson(undefined);
-      setPreviewProblem(problemText(error, "This draft could not be previewed. Try again."));
+      setPreviewProblem(errorText(error, "This draft could not be previewed. Try again."));
     } finally {
       setPreviewBusy(false);
     }
@@ -203,7 +199,7 @@ export function LayoutMapper({
       });
       await onSaved(profile);
     } catch (error) {
-      setSaveProblem(problemText(error, "This layout could not be saved. Try again."));
+      setSaveProblem(errorText(error, "This layout could not be saved. Try again."));
     } finally {
       setSaveBusy(false);
     }

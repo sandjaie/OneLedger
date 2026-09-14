@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { type apiFetch, errorText } from "@/lib/api/client";
+import { moneyText } from "@/lib/money/format";
 import type {
   CategoryRow,
   CurrencyRow,
@@ -44,22 +44,6 @@ const REASON_TEXT: Record<string, string> = {
 };
 
 const IMPORT_LOCKED = "PDF is encrypted or the password is incorrect";
-
-function currencyOf(currencies: Array<CurrencyRow>, code: string): CurrencyRow {
-  return (
-    currencies.find((row) => row.code === code) ?? {
-      code,
-      name: code,
-      symbol: code,
-      decimals: 2,
-      numberFormat: "international",
-    }
-  );
-}
-
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
 
 function emptyForm(currencies: Array<CurrencyRow>): FormState {
   return {
@@ -199,7 +183,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
     } catch (error) {
-      setProblem(detail(error, "This payslip could not be recorded."));
+      setProblem(errorText(error, "This payslip could not be recorded."));
     } finally {
       setBusy(false);
     }
@@ -217,7 +201,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       );
       setCandidates(result.candidates);
     } catch (error) {
-      setCandidatesProblem(detail(error, "Candidates could not be loaded."));
+      setCandidatesProblem(errorText(error, "Candidates could not be loaded."));
     } finally {
       setCandidatesBusy(false);
     }
@@ -243,7 +227,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       cancelCandidates();
       setAttempt((value) => value + 1);
     } catch (error) {
-      setCandidatesProblem(detail(error, "This credit could not be linked."));
+      setCandidatesProblem(errorText(error, "This credit could not be linked."));
     } finally {
       setLinkBusy(false);
     }
@@ -258,7 +242,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       setUnlinkFor(undefined);
       setAttempt((value) => value + 1);
     } catch (error) {
-      setUnlinkProblem(detail(error, "This payslip could not be unlinked."));
+      setUnlinkProblem(errorText(error, "This payslip could not be unlinked."));
     } finally {
       setLinkBusy(false);
     }
@@ -289,7 +273,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       setPreview(result);
       setLocked(false);
     } catch (error) {
-      const message = detail(error, "This file could not be checked.");
+      const message = errorText(error, "This file could not be checked.");
       setImportProblem(message);
       if (message === IMPORT_LOCKED) setLocked(true);
     } finally {
@@ -313,7 +297,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       setImportResult(result);
       setAttempt((value) => value + 1);
     } catch (error) {
-      setImportProblem(detail(error, "This file could not be imported."));
+      setImportProblem(errorText(error, "This file could not be imported."));
     } finally {
       setImportBusy(false);
     }
@@ -353,7 +337,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       }
       setAttempt((value) => value + 1);
     } catch (error) {
-      setSpendingProblem({ key, message: detail(error, "This could not be saved.") });
+      setSpendingProblem({ key, message: errorText(error, "This could not be saved.") });
     } finally {
       setSpendingBusy(undefined);
     }
@@ -385,12 +369,11 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         {loadState === "ready" && payslips && payslips.length > 0 && (
           <ul className="salary-payslip-list">
             {payslips.map((payslip) => {
-              const currency = currencyOf(currencies, payslip.currency);
               return (
                 <li key={payslip.id}>
                   <div>
                     <strong>{payslip.payMonth}</strong>
-                    <span>{formatMoney(payslip.netPay, currency)} net · {formatMoney(payslip.grossEarnings, currency)} gross</span>
+                    <span>{moneyText(payslip.netPay, payslip.currency, currencies)} net · {moneyText(payslip.grossEarnings, payslip.currency, currencies)} gross</span>
                     <span>{depositState(payslip)}</span>
                     {payslip.imported && <small>Imported</small>}
                   </div>
@@ -401,7 +384,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                       const chosenCategory = spendingCategoryFor(key, line);
                       return (
                         <li key={line.lineNo}>
-                          <span>{line.kind}: {line.label} {formatMoney(line.amount, currency)}</span>
+                          <span>{line.kind}: {line.label} {moneyText(line.amount, payslip.currency, currencies)}</span>
                           {line.kind === "deduction" && (
                             <span className="salary-line-spending">
                               <label>
@@ -473,7 +456,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                         <ul>
                           {candidates.map((candidate) => (
                             <li key={candidate.transactionId}>
-                              <span>{candidate.bookedDate} · {formatMoney(candidate.amount, currencyOf(currencies, candidate.currency))} · {candidate.description}</span>
+                              <span>{candidate.bookedDate} · {moneyText(candidate.amount, candidate.currency, currencies)} · {candidate.description}</span>
                               <button
                                 className="text-action"
                                 onClick={() => setConfirmingCandidate(candidate)}

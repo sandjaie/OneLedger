@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { type apiFetch, errorText } from "@/lib/api/client";
+import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
   CurrencyRow,
@@ -79,10 +79,6 @@ function label(status: string) {
   return GROUP_LABEL[status] ?? status;
 }
 
-function detail(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.detail : fallback;
-}
-
 function accepted(batch: ReviewBatch) {
   return batch.groups.find((group) => group.status === ACCEPTED)?.count ?? 0;
 }
@@ -106,18 +102,6 @@ function withoutCategory(batch: ReviewBatch) {
   );
 }
 
-/** The catalogue row for a code, or the household's display currency.
- *
- * From the catalogue, never a union of codes (ADR-0012). The fallback keeps an account the
- * catalogue does not cover formatting with real grouping rather than printing raw.
- */
-function display(
-  currencies: Array<CurrencyRow>,
-  currency: HouseholdCurrency,
-  code: string | undefined,
-) {
-  return currencies.find((option) => option.code === code) ?? currency;
-}
 
 
 export function ReviewScreen({
@@ -157,7 +141,7 @@ export function ReviewScreen({
       })
       .catch((error: unknown) => {
         if (!current) return;
-        setProblem(detail(error, "This batch could not be loaded."));
+        setProblem(errorText(error, "This batch could not be loaded."));
         setBusy(false);
       });
     return () => {
@@ -197,7 +181,7 @@ export function ReviewScreen({
       // a batch the screen has already discarded. `reading` clears it when the new one arrives.
       reload();
     } catch (error) {
-      setProblem(detail(error, "Those rows could not be decided."));
+      setProblem(errorText(error, "Those rows could not be decided."));
       setBusy(false);
     }
   }
@@ -214,7 +198,7 @@ export function ReviewScreen({
     } catch (error) {
       // V14's own sentence, written for the owner: which account failed to reconcile and by
       // how much. The whole commit rolled back, so the batch is exactly as it was.
-      setProblem(detail(error, "This batch could not be imported."));
+      setProblem(errorText(error, "This batch could not be imported."));
       setBusy(false);
     }
   }
@@ -231,7 +215,7 @@ export function ReviewScreen({
     } catch (error) {
       // The service's own sentence — a batch someone else imported from a second tab reads back
       // as already imported, which is not a failure to describe as "could not be discarded".
-      setProblem(detail(error, "This batch could not be discarded."));
+      setProblem(errorText(error, "This batch could not be discarded."));
       setConfirming(false);
       setBusy(false);
     }
@@ -254,25 +238,16 @@ export function ReviewScreen({
   const ready = accepted(batch);
   const unclassified = withoutCategory(batch);
   // The account's own currency, not a row's. The declared opening and closing are the account's
-  // figures, and a committed batch carries no groups at all — reading the code off the first
-  // row would then fall back to the household's and print the wrong symbol on real money.
-  //
-  // It is the banner's currency and a row amount's last resort, and it is NOT the currency of a
-  // row's converted figure: `amount_base` is frozen in the household's base currency, so on a
-  // card denominated in anything else — the ordinary case here — formatting it with this one
-  // prints real money under the wrong symbol and the wrong grouping. `Row` is given both.
-  const shown = display(
-    currencies,
-    currency,
-    accounts.find(({ id }) => id === batch.accountId)?.currency,
-  );
+  // figures, and a committed batch carries no groups at all to read a code from. It is only the
+  // banner's: each row formats in its own code, and a row's converted figure in the household's.
+  const accountCode = accounts.find(({ id }) => id === batch.accountId)?.currency;
 
   return (
     <section className="workspace-content" aria-labelledby="review-title">
       <p className="eyebrow">Statement import</p>
       <h1 className="workspace-title" id="review-title">Review</h1>
 
-      <Banner batch={batch} currency={shown} />
+      <Banner batch={batch} code={accountCode} currencies={currencies} />
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {imported !== undefined && (
@@ -332,7 +307,6 @@ export function ReviewScreen({
 
       {batch.groups.map((group) => (
         <Group
-          accountCurrency={shown}
           currencies={currencies}
           currency={currency}
           group={group}
@@ -397,17 +371,25 @@ function Discard({
   );
 }
 
-function Banner({ batch, currency }: { batch: ReviewBatch; currency: HouseholdCurrency }) {
+function Banner({
+  batch,
+  code,
+  currencies,
+}: {
+  batch: ReviewBatch;
+  code: string | undefined;
+  currencies: Array<CurrencyRow>;
+}) {
   const reconciliation = batch.reconciliation;
   const reconciled = reconciliation.status === RECONCILED;
   return (
     <div className={reconciled ? "import-verdict" : "inline-alert"} role="status">
       <strong>{reconciled ? "Reconciled" : `Reconciliation: ${reconciliation.status}`}</strong>
       {reconciliation.declaredOpening !== null && (
-        <> · opening {formatMoney(reconciliation.declaredOpening, currency)}</>
+        <> · opening {moneyText(reconciliation.declaredOpening, code, currencies)}</>
       )}
       {reconciliation.declaredClosing !== null && (
-        <> · closing {formatMoney(reconciliation.declaredClosing, currency)}</>
+        <> · closing {moneyText(reconciliation.declaredClosing, code, currencies)}</>
       )}
       <> · {batch.rowsExtracted} rows extracted</>
       {reconciliation.message && <> · {reconciliation.message}</>}
@@ -416,7 +398,6 @@ function Banner({ batch, currency }: { batch: ReviewBatch; currency: HouseholdCu
 }
 
 function Group({
-  accountCurrency,
   currencies,
   currency,
   household,
@@ -426,7 +407,6 @@ function Group({
   open,
   selected,
 }: {
-  accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   household: HouseholdResponse;
@@ -472,7 +452,6 @@ function Group({
       <ul className="review-rows">
         {group.rows.map((row) => (
           <Row
-            accountCurrency={accountCurrency}
             household={household}
             currencies={currencies}
             currency={currency}
@@ -489,7 +468,6 @@ function Group({
 }
 
 function Row({
-  accountCurrency,
   currencies,
   currency,
   household,
@@ -498,7 +476,6 @@ function Row({
   row,
   selected,
 }: {
-  accountCurrency: HouseholdCurrency;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
   household: HouseholdResponse;
@@ -533,7 +510,7 @@ function Row({
           displayed currency rather than a figure recomputed here (`converted`). The row names
           its own currency, so a row is never formatted with a batch-level guess. */}
       <span className="review-amount">
-        {formatMoney(row.amount, display(currencies, accountCurrency, row.currency))}
+        {moneyText(row.amount, row.currency, currencies)}
       </span>
       <span className="review-converted">{conversion ?? ""}</span>
       <span className="section-label">{row.proposedTxnType ?? "unclassified"}</span>

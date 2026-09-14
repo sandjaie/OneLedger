@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { type apiFetch } from "@/lib/api/client";
-import { formatMoney } from "@/lib/money/format";
+import { type apiFetch, errorText } from "@/lib/api/client";
+import { moneyText } from "@/lib/money/format";
 import type {
   Candidate,
   CandidatesResponse,
@@ -43,15 +43,9 @@ function pairKey(candidate: Candidate) {
 }
 
 /** The sentence the service wrote, not the status line wrapped round it. */
-function refusalText(error: unknown, fallback: string) {
-  const detail = (error as { detail?: unknown } | null)?.detail;
-  return typeof detail === "string" && detail ? detail : fallback;
-}
-
 function useMoney(currencies: Array<CurrencyRow>, household: HouseholdResponse) {
   function money(value: string, code: string) {
-    const row = currencies.find((one) => one.code === code);
-    return row ? formatMoney(value, row) : `${value} ${code}`;
+    return moneyText(value, code, currencies);
   }
   // A leg's amount in its own currency, then — when that is not the base — the frozen base
   // figure in the household's. Never the conversion alone.
@@ -90,7 +84,7 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
       setConfirmed(decided.transfers);
       setOpen(true);
     } catch (error) {
-      setProblem(refusalText(error, "Transfer candidates could not be loaded. Retry."));
+      setProblem(errorText(error, "Transfer candidates could not be loaded. Retry."));
     } finally {
       setBusy(false);
     }
@@ -138,7 +132,7 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
         );
       }
     } catch (error) {
-      setProblem(refusalText(error, "The transfer was not confirmed. Retry."));
+      setProblem(errorText(error, "The transfer was not confirmed. Retry."));
     } finally {
       setBusy(false);
       if (changed) onChanged();
@@ -153,7 +147,7 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
       setConfirmed((current) => current.filter((one) => one.id !== transfer.id));
       onChanged();
     } catch (error) {
-      setProblem(refusalText(error, "The transfer was not unlinked. Retry."));
+      setProblem(errorText(error, "The transfer was not unlinked. Retry."));
     } finally {
       setBusy(false);
     }
@@ -275,7 +269,7 @@ export function PeerPicker({
         if (!cancelled) setPeers(found.peers);
       })
       .catch((error: unknown) => {
-        if (!cancelled) setProblem(refusalText(error, "Peers could not be loaded. Retry."));
+        if (!cancelled) setProblem(errorText(error, "Peers could not be loaded. Retry."));
       });
     return () => {
       cancelled = true;
@@ -304,7 +298,7 @@ export function PeerPicker({
       onChanged();
       onClose();
     } catch (error) {
-      setProblem(refusalText(error, "The transfer was not linked. Retry."));
+      setProblem(errorText(error, "The transfer was not linked. Retry."));
     } finally {
       setBusy(false);
     }

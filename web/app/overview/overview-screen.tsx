@@ -2,8 +2,8 @@
 
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { ApiError, type apiFetch } from "@/lib/api/client";
-import { type Currency, formatMoney, formatOwed, formatPercent } from "@/lib/money/format";
+import { errorText, type apiFetch } from "@/lib/api/client";
+import { type Currency, formatOwed, formatPercent, moneyText } from "@/lib/money/format";
 import type {
   CardDue,
   CurrencyRow,
@@ -99,10 +99,10 @@ export function OverviewScreen({ household, currency, currencies, request, child
         if (!current) return;
         setState({
           status: "failed",
-          sentence:
-            error instanceof ApiError
-              ? error.detail
-              : "The overview could not be loaded. Check the API service and try again.",
+          sentence: errorText(
+            error,
+            "The overview could not be loaded. Check the API service and try again.",
+          ),
         });
       });
     return () => {
@@ -112,10 +112,8 @@ export function OverviewScreen({ household, currency, currencies, request, child
 
   const rowFor = (code: string): Currency | undefined =>
     household.currencies.find((row) => row.code === code) ?? currencies.find((row) => row.code === code);
-  const money = (value: string, code: string) => {
-    const row = rowFor(code);
-    return row ? formatMoney(value, row) : `${value} ${code}`;
-  };
+  const money = (value: string, code: string) =>
+    moneyText(value, code, [...household.currencies, ...currencies]);
   const owed = (value: string, code: string) => {
     const row = rowFor(code);
     return row ? formatOwed(value, row) : `${value} ${code}`;
