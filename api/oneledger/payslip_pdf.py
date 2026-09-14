@@ -60,7 +60,8 @@ _MONTHS = {
     )
 }
 _TABLE_HEADER = "PAYMENTS AMOUNT DEDUCTIONS AMOUNT"
-_NET_HEADER = "NET PAY AMOUNT"
+_NET_HEADER_WORDS = ("NET", "PAY", "AMOUNT")
+_PAY_ADVICE = re.compile(r"PAY ADVICE FOR ([A-Z]+) (\d{4})$")
 _CURRENCY_LINE = re.compile(r"^ALL AMOUNTS IN ([A-Z]{3})$")
 _AMOUNT_TOKEN = re.compile(r"^[\d,]+(?:\.\d{1,4})?$")
 
@@ -100,17 +101,16 @@ def _normalized(line: Line) -> str:
 
 
 def _month_start(line: Line) -> date | None:
-    text = _normalized(line)
-    if not text.startswith("PAY ADVICE FOR "):
+    # A `search`, not a `fullmatch`: the real source prints "CONFIDENTIAL" (and possibly other
+    # boilerplate) ahead of the marker on the same or a preceding line. Anchoring only at the end
+    # keeps the marker exact while admitting whatever comes before it.
+    match = _PAY_ADVICE.search(_normalized(line))
+    if match is None:
         return None
-    remainder = text[len("PAY ADVICE FOR ") :].split()
-    if len(remainder) != 2:
+    month = _MONTHS.get(match.group(1))
+    if month is None:
         return None
-    month_name, year_text = remainder
-    month = _MONTHS.get(month_name)
-    if month is None or re.fullmatch(r"\d{4}", year_text) is None:
-        return None
-    return date(int(year_text), month, 1)
+    return date(int(match.group(2)), month, 1)
 
 
 def _table_boundary(line: Line) -> float | None:
@@ -123,12 +123,17 @@ def _table_boundary(line: Line) -> float | None:
 
 
 def _net_anchor(line: Line) -> float | None:
-    if _normalized(line) != _NET_HEADER:
+    """The x0 of the header's own `Net` word, or `None`.
+
+    A suffix match, not a whole-line match: the real source prints this header as the tail of a
+    longer row — "Bank - Branch Name Account Number Net Pay Amount" — so bank, branch and account
+    columns sit to its left by construction, never parsed or retained (rule 4).
+    """
+    words = line.words
+    if len(words) < 3:
         return None
-    for word in line.words:
-        if word.text.upper() == "NET":
-            return word.x0
-    return None  # unreachable: the text check above already requires the word
+    tail = tuple(unicodedata.normalize("NFKC", word.text).upper() for word in words[-3:])
+    return words[-3].x0 if tail == _NET_HEADER_WORDS else None
 
 
 def _currency_code(line: Line) -> str | None:
@@ -238,8 +243,15 @@ def _extract_month(pay_month: date, block: Sequence[Line]) -> PayslipMonthDraft:
         elif s.net_search_active:
             column = [word for word in line.words if word.x0 >= s.net_anchor]
             if column:
-                amount = _parse_amount(column[-1].text)
-                s.net_pay = amount if amount is not None and amount >= 0 else None
+                # The last amount-shaped token in the column, not simply its last word: a masked
+                # account token never parses as an amount (rule 4), but is never trusted to sit
+                # only left of the anchor either.
+                amounts = [
+                    amount
+                    for word in column
+                    if (amount := _parse_amount(word.text)) is not None and amount >= 0
+                ]
+                s.net_pay = amounts[-1] if amounts else None
                 s.net_search_active = False
                 continue
 
@@ -307,12 +319,19 @@ def extract_payslips(pages: Sequence[Page]) -> PayslipExtraction:
     starts: list[date] = []
     blocks: list[list[Line]] = []
     current: list[Line] | None = None
+    current_month: date | None = None
     for line in numbered_lines:
         month = _month_start(line)
         if month is not None:
+            if month == current_month:
+                # The real source repeats the marker on every page of a block, including its own
+                # detail page — a marker naming the block's own month continues it; only a
+                # marker naming a different month starts a new one.
+                continue
             starts.append(month)
             current = []
             blocks.append(current)
+            current_month = month
             continue
         if current is not None:
             current.append(line)

@@ -127,6 +127,55 @@ def test_incomplete_month_when_a_required_element_is_missing(tmp_path: Path) -> 
     assert extraction.months[0].reason == "incomplete_month"
 
 
+def test_net_pay_reads_past_the_bank_branch_and_account_columns(tmp_path: Path) -> None:
+    # The real source's net-pay header is the tail of a longer row, and its value row's masked
+    # account token must never be mistaken for the net-pay amount (OL-001).
+    month = _month(
+        net_pay="3,100.00",
+        masked_account="AE00XXXXXXXXXX0000",
+        bank_name="Synthetic Bank",
+        branch_name="Synthetic Branch",
+    )
+    extraction = extract_payslips(_pages(tmp_path, [month]))
+    assert extraction.supported
+    assert extraction.months[0].reason is None
+    assert extraction.months[0].net_pay == Decimal("3100.00")
+
+
+def test_a_repeated_marker_for_the_same_month_continues_its_block(tmp_path: Path) -> None:
+    # The real source reprints "CONFIDENTIAL" then the marker on every page of a block,
+    # including its own detail page; only a marker naming a different month starts a new block
+    # (OL-002).
+    month = _month(include_detail_page=True)
+    extraction = extract_payslips(_pages(tmp_path, [month]))
+    assert extraction.supported
+    assert len(extraction.months) == 1
+    assert extraction.months[0].reason is None
+    assert [(line.kind, line.label, line.amount) for line in extraction.months[0].lines] == [
+        ("earning", "Basic", Decimal("3000.00")),
+        ("earning", "Housing Allowance", Decimal("500.00")),
+        ("deduction", "Tax", Decimal("400.00")),
+    ]
+
+
+def test_a_payment_only_row_reconciles_beside_shorter_deduction_lines(tmp_path: Path) -> None:
+    month = _month(
+        payment_lines=[("Basic", "3000.00"), ("Housing Allowance", "500.00"), ("Bonus", "200.00")],
+        deduction_lines=[("Tax", "400.00")],
+        payments_total="3700.00",
+        deductions_total="400.00",
+        net_pay="3300.00",
+    )
+    extraction = extract_payslips(_pages(tmp_path, [month]))
+    assert extraction.months[0].reason is None
+    assert [line.label for line in extraction.months[0].lines] == [
+        "Basic",
+        "Housing Allowance",
+        "Bonus",
+        "Tax",
+    ]
+
+
 def test_a_non_matching_pdf_is_unsupported(tmp_path: Path) -> None:
     placements = [Placement(page=0, x=50, y=700, text="Not a payslip at all")]
     path = tmp_path / "unrelated.pdf"

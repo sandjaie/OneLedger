@@ -553,6 +553,7 @@ def import_payslips(
                     if reason is None
                 ]
                 document_id: UUID | None = None
+                created_new_document = False
                 if reconciling:
                     uploaded = storage.store(data, owner.household_id, _SAFE_DOCUMENT_LABEL)
                     cur.execute(
@@ -582,6 +583,8 @@ def import_payslips(
                             (owner.household_id, uploaded.sha256),
                         )
                         row = cur.fetchone()
+                    else:
+                        created_new_document = True
                     assert row is not None
                     document_id = UUID(str(row[0]))
                 outcomes: dict[
@@ -591,6 +594,19 @@ def import_payslips(
                     index: _commit_month(cur, owner.household_id, month, index, document_id)
                     for index, month in reconciling
                 }
+                if (
+                    created_new_document
+                    and document_id is not None
+                    and not any(status == "imported" for status, _ in outcomes.values())
+                ):
+                    # Nothing in this transaction ended up referencing the document this upload
+                    # would otherwise have stored on its own — every reconciling month was
+                    # already recorded under a different idempotency key (OL-005). Leave no
+                    # orphan document row behind for a file that recorded nothing new.
+                    cur.execute(
+                        "DELETE FROM document WHERE household_id = %s AND id = %s",
+                        (owner.household_id, document_id),
+                    )
                 months_out = [
                     _month_out(month, None, *outcomes[index])
                     if reason is None

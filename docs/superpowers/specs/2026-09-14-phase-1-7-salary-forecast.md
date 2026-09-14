@@ -174,17 +174,23 @@ header and an `All amounts in <code>` line. Anything else is unsupported. It ret
 currency, gross_earnings, total_deductions, net_pay, lines, reason)` with
 `PayslipLineDraft(kind, label, amount)` and exact `Decimal` values.
 
-1. Every `PAY ADVICE FOR <month> <year>` line starts a month block that runs, across pages, to the
-   next such line or the end of the file. The month is that calendar month.
+1. A line ending in `PAY ADVICE FOR <month> <year>` — the source prints `CONFIDENTIAL` immediately
+   before it on every page, including a block's own detail page — starts or continues a month
+   block: naming the block's own month continues it (the marker is reprinted on every page of the
+   block), and naming a different month starts a new one, running across pages to the next marker
+   naming a different month or the end of the file. The month is that calendar month.
 2. Lines between the first table header and the next line beginning `Total` are table lines. Words
    left of the header's `Deductions` word form the payment side and the rest the deduction side.
    Each non-empty side is a label followed by one amount: its last word must be a positive amount
    with at most four decimals (thousands commas allowed); the other words, joined by single spaces,
    are a 1–80 character label.
 3. The `Total` line supplies the stated payments total (left side) and deductions total (right).
-4. The first line after the `Net Pay Amount` header with a word at or right of that header's `Net`
-   word supplies net pay from that column only. Bank, branch and account words are never parsed or
-   retained, nor are employee, position or organization lines.
+4. The `Net Pay Amount` header is the tail of a longer row (for example `Bank - Branch Name
+   Account Number Net Pay Amount`); its anchor is the `Net` word starting that tail. The first
+   line after it with a word at or right of that anchor supplies net pay as the last amount-shaped
+   token at or right of the anchor on that line — a masked account token is never amount-shaped
+   and is never read as one. Bank, branch and account words are never parsed or retained, nor are
+   employee, position or organization lines.
 5. `All amounts in <code>` supplies the currency, which must exist in the currency table.
 6. Everything else in a block — including the repeated `Element Remarks Amount` deduction detail —
    is ignored and never counted.

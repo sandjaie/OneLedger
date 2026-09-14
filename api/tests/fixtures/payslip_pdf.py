@@ -1,10 +1,16 @@
 """Synthetic monthly pay-advice PDFs built on the shared byte fixture.
 
-Layout mirrors the spec's supported source: a "PAY ADVICE FOR <month> <year>" marker, a
-side-by-side "Payments Amount Deductions Amount" table ending at a "Total" row, a
-"Net Pay Amount" header and value line (with bank/branch/account text to its left, ignored), an
-"All amounts in <code>" line, and an optional page-2 "Element Remarks Amount" detail block that
-must be ignored. All labels, references and amounts are synthetic.
+Layout mirrors the real supported source (structure only — every name, reference and amount
+below is synthetic, never real payslip content): every page opens with "CONFIDENTIAL" then a
+"PAY ADVICE FOR <month> <year>" marker; a repeated marker naming the same month continues that
+block rather than starting a new one, since the real source reprints it on every page including
+its own detail page. A side-by-side "Payments Amount Deductions Amount" table ends at a "Total"
+row; a "Bank - Branch Name Account Number Net Pay Amount" header is followed by a value row
+carrying bank and branch text, a masked account token and a comma-grouped net amount — bank,
+branch and account columns sit left of the "Net" anchor and are never parsed. A "Message" line, a
+leave-balance sentence containing numbers, and an "All amounts in <code>" line follow. An optional
+page-2 detail block repeats the block's own marker, carries an ignored "Element Remarks Amount"
+table and a footer line, and must not be read as a second month.
 """
 
 from __future__ import annotations
@@ -13,12 +19,14 @@ from dataclasses import dataclass, field
 
 from tests.fixtures.synthetic_pdf import Placement, build_pdf
 
-# Column x-positions: the payments side starts at PAYMENTS_X, the deductions side (and the
-# header's own "Deductions" word) at DEDUCTIONS_X, and the net-pay value column at NET_X — each
-# gap is wide enough that no placement's rendered text can drift into the next column.
+# Column x-positions. Each gap is wide enough that no placement's rendered text can drift into
+# the next column: a ~19-character masked token starting at ACCOUNT_X (roughly 105pt at size 10)
+# still ends well short of NET_X.
 PAYMENTS_X = 50.0
 DEDUCTIONS_X = 300.0
-NET_X = 420.0
+BRANCH_X = 160.0
+ACCOUNT_X = 320.0
+NET_X = 480.0
 _ROW_HEIGHT = 24.0
 
 
@@ -32,7 +40,14 @@ class PayslipMonthSpec:
     payments_total: str = "0.00"
     deductions_total: str = "0.00"
     net_pay: str = "0.00"
-    bank_detail: str = "A1B2C3D4E5F6 Synthetic Branch 000111222"
+    bank_name: str = "Synthetic Bank"
+    branch_name: str = "Synthetic Branch"
+    masked_account: str = "AE00XXXXXXXXXX0000"
+    message: str = "No message this month."
+    leave_balance: str = (
+        "Annual Leave balance as on 30-Jun-2025 is 12.34 working hours which equates to "
+        "1.54 calendar days."
+    )
     include_detail_page: bool = False
 
 
@@ -49,12 +64,17 @@ def build_payslip_pdf(months: list[PayslipMonthSpec]) -> bytes:
         nonlocal y
         y -= _ROW_HEIGHT * rows
 
-    for month in months:
-        if y < 120.0:  # start the next month clear of the page bottom
-            page += 1
-            y = 740.0
+    def marker(month: PayslipMonthSpec) -> None:
+        line(PAYMENTS_X, "CONFIDENTIAL")
+        advance()
         line(PAYMENTS_X, f"PAY ADVICE FOR {month.month_name} {month.year}")
         advance(2)
+
+    for month in months:
+        if y < 160.0:  # start the next month clear of the page bottom
+            page += 1
+            y = 740.0
+        marker(month)
         line(PAYMENTS_X, "Payments")
         line(PAYMENTS_X + 100.0, "Amount")
         line(DEDUCTIONS_X, "Deductions")
@@ -72,22 +92,40 @@ def build_payslip_pdf(months: list[PayslipMonthSpec]) -> bytes:
         line(PAYMENTS_X, f"Total {month.payments_total}")
         line(DEDUCTIONS_X, f"Total {month.deductions_total}")
         advance(2)
+        line(PAYMENTS_X, "Bank")
+        line(PAYMENTS_X + 50.0, "-")
+        line(BRANCH_X, "Branch")
+        line(BRANCH_X + 60.0, "Name")
+        line(ACCOUNT_X, "Account")
+        line(ACCOUNT_X + 70.0, "Number")
         line(NET_X, "Net")
-        line(NET_X + 70.0, "Pay")
-        line(NET_X + 140.0, "Amount")
+        line(NET_X + 40.0, "Pay")
+        line(NET_X + 80.0, "Amount")
         advance()
-        line(PAYMENTS_X, month.bank_detail)
+        line(PAYMENTS_X, month.bank_name)
+        line(BRANCH_X, month.branch_name)
+        line(ACCOUNT_X, month.masked_account)
         line(NET_X, month.net_pay)
         advance(2)
+        line(PAYMENTS_X, f"Message {month.message}")
+        advance()
+        line(PAYMENTS_X, month.leave_balance)
+        advance()
         line(PAYMENTS_X, f"All amounts in {month.currency}")
         advance(3)
 
         if month.include_detail_page:
             page += 1
             y = 740.0
+            marker(month)
             line(PAYMENTS_X, "Element Remarks Amount")
             advance()
             line(PAYMENTS_X, "Basic detail-row-not-a-total 12345.00")
             advance(2)
+            line(PAYMENTS_X, "This is a system generated document printed by the employee")
+            line(PAYMENTS_X + 400.0, "14-Sep-2026 09:00")
+            advance()
+            line(PAYMENTS_X, "2/2")
+            advance()
 
     return build_pdf(placements, page_count=page + 1, page_size=(612.0, 792.0))

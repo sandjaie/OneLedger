@@ -193,6 +193,18 @@ def _payslip_count(fixture: PayslipFixture) -> int:
         return int(found[0])
 
 
+def _document_count(fixture: PayslipFixture) -> int:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(*) FROM document
+                WHERE household_id = %s AND document_type = 'payslip'""",
+            (fixture.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None
+        return int(found[0])
+
+
 def test_entry_replay_conflicting_key_and_exact_round_trip(live: PayslipFixture) -> None:
     key = str(uuid4())
     body = _body(live, idempotencyKey=key)
@@ -410,6 +422,16 @@ def test_import_preview_writes_nothing_then_commit_imports_reconciling_months(
     assert [m["status"] for m in preview_body["months"]] == [None, None, None, None]
     assert preview_body["months"][1]["reason"] == "payments_total_disagrees"
     assert _payslip_count(live) == 1  # only the manual April entry
+    assert _document_count(live) == 0  # a preview writes nothing (OL-004)
+
+    # January carries a detail page that repeats its own "CONFIDENTIAL" / "PAY ADVICE FOR"
+    # marker (OL-002); its lines must still be exactly what was extracted before that page
+    # existed.
+    january = next(m for m in preview_body["months"] if m["payMonth"] == "2026-01")
+    assert [(line["kind"], line["label"], line["amount"]) for line in january["lines"]] == [
+        ("earning", "Basic", "3000.00"),
+        ("deduction", "Tax", "400.00"),
+    ]
 
     committed = client().post(
         "/payslips/import",
@@ -421,6 +443,16 @@ def test_import_preview_writes_nothing_then_commit_imports_reconciling_months(
     outcomes = [m["status"] for m in committed.json()["months"]]
     assert outcomes == ["imported", "not_reconciled", "imported", "already_recorded"]
     assert _payslip_count(live) == 3  # manual April, imported January and March
+    assert _document_count(live) == 1  # one uploaded file, one document row (OL-004)
+
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """SELECT count(DISTINCT source_document_id) FROM payslip
+                WHERE household_id = %s AND source_document_id IS NOT NULL""",
+            (live.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None and int(found[0]) == 1  # January and March share it
 
     reimport = client().post(
         "/payslips/import",
@@ -436,6 +468,78 @@ def test_import_preview_writes_nothing_then_commit_imports_reconciling_months(
         "already_recorded",
     ]
     assert _payslip_count(live) == 3  # nothing new
+    assert _document_count(live) == 1  # the same document is reused, not duplicated
+
+
+def test_import_stores_no_document_when_nothing_reconciles(live: PayslipFixture) -> None:
+    months = [
+        PayslipMonthSpec(
+            month_name="JANUARY",
+            year=2026,
+            currency=live.currency,
+            payment_lines=[("Basic", "3000.00")],
+            deduction_lines=[("Tax", "400.00")],
+            payments_total="2900.00",  # deliberately wrong: does not reconcile
+            deductions_total="400.00",
+            net_pay="2500.00",
+        ),
+    ]
+    committed = client().post(
+        "/payslips/import",
+        files={"file": ("payslips.pdf", build_payslip_pdf(months))},
+        data={"commit": "true"},
+        headers=ORIGIN,
+    )
+    assert [m["status"] for m in committed.json()["months"]] == ["not_reconciled"]
+    assert _payslip_count(live) == 0
+    assert _document_count(live) == 0  # OL-004: nothing reconciled, nothing stored
+
+
+def test_import_stores_no_document_when_every_reconciling_month_is_already_recorded(
+    live: PayslipFixture,
+) -> None:
+    manual = client().post(
+        "/payslips",
+        json=_body(
+            live,
+            idempotencyKey=str(uuid4()),
+            payMonth="2026-01",
+            grossEarnings="3000.0000",
+            totalDeductions="400.0000",
+            netPay="2600.0000",
+            lines=[
+                {"kind": "earning", "label": "Basic", "amount": "3000.0000"},
+                {"kind": "deduction", "label": "Tax", "amount": "400.0000"},
+            ],
+        ),
+        headers=ORIGIN,
+    )
+    assert manual.status_code == 201
+    assert _document_count(live) == 0
+
+    months = [
+        PayslipMonthSpec(
+            month_name="JANUARY",
+            year=2026,
+            currency=live.currency,
+            payment_lines=[("Basic", "3000.00")],
+            deduction_lines=[("Tax", "400.00")],
+            payments_total="3000.00",
+            deductions_total="400.00",
+            net_pay="2600.00",
+        ),
+    ]
+    committed = client().post(
+        "/payslips/import",
+        files={"file": ("payslips.pdf", build_payslip_pdf(months))},
+        data={"commit": "true"},
+        headers=ORIGIN,
+    )
+    assert [m["status"] for m in committed.json()["months"]] == ["already_recorded"]
+    assert _payslip_count(live) == 1  # only the manual entry
+    # OL-005: a fresh file whose only reconciling month was already recorded leaves no orphan
+    # document row behind.
+    assert _document_count(live) == 0
 
 
 def test_deposit_candidates_window_link_and_unlink(live: PayslipFixture) -> None:
