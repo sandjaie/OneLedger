@@ -11,6 +11,7 @@ import { HouseholdForm } from "@/app/settings/household-form";
 import { RulesManager } from "@/app/settings/rules-manager";
 import { ImportScreen } from "@/app/import/import-screen";
 import { InvestmentEntryScreen } from "@/app/investments/entry-screen";
+import { InvestmentImportScreen } from "@/app/investments/import/investment-import-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
@@ -30,10 +31,13 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "import" | "review" | "classification-review";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-import" | "import" | "review" | "classification-review";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
+  // The investment import being resumed at `/investments/import/{importId}`. Undefined for a
+  // fresh upload — the screen tells the two apart by whether this is present.
+  importId?: string;
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
@@ -68,6 +72,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
+  if (window.location.pathname.startsWith("/investments/import")) return "investments-import";
   if (window.location.pathname === "/investments") return "investments";
   if (window.location.pathname === "/import") return "import";
   if (window.location.pathname === "/review") return "classification-review";
@@ -86,6 +91,7 @@ function fxStatusText(fx: FxState) {
 export function Workspace({
   section,
   batchId,
+  importId,
   request = apiFetch,
   navigate = (path) => window.location.replace(path),
 }: Props = {}) {
@@ -157,7 +163,7 @@ export function Workspace({
           setInventory(nextInventory);
           setCurrencies(catalogue);
         }
-        if (activeSection === "investments") {
+        if (activeSection === "investments" || activeSection === "investments-import") {
           const nextInventory = await request<AccountsResponse>("/accounts");
           if (!current) return;
           setInventory(nextInventory);
@@ -329,6 +335,7 @@ export function Workspace({
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
             <Link aria-current={activeSection === "investments" ? "page" : undefined} href="/investments">Investments</Link>
+            <Link aria-current={activeSection === "investments-import" ? "page" : undefined} href="/investments/import">Import investments</Link>
             <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
             <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
               <span>Plans</span><small>Available after ledger import</small>
@@ -435,6 +442,22 @@ export function Workspace({
           {activeSection === "investments" && inventory && (
             <InvestmentEntryScreen
               accounts={inventory.accounts}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "investments-import" && inventory && (
+            <InvestmentImportScreen
+              accounts={inventory.accounts}
+              importId={importId}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

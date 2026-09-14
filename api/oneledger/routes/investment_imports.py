@@ -322,6 +322,16 @@ def _response(
     )
 
 
+# This project targets Python 3.14 (`pyproject.toml`), where PEP 758 makes a bare
+# `except A, B:` valid — no parentheses required — so `except (ValidationError, ValueError):`
+# still imports and runs fine either way. This repo's pinned ruff formats to that bare style
+# whenever there is no `as` binding to keep, which is a real behaviour change to notice if you
+# are reading this on an older Python. Naming the tuple ahead of the clause is a formatter-
+# stability workaround only, so the source reads the same regardless of which style a given
+# ruff/Python version prefers — not a fix for any failure to import.
+_RESOLUTIONS_ERRORS = (ValidationError, ValueError)
+
+
 def _resolutions(value: str) -> tuple[TargetResolution, ...]:
     try:
         supplied = TypeAdapter(list[ResolutionInput]).validate_json(value)
@@ -331,7 +341,7 @@ def _resolutions(value: str) -> tuple[TargetResolution, ...]:
             TargetResolution(item.sourceGroupNumber, item.accountId, item.securityId)
             for item in supplied
         )
-    except ValidationError, ValueError:
+    except _RESOLUTIONS_ERRORS:
         raise HTTPException(
             status_code=422, detail="investment target resolutions are invalid"
         ) from None
