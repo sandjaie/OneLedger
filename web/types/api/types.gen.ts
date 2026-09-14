@@ -684,6 +684,64 @@ export type ApplyBody = {
 export type AssetClassName = 'equity' | 'fixed_income' | 'cash' | 'commodity' | 'real_asset' | 'alternative' | 'other';
 
 /**
+ * AttributionLeg
+ */
+export type AttributionLeg = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Reasons
+     */
+    reasons: Array<string>;
+    /**
+     * Opening
+     */
+    opening: string | null;
+    /**
+     * Closing
+     */
+    closing: string | null;
+    /**
+     * Actualchange
+     */
+    actualChange: string | null;
+    /**
+     * Retainedincome
+     */
+    retainedIncome: string | null;
+    /**
+     * Investmentincome
+     */
+    investmentIncome: string | null;
+    /**
+     * Internalmovementsandcosts
+     */
+    internalMovementsAndCosts: string | null;
+    /**
+     * Otherexternalchanges
+     */
+    otherExternalChanges: string | null;
+    /**
+     * Marketmovement
+     */
+    marketMovement: string | null;
+    /**
+     * Assetrevaluation
+     */
+    assetRevaluation: string | null;
+    /**
+     * Fxtranslation
+     */
+    fxTranslation: string | null;
+    /**
+     * Residual
+     */
+    residual: string | null;
+};
+
+/**
  * BackfillResult
  */
 export type BackfillResult = {
@@ -4165,6 +4223,26 @@ export type MissingRate = {
      * Asof
      */
     asOf: string;
+};
+
+/**
+ * MonthAttributionResponse
+ */
+export type MonthAttributionResponse = {
+    /**
+     * Monthend
+     */
+    monthEnd: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    base: AttributionLeg;
+    secondary: AttributionLeg;
 };
 
 /**
@@ -8738,6 +8816,36 @@ export type ReadMonthPositionsWealthHistoryMonthEndGetResponses = {
 };
 
 export type ReadMonthPositionsWealthHistoryMonthEndGetResponse = ReadMonthPositionsWealthHistoryMonthEndGetResponses[keyof ReadMonthPositionsWealthHistoryMonthEndGetResponses];
+
+export type ReadMonthAttributionWealthHistoryMonthEndAttributionGetData = {
+    body?: never;
+    path: {
+        /**
+         * Monthend
+         */
+        monthEnd: string;
+    };
+    query?: never;
+    url: '/wealth-history/{monthEnd}/attribution';
+};
+
+export type ReadMonthAttributionWealthHistoryMonthEndAttributionGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadMonthAttributionWealthHistoryMonthEndAttributionGetError = ReadMonthAttributionWealthHistoryMonthEndAttributionGetErrors[keyof ReadMonthAttributionWealthHistoryMonthEndAttributionGetErrors];
+
+export type ReadMonthAttributionWealthHistoryMonthEndAttributionGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MonthAttributionResponse;
+};
+
+export type ReadMonthAttributionWealthHistoryMonthEndAttributionGetResponse = ReadMonthAttributionWealthHistoryMonthEndAttributionGetResponses[keyof ReadMonthAttributionWealthHistoryMonthEndAttributionGetResponses];
 
 export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostData = {
     body: DescriptionReparseRequest;
