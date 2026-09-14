@@ -7,7 +7,11 @@ from pathlib import Path
 
 from oneledger.ingest.words import Page, extract_pages
 from oneledger.payslip_pdf import extract_payslips
-from tests.fixtures.payslip_pdf import PayslipMonthSpec, build_payslip_pdf
+from tests.fixtures.payslip_pdf import (
+    PayslipMonthSpec,
+    build_legacy_table_payslip_pdf,
+    build_payslip_pdf,
+)
 from tests.fixtures.synthetic_pdf import Placement, build_pdf
 
 
@@ -174,6 +178,40 @@ def test_a_payment_only_row_reconciles_beside_shorter_deduction_lines(tmp_path: 
         "Bonus",
         "Tax",
     ]
+
+
+def test_the_older_sub_headed_table_variant_reconciles_exactly(tmp_path: Path) -> None:
+    # A sub-heading row, a lone "-", a remark row (digits, slashes, an invented name) and a
+    # wrapped label's leftover word all sit inside the table with no trailing amount, and must
+    # be ignored rather than refused or read as a label.
+    path = tmp_path / "legacy-table.pdf"
+    path.write_bytes(
+        build_legacy_table_payslip_pdf(
+            month_name="JUNE",
+            year=2025,
+            currency="USD",
+            payments_total="31,500.00",
+            deductions_total="145.00",
+            net_pay="31,355.00",
+        )
+    )
+    extraction = extract_payslips(extract_pages(path))
+    assert extraction.supported
+    assert len(extraction.months) == 1
+    month = extraction.months[0]
+    assert month.reason is None
+    assert month.gross_earnings == Decimal("31500.00")
+    assert month.total_deductions == Decimal("145.00")
+    assert month.net_pay == Decimal("31355.00")
+    assert [(line.kind, line.label, line.amount) for line in month.lines] == [
+        ("earning", "Accommodation Allowance", Decimal("5000.00")),
+        ("earning", "Basic Salary", Decimal("25000.00")),
+        ("earning", "Transport Allowance", Decimal("1500.00")),
+        ("deduction", "Concessional Travel Tickets Deduction", Decimal("120.00")),
+        ("deduction", "Emirates Premium Staff Card", Decimal("25.00")),
+    ]
+    # The invented employee name from the remark row never appears in any stored label.
+    assert all("JANESMITH" not in line.label for line in month.lines)
 
 
 def test_a_non_matching_pdf_is_unsupported(tmp_path: Path) -> None:

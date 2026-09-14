@@ -63,7 +63,9 @@ _TABLE_HEADER = "PAYMENTS AMOUNT DEDUCTIONS AMOUNT"
 _NET_HEADER_WORDS = ("NET", "PAY", "AMOUNT")
 _PAY_ADVICE = re.compile(r"PAY ADVICE FOR ([A-Z]+) (\d{4})$")
 _CURRENCY_LINE = re.compile(r"^ALL AMOUNTS IN ([A-Z]{3})$")
-_AMOUNT_TOKEN = re.compile(r"^[\d,]+(?:\.\d{1,4})?$")
+# The decimal part is required, not optional: a digit-only run (a remark continuation line, a
+# reference number) is common table filler in the older layout and must never read as an amount.
+_AMOUNT_TOKEN = re.compile(r"^[\d,]+\.\d{1,4}$")
 
 
 class _RowRefusal(ValueError):
@@ -145,7 +147,7 @@ def _parse_amount(token: str) -> Decimal | None:
     if _AMOUNT_TOKEN.fullmatch(token) is None:
         return None
     cleaned = token.replace(",", "")
-    if re.fullmatch(r"\d+(?:\.\d{1,4})?", cleaned) is None:
+    if re.fullmatch(r"\d+\.\d{1,4}", cleaned) is None:
         return None
     try:
         return Decimal(cleaned)
@@ -154,18 +156,30 @@ def _parse_amount(token: str) -> Decimal | None:
 
 
 def _side(words: Sequence[Word], *, allow_zero: bool) -> tuple[str, Decimal] | None:
-    """A table side: label then trailing amount, or `None` for an empty side.
+    """A table side: label then trailing amount, `None` for an empty or amount-less side.
 
-    Raises `_RowRefusal` for a non-empty side with no valid trailing amount or an out-of-bounds
-    label (rule 2). `allow_zero` is used only for a Total row's own sides (rule 3), which may
-    state a zero total; every other side must be strictly positive, as the stored line is.
+    An older supported layout nests a sub-heading, a lone "-", a wrapped label's remaining
+    words, or a remark row (digits, slashes, a name — never stored) inside the table, none of
+    which end in an amount-shaped token; these carry no entry and are silently ignored, not
+    refused, so reconciliation — not this row — is what stops a real amount going missing.
+    Raises `_RowRefusal` when an amount-shaped token appears anywhere but last (misplaced, not
+    absent) or the label is out of bounds (rule 2); `allow_zero` is used only for a Total row's
+    own sides (rule 3), which may state a zero total, while every other side must be positive,
+    as the stored line is.
     """
     if not words:
         return None
     amount = _parse_amount(words[-1].text)
-    if amount is None or (amount < 0 or (amount == 0 and not allow_zero)):
+    if amount is None:
+        if any(_parse_amount(word.text) is not None for word in words):
+            raise _RowRefusal
+        return None
+    if amount < 0 or (amount == 0 and not allow_zero):
         raise _RowRefusal
-    label = " ".join(word.text for word in words[:-1]).strip()
+    label_words = words[:-1]
+    if label_words and label_words[0].text == "*":
+        label_words = label_words[1:]  # a leading "*" marks the entry, not part of its label
+    label = " ".join(word.text for word in label_words).strip()
     if not 1 <= len(label) <= 80:
         raise _RowRefusal
     return label, amount

@@ -129,3 +129,85 @@ def build_payslip_pdf(months: list[PayslipMonthSpec]) -> bytes:
             advance()
 
     return build_pdf(placements, page_count=page + 1, page_size=(612.0, 792.0))
+
+
+def build_legacy_table_payslip_pdf(
+    *,
+    month_name: str,
+    year: int,
+    currency: str,
+    payments_total: str,
+    deductions_total: str,
+    net_pay: str,
+) -> bytes:
+    """The older sub-headed table variant real files also use.
+
+    Beside real entries, the table carries a sub-heading row, a lone "-", a remark row (digits,
+    slashes and an invented employee name — never a label) and a wrapped label's leftover word,
+    none of which end in an amount-shaped token. Entries are marked with a leading "*". All
+    names, references and amounts here are synthetic.
+    """
+    placements: list[Placement] = []
+    page = 0
+    y = 740.0
+
+    def line(x: float, text: str) -> None:
+        nonlocal y
+        placements.append(Placement(page=page, x=x, y=y, text=text, size=10.0))
+
+    def advance(rows: int = 1) -> None:
+        nonlocal y
+        y -= _ROW_HEIGHT * rows
+
+    line(PAYMENTS_X, "CONFIDENTIAL")
+    advance()
+    line(PAYMENTS_X, f"PAY ADVICE FOR {month_name} {year}")
+    advance(2)
+    line(PAYMENTS_X, "Payments")
+    line(PAYMENTS_X + 100.0, "Amount")
+    line(DEDUCTIONS_X, "Deductions")
+    line(DEDUCTIONS_X + 100.0, "Amount")
+    advance()
+
+    line(PAYMENTS_X, "Fixed Pay")  # sub-heading row, no amount either side: ignored
+    line(DEDUCTIONS_X, "Miscellaneous")
+    advance()
+    line(PAYMENTS_X, "* Accommodation Allowance 5,000.00")
+    line(DEDUCTIONS_X, "* Concessional Travel Tickets Deduction 120.00")
+    advance()
+    line(PAYMENTS_X, "* Basic Salary 25,000.00")
+    line(DEDUCTIONS_X, "-")  # lone dash, no amount: ignored
+    advance()
+    line(DEDUCTIONS_X, "2025/87654321/DOE/JANESMITH/1")  # remark row: ignored, never a label
+    advance()
+    line(PAYMENTS_X, "* Transport Allowance 1,500.00")
+    advance()
+    line(DEDUCTIONS_X, "999999999999")  # digit-only remark continuation, no decimal: ignored
+    advance()
+    line(DEDUCTIONS_X, "* Emirates Premium Staff Card 25.00")
+    advance()
+    line(DEDUCTIONS_X, "Deduction")  # wrapped label remainder, no amount: ignored
+    advance()
+    line(PAYMENTS_X, f"Total {payments_total}")
+    line(DEDUCTIONS_X, f"Total {deductions_total}")
+    advance(2)
+
+    line(PAYMENTS_X, "Bank")
+    line(PAYMENTS_X + 50.0, "-")
+    line(BRANCH_X, "Branch")
+    line(BRANCH_X + 60.0, "Name")
+    line(ACCOUNT_X, "Account")
+    line(ACCOUNT_X + 70.0, "Number")
+    line(NET_X, "Net")
+    line(NET_X + 40.0, "Pay")
+    line(NET_X + 80.0, "Amount")
+    advance()
+    line(PAYMENTS_X, "Synthetic Legacy Bank")
+    line(BRANCH_X, "Synthetic Branch")
+    line(ACCOUNT_X, "AE00YYYYYYYYYY0000")
+    line(NET_X, net_pay)
+    advance(2)
+    line(PAYMENTS_X, f"All amounts in {currency}")
+    advance(2)
+
+    return build_pdf(placements, page_count=page + 1, page_size=(612.0, 792.0))
