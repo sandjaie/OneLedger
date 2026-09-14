@@ -6,16 +6,16 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 14 September 2026.
+Updated: 15 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 2.3 — classification learning and review depth** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| Outcome state | **Implementation active** — Phases 2.2–2.4 planned together and reviewed once on 14 Sep 2026 | [Phase 2.3 plan](plans/2026-09-14-phase-2-3-classification-learning.md) |
-| Next product action | Deliver Phase 2.4 — data quality and recovery | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
-| Current implementation task | Phase 2.2 Tasks 1 and 2 delivered (`feature/p2-2a-month-end-positions`, `feature/p2-2b-attribution`); Phase 2.3 Task 1 delivered (`feature/p2-3-classification-learning`); Phase 2.4 is next | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
+| Current outcome | **Phase 2.4 — data quality and recovery** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| Outcome state | **Phase 2 implementation complete** — Phases 2.1–2.4 planned and reviewed together on 14 Sep 2026, all delivered; owner acceptance open on each | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
+| Next product action | Begin Phase 3.1 — commitments and actions | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
+| Current implementation task | Phase 2.2 Tasks 1 and 2 delivered (`feature/p2-2a-month-end-positions`, `feature/p2-2b-attribution`); Phase 2.3 Task 1 delivered (`feature/p2-3-classification-learning`); Phase 2.4 Task 1 delivered (`feature/p2-4-data-quality-recovery`) | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
 
 ## Canonical phase status
 
@@ -37,7 +37,7 @@ Updated: 14 September 2026.
 | 2.1 — complete historical coverage | **Implementation complete; owner acceptance open** | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md) · [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
 | 2.2 — wealth history and attribution | **Implementation complete; owner acceptance open** | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md) · [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
 | 2.3 — classification learning and review depth | **Implementation complete; owner acceptance open** | [Phase 2.3 specification](specs/2026-09-14-phase-2-3-classification-learning.md) · [Phase 2.3 plan](plans/2026-09-14-phase-2-3-classification-learning.md) |
-| 2.4 — data quality and recovery | **Planned** | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
+| 2.4 — data quality and recovery | **Implementation complete; owner acceptance open** | [Phase 2.4 specification](specs/2026-09-14-phase-2-4-data-quality-recovery.md) · [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
 | 3.1 — commitments and actions | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.2 — cash forecast and monthly review | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.3 — goals and emergency reserve | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
@@ -75,6 +75,7 @@ the pre-structure narrative lives in the [12 September delivery history](reports
 | Phase 2.1 owner acceptance | **Open** — delivered via PR #207; after importing all available real statements, record the structural counts per coverage status only | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md#acceptance) |
 | Phase 2.2 owner acceptance | **Open** — delivered via PRs #209–#210; after real imports, refresh wealth history and record structural counts of complete months and months with a non-zero residual only | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md#acceptance) |
 | Phase 2.3 owner acceptance | **Open** — delivered on `feature/p2-3-classification-learning`; applying a suggestion to past rows uses the previewed `/classify?ruleId=` pass (unclassified rows only, no undo) instead of chunked classification runs | [Phase 2.3 specification](specs/2026-09-14-phase-2-3-classification-learning.md#acceptance) |
+| Phase 2.4 owner acceptance | **Open** — delivered on `feature/p2-4-data-quality-recovery`; two deviations: the psql session that keeps the backup's snapshot open uses two named pipes and fixed file descriptors rather than a bash `coproc` (this checkout's `/bin/bash` is 3.2, which has no `coproc` builtin, matching `scripts/test-db.sh`'s own avoidance of bash-4-only syntax), and the Wealth history doctor section reports incomplete months only, not complete months with a non-zero attribution residual (recomputing the residual needs the full attribution flow/funding/rate query per month, too costly to redo on every `/doctor` request across a 36-month history); take a real database-and-documents backup, run `scripts/restore-drill.sh` against the isolated test server, and record only structural pass/fail | [Phase 2.4 specification](specs/2026-09-14-phase-2-4-data-quality-recovery.md#acceptance) |
 
 Longer-horizon findings and decisions are maintained in the
 [project register](project-register.md), not in this live-gate table.

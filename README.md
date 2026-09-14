@@ -124,6 +124,40 @@ Statements are parsed by software running on a machine you control, and reach no
 Rationale in [ADR-0013](docs/adr/0013-python-backend-service.html) and
 [ADR-0014](docs/adr/0014-one-vps-one-compose-file.html).
 
+### Backups and the restore drill
+
+The compose `backup` service runs `scripts/backup-db.sh --if-due` hourly, without anyone
+remembering. One run writes three encrypted files sharing one UTC stamp: the database dump, an
+archive of the documents volume, and a structural manifest taken from the same database snapshot
+the dump reads.
+
+Run it by hand **inside the `backup` service**, not directly on the host — that container already
+has `BACKUP_PASSPHRASE`, `DATABASE_URL` and, critically, `DOCUMENTS_DIR` pointed at the real
+`documents` Docker volume (`/oneledger/documents`, mounted read-only). Set `DOCUMENTS_DIR` to a
+plain host folder instead and the archive backs up whatever happens to be there — not the
+originals the app actually stores, and not the same files `GET /doctor` and the restore drill
+believe they are proving:
+
+```bash
+docker compose run --rm --entrypoint bash backup scripts/backup-db.sh
+```
+
+It always runs this way — `--if-due` or not.
+
+Prove a backup restores, rather than trusting that it would, with `scripts/restore-drill.sh`. It
+restores the newest complete stamp into the isolated test server (`scripts/test-db.sh`) — a
+temporary database and document directory, never the working ledger — and compares a recomputed
+manifest against the one recorded at backup time item by item, always writing
+`<prefix>-<stamp>.drill.json`. This one runs on the host, since it talks to `db-test` directly:
+
+```bash
+scripts/restore-drill.sh
+```
+
+Settings › Data Quality shows the newest backup's age and file completeness and the newest
+drill's result and age. See [security-and-privacy.html §9](docs/operations/security-and-privacy.html#9-backups)
+for the retention schedule and cadence.
+
 ---
 
 ## Reading and publishing it

@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# Backs up the database only — a restorable snapshot of oneledger's Postgres data. It does NOT
-# back up the documents volume (the original statement PDFs); that is a separate concern with
-# its own lifetime and is not covered here.
+# One stamped backup run (spec "One backup run, one stamp"): the database dump, the documents
+# archive (the original statement PDFs — I6 provenance) and a structural evidence manifest, all
+# three named `<prefix>-<stamp>.<ext>` with one shared UTC stamp, all three encrypted before they
+# touch disk (security-and-privacy.html §6/§9).
 #
-# The dump is encrypted before it touches disk (security-and-privacy.html §6/§9: backups are
-# encrypted at rest wherever they are stored). Restore with:
+# The manifest is computed inside a REPEATABLE READ psql session that exports its snapshot and
+# stays open while `pg_dump --snapshot=<id>` runs against the very same snapshot, so the manifest
+# and the dump can never describe different data. Restore with:
 #   openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE \
-#     < backups/oneledger-<timestamp>.dump.enc | pg_restore -d "$DATABASE_URL" --clean
-# On a Linux host the compose service writes its dumps as root, mode 600: read them with sudo.
+#     < backups/oneledger-<stamp>.dump.enc | pg_restore -d "$DATABASE_URL" --clean
+# scripts/restore-drill.sh does exactly this, into isolation, and proves the result.
+# On a Linux host the compose service writes these as root, mode 600: read them with sudo.
 #
-# Nobody has to remember to run it: the compose `backup` service calls it hourly with
-# --if-due, which dumps only when the newest backup is more than a day old. Run by hand it
-# always dumps.
+# Nobody has to remember to run it: the compose `backup` service calls it hourly with --if-due,
+# which runs only when the newest dump is more than a day old. Run by hand it always runs.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # shellcheck disable=SC1091
 . scripts/load-env.sh
 
-# The directory the API reads for Settings › Data Quality, so both must name the same one;
-# compose sets it for both containers.
+# The directory Settings › Data Quality reads, so both must name the same one; compose sets it
+# for both containers.
 dir="${BACKUP_DIR:-backups}"
 # Compose sets the prefix to the project's name, as it names the volumes: a scratch stack run
 # from this checkout writes beside the ledger's backups, and must neither count as one of them
@@ -28,44 +30,146 @@ prefix="${BACKUP_PREFIX:-${COMPOSE_PROJECT_NAME:-oneledger}}"
 pattern="$prefix-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z.dump.enc"
 mkdir -p "$dir"
 
-# Measured against the newest file's own clock rather than a timer, so a laptop asleep all
-# night or a stack down for a week is caught up on the first tick after it comes back.
+# Measured against the newest dump's own clock rather than a timer, so a laptop asleep all night
+# or a stack down for a week is caught up on the first tick after it comes back. The other two
+# files of a run always share the dump's stamp, so checking the dump alone is enough.
 if [ "${1:-}" = "--if-due" ] &&
    [ -n "$(find "$dir" -maxdepth 1 -name "$pattern" -mmin -$((24 * 60)) | head -n 1)" ]; then
   exit 0
 fi
 
 : "${DATABASE_URL:=$(scripts/dsn.sh)}"
-: "${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE is unset — set it in .env; without it the backup cannot be encrypted, and an unencrypted dump is not written}"
+: "${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE is unset — set it in .env; without it the backup cannot be encrypted, and an unencrypted backup is not written}"
+: "${DOCUMENTS_DIR:?DOCUMENTS_DIR is unset — compose sets it for the backup service; a manual run needs it in .env too}"
 export BACKUP_PASSPHRASE
 
-out="$dir/$prefix-$(date -u +%Y%m%dT%H%M%SZ).dump.enc"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+out_dump="$dir/$prefix-$stamp.dump.enc"
+out_docs="$dir/$prefix-$stamp.documents.tar.enc"
+out_manifest="$dir/$prefix-$stamp.manifest.json.enc"
 
-if [ -e "$out" ]; then
-  echo "FAIL: $out already exists — refusing to overwrite a backup." >&2
-  exit 1
-fi
+for out in "$out_dump" "$out_docs" "$out_manifest"; do
+  if [ -e "$out" ]; then
+    echo "FAIL: $out already exists — refusing to overwrite a backup." >&2
+    exit 1
+  fi
+done
 
-# Write to a uniquely named temporary file and publish only after the whole pipeline
-# succeeds: a pg_dump that fails mid-stream must not leave a plausible-looking partial
-# backup at the final path for a retention or copy job to preserve as if it were valid.
-# mktemp keeps two same-second invocations off each other's temp file, and ln claims the
-# final name atomically — it fails outright if a concurrent run published first.
-tmp="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
-trap 'rm -f "$tmp"' EXIT
-pg_dump -Fc "$DATABASE_URL" \
-  | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp"
-ln "$tmp" "$out"
+# Written to uniquely named temporary files and published only after the whole run succeeds: a
+# failure partway through must not leave a plausible-looking partial backup — or one of the
+# three files without its siblings — at a final path for a retention or copy job to keep as if
+# it were valid. mktemp keeps two same-second runs off each other's temp files; ln claims each
+# final name atomically.
+tmp_dump="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
+tmp_docs="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
+tmp_manifest="$(mktemp "$dir/.$prefix-tmp.XXXXXXXX")"
+fifo_dir=
+psql_pid=
+psql_started=
+cleanup() {
+  # An EXIT trap's own exit status becomes the script's, so the real one is captured first and
+  # returned last — otherwise a harmless false test below (nothing left to clean up) would
+  # silently turn a successful run into a reported failure.
+  local status=$?
+  rm -f "$tmp_dump" "$tmp_docs" "$tmp_manifest"
+  if [ -n "$psql_started" ]; then
+    exec 3>&- 2>/dev/null || true
+    wait "$psql_pid" 2>/dev/null || true
+  fi
+  [ -n "$fifo_dir" ] && rm -rf "$fifo_dir"
+  return "$status"
+}
+trap cleanup EXIT
+
+# The documents archive and the two structural facts the manifest records about it: a plain file
+# count and the SHA-256 of the sorted list of each file's own SHA-256 — order-independent, so it
+# does not depend on filesystem traversal order, and a fixed value (the empty-input hash) when
+# there are no documents yet. Counted straight from DOCUMENTS_DIR, not from the archive: `tar`
+# is piped directly into `openssl` below with no unencrypted copy ever written to disk (§6/§9 —
+# a plaintext tar surviving a SIGKILL or `docker compose stop` mid-run would be exactly the
+# violation this rule exists to prevent), so there is no archive file to count or hash from
+# instead. This does mean the count/hash and the archive are two independent reads of the same
+# directory rather than one — a document added or removed between them, or before the database
+# snapshot a few lines below is taken, is reflected in at most one of the manifest, the archive
+# and the dump. Accepted: closing that fully would need a second unencrypted pass, which is the
+# exposure being avoided in the first place.
+docs_count="$(find "$DOCUMENTS_DIR" -type f | wc -l | tr -d ' ')"
+docs_hash="$(find "$DOCUMENTS_DIR" -type f -exec sha256sum {} + 2>/dev/null |
+  awk '{print $1}' | sort | sha256sum | awk '{print $1}')"
+tar -C "$DOCUMENTS_DIR" -cf - . |
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp_docs"
+
+# The REPEATABLE READ session: a long-lived psql process so its transaction — and the snapshot
+# it exports — stays open across the `pg_dump` call below, which is a separate process this
+# script runs directly rather than through the session. `\echo` markers bound each answer, so a
+# stray command tag (BEGIN, COMMIT) can never be mistaken for the row it precedes.
+#
+# ponytail: a bash `coproc` would be the one-liner for this, but this checkout's own bash
+# (/bin/bash on macOS is 3.2; the rest of this codebase avoids bash-4-only syntax, e.g.
+# test-db.sh uses `tr` rather than `${var,,}`) has no `coproc` builtin. Two named pipes and fixed
+# file descriptors 3 (to psql) and 4 (from psql) give the identical held-open session and work
+# back to bash 3.2 — the same technique bash's own `coproc` is sugar for.
+fifo_dir="$(mktemp -d "${TMPDIR:-/tmp}/oneledger-backup.XXXXXXXX")"
+mkfifo "$fifo_dir/in" "$fifo_dir/out"
+psql "$DATABASE_URL" -X -q -t -A -v ON_ERROR_STOP=1 \
+  -v docs_count="$docs_count" -v docs_hash="$docs_hash" \
+  < "$fifo_dir/in" > "$fifo_dir/out" &
+psql_pid=$!
+psql_started=1
+exec 3> "$fifo_dir/in"
+exec 4< "$fifo_dir/out"
+
+psql_ask() {
+  printf '%s\n' "$1" >&3
+  printf '\\echo %s\n' "$2" >&3
+  local line answer=""
+  while IFS= read -r line <&4; do
+    [ "$line" = "$2" ] && break
+    [ -n "$line" ] && answer="$line"
+  done
+  printf '%s' "$answer"
+}
+
+psql_ask "BEGIN ISOLATION LEVEL REPEATABLE READ;" MARK_BEGIN >/dev/null
+snapshot_id="$(psql_ask "SELECT pg_export_snapshot();" MARK_SNAPSHOT)"
+[ -n "$snapshot_id" ] || { echo "FAIL: could not export a database snapshot." >&2; exit 1; }
+manifest_json="$(psql_ask '\i scripts/backup-manifest.sql' MARK_MANIFEST)"
+[ -n "$manifest_json" ] || { echo "FAIL: the manifest query returned nothing." >&2; exit 1; }
+
+# Runs against the exported snapshot while the psql session's transaction is still open, so it
+# sees exactly the data the manifest just described — never a row committed after either point.
+pg_dump -Fc --snapshot="$snapshot_id" "$DATABASE_URL" |
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp_dump"
+
+# Closing stdin ends the session; its read-only transaction rolls back on its own.
+exec 3>&-
+wait "$psql_pid"
+psql_started=
+rm -rf "$fifo_dir"
+fifo_dir=
+
+printf '%s' "$manifest_json" |
+  openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out "$tmp_manifest"
+
+ln "$tmp_dump" "$out_dump"
+ln "$tmp_docs" "$out_docs"
+ln "$tmp_manifest" "$out_manifest"
 
 # Retention (security-and-privacy.html §9): nothing younger than thirty days is pruned, and the
-# thirty newest are kept however old they are. Pruned only here, after a new backup is
-# published, so a job that keeps failing prunes nothing. The count is for the job that
-# succeeds on the wrong database: after a reset, the real copies survive thirty further dumps
-# of an empty ledger, a month of daily ones, rather than the first. The stamp sorts in time order.
+# thirty newest stamps are kept however old they are. Pruned only here, after a new run has
+# published, so a job that keeps failing prunes nothing. Every file of a pruned stamp goes
+# together — the three backup files and, if scripts/restore-drill.sh ever wrote one for it, its
+# drill.json too — none is kept without its siblings, and none is left pointing at a stamp that
+# no longer exists.
 find "$dir" -maxdepth 1 -name "$pattern" | sort -r | tail -n +31 |
-  while IFS= read -r old; do
-    find "$old" -maxdepth 0 -mmin +$((30 * 24 * 60)) -delete
+  while IFS= read -r old_dump; do
+    if find "$old_dump" -maxdepth 0 -mmin +$((30 * 24 * 60)) -print -quit | grep -q .; then
+      stem="${old_dump%.dump.enc}"
+      rm -f "$old_dump" "$stem.documents.tar.enc" "$stem.manifest.json.enc" "$stem.drill.json"
+    fi
   done
 
-bytes="$(wc -c < "$out" | tr -d ' ')"
-echo "$out ($bytes bytes)"
+for out in "$out_dump" "$out_docs" "$out_manifest"; do
+  bytes="$(wc -c < "$out" | tr -d ' ')"
+  echo "$out ($bytes bytes)"
+done

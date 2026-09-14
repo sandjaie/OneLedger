@@ -1,10 +1,13 @@
 """GET /doctor: the report behind Settings › Data Quality (testing-and-data-quality.html §5).
 
 Its first section is the one whose absence cost the ledger twice on 10 September 2026: how old
-the newest backup is, and how much of the ledger it does not hold. The other sections §5 lists
-arrive with Phase 2.
+the newest backup is, whether that run wrote all three of its files, and whether a restore drill
+has ever proven one of them restores (spec "Diagnostics", Phase 2.4). This route never decrypts
+anything and never needs BACKUP_PASSPHRASE — it reads filenames and the drill's own plaintext
+JSON, both written by scripts/backup-db.sh and scripts/restore-drill.sh.
 """
 
+import json
 import os
 import re
 from datetime import UTC, date, datetime, timedelta
@@ -23,8 +26,11 @@ from .coverage import coverage_rows
 router = APIRouter(tags=["doctor"])
 
 # The compose `backup` service takes one a day. Past two days a run has been missed, rather
-# than merely being due.
+# than merely being due (spec "Diagnostics": "warning over 48 hours").
 STALE_AFTER = timedelta(days=2)
+# The quarterly restore test in testing-and-data-quality.html §7 is the floor; a drill older than
+# this is a warning rather than the proof it is meant to be.
+DRILL_STALE_AFTER = timedelta(days=31)
 
 
 class Finding(BaseModel):
@@ -86,7 +92,20 @@ def _transactions(count: int) -> str:
     return f"{count:,} transaction{'' if count == 1 else 's'}"
 
 
-def backup_finding(newest: datetime | None, not_held: int, now: datetime) -> Finding:
+def newest_backup_complete(directory: Path, prefix: str, newest: datetime) -> bool:
+    """Whether the newest stamp's run wrote all three files of one backup (spec "Diagnostics":
+    "checked by filename only" — this never opens or decrypts any of them)."""
+    stamp = newest.strftime("%Y%m%dT%H%M%SZ")
+    return all(
+        (directory / f"{prefix}-{stamp}.{suffix}").exists()
+        for suffix in ("dump.enc", "documents.tar.enc", "manifest.json.enc")
+    )
+
+
+def backup_finding(
+    newest: datetime | None, not_held: int, now: datetime, files_complete: bool = True
+) -> Finding:
+    incomplete = "" if files_complete else " (missing the documents archive or manifest)"
     if newest is None:
         return Finding(
             level="warning",
@@ -98,13 +117,58 @@ def backup_finding(newest: datetime | None, not_held: int, now: datetime) -> Fin
     if age > STALE_AFTER:
         return Finding(
             level="warning",
-            message=f"The newest backup is {age.days} days old ({taken}), and the ledger has "
-            f"{_transactions(not_held)} it does not hold.",
+            message=f"The newest backup is {age.days} days old ({taken}){incomplete}, and the "
+            f"ledger has {_transactions(not_held)} it does not hold.",
+        )
+    if not files_complete:
+        return Finding(
+            level="warning",
+            message=f"The newest backup{incomplete} was taken {taken}; "
+            f"{_transactions(not_held)} added since.",
         )
     return Finding(
         level="ok",
         message=f"The newest backup was taken {taken}; {_transactions(not_held)} added since.",
     )
+
+
+def newest_drill(directory: Path, prefix: str) -> dict[str, object] | None:
+    """The most recently written `<prefix>-<stamp>.drill.json` (spec "Restore drill" step 5),
+    read by its own file time — a drill can be run against any stamp at any moment, so the
+    newest *drill* is not the same thing as the newest *backup*. `scripts/restore-drill.sh`
+    writes this in plain text — structural pass/fail only, never a row — so this needs no
+    passphrase. A file that is missing or does not parse is treated as no drill at all."""
+    name = re.compile(rf"{re.escape(prefix)}-\d{{8}}T\d{{6}}Z\.drill\.json")
+    candidates = [p for p in directory.glob(f"{prefix}-*.drill.json") if name.fullmatch(p.name)]
+    if not candidates:
+        return None
+    newest_path = max(candidates, key=lambda p: p.stat().st_mtime)
+    try:
+        parsed = json.loads(newest_path.read_text())
+    except OSError, ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def drill_finding(drill: dict[str, object] | None, now: datetime) -> Finding:
+    if drill is None:
+        return Finding(level="warning", message="No restore drill has ever been run.")
+    try:
+        drill_time = datetime.fromisoformat(str(drill["drillTime"]))
+    except KeyError, ValueError:
+        return Finding(
+            level="warning", message="The newest restore drill result could not be read."
+        )
+    when = drill_time.strftime("%Y-%m-%d %H:%M UTC")
+    if drill.get("result") != "pass":
+        return Finding(level="warning", message=f"The newest restore drill ({when}) failed.")
+    age = now - drill_time
+    if age > DRILL_STALE_AFTER:
+        return Finding(
+            level="warning",
+            message=f"The newest restore drill passed {when}, {age.days} days ago.",
+        )
+    return Finding(level="ok", message=f"The newest restore drill passed {when}.")
 
 
 def identity_backfills_remaining(owner: OwnerSession) -> int:
@@ -274,20 +338,72 @@ def coverage_findings(owner: OwnerSession) -> list[Finding]:
     return findings
 
 
+def wealth_history_counts(owner: OwnerSession) -> tuple[int, date | None]:
+    """(months with an incomplete position, the latest such month) — a stored `status <>
+    'available'` row is how `GET /wealth-history` itself already marks a month incomplete
+    (routes/wealth_history.py's own `complete` flag), so this reads the same fact rather than a
+    second copy of it.
+
+    ponytail: the spec also asks for complete months whose base-currency attribution residual is
+    non-zero. Computing that means running `_attribute_leg`'s full flow/funding/rate machinery
+    per month (routes/wealth_history.py), which is not cheap enough to redo on every /doctor
+    request across a whole 36-month history — so only incomplete months are reported here; a
+    non-zero residual is visible in Wealth History's own attribution view for the month it
+    affects. Upgrade path: cache the residual alongside `month_end_position` when it stops being
+    fine to eyeball.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        cur.execute(
+            """SELECT count(DISTINCT month_end), max(month_end) FROM month_end_position
+                WHERE household_id = %s AND status <> 'available'""",
+            (owner.household_id,),
+        )
+        row = cur.fetchone()
+    assert row is not None
+    count, latest = row
+    return count or 0, latest
+
+
+def wealth_history_findings_from_counts(count: int, latest: date | None) -> list[Finding]:
+    if not count:
+        return [Finding(level="ok", message="Every computed month of wealth history is complete.")]
+    assert latest is not None
+    month_word = "month" if count == 1 else "months"
+    is_are = "is" if count == 1 else "are"
+    return [
+        Finding(
+            level="warning",
+            message=f"{count:,} {month_word} of wealth history {is_are} incomplete, "
+            f"latest {latest:%Y-%m}.",
+        )
+    ]
+
+
+def wealth_history_findings(owner: OwnerSession) -> list[Finding]:
+    return wealth_history_findings_from_counts(*wealth_history_counts(owner))
+
+
 @router.get("/doctor")
 def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorReport:
-    newest = newest_backup(backup_dir(), os.environ.get("BACKUP_PREFIX") or "oneledger")
+    directory = backup_dir()
+    prefix = os.environ.get("BACKUP_PREFIX") or "oneledger"
+    now = datetime.now(UTC)
+    newest = newest_backup(directory, prefix)
+    files_complete = newest is not None and newest_backup_complete(directory, prefix, newest)
     finding = backup_finding(
-        newest, transactions_since(owner.household_id, newest), datetime.now(UTC)
+        newest, transactions_since(owner.household_id, newest), now, files_complete
     )
+    drill = drill_finding(newest_drill(directory, prefix), now)
     return DoctorReport(
         sections=[
-            DoctorSection(title="Backups", findings=[finding]),
+            DoctorSection(title="Backups", findings=[finding, drill]),
             DoctorSection(
                 title="Account identities",
                 findings=[identity_backfill_finding(identity_backfills_remaining(owner))],
             ),
             DoctorSection(title="Investments", findings=investment_findings(owner)),
             DoctorSection(title="Coverage", findings=coverage_findings(owner)),
+            DoctorSection(title="Wealth history", findings=wealth_history_findings(owner)),
         ]
     )

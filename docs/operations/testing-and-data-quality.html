@@ -520,6 +520,7 @@ this screen is the whole of it, and it runs automatically after every import:</p
 
 BACKUPS
   ✓ The newest backup was taken 2026-10-05 02:14 UTC; 38 transactions added since.
+  ✓ The newest restore drill passed 2026-10-01 03:00 UTC.
 
 BALANCES
   ✓ All 14 accounts reconcile to their opening balance + transactions
@@ -533,6 +534,9 @@ TRANSFERS
 
 COVERAGE
   ⚠ ICICI Savings: 1 month missing, 0 partial, earliest 2026-08.
+
+WEALTH HISTORY
+  ✓ Every computed month of wealth history is complete.
 
 CLASSIFICATION
   ✓ 94.2% classified (18,204 of 19,326)
@@ -636,11 +640,11 @@ the schema snapshot — a migration that drifts from the documented schema fails
 <li>Compare monthly spending against a hand tally for one category.</li>
 <li>Confirm net worth against a manual sum of account balances.</li>
 <li>Clear Settings › Data Quality warnings, or record why one is acceptable.</li>
+<li><strong>Run <code>scripts/restore-drill.sh</code> against the isolated test server and confirm it
+passes.</strong> A backup that has never been restored is a hypothesis.</li>
 </ul>
 <p><strong>Quarterly</strong></p>
 <ul>
-<li><strong>Restore from backup into a scratch database and verify row counts and totals.</strong> A backup that
-has never been restored is a hypothesis.</li>
 <li>Work the security checklist (<a href="./security-and-privacy.html">security-and-privacy.html</a> §11).</li>
 <li>Review rule health: unused rules, frequently-overridden rules, shadowed rules.</li>
 </ul>

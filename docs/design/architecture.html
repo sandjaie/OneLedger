@@ -617,17 +617,22 @@ first disk resize is years away.</p>
 <h2 id="10-backups">10. Backups</h2>
 <p>The one place where &quot;personal project&quot; is not an excuse. Hours of downtime are fine; losing the
 ledger is not.</p>
-<pre><code>Daily    pg_dump → encrypted → disk, 30 days retained      the compose backup service
-Weekly   documents volume → local disk                     scripts/backup-docs.sh
-Monthly  copy of both to a second physical location
+<pre><code>Daily    dump + documents archive + manifest → encrypted → disk, 30 days retained   the compose backup service
+Monthly  copy of all three to a second physical location
+Monthly  restore drill against the isolated test server                            scripts/restore-drill.sh
 </code></pre>
-<p>The daily row runs itself. The compose <code>backup</code> service, which the api depends on,
-calls <code>scripts/backup-db.sh --if-due</code> every hour: it dumps only when the newest backup is
-more than a day old, so a stack that was down catches up on its first tick, and then prunes what is
-older than thirty days, never below the thirty newest. <strong>Settings › Data Quality</strong> (<code>GET /doctor</code>) warns when
-two days pass without one and says how many transactions the newest backup does not hold. The weekly
-and monthly rows are not automated yet.</p>
-<p>Restore is tested <strong>quarterly</strong> against a scratch database, and the test is a checklist item in
+<p>The daily row runs itself. The compose <code>backup</code> service, which the api depends on, calls
+<code>scripts/backup-db.sh --if-due</code> every hour: it runs only when the newest backup is more than a
+day old, so a stack that was down catches up on its first tick, and then prunes what is older than
+thirty days, never below the thirty newest stamps. One run writes three files sharing one stamp — the
+database dump, an encrypted archive of the documents volume, and a structural manifest taken from the
+same database snapshot the dump reads — so restoring one without the others is never mistaken for a
+complete backup. <strong>Settings › Data Quality</strong> (<code>GET /doctor</code>) warns when the newest stamp is
+too old, when it is missing one of its three files, and when the newest restore drill has failed, gone
+stale, or never run. The monthly copy to a second location is not automated yet; the owner copies the
+encrypted files by hand.</p>
+<p>Restore is proven <strong>monthly</strong> by <code>scripts/restore-drill.sh</code> against the isolated test
+server — never the working ledger — and the drill is a checklist item in
 <a href="../operations/testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
 restored is a hypothesis, not a backup.</p>
 <p>Keep <code>~/statements/</code> outside the repository as a second copy of the source data. The

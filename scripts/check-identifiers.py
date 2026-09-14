@@ -222,6 +222,9 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/accounts.py",
     # Data Quality counts the rows a backup does not hold, and a backup holds every row.
     "api/oneledger/routes/doctor.py",
+    # The backup manifest sums every row a restored dump must reproduce, transfer legs and
+    # excluded rows included — a report's own exclusions would make a faithful dump look wrong.
+    "scripts/backup-manifest.sql",
     "db/migrations/",
 }
 
