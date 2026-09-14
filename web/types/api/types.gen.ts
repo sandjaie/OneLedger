@@ -1798,6 +1798,40 @@ export type DecisionResult = {
 };
 
 /**
+ * DeductionRuleIn
+ */
+export type DeductionRuleIn = {
+    /**
+     * Categoryid
+     */
+    categoryId: string;
+};
+
+/**
+ * DeductionRuleRow
+ */
+export type DeductionRuleRow = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Categoryid
+     */
+    categoryId: string;
+};
+
+/**
+ * DeductionRulesResponse
+ */
+export type DeductionRulesResponse = {
+    /**
+     * Rules
+     */
+    rules: Array<DeductionRuleRow>;
+};
+
+/**
  * DepositCandidate
  */
 export type DepositCandidate = {
@@ -3665,6 +3699,16 @@ export type LayoutProposal = {
 };
 
 /**
+ * LineSpendingIn
+ */
+export type LineSpendingIn = {
+    /**
+     * Categoryid
+     */
+    categoryId: string;
+};
+
+/**
  * LotAllocationConfirmationRequest
  */
 export type LotAllocationConfirmationRequest = {
@@ -4387,6 +4431,14 @@ export type PayslipLineOut = {
      * Amount
      */
     amount: string;
+    /**
+     * Countedasspending
+     */
+    countedAsSpending: boolean;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
 };
 
 /**
@@ -8933,6 +8985,159 @@ export type LinkDepositPayslipsPayslipIdDepositPutResponses = {
 };
 
 export type LinkDepositPayslipsPayslipIdDepositPutResponse = LinkDepositPayslipsPayslipIdDepositPutResponses[keyof LinkDepositPayslipsPayslipIdDepositPutResponses];
+
+export type ListDeductionRulesPayslipsDeductionRulesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/payslips/deduction-rules';
+};
+
+export type ListDeductionRulesPayslipsDeductionRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListDeductionRulesPayslipsDeductionRulesGetError = ListDeductionRulesPayslipsDeductionRulesGetErrors[keyof ListDeductionRulesPayslipsDeductionRulesGetErrors];
+
+export type ListDeductionRulesPayslipsDeductionRulesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeductionRulesResponse;
+};
+
+export type ListDeductionRulesPayslipsDeductionRulesGetResponse = ListDeductionRulesPayslipsDeductionRulesGetResponses[keyof ListDeductionRulesPayslipsDeductionRulesGetResponses];
+
+export type DeleteDeductionRulePayslipsDeductionRulesLabelDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Label
+         */
+        label: string;
+    };
+    query?: never;
+    url: '/payslips/deduction-rules/{label}';
+};
+
+export type DeleteDeductionRulePayslipsDeductionRulesLabelDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteDeductionRulePayslipsDeductionRulesLabelDeleteError = DeleteDeductionRulePayslipsDeductionRulesLabelDeleteErrors[keyof DeleteDeductionRulePayslipsDeductionRulesLabelDeleteErrors];
+
+export type DeleteDeductionRulePayslipsDeductionRulesLabelDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteDeductionRulePayslipsDeductionRulesLabelDeleteResponse = DeleteDeductionRulePayslipsDeductionRulesLabelDeleteResponses[keyof DeleteDeductionRulePayslipsDeductionRulesLabelDeleteResponses];
+
+export type SaveDeductionRulePayslipsDeductionRulesLabelPutData = {
+    body: DeductionRuleIn;
+    path: {
+        /**
+         * Label
+         */
+        label: string;
+    };
+    query?: never;
+    url: '/payslips/deduction-rules/{label}';
+};
+
+export type SaveDeductionRulePayslipsDeductionRulesLabelPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveDeductionRulePayslipsDeductionRulesLabelPutError = SaveDeductionRulePayslipsDeductionRulesLabelPutErrors[keyof SaveDeductionRulePayslipsDeductionRulesLabelPutErrors];
+
+export type SaveDeductionRulePayslipsDeductionRulesLabelPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: DeductionRuleRow;
+};
+
+export type SaveDeductionRulePayslipsDeductionRulesLabelPutResponse = SaveDeductionRulePayslipsDeductionRulesLabelPutResponses[keyof SaveDeductionRulePayslipsDeductionRulesLabelPutResponses];
+
+export type StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+        /**
+         * Line No
+         */
+        line_no: number;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/lines/{line_no}/spending';
+};
+
+export type StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteError = StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteErrors[keyof StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteErrors];
+
+export type StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteResponse = StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteResponses[keyof StopCountingLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingDeleteResponses];
+
+export type CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostData = {
+    body: LineSpendingIn;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+        /**
+         * Line No
+         */
+        line_no: number;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/lines/{line_no}/spending';
+};
+
+export type CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostError = CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostErrors[keyof CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostErrors];
+
+export type CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostResponse = CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostResponses[keyof CountLineAsSpendingPayslipsPayslipIdLinesLineNoSpendingPostResponses];
 
 export type ListCommitmentsCommitmentsGetData = {
     body?: never;

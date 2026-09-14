@@ -48,6 +48,7 @@ dependency. See the [Phase 1.7 specification](../specs/2026-09-14-phase-1-7-sala
 | -: | --- | --- | ---: | ---: | --- |
 | 1 | payslips, PDF import and the net-pay link | `feature/p1-7a-payslips` | 1,450 | 1,050 | Phase 1.6 merged |
 | 2 | commitments and the thin forecast | `feature/p1-7b-commitments-forecast` | 900 | 750 | 1 |
+| 3 | deductions counted as spending | `feature/p1-7c-payslip-deduction-spending` | 700 | 500 | 1–2 |
 
 ## Task 1 — payslips, PDF import and the net-pay link
 
@@ -168,6 +169,31 @@ app/__tests__/workspace.test.tsx && npm run typecheck`; shared static command; `
 **Acceptance:** from `/plans`, a synthetic commitment added, edited or archived moves its account's
 30/60/90-day balances exactly; exclusions, dates and assumptions are visible; the forecast writes
 nothing; the specification's acceptance passes.
+
+## Task 3 — deductions counted as spending
+
+**Workspace/branch/base/target:** `/Users/sandjaieravi/dev/OneLedger` /
+`feature/p1-7c-payslip-deduction-spending` / `develop` / `develop`.
+**Depends:** Tasks 1 and 2. **Forecast:** 600–800 production, 400–600 tests.
+**Files:** create `db/migrations/V44__payslip_deduction_spending.sql`,
+`db/tests/0041_payslip_deduction_spending.sql`; update `api/oneledger/routes/payslips.py`,
+`api/tests/test_payslips_live.py`, `web/app/salary/payslips-screen.tsx` and its test; schema,
+API-contract and progress documents.
+**Contract:** the specification's "Deductions counted as spending". Postings reuse the manual
+ledger posting rules of `routes/transactions.py::create_transaction` (household lock, account
+lifetime and anchor, frozen FX, dedupe hash) through a shared helper rather than a copy; the pair
+and its `payslip_line_posting` row are written or removed in the same transaction as the link,
+unlink, correction or line toggle.
+**Tests:** a linked payslip with a flight deduction marked as spending adds exactly that amount to
+dashboard income and spending for the month and leaves the account balance and net worth
+unchanged; unlink and correction remove the pair; a rule auto-posts on a later link; replay is
+idempotent; an earning line and a foreign line are refused; RLS on both tables.
+**RED/GREEN:** `eval "$(scripts/test-db.sh up)"`; `scripts/hooks/db-tests.sh`;
+`(cd api && uv run pytest -q tests/test_payslips_live.py tests/test_dashboard_flows_live.py)`;
+shared types command; `cd web && npx vitest run app/salary && npm run typecheck`;
+`scripts/verify.sh`.
+**Acceptance:** a payslip's flight-ticket deduction appears as Travel spending and matching salary
+income in the month its net pay arrived, with balances unchanged.
 
 ## Stop conditions
 

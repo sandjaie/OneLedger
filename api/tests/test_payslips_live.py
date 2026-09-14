@@ -122,11 +122,14 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[PayslipFix
     finally:
         app.dependency_overrides.clear()
         with connection.cursor() as cur:
-            # payslip/payslip_line are this branch's new tables; document, transaction and
-            # transfer are emptied too, matching every other `*_live.py` fixture, because
-            # `connect_to_test_database()` refuses to start a later suite's fixture against a
-            # database still holding committed transaction rows.
-            cur.execute("TRUNCATE document, transaction, transfer, payslip_line, payslip CASCADE")
+            # payslip/payslip_line/payslip_line_posting/payslip_deduction_rule are this branch's
+            # new tables; document, transaction and transfer are emptied too, matching every
+            # other `*_live.py` fixture, because `connect_to_test_database()` refuses to start a
+            # later suite's fixture against a database still holding committed transaction rows.
+            cur.execute(
+                """TRUNCATE document, transaction, transfer, payslip_line_posting,
+                            payslip_deduction_rule, payslip_line, payslip CASCADE"""
+            )
         connection.commit()
         connection.close()
 
@@ -203,6 +206,81 @@ def _document_count(fixture: PayslipFixture) -> int:
         found = cur.fetchone()
         assert found is not None
         return int(found[0])
+
+
+def _category_id(fixture: PayslipFixture, slug: str) -> UUID:
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT id FROM category WHERE slug = %s AND household_id IS NULL", (slug,))
+        found = cur.fetchone()
+        assert found is not None
+        return UUID(str(found[0]))
+
+
+def _account_balance(fixture: PayslipFixture) -> Decimal:
+    with fixture.connection.cursor() as cur:
+        cur.execute("SELECT current_balance FROM account WHERE id = %s", (fixture.account_id,))
+        found = cur.fetchone()
+        assert found is not None
+        return Decimal(found[0])
+
+
+def _reportable_totals(fixture: PayslipFixture) -> tuple[Decimal, Decimal]:
+    """(income, spending) summed over every reportable row this household owns — the same
+    figures `GET /dashboard` derives its month and year-to-date totals from (spending is
+    every non-income reportable row with its sign turned, `routes/dashboard.py`)."""
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """SELECT coalesce(sum(amount) FILTER (WHERE txn_type = 'income'), 0),
+                      coalesce(-sum(amount) FILTER (WHERE txn_type <> 'income'), 0)
+                 FROM v_transaction_reportable WHERE household_id = %s""",
+            (fixture.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None
+        return Decimal(found[0]), Decimal(found[1])
+
+
+def _posting_count(fixture: PayslipFixture) -> int:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM payslip_line_posting WHERE household_id = %s",
+            (fixture.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None
+        return int(found[0])
+
+
+def _seed_fx_rate(fixture: PayslipFixture, on: date) -> None:
+    """The deduction-spending pair freezes through the real manual-posting path (I5), which
+    needs a stored rate for the day it posts on — unlike `_income` above, which inserts its
+    synthetic credit directly and never looks one up."""
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
+               VALUES (%s, %s, %s, 1, 'manual')
+               ON CONFLICT (rate_date, base_currency, quote_currency) DO NOTHING""",
+            (on, fixture.secondary_currency, fixture.currency),
+        )
+    fixture.connection.commit()
+
+
+def _flight_deduction_body(fixture: PayslipFixture, **overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "payMonth": "2026-01",
+        "currency": fixture.currency,
+        "grossEarnings": "5000.0000",
+        "totalDeductions": "1000.0000",
+        "netPay": "4000.0000",
+        "lines": [
+            {"kind": "earning", "label": "Basic", "amount": "5000.0000"},
+            {"kind": "deduction", "label": "Tax", "amount": "600.0000"},
+            {"kind": "deduction", "label": "Flights", "amount": "400.0000"},
+        ],
+        "idempotencyKey": str(uuid4()),
+    }
+    base.update(overrides)
+    return base
 
 
 def test_entry_replay_conflicting_key_and_exact_round_trip(live: PayslipFixture) -> None:
@@ -743,3 +821,322 @@ def test_deposit_becomes_ineligible_once_the_credit_is_a_transfer_leg(
     row = next(p for p in listing if p["id"] == payslip["id"])
     assert row["deposit"]["transactionId"] == str(credit)
     assert row["deposit"]["eligible"] is False
+
+
+# Phase 1.7 Task 3: deductions counted as spending (spec "Deductions counted as spending").
+
+
+def test_deduction_marked_as_spending_posts_balanced_pair_with_balances_unchanged(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    salary_category = _category_id(live, "salary")
+
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    assert flights_line["countedAsSpending"] is False
+    assert flights_line["categoryId"] is None
+
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    link = client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    assert link.status_code == 200
+
+    balance_before = _account_balance(live)
+    income_before, spending_before = _reportable_totals(live)
+
+    toggled = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert toggled.status_code == 200, toggled.json()
+    toggled_line = next(
+        line for line in toggled.json()["lines"] if line["lineNo"] == flights_line["lineNo"]
+    )
+    assert toggled_line["countedAsSpending"] is True
+    assert toggled_line["categoryId"] == str(flights_category)
+
+    # The pair nets to zero: income and spending each rise by exactly the deduction, the
+    # account balance and (by construction, since it is the same figure) net worth do not move.
+    assert _account_balance(live) == balance_before
+    income_after, spending_after = _reportable_totals(live)
+    assert income_after == income_before + Decimal("400.0000")
+    assert spending_after == spending_before + Decimal("400.0000")
+    assert _posting_count(live) == 1
+
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """SELECT t.txn_type::text, t.category_id, t.amount, t.description_raw,
+                      t.booked_date, t.account_id
+                 FROM payslip_line_posting p
+                 JOIN transaction t ON t.id = p.income_transaction_id
+                WHERE p.household_id = %s""",
+            (live.owner.household_id,),
+        )
+        income_row = cur.fetchone()
+        assert income_row is not None
+        assert income_row[0] == "income"
+        assert income_row[1] == salary_category
+        assert Decimal(income_row[2]) == Decimal("400.0000")
+        assert income_row[3] == "Payroll: Flights withheld"
+        assert income_row[4] == date(2026, 1, 15)
+        assert income_row[5] == live.account_id
+
+        cur.execute(
+            """SELECT t.txn_type::text, t.category_id, t.amount, t.description_raw
+                 FROM payslip_line_posting p
+                 JOIN transaction t ON t.id = p.expense_transaction_id
+                WHERE p.household_id = %s""",
+            (live.owner.household_id,),
+        )
+        expense_row = cur.fetchone()
+        assert expense_row is not None
+        assert expense_row[0] == "expense"
+        assert expense_row[1] == flights_category
+        assert Decimal(expense_row[2]) == Decimal("-400.0000")  # signed negative, ADR-0010
+        assert expense_row[3] == "Payroll: Flights"
+
+    # Replaying the same toggle is idempotent: no second pair.
+    replay = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert replay.status_code == 200
+    assert _posting_count(live) == 1
+
+    # Stopping removes the pair and restores the totals exactly.
+    stopped = client().delete(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending", headers=ORIGIN
+    )
+    assert stopped.status_code == 200
+    stopped_line = next(
+        line for line in stopped.json()["lines"] if line["lineNo"] == flights_line["lineNo"]
+    )
+    assert stopped_line["countedAsSpending"] is False
+    assert _posting_count(live) == 0
+    assert _account_balance(live) == balance_before
+    assert _reportable_totals(live) == (income_before, spending_before)
+
+    # Replaying the stop is idempotent too.
+    stopped_again = client().delete(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending", headers=ORIGIN
+    )
+    assert stopped_again.status_code == 200
+    assert _posting_count(live) == 0
+
+
+def test_unlink_removes_the_pair_and_a_saved_rule_auto_posts_on_a_later_link(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert _posting_count(live) == 1
+
+    unlink = client().delete(f"/payslips/{payslip['id']}/deposit", headers=ORIGIN)
+    assert unlink.status_code == 200
+    assert _posting_count(live) == 0  # unlinking removes the pair
+
+    # The rule persists: relinking the same credit auto-posts the pair again with no new toggle.
+    relink = client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    assert relink.status_code == 200
+    relinked_line = next(
+        line for line in relink.json()["lines"] if line["lineNo"] == flights_line["lineNo"]
+    )
+    assert relinked_line["countedAsSpending"] is True
+    assert _posting_count(live) == 1
+
+    # A correction requires unlinking first; after it, the original's pair (already removed by
+    # the unlink above) stays gone and the correction itself creates none for its own lines.
+    client().delete(f"/payslips/{payslip['id']}/deposit", headers=ORIGIN)
+    correction = client().post(
+        f"/payslips/{payslip['id']}/corrections",
+        json=_flight_deduction_body(live, idempotencyKey=str(uuid4())),
+        headers=ORIGIN,
+    )
+    assert correction.status_code == 201
+    assert _posting_count(live) == 0
+
+
+def test_earning_line_and_foreign_line_spending_are_refused(live: PayslipFixture) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    earning_line = next(line for line in payslip["lines"] if line["kind"] == "earning")
+
+    earning_refused = client().post(
+        f"/payslips/{payslip['id']}/lines/{earning_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert earning_refused.status_code == 422
+
+    foreign_line = client().post(
+        f"/payslips/{payslip['id']}/lines/999/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert foreign_line.status_code == 404
+
+    foreign_payslip = client().post(
+        f"/payslips/{uuid4()}/lines/1/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert foreign_payslip.status_code == 404
+    assert _posting_count(live) == 0
+
+
+def test_deduction_rules_are_saved_listed_and_removed(live: PayslipFixture) -> None:
+    flights_category = _category_id(live, "travel-flights")
+
+    saved = client().put(
+        "/payslips/deduction-rules/Flights",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {"label": "Flights", "categoryId": str(flights_category)}
+
+    listed = client().get("/payslips/deduction-rules", headers=ORIGIN)
+    assert listed.status_code == 200
+    assert listed.json()["rules"] == [{"label": "Flights", "categoryId": str(flights_category)}]
+
+    # An income category is refused: a deduction rule must resolve to an active expense category.
+    salary_category = _category_id(live, "salary")
+    refused = client().put(
+        "/payslips/deduction-rules/Flights",
+        json={"categoryId": str(salary_category)},
+        headers=ORIGIN,
+    )
+    assert refused.status_code == 422
+
+    removed = client().delete("/payslips/deduction-rules/Flights", headers=ORIGIN)
+    assert removed.status_code == 204
+    assert client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"] == []
+
+
+def test_invalid_rule_label_path_parameter_is_422_not_500(live: PayslipFixture) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    too_long = "x" * 81  # _normalize_label's bound is 1-80 characters
+
+    saved = client().put(
+        f"/payslips/deduction-rules/{too_long}",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert saved.status_code == 422
+
+    removed = client().delete(f"/payslips/deduction-rules/{too_long}", headers=ORIGIN)
+    assert removed.status_code == 422
+
+
+def test_spending_toggle_refuses_a_different_category_leaving_the_rule_unchanged(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    groceries_category = _category_id(live, "groceries")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    first = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert first.status_code == 200
+
+    conflicting = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(groceries_category)},
+        headers=ORIGIN,
+    )
+    assert conflicting.status_code == 409
+    assert _posting_count(live) == 1
+    rules = client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"]
+    assert rules == [{"label": "Flights", "categoryId": str(flights_category)}]
+
+
+def test_unlink_refuses_with_409_when_a_posting_is_referenced_elsewhere(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    with live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT expense_transaction_id FROM payslip_line_posting WHERE household_id = %s",
+            (live.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None
+        expense_id = UUID(str(found[0]))
+
+    # A transfer confirmed against the expense leg (an owner could later re-decide this posted
+    # spend was actually money moved between their own accounts) leaves the ledger referencing
+    # it; unlinking must refuse rather than delete out from under that reference. `other_account_id`
+    # is a different *household*'s account (foreign-isolation fixture), so a second account in
+    # this same household is created here instead.
+    with live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM person WHERE household_id = %s AND is_self", (live.owner.household_id,)
+        )
+        found = cur.fetchone()
+        assert found is not None
+        person_id = UUID(str(found[0]))
+        second_account_id = _account(
+            cur,
+            live.owner.household_id,
+            person_id,
+            "Synthetic second payslip account",
+            live.currency,
+        )
+    live.connection.commit()
+    other_credit = _income(
+        live, amount="400.0000", on=date(2026, 1, 15), account_id=second_account_id
+    )
+    confirm = client().post(
+        "/transfers",
+        json={
+            "sourceTransactionId": str(expense_id),
+            "destinationTransactionId": str(other_credit),
+            "fromCandidate": False,
+        },
+        headers=ORIGIN,
+    )
+    assert confirm.status_code == 201
+
+    balance_before = _account_balance(live)
+    unlink = client().delete(f"/payslips/{payslip['id']}/deposit", headers=ORIGIN)
+    assert unlink.status_code == 409
+    assert _posting_count(live) == 1
+    assert _account_balance(live) == balance_before

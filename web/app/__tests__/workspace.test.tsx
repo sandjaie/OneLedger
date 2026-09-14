@@ -579,7 +579,7 @@ describe("authenticated workspace", () => {
     render(
       <Workspace
         section="salary"
-        request={requestThat(household, catalogue, { payslips: [], total: 0 })}
+        request={requestThat(household, catalogue, [], { payslips: [], total: 0 })}
         navigate={vi.fn()}
       />,
     );

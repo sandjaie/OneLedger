@@ -210,6 +210,66 @@ reconciles, the file is stored through `ingest.storage.store` and one `document`
 `source_document_id`, reusing the investment import's document pattern. The password is used for
 the request only.
 
+## Deductions counted as spending (Task 3)
+
+Owner direction, 14 September 2026: some payroll deductions, such as employer-arranged flight
+tickets, are personal spending paid from gross pay. The bank credit carries only net pay, so
+counting such a deduction as spending alone would understate savings. A deduction the owner marks
+as spending therefore becomes a balanced pair of ordinary ledger postings on the account that
+received the linked net pay, dated on that credit's booked date:
+
+- an `income` posting for the deduction amount, categorised Salary, described
+  `Payroll: <label> withheld`; and
+- an `expense` posting for the same amount, in the owner's chosen category, described
+  `Payroll: <label>`.
+
+The pair nets to zero, so account balances, statement reconciliation and net worth are unchanged,
+while income, spending, category totals, trends and the year-to-date summary show the purchase.
+Frozen reporting amounts use the ordinary manual-posting rules.
+
+### Data (V44)
+
+```sql
+CREATE TABLE payslip_deduction_rule (
+  household_id UUID NOT NULL REFERENCES household(id),
+  label        TEXT NOT NULL,
+  category_id  UUID NOT NULL REFERENCES category(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, label)
+);
+
+CREATE TABLE payslip_line_posting (
+  household_id          UUID NOT NULL REFERENCES household(id),
+  payslip_line_id       UUID NOT NULL,
+  income_transaction_id UUID NOT NULL,
+  expense_transaction_id UUID NOT NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, payslip_line_id),
+  FOREIGN KEY (household_id, income_transaction_id) REFERENCES transaction (household_id, id),
+  FOREIGN KEY (household_id, expense_transaction_id) REFERENCES transaction (household_id, id)
+);
+```
+
+Both tables enable household RLS; `payslip_line_posting.payslip_line_id` references a deduction
+line of the same household. A rule's category must be an active expense category visible to the
+household.
+
+### Behaviour
+
+- `PUT /payslips/deduction-rules/{label}` with `{categoryId}` saves a rule; `DELETE` removes it;
+  `GET /payslips/deduction-rules` lists them. A rule changes no existing posting.
+- A payslip's deduction lines report `countedAsSpending` and `categoryId` (from the posting, else
+  the matching rule).
+- Linking net pay posts the pair for every deduction line with a matching rule; unlinking and
+  superseding remove that payslip's pairs; all in the same database transaction as the link change.
+- `POST /payslips/{payslipId}/lines/{lineId}/spending` with `{categoryId}` counts one deduction line
+  as spending (saving the rule for its label) and posts the pair when the payslip is linked;
+  `DELETE` on the same path stops counting it and removes its pair. Earning lines are refused.
+- Replaying any of these is idempotent; a pair exists at most once per line.
+- The Salary screen shows each deduction with a "count as spending" control and a category picker
+  defaulting to Travel › Flights when that category exists.
+
 ## API boundary
 
 Every route uses `require_owner`, filters by the session household and answers 404 for an unknown
@@ -371,6 +431,8 @@ inflation or scenarios (Phase 5.5); valuing holdings or snapshots in a forecast;
 payment or automatic ledger write.
 
 ## Documents the implementation must reconcile
+
+Task 3 also reconciles `schema.md` (V44) and the payslip rows of `api-contracts.html`.
 
 `docs/superpowers/schema.md` (V42, V43; retire the planned `0017` payslip shapes),
 `docs/design/data-model.html` (entity map, semantics, migration list),
