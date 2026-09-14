@@ -760,12 +760,18 @@ def _salary_category_id(cur: psycopg.Cursor[Any]) -> UUID:
     return UUID(str(row[0]))
 
 
-def _has_pair(cur: psycopg.Cursor[Any], household_id: UUID, line_id: UUID) -> bool:
+def _pair_category(cur: psycopg.Cursor[Any], household_id: UUID, line_id: UUID) -> UUID | None:
+    """The expense leg's category for this line's existing pair, or `None` when it has none —
+    both whether a pair exists and, when it does, what it already counts as spending under."""
     cur.execute(
-        "SELECT 1 FROM payslip_line_posting WHERE household_id = %s AND payslip_line_id = %s",
+        """SELECT t.category_id FROM payslip_line_posting p
+             JOIN v_transaction_posting t
+               ON t.household_id = p.household_id AND t.id = p.expense_transaction_id
+            WHERE p.household_id = %s AND p.payslip_line_id = %s""",
         (household_id, line_id),
     )
-    return cur.fetchone() is not None
+    row = cur.fetchone()
+    return None if row is None else UUID(str(row[0]))
 
 
 def _assert_account_currency(
@@ -932,41 +938,68 @@ def link_deposit(
     return rows[0]
 
 
+def _pair_removal_conflict() -> HTTPException:
+    return HTTPException(
+        status_code=409, detail="a payroll posting is referenced elsewhere; release it first"
+    )
+
+
 @router.delete("/payslips/{payslip_id}/deposit", response_model=PayslipRow)
 def unlink_deposit(
     payslip_id: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> PayslipRow:
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        cur.execute(
-            "SELECT id FROM payslip WHERE household_id = %s AND id = %s FOR UPDATE",
-            (owner.household_id, payslip_id),
-        )
-        if cur.fetchone() is None:
-            raise HTTPException(status_code=404, detail="payslip not found")
-        _remove_pairs_for_payslip(cur, owner.household_id, payslip_id)
-        cur.execute(
-            "UPDATE payslip SET deposit_transaction_id = NULL WHERE household_id = %s AND id = %s",
-            (owner.household_id, payslip_id),
-        )
-        rows = _load_payslips(cur, owner.household_id, [payslip_id])
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+            cur.execute(
+                "SELECT id FROM payslip WHERE household_id = %s AND id = %s FOR UPDATE",
+                (owner.household_id, payslip_id),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail="payslip not found")
+            _remove_pairs_for_payslip(cur, owner.household_id, payslip_id)
+            cur.execute(
+                """UPDATE payslip SET deposit_transaction_id = NULL
+                    WHERE household_id = %s AND id = %s""",
+                (owner.household_id, payslip_id),
+            )
+            rows = _load_payslips(cur, owner.household_id, [payslip_id])
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise _pair_removal_conflict() from exc
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     assert rows
     return rows[0]
+
+
+def _normalize_label_param(label: str) -> str:
+    """The body's `label` field goes through `PayslipLineIn`'s pydantic validator, which turns a
+    `ValueError` into a 422 automatically — a path parameter has no such validator, so the same
+    `_normalize_label` raising here must be translated by hand or it surfaces as a 500."""
+    try:
+        return _normalize_label(label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/payslips/deduction-rules", response_model=DeductionRulesResponse)
 def list_deduction_rules(
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> DeductionRulesResponse:
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute(
-            """SELECT label, category_id FROM payslip_deduction_rule
-                WHERE household_id = %s ORDER BY label""",
-            (owner.household_id,),
-        )
-        rules = [DeductionRuleRow(label=str(row[0]), categoryId=row[1]) for row in cur.fetchall()]
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute(
+                """SELECT label, category_id FROM payslip_deduction_rule
+                    WHERE household_id = %s ORDER BY label""",
+                (owner.household_id,),
+            )
+            rules = [
+                DeductionRuleRow(label=str(row[0]), categoryId=row[1]) for row in cur.fetchall()
+            ]
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     return DeductionRulesResponse(rules=rules)
 
 
@@ -976,17 +1009,20 @@ def save_deduction_rule(
     body: DeductionRuleIn,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> DeductionRuleRow:
-    normalized = _normalize_label(label)
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        _assert_category_allowed(cur, body.categoryId, owner.household_id, kind="expense")
-        cur.execute(
-            """INSERT INTO payslip_deduction_rule (household_id, label, category_id)
-               VALUES (%s, %s, %s)
-               ON CONFLICT (household_id, label)
-               DO UPDATE SET category_id = EXCLUDED.category_id, updated_at = now()""",
-            (owner.household_id, normalized, body.categoryId),
-        )
+    normalized = _normalize_label_param(label)
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            _assert_category_allowed(cur, body.categoryId, owner.household_id, kind="expense")
+            cur.execute(
+                """INSERT INTO payslip_deduction_rule (household_id, label, category_id)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (household_id, label)
+                   DO UPDATE SET category_id = EXCLUDED.category_id, updated_at = now()""",
+                (owner.household_id, normalized, body.categoryId),
+            )
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     return DeductionRuleRow(label=normalized, categoryId=body.categoryId)
 
 
@@ -994,13 +1030,16 @@ def save_deduction_rule(
 def delete_deduction_rule(
     label: str, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> Response:
-    normalized = _normalize_label(label)
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute(
-            "DELETE FROM payslip_deduction_rule WHERE household_id = %s AND label = %s",
-            (owner.household_id, normalized),
-        )
+    normalized = _normalize_label_param(label)
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute(
+                "DELETE FROM payslip_deduction_rule WHERE household_id = %s AND label = %s",
+                (owner.household_id, normalized),
+            )
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -1029,53 +1068,71 @@ def count_line_as_spending(
     body: LineSpendingIn,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> PayslipRow:
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        line_id, label, amount, kind = _payslip_line(cur, owner.household_id, payslip_id, line_no)
-        if kind != "deduction":
-            raise HTTPException(
-                status_code=422, detail="only a deduction line can count as spending"
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+            line_id, label, amount, kind = _payslip_line(
+                cur, owner.household_id, payslip_id, line_no
             )
-        _assert_category_allowed(cur, body.categoryId, owner.household_id, kind="expense")
-        cur.execute(
-            """INSERT INTO payslip_deduction_rule (household_id, label, category_id)
-               VALUES (%s, %s, %s)
-               ON CONFLICT (household_id, label)
-               DO UPDATE SET category_id = EXCLUDED.category_id, updated_at = now()""",
-            (owner.household_id, label, body.categoryId),
-        )
-        # Idempotent: a line already posted keeps its existing pair rather than doubling it.
-        if not _has_pair(cur, owner.household_id, line_id):
+            if kind != "deduction":
+                raise HTTPException(
+                    status_code=422, detail="only a deduction line can count as spending"
+                )
+            # A line already paired in a different category must not be silently repointed, or
+            # relinked/reposted, without first being stopped — checked before the rule is
+            # touched, so a refused request changes nothing, rule included.
+            existing_category = _pair_category(cur, owner.household_id, line_id)
+            if existing_category is not None and existing_category != body.categoryId:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "this line already counts as spending in a different category; "
+                        "stop counting it first"
+                    ),
+                )
+            _assert_category_allowed(cur, body.categoryId, owner.household_id, kind="expense")
             cur.execute(
-                """SELECT deposit_transaction_id, currency FROM payslip
-                    WHERE household_id = %s AND id = %s""",
-                (owner.household_id, payslip_id),
+                """INSERT INTO payslip_deduction_rule (household_id, label, category_id)
+                   VALUES (%s, %s, %s)
+                   ON CONFLICT (household_id, label)
+                   DO UPDATE SET category_id = EXCLUDED.category_id, updated_at = now()""",
+                (owner.household_id, label, body.categoryId),
             )
-            header = cur.fetchone()
-            assert header is not None  # _payslip_line above already proved the payslip exists
-            deposit_id, currency = header[0], str(header[1]).strip()
-            if deposit_id is not None:
+            # Idempotent: a line already posted (in the same category, just checked above)
+            # keeps its existing pair rather than doubling it.
+            if existing_category is None:
                 cur.execute(
-                    """SELECT account_id, booked_date FROM v_transaction_posting
+                    """SELECT deposit_transaction_id, currency FROM payslip
                         WHERE household_id = %s AND id = %s""",
-                    (owner.household_id, deposit_id),
+                    (owner.household_id, payslip_id),
                 )
-                posting = cur.fetchone()
-                assert posting is not None
-                account_id, booked_date = UUID(str(posting[0])), posting[1]
-                _assert_account_currency(cur, account_id, currency, owner.household_id)
-                _post_deduction_pair(
-                    cur,
-                    owner.household_id,
-                    line_id,
-                    label,
-                    amount,
-                    body.categoryId,
-                    account_id,
-                    booked_date,
-                )
-        rows = _load_payslips(cur, owner.household_id, [payslip_id])
+                header = cur.fetchone()
+                assert header is not None  # _payslip_line above already proved it exists
+                deposit_id, currency = header[0], str(header[1]).strip()
+                if deposit_id is not None:
+                    cur.execute(
+                        """SELECT account_id, booked_date FROM v_transaction_posting
+                            WHERE household_id = %s AND id = %s""",
+                        (owner.household_id, deposit_id),
+                    )
+                    posting = cur.fetchone()
+                    assert posting is not None
+                    account_id, booked_date = UUID(str(posting[0])), posting[1]
+                    _assert_account_currency(cur, account_id, currency, owner.household_id)
+                    _post_deduction_pair(
+                        cur,
+                        owner.household_id,
+                        line_id,
+                        label,
+                        amount,
+                        body.categoryId,
+                        account_id,
+                        booked_date,
+                    )
+            rows = _load_payslips(cur, owner.household_id, [payslip_id])
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     assert rows
     return rows[0]
 
@@ -1086,28 +1143,36 @@ def stop_counting_line_as_spending(
     line_no: int,
     owner: Annotated[OwnerSession, Depends(require_owner)],
 ) -> PayslipRow:
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        line_id, _label, _amount, kind = _payslip_line(cur, owner.household_id, payslip_id, line_no)
-        if kind != "deduction":
-            raise HTTPException(
-                status_code=422, detail="only a deduction line can count as spending"
+    try:
+        with connect() as conn, conn.cursor() as cur:
+            scope_to_owner(conn, owner.user_id)
+            cur.execute("SELECT id FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+            line_id, _label, _amount, kind = _payslip_line(
+                cur, owner.household_id, payslip_id, line_no
             )
-        cur.execute(
-            """SELECT income_transaction_id, expense_transaction_id FROM payslip_line_posting
-                WHERE household_id = %s AND payslip_line_id = %s""",
-            (owner.household_id, line_id),
-        )
-        pair = cur.fetchone()
-        if pair is not None:
+            if kind != "deduction":
+                raise HTTPException(
+                    status_code=422, detail="only a deduction line can count as spending"
+                )
             cur.execute(
-                """DELETE FROM payslip_line_posting
+                """SELECT income_transaction_id, expense_transaction_id
+                     FROM payslip_line_posting
                     WHERE household_id = %s AND payslip_line_id = %s""",
                 (owner.household_id, line_id),
             )
-            delete_ledger_transaction(cur, owner.household_id, UUID(str(pair[0])))
-            delete_ledger_transaction(cur, owner.household_id, UUID(str(pair[1])))
-        rows = _load_payslips(cur, owner.household_id, [payslip_id])
+            pair = cur.fetchone()
+            if pair is not None:
+                cur.execute(
+                    """DELETE FROM payslip_line_posting
+                        WHERE household_id = %s AND payslip_line_id = %s""",
+                    (owner.household_id, line_id),
+                )
+                delete_ledger_transaction(cur, owner.household_id, UUID(str(pair[0])))
+                delete_ledger_transaction(cur, owner.household_id, UUID(str(pair[1])))
+            rows = _load_payslips(cur, owner.household_id, [payslip_id])
+    except psycopg.errors.ForeignKeyViolation as exc:
+        raise _pair_removal_conflict() from exc
+    except psycopg.Error as exc:
+        raise _translate_database_error(exc) from None
     assert rows
     return rows[0]

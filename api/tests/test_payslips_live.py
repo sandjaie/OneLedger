@@ -1029,3 +1029,114 @@ def test_deduction_rules_are_saved_listed_and_removed(live: PayslipFixture) -> N
     removed = client().delete("/payslips/deduction-rules/Flights", headers=ORIGIN)
     assert removed.status_code == 204
     assert client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"] == []
+
+
+def test_invalid_rule_label_path_parameter_is_422_not_500(live: PayslipFixture) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    too_long = "x" * 81  # _normalize_label's bound is 1-80 characters
+
+    saved = client().put(
+        f"/payslips/deduction-rules/{too_long}",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert saved.status_code == 422
+
+    removed = client().delete(f"/payslips/deduction-rules/{too_long}", headers=ORIGIN)
+    assert removed.status_code == 422
+
+
+def test_spending_toggle_refuses_a_different_category_leaving_the_rule_unchanged(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    groceries_category = _category_id(live, "groceries")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    first = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert first.status_code == 200
+
+    conflicting = client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(groceries_category)},
+        headers=ORIGIN,
+    )
+    assert conflicting.status_code == 409
+    assert _posting_count(live) == 1
+    rules = client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"]
+    assert rules == [{"label": "Flights", "categoryId": str(flights_category)}]
+
+
+def test_unlink_refuses_with_409_when_a_posting_is_referenced_elsewhere(
+    live: PayslipFixture,
+) -> None:
+    flights_category = _category_id(live, "travel-flights")
+    payslip = client().post("/payslips", json=_flight_deduction_body(live), headers=ORIGIN).json()
+    flights_line = next(line for line in payslip["lines"] if line["label"] == "Flights")
+    _seed_fx_rate(live, date(2026, 1, 15))
+    credit = _income(live, amount="4000.0000", on=date(2026, 1, 15))
+    client().put(
+        f"/payslips/{payslip['id']}/deposit", json={"transactionId": str(credit)}, headers=ORIGIN
+    )
+    client().post(
+        f"/payslips/{payslip['id']}/lines/{flights_line['lineNo']}/spending",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    with live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT expense_transaction_id FROM payslip_line_posting WHERE household_id = %s",
+            (live.owner.household_id,),
+        )
+        found = cur.fetchone()
+        assert found is not None
+        expense_id = UUID(str(found[0]))
+
+    # A transfer confirmed against the expense leg (an owner could later re-decide this posted
+    # spend was actually money moved between their own accounts) leaves the ledger referencing
+    # it; unlinking must refuse rather than delete out from under that reference. `other_account_id`
+    # is a different *household*'s account (foreign-isolation fixture), so a second account in
+    # this same household is created here instead.
+    with live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM person WHERE household_id = %s AND is_self", (live.owner.household_id,)
+        )
+        found = cur.fetchone()
+        assert found is not None
+        person_id = UUID(str(found[0]))
+        second_account_id = _account(
+            cur,
+            live.owner.household_id,
+            person_id,
+            "Synthetic second payslip account",
+            live.currency,
+        )
+    live.connection.commit()
+    other_credit = _income(
+        live, amount="400.0000", on=date(2026, 1, 15), account_id=second_account_id
+    )
+    confirm = client().post(
+        "/transfers",
+        json={
+            "sourceTransactionId": str(expense_id),
+            "destinationTransactionId": str(other_credit),
+            "fromCandidate": False,
+        },
+        headers=ORIGIN,
+    )
+    assert confirm.status_code == 201
+
+    balance_before = _account_balance(live)
+    unlink = client().delete(f"/payslips/{payslip['id']}/deposit", headers=ORIGIN)
+    assert unlink.status_code == 409
+    assert _posting_count(live) == 1
+    assert _account_balance(live) == balance_before
