@@ -676,6 +676,24 @@ export type BodyConfirmStatementAccountParseAccountPost = {
 };
 
 /**
+ * Body_import_payslips_payslips_import_post
+ */
+export type BodyImportPayslipsPayslipsImportPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Commit
+     */
+    commit?: boolean;
+};
+
+/**
  * Body_parse_investment_statement_investment_imports_parse_post
  */
 export type BodyParseInvestmentStatementInvestmentImportsParsePost = {
@@ -1641,6 +1659,90 @@ export type DecisionResult = {
      * Updated
      */
     updated: number;
+};
+
+/**
+ * DepositCandidate
+ */
+export type DepositCandidate = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Description
+     */
+    description: string;
+};
+
+/**
+ * DepositCandidatesResponse
+ */
+export type DepositCandidatesResponse = {
+    /**
+     * Candidates
+     */
+    candidates: Array<DepositCandidate>;
+};
+
+/**
+ * DepositLinkRequest
+ */
+export type DepositLinkRequest = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+};
+
+/**
+ * DepositOut
+ */
+export type DepositOut = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Eligible
+     */
+    eligible: boolean;
 };
 
 /**
@@ -3875,6 +3977,201 @@ export type ParseRow = {
      * Dedupehash
      */
     dedupeHash: string;
+};
+
+/**
+ * PayslipCreate
+ */
+export type PayslipCreate = {
+    /**
+     * Paymonth
+     */
+    payMonth: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Grossearnings
+     */
+    grossEarnings: string;
+    /**
+     * Totaldeductions
+     */
+    totalDeductions: string;
+    /**
+     * Netpay
+     */
+    netPay: string;
+    /**
+     * Lines
+     */
+    lines: Array<PayslipLineIn>;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * PayslipImportMonth
+ */
+export type PayslipImportMonth = {
+    /**
+     * Paymonth
+     */
+    payMonth: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Grossearnings
+     */
+    grossEarnings: string;
+    /**
+     * Totaldeductions
+     */
+    totalDeductions: string;
+    /**
+     * Netpay
+     */
+    netPay: string;
+    /**
+     * Lines
+     */
+    lines: Array<PayslipLineOut>;
+    /**
+     * Reason
+     */
+    reason: 'incomplete_month' | 'unreadable_line' | 'too_many_lines' | 'unknown_currency' | 'payments_total_disagrees' | 'deductions_total_disagrees' | 'net_pay_disagrees' | null;
+    /**
+     * Status
+     */
+    status: 'imported' | 'already_imported' | 'already_recorded' | 'not_reconciled' | null;
+    /**
+     * Payslipid
+     */
+    payslipId: string | null;
+};
+
+/**
+ * PayslipImportResponse
+ */
+export type PayslipImportResponse = {
+    /**
+     * Supported
+     */
+    supported: boolean;
+    /**
+     * Months
+     */
+    months: Array<PayslipImportMonth>;
+};
+
+/**
+ * PayslipLineIn
+ */
+export type PayslipLineIn = {
+    /**
+     * Kind
+     */
+    kind: 'earning' | 'deduction';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+};
+
+/**
+ * PayslipLineOut
+ */
+export type PayslipLineOut = {
+    /**
+     * Lineno
+     */
+    lineNo: number;
+    /**
+     * Kind
+     */
+    kind: 'earning' | 'deduction';
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+};
+
+/**
+ * PayslipRow
+ */
+export type PayslipRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Paymonth
+     */
+    payMonth: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Grossearnings
+     */
+    grossEarnings: string;
+    /**
+     * Totaldeductions
+     */
+    totalDeductions: string;
+    /**
+     * Netpay
+     */
+    netPay: string;
+    /**
+     * Lines
+     */
+    lines: Array<PayslipLineOut>;
+    /**
+     * Supersedespayslipid
+     */
+    supersedesPayslipId: string | null;
+    /**
+     * Supersededbypayslipid
+     */
+    supersededByPayslipId: string | null;
+    /**
+     * Imported
+     */
+    imported: boolean;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    deposit: DepositOut | null;
+};
+
+/**
+ * PayslipsResponse
+ */
+export type PayslipsResponse = {
+    /**
+     * Payslips
+     */
+    payslips: Array<PayslipRow>;
+    /**
+     * Total
+     */
+    total: number;
 };
 
 /**
@@ -8161,6 +8458,201 @@ export type PriceRefreshInvestmentPricesRefreshPostResponses = {
 };
 
 export type PriceRefreshInvestmentPricesRefreshPostResponse = PriceRefreshInvestmentPricesRefreshPostResponses[keyof PriceRefreshInvestmentPricesRefreshPostResponses];
+
+export type ListPayslipsPayslipsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/payslips';
+};
+
+export type ListPayslipsPayslipsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListPayslipsPayslipsGetError = ListPayslipsPayslipsGetErrors[keyof ListPayslipsPayslipsGetErrors];
+
+export type ListPayslipsPayslipsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipsResponse;
+};
+
+export type ListPayslipsPayslipsGetResponse = ListPayslipsPayslipsGetResponses[keyof ListPayslipsPayslipsGetResponses];
+
+export type CreatePayslipPayslipsPostData = {
+    body: PayslipCreate;
+    path?: never;
+    query?: never;
+    url: '/payslips';
+};
+
+export type CreatePayslipPayslipsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreatePayslipPayslipsPostError = CreatePayslipPayslipsPostErrors[keyof CreatePayslipPayslipsPostErrors];
+
+export type CreatePayslipPayslipsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type CreatePayslipPayslipsPostResponse = CreatePayslipPayslipsPostResponses[keyof CreatePayslipPayslipsPostResponses];
+
+export type CorrectPayslipPayslipsPayslipIdCorrectionsPostData = {
+    body: PayslipCreate;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/corrections';
+};
+
+export type CorrectPayslipPayslipsPayslipIdCorrectionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CorrectPayslipPayslipsPayslipIdCorrectionsPostError = CorrectPayslipPayslipsPayslipIdCorrectionsPostErrors[keyof CorrectPayslipPayslipsPayslipIdCorrectionsPostErrors];
+
+export type CorrectPayslipPayslipsPayslipIdCorrectionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type CorrectPayslipPayslipsPayslipIdCorrectionsPostResponse = CorrectPayslipPayslipsPayslipIdCorrectionsPostResponses[keyof CorrectPayslipPayslipsPayslipIdCorrectionsPostResponses];
+
+export type ImportPayslipsPayslipsImportPostData = {
+    body: BodyImportPayslipsPayslipsImportPost;
+    path?: never;
+    query?: never;
+    url: '/payslips/import';
+};
+
+export type ImportPayslipsPayslipsImportPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportPayslipsPayslipsImportPostError = ImportPayslipsPayslipsImportPostErrors[keyof ImportPayslipsPayslipsImportPostErrors];
+
+export type ImportPayslipsPayslipsImportPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipImportResponse;
+};
+
+export type ImportPayslipsPayslipsImportPostResponse = ImportPayslipsPayslipsImportPostResponses[keyof ImportPayslipsPayslipsImportPostResponses];
+
+export type DepositCandidatesPayslipsPayslipIdDepositCandidatesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/deposit-candidates';
+};
+
+export type DepositCandidatesPayslipsPayslipIdDepositCandidatesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DepositCandidatesPayslipsPayslipIdDepositCandidatesGetError = DepositCandidatesPayslipsPayslipIdDepositCandidatesGetErrors[keyof DepositCandidatesPayslipsPayslipIdDepositCandidatesGetErrors];
+
+export type DepositCandidatesPayslipsPayslipIdDepositCandidatesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DepositCandidatesResponse;
+};
+
+export type DepositCandidatesPayslipsPayslipIdDepositCandidatesGetResponse = DepositCandidatesPayslipsPayslipIdDepositCandidatesGetResponses[keyof DepositCandidatesPayslipsPayslipIdDepositCandidatesGetResponses];
+
+export type UnlinkDepositPayslipsPayslipIdDepositDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/deposit';
+};
+
+export type UnlinkDepositPayslipsPayslipIdDepositDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkDepositPayslipsPayslipIdDepositDeleteError = UnlinkDepositPayslipsPayslipIdDepositDeleteErrors[keyof UnlinkDepositPayslipsPayslipIdDepositDeleteErrors];
+
+export type UnlinkDepositPayslipsPayslipIdDepositDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type UnlinkDepositPayslipsPayslipIdDepositDeleteResponse = UnlinkDepositPayslipsPayslipIdDepositDeleteResponses[keyof UnlinkDepositPayslipsPayslipIdDepositDeleteResponses];
+
+export type LinkDepositPayslipsPayslipIdDepositPutData = {
+    body: DepositLinkRequest;
+    path: {
+        /**
+         * Payslip Id
+         */
+        payslip_id: string;
+    };
+    query?: never;
+    url: '/payslips/{payslip_id}/deposit';
+};
+
+export type LinkDepositPayslipsPayslipIdDepositPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkDepositPayslipsPayslipIdDepositPutError = LinkDepositPayslipsPayslipIdDepositPutErrors[keyof LinkDepositPayslipsPayslipIdDepositPutErrors];
+
+export type LinkDepositPayslipsPayslipIdDepositPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: PayslipRow;
+};
+
+export type LinkDepositPayslipsPayslipIdDepositPutResponse = LinkDepositPayslipsPayslipIdDepositPutResponses[keyof LinkDepositPayslipsPayslipIdDepositPutResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;

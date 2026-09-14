@@ -16,6 +16,7 @@ import { InvestmentImportScreen } from "@/app/investments/import/investment-impo
 import { PortfolioScreen } from "@/app/investments/portfolio-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
+import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import type {
@@ -33,7 +34,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -82,6 +83,7 @@ function sectionFromPath() {
   if (window.location.pathname.startsWith("/investments/")) return "investments-holding";
   if (window.location.pathname === "/import") return "import";
   if (window.location.pathname === "/review") return "classification-review";
+  if (window.location.pathname === "/salary") return "salary";
   return "overview";
 }
 
@@ -184,6 +186,11 @@ export function Workspace({
           if (!current) return;
           setInventory(nextInventory);
           setInstitutions(nextInstitutions);
+          setCurrencies(catalogue);
+        }
+        if (activeSection === "salary") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
           setCurrencies(catalogue);
         }
         setState("ready");
@@ -353,6 +360,7 @@ export function Workspace({
             >Investments</Link>
             <Link aria-current={activeSection === "investments-import" ? "page" : undefined} href="/investments/import">Import investments</Link>
             <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
+            <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
             <button aria-label="Plans unavailable — Available after ledger import" disabled type="button">
               <span>Plans</span><small>Available after ledger import</small>
             </button>
@@ -503,6 +511,21 @@ export function Workspace({
             <InvestmentImportScreen
               accounts={inventory.accounts}
               importId={importId}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "salary" && currencies && (
+            <PayslipsScreen
+              currencies={currencies}
               request={async (path, init) => {
                 try {
                   return await request(path, init);

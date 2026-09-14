@@ -1,0 +1,126 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { PayslipsScreen } from "@/app/salary/payslips-screen";
+import { ApiError, type apiFetch } from "@/lib/api/client";
+import type { CurrencyRow, PayslipImportResponse, PayslipRow, PayslipsResponse } from "@/types/api";
+
+type Request = typeof apiFetch;
+
+const currencies: Array<CurrencyRow> = [
+  { code: "XAA", name: "Synthetic Currency", symbol: "A", decimals: 2, numberFormat: "international" },
+];
+
+const payslip: PayslipRow = {
+  id: "00000000-0000-4000-8000-000000000001",
+  payMonth: "2026-01",
+  currency: "XAA",
+  grossEarnings: "5000.0000",
+  totalDeductions: "1000.0000",
+  netPay: "4000.0000",
+  lines: [
+    { lineNo: 1, kind: "earning", label: "Basic", amount: "5000.0000" },
+    { lineNo: 2, kind: "deduction", label: "Tax", amount: "1000.0000" },
+  ],
+  supersedesPayslipId: null,
+  supersededByPayslipId: null,
+  imported: false,
+  createdAt: "2026-01-05T00:00:00Z",
+  deposit: null,
+};
+
+function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
+  return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe("salary screen", () => {
+  it("lists a recorded payslip with its money formatted in its own currency", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen currencies={currencies} request={request} />);
+
+    await screen.findByText("2026-01");
+    expect(screen.getByText("A 4,000.00 net · A 5,000.00 gross")).toBeTruthy();
+    expect(screen.getByText("Not linked")).toBeTruthy();
+  });
+
+  it("posts typed strings with one idempotency key, reused on a retry", async () => {
+    let firstKey: string | undefined;
+    let calls = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips" && (!init || init.method === undefined)) {
+        return { payslips: [], total: 0 } satisfies PayslipsResponse;
+      }
+      if (path === "/payslips" && init?.method === "POST") {
+        calls += 1;
+        const body = JSON.parse(String(init.body)) as { idempotencyKey: string; grossEarnings: string };
+        if (calls === 1) {
+          firstKey = body.idempotencyKey;
+          throw new ApiError(500, "transient failure");
+        }
+        expect(body.idempotencyKey).toBe(firstKey);
+        expect(body.grossEarnings).toBe("5000.0000");
+        return payslip;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen currencies={currencies} request={request} />);
+    await screen.findByText("No payslips are recorded yet.");
+
+    fireEvent.change(screen.getByLabelText("Pay month"), { target: { value: "2026-01" } });
+    fireEvent.change(screen.getByLabelText("Gross earnings"), { target: { value: "5000.0000" } });
+    fireEvent.change(screen.getByLabelText("Total deductions"), { target: { value: "1000.0000" } });
+    fireEvent.change(screen.getByLabelText("Net pay"), { target: { value: "4000.0000" } });
+    fireEvent.change(screen.getByPlaceholderText("Label"), { target: { value: "Basic" } });
+    fireEvent.change(screen.getByPlaceholderText("Amount"), { target: { value: "5000.0000" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Record payslip" }));
+    await waitFor(() => expect(screen.getByText("transient failure")).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Record payslip" }));
+    await waitFor(() => expect(calls).toBe(2));
+  });
+
+  it("previews an import and only then offers to confirm it", async () => {
+    const preview: PayslipImportResponse = {
+      supported: true,
+      months: [
+        {
+          payMonth: "2026-01",
+          currency: "XAA",
+          grossEarnings: "5000.0000",
+          totalDeductions: "1000.0000",
+          netPay: "4000.0000",
+          lines: [],
+          reason: null,
+          status: null,
+          payslipId: null,
+        },
+      ],
+    };
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips") return { payslips: [], total: 0 } satisfies PayslipsResponse;
+      if (path === "/payslips/import" && init?.method === "POST") return preview;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen currencies={currencies} request={request} />);
+    await screen.findByText("No payslips are recorded yet.");
+
+    expect(screen.queryByText("Import reconciling months")).toBeNull();
+    const file = new File(["synthetic"], "payslip.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Payslip file"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Check file" }));
+
+    await screen.findByText("Reconciles");
+    expect(screen.getByRole("button", { name: "Import reconciling months" })).toBeTruthy();
+  });
+});

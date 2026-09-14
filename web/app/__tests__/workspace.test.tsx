@@ -575,6 +575,20 @@ describe("authenticated workspace", () => {
     expect(await screen.findByText("Nothing needs classification review.")).toBeTruthy();
   });
 
+  it("renders the salary screen with the currency catalogue and marks the nav current", async () => {
+    render(
+      <Workspace
+        section="salary"
+        request={requestThat(household, catalogue, { payslips: [], total: 0 })}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Salary" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Salary" })).toBeTruthy();
+    expect(await screen.findByText("No payslips are recorded yet.")).toBeTruthy();
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("clears Accounts when create returns %i", async (status, destination) => {
