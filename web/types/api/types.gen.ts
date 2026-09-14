@@ -587,6 +587,36 @@ export type AcquisitionPosition = {
      * Fxrates
      */
     fxRates: Array<PositionFxRate>;
+    /**
+     * Closed
+     */
+    closed: boolean;
+    /**
+     * Xirrpercent
+     */
+    xirrPercent?: string | null;
+    /**
+     * Xirrreason
+     */
+    xirrReason?: 'no_sign_change' | 'multiple_roots' | 'missing_terminal_value' | 'incomplete_history' | 'missing_price' | 'blocked_action' | 'not_converged' | null;
+};
+
+/**
+ * AllocationGroupRow
+ */
+export type AllocationGroupRow = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string;
+    /**
+     * Ratio
+     */
+    ratio: string | null;
 };
 
 /**
@@ -2005,6 +2035,166 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HoldingCashLink
+ */
+export type HoldingCashLink = {
+    /**
+     * Investmenteventid
+     */
+    investmentEventId: string;
+    /**
+     * Cashtransactionid
+     */
+    cashTransactionId: string;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * Allocatedamount
+     */
+    allocatedAmount: string;
+};
+
+/**
+ * HoldingDetail
+ */
+export type HoldingDetail = {
+    /**
+     * Holdingid
+     */
+    holdingId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Securityname
+     */
+    securityName: string;
+    /**
+     * Assetclass
+     */
+    assetClass: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Units
+     */
+    units: string;
+    /**
+     * Openedon
+     */
+    openedOn: string;
+    /**
+     * Closedon
+     */
+    closedOn: string | null;
+    /**
+     * Events
+     */
+    events: Array<HoldingEventRow>;
+    /**
+     * Eventstotal
+     */
+    eventsTotal: number;
+    /**
+     * Cashlinks
+     */
+    cashLinks: Array<HoldingCashLink>;
+    /**
+     * Prices
+     */
+    prices: Array<HoldingPriceRow>;
+    /**
+     * Openreviewreasons
+     */
+    openReviewReasons: Array<ReviewReason>;
+};
+
+/**
+ * HoldingEventRow
+ */
+export type HoldingEventRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Eventdate
+     */
+    eventDate: string;
+    /**
+     * Eventkind
+     */
+    eventKind: string;
+    /**
+     * Units
+     */
+    units: string | null;
+    /**
+     * Unitratio
+     */
+    unitRatio: string | null;
+    /**
+     * Price
+     */
+    price: string | null;
+    /**
+     * Grossamount
+     */
+    grossAmount: string | null;
+    /**
+     * Charges
+     */
+    charges: string | null;
+    /**
+     * Withheldtax
+     */
+    withheldTax: string | null;
+    /**
+     * Netamount
+     */
+    netAmount: string | null;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Correctseventid
+     */
+    correctsEventId: string | null;
+    /**
+     * Counterparteventid
+     */
+    counterpartEventId: string | null;
+    /**
+     * Correctionstate
+     */
+    correctionState: string;
+};
+
+/**
+ * HoldingPriceRow
+ */
+export type HoldingPriceRow = {
+    /**
+     * Pricedate
+     */
+    priceDate: string;
+    /**
+     * Price
+     */
+    price: string;
 };
 
 /**
@@ -3805,6 +3995,85 @@ export type PortfolioPositions = {
      * Positions
      */
     positions: Array<AcquisitionPosition>;
+};
+
+/**
+ * PortfolioSummary
+ */
+export type PortfolioSummary = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string;
+    /**
+     * Valuecomplete
+     */
+    valueComplete: boolean;
+    /**
+     * Contributionsbase
+     */
+    contributionsBase: string;
+    /**
+     * Contributionssecondary
+     */
+    contributionsSecondary: string;
+    /**
+     * Gainbase
+     */
+    gainBase: string | null;
+    /**
+     * Gainsecondary
+     */
+    gainSecondary: string | null;
+    /**
+     * Xirrpercent
+     */
+    xirrPercent: string | null;
+    /**
+     * Xirrreason
+     */
+    xirrReason: 'no_sign_change' | 'multiple_roots' | 'missing_terminal_value' | 'incomplete_history' | 'missing_price' | 'blocked_action' | 'not_converged' | null;
+    /**
+     * Allocationbyassetclass
+     */
+    allocationByAssetClass: Array<AllocationGroupRow>;
+    /**
+     * Allocationbyaccount
+     */
+    allocationByAccount: Array<AllocationGroupRow>;
+    /**
+     * Allocationcomplete
+     */
+    allocationComplete: boolean;
+    /**
+     * Valuedcount
+     */
+    valuedCount: number;
+    /**
+     * Unvaluedcount
+     */
+    unvaluedCount: number;
+    /**
+     * Stalecount
+     */
+    staleCount: number;
+    priceStatus: PriceStatus;
 };
 
 /**
@@ -7897,6 +8166,10 @@ export type PortfolioPositionsPortfolioPositionsGetData = {
          * Asof
          */
         asOf?: string | null;
+        /**
+         * Includeclosed
+         */
+        includeClosed?: boolean;
     };
     url: '/portfolio/positions';
 };
@@ -7918,6 +8191,66 @@ export type PortfolioPositionsPortfolioPositionsGetResponses = {
 };
 
 export type PortfolioPositionsPortfolioPositionsGetResponse = PortfolioPositionsPortfolioPositionsGetResponses[keyof PortfolioPositionsPortfolioPositionsGetResponses];
+
+export type PortfolioSummaryPortfolioSummaryGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/portfolio/summary';
+};
+
+export type PortfolioSummaryPortfolioSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PortfolioSummaryPortfolioSummaryGetError = PortfolioSummaryPortfolioSummaryGetErrors[keyof PortfolioSummaryPortfolioSummaryGetErrors];
+
+export type PortfolioSummaryPortfolioSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PortfolioSummary;
+};
+
+export type PortfolioSummaryPortfolioSummaryGetResponse = PortfolioSummaryPortfolioSummaryGetResponses[keyof PortfolioSummaryPortfolioSummaryGetResponses];
+
+export type HoldingDetailPortfolioHoldingsHoldingIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Holdingid
+         */
+        holdingId: string;
+    };
+    query?: never;
+    url: '/portfolio/holdings/{holdingId}';
+};
+
+export type HoldingDetailPortfolioHoldingsHoldingIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HoldingDetailPortfolioHoldingsHoldingIdGetError = HoldingDetailPortfolioHoldingsHoldingIdGetErrors[keyof HoldingDetailPortfolioHoldingsHoldingIdGetErrors];
+
+export type HoldingDetailPortfolioHoldingsHoldingIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: HoldingDetail;
+};
+
+export type HoldingDetailPortfolioHoldingsHoldingIdGetResponse = HoldingDetailPortfolioHoldingsHoldingIdGetResponses[keyof HoldingDetailPortfolioHoldingsHoldingIdGetResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;

@@ -56,8 +56,11 @@ def _price(fixture: EventFixture, on: date, value: str) -> None:
     assert response.status_code == 201, response.text
 
 
-def _positions(as_of: date = AS_OF) -> dict[str, Any]:
-    response = _client().get("/portfolio/positions", params={"asOf": str(as_of)})
+def _positions(as_of: date = AS_OF, *, include_closed: bool = False) -> dict[str, Any]:
+    response = _client().get(
+        "/portfolio/positions",
+        params={"asOf": str(as_of), "includeClosed": include_closed},
+    )
     assert response.status_code == 200, response.text
     result: dict[str, Any] = response.json()
     return result
@@ -82,6 +85,14 @@ def test_acquisition_position_separates_frozen_contribution_from_current_value(
     assert payload["baseCurrency"] == position_live.currency
     assert payload["secondaryCurrency"] == position_live.secondary_currency
     [row] = payload["positions"]
+    closed, xirr_percent, xirr_reason = (
+        row.pop("closed"),
+        row.pop("xirrPercent"),
+        row.pop("xirrReason"),
+    )
+    assert closed is False
+    assert xirr_reason is None
+    assert isinstance(xirr_percent, str)
     assert row == {
         "holdingId": acquired["holdingId"],
         "accountId": str(position_live.account_id),
@@ -385,6 +396,22 @@ def test_fully_disposed_holding_is_absent_from_current_value(
 
     assert _positions()["positions"] == []
     assert len(_positions(date(2026, 2, 1))["positions"]) == 1
+
+
+def test_closed_holding_only_appears_with_include_closed_and_never_values(
+    position_live: EventFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cash_lifecycle, "connect", connect_to_test_database)
+    _acquire(position_live)
+    _price(position_live, date(2026, 2, 1), "6.000000")
+    _dispose(position_live, date(2026, 2, 2), "4.00000000", "24.0000")
+
+    assert _positions()["positions"] == []
+    [row] = _positions(include_closed=True)["positions"]
+    assert row["closed"] is True
+    assert row["units"] == "0.00000000"
+    assert row["currentValueNative"] == "0.0000"
+    assert row["currentValueBase"] == "0.0000"
 
 
 def test_cash_only_event_withholds_contribution_gain(

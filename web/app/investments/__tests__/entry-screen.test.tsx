@@ -104,6 +104,7 @@ const position: AcquisitionPosition = {
     { reportingCurrency: "XAA", rate: "1", rateDate: "2026-02-06", carried: false },
     { reportingCurrency: "XBB", rate: "2.0000000000", rateDate: "2026-02-06", carried: false },
   ],
+  closed: false,
 };
 
 const event: InvestmentEventRow = {
@@ -627,7 +628,7 @@ describe("investment entry", () => {
         throw new Error(`Unexpected synthetic route ${path}`);
       });
 
-      render(<Workspace section="investments" request={request} navigate={navigate} />);
+      render(<Workspace section="investments-entry" request={request} navigate={navigate} />);
 
       await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
       expect(screen.queryByRole("heading", { name: "Investments" })).toBeNull();

@@ -13,10 +13,16 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 
+from oneledger.main import app
+from oneledger.routes import doctor, investment_catalogue
 from oneledger.routes.doctor import transactions_since
 
+from .live_database import connect_to_test_database
 from .test_ingest_route_live import Fixture, _clean, _connect
+from .test_investment_events_live import EventFixture
+from .test_portfolio_live import _acquire
 
 STAMP = datetime(2026, 9, 7, 11, 47, tzinfo=UTC)
 
@@ -56,3 +62,29 @@ def test_the_count_is_the_households_rows_created_after_the_stamp(live: Fixture)
     assert transactions_since(live.household_id, STAMP) == 2
     assert transactions_since(live.household_id, None) == 3
     assert transactions_since(uuid4(), None) == 0
+
+
+pytest_plugins = ("tests.test_investment_events_live",)
+
+
+@pytest.fixture
+def investment_doctor_live(
+    live_events: EventFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[EventFixture]:
+    monkeypatch.setenv("DOCUMENTS_DIR", str(tmp_path))
+    monkeypatch.setenv("BACKUP_DIR", str(tmp_path))
+    monkeypatch.setattr(doctor, "connect", connect_to_test_database)
+    monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
+    yield live_events
+
+
+def test_doctor_reports_an_unvalued_holding(investment_doctor_live: EventFixture) -> None:
+    """A purchase with no dated price yet must surface in Settings › Data Quality."""
+    _acquire(investment_doctor_live)
+
+    response = TestClient(app).get("/doctor")
+
+    assert response.status_code == 200
+    sections = {section["title"]: section for section in response.json()["sections"]}
+    messages = [finding["message"] for finding in sections["Investments"]["findings"]]
+    assert any("no dated price and cannot be valued" in message for message in messages)

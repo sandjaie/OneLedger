@@ -104,6 +104,25 @@ def test_identity_backfill_finding_reports_legacy_and_current_states() -> None:
     }
 
 
+def test_investment_findings_report_each_issue_and_ok_when_clean() -> None:
+    messages = [f.message for f in doctor.investment_findings_from_counts((2, 1, 3, 1, 0))]
+    assert "2 investment import reviews block committing." in messages
+    assert "1 open holding has no dated price and cannot be valued." in messages
+    assert "3 open holdings have a price older than seven days." in messages
+    assert "1 investment purchase has no linked cash funding." in messages
+    assert not any("realised gain" in message for message in messages)
+    assert doctor.investment_findings_from_counts((1, 0, 0, 0, 1)) == [
+        doctor.Finding(level="warning", message="1 investment import review blocks committing."),
+        doctor.Finding(
+            level="warning",
+            message="1 disposal is awaiting lot evidence before realised gain is available.",
+        ),
+    ]
+    assert doctor.investment_findings_from_counts((0, 0, 0, 0, 0)) == [
+        doctor.Finding(level="ok", message="No investment data-quality issues found.")
+    ]
+
+
 def test_doctor_is_refused_without_an_owner_session() -> None:
     assert TestClient(app).get("/doctor").status_code == 401
 
@@ -120,6 +139,7 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
     connection = Connection(12)
     monkeypatch.setattr(doctor, "connect", lambda: connection)
     monkeypatch.setattr(doctor, "identity_backfills_remaining", lambda _: 0)
+    monkeypatch.setattr(doctor, "investment_findings", lambda _: [])
     app.dependency_overrides[auth.require_owner] = owner
     try:
         response = TestClient(app).get("/doctor")
@@ -127,7 +147,7 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    section, identity = response.json()["sections"]
+    section, identity, investments = response.json()["sections"]
     assert section["title"] == "Backups"
     [finding] = section["findings"]
     assert "12 transactions" in finding["message"]
@@ -138,3 +158,4 @@ def test_doctor_counts_the_owners_transactions_since_this_stacks_newest_backup(
             {"level": "ok", "message": "Every account identity is on the current local model."}
         ],
     }
+    assert investments == {"title": "Investments", "findings": []}

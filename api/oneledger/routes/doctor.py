@@ -128,6 +128,115 @@ def identity_backfill_finding(remaining: int) -> Finding:
     return Finding(level="ok", message="Every account identity is on the current local model.")
 
 
+_INVESTMENT_COUNTS_SQL = """
+    SELECT
+        (SELECT count(*) FROM investment_review_item
+          WHERE household_id = %(household)s AND status = 'open' AND is_blocking),
+        (SELECT count(*) FROM holding h
+           JOIN account a ON a.household_id = h.household_id AND a.id = h.account_id
+          WHERE h.household_id = %(household)s AND h.current_units > 0 AND a.is_active
+            AND NOT EXISTS (
+                SELECT FROM price_snapshot p WHERE p.security_id = h.security_id
+                  AND p.is_accepted AND p.price_date <= CURRENT_DATE)),
+        (SELECT count(*) FROM holding h
+           JOIN account a ON a.household_id = h.household_id AND a.id = h.account_id
+          WHERE h.household_id = %(household)s AND h.current_units > 0 AND a.is_active
+            AND (SELECT max(p.price_date) FROM price_snapshot p
+                  WHERE p.security_id = h.security_id AND p.is_accepted
+                    AND p.price_date <= CURRENT_DATE) < CURRENT_DATE - 7),
+        (SELECT count(*) FROM investment_transaction t
+          WHERE t.household_id = %(household)s
+            AND t.event_kind IN ('purchase', 'recurring_purchase', 'rights')
+            AND NOT EXISTS (
+                SELECT FROM investment_transaction c WHERE c.corrects_transaction_id = t.id)
+            AND NOT EXISTS (
+                SELECT FROM investment_cash_allocation ica
+                 WHERE ica.investment_transaction_id = t.id AND ica.role = 'funding')),
+        (SELECT count(*) FROM investment_review_item
+          WHERE household_id = %(household)s AND status = 'open'
+            AND reason = 'incomplete_lot_allocation')
+"""
+
+
+def investment_counts(owner: OwnerSession) -> tuple[int, int, int, int, int]:
+    """(blocking reviews, unvalued holdings, stale prices, unfunded purchases, withheld gains).
+
+    ponytail: "unfunded" only means no funding allocation exists at all, not that the purchase
+    is short of its full amount — a partial-funding tally would need funding.py's remaining-
+    amount math, which this report does not otherwise need.
+    """
+    with connect() as conn, conn.cursor() as cur:
+        scope_to_owner(conn, owner.user_id)
+        cur.execute(_INVESTMENT_COUNTS_SQL, {"household": owner.household_id})
+        row = cur.fetchone()
+    assert row is not None
+    return tuple(row)
+
+
+def _plural(count: int, noun: str, plural_noun: str, verb: str, plural_verb: str) -> str:
+    return f"{count:,} {noun if count == 1 else plural_noun} {verb if count == 1 else plural_verb}"
+
+
+def investment_findings_from_counts(counts: tuple[int, int, int, int, int]) -> list[Finding]:
+    blocking, unvalued, stale, unfunded, withheld_gain = counts
+    findings = []
+    if blocking:
+        findings.append(
+            Finding(
+                level="warning",
+                message=_plural(
+                    blocking,
+                    "investment import review",
+                    "investment import reviews",
+                    "blocks",
+                    "block",
+                )
+                + " committing.",
+            )
+        )
+    if unvalued:
+        findings.append(
+            Finding(
+                level="warning",
+                message=_plural(unvalued, "open holding", "open holdings", "has", "have")
+                + " no dated price and cannot be valued.",
+            )
+        )
+    if stale:
+        findings.append(
+            Finding(
+                level="warning",
+                message=_plural(stale, "open holding", "open holdings", "has", "have")
+                + " a price older than seven days.",
+            )
+        )
+    if unfunded:
+        findings.append(
+            Finding(
+                level="warning",
+                message=_plural(
+                    unfunded, "investment purchase", "investment purchases", "has", "have"
+                )
+                + " no linked cash funding.",
+            )
+        )
+    if withheld_gain:
+        findings.append(
+            Finding(
+                level="warning",
+                message=_plural(withheld_gain, "disposal", "disposals", "is", "are")
+                + " awaiting lot evidence before realised gain is available.",
+            )
+        )
+    if not findings:
+        findings.append(Finding(level="ok", message="No investment data-quality issues found."))
+    return findings
+
+
+def investment_findings(owner: OwnerSession) -> list[Finding]:
+    return investment_findings_from_counts(investment_counts(owner))
+
+
 @router.get("/doctor")
 def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorReport:
     newest = newest_backup(backup_dir(), os.environ.get("BACKUP_PREFIX") or "oneledger")
@@ -141,5 +250,6 @@ def report(owner: Annotated[OwnerSession, Depends(require_owner)]) -> DoctorRepo
                 title="Account identities",
                 findings=[identity_backfill_finding(identity_backfills_remaining(owner))],
             ),
+            DoctorSection(title="Investments", findings=investment_findings(owner)),
         ]
     )

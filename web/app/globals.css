@@ -1773,3 +1773,25 @@ body { background: #eef2f0; }
 .investment-import-rows { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
 .investment-import-reasons { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
 .investment-create-security { display: grid; gap: 12px; }
+
+.workspace-content.portfolio-screen,
+.workspace-content.holding-screen { display: grid; width: 100%; max-width: 1180px; gap: 22px; }
+.portfolio-links { display: flex; gap: 14px; align-items: center; }
+.portfolio-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.portfolio-metric { display: grid; gap: 6px; padding: 16px; border: 1px solid var(--rule); background: var(--surface); }
+.portfolio-metric strong { font-size: 1.3rem; font-weight: 500; }
+.portfolio-metric small { color: var(--muted); font-size: 0.66rem; }
+.portfolio-price-status,
+.portfolio-allocation { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--rule); }
+.portfolio-price-status { grid-template-columns: 1fr auto; align-items: start; }
+.portfolio-price-status p { margin: 4px 0 0; color: var(--muted); font-size: 0.78rem; }
+.portfolio-allocation-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+.portfolio-allocation-groups h3 { margin: 0 0 6px; font-size: 0.78rem; }
+.portfolio-allocation-groups dl,
+.holding-screen dl { display: grid; gap: 6px; margin: 0; }
+.portfolio-allocation-groups dl div,
+.holding-screen dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.78rem; }
+.portfolio-allocation-groups dt,
+.holding-screen dt { color: var(--muted); }
+.holding-screen dl.portfolio-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.holding-screen dl.portfolio-metrics div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule); }

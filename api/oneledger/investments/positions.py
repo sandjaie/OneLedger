@@ -77,6 +77,20 @@ class AcquisitionPosition(BaseModel):
     gainSecondary: str | None
     missingFx: list[str]
     fxRates: list[PositionFxRate]
+    closed: bool
+    xirrPercent: str | None = None
+    xirrReason: (
+        Literal[
+            "no_sign_change",
+            "multiple_roots",
+            "missing_terminal_value",
+            "incomplete_history",
+            "missing_price",
+            "blocked_action",
+            "not_converged",
+        ]
+        | None
+    ) = None
 
 
 class PortfolioPositions(BaseModel):
@@ -224,7 +238,7 @@ _POSITIONS = """
            ORDER BY snapshot.price_date DESC, snapshot.observed_at DESC, snapshot.id DESC
            LIMIT 1
       ) accepted ON true
-     WHERE totals.units > 0 AND a.is_active
+     WHERE (totals.units > 0 OR (%(include_closed)s AND totals.units = 0)) AND a.is_active
        AND (NOT %(included_only)s OR a.include_in_net_worth)
      ORDER BY security.name, h.id
 """
@@ -238,15 +252,24 @@ def read_positions(
     as_of: date,
     *,
     included_only: bool = False,
+    include_closed: bool = False,
 ) -> list[AcquisitionPosition]:
     """Value active unit leaves at accepted dated prices.
 
     Gain stays available across a purchase, rights, bonus or split history and is withheld by
     any switch, systematic transfer or platform transfer leg, or by any disposal or income event.
+    A fully disposed holding (zero units as of the requested date) is included only when
+    `include_closed` is set; its current value is exactly zero rather than omitted, since it
+    genuinely holds nothing — never a synthetic "unavailable" state.
     """
     cur.execute(
         _POSITIONS,
-        {"household": household_id, "as_of": as_of, "included_only": included_only},
+        {
+            "household": household_id,
+            "as_of": as_of,
+            "included_only": included_only,
+            "include_closed": include_closed,
+        },
     )
     positions: list[AcquisitionPosition] = []
     rate_cache: dict[str, CurrentRatePair] = {}
@@ -296,7 +319,10 @@ def read_positions(
                 assetClass=row[4],
                 currency=currency,
                 asOf=as_of,
-                units=str(row[6]),
+                # `str()` on an exact-zero NUMERIC(28,8) value prints as "0E-8" (Decimal's own
+                # to-string rule switches to scientific notation once the adjusted exponent is
+                # below -6); a closed holding is the one case that can be exactly zero here.
+                units=format(Decimal(row[6]), "f"),
                 cumulativeContributionsNative=str(row[7]),
                 cumulativeContributionsBase=str(row[8]),
                 cumulativeContributionsSecondary=str(row[9]),
@@ -311,6 +337,7 @@ def read_positions(
                 gainBase=_out(calculation.gain_base),
                 gainSecondary=_out(calculation.gain_secondary),
                 missingFx=missing_fx,
+                closed=Decimal(row[6]) == 0,
                 fxRates=[
                     PositionFxRate(
                         reportingCurrency=reporting,
