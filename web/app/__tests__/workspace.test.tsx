@@ -55,6 +55,11 @@ type Request = typeof apiFetch;
  */
 function outOfBand(path: string): Promise<unknown> | undefined {
   if (path === "/rules") return Promise.resolve([]);
+  // Malformed on purpose: the analytics/suggestions panels render nothing until they see the
+  // shape they expect (`.coverage`, `.suggestions`), so an empty object here is "no data yet",
+  // exactly like every other section this sequence does not care about.
+  if (path === "/rules/analytics") return Promise.resolve({});
+  if (path === "/rules/suggestions") return Promise.resolve({});
   if (path === "/doctor") return Promise.resolve({ sections: [] });
   return undefined;
 }
