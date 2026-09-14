@@ -350,6 +350,58 @@ export type AccountsResponse = {
 };
 
 /**
+ * AcknowledgementIn
+ */
+export type AcknowledgementIn = {
+    /**
+     * Subject
+     */
+    subject: 'account' | 'payslips';
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Reason
+     */
+    reason: 'not_issued' | 'unobtainable' | 'unsupported_format' | 'account_not_in_use';
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * AcknowledgementRow
+ */
+export type AcknowledgementRow = {
+    /**
+     * Subject
+     */
+    subject: 'account' | 'payslips';
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Reason
+     */
+    reason: 'not_issued' | 'unobtainable' | 'unsupported_format' | 'account_not_in_use';
+    /**
+     * Note
+     */
+    note: string | null;
+};
+
+/**
  * AcquisitionCorrectionCreate
  */
 export type AcquisitionCorrectionCreate = {
@@ -1742,6 +1794,89 @@ export type ConfirmedLotAllocation = {
      * Allocatedunits
      */
     allocatedUnits: string;
+};
+
+/**
+ * CoverageCounts
+ */
+export type CoverageCounts = {
+    /**
+     * Reconciled
+     */
+    reconciled?: number;
+    /**
+     * Acknowledged
+     */
+    acknowledged?: number;
+    /**
+     * Partial
+     */
+    partial?: number;
+    /**
+     * Inprogress
+     */
+    inProgress?: number;
+    /**
+     * Missing
+     */
+    missing?: number;
+    /**
+     * Outsideaccountlife
+     */
+    outsideAccountLife?: number;
+};
+
+/**
+ * CoverageResponse
+ */
+export type CoverageResponse = {
+    /**
+     * Historyanchor
+     */
+    historyAnchor: string;
+    /**
+     * Months
+     */
+    months: Array<string>;
+    /**
+     * Rows
+     */
+    rows: Array<CoverageRow>;
+};
+
+/**
+ * CoverageRow
+ */
+export type CoverageRow = {
+    /**
+     * Subject
+     */
+    subject: 'account' | 'payslips';
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * Lifestart
+     */
+    lifeStart: string | null;
+    /**
+     * Openingbalancedate
+     */
+    openingBalanceDate: string | null;
+    /**
+     * Anchorafterhistory
+     */
+    anchorAfterHistory: boolean | null;
+    /**
+     * Months
+     */
+    months: Array<MonthCell>;
+    counts: CoverageCounts;
 };
 
 /**
@@ -4030,6 +4165,24 @@ export type MissingRate = {
      * Asof
      */
     asOf: string;
+};
+
+/**
+ * MonthCell
+ */
+export type MonthCell = {
+    /**
+     * Status
+     */
+    status: 'outside_account_life' | 'reconciled' | 'acknowledged' | 'partial' | 'in_progress' | 'missing';
+    /**
+     * Reason
+     */
+    reason?: 'not_issued' | 'unobtainable' | 'unsupported_format' | 'account_not_in_use' | null;
+    /**
+     * Note
+     */
+    note?: string | null;
 };
 
 /**
@@ -8246,6 +8399,99 @@ export type BackfillCardCyclesCardStatementsBackfillPostResponses = {
 };
 
 export type BackfillCardCyclesCardStatementsBackfillPostResponse = BackfillCardCyclesCardStatementsBackfillPostResponses[keyof BackfillCardCyclesCardStatementsBackfillPostResponses];
+
+export type ReadCoverageCoverageGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/coverage';
+};
+
+export type ReadCoverageCoverageGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadCoverageCoverageGetError = ReadCoverageCoverageGetErrors[keyof ReadCoverageCoverageGetErrors];
+
+export type ReadCoverageCoverageGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: CoverageResponse;
+};
+
+export type ReadCoverageCoverageGetResponse = ReadCoverageCoverageGetResponses[keyof ReadCoverageCoverageGetResponses];
+
+export type DeleteAcknowledgementCoverageAcknowledgementsDeleteData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Subject
+         */
+        subject: 'account' | 'payslips';
+        /**
+         * Month
+         */
+        month: string;
+        /**
+         * Accountid
+         */
+        accountId?: string | null;
+    };
+    url: '/coverage/acknowledgements';
+};
+
+export type DeleteAcknowledgementCoverageAcknowledgementsDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteAcknowledgementCoverageAcknowledgementsDeleteError = DeleteAcknowledgementCoverageAcknowledgementsDeleteErrors[keyof DeleteAcknowledgementCoverageAcknowledgementsDeleteErrors];
+
+export type DeleteAcknowledgementCoverageAcknowledgementsDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteAcknowledgementCoverageAcknowledgementsDeleteResponse = DeleteAcknowledgementCoverageAcknowledgementsDeleteResponses[keyof DeleteAcknowledgementCoverageAcknowledgementsDeleteResponses];
+
+export type UpsertAcknowledgementCoverageAcknowledgementsPutData = {
+    body: AcknowledgementIn;
+    path?: never;
+    query?: never;
+    url: '/coverage/acknowledgements';
+};
+
+export type UpsertAcknowledgementCoverageAcknowledgementsPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpsertAcknowledgementCoverageAcknowledgementsPutError = UpsertAcknowledgementCoverageAcknowledgementsPutErrors[keyof UpsertAcknowledgementCoverageAcknowledgementsPutErrors];
+
+export type UpsertAcknowledgementCoverageAcknowledgementsPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: AcknowledgementRow;
+};
+
+export type UpsertAcknowledgementCoverageAcknowledgementsPutResponse = UpsertAcknowledgementCoverageAcknowledgementsPutResponses[keyof UpsertAcknowledgementCoverageAcknowledgementsPutResponses];
 
 export type ReparseDescriptionsImportBatchIdReparseDescriptionsPostData = {
     body: DescriptionReparseRequest;

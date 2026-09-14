@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
+import { CoverageScreen } from "@/app/coverage/coverage-screen";
 import { DocumentsScreen } from "@/app/documents/documents-screen";
 import { OverviewScreen } from "@/app/overview/overview-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
@@ -37,7 +38,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -89,6 +90,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/review") return "classification-review";
   if (window.location.pathname === "/salary") return "salary";
   if (window.location.pathname === "/plans") return "plans";
+  if (window.location.pathname === "/coverage") return "coverage";
   return "overview";
 }
 
@@ -401,6 +403,7 @@ export function Workspace({
             <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
             <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
             <Link aria-current={activeSection === "plans" ? "page" : undefined} href="/plans">Plans</Link>
+            <Link aria-current={activeSection === "coverage" ? "page" : undefined} href="/coverage">Coverage</Link>
             <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
           </nav>
 
@@ -598,6 +601,20 @@ export function Workspace({
             <PlansScreen
               accounts={inventory.accounts}
               currencies={currencies}
+              request={async (path, init) => {
+                try {
+                  return await request(path, init);
+                } catch (error) {
+                  const next = authDestination(error);
+                  if (next) leaveForAuth(next);
+                  throw error;
+                }
+              }}
+            />
+          )}
+
+          {activeSection === "coverage" && (
+            <CoverageScreen
               request={async (path, init) => {
                 try {
                   return await request(path, init);
