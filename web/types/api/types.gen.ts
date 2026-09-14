@@ -3863,6 +3863,28 @@ export type PreviewItem = {
 };
 
 /**
+ * PriceStatus
+ */
+export type PriceStatus = {
+    /**
+     * Lastsuccessfulcheck
+     */
+    lastSuccessfulCheck: string | null;
+    /**
+     * Mappedcount
+     */
+    mappedCount: number;
+    /**
+     * Unmappedcount
+     */
+    unmappedCount: number;
+    /**
+     * Latestpricedate
+     */
+    latestPriceDate: string | null;
+};
+
+/**
  * Proposal
  */
 export type Proposal = {
@@ -4001,6 +4023,17 @@ export type Reconciliation = {
      * Message
      */
     message: string;
+};
+
+/**
+ * RefreshOutcome
+ */
+export type RefreshOutcome = {
+    /**
+     * Outcome
+     */
+    outcome: string;
+    status: PriceStatus;
 };
 
 /**
@@ -7805,6 +7838,56 @@ export type GetInvestmentImportInvestmentImportsImportIdGetResponses = {
 };
 
 export type GetInvestmentImportInvestmentImportsImportIdGetResponse = GetInvestmentImportInvestmentImportsImportIdGetResponses[keyof GetInvestmentImportInvestmentImportsImportIdGetResponses];
+
+export type PriceStatusInvestmentPricesStatusGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/investment-prices/status';
+};
+
+export type PriceStatusInvestmentPricesStatusGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PriceStatusInvestmentPricesStatusGetError = PriceStatusInvestmentPricesStatusGetErrors[keyof PriceStatusInvestmentPricesStatusGetErrors];
+
+export type PriceStatusInvestmentPricesStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PriceStatus;
+};
+
+export type PriceStatusInvestmentPricesStatusGetResponse = PriceStatusInvestmentPricesStatusGetResponses[keyof PriceStatusInvestmentPricesStatusGetResponses];
+
+export type PriceRefreshInvestmentPricesRefreshPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/investment-prices/refresh';
+};
+
+export type PriceRefreshInvestmentPricesRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PriceRefreshInvestmentPricesRefreshPostError = PriceRefreshInvestmentPricesRefreshPostErrors[keyof PriceRefreshInvestmentPricesRefreshPostErrors];
+
+export type PriceRefreshInvestmentPricesRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RefreshOutcome;
+};
+
+export type PriceRefreshInvestmentPricesRefreshPostResponse = PriceRefreshInvestmentPricesRefreshPostResponses[keyof PriceRefreshInvestmentPricesRefreshPostResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;
