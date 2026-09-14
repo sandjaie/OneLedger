@@ -322,6 +322,13 @@ def _response(
     )
 
 
+# A bare multi-type `except (ValidationError, ValueError):` round-trips through this pinned
+# ruff's formatter as `except ValidationError, ValueError:` — Python 2 syntax that fails to
+# import at all (`_ERRORS` has no `as` binding, which is what actually triggers ruff's bug; a
+# tuple named ahead of the clause sidesteps it without disabling the hook).
+_RESOLUTIONS_ERRORS = (ValidationError, ValueError)
+
+
 def _resolutions(value: str) -> tuple[TargetResolution, ...]:
     try:
         supplied = TypeAdapter(list[ResolutionInput]).validate_json(value)
@@ -331,7 +338,7 @@ def _resolutions(value: str) -> tuple[TargetResolution, ...]:
             TargetResolution(item.sourceGroupNumber, item.accountId, item.securityId)
             for item in supplied
         )
-    except ValidationError, ValueError:
+    except _RESOLUTIONS_ERRORS:
         raise HTTPException(
             status_code=422, detail="investment target resolutions are invalid"
         ) from None

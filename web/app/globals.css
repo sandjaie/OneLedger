@@ -1756,3 +1756,20 @@ body { background: #eef2f0; }
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Investment statement import — review groups from `investment-import-screen.tsx`, styled with
+   the same paper/ink components the entry docket and review screen already use. */
+.investment-import-group {
+  display: grid; gap: 14px; margin-top: 22px; padding: 18px 20px;
+  border: 1px solid var(--rule); border-radius: 9px; background: var(--surface);
+}
+.investment-import-group h3 { margin: 0; font-family: var(--serif); font-size: 1.05rem; font-weight: 400; }
+.investment-import-target {
+  display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid var(--rule);
+}
+.investment-import-target dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin: 0; }
+.investment-import-target dt { color: var(--muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.investment-import-target dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: 0.78rem; }
+.investment-import-rows { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 0.68rem; color: var(--muted); }
+.investment-import-reasons { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+.investment-create-security { display: grid; gap: 12px; }
