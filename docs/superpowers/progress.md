@@ -12,11 +12,11 @@ Updated: 14 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 1.8 — layout mapper and documents** | [master plan](../product/master-implementation-plan.html#phase-1-delivery) |
-| Outcome state | **Implementation complete; owner acceptance open** — Phases 1.6, 1.7 and 1.8 owner acceptance remain open | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
+| Current outcome | **Phase 2.1 — complete historical coverage** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| Outcome state | **Implementation active** — planned at personal scale on 14 Sep 2026; Phases 1.6–1.8 owner acceptance remain open | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
 | Completed documentation action | PR #164 merged at `e501536` and established this tracker structure | [documentation design](specs/2026-09-12-project-documentation-architecture-design.md) |
-| Next product action | Owner acceptance for Phases 1.6–1.8 | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md#acceptance) |
-| Current implementation task | Both Phase 1.8 tasks delivered — Task 1 on `feature/p1-8a-layout-mapper`, Task 2 on `feature/p1-8b-document-library` | [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md#task-2--document-library-and-row-provenance) |
+| Next product action | Deliver Task 1 — history coverage grid and acknowledged gaps | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md#task-1--history-coverage-grid-and-acknowledged-gaps) |
+| Current implementation task | Phase 1 implementation is complete through PR #206; Phase 2.1 Task 1 is next | [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
 
 ## Canonical phase status
 
@@ -35,7 +35,7 @@ Updated: 14 September 2026.
 | 1.6 — investments | **Implementation complete; owner acceptance open** | [Phase 1.6 plan](plans/2026-09-12-phase-1-6-investments.md) |
 | 1.7 — salary and a thin forecast | **Implementation complete; owner acceptance open** | [Phase 1.7 specification](specs/2026-09-14-phase-1-7-salary-forecast.md) · [Phase 1.7 plan](plans/2026-09-14-phase-1-7-salary-forecast.md) |
 | 1.8 — layout mapper and documents | **Implementation complete; owner acceptance open** | [Phase 1.8 specification](specs/2026-09-14-phase-1-8-layout-mapper-documents.md) · [Phase 1.8 plan](plans/2026-09-14-phase-1-8-layout-mapper-documents.md) |
-| 2.1 — complete historical coverage | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
+| 2.1 — complete historical coverage | **In progress** | [Phase 2.1 specification](specs/2026-09-14-phase-2-1-history-coverage.md) · [Phase 2.1 plan](plans/2026-09-14-phase-2-1-history-coverage.md) |
 | 2.2 — wealth history and attribution | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | 2.3 — classification learning and review depth | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | 2.4 — data quality and recovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
