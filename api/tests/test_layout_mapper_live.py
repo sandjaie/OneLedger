@@ -14,6 +14,7 @@ Skipped when no database is reachable. Every figure is invented.
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from fastapi.testclient import TestClient
 
@@ -24,6 +25,21 @@ from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import ORIGIN, Fixture, live  # noqa: F401 - fixture import
 
 ACCOUNT_NUMBER = "5559998881"
+STATEMENT_DATES = (date(2026, 3, 13), date(2026, 3, 14))
+
+
+def _seed_manual_fx(live: Fixture) -> None:  # noqa: F811
+    """This statement's own dates, the same way `Fixture.__init__` seeds its own (route-live
+    test's 1st/2nd of March): every committed row freezes a base/secondary rate, matched or not,
+    and this file's dates are its own so it must supply them."""
+    with live.conn.cursor() as cur:
+        for on in STATEMENT_DATES:
+            cur.execute(
+                """INSERT INTO fx_rate (rate_date, base_currency, quote_currency, rate, source)
+                   VALUES (%s, %s, %s, 4.0000000000, 'manual') ON CONFLICT DO NOTHING""",
+                (on, live.secondary, live.base),
+            )
+    live.conn.commit()
 
 
 def _unmapped_statement(
@@ -53,6 +69,7 @@ def _unmapped_statement(
 def test_an_unseen_layout_is_mapped_saved_and_imported_end_to_end(live: Fixture) -> None:  # noqa: F811
     client = TestClient(app)
     pdf = _unmapped_statement()
+    _seed_manual_fx(live)
     try:
         _run_mapping_chain(client, live, pdf)
     finally:
