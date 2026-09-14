@@ -369,3 +369,48 @@ def test_closed_manual_mapping_retries_its_date_but_refuses_a_gap(
     assert retry.status_code == 200
     assert gap.status_code == 409
     assert gap.json()["detail"] == "manual price date has no valid source mapping"
+
+
+def test_security_creation_derives_country_and_refuses_a_duplicate_isin(
+    live_catalogue: tuple[psycopg.Connection, auth.OwnerSession],
+) -> None:
+    connection, owner = live_catalogue
+    with connection.cursor() as cur:
+        cur.execute("SELECT min(code) FROM currency")
+        result = cur.fetchone()
+        assert result is not None
+        currency = str(result[0]).strip()
+    body = {
+        "name": "Synthetic new security",
+        "securityType": "equity",
+        "assetClass": "equity",
+        "currency": currency,
+        "isin": "US0000000010",
+    }
+    with TestClient(app) as client:
+        created = client.post("/investment-catalogue/securities", json=body)
+        duplicate = client.post(
+            "/investment-catalogue/securities", json={**body, "name": "Different name"}
+        )
+        no_identity = client.post(
+            "/investment-catalogue/securities",
+            json={
+                "name": "No identity",
+                "securityType": "equity",
+                "assetClass": "equity",
+                "currency": currency,
+            },
+        )
+    assert created.status_code == 201
+    payload = created.json()
+    assert payload["country"] == "US"
+    assert payload["isin"] == "US0000000010"
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"]["existingSecurityId"] == payload["id"]
+    assert no_identity.status_code == 422
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT count(*) FROM security WHERE household_id = %s AND isin = %s",
+            (owner.household_id, "US0000000010"),
+        )
+        assert cur.fetchone() == (1,)

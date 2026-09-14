@@ -599,6 +599,8 @@ export type ApplyBody = {
     idempotencyKey: string;
 };
 
+export type AssetClassName = 'equity' | 'fixed_income' | 'cash' | 'commodity' | 'real_asset' | 'alternative' | 'other';
+
 /**
  * BackfillResult
  */
@@ -1457,6 +1459,16 @@ export type ClassifyResult = {
 };
 
 /**
+ * CommitRequest
+ */
+export type CommitRequest = {
+    /**
+     * Expectedstate
+     */
+    expectedState: string;
+};
+
+/**
  * CommitResult
  */
 export type CommitResult = {
@@ -1480,6 +1492,24 @@ export type CommitResult = {
      * Cardstatementmissing
      */
     cardStatementMissing?: Array<string>;
+};
+
+/**
+ * CommittedGroupResponse
+ */
+export type CommittedGroupResponse = {
+    /**
+     * Groupnumber
+     */
+    groupNumber: number;
+    /**
+     * Status
+     */
+    status: 'committed' | 'blocked';
+    /**
+     * Reason
+     */
+    reason: 'open_review' | 'missing_fx_rate' | 'database_refusal' | null;
 };
 
 /**
@@ -1956,6 +1986,7 @@ export type GroupResponse = {
      * Stageable
      */
     stageable: boolean;
+    status: StagedGroupStatus | null;
     /**
      * Targets
      */
@@ -2345,6 +2376,21 @@ export type InvestmentCancelResponse = {
 };
 
 /**
+ * InvestmentCommitResponse
+ */
+export type InvestmentCommitResponse = {
+    /**
+     * Importid
+     */
+    importId: string;
+    status: StagedImportStatus;
+    /**
+     * Groups
+     */
+    groups: Array<CommittedGroupResponse>;
+};
+
+/**
  * InvestmentCoverage
  */
 export type InvestmentCoverage = {
@@ -2527,6 +2573,10 @@ export type InvestmentParseResponse = {
      * Previewtruncated
      */
     previewTruncated: boolean;
+    /**
+     * Expectedstate
+     */
+    expectedState: string | null;
 };
 
 /**
@@ -4608,6 +4658,32 @@ export type SecurityCandidate = {
 };
 
 /**
+ * SecurityCreate
+ *
+ * A household-scoped security the owner has confirmed; never derived from statement text.
+ */
+export type SecurityCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    securityType: SecurityTypeName;
+    assetClass: AssetClassName;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Isin
+     */
+    isin?: string | null;
+    /**
+     * Country
+     */
+    country?: string | null;
+};
+
+/**
  * SecurityResolution
  */
 export type SecurityResolution = {
@@ -4652,6 +4728,42 @@ export type SecurityResolveRequest = {
      */
     name?: string | null;
 };
+
+/**
+ * SecurityRow
+ */
+export type SecurityRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Securitytype
+     */
+    securityType: string;
+    /**
+     * Assetclass
+     */
+    assetClass: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Country
+     */
+    country: string;
+    /**
+     * Isin
+     */
+    isin: string | null;
+};
+
+export type SecurityTypeName = 'mutual_fund' | 'equity' | 'exchange_traded_fund' | 'bond' | 'deposit' | 'commodity' | 'real_asset' | 'alternative' | 'other';
 
 /**
  * SkippedStatement
@@ -4734,6 +4846,10 @@ export type SplitActionCreate = {
      */
     idempotencyKey: string;
 };
+
+export type StagedGroupStatus = 'draft' | 'ready' | 'blocked' | 'committed' | 'cancelled';
+
+export type StagedImportStatus = 'staged' | 'awaiting_review' | 'partially_committed' | 'completed' | 'cancelled' | 'failed';
 
 /**
  * SwitchActionCorrectionCreate
@@ -5003,6 +5119,18 @@ export type TargetResponse = {
      * Accountmask
      */
     accountMask: string | null;
+    /**
+     * Securitylabel
+     */
+    securityLabel: string | null;
+    /**
+     * Isin
+     */
+    isin: string | null;
+    /**
+     * Securitycandidates
+     */
+    securityCandidates: Array<string>;
     /**
      * Drafts
      */
@@ -7147,6 +7275,35 @@ export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResp
 
 export type ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponse = ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponses[keyof ResolveCatalogueSecurityInvestmentCatalogueSecuritiesResolvePostResponses];
 
+export type CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostData = {
+    body: SecurityCreate;
+    path?: never;
+    query?: never;
+    url: '/investment-catalogue/securities';
+};
+
+export type CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostErrors = {
+    /**
+     * the ISIN already names an existing security
+     */
+    409: unknown;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostError = CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostErrors[keyof CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostErrors];
+
+export type CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SecurityRow;
+};
+
+export type CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostResponse = CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostResponses[keyof CreateCatalogueSecurityInvestmentCatalogueSecuritiesPostResponses];
+
 export type AppendManualPriceInvestmentCatalogueSecuritiesSecurityIdManualPricesPostData = {
     body: ManualPriceCreate;
     path: {
@@ -7588,6 +7745,66 @@ export type CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses =
 };
 
 export type CancelInvestmentImportInvestmentImportsImportIdCancelPostResponse = CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses[keyof CancelInvestmentImportInvestmentImportsImportIdCancelPostResponses];
+
+export type CommitInvestmentImportInvestmentImportsImportIdCommitPostData = {
+    body: CommitRequest;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/investment-imports/{import_id}/commit';
+};
+
+export type CommitInvestmentImportInvestmentImportsImportIdCommitPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CommitInvestmentImportInvestmentImportsImportIdCommitPostError = CommitInvestmentImportInvestmentImportsImportIdCommitPostErrors[keyof CommitInvestmentImportInvestmentImportsImportIdCommitPostErrors];
+
+export type CommitInvestmentImportInvestmentImportsImportIdCommitPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvestmentCommitResponse;
+};
+
+export type CommitInvestmentImportInvestmentImportsImportIdCommitPostResponse = CommitInvestmentImportInvestmentImportsImportIdCommitPostResponses[keyof CommitInvestmentImportInvestmentImportsImportIdCommitPostResponses];
+
+export type GetInvestmentImportInvestmentImportsImportIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/investment-imports/{import_id}';
+};
+
+export type GetInvestmentImportInvestmentImportsImportIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetInvestmentImportInvestmentImportsImportIdGetError = GetInvestmentImportInvestmentImportsImportIdGetErrors[keyof GetInvestmentImportInvestmentImportsImportIdGetErrors];
+
+export type GetInvestmentImportInvestmentImportsImportIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: InvestmentParseResponse;
+};
+
+export type GetInvestmentImportInvestmentImportsImportIdGetResponse = GetInvestmentImportInvestmentImportsImportIdGetResponses[keyof GetInvestmentImportInvestmentImportsImportIdGetResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;
