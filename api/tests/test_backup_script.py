@@ -1,8 +1,11 @@
 """scripts/backup-db.sh: the schedule's tick and the retention rule.
 
-The script is copied into a temporary tree and run there with a stand-in `pg_dump` on PATH and
-an environment built from nothing, so no run here reaches a database, reads the repository's
-`.env`, or touches its `backups/`.
+The script is copied into a temporary tree and run there with stand-in `pg_dump` and `psql`
+binaries on PATH and an environment built from nothing, so no run here reaches a database, reads
+the repository's `.env`, or touches its `backups/`. `psql` is faked well enough to answer the
+script's own three questions (BEGIN, export a snapshot, run the manifest query) — the manifest's
+real content, and a real snapshot-bound dump, are proven against the real isolated test server in
+test_backup_drill_live.py; this file is only about the schedule and the retention rule.
 """
 
 import os
@@ -18,6 +21,10 @@ REPO = Path(__file__).resolve().parents[2]
 HOUR = 60 * 60
 DAY = 24 * HOUR
 PASSPHRASE = "synthetic-passphrase"
+FAKE_MANIFEST = (
+    '{"flywayVersion":"0","tableCounts":{},"amountSums":{},'
+    '"documents":{"fileCount":0,"sha256OfSortedHashes":"x"}}'
+)
 
 
 @pytest.fixture
@@ -27,7 +34,27 @@ def tree(tmp_path: Path) -> Path:
         shutil.copy2(REPO / "scripts" / name, tmp_path / "scripts" / name)
     (tmp_path / "bin").mkdir()
     (tmp_path / "backups").mkdir()
+    (tmp_path / "documents").mkdir()
     return tmp_path
+
+
+def _fake_psql(tree: Path) -> None:
+    """Answers exactly the three things backup-db.sh's psql session asks: acknowledges `\\echo`
+    markers (so the caller's reader can find the end of each answer), a fixed snapshot id, and a
+    fixed manifest. Everything else (BEGIN, ON_ERROR_STOP, connection string, -v flags) is
+    ignored — a real psql session against a real database is test_backup_drill_live.py's job."""
+    psql = tree / "bin" / "psql"
+    psql.write_text(
+        "#!/bin/sh\n"
+        "while IFS= read -r line; do\n"
+        '  case "$line" in\n'
+        "    '\\echo '*) printf '%s\\n' \"${line#\\\\echo }\" ;;\n"
+        "    'SELECT pg_export_snapshot();') printf 'fake-snapshot-id\\n' ;;\n"
+        "    '\\i scripts/backup-manifest.sql') printf '%s\\n' \"$MANIFEST_JSON\" ;;\n"
+        "  esac\n"
+        "done\n"
+    )
+    psql.chmod(0o755)
 
 
 def run(
@@ -40,10 +67,13 @@ def run(
     pg_dump = tree / "bin" / "pg_dump"
     pg_dump.write_text(f"#!/bin/sh\n{dump}\n")
     pg_dump.chmod(0o755)
+    _fake_psql(tree)
     env = {
         "PATH": f"{tree / 'bin'}:{os.environ['PATH']}",
         "BACKUP_PASSPHRASE": PASSPHRASE,
         "DATABASE_URL": "postgresql://synthetic.invalid/none",
+        "DOCUMENTS_DIR": str(tree / "documents"),
+        "MANIFEST_JSON": FAKE_MANIFEST,
         **(extra or {}),
     }
     if prefix:
@@ -78,6 +108,10 @@ def names(tree: Path) -> list[str]:
     return sorted(path.name for path in (tree / "backups").iterdir())
 
 
+def dump_names(tree: Path) -> list[str]:
+    return [name for name in names(tree) if name.endswith(".dump.enc")]
+
+
 def test_a_tick_within_a_day_of_the_last_backup_takes_none(tree: Path) -> None:
     backup(tree, "oneledger-20260910T080000Z.dump.enc", HOUR)
 
@@ -94,7 +128,19 @@ def test_run_by_hand_it_dumps_however_recent_the_last_backup(tree: Path) -> None
     result = run(tree)
 
     assert result.returncode == 0, result.stderr
-    assert len(names(tree)) == 2
+    # The pre-existing dump, plus this run's own dump, documents archive and manifest.
+    assert len(names(tree)) == 4
+    assert len(dump_names(tree)) == 2
+
+
+def test_a_run_writes_all_three_files_sharing_one_stamp(tree: Path) -> None:
+    result = run(tree)
+
+    assert result.returncode == 0, result.stderr
+    [dump] = dump_names(tree)
+    stamp = dump.removeprefix("oneledger-").removesuffix(".dump.enc")
+    suffixes = ("dump.enc", "documents.tar.enc", "manifest.json.enc")
+    assert names(tree) == sorted(f"oneledger-{stamp}.{suffix}" for suffix in suffixes)
 
 
 def test_a_tick_a_day_after_the_last_backup_takes_an_encrypted_one(tree: Path) -> None:
@@ -103,7 +149,7 @@ def test_a_tick_a_day_after_the_last_backup_takes_an_encrypted_one(tree: Path) -
     result = run(tree, "--if-due")
 
     assert result.returncode == 0, result.stderr
-    [taken] = [name for name in names(tree) if name != "oneledger-20260909T080000Z.dump.enc"]
+    [taken] = [name for name in dump_names(tree) if name != "oneledger-20260909T080000Z.dump.enc"]
     decrypted = subprocess.run(
         [
             "openssl",
@@ -133,7 +179,8 @@ def test_another_stacks_fresh_dump_is_not_this_stacks_backup(tree: Path) -> None
     assert result.returncode == 0, result.stderr
     assert [name for name in names(tree) if not name.startswith("oneledger-verify-")]
     assert run(tree, prefix="oneledger-verify").returncode == 0
-    assert sum(name.startswith("oneledger-verify-") for name in names(tree)) == 2
+    # The pre-existing hand-placed dump, plus one full run's three files.
+    assert sum(name.startswith("oneledger-verify-") for name in names(tree)) == 4
 
 
 def test_retention_keeps_the_thirty_newest_however_old_they_are(tree: Path) -> None:
@@ -144,11 +191,13 @@ def test_retention_keeps_the_thirty_newest_however_old_they_are(tree: Path) -> N
     result = run(tree)
 
     assert result.returncode == 0, result.stderr
-    kept = names(tree)
+    kept = dump_names(tree)
     assert len(kept) == 30
     assert old[0].name not in kept
     assert old[1].name not in kept
     assert old[2].name in kept
+    # This run's own documents archive and manifest are not pruned — only .dump.enc stamps age.
+    assert len(names(tree)) == 32
 
 
 def test_retention_never_prunes_a_backup_younger_than_thirty_days(tree: Path) -> None:
@@ -157,7 +206,8 @@ def test_retention_never_prunes_a_backup_younger_than_thirty_days(tree: Path) ->
     result = run(tree)
 
     assert result.returncode == 0, result.stderr
-    assert len(names(tree)) == 36
+    assert len(dump_names(tree)) == 36
+    assert len(names(tree)) == 38
 
 
 def test_a_failed_dump_prunes_nothing_and_leaves_nothing(tree: Path) -> None:
@@ -178,7 +228,7 @@ def test_a_project_whose_name_extends_this_one_is_still_another_stack(tree: Path
     result = run(tree, "--if-due")
 
     assert result.returncode == 0, result.stderr
-    assert len([name for name in names(tree) if not name.startswith("oneledger-2-")]) == 2
+    assert len([name for name in names(tree) if not name.startswith("oneledger-2-")]) == 4
 
 
 def test_a_hand_run_in_a_scratch_shell_names_its_dump_after_that_project(tree: Path) -> None:
@@ -187,5 +237,6 @@ def test_a_hand_run_in_a_scratch_shell_names_its_dump_after_that_project(tree: P
     result = run(tree, extra={"COMPOSE_PROJECT_NAME": "oneledger-verify"})
 
     assert result.returncode == 0, result.stderr
-    [taken] = names(tree)
-    assert taken.startswith("oneledger-verify-")
+    taken = names(tree)
+    assert len(taken) == 3
+    assert all(name.startswith("oneledger-verify-") for name in taken)

@@ -52,7 +52,11 @@ services:
       BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?run scripts/production-stack.sh init}
       BACKUP_DIR: /oneledger/backups
       BACKUP_PREFIX: oneledger-production
-    volumes: ["./scripts:/oneledger/scripts:ro", "./backups:/oneledger/backups"]
+      DOCUMENTS_DIR: /oneledger/documents
+    volumes:
+      - ./scripts:/oneledger/scripts:ro
+      - ./backups:/oneledger/backups
+      - documents:/oneledger/documents:ro
     init: true
     entrypoint:
       - bash

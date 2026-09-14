@@ -124,6 +124,32 @@ Statements are parsed by software running on a machine you control, and reach no
 Rationale in [ADR-0013](docs/adr/0013-python-backend-service.html) and
 [ADR-0014](docs/adr/0014-one-vps-one-compose-file.html).
 
+### Backups and the restore drill
+
+The compose `backup` service runs `scripts/backup-db.sh --if-due` hourly, without anyone
+remembering. One run writes three encrypted files sharing one UTC stamp: the database dump, an
+archive of the documents volume, and a structural manifest taken from the same database snapshot
+the dump reads. Run it by hand — it always runs, `--if-due` or not — after `scripts/load-env.sh`
+can find `BACKUP_PASSPHRASE`, `DATABASE_URL` and `DOCUMENTS_DIR`:
+
+```bash
+scripts/backup-db.sh
+```
+
+Prove a backup restores, rather than trusting that it would, with `scripts/restore-drill.sh`. It
+restores the newest complete stamp into the isolated test server (`scripts/test-db.sh`) — a
+temporary database and document directory, never the working ledger — and compares a recomputed
+manifest against the one recorded at backup time item by item, always writing
+`<prefix>-<stamp>.drill.json`:
+
+```bash
+scripts/restore-drill.sh
+```
+
+Settings › Data Quality shows the newest backup's age and file completeness and the newest
+drill's result and age. See [security-and-privacy.html §9](docs/operations/security-and-privacy.html#9-backups)
+for the retention schedule and cadence.
+
 ---
 
 ## Reading and publishing it

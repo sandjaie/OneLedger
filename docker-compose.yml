@@ -63,13 +63,15 @@ services:
     depends_on:
       db-test: { condition: service_healthy }
 
-  # The daily encrypted dump (security-and-privacy.html §9), taken without anyone remembering.
+  # The daily encrypted backup (security-and-privacy.html §9), taken without anyone remembering.
   # On 10 September 2026 the ledger was lost twice and the newest backup was three days old:
-  # scripts/backup-db.sh worked, and nothing ever ran it.
+  # scripts/backup-db.sh worked, and nothing ever ran it. One run now writes three files sharing
+  # one stamp — the database dump, the documents archive and a structural manifest bound to the
+  # same snapshot (Phase 2.4) — so a restore drill can prove all three reproduce together.
   #
-  # Every hour it runs the script with --if-due, which dumps only when the newest backup is
-  # more than a day old, then prunes those past thirty days. A failed run is retried on the
-  # next tick, and Settings › Data Quality warns once two days pass without one. The api
+  # Every hour it runs the script with --if-due, which runs only when the newest backup is more
+  # than a day old, then prunes those past thirty days. A failed run is retried on the next
+  # tick, and Settings › Data Quality warns once it has been too long without one. The api
   # depends on it, so any stack the app can be used on is a stack being backed up.
   backup:
     # The server's own image: pg_dump of the server's major version, and openssl.
@@ -90,9 +92,15 @@ services:
       # the volumes below are named: a scratch stack's dump of an empty database is neither
       # counted by the ledger's tick and Data Quality nor pruned with the ledger's backups.
       BACKUP_PREFIX: ${COMPOSE_PROJECT_NAME:-oneledger}
+      # Read-only, like the mount below: the backup service tars the documents it is given,
+      # never writes to the volume the app itself owns.
+      DOCUMENTS_DIR: /oneledger/documents
     # On a Linux host this runs as root and its dumps are root's, mode 600. Create backups/
     # yourself before the first `up` so the directory stays yours; read a dump with sudo.
-    volumes: ["./scripts:/oneledger/scripts:ro", "./backups:/oneledger/backups"]
+    volumes:
+      - ./scripts:/oneledger/scripts:ro
+      - ./backups:/oneledger/backups
+      - documents:/oneledger/documents:ro
     # tini passes the stop signal on, so a `docker compose stop` does not wait out the sleep.
     init: true
     entrypoint:

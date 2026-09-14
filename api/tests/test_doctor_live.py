@@ -8,13 +8,14 @@ is reachable. Every figure is invented.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
+from oneledger import auth
 from oneledger.main import app
 from oneledger.routes import doctor, investment_catalogue
 from oneledger.routes.doctor import transactions_since
@@ -76,6 +77,60 @@ def investment_doctor_live(
     monkeypatch.setattr(doctor, "connect", connect_to_test_database)
     monkeypatch.setattr(investment_catalogue, "connect", connect_to_test_database)
     yield live_events
+
+
+def test_wealth_history_counts_the_households_incomplete_months(live: Fixture) -> None:
+    """A stored `status <> 'available'` row is how `GET /wealth-history` itself marks a month
+    incomplete (routes/wealth_history.py); this reads exactly that fact for a synthetic pair of
+    months, one earlier and complete, one later and not."""
+    owner = auth.OwnerSession(
+        user_id=live.user_id, household_id=live.household_id, session_id=uuid4(), email="o@x"
+    )
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO month_end_position
+                   (household_id, month_end, account_id, valuation_mode, currency,
+                    native_value, evidence_date, value_base, value_secondary, status)
+               VALUES (%s, DATE '2026-06-30', %s, 'ledger_balance', %s,
+                       100.0000, DATE '2026-06-30', 100.0000, 100.0000, 'available')""",
+            (live.household_id, live.account_id, live.base),
+        )
+        cur.execute(
+            """INSERT INTO month_end_position
+                   (household_id, month_end, account_id, valuation_mode, currency, status)
+               VALUES (%s, DATE '2026-07-31', %s, 'ledger_balance', %s, 'no_snapshot')""",
+            (live.household_id, live.account_id, live.base),
+        )
+    live.conn.commit()
+
+    assert doctor.wealth_history_counts(owner) == (1, date(2026, 7, 31))
+
+
+def test_doctor_route_includes_wealth_history_findings(live: Fixture) -> None:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO month_end_position
+                   (household_id, month_end, account_id, valuation_mode, currency, status)
+               VALUES (%s, DATE '2026-07-31', %s, 'ledger_balance', %s, 'no_snapshot')""",
+            (live.household_id, live.account_id, live.base),
+        )
+    live.conn.commit()
+
+    def owner_dep() -> auth.OwnerSession:
+        return auth.OwnerSession(
+            user_id=live.user_id, household_id=live.household_id, session_id=uuid4(), email="o@x"
+        )
+
+    app.dependency_overrides[auth.require_owner] = owner_dep
+    try:
+        response = TestClient(app).get("/doctor")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    sections = {section["title"]: section for section in response.json()["sections"]}
+    messages = [f["message"] for f in sections["Wealth history"]["findings"]]
+    assert any("1 month of wealth history is incomplete" in message for message in messages)
 
 
 def test_doctor_reports_an_unvalued_holding(investment_doctor_live: EventFixture) -> None:

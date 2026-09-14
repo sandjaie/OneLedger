@@ -822,19 +822,26 @@ link, advisor delivery or outbound reminder containing financial data is introdu
 <h2 id="9-backups">9. Backups</h2>
 <p>Restated here because data loss is the most likely serious failure and the least exciting to
 prepare for.</p>
-<pre><code>Daily     pg_dump → encrypted → local disk               30 days retained
-Weekly    documents volume → local disk                  4 weeks retained
-Monthly   Both → second physical location                12 months retained
-Quarterly RESTORE TEST → scratch database                verified, not assumed
+<pre><code>Daily    Database dump + documents archive + manifest → encrypted → local disk   30 days retained
+Monthly  All three → second physical location                                   12 months retained
+Monthly  RESTORE DRILL → isolated test server                                    verified, not assumed
 </code></pre>
-<p>The daily row is taken by the compose <code>backup</code> service, not by anyone remembering, and
-Settings › Data Quality says when it has not been
+<p>One daily run (<code>scripts/backup-db.sh</code>) writes three files sharing one UTC stamp: the
+encrypted database dump, an encrypted archive of the documents volume (the original statement
+PDFs), and an encrypted structural manifest — row counts, named <code>NUMERIC</code> sums and a
+documents hash, taken from the same database snapshot the dump itself reads, so the two can never
+describe different data. It is taken by the compose <code>backup</code> service, not by anyone
+remembering, and Settings › Data Quality says when it has not been, and when a stamp is missing
+one of its three files
 (<a href="../design/architecture.html#10-backups">architecture.html</a> §10). Retention never
-drops below the thirty newest, so after a reset the last good backups survive at least thirty
-further dumps of an emptied database — a month of daily ones — not indefinitely.</p>
-<p>The quarterly restore test is a checklist item in
-<a href="./testing-and-data-quality.html">testing-and-data-quality.html</a>. A backup that has never been
-restored is a hypothesis.</p>
+drops below the thirty newest stamps, so after a reset the last good backups survive at least
+thirty further runs against an emptied database — a month of daily ones — not indefinitely.</p>
+<p><code>scripts/restore-drill.sh</code> is the monthly restore drill: it restores the newest complete
+stamp into the isolated test server — a temporary database and a temporary document directory,
+never the working ledger — and recomputes the manifest from the restored copy, comparing it item
+by item against the one recorded at backup time. It is run by hand and records structural
+pass/fail only; Settings › Data Quality shows the newest result and its age. A backup that has
+never been restored is a hypothesis.</p>
 <p>Keep <code>~/statements/</code> outside the repository as a second copy of the source data: the ledger
 is reconstructible from originals if it ever comes to that. That is a further argument for
 keeping parsers deterministic and versioned.</p>
