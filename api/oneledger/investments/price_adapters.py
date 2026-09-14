@@ -25,6 +25,12 @@ SOURCE_VERSION = "v1"
 _MAX_BYTES = 32 * 1024 * 1024
 _TIMEOUT = httpx.Timeout(30.0)
 _NA_VALUES = {"", "N.A.", "NA", "N.A", "-"}
+# price_snapshot.price is NUMERIC(20,6): at most 6 decimal places and 14 integer digits. A row
+# outside that range is skipped, never rounded — quantizing here would let a later identical
+# re-fetch of the same untruncated source value read as a "different" price and land in
+# price_snapshot as a spurious conflict (uq_price_snapshot_observation/idx_..._one_accepted).
+_MAX_SCALE = 6
+_MAX_INTEGER_DIGITS = 14
 # Matches security.isin's own CHECK constraint (ISO 6166): two letters, nine alphanumerics,
 # one checksum digit.
 _ISIN = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
@@ -53,7 +59,14 @@ def _price(value: str) -> Decimal | None:
         price = Decimal(value)
     except InvalidOperation:
         return None
-    return price if price.is_finite() and price > 0 else None
+    if not price.is_finite() or price <= 0:
+        return None
+    _sign, digits, exponent = price.as_tuple()
+    if not isinstance(exponent, int) or exponent < -_MAX_SCALE:
+        return None
+    if len(digits) + exponent > _MAX_INTEGER_DIGITS:
+        return None
+    return price
 
 
 def _price_date(value: str) -> date | None:

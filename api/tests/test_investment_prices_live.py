@@ -239,6 +239,24 @@ def test_outage_keeps_the_cached_price_and_reports_source_unavailable(
         assert Decimal(row[0]) == Decimal("150.500000")
 
 
+def test_a_200_response_with_no_parseable_rows_is_source_unavailable(
+    live_prices: PricesFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A malformed/empty 200 body must not count as a successful check."""
+    monkeypatch.setenv("OFFICIAL_NAV_CURRENCY", live_prices.currency)
+    header_only = _PUBLICATION.splitlines()[0] + "\n"
+
+    response = _refresh(monkeypatch, header_only)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["outcome"] == "source_unavailable"
+    assert prices_module._last_success.get(live_prices.owner.household_id) is None
+
+    # The 24-hour gate was never armed, so an immediate retry is attempted again, not skipped.
+    retried = _refresh(monkeypatch, _PUBLICATION)
+    assert retried.json()["outcome"] == "refreshed"
+
+
 def test_a_conflicting_value_for_an_existing_date_is_retained_unaccepted(
     live_prices: PricesFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

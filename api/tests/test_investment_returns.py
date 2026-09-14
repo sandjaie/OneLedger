@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+import time
+from datetime import date, timedelta
 from decimal import Decimal
 
 from oneledger.investments.returns import (
@@ -50,6 +51,22 @@ def test_xirr_matches_an_independently_computed_rate_within_one_hundredth_of_a_p
     assert result.rate_percent is not None
     reference = _bisection_reference(raw)
     assert abs(float(result.rate_percent) - reference) <= 0.01
+
+
+def test_xirr_completes_a_sixty_one_flow_monthly_series_quickly() -> None:
+    """A holding with five years of monthly contributions must not make the portfolio wait."""
+    flows = [
+        CashFlow(date(2020, 1, 1) + timedelta(days=30 * i), Decimal("-100")) for i in range(60)
+    ]
+    flows.append(CashFlow(date(2020, 1, 1) + timedelta(days=30 * 60), Decimal("7500")))
+
+    started = time.monotonic()
+    result = xirr(flows)
+    elapsed = time.monotonic() - started
+
+    assert result.reason is None
+    assert result.rate_percent is not None
+    assert elapsed < 2.0, f"xirr took {elapsed:.2f}s for 61 flows"
 
 
 def test_xirr_refuses_a_series_with_no_sign_change() -> None:

@@ -245,6 +245,10 @@ def refresh(
             raise ValueError("OFFICIAL_NAV_URL is not configured")
         text = fetch_official_nav_text_v1(client, url)
         records = parse_official_nav_text_v1(text)
+        if not records:
+            # A 200 that parses to nothing is not a successful check — a truncated, reformatted
+            # or empty publication must not look "refreshed" and must not start the 24-hour gate.
+            raise ValueError("official NAV publication parsed to no records")
     except httpx.HTTPError, ValueError:
         return RefreshOutcome(
             outcome="source_unavailable",

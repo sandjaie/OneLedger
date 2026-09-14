@@ -112,12 +112,22 @@ def classify_event_flows(events: Sequence[tuple[str, date, Decimal]]) -> Classif
     return ClassifiedFlows(flows, has_blocking, has_unknown)
 
 
-def _residual(flows: Sequence[CashFlow], d0: date, rate: Decimal, scale: Decimal) -> Decimal:
-    base = Decimal(1) + rate
+def _residual(days: Sequence[tuple[int, Decimal]], rate: Decimal, scale: Decimal) -> Decimal:
+    """`sum(amount / (1+r)^(days/365)) / scale`.
+
+    `Decimal.__pow__` with a non-integer exponent computes `exp(exponent * x.ln())` internally —
+    a transcendental call per flow. Every flow's exponent is a multiple of one day, so this
+    computes the one-day discount factor `(1+r)^(-1/365)` once per rate (one `ln`, one `exp`)
+    and raises it to each flow's whole number of days — `Decimal.__pow__` with an integer
+    exponent is exact repeated-squaring multiplication, no further `ln`/`exp` per flow. On a
+    61-flow monthly series this cut the grid scan from ~2s to ~0.1s at the same 50-digit
+    precision, rate domain and grid density the spec requires.
+    """
+    ln_base = (Decimal(1) + rate).ln()
+    daily_factor = (-ln_base / 365).exp()
     total = Decimal(0)
-    for flow in flows:
-        years = Decimal((flow.on - d0).days) / Decimal(365)
-        total += flow.amount / (base**years)
+    for days_i, amount in days:
+        total += amount * (daily_factor**days_i)
     return total / scale
 
 
@@ -140,18 +150,28 @@ def _bisect(
     return mid, hi_r - lo_r <= _RATE_TOLERANCE and abs(mid_f) <= _RESIDUAL_TOLERANCE
 
 
+def _aggregate_by_date(flows: Sequence[CashFlow]) -> list[CashFlow]:
+    """One net amount per date. Fewer terms for the grid/bisection to evaluate; same sum."""
+    totals: dict[date, Decimal] = {}
+    for flow in flows:
+        totals[flow.on] = totals.get(flow.on, Decimal(0)) + flow.amount
+    return [CashFlow(on, amount) for on, amount in totals.items() if amount != 0]
+
+
 def xirr(flows: Sequence[CashFlow]) -> XirrResult:
     """`sum(CF_i / (1 + r)^((d_i - d_0) / 365)) = 0` over a 50-significant-digit log-scale scan."""
-    scale = sum((abs(flow.amount) for flow in flows), Decimal(0))
-    if len(flows) < 2 or scale == 0:
+    points = _aggregate_by_date(flows)
+    scale = sum((abs(flow.amount) for flow in points), Decimal(0))
+    if len(points) < 2 or scale == 0:
         return XirrResult(None, "no_sign_change")
 
     with localcontext() as ctx:
         ctx.prec = _PRECISION
-        d0 = min(flow.on for flow in flows)
+        d0 = min(flow.on for flow in points)
+        days = [((flow.on - d0).days, flow.amount) for flow in points]
 
         def residual(rate: Decimal) -> Decimal:
-            return _residual(flows, d0, rate, scale)
+            return _residual(days, rate, scale)
 
         y_min = (_RATE_MIN + 1).ln()
         y_max = (_RATE_MAX + 1).ln()
@@ -214,12 +234,21 @@ _PORTFOLIO_EVENTS_SQL = """
      ORDER BY event.event_date, event.created_at
 """
 
+# Same active-event definition as positions.py's `active_events` CTE: a corrected original
+# contributes nothing, only its correction does. Starting from investment_transaction (not
+# investment_unit_effect) and left-joining the effect matches that shape rather than summing a
+# corrected original's effect row alongside its replacement's.
 _UNITS_SQL = """
     SELECT h.security_id, security.currency, COALESCE(sum(effect.signed_units), 0)
       FROM holding h
       JOIN security ON security.id = h.security_id
+      LEFT JOIN investment_transaction event
+        ON event.holding_id = h.id AND event.event_date <= %s
+       AND NOT EXISTS (
+           SELECT FROM investment_transaction correction
+            WHERE correction.corrects_transaction_id = event.id)
       LEFT JOIN investment_unit_effect effect
-        ON effect.holding_id = h.id AND effect.effect_date <= %s
+        ON effect.investment_transaction_id = event.id
      WHERE h.id = %s
      GROUP BY h.security_id, security.currency
 """
@@ -267,7 +296,20 @@ def holding_flows(cur: psycopg.Cursor[Any], holding_id: UUID, as_of: date) -> Fl
     return FlowsResult(flows, None)
 
 
-_HOUSEHOLD_HOLDINGS_SQL = "SELECT id FROM holding WHERE household_id = %s"
+# Same population read_positions values by default (included_only=False): the account must be
+# active and in 'holdings' valuation mode as of the requested date. A holding whose account has
+# switched to snapshot/ledger_balance mode, or closed, is not double-counted here either.
+_HOUSEHOLD_HOLDINGS_SQL = """
+    SELECT h.id
+      FROM holding h
+      JOIN account a ON a.household_id = h.household_id AND a.id = h.account_id
+      JOIN account_valuation_period period
+        ON period.household_id = a.household_id AND period.account_id = a.id
+       AND period.valuation_mode = 'holdings'
+       AND %(as_of)s >= period.effective_from
+       AND (period.effective_to IS NULL OR %(as_of)s <= period.effective_to)
+     WHERE h.household_id = %(household)s AND a.is_active
+"""
 
 
 def portfolio_flows(
@@ -279,7 +321,7 @@ def portfolio_flows(
     result rather than silently omitting a holding from the terminal value — a portfolio
     denominator never drops coverage quietly.
     """
-    cur.execute(_HOUSEHOLD_HOLDINGS_SQL, (household_id,))
+    cur.execute(_HOUSEHOLD_HOLDINGS_SQL, {"household": household_id, "as_of": as_of})
     holding_ids = [row[0] for row in cur.fetchall()]
 
     flows: list[CashFlow] = []
