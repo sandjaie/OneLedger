@@ -78,7 +78,7 @@ report=$(git diff --numstat --no-renames "$base" "$tip" | awk -F'\t' '
         path ~ /(package-lock\.json|uv\.lock|\.lock)$/)
       kind = "skip"
 
-    # Tests and their fixtures count, but against the wider budget only: TDD earns its lines.
+    # Tests and their fixtures count, but against the wider budget only: tests earn their lines.
     # Checked before configuration, because an expected-output fixture is JSON or YAML far more
     # often than not, and a 1,500-line one is a review to read however it is spelled.
     else if (path ~ /(^|\/)tests?\// ||

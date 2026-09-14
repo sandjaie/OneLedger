@@ -327,8 +327,8 @@ def _load_payslips(
     lines_by_id: dict[UUID, list[PayslipLineOut]] = {pid: [] for pid in payslip_ids}
     # countedAsSpending is whether a pair is actually posted for this line; categoryId comes
     # from that posting, else from a matching but not-yet-posted rule (spec "Deductions counted
-    # as spending": "categoryId (from the posting, else the matching rule)") — a rule surviving
-    # a DELETE toggle (so a later payslip still auto-posts) must not make the toggle look on.
+    # as spending": "categoryId (from the posting, else the matching rule)") — a rule surviving an
+    # unlink or correction (so a later payslip still auto-posts) must not make the toggle look on.
     spending: dict[UUID, tuple[bool, UUID | None]] = {}
     if payslip_ids:
         cur.execute(

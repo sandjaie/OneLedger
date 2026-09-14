@@ -6,7 +6,7 @@ This file owns when OneLedger's gates run and what they produce.
 OneLedger is a single-owner personal application. Each branch gets one defect-finding pass and one
 exact-head proof:
 
-> phase plan reviewed once → implement with tests for major behavior → local commit →
+> phase-group plans reviewed once → implement with tests for major behavior → local commit →
 > one review → one repair → `scripts/verify.sh` once → first push → PR → merge
 
 ## Safety floor
@@ -25,7 +25,7 @@ No schedule pressure or process change relaxes these:
 
 | Gate | Trigger | Produces |
 |---|---|---|
-| `/oneledger-plan-review` | A new phase specification and plan, once, before its first branch | Blocking contract, safety and size findings |
+| `/oneledger-plan-review` | A new phase group's specifications and plans (such as Phases 2.2–2.4), once, before the group's first branch | Blocking contract, safety and size findings |
 | `/oneledger-code-review` | A branch is implemented and its affected tests pass | One deduplicated finding set |
 | Confirmation | A repaired blocking finding concerned money, authorization/RLS or a migration | Closure of those findings only |
 | `scripts/verify.sh` | Review is resolved and the intended head is committed | One comprehensive pass and an exact-head receipt |
@@ -35,13 +35,14 @@ Review skills are report-only unless the owner explicitly requests fix mode. The
 agent applies findings. Nothing is weakened, deleted or skipped to make a gate green; a genuinely
 wrong invariant requires an owner decision, usually a superseding ADR.
 
-## 1. Plan a phase once
+## 1. Plan a phase group once
 
-Write the phase specification and dated plan against the current repository. Each plan task is one
-branch with the fields required by `CLAUDE.md`, sized to the budget in
-[git-workflow.md](git-workflow.md). Group related work into one branch instead of splitting it
-thin. Run `/oneledger-plan-review` once; the planner applies its blocking findings. There is no
-second plan review and no confirmation pass.
+Write each phase's specification and dated plan against the current repository, and plan the
+phases of a group together — Phases 2.2–2.4, or 3.1–3.4. Each plan task is one branch with the
+fields required by `CLAUDE.md`, sized to the budget in [git-workflow.md](git-workflow.md). Group
+related work into one branch instead of splitting it thin. Run `/oneledger-plan-review` once over the
+whole group, not once per phase; the planner applies its blocking findings. There is no second plan
+review and no confirmation pass.
 
 The plan's forecast is made once. There is no dispatch-time reforecast. If a branch nears the hard
 stop, finish its coherent part, name the remainder as the next branch in

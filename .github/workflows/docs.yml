@@ -3,8 +3,8 @@ name: docs
 # Publish only. There is no `check` job here on purpose: the pre-commit hook
 # runs `python3 scripts/check-docs.py` with `pass_filenames: false`, and that
 # script walks the whole tree rather than the staged files — so a CI job would
-# run the identical command over the identical 46 documents and report it
-# twenty minutes later. The hooks are the gate; see CLAUDE.md.
+# run the identical command over the identical documents and report it
+# twenty minutes later. The hooks and `scripts/verify.sh` are the gate; see docs/development-cycle.md.
 #
 # A repository has one Pages site, so only the default branch publishes.
 # `workflow_dispatch` deliberately publishes whatever branch it is run from,

@@ -1,12 +1,13 @@
 ---
 name: oneledger-plan-review
-description: Review a new OneLedger phase specification and plan once before its first branch for contracts, safety, dependencies and branch size. Report blocking findings without editing the plan.
+description: Review the specifications and plans for a new OneLedger phase group (such as Phases 2.2–2.4) once, before the group's first branch, for contracts, safety, dependencies and branch size. Report blocking findings without editing the plans.
 ---
 
 # OneLedger plan review
 
-Run once for a new phase specification and plan, before its first branch. Do not run it for later
-plan edits, splits, re-baselines or recorded deviations. This skill is report-only unless the owner
+Run once per phase group — the specifications and plans for, say, Phases 2.2–2.4 or 3.1–3.4
+reviewed together — before the group's first branch. Do not run it per phase, nor for later plan
+edits, splits, re-baselines or recorded deviations. This skill is report-only unless the owner
 explicitly requests fix mode.
 
 ## Required task shape

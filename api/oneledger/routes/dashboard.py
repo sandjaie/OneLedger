@@ -9,7 +9,7 @@ or one frozen snapshot, never two sources for one account. Assets are positive a
 negative; the asset, liability and liquid figures are FILTERs on the same PostgreSQL sum. `asOf`
 selects the valuation period, event-derived units, accepted non-future price, snapshot, rates and
 card cycles. A ledger-mode account still contributes its current balance, so a complete historical
-balance sheet remains `GET /networth`'s.
+balance sheet remains the planned Phase 2.2 net-worth history's.
 
 **Which rate, and how it is labelled (Invariant 7).** The date's own row when the table holds one —
 itself labelled carried over a weekend, with the date it really comes from. The table is filled
