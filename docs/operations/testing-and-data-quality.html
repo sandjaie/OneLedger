@@ -739,6 +739,19 @@ refusal on <code>POST</code>/<code>PUT /commitments</code> and the 409 second pl
 /actions</code>, <code>GET /forecast</code> and payment-candidates changing no row;
 household isolation of <code>GET /actions</code> against real foreign rows; and member 403 and
 foreign-household 404 on every write.</li>
+<li>Phase 3.2 Task 1: a card-statement commitment moves the paying account down and its card up by the
+same amount on the same date, the currency total unchanged by it, and linking the payment removes
+both; a card account whose own balance date is on or after the payment gets no mirror, and an
+excluded or currency-mismatched card account still applies the paying side while listing the
+commitment as <code>card_settlement_not_projected</code>. A 1,000 balance with a 1,500 outflow before
+a salary commitment shows an exact 500 <code>shortfall</code>, naming a second same-currency account
+with enough as <code>fundingAccounts</code> and leaving it unchanged. Archived commitments and
+dismissed occurrences contribute nothing; unapplied occurrences (on or after <code>nextDueDate</code>,
+on or before the balance date) are capped at 12 per commitment; <code>balanceAgeDays</code>,
+<code>coverageGapMonths</code>, currency membership, <code>excludedAccountIds</code> and
+<code>staleAccountIds</code> are exact; <code>unplannedCardDues</code> lists a due regardless of
+snooze or dismissal marks and excludes one past <code>asOf + 90</code>. <code>GET /forecast</code>
+changes no row.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.
