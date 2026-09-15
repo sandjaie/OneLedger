@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -41,6 +42,12 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
   const [feedback, setFeedback] = useState<string>();
 
   const hasOpenOccurrence = Boolean(commitment.nextDueDate) && !commitment.archivedAt;
+  // A claim or deposit's expected money always plans positive; a policy's premium always plans
+  // negative (the sign this row's own amount already carries, the same sign check negateAmount
+  // uses elsewhere — not money arithmetic or a money-string comparison). The database refuses an
+  // income posting for a claim- or deposit-sourced commitment (spec "Register-sourced commitments
+  // (V54)"), so the hint only ever applies here.
+  const showIncomeHint = commitment.source === "register_record" && !commitment.amount.startsWith("-");
 
   useEffect(() => {
     let current = true;
@@ -142,6 +149,16 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {feedback && <p role="status">{feedback}</p>}
+      {showIncomeHint && (
+        <p>
+          <small>
+            An income posting cannot settle this — a reimbursement or returned principal is never
+            counted as newly earned income. If the posting shows as income,{" "}
+            <Link href={`/transactions?accountId=${commitment.accountId}`}>recategorise it</Link>{" "}
+            as a refund or a transfer first.
+          </small>
+        </p>
+      )}
 
       {hasOpenOccurrence && (
         <>

@@ -234,7 +234,8 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
               return (
                 <tr key={row.id}>
                   <td>
-                    {row.documentType}
+                    {row.title ?? row.documentType}
+                    {row.title && <small> · {row.documentType}</small>}
                     {row.isPasswordProtected && <small> · password protected</small>}
                   </td>
                   <td>{accountLabel(row)}</td>

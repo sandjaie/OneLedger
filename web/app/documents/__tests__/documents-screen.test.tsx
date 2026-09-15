@@ -31,9 +31,23 @@ function document(overrides: Partial<DocumentRow>): DocumentRow {
     layoutId: "layout-1",
     layoutVersion: 1,
     newerLayoutId: null,
+    title: null,
     ...overrides,
   };
 }
+
+const upload = document({
+  id: "doc-5",
+  documentType: "insurance_policy",
+  accountId: null,
+  accountName: null,
+  accountNumberMasked: null,
+  period: { start: null, end: null, isDerived: null },
+  importKind: "upload",
+  importId: null,
+  importStatus: null,
+  title: "Synthetic policy schedule",
+});
 
 const investment = document({
   id: "doc-2",
@@ -145,6 +159,15 @@ describe("the documents screen", () => {
     const button = screen.getByRole("button", { name: "Re-read descriptions" });
     fireEvent.click(button);
     expect(screen.getByText("A newer layout is available for this import.")).toBeTruthy();
+  });
+
+  it("shows an upload by its title with no import link", () => {
+    renderScreen([upload], 1);
+
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText("Synthetic policy schedule")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Transactions" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
   });
 
   it("offers more rows when the library is longer than the page", () => {

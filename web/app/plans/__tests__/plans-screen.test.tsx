@@ -60,6 +60,8 @@ const commitment: CommitmentRow = {
   source: "owner",
   sourceCardStatementId: null,
   sourceCardAccountName: null,
+  sourceRegisterRecordId: null,
+  sourceRegisterTitle: null,
 };
 
 const emptyForecast: ForecastResponse = {

@@ -26,6 +26,7 @@ function document(overrides: Partial<DocumentRow>): DocumentRow {
     layoutId: "layout-1",
     layoutVersion: 1,
     newerLayoutId: "layout-2",
+    title: null,
     ...overrides,
   };
 }
