@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -744,3 +745,248 @@ def test_forecast_omits_a_settled_occurrence_and_projects_a_part_paid_remainder(
     # A later, still-unpaid occurrence projects the full amount, not the remainder.
     later_occurrence = next(o for o in part_paid_shown if o["date"] == "2026-03-01")
     assert later_occurrence["amount"] == "5000.0000"
+
+
+# --- Phase 3.1 Task 2: card-source rules on create and update, and planning-then-settling a card
+# due through the action list. ---------------------------------------------------------------
+
+
+def _credit_card_account(
+    fixture: PlansFixture, currency: str, name: str = "Synthetic plans card"
+) -> UUID:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                                     country, opening_balance, opening_balance_date, credit_limit)
+               VALUES (%s, %s, %s, 'credit_card', %s, 'XZ', 0, '2026-01-01', 5000)
+               RETURNING id""",
+            (fixture.owner.household_id, fixture.person_id, name, currency),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def _card_statement(
+    fixture: PlansFixture,
+    account_id: UUID,
+    currency: str,
+    *,
+    balance: str = "400.0000",
+    due_date: str = "2026-02-20",
+    statement_date: str = "2026-02-01",
+    paid_in_full: bool = False,
+) -> UUID:
+    # One cycle per account per period_end (idx_card_stmt_period) — a distinct statement_date
+    # keeps two statements on the same synthetic card apart.
+    period_end = date.fromisoformat(statement_date) - date.resolution
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO card_statement (household_id, account_id, period_start, period_end,
+                       statement_date, payment_due_date, currency, opening_balance,
+                       closing_balance, statement_balance, is_paid_in_full)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s)
+               RETURNING id""",
+            (
+                fixture.owner.household_id,
+                account_id,
+                period_end.replace(day=1),
+                period_end,
+                statement_date,
+                due_date,
+                currency,
+                -Decimal(balance),
+                Decimal(balance),
+                paid_in_full,
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def _card_body(
+    statement_id: UUID, account_id: UUID, currency: str, **overrides: object
+) -> dict[str, object]:
+    body: dict[str, object] = {
+        "accountId": str(account_id),
+        "label": "Synthetic card payment",
+        "amount": "-400.0000",
+        "currency": currency,
+        "cadence": "once",
+        "firstDate": "2026-02-20",
+        "endDate": None,
+        "sourceCardStatementId": str(statement_id),
+        "idempotencyKey": str(uuid4()),
+    }
+    body.update(overrides)
+    return body
+
+
+def test_card_source_refusals_on_create(live: PlansFixture) -> None:
+    card_account = _credit_card_account(live, live.currency)
+    statement = _card_statement(live, card_account, live.currency)
+
+    unknown = client().post(
+        "/commitments",
+        json=_card_body(uuid4(), live.account_id, live.currency),
+        headers=ORIGIN,
+    )
+    assert unknown.status_code == 404
+
+    zero_due = _card_statement(
+        live,
+        card_account,
+        live.currency,
+        balance="0.0000",
+        statement_date="2026-03-01",
+        due_date="2026-03-20",
+    )
+    nothing_due = client().post(
+        "/commitments", json=_card_body(zero_due, live.account_id, live.currency), headers=ORIGIN
+    )
+    assert nothing_due.status_code == 422
+    assert nothing_due.json()["detail"] == "nothing is due on this card statement"
+
+    recurring = client().post(
+        "/commitments",
+        json=_card_body(statement, live.account_id, live.currency, cadence="monthly"),
+        headers=ORIGIN,
+    )
+    assert recurring.status_code == 422
+
+    positive = client().post(
+        "/commitments",
+        json=_card_body(statement, live.account_id, live.currency, amount="400.0000"),
+        headers=ORIGIN,
+    )
+    assert positive.status_code == 422
+
+    own_account = client().post(
+        "/commitments", json=_card_body(statement, card_account, live.currency), headers=ORIGIN
+    )
+    assert own_account.status_code == 422
+    assert own_account.json()["detail"] == "choose the account that pays the card"
+
+    other_card = _credit_card_account(live, live.currency, name="Synthetic other plans card")
+    not_asset = client().post(
+        "/commitments", json=_card_body(statement, other_card, live.currency), headers=ORIGIN
+    )
+    assert not_asset.status_code == 422
+    assert not_asset.json()["detail"] == "choose the account that pays the card"
+
+    wrong_currency = client().post(
+        "/commitments",
+        json=_card_body(statement, live.secondary_account_id, live.secondary_currency),
+        headers=ORIGIN,
+    )
+    assert wrong_currency.status_code == 422
+    assert (
+        wrong_currency.json()["detail"]
+        == "the paying account must be in the card statement's currency"
+    )
+
+    planned = client().post(
+        "/commitments", json=_card_body(statement, live.account_id, live.currency), headers=ORIGIN
+    )
+    assert planned.status_code == 201, planned.text
+    row = planned.json()
+    assert row["source"] == "card_statement"
+    assert row["sourceCardStatementId"] == str(statement)
+    assert row["sourceCardAccountName"] == "Synthetic plans card"
+
+    again = client().post(
+        "/commitments",
+        json=_card_body(statement, live.account_id, live.currency, idempotencyKey=str(uuid4())),
+        headers=ORIGIN,
+    )
+    assert again.status_code == 409
+    assert again.json()["detail"] == "a payment is already planned for this card statement"
+
+
+def test_card_source_refusals_on_update(live: PlansFixture) -> None:
+    card_account = _credit_card_account(live, live.currency)
+    statement = _card_statement(live, card_account, live.currency)
+    created = client().post(
+        "/commitments", json=_card_body(statement, live.account_id, live.currency), headers=ORIGIN
+    )
+    assert created.status_code == 201, created.text
+    commitment_id = created.json()["id"]
+
+    def update(**overrides: object) -> httpx.Response:
+        body = _card_body(statement, live.account_id, live.currency)
+        del body["sourceCardStatementId"]
+        del body["idempotencyKey"]
+        body.update(overrides)
+        response: httpx.Response = client().put(
+            f"/commitments/{commitment_id}", json=body, headers=ORIGIN
+        )
+        return response
+
+    assert update(cadence="monthly").status_code == 422
+    assert update(amount="400.0000").status_code == 422
+    own_account = update(accountId=str(card_account))
+    assert own_account.status_code == 422
+    assert own_account.json()["detail"] == "choose the account that pays the card"
+    wrong_currency = update(
+        accountId=str(live.secondary_account_id), currency=live.secondary_currency
+    )
+    assert wrong_currency.status_code == 422
+
+    ok = update(label="Synthetic renamed card payment")
+    assert ok.status_code == 200, ok.text
+    assert ok.json()["label"] == "Synthetic renamed card payment"
+    assert ok.json()["source"] == "card_statement"
+
+
+def test_planning_a_card_due_then_settling_clears_both_items(live: PlansFixture) -> None:
+    card_account = _credit_card_account(live, live.currency)
+    statement = _card_statement(
+        live, card_account, live.currency, due_date="2026-02-05", statement_date="2026-02-01"
+    )
+    card_key = f"card.{statement}"
+    commitment_key_prefix = None
+
+    unplanned = client().get("/actions?asOf=2026-02-02", headers=ORIGIN)
+    assert unplanned.status_code == 200, unplanned.text
+    assert card_key in {item["actionKey"] for item in unplanned.json()["items"]}
+
+    planned = client().post(
+        "/commitments",
+        json=_card_body(statement, live.account_id, live.currency, firstDate="2026-02-05"),
+        headers=ORIGIN,
+    )
+    assert planned.status_code == 201, planned.text
+    commitment_id = planned.json()["id"]
+    commitment_key_prefix = f"commitment.{commitment_id}."
+
+    after_planning = client().get("/actions?asOf=2026-02-02", headers=ORIGIN)
+    keys = {item["actionKey"] for item in after_planning.json()["items"]}
+    assert card_key not in keys
+    assert any(key.startswith(commitment_key_prefix) for key in keys)
+
+    # A bank-side transfer leg on the paying account is a real cash movement (V48's
+    # commitment_payment_is_eligible rule accepts a transfer leg) and settles the planned
+    # payment.
+    transfer_txn = _raw_txn(
+        live, live.account_id, "-400.0000", "2026-02-05", txn_type="transfer_out"
+    )
+    settle = client().post(
+        f"/commitments/{commitment_id}/resolutions",
+        json={
+            "dueDate": "2026-02-05",
+            "kind": "payment",
+            "transactionId": str(transfer_txn),
+            "closes": True,
+        },
+        headers=ORIGIN,
+    )
+    assert settle.status_code == 201, settle.text
+    assert settle.json()["status"] == "finished"
+
+    after_settling = client().get("/actions?asOf=2026-02-02", headers=ORIGIN)
+    keys = {item["actionKey"] for item in after_settling.json()["items"]}
+    assert card_key not in keys
+    assert not any(key.startswith(commitment_key_prefix) for key in keys)
