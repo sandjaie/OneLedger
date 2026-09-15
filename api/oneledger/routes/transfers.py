@@ -334,6 +334,33 @@ def _check_window(date_from: date | None, date_to: date | None) -> None:
             )
 
 
+def candidates_for_window(
+    cur: psycopg.Cursor[Any], household_id: UUID, date_from: date, date_to: date
+) -> list[Candidate]:
+    """Scored candidates over debits in `[date_from, date_to]`, ranked, filtered to the shown
+    bands — the computation `GET /transfers/candidates` paginates and the monthly review's
+    transfers step counts. Not a second scorer: both callers reach this one function."""
+    cur.execute(
+        f"""SELECT d.id, c.id
+              FROM transaction d
+              JOIN transaction c
+                ON c.household_id = d.household_id
+               AND c.account_id <> d.account_id
+               AND c.booked_date BETWEEN d.booked_date AND d.booked_date + %s
+             WHERE d.household_id = %s
+               AND d.booked_date BETWEEN %s AND %s
+               AND d.amount < 0 AND c.amount > 0
+               AND {_LINKABLE.format(t="d")} AND {_LINKABLE.format(t="c")}
+               AND {_NOT_REJECTED}""",
+        (LOOKAHEAD_DAYS, household_id, date_from, date_to),
+    )
+    pair_ids = [(row[0], row[1]) for row in cur.fetchall()]
+    loaded = _load(cur, household_id, {i for pair in pair_ids for i in pair})
+    scorer = _Scorer(cur, household_id, list(loaded.values()))
+    scored = [scorer.score(loaded[d], loaded[c]) for d, c in pair_ids]
+    return _ranked([candidate for candidate in scored if candidate.band in SHOWN])
+
+
 @router.get("/transfers/candidates")
 def list_candidates(
     owner: Annotated[OwnerSession, Depends(require_owner)],
@@ -349,25 +376,7 @@ def list_candidates(
         if window is None:
             return CandidatesResponse(candidates=[], total=0)
         _check_window(*window)
-        cur.execute(
-            f"""SELECT d.id, c.id
-                  FROM transaction d
-                  JOIN transaction c
-                    ON c.household_id = d.household_id
-                   AND c.account_id <> d.account_id
-                   AND c.booked_date BETWEEN d.booked_date AND d.booked_date + %s
-                 WHERE d.household_id = %s
-                   AND d.booked_date BETWEEN %s AND %s
-                   AND d.amount < 0 AND c.amount > 0
-                   AND {_LINKABLE.format(t="d")} AND {_LINKABLE.format(t="c")}
-                   AND {_NOT_REJECTED}""",
-            (LOOKAHEAD_DAYS, owner.household_id, *window),
-        )
-        pair_ids = [(row[0], row[1]) for row in cur.fetchall()]
-        loaded = _load(cur, owner.household_id, {i for pair in pair_ids for i in pair})
-        scorer = _Scorer(cur, owner.household_id, list(loaded.values()))
-        scored = [scorer.score(loaded[d], loaded[c]) for d, c in pair_ids]
-    shown = _ranked([candidate for candidate in scored if candidate.band in SHOWN])
+        shown = candidates_for_window(cur, owner.household_id, *window)
     return CandidatesResponse(
         candidates=[_public_candidate(item) for item in shown[offset : offset + limit]],
         total=len(shown),
