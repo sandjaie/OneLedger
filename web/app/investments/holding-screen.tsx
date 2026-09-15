@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
+import { FundingPanel, type FundableEvent } from "@/app/investments/funding-panel";
 import { reasonText } from "@/app/investments/review-reasons";
 import type { apiFetch } from "@/lib/api/client";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, errorText } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
-import type { HoldingDetail } from "@/types/api";
+import type { HoldingDetail, ManualPriceCreate, ManualPriceRow } from "@/types/api";
 
 type Props = {
   holdingId: string;
@@ -16,11 +17,31 @@ type Props = {
 
 type LoadState = "loading" | "ready" | "error" | "not_found";
 
+const PURCHASE_KINDS = new Set(["purchase", "recurring_purchase"]);
+
+/** Active purchases with a recorded net amount — the ones a funding action can ever apply to. */
+function purchaseEvents(detail: HoldingDetail) {
+  return detail.events.filter(
+    (event) => PURCHASE_KINDS.has(event.eventKind) && event.correctionState === "active" && event.netAmount !== null,
+  );
+}
+
+function fundableEvent(detail: HoldingDetail, eventId: string): FundableEvent | undefined {
+  const event = detail.events.find((item) => item.id === eventId);
+  if (!event || event.netAmount === null) return undefined;
+  return { id: event.id, eventDate: event.eventDate, eventKind: event.eventKind, currency: event.currency, netAmount: event.netAmount };
+}
 
 export function HoldingScreen({ holdingId, request }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [attempt, setAttempt] = useState(0);
   const [detail, setDetail] = useState<HoldingDetail>();
+  const [priceDate, setPriceDate] = useState("");
+  const [priceValue, setPriceValue] = useState("");
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceProblem, setPriceProblem] = useState("");
+  const [priceFeedback, setPriceFeedback] = useState("");
+  const [fundingEventId, setFundingEventId] = useState<string>();
 
   useEffect(() => {
     let current = true;
@@ -38,6 +59,33 @@ export function HoldingScreen({ holdingId, request }: Props) {
       current = false;
     };
   }, [holdingId, request, attempt]);
+
+  async function submitPrice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!detail || priceBusy) return;
+    setPriceBusy(true);
+    setPriceProblem("");
+    setPriceFeedback("");
+    try {
+      const body: ManualPriceCreate = { priceDate, price: priceValue };
+      await request<ManualPriceRow>(`/investment-catalogue/securities/${detail.securityId}/manual-prices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setPriceDate("");
+      setPriceValue("");
+      setPriceFeedback("Dated price recorded.");
+      setAttempt((value) => value + 1);
+    } catch (error) {
+      setPriceProblem(errorText(error, "This price was not recorded. Retry."));
+    } finally {
+      setPriceBusy(false);
+    }
+  }
+
+  const purchases = detail ? purchaseEvents(detail) : [];
+  const fundingEvent = detail && fundingEventId ? fundableEvent(detail, fundingEventId) : undefined;
 
   return (
     <section className="workspace-content holding-screen" aria-labelledby="holding-title">
@@ -128,7 +176,53 @@ export function HoldingScreen({ holdingId, request }: Props) {
                 ))}
               </dl>
             )}
+            <form className="investment-record-price" onSubmit={(event) => void submitPrice(event)}>
+              <h3>Record a dated price</h3>
+              {priceProblem && <p className="inline-alert" role="alert">{priceProblem}</p>}
+              {priceFeedback && <p className="investment-feedback" role="status">{priceFeedback}</p>}
+              <label className="date-field">
+                <span>Price date</span>
+                <input disabled={priceBusy} onChange={(event) => setPriceDate(event.target.value)} required type="date" value={priceDate} />
+              </label>
+              <label className="text-field">
+                <span>Price ({detail.currency})</span>
+                <input disabled={priceBusy} inputMode="decimal" onChange={(event) => setPriceValue(event.target.value)} required value={priceValue} />
+              </label>
+              <button className="primary-action" disabled={priceBusy || !priceDate || !priceValue} type="submit">
+                {priceBusy ? "Recording price…" : "Record price"}
+              </button>
+            </form>
           </section>
+
+          {purchases.length > 0 && (
+            <section aria-labelledby="holding-funding-title">
+              <p className="section-label" id="holding-funding-title">Purchase funding</p>
+              <ul className="investment-holding-grid">
+                {purchases.map((event) => (
+                  <li aria-label={`Funding for the ${event.eventKind.replaceAll("_", " ")} on ${event.eventDate}`} className="investment-holding" key={event.id}>
+                    <div>
+                      <p className="section-label">{event.eventKind.replaceAll("_", " ")}</p>
+                      <h3>{dateLabel(event.eventDate)}</h3>
+                      <p className="investment-exact">{event.currency} {event.netAmount}</p>
+                      {event.fundingComplete
+                        ? <p>Fully funded. Unlink existing funding before correcting this purchase.</p>
+                        : <p>Not fully funded.</p>}
+                    </div>
+                    <button
+                      className="text-action"
+                      onClick={() => setFundingEventId(fundingEventId === event.id ? undefined : event.id)}
+                      type="button"
+                    >
+                      {fundingEventId === event.id ? "Hide funding" : event.fundingComplete ? "Review funding" : "Fund this purchase"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {fundingEvent && (
+                <FundingPanel events={[fundingEvent]} existingLinks={detail.cashLinks} request={request} />
+              )}
+            </section>
+          )}
         </>
       )}
     </section>

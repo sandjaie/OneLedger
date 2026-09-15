@@ -187,6 +187,12 @@ class HoldingEventRow(BaseModel):
     correctsEventId: UUID | None
     counterpartEventId: UUID | None
     correctionState: str  # "active" | "corrected"
+    # True for every event that is not an active purchase (nothing to fund). For an active
+    # purchase or recurring purchase, true only once `investment_cash_allocation` rows with
+    # role 'funding' cover the full net amount — the same remaining-amount comparison
+    # `investments/funding.py`'s proposal validation makes, so the holding page and the funding
+    # route agree on what "funded" means without restating either's arithmetic in TypeScript.
+    fundingComplete: bool
 
 
 class HoldingDetail(BaseModel):
@@ -287,30 +293,15 @@ def read_holding_detail(
         closed_on=row[8],
     )
 
-    cur.execute(_EVENTS_SQL, (household_id, holding.id))
-    event_rows = cur.fetchall()
-    events_total = int(event_rows[0][14]) if event_rows else 0
-    events = [
-        HoldingEventRow(
-            id=r[0],
-            eventDate=r[1],
-            eventKind=r[2],
-            units=_out(None if r[3] is None else Decimal(r[3])),
-            unitRatio=_out(None if r[4] is None else Decimal(r[4])),
-            price=_out(None if r[5] is None else Decimal(r[5])),
-            grossAmount=_out(None if r[6] is None else Decimal(r[6])),
-            charges=_out(None if r[7] is None else Decimal(r[7])),
-            withheldTax=_out(None if r[8] is None else Decimal(r[8])),
-            netAmount=_out(None if r[9] is None else Decimal(r[9])),
-            currency=str(r[10]).strip(),
-            correctsEventId=r[11],
-            counterpartEventId=r[12],
-            correctionState="active" if r[13] else "corrected",
-        )
-        for r in event_rows
-    ]
-
     cur.execute(_CASH_LINKS_SQL, (household_id, holding.id))
+    cash_link_rows = cur.fetchall()
+    # Only a 'funding' allocation counts toward a purchase's remaining amount — 'proceeds',
+    # 'cash_distribution' and 'fee' allocations belong to other event kinds and never appear
+    # against a purchase, but the sum stays scoped to the role that does.
+    funded_by_event: dict[UUID, Decimal] = {}
+    for r in cash_link_rows:
+        if str(r[2]) == "funding":
+            funded_by_event[r[0]] = funded_by_event.get(r[0], Decimal(0)) + Decimal(r[3])
     cash_links = [
         HoldingCashLink(
             investmentEventId=r[0],
@@ -319,8 +310,41 @@ def read_holding_detail(
             allocatedAmount=_out(Decimal(r[3])) or "0",
             currency=str(r[4]).strip(),
         )
-        for r in cur.fetchall()
+        for r in cash_link_rows
     ]
+
+    cur.execute(_EVENTS_SQL, (household_id, holding.id))
+    event_rows = cur.fetchall()
+    events_total = int(event_rows[0][14]) if event_rows else 0
+    events = []
+    for r in event_rows:
+        event_id, event_kind, is_active = r[0], r[2], bool(r[13])
+        net_amount = None if r[9] is None else Decimal(r[9])
+        funding_complete = (
+            event_kind not in ("purchase", "recurring_purchase")
+            or not is_active
+            or net_amount is None
+            or funded_by_event.get(event_id, Decimal(0)) >= abs(net_amount)
+        )
+        events.append(
+            HoldingEventRow(
+                id=r[0],
+                eventDate=r[1],
+                eventKind=r[2],
+                units=_out(None if r[3] is None else Decimal(r[3])),
+                unitRatio=_out(None if r[4] is None else Decimal(r[4])),
+                price=_out(None if r[5] is None else Decimal(r[5])),
+                grossAmount=_out(None if r[6] is None else Decimal(r[6])),
+                charges=_out(None if r[7] is None else Decimal(r[7])),
+                withheldTax=_out(None if r[8] is None else Decimal(r[8])),
+                netAmount=_out(net_amount),
+                currency=str(r[10]).strip(),
+                correctsEventId=r[11],
+                counterpartEventId=r[12],
+                correctionState="active" if is_active else "corrected",
+                fundingComplete=funding_complete,
+            )
+        )
 
     cur.execute(_PRICES_SQL, (holding.security_id,))
     prices = [

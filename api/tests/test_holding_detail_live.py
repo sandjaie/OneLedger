@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import date
+from decimal import Decimal
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.db import scope_to_owner
 from oneledger.investments import cash_lifecycle
+from oneledger.investments.portfolio import read_holding_detail
 from oneledger.main import app
 from oneledger.routes import dashboard, investment_catalogue, portfolio
 
@@ -22,6 +25,7 @@ from .test_portfolio_live import _acquire, _dispose, _price
 pytest_plugins = ("tests.test_investment_events_live",)
 
 AS_OF = date(2026, 2, 5)
+ORIGIN = {"Origin": "http://localhost:3000"}
 
 
 @pytest.fixture
@@ -91,6 +95,106 @@ def test_holding_detail_lists_events_prices_and_no_lot_or_evidence_fields(
     assert forbidden.isdisjoint(detail)
     for event in detail["events"]:
         assert forbidden.isdisjoint(event)
+
+
+def _cash_account(fixture: EventFixture, currency: str) -> UUID:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM person WHERE household_id = %s LIMIT 1", (fixture.owner.household_id,)
+        )
+        person = cur.fetchone()
+        assert person is not None
+        cur.execute(
+            """INSERT INTO account (
+                   household_id, owner_person_id, name, account_type, currency, country,
+                   opening_balance, opening_balance_date)
+               VALUES (%s, %s, 'Synthetic funding cash', 'cash', %s, 'XZ', 0, '2026-01-01')
+               RETURNING id""",
+            (fixture.owner.household_id, person[0], currency),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def _cash_debit(fixture: EventFixture, account_id: UUID, currency: str, amount: str) -> UUID:
+    value = Decimal(amount)
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction (
+                   household_id, account_id, booked_date, description_raw, amount, currency,
+                   fx_rate_date, fx_rate_to_base, fx_rate_to_secondary, amount_base,
+                   amount_secondary, txn_type, source, dedupe_hash)
+               VALUES (%s, %s, '2026-02-01', 'SYNTHETIC FUNDING CASH', %s, %s,
+                       '2026-02-01', 1.0000000000, 2.0000000000, %s, %s, 'expense',
+                       'manual', %s) RETURNING id""",
+            (
+                fixture.owner.household_id,
+                account_id,
+                value,
+                currency,
+                value,
+                value * 2,
+                uuid4().hex + uuid4().hex,
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def test_a_purchase_is_marked_funded_once_confirmed(holding_live: EventFixture) -> None:
+    """`fundingComplete` restates the same remaining-amount check the funding route makes, so
+    the holding page never re-derives it from `netAmount` and `cashLinks` client side."""
+    acquired = _acquire(holding_live)
+    event_id = acquired["id"]
+
+    before = _detail(acquired["holdingId"])
+    purchase_before = next(e for e in before["events"] if e["id"] == event_id)
+    assert purchase_before["netAmount"] == "-21.0000"
+    assert purchase_before["fundingComplete"] is False
+
+    cash_account = _cash_account(holding_live, holding_live.currency)
+    cash_id = _cash_debit(holding_live, cash_account, holding_live.currency, "-21.0000")
+    try:
+        allocation = {
+            "investmentEventId": event_id,
+            "cashTransactionId": str(cash_id),
+            "allocatedAmount": "21.0000",
+        }
+        proposal = TestClient(app).post(
+            "/investment-funding/proposals", json={"allocations": [allocation]}, headers=ORIGIN
+        )
+        assert proposal.status_code == 200, proposal.text
+        confirmation = TestClient(app).post(
+            "/investment-funding/confirmations",
+            json={"allocations": [allocation], "expectedState": proposal.json()["expectedState"]},
+            headers=ORIGIN,
+        )
+        assert confirmation.status_code == 201, confirmation.text
+
+        # The confirmed cash leaf now sits in `transaction`, so the route's own paranoid
+        # `connect_to_test_database` guard (any row there fails the fixture) would refuse a
+        # second HTTP round trip; read the same query `read_holding_detail` runs directly
+        # against the fixture's own connection instead.
+        with holding_live.connection.cursor() as cur:
+            after = read_holding_detail(
+                cur, holding_live.owner.household_id, UUID(acquired["holdingId"])
+            )
+        assert after is not None
+        purchase_after = next(e for e in after.events if str(e.id) == event_id)
+        assert purchase_after.fundingComplete is True
+    finally:
+        # `connect_to_test_database` refuses to run against a `transaction` table holding any
+        # row, so the one cash leaf this test appends must not outlive it — `holding_live`
+        # never otherwise touches that table.
+        scope_to_owner(holding_live.connection, holding_live.owner.user_id)
+        with holding_live.connection.cursor() as cur:
+            cur.execute("SELECT unlink_investment_cash_allocations(%s)", (cash_id,))
+            cur.execute("DELETE FROM transaction WHERE id = %s", (cash_id,))
+        holding_live.connection.commit()
 
 
 def test_a_fully_closed_holdings_units_render_as_an_exact_zero(

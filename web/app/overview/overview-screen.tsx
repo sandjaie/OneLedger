@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
@@ -10,6 +11,7 @@ import type {
   DashboardResponse,
   HouseholdCurrency,
   HouseholdResponse,
+  InvestmentCoverage,
   MissingRate,
   MonthFlows,
   YearToDate,
@@ -24,6 +26,32 @@ type Props = {
   request: typeof apiFetch;
   children?: ReactNode;
 };
+
+/** Every status that leaves a total unavailable or stale — everything except a current price or
+ * a current-dated snapshot. Stale still contributes a number; missing, future-only, out-of-range
+ * and carried do not (or contribute an aged one), so each gets its own reason and link. */
+function isCoverageConcern(item: InvestmentCoverage): boolean {
+  return item.status !== "current_price" && item.status !== "current_snapshot";
+}
+
+function coverageReasonText(item: InvestmentCoverage): string {
+  switch (item.status) {
+    case "missing_price":
+      return "No accepted price is recorded for this holding.";
+    case "future_price_only":
+      return "Only a future-dated price is recorded for this holding.";
+    case "outside_supported_range":
+      return "This holding's value is outside the supported calculation range.";
+    case "missing_snapshot":
+      return "No valuation snapshot is recorded for this account.";
+    case "carried_snapshot":
+      return `The latest valuation snapshot is from ${item.valueDate}, carried forward.`;
+    case "stale_price":
+      return `The latest price for this holding is from ${item.valueDate}.`;
+    default:
+      return item.status.replaceAll("_", " ");
+  }
+}
 
 type State =
   | { status: "loading" }
@@ -119,6 +147,9 @@ export function OverviewScreen({ household, currency, currencies, request, child
     return row ? formatOwed(value, row) : `${value} ${code}`;
   };
   const percent = (value: string | null) => (value === null ? "Not applicable" : formatPercent(value));
+  const coverageHref = (item: InvestmentCoverage) =>
+    item.holdingId ? `/investments/${item.holdingId}` : "/accounts";
+  const coverageLabel = (item: InvestmentCoverage) => (item.holdingId ? "View holding" : "View account");
 
   return (
     <section className="workspace-content overview" aria-labelledby="overview-title">
@@ -233,6 +264,19 @@ export function OverviewScreen({ household, currency, currencies, request, child
             </ul>
           )}
         </section>
+
+        {worth.investmentCoverage.filter(isCoverageConcern).length > 0 && (
+          <section className="overview-panel" aria-labelledby="coverage-title">
+            <h2 id="coverage-title">Why some figures may be incomplete</h2>
+            <ul className="overview-notes">
+              {worth.investmentCoverage.filter(isCoverageConcern).map((item) => (
+                <li key={`${item.accountId}-${item.holdingId ?? ""}-${item.status}`}>
+                  {coverageReasonText(item)} <Link href={coverageHref(item)}>{coverageLabel(item)}</Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {primary.assets !== null && primary.liabilities !== null && primary.liquid !== null && (
           <section aria-label="Position summary" className="overview-summary-grid">

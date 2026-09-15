@@ -8,26 +8,47 @@ import type {
   FundingConfirmationResponse,
   FundingProposalResponse,
   FundingUnlinkResponse,
-  InvestmentEventRow,
+  HoldingCashLink,
   TransactionRow,
   TransactionsResponse,
 } from "@/types/api";
 
+/** Every field this panel actually reads off an event — a strict subset of both
+ * `InvestmentEventRow` (the acquisition route's own response, used fresh from entry-screen) and
+ * the holding page's thinner `HoldingEventRow`, so either satisfies it without a cast. */
+export type FundableEvent = {
+  id: string;
+  eventDate: string;
+  eventKind: string;
+  currency: string;
+  netAmount: string;
+};
+
+/** Every field this panel reads off a confirmed allocation — a strict subset of
+ * `ConfirmedFundingAllocation`, satisfied both by a proposal this panel confirmed itself and by
+ * an existing `HoldingCashLink` seeded from the holding page. */
+type FundedAllocation = { id: string; cashTransactionId: string; allocatedAmount: string };
+
 type Props = {
-  events: Array<InvestmentEventRow>;
+  events: Array<FundableEvent>;
   request: typeof apiFetch;
+  // Cash already linked to these events before this panel opened (the holding page's own
+  // `HoldingDetail.cashLinks`) — seeded so the owner can review and unlink prior funding, not
+  // only funding confirmed in this session.
+  existingLinks?: Array<HoldingCashLink>;
 };
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type AllocationDraft = FundingAllocationInput & { key: number };
 type UnverifiedOutcome = { kind: "confirmation" | "removal"; detail: string };
 type RemovalResult = { transaction: TransactionRow; response: FundingUnlinkResponse };
+type Confirmed = { allocations: Array<FundedAllocation> } | undefined;
 
 const TRANSACTION_QUERY = "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=";
 const MAX_AUTO_PAGES = 4;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function purchaseLabel(event: InvestmentEventRow) {
+function purchaseLabel(event: FundableEvent) {
   return `${event.eventDate} · ${event.eventKind.replaceAll("_", " ")} · ${event.currency} ${event.netAmount}`;
 }
 
@@ -42,7 +63,7 @@ function isEligible(transaction: TransactionRow) {
     && !transaction.txnType.startsWith("investment_");
 }
 
-function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDraft {
+function newDraft(key: number, events: Array<FundableEvent>): AllocationDraft {
   return {
     key,
     investmentEventId: events.length === 1 ? events[0].id : "",
@@ -51,7 +72,7 @@ function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDra
   };
 }
 
-export function FundingPanel({ events, request }: Props) {
+export function FundingPanel({ events, request, existingLinks = [] }: Props) {
   const nextKey = useRef(2);
   const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -66,7 +87,19 @@ export function FundingPanel({ events, request }: Props) {
   const [transactionTotal, setTransactionTotal] = useState(0);
   const [drafts, setDrafts] = useState<Array<AllocationDraft>>([newDraft(1, events)]);
   const [proposal, setProposal] = useState<FundingProposalResponse>();
-  const [confirmed, setConfirmed] = useState<FundingConfirmationResponse>();
+  // Seeded once, from the links this panel opened with — a purchase funded before this session
+  // shows the same "review removal" action as one confirmed just now.
+  const [confirmed, setConfirmed] = useState<Confirmed>(() => {
+    const eventIds = new Set(events.map((event) => event.id));
+    const seeded = existingLinks
+      .filter((link) => link.role === "funding" && eventIds.has(link.investmentEventId))
+      .map((link) => ({
+        id: `${link.investmentEventId}:${link.cashTransactionId}`,
+        cashTransactionId: link.cashTransactionId,
+        allocatedAmount: link.allocatedAmount,
+      }));
+    return seeded.length > 0 ? { allocations: seeded } : undefined;
+  });
   const [removingCashId, setRemovingCashId] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -457,6 +490,7 @@ export function FundingPanel({ events, request }: Props) {
                   </p>
                 ))}
                 <p>{allocations.length} recorded allocation{allocations.length === 1 ? "" : "s"}. The purchase and any confirmed transfer chain remain separate ledger records.</p>
+                <p>Unlink this funding before correcting the purchase it funds.</p>
                 <button
                   aria-label={`Review removal for ${transaction?.descriptionRaw ?? "cash entry"}`}
                   className="text-action"

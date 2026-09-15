@@ -10,6 +10,7 @@ import type {
   CurrencyRow,
   DashboardResponse,
   HouseholdResponse,
+  InvestmentCoverage,
   MonthFlows,
 } from "@/types/api";
 
@@ -305,6 +306,59 @@ describe("overview screen", () => {
     expect(await screen.findByText(/Nothing to report yet/)).toBeTruthy();
     expect(screen.queryByText(/0\.00/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("shows an investment coverage reason with a link, and skips a fully current one", async () => {
+    const missingPrice: InvestmentCoverage = {
+      accountId: "acct-1",
+      holdingId: "holding-1",
+      valuationMode: "holdings",
+      status: "missing_price",
+      valueDate: null,
+      carried: false,
+      ageDays: null,
+      method: null,
+      confidence: null,
+    };
+    const carriedSnapshot: InvestmentCoverage = {
+      accountId: "acct-2",
+      holdingId: null,
+      valuationMode: "snapshot",
+      status: "carried_snapshot",
+      valueDate: "2026-02-01",
+      carried: true,
+      ageDays: 42,
+      method: "owner_entered",
+      confidence: "medium",
+    };
+    const current: InvestmentCoverage = {
+      accountId: "acct-3",
+      holdingId: "holding-3",
+      valuationMode: "holdings",
+      status: "current_price",
+      valueDate: "2026-03-15",
+      carried: false,
+      ageDays: 0,
+      method: null,
+      confidence: null,
+    };
+    const base = payload().netWorth;
+    renderWith(
+      payload({
+        netWorth: { ...base, investmentCoverage: [missingPrice, carriedSnapshot, current] },
+      }),
+    );
+
+    const region = await screen.findByRole("region", { name: "Why some figures may be incomplete" });
+    expect(within(region).getByText(/No accepted price is recorded for this holding\./)).toBeTruthy();
+    expect(within(region).getByRole("link", { name: "View holding" })).toHaveProperty(
+      "pathname",
+      "/investments/holding-1",
+    );
+    expect(within(region).getByText(/carried forward/)).toBeTruthy();
+    expect(within(region).getByRole("link", { name: "View account" })).toHaveProperty("pathname", "/accounts");
+    // The fully current entry names no reason and gets no row.
+    expect(within(region).getAllByRole("listitem")).toHaveLength(2);
   });
 
   it("renders the service's own sentence when the request fails", async () => {

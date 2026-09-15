@@ -2929,6 +2929,10 @@ export type HoldingEventRow = {
      * Correctionstate
      */
     correctionState: string;
+    /**
+     * Fundingcomplete
+     */
+    fundingComplete: boolean;
 };
 
 /**

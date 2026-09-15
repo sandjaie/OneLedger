@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
@@ -305,7 +305,7 @@ export function Workspace({
     } catch {}
   }
 
-  function leaveForAuth(path: string) {
+  const leaveForAuth = useCallback((path: string) => {
     fxRequest.current?.controller.abort();
     setHousehold(undefined);
     setCurrency(undefined);
@@ -316,7 +316,24 @@ export function Workspace({
     setCategories(undefined);
     setState("leaving");
     setDestination(path);
-  }
+  }, []);
+
+  // One stable wrapper, reused by every section below: an inline arrow recreated each render
+  // would give each section a new `request` reference every time *anything* in Workspace
+  // re-renders, and a section whose data-loading effect depends on `request` would reload on
+  // every unrelated keystroke or currency toggle rather than once per mount.
+  const wrappedRequest = useCallback<typeof apiFetch>(
+    async (path, init) => {
+      try {
+        return await request(path, init);
+      } catch (error) {
+        const next = authDestination(error);
+        if (next) leaveForAuth(next);
+        throw error;
+      }
+    },
+    [request, leaveForAuth],
+  );
 
   async function loadFx() {
     const requestedDate = fxDate;
@@ -420,15 +437,7 @@ export function Workspace({
               currencies={currencies}
               currency={currency}
               household={household}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             >
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
             </OverviewScreen>
@@ -438,15 +447,7 @@ export function Workspace({
             <ImportScreen
               accounts={inventory.accounts}
               currencies={currencies}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -457,15 +458,7 @@ export function Workspace({
               currencies={currencies}
               currency={currency}
               household={household}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -475,15 +468,7 @@ export function Workspace({
               currencies={currencies}
               institutions={institutions}
               onChanged={() => setAttempt((value) => value + 1)}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
               totals={inventory.totals}
             />
           )}
@@ -497,15 +482,7 @@ export function Workspace({
               household={household}
               initialSourceDocumentId={sourceDocumentIdFromLocation()}
               onChanged={() => setAttempt((value) => value + 1)}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
               total={ledger.total}
               transactions={ledger.transactions}
             />
@@ -515,60 +492,28 @@ export function Workspace({
             <DocumentsScreen
               accounts={inventory.accounts}
               documents={documents.documents}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
               total={documents.total}
             />
           )}
 
           {activeSection === "investments" && (
             <PortfolioScreen
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
           {activeSection === "investments-holding" && holdingId && (
             <HoldingScreen
               holdingId={holdingId}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
           {activeSection === "investments-entry" && inventory && (
             <InvestmentEntryScreen
               accounts={inventory.accounts}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -576,15 +521,7 @@ export function Workspace({
             <InvestmentImportScreen
               accounts={inventory.accounts}
               importId={importId}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -592,15 +529,7 @@ export function Workspace({
             <PayslipsScreen
               currencies={currencies}
               categories={categories}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -608,29 +537,13 @@ export function Workspace({
             <PlansScreen
               accounts={inventory.accounts}
               currencies={currencies}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
           {activeSection === "coverage" && (
             <CoverageScreen
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -638,30 +551,14 @@ export function Workspace({
             <WealthScreen
               currencies={currencies}
               currency={currency}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
           {activeSection === "classification-review" && categories && (
             <ClassificationReviewScreen
               categories={categories}
-              request={async (path, init) => {
-                try {
-                  return await request(path, init);
-                } catch (error) {
-                  const next = authDestination(error);
-                  if (next) leaveForAuth(next);
-                  throw error;
-                }
-              }}
+              request={wrappedRequest}
             />
           )}
 
@@ -673,15 +570,7 @@ export function Workspace({
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
 
               <DataQuality
-                request={async (path, init) => {
-                  try {
-                    return await request(path, init);
-                  } catch (error) {
-                    const next = authDestination(error);
-                    if (next) leaveForAuth(next);
-                    throw error;
-                  }
-                }}
+                request={wrappedRequest}
               />
 
               {currencies && (
@@ -689,19 +578,13 @@ export function Workspace({
                   currencies={currencies}
                   household={household}
                   onSaved={() => setAttempt((value) => value + 1)}
-                  save={async (body: HouseholdUpdate) => {
-                    try {
-                      await request<void>("/household", {
-                        method: "PATCH",
-                        body: JSON.stringify(body),
-                        headers: { "Content-Type": "application/json" },
-                      });
-                    } catch (error) {
-                      const next = authDestination(error);
-                      if (next) leaveForAuth(next);
-                      throw error;
-                    }
-                  }}
+                  save={(body: HouseholdUpdate) =>
+                    wrappedRequest<void>("/household", {
+                      method: "PATCH",
+                      body: JSON.stringify(body),
+                      headers: { "Content-Type": "application/json" },
+                    })
+                  }
                 />
               )}
 
@@ -709,15 +592,7 @@ export function Workspace({
                 <CategoriesManager
                   categories={categories}
                   onChanged={() => setAttempt((value) => value + 1)}
-                  request={async (path, init) => {
-                    try {
-                      return await request(path, init);
-                    } catch (error) {
-                      const next = authDestination(error);
-                      if (next) leaveForAuth(next);
-                      throw error;
-                    }
-                  }}
+                  request={wrappedRequest}
                 />
               )}
 
@@ -725,15 +600,7 @@ export function Workspace({
                 <RulesManager
                   categories={categories}
                   onChanged={() => setAttempt((value) => value + 1)}
-                  request={async (path, init) => {
-                    try {
-                      return await request(path, init);
-                    } catch (error) {
-                      const next = authDestination(error);
-                      if (next) leaveForAuth(next);
-                      throw error;
-                    }
-                  }}
+                  request={wrappedRequest}
                 />
               )}
 

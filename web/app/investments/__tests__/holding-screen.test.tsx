@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { HoldingScreen } from "@/app/investments/holding-screen";
 import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
-import type { HoldingDetail, HouseholdResponse } from "@/types/api";
+import type {
+  FundingProposalResponse,
+  HoldingDetail,
+  HouseholdResponse,
+  TransactionsResponse,
+} from "@/types/api";
 
 type Request = typeof apiFetch;
 
@@ -53,6 +58,7 @@ function detail(overrides: Partial<HoldingDetail> = {}): HoldingDetail {
         correctsEventId: null,
         counterpartEventId: null,
         correctionState: "active",
+        fundingComplete: true,
       },
     ],
     eventsTotal: 1,
@@ -97,6 +103,142 @@ describe("HoldingScreen", () => {
     expect(screen.getByText("funding")).toBeTruthy();
     expect(screen.getByText("XAA 101.0000")).toBeTruthy();
     expect(screen.getByText("XAA 10.500000")).toBeTruthy();
+  });
+
+  it("records a dated price with the exact strings typed and reloads the holding", async () => {
+    let loads = 0;
+    const request = requestFrom((path, init) => {
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        loads += 1;
+        return loads === 1 ? detail() : detail({ prices: [{ priceDate: "2026-02-10", price: "11.250000" }] });
+      }
+      if (path === "/investment-catalogue/securities/00000000-0000-4000-8000-000000000040/manual-prices" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toEqual({ priceDate: "2026-02-10", price: "11.250000" });
+        return { id: "price-1", securityId: "00000000-0000-4000-8000-000000000040", priceDate: "2026-02-10", price: "11.250000", currency: "XAA", status: "recorded" };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(screen.getByLabelText("Price (XAA)"), { target: { value: "11.250000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record price" }));
+
+    expect(await screen.findByText("Dated price recorded.")).toBeTruthy();
+    expect(await screen.findByText("XAA 11.250000")).toBeTruthy();
+    expect(loads).toBe(2);
+  });
+
+  it("lists a purchase that is not fully funded and confirms funding through the existing flow", async () => {
+    const unfunded = detail({
+      events: [{
+        id: "00000000-0000-4000-8000-000000000061",
+        eventDate: "2026-01-06",
+        eventKind: "purchase",
+        units: "5.00000000",
+        unitRatio: null,
+        price: "10.000000",
+        grossAmount: "50.0000",
+        charges: "0.0000",
+        withheldTax: "0.0000",
+        netAmount: "-50.0000",
+        currency: "XAA",
+        correctsEventId: null,
+        counterpartEventId: null,
+        correctionState: "active",
+        fundingComplete: false,
+      }],
+      cashLinks: [],
+    });
+    const cashTransactions: TransactionsResponse = {
+      transactions: [{
+        id: "00000000-0000-4000-8000-000000000080",
+        accountId: "00000000-0000-4000-8000-000000000011",
+        accountName: "Synthetic cash account",
+        bookedDate: "2026-01-06",
+        descriptionRaw: "Synthetic funding debit",
+        descriptionClean: "Synthetic funding debit",
+        amount: "-50.0000",
+        currency: "XAA",
+        originalAmount: null,
+        originalCurrency: null,
+        amountBase: "-50.0000",
+        amountSecondary: "-100.0000",
+        fxRateDate: "2026-01-06",
+        fxRateIsCarried: false,
+        fxRateToBase: "1.0000000000",
+        fxRateToSecondary: "2.0000000000",
+        txnType: "expense",
+        categoryId: null,
+        categoryName: null,
+        merchantId: null,
+        transferId: null,
+        parentTransactionId: null,
+        isSplitParent: false,
+        isExcluded: false,
+        classifiedBy: "unclassified",
+        source: "statement_import",
+        notes: null,
+        sourceDocumentId: null,
+        sourcePageNumber: null,
+        sourceRowNumber: null,
+      }],
+      total: 1,
+    };
+    const proposalResponse: FundingProposalResponse = {
+      state: "ready",
+      expectedState: "a".repeat(64),
+      allocations: [{
+        investmentEventId: "00000000-0000-4000-8000-000000000061",
+        cashTransactionId: "00000000-0000-4000-8000-000000000080",
+        allocatedAmount: "50.0000",
+        eventRemainingAmount: "50.0000",
+        cashAmount: "50.0000",
+        currency: "XAA",
+        priorTransactionType: "expense",
+        role: "funding",
+      }],
+    };
+    const request = requestFrom((path, init) => {
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) return unfunded;
+      if (path === "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0") return cashTransactions;
+      if (path === "/investment-funding/proposals" && init?.method === "POST") return proposalResponse;
+      if (path === "/investment-funding/confirmations" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toEqual({
+          allocations: proposalResponse.allocations.map(({ investmentEventId, cashTransactionId, allocatedAmount }) => (
+            { investmentEventId, cashTransactionId, allocatedAmount }
+          )),
+          expectedState: proposalResponse.expectedState,
+        });
+        return { state: "confirmed", allocations: [{
+          id: "alloc-1",
+          investmentEventId: "00000000-0000-4000-8000-000000000061",
+          cashTransactionId: "00000000-0000-4000-8000-000000000080",
+          role: "funding",
+          allocatedAmount: "50.0000",
+          priorTransactionType: "expense",
+          cashTransactionType: "investment_buy",
+        }] };
+      }
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    });
+
+    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    expect(screen.getByText("Not fully funded.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Fund this purchase" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Find cash entries" }));
+    await screen.findByRole("group", { name: "Funding allocation 1" });
+    fireEvent.change(screen.getByLabelText("Purchase for allocation 1"), { target: { value: "00000000-0000-4000-8000-000000000061" } });
+    fireEvent.change(screen.getByLabelText("Cash entry for allocation 1"), { target: { value: "00000000-0000-4000-8000-000000000080" } });
+    fireEvent.change(screen.getByLabelText("Allocated amount for allocation 1"), { target: { value: "50.0000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm funding" }));
+
+    expect(await screen.findByText("Funding confirmed from the reviewed server proposal.")).toBeTruthy();
   });
 
   it("shows a not-found state for a foreign or missing holding without a generic error", async () => {

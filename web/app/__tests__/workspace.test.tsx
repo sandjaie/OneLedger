@@ -7,12 +7,15 @@ import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   AccountsResponse,
+  ClassifyResult,
   CurrencyRow,
   DashboardResponse,
   FxRateResponse,
   HouseholdResponse,
   InstitutionRow,
   MonthFlows,
+  RuleRow,
+  RuleSuggestion,
 } from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
@@ -761,5 +764,83 @@ describe("authenticated workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save household" }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(destination));
     expect(screen.queryByLabelText("Household name")).toBeNull();
+  });
+
+  it("creates a suggested rule, checks past rows and applies — surviving an unrelated re-render", async () => {
+    const suggestion: RuleSuggestion = {
+      pattern: "WHOLE FOODS",
+      direction: "debit",
+      categoryId: "cat-1",
+      categoryName: "Groceries",
+      txnType: "expense",
+      evidenceRows: 4,
+      affected: 6,
+      unclassified: 5,
+    };
+    const createdRule: RuleRow = {
+      id: "rule-1",
+      origin: "user",
+      timesApplied: 0,
+      lastAppliedAt: null,
+      name: "Mark Groceries",
+      priority: 100,
+      isActive: true,
+      matchDescriptionPattern: "WHOLE FOODS",
+      matchPatternKind: "contains",
+      matchDirection: "debit",
+      setCategoryId: "cat-1",
+      setTxnType: "expense",
+    };
+    const preview: ClassifyResult = {
+      considered: 5,
+      changed: 3,
+      sample: [{ id: "row-1", bookedDate: "2026-01-02", descriptionRaw: "WHOLE FOODS #123", amount: "-42.0000", currency: "XIN", classifiedBy: "unclassified" }],
+      applied: false,
+    };
+    const applied: ClassifyResult = { ...preview, applied: true };
+
+    let suggestionCalls = 0;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (path === "/household") return household;
+      if (path === "/currencies") return catalogue;
+      if (path === "/categories") return [];
+      if (path === "/rules" && method === "GET") return [];
+      if (path === "/rules" && method === "POST") return createdRule;
+      if (path === "/rules/analytics") return {};
+      if (path === "/rules/suggestions") {
+        suggestionCalls += 1;
+        return { suggestions: [suggestion] };
+      }
+      if (path === "/doctor") return { sections: [] };
+      if (path === "/classify?ruleId=rule-1&preview=true" && method === "POST") return preview;
+      if (path === "/classify?ruleId=rule-1" && method === "POST") return applied;
+      throw new Error(`Unexpected synthetic route ${method} ${path}`);
+    }) as Request;
+
+    render(<Workspace section="settings" request={request} navigate={vi.fn()} />);
+
+    const card = (await screen.findByText(/narration contains .WHOLE FOODS., debit → Groceries/)).closest("li");
+    if (!card) throw new Error("suggestion card not found");
+    expect(suggestionCalls).toBe(1);
+
+    fireEvent.click(within(card).getByRole("button", { name: "Create rule" }));
+    await within(card).findByRole("button", { name: "Check past rows" });
+
+    // An unrelated re-render — the reporting-currency toggle — must not reload the
+    // suggestions the card's own state now depends on staying put.
+    fireEvent.click(screen.getByRole("button", { name: "XAE" }));
+    expect(suggestionCalls).toBe(1);
+
+    fireEvent.click(within(card).getByRole("button", { name: "Check past rows" }));
+    await within(card).findByText("3 of 5 unclassified rows would change. Checking changes nothing; nothing is applied until confirmed.");
+
+    fireEvent.click(within(card).getByRole("button", { name: "Apply 3 changes" }));
+    await within(card).findByText("3 of 5 unclassified rows updated.");
+
+    // The card — its pattern, its now-created rule, its apply outcome — stayed mounted
+    // through the whole flow rather than being replaced by a reloaded suggestions list.
+    expect(screen.getByText(/narration contains .WHOLE FOODS., debit → Groceries/)).toBeTruthy();
+    expect(suggestionCalls).toBe(1);
   });
 });
