@@ -2746,6 +2746,100 @@ commitment applies no occurrence) and substitutes `remainingNext` for the occurr
 
 ---
 
+## `V49` (applied)
+
+### Card-statement source and actions
+
+Phase 3.1 Task 2. A commitment may be planned from a card statement's due amount, and one Needs
+attention list gathers every item that asks the owner to act: a commitment occurrence, a card
+statement with an amount due and no plan, and owner-entered follow-ups. `action_item` and
+`action_mark` follow `commitment_resolution`'s own convention (V48): plain owner-scoped tables, no
+`SECURITY DEFINER` write path.
+
+```sql
+ALTER TABLE card_statement
+  ADD CONSTRAINT uq_card_statement_household_id UNIQUE (household_id, id);
+
+ALTER TABLE commitment
+  ADD COLUMN source_card_statement_id UUID,
+  ADD CONSTRAINT fk_commitment_card_statement_scope
+    FOREIGN KEY (household_id, source_card_statement_id)
+    REFERENCES card_statement (household_id, id) ON DELETE RESTRICT,
+  ADD CONSTRAINT commitment_card_source_is_one_payment CHECK (
+    source_card_statement_id IS NULL OR (cadence = 'once' AND amount < 0));
+CREATE UNIQUE INDEX uq_commitment_open_card_statement ON commitment (source_card_statement_id)
+  WHERE source_card_statement_id IS NOT NULL AND archived_at IS NULL;
+
+CREATE TYPE action_item_state AS ENUM ('open', 'completed', 'dismissed');
+
+CREATE TABLE action_item (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id    UUID NOT NULL REFERENCES household(id),
+  idempotency_key UUID NOT NULL,
+  title           TEXT NOT NULL,
+  due_date        DATE,
+  account_id      UUID,
+  state           action_item_state NOT NULL DEFAULT 'open',
+  dismiss_reason  TEXT,
+  resolved_at     TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_action_item_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT fk_action_item_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT action_item_title_is_bounded CHECK (
+    char_length(title) BETWEEN 1 AND 120 AND title = btrim(title)),
+  CONSTRAINT action_item_resolution_agrees CHECK ((state = 'open') = (resolved_at IS NULL)),
+  CONSTRAINT action_item_dismissal_has_reason CHECK (
+    (state = 'dismissed') = (dismiss_reason IS NOT NULL)
+    AND (dismiss_reason IS NULL OR (char_length(dismiss_reason) BETWEEN 1 AND 200
+                                    AND dismiss_reason = btrim(dismiss_reason))))
+);
+
+CREATE TABLE action_mark (
+  household_id   UUID NOT NULL REFERENCES household(id),
+  action_key     TEXT NOT NULL,
+  snoozed_until  DATE,
+  dismiss_reason TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, action_key),
+  CONSTRAINT action_mark_key_shape CHECK (action_key ~
+    '^(follow-up\.[0-9a-f-]{36}|commitment\.[0-9a-f-]{36}\.[0-9]{4}-[0-9]{2}-[0-9]{2}|card\.[0-9a-f-]{36})$'),
+  CONSTRAINT action_mark_is_one_mark CHECK (num_nonnulls(snoozed_until, dismiss_reason) = 1),
+  CONSTRAINT action_mark_dismissal_is_card CHECK (dismiss_reason IS NULL OR action_key LIKE 'card.%'),
+  CONSTRAINT action_mark_reason_is_bounded CHECK (dismiss_reason IS NULL OR (
+    char_length(dismiss_reason) BETWEEN 1 AND 200 AND dismiss_reason = btrim(dismiss_reason)))
+);
+```
+
+Both new tables enable `household_isolation FOR ALL TO authenticated`. `routes/plans.py`'s
+`POST`/`PUT /commitments` apply the card-source rules on create and re-apply the account,
+currency, cadence and sign rules on every update of an already card-sourced commitment; the
+`CommitmentRow` gains `source` (`"owner" | "card_statement"`), `sourceCardStatementId` and
+`sourceCardAccountName` (read through a left join to `card_statement` and its own account).
+`routes/actions.py` (registered in `main.py`) implements `GET /actions` and the six write routes
+(`docs/design/api-contracts.html`) from one function, `action_list(cur, household_id, as_of, *,
+apply_marks)`, gathering:
+
+1. a `commitment.<id>.<nextDueDate>` item for each unarchived commitment with `next_due_date`
+   within `plans.DUE_WINDOW_DAYS` days or overdue, its `remaining` and `partlyPaid` from
+   `_commitment_progress()`;
+2. a `card.<statementId>` item for the latest `card_statement` per active credit-card account
+   that states an amount due, is not paid in full, is due within the window, has no unarchived
+   commitment sourced from it and no dismissal mark;
+3. a `follow-up.<id>` item for each open `action_item`.
+
+A commitment item's completion and dismissal are always through `POST
+/commitments/{id}/resolutions` (Task 1); no route here writes `commitment_resolution`. A snoozed
+item (`action_mark.snoozed_until > asOf`) moves to the response's `snoozed[]`; a card item's
+dismissal (`action_mark.dismiss_reason`, card keys only — the database's own
+`action_mark_dismissal_is_card` check) hides it entirely, the same rule that decides whether it is
+an item at all, so `apply_marks=False` (a future caller wanting a raw count) still respects it and
+only turns off snooze marking.
+
+---
+
 ## `0013`
 
 ### Loans
