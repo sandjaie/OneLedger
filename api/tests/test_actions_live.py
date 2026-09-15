@@ -798,3 +798,135 @@ def test_previous_month_review_reflects_completion(live: ActionsFixture) -> None
     assert reopened.status_code == 204, reopened.text
     after_reopen = _actions(live)
     assert after_reopen["previousMonthReview"]["completedAt"] is None
+
+
+# --- goal.<id> and reserve.<householdId> items (Phase 3.3 Task 2). ------------------------------
+
+
+def _create_goal(fixture: ActionsFixture, target_amount: str, target_date: str) -> dict[str, Any]:
+    response = client().post(
+        "/goals",
+        json={
+            "name": "Synthetic actions goal",
+            "targetAmount": target_amount,
+            "targetCurrency": fixture.currency,
+            "targetDate": target_date,
+            "priority": 1,
+            "plannedMonthly": None,
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+    payload: dict[str, Any] = response.json()
+    return payload
+
+
+def test_goal_shortfall_item_appears_disappears_when_closed_and_can_be_snoozed(
+    live: ActionsFixture,
+) -> None:
+    goal = _create_goal(live, "5000.0000", _d(365))
+    key = f"goal.{goal['id']}"
+
+    present = _actions(live)
+    assert key in _keys(present["items"])
+    item = next(row for row in present["items"] if row["actionKey"] == key)
+    assert item["reason"] == "goal_shortfall"
+    assert item["kind"] == "goal"
+    assert item["amount"] == "5000.0000"
+
+    closed = client().post(
+        f"/goals/{goal['id']}/close", json={"state": "abandoned"}, headers=ORIGIN
+    )
+    assert closed.status_code == 200, closed.text
+    after_close = _actions(live)
+    assert key not in _keys(after_close["items"])
+    # A closed goal's key names nothing any more, so a snooze on it 404s.
+    refused = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert refused.status_code == 404
+
+    goal2 = _create_goal(live, "2000.0000", _d(365))
+    key2 = f"goal.{goal2['id']}"
+    snoozed = client().put(f"/actions/marks/{key2}", json={"until": _d(3)}, headers=ORIGIN)
+    assert snoozed.status_code == 204, snoozed.text
+    while_snoozed = _actions(live)
+    assert key2 not in _keys(while_snoozed["items"])
+    assert key2 in _keys(while_snoozed["snoozed"])
+
+    dismiss_refused = client().put(
+        f"/actions/marks/{key2}", json={"reason": "not applicable"}, headers=ORIGIN
+    )
+    assert dismiss_refused.status_code == 422
+
+
+def _asset_account(fixture: ActionsFixture, opening: str) -> UUID:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                                     country, opening_balance, opening_balance_date)
+               VALUES (%s, %s, 'Synthetic reserve resource', 'savings', %s, 'XZ', %s, '2020-01-01')
+               RETURNING id""",
+            (fixture.household_id, fixture.person_id, fixture.currency, Decimal(opening)),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def _put_reserve_settings(target_months: str, manual_monthly_base: str) -> None:
+    response = client().put(
+        "/emergency-reserve",
+        json={
+            "targetMonths": target_months,
+            "baselineMethod": "manual",
+            "referenceMonths": 6,
+            "buckets": ["need"],
+            "manualMonthlyBase": manual_monthly_base,
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_reserve_below_target_item_appears_and_disappears_once_target_is_met(
+    live: ActionsFixture,
+) -> None:
+    resource_id = _asset_account(live, "1000.0000")
+    eligible = client().put(
+        f"/emergency-reserve/accounts/{resource_id}",
+        json={"accessDays": 0, "restrictionNote": None},
+        headers=ORIGIN,
+    )
+    assert eligible.status_code == 200, eligible.text
+    key = f"reserve.{live.household_id}"
+
+    # 1000 eligible over a 500 baseline is 2.00 months, short of a 6-month target.
+    _put_reserve_settings(target_months="6.0", manual_monthly_base="500.0000")
+    present = _actions(live)
+    assert key in _keys(present["items"])
+    item = next(row for row in present["items"] if row["actionKey"] == key)
+    assert item["reason"] == "reserve_below_target"
+    assert item["kind"] == "reserve"
+
+    # The same 1000 over a 100 baseline is 10.00 months, past the same target.
+    _put_reserve_settings(target_months="6.0", manual_monthly_base="100.0000")
+    after = _actions(live)
+    assert key not in _keys(after["items"])
+
+    _put_reserve_settings(target_months="6.0", manual_monthly_base="500.0000")
+    snoozed = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert snoozed.status_code == 204, snoozed.text
+    while_snoozed = _actions(live)
+    assert key not in _keys(while_snoozed["items"])
+    assert key in _keys(while_snoozed["snoozed"])
+
+    dismiss_refused = client().put(
+        f"/actions/marks/{key}", json={"reason": "not applicable"}, headers=ORIGIN
+    )
+    assert dismiss_refused.status_code == 422
+
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    foreign_refused = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert foreign_refused.status_code == 404
+    app.dependency_overrides[auth.require_owner] = lambda: live.owner
