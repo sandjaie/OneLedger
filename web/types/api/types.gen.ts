@@ -698,11 +698,11 @@ export type ActionRow = {
     /**
      * Kind
      */
-    kind: 'commitment' | 'card_due' | 'follow_up';
+    kind: 'commitment' | 'card_due' | 'follow_up' | 'goal' | 'reserve';
     /**
      * Reason
      */
-    reason: 'commitment_overdue' | 'commitment_due' | 'card_payment_unplanned' | 'follow_up';
+    reason: 'commitment_overdue' | 'commitment_due' | 'card_payment_unplanned' | 'follow_up' | 'goal_shortfall' | 'reserve_below_target';
     /**
      * Title
      */
@@ -902,6 +902,36 @@ export type BackfillResult = {
      * Skipped
      */
     skipped: Array<SkippedStatement>;
+};
+
+/**
+ * BaselineOut
+ */
+export type BaselineOut = {
+    /**
+     * Method
+     */
+    method: string;
+    /**
+     * Monthlybase
+     */
+    monthlyBase: string | null;
+    /**
+     * Referencestart
+     */
+    referenceStart: string | null;
+    /**
+     * Referenceend
+     */
+    referenceEnd: string | null;
+    /**
+     * Uncategorisedbase
+     */
+    uncategorisedBase: string | null;
+    /**
+     * Status
+     */
+    status: string;
 };
 
 /**
@@ -2221,6 +2251,28 @@ export type CurrencyRow = {
 };
 
 /**
+ * CurrencyTotalRow
+ */
+export type CurrencyTotalRow = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Eligiblenative
+     */
+    eligibleNative: string;
+    /**
+     * Rate
+     */
+    rate: string | null;
+    /**
+     * Ratedate
+     */
+    rateDate: string | null;
+};
+
+/**
  * DashboardResponse
  */
 export type DashboardResponse = {
@@ -2667,6 +2719,194 @@ export type DraftResponse = {
      * Rownumber
      */
     rowNumber: number;
+};
+
+/**
+ * EligibleAccountIn
+ */
+export type EligibleAccountIn = {
+    /**
+     * Accessdays
+     */
+    accessDays: number;
+    /**
+     * Restrictionnote
+     */
+    restrictionNote?: string | null;
+};
+
+/**
+ * EligibleAccountRow
+ */
+export type EligibleAccountRow = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Value
+     */
+    value: string | null;
+    /**
+     * Valuedate
+     */
+    valueDate: string | null;
+    /**
+     * Reason
+     */
+    reason: 'missing_snapshot' | 'missing_price' | 'mixed_currency' | null;
+    /**
+     * Goalreserved
+     */
+    goalReserved: string;
+    /**
+     * Emergencyreserved
+     */
+    emergencyReserved: string;
+    /**
+     * Eligible
+     */
+    eligible: string | null;
+    /**
+     * Accessdays
+     */
+    accessDays: number;
+    /**
+     * Restrictionnote
+     */
+    restrictionNote: string | null;
+    /**
+     * Upcomingcommitments
+     */
+    upcomingCommitments: Array<UpcomingCommitmentRow>;
+};
+
+/**
+ * EmergencyReserveIn
+ */
+export type EmergencyReserveIn = {
+    /**
+     * Targetmonths
+     */
+    targetMonths: string;
+    /**
+     * Baselinemethod
+     */
+    baselineMethod: 'reference_period' | 'manual';
+    /**
+     * Referencemonths
+     */
+    referenceMonths: number;
+    /**
+     * Buckets
+     */
+    buckets: Array<'need' | 'want' | 'investment' | 'debt_service'>;
+    /**
+     * Manualmonthlybase
+     */
+    manualMonthlyBase?: string | null;
+};
+
+/**
+ * EmergencyReserveResponse
+ */
+export type EmergencyReserveResponse = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Configured
+     */
+    configured: boolean;
+    settings: EmergencyReserveSettings | null;
+    baseline: BaselineOut | null;
+    /**
+     * Accounts
+     */
+    accounts: Array<EligibleAccountRow>;
+    /**
+     * Eligiblebase
+     */
+    eligibleBase: string | null;
+    /**
+     * Coveragemonths
+     */
+    coverageMonths: string | null;
+    /**
+     * Reservedmonths
+     */
+    reservedMonths: string | null;
+    /**
+     * Targetbase
+     */
+    targetBase: string | null;
+    /**
+     * Gapbase
+     */
+    gapBase: string | null;
+    /**
+     * Coveragestatus
+     */
+    coverageStatus: string;
+    /**
+     * Reasons
+     */
+    reasons: Array<string>;
+    /**
+     * Currencies
+     */
+    currencies: Array<CurrencyTotalRow>;
+    /**
+     * Coveragegapmonths
+     */
+    coverageGapMonths: number;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Reservations
+     */
+    reservations: Array<ReservationRow>;
+};
+
+/**
+ * EmergencyReserveSettings
+ */
+export type EmergencyReserveSettings = {
+    /**
+     * Targetmonths
+     */
+    targetMonths: string;
+    /**
+     * Baselinemethod
+     */
+    baselineMethod: string;
+    /**
+     * Referencemonths
+     */
+    referenceMonths: number;
+    /**
+     * Buckets
+     */
+    buckets: Array<string>;
+    /**
+     * Manualmonthlybase
+     */
+    manualMonthlyBase: string | null;
 };
 
 /**
@@ -8387,6 +8627,28 @@ export type UnplannedCardDue = {
 };
 
 /**
+ * UpcomingCommitmentRow
+ */
+export type UpcomingCommitmentRow = {
+    /**
+     * Commitmentid
+     */
+    commitmentId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Duedate
+     */
+    dueDate: string;
+    /**
+     * Remainingnext
+     */
+    remainingNext: string | null;
+};
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -12077,6 +12339,121 @@ export type ReleaseReservationReservationsReservationIdReleasePostResponses = {
 };
 
 export type ReleaseReservationReservationsReservationIdReleasePostResponse = ReleaseReservationReservationsReservationIdReleasePostResponses[keyof ReleaseReservationReservationsReservationIdReleasePostResponses];
+
+export type ReadEmergencyReserveEmergencyReserveGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/emergency-reserve';
+};
+
+export type ReadEmergencyReserveEmergencyReserveGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadEmergencyReserveEmergencyReserveGetError = ReadEmergencyReserveEmergencyReserveGetErrors[keyof ReadEmergencyReserveEmergencyReserveGetErrors];
+
+export type ReadEmergencyReserveEmergencyReserveGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmergencyReserveResponse;
+};
+
+export type ReadEmergencyReserveEmergencyReserveGetResponse = ReadEmergencyReserveEmergencyReserveGetResponses[keyof ReadEmergencyReserveEmergencyReserveGetResponses];
+
+export type PutEmergencyReserveEmergencyReservePutData = {
+    body: EmergencyReserveIn;
+    path?: never;
+    query?: never;
+    url: '/emergency-reserve';
+};
+
+export type PutEmergencyReserveEmergencyReservePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutEmergencyReserveEmergencyReservePutError = PutEmergencyReserveEmergencyReservePutErrors[keyof PutEmergencyReserveEmergencyReservePutErrors];
+
+export type PutEmergencyReserveEmergencyReservePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmergencyReserveResponse;
+};
+
+export type PutEmergencyReserveEmergencyReservePutResponse = PutEmergencyReserveEmergencyReservePutResponses[keyof PutEmergencyReserveEmergencyReservePutResponses];
+
+export type DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Accountid
+         */
+        accountId: string;
+    };
+    query?: never;
+    url: '/emergency-reserve/accounts/{accountId}';
+};
+
+export type DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteError = DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteErrors[keyof DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteErrors];
+
+export type DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteResponse = DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteResponses[keyof DeleteEligibleAccountEmergencyReserveAccountsAccountIdDeleteResponses];
+
+export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutData = {
+    body: EligibleAccountIn;
+    path: {
+        /**
+         * Accountid
+         */
+        accountId: string;
+    };
+    query?: never;
+    url: '/emergency-reserve/accounts/{accountId}';
+};
+
+export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutError = PutEligibleAccountEmergencyReserveAccountsAccountIdPutErrors[keyof PutEligibleAccountEmergencyReserveAccountsAccountIdPutErrors];
+
+export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: EmergencyReserveResponse;
+};
+
+export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponse = PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses[keyof PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses];
 
 export type ReadMonthlyReviewMonthlyReviewGetData = {
     body?: never;

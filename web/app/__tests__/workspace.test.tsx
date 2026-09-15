@@ -108,6 +108,28 @@ function outOfBand(path: string): Promise<unknown> | undefined {
       },
     });
   }
+  // Emergency reserve (Phase 3.3 Task 2) fetches alongside the forecast and commitments on
+  // Plans; every test here is about the rest of the screen, so it sees an unconfigured reserve.
+  if (path === "/emergency-reserve") {
+    return Promise.resolve({
+      asOf: "2026-03-01",
+      configured: false,
+      settings: null,
+      baseline: null,
+      accounts: [],
+      eligibleBase: null,
+      coverageMonths: null,
+      reservedMonths: null,
+      targetBase: null,
+      gapBase: null,
+      coverageStatus: "not_enough_information",
+      reasons: ["not_configured"],
+      currencies: [],
+      coverageGapMonths: 0,
+      baseCurrency: "XIN",
+      reservations: [],
+    });
+  }
   return undefined;
 }
 
