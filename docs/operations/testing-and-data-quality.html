@@ -703,6 +703,24 @@ twin and the web&#39;s <code>proposedPattern</code> are proven identical on one 
 consumed by both a pytest and a vitest suite. <code>GET /classification-review/groups?sort=impact</code>
 is proven to order groups by total absolute <code>amount_base</code> then occurrence count, distinct
 from the default severity/date order.</li>
+<li>Phase 3.1 Task 1: a monthly commitment settled by linking its posting advances to next month and
+its forecast occurrence disappears exactly once; a part payment leaves the exact remainder
+projected; dismissing an occurrence records the reason and the next occurrence still appears.
+<code>GET /forecast</code>, the payment-candidates read and <code>GET /commitments</code> change no
+row. The V48 SQL suite proves isolation on <code>commitment_resolution</code>, the resolution shape,
+closing and transaction uniqueness, every <code>commitment_payment_is_eligible</code> refusal (wrong
+account, currency, sign, excluded, opening balance, a payslip pair posting, a split parent) and a
+transfer leg accepted, and immutability once inserted; a separate upgrade rehearsal migrates to V47,
+inserts a once, a month-end monthly, a 29&nbsp;February annual and an ended commitment on accounts
+with past balance dates, applies V48 and asserts each backfilled <code>nextDueDate</code>. The unit
+suite proves <code>is_occurrence</code>/<code>next_occurrence</code> across the same month-end and
+29&nbsp;February clamps and inclusive end dates as <code>occurrence_dates</code>. The live API suite
+proves full and part payment, completed and dismissed closes, a once commitment finishing, replay
+returning 200, every 409/422 refusal (stale due date, archived, finished, already resolved, a reused
+posting, every ineligible sign/account/currency/excluded posting), undo of a part payment and of the
+latest closing row with refusal of an older one or one whose next occurrence already has a payment
+(<code>undoable</code> agreeing each time), an overpayment leaving <code>remainingNext</code>
+<code>"0.0000"</code>, and payment-candidate window edges.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

@@ -1723,6 +1723,14 @@ export type CommitmentCreate = {
      */
     endDate?: string | null;
     /**
+     * Certainty
+     */
+    certainty?: 'confirmed' | 'estimated';
+    /**
+     * Nextduedate
+     */
+    nextDueDate?: string | null;
+    /**
      * Idempotencykey
      */
     idempotencyKey: string;
@@ -1780,6 +1788,30 @@ export type CommitmentRow = {
      * Updatedat
      */
     updatedAt: string;
+    /**
+     * Certainty
+     */
+    certainty: 'confirmed' | 'estimated';
+    /**
+     * Nextduedate
+     */
+    nextDueDate: string | null;
+    /**
+     * Status
+     */
+    status: 'upcoming' | 'due' | 'overdue' | 'finished' | 'cancelled';
+    /**
+     * Paidtowardnext
+     */
+    paidTowardNext: string;
+    /**
+     * Partlypaid
+     */
+    partlyPaid: boolean;
+    /**
+     * Remainingnext
+     */
+    remainingNext: string | null;
 };
 
 /**
@@ -1814,6 +1846,14 @@ export type CommitmentUpdate = {
      * Enddate
      */
     endDate?: string | null;
+    /**
+     * Certainty
+     */
+    certainty?: 'confirmed' | 'estimated';
+    /**
+     * Nextduedate
+     */
+    nextDueDate?: string | null;
 };
 
 /**
@@ -2580,6 +2620,10 @@ export type ForecastOccurrence = {
      * Duebyasof
      */
     dueByAsOf: boolean;
+    /**
+     * Certainty
+     */
+    certainty: 'confirmed' | 'estimated';
 };
 
 /**
@@ -4833,6 +4877,46 @@ export type ParseRow = {
 };
 
 /**
+ * PaymentCandidate
+ */
+export type PaymentCandidate = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Description
+     */
+    description: string;
+};
+
+/**
+ * PaymentCandidatesResponse
+ */
+export type PaymentCandidatesResponse = {
+    /**
+     * Duedate
+     */
+    dueDate: string | null;
+    /**
+     * Candidates
+     */
+    candidates: Array<PaymentCandidate>;
+};
+
+/**
  * PayslipCreate
  */
 export type PayslipCreate = {
@@ -5487,6 +5571,103 @@ export type RefreshOutcome = {
      */
     outcome: string;
     status: PriceStatus;
+};
+
+/**
+ * ResolutionCreate
+ */
+export type ResolutionCreate = {
+    /**
+     * Duedate
+     */
+    dueDate: string;
+    /**
+     * Kind
+     */
+    kind: 'payment' | 'completed' | 'dismissed';
+    /**
+     * Transactionid
+     */
+    transactionId?: string | null;
+    /**
+     * Closes
+     */
+    closes?: boolean | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * ResolutionRow
+ */
+export type ResolutionRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Duedate
+     */
+    dueDate: string;
+    /**
+     * Kind
+     */
+    kind: 'payment' | 'completed' | 'dismissed';
+    /**
+     * Closes
+     */
+    closes: boolean;
+    /**
+     * Reason
+     */
+    reason: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Undoable
+     */
+    undoable: boolean;
+    transaction?: ResolutionTransaction | null;
+};
+
+/**
+ * ResolutionTransaction
+ */
+export type ResolutionTransaction = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Eligible
+     */
+    eligible: boolean;
+};
+
+/**
+ * ResolutionsResponse
+ */
+export type ResolutionsResponse = {
+    /**
+     * Resolutions
+     */
+    resolutions: Array<ResolutionRow>;
 };
 
 /**
@@ -10536,6 +10717,10 @@ export type ListCommitmentsCommitmentsGetData = {
          * Includearchived
          */
         includeArchived?: boolean;
+        /**
+         * Asof
+         */
+        asOf?: string | null;
     };
     url: '/commitments';
 };
@@ -10672,6 +10857,130 @@ export type ReadForecastForecastGetResponses = {
 };
 
 export type ReadForecastForecastGetResponse = ReadForecastForecastGetResponses[keyof ReadForecastForecastGetResponses];
+
+export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}/payment-candidates';
+};
+
+export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetError = PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetErrors[keyof PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetErrors];
+
+export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaymentCandidatesResponse;
+};
+
+export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetResponse = PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetResponses[keyof PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetResponses];
+
+export type ListResolutionsCommitmentsCommitmentIdResolutionsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}/resolutions';
+};
+
+export type ListResolutionsCommitmentsCommitmentIdResolutionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListResolutionsCommitmentsCommitmentIdResolutionsGetError = ListResolutionsCommitmentsCommitmentIdResolutionsGetErrors[keyof ListResolutionsCommitmentsCommitmentIdResolutionsGetErrors];
+
+export type ListResolutionsCommitmentsCommitmentIdResolutionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ResolutionsResponse;
+};
+
+export type ListResolutionsCommitmentsCommitmentIdResolutionsGetResponse = ListResolutionsCommitmentsCommitmentIdResolutionsGetResponses[keyof ListResolutionsCommitmentsCommitmentIdResolutionsGetResponses];
+
+export type CreateResolutionCommitmentsCommitmentIdResolutionsPostData = {
+    body: ResolutionCreate;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}/resolutions';
+};
+
+export type CreateResolutionCommitmentsCommitmentIdResolutionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateResolutionCommitmentsCommitmentIdResolutionsPostError = CreateResolutionCommitmentsCommitmentIdResolutionsPostErrors[keyof CreateResolutionCommitmentsCommitmentIdResolutionsPostErrors];
+
+export type CreateResolutionCommitmentsCommitmentIdResolutionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentRow;
+};
+
+export type CreateResolutionCommitmentsCommitmentIdResolutionsPostResponse = CreateResolutionCommitmentsCommitmentIdResolutionsPostResponses[keyof CreateResolutionCommitmentsCommitmentIdResolutionsPostResponses];
+
+export type UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Commitment Id
+         */
+        commitment_id: string;
+        /**
+         * Resolution Id
+         */
+        resolution_id: string;
+    };
+    query?: never;
+    url: '/commitments/{commitment_id}/resolutions/{resolution_id}';
+};
+
+export type UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteError = UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteErrors[keyof UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteErrors];
+
+export type UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: CommitmentRow;
+};
+
+export type UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteResponse = UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteResponses[keyof UndoResolutionCommitmentsCommitmentIdResolutionsResolutionIdDeleteResponses];
 
 export type PortfolioPositionsPortfolioPositionsGetData = {
     body?: never;

@@ -58,6 +58,45 @@ def occurrence_dates(
     return dates
 
 
+def is_occurrence(cadence: Cadence, first: date, end: date | None, candidate: date) -> bool:
+    """Phase 3.1 spec "Occurrence rules": `candidate` is `first` plus `n` (monthly) or `12n`
+    (annual) clamped months for some `n >= 0`, not after `end`; `once` only ever occurs on
+    `first` itself. Used to validate an owner-given `nextDueDate` against its commitment's
+    schedule (`routes/plans.py`)."""
+    if end is not None and candidate > end:
+        return False
+    if cadence == "once":
+        return candidate == first
+    if candidate < first:
+        return False
+    step = 1 if cadence == "monthly" else 12
+    months_between = (candidate.year - first.year) * 12 + (candidate.month - first.month)
+    if months_between % step != 0:
+        return False
+    return _add_months(first, months_between) == candidate
+
+
+def next_occurrence(cadence: Cadence, first: date, end: date | None, due: date) -> date | None:
+    """The scheduled occurrence strictly after `due` — `None` for `once` (it has no successor)
+    or once the schedule has passed `end`. Clamping always restarts from `first`, so a run of
+    month-end clamped dates (31 January, 28/29 February, 31 March, ...) never drifts. Used both
+    to close a resolved occurrence onto the next one and, doubled with the default-next-due rule
+    in `routes/plans.py`, to pick a new commitment's first open occurrence."""
+    if cadence == "once":
+        return None
+    step = 1 if cadence == "monthly" else 12
+    months_between = (due.year - first.year) * 12 + (due.month - first.month)
+    n = max(0, months_between // step)
+    while n > 0 and _add_months(first, n * step) > due:
+        n -= 1
+    while _add_months(first, n * step) <= due:
+        n += 1
+    candidate = _add_months(first, n * step)
+    if end is not None and candidate > end:
+        return None
+    return candidate
+
+
 def project_balances(
     start: Decimal, occurrences: list[tuple[date, Decimal]], as_of: date
 ) -> list[tuple[int, date, Decimal]]:
