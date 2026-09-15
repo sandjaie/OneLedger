@@ -450,9 +450,18 @@ and an inline <strong>Add follow-up</strong> form reusing the same create call N
 the completion date and the remaining open-action count. Overview&#39;s Needs attention panel always
 renders — even with nothing else to attend to — to state whether last month&#39;s review is
 complete, linking <code>/plans#review</code>. No money arithmetic runs in the browser; every figure
-is a server string. Phase 3.3 and
-Phase 3.4 add goals, emergency-reserve coverage and protection/administration records within that
-same view. Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
+is a server string. Phase 3.3 Task 1 adds <strong>Goals</strong> (<code>goals.tsx</code>, anchor
+<code>#goals</code>) between Monthly review and the forecast: each goal shows target, date,
+priority, current value, percent, contributed/market/FX, planned monthly and projected, and a
+<strong>Shortfall</strong> or <strong>Surplus</strong> line, naming its reasons when progress is
+unavailable. <strong>Add goal</strong> and <strong>Edit</strong>; <strong>Mark achieved</strong>
+and <strong>Abandon</strong> (confirming that its reservations are released). <strong>Reserve</strong>
+opens a form — an account picker showing each account&#39;s value, reserved and unreserved, then an
+amount or the whole account. Each reservation lists its account, reserved date, contributed and
+current value and offers <strong>Release</strong>. A resources table lists every reservable
+account&#39;s value, reserved, unreserved and an over-reserved warning. Phase 3.3 Task 2 adds
+Emergency reserve and Phase 3.4 adds protection/administration records within that same view.
+Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
 every record type.</p>
 <p><strong>Persistent header:</strong> the <strong>currency toggle</strong> (the household&#39;s pair, <code>INR ⇄ AED</code> in the mockups below) and a date-range control on
