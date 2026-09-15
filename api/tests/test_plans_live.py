@@ -618,6 +618,66 @@ def test_schedule_and_sign_edits_refused_once_resolved(live: PlansFixture) -> No
     assert label_changed.json()["label"] == "Synthetic salary renamed"
 
 
+def _update_body(fixture: PlansFixture, **overrides: object) -> dict[str, object]:
+    return {k: v for k, v in _body(fixture, **overrides).items() if k != "idempotencyKey"}
+
+
+def test_finished_commitment_without_resolutions_accepts_a_label_edit(live: PlansFixture) -> None:
+    created = client().post(
+        "/commitments",
+        json=_body(live, endDate="2026-03-01", nextDueDate="2026-03-01"),
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201, created.text
+    commitment_id = created.json()["id"]
+    # The V48 backfill leaves an already-ended Phase 1.7 commitment with no next due date.
+    with live.connection.cursor() as cur:
+        cur.execute("UPDATE commitment SET next_due_date = NULL WHERE id = %s", (commitment_id,))
+    live.connection.commit()
+
+    renamed = client().put(
+        f"/commitments/{commitment_id}",
+        json=_update_body(live, label="Synthetic salary renamed", endDate="2026-03-01"),
+        headers=ORIGIN,
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["label"] == "Synthetic salary renamed"
+    assert renamed.json()["nextDueDate"] is None
+    assert renamed.json()["status"] == "finished"
+
+
+def test_extending_a_finished_resolved_commitment_reopens_it(live: PlansFixture) -> None:
+    created = client().post(
+        "/commitments",
+        json=_body(live, endDate="2026-02-01", nextDueDate="2026-02-01"),
+        headers=ORIGIN,
+    )
+    commitment_id = created.json()["id"]
+    closed = client().post(
+        f"/commitments/{commitment_id}/resolutions",
+        json={"dueDate": "2026-02-01", "kind": "completed"},
+        headers=ORIGIN,
+    )
+    assert closed.status_code == 201, closed.text
+    assert closed.json()["nextDueDate"] is None
+
+    extended = client().put(
+        f"/commitments/{commitment_id}",
+        json=_update_body(live, endDate="2026-04-01"),
+        headers=ORIGIN,
+    )
+    assert extended.status_code == 200, extended.text
+    assert extended.json()["nextDueDate"] == "2026-03-01"
+    assert extended.json()["status"] != "finished"
+
+    before_closed = client().put(
+        f"/commitments/{commitment_id}",
+        json=_update_body(live, endDate="2026-01-15"),
+        headers=ORIGIN,
+    )
+    assert before_closed.status_code == 422
+
+
 def test_forecast_omits_a_settled_occurrence_and_projects_a_part_paid_remainder(
     live: PlansFixture,
 ) -> None:

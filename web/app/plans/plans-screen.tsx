@@ -159,7 +159,12 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
             firstDate: form.firstDate,
             endDate: form.endDate || null,
             certainty: form.certainty,
-            nextDueDate: form.nextDueDate || null,
+            // Only an owner-changed next due date is sent: the server keeps the stored one when
+            // it is still on the (possibly edited) schedule, else applies its default rule.
+            nextDueDate:
+              form.nextDueDate && form.nextDueDate !== (editing.nextDueDate ?? "")
+                ? form.nextDueDate
+                : null,
           }),
         });
         setFeedback("Commitment updated.");
@@ -347,13 +352,11 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                     <small>Archived</small>
                   ) : (
                     <>
-                      {commitment.nextDueDate && (
-                        <button
-                          className="text-action"
-                          onClick={() => setSettlingId(commitment.id)}
-                          type="button"
-                        >Settle</button>
-                      )}
+                      <button
+                        className="text-action"
+                        onClick={() => setSettlingId(commitment.id)}
+                        type="button"
+                      >{commitment.nextDueDate ? "Settle" : "History"}</button>
                       <button className="text-action" onClick={() => startEdit(commitment)} type="button">Edit</button>
                       <button
                         className="text-action"

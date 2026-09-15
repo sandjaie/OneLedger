@@ -537,20 +537,27 @@ def update_commitment(
                 ):
                     raise HTTPException(status_code=409, detail=_RESOLVED_SCHEDULE_FIXED)
                 next_due = stored_next_due
-                if body.endDate is not None:
-                    floor = stored_next_due
-                    if floor is None:
-                        cur.execute(
-                            """SELECT max(due_date) FROM commitment_resolution
-                                WHERE household_id = %s AND commitment_id = %s AND closes""",
-                            (owner.household_id, commitment_id),
-                        )
-                        floor = cur.fetchone()[0]
-                    if floor is not None and body.endDate < floor:
-                        raise HTTPException(
-                            status_code=422,
-                            detail="end date must not fall before the next due date",
-                        )
+                latest_closed = None
+                if stored_next_due is None:
+                    cur.execute(
+                        """SELECT max(due_date) FROM commitment_resolution
+                            WHERE household_id = %s AND commitment_id = %s AND closes""",
+                        (owner.household_id, commitment_id),
+                    )
+                    latest_closed = cur.fetchone()[0]
+                floor = stored_next_due if stored_next_due is not None else latest_closed
+                if body.endDate is not None and floor is not None and body.endDate < floor:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="end date must not fall before the next due date",
+                    )
+                if stored_next_due is None and latest_closed is not None:
+                    # A finished commitment whose end date is extended (or removed) reopens at
+                    # the occurrence after its latest closed one, so the newly allowed
+                    # occurrences are projected and settleable rather than silently dropped.
+                    next_due = next_occurrence(
+                        stored_cadence, stored_first, body.endDate, latest_closed
+                    )
             else:
                 _assert_account(cur, owner.household_id, body.accountId, body.currency)
                 if (
@@ -559,6 +566,15 @@ def update_commitment(
                     and is_occurrence(body.cadence, body.firstDate, body.endDate, stored_next_due)
                 ):
                     next_due = stored_next_due
+                elif (
+                    body.nextDueDate is None
+                    and stored_next_due is None
+                    and (body.cadence, body.firstDate, body.endDate)
+                    == (stored_cadence, stored_first, stored_end)
+                ):
+                    # An already-finished commitment (e.g. an ended Phase 1.7 row backfilled to
+                    # NULL) keeps accepting edits that leave its schedule alone.
+                    next_due = None
                 else:
                     next_due = _resolved_next_due_date(
                         cur,

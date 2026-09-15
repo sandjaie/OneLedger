@@ -598,34 +598,90 @@ def test_candidates_window_edges_and_read_only(live: ResolutionFixture) -> None:
 
 
 def test_foreign_household_is_404_on_every_route(live: ResolutionFixture) -> None:
-    commitment = _commitment(live)
-    foreign_id = uuid4()
-
-    assert client().get(f"/commitments/{foreign_id}/resolutions", headers=ORIGIN).status_code == 404
-    assert (
-        client().get(f"/commitments/{foreign_id}/payment-candidates", headers=ORIGIN).status_code
-        == 404
-    )
+    own = _commitment(live)
+    own_payment = _txn(live, "-100.0000", "2026-02-01")
     assert (
         client()
         .post(
-            f"/commitments/{foreign_id}/resolutions",
-            json={"dueDate": "2026-02-01", "kind": "completed"},
+            f"/commitments/{own['id']}/resolutions",
+            json={
+                "dueDate": "2026-02-01",
+                "kind": "payment",
+                "transactionId": own_payment,
+                "closes": False,
+            },
             headers=ORIGIN,
         )
         .status_code
+        == 201
+    )
+
+    # Real rows in the other household: a commitment, an eligible posting, a part payment and a
+    # second eligible posting left unlinked, so every route has something it must not reveal.
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    foreign = _commitment(live, accountId=str(live.other_account_id))
+    foreign_paid = _txn(live, "-100.0000", "2026-02-01", account_id=live.other_account_id)
+    _txn(live, "-200.0000", "2026-02-02", account_id=live.other_account_id)
+    created = client().post(
+        f"/commitments/{foreign['id']}/resolutions",
+        json={
+            "dueDate": "2026-02-01",
+            "kind": "payment",
+            "transactionId": foreign_paid,
+            "closes": False,
+        },
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201, created.text
+    history = client().get(f"/commitments/{foreign['id']}/resolutions", headers=ORIGIN)
+    foreign_resolution_id = history.json()["resolutions"][0]["id"]
+    app.dependency_overrides[auth.require_owner] = lambda: live.owner
+
+    def foreign_state() -> list[tuple[Any, ...]]:
+        with live.connection.cursor() as cur:
+            cur.execute(
+                """SELECT c.next_due_date, c.label, r.id, r.kind::text, r.closes, r.transaction_id
+                     FROM commitment c
+                     LEFT JOIN commitment_resolution r ON r.commitment_id = c.id
+                    WHERE c.household_id = %s ORDER BY r.id""",
+                (live.other_owner.household_id,),
+            )
+            return cur.fetchall()
+
+    before = foreign_state()
+    base = f"/commitments/{foreign['id']}"
+    assert client().get(f"{base}/resolutions", headers=ORIGIN).status_code == 404
+    assert client().get(f"{base}/payment-candidates", headers=ORIGIN).status_code == 404
+    for body in (
+        {"dueDate": "2026-02-01", "kind": "completed"},
+        {"dueDate": "2026-02-01", "kind": "payment", "transactionId": own_payment, "closes": True},
+    ):
+        assert client().post(f"{base}/resolutions", json=body, headers=ORIGIN).status_code == 404
+    assert (
+        client().delete(f"{base}/resolutions/{foreign_resolution_id}", headers=ORIGIN).status_code
         == 404
     )
+    # The owner's own commitment cannot reach the foreign resolution either.
     assert (
         client()
-        .delete(f"/commitments/{foreign_id}/resolutions/{uuid4()}", headers=ORIGIN)
+        .delete(f"/commitments/{own['id']}/resolutions/{foreign_resolution_id}", headers=ORIGIN)
         .status_code
         == 404
     )
-    # A resolution id that belongs to another commitment (real commitment, foreign resolution id).
-    assert (
-        client()
-        .delete(f"/commitments/{commitment['id']}/resolutions/{uuid4()}", headers=ORIGIN)
-        .status_code
-        == 404
+    # Nor can the owner settle their own commitment with the other household's posting.
+    refused = client().post(
+        f"/commitments/{own['id']}/resolutions",
+        json={
+            "dueDate": "2026-02-01",
+            "kind": "payment",
+            "transactionId": foreign_paid,
+            "closes": True,
+        },
+        headers=ORIGIN,
     )
+    assert refused.status_code in (404, 422), refused.text
+    # And the owner's own candidates never list a foreign posting.
+    own_candidates = client().get(f"/commitments/{own['id']}/payment-candidates", headers=ORIGIN)
+    assert own_candidates.status_code == 200
+    assert all(c["transactionId"] != foreign_paid for c in own_candidates.json()["candidates"])
+    assert foreign_state() == before

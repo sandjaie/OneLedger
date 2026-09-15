@@ -208,4 +208,46 @@ describe("plans screen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
     expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
   });
+
+  it("offers History for a finished commitment", async () => {
+    const finished: CommitmentRow = {
+      ...commitment,
+      nextDueDate: null,
+      status: "finished",
+      remainingNext: null,
+    };
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") return { commitments: [finished] } satisfies CommitmentsResponse;
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: null, candidates: [] };
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(screen.queryByRole("button", { name: "Settle" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+    expect(await screen.findByRole("heading", { name: "History" })).toBeTruthy();
+  });
+
+  it("does not resend an unchanged next due date when editing", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === `/commitments/${commitment.id}` && init?.method === "PUT") {
+        bodies.push(JSON.parse(String(init.body)));
+        return commitment;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Save/ }));
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0].nextDueDate).toBeNull();
+  });
 });
