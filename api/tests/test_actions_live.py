@@ -889,6 +889,14 @@ def _put_reserve_settings(target_months: str, manual_monthly_base: str) -> None:
     assert response.status_code == 200, response.text
 
 
+def test_reserve_item_with_no_eligible_account_is_the_whole_target(live: ActionsFixture) -> None:
+    _put_reserve_settings(target_months="6.0", manual_monthly_base="500.0000")
+    item = next(
+        row for row in _actions(live)["items"] if row["actionKey"] == f"reserve.{live.household_id}"
+    )
+    assert item["amount"] == "3000.0000"
+
+
 def test_reserve_below_target_item_appears_and_disappears_once_target_is_met(
     live: ActionsFixture,
 ) -> None:
@@ -908,6 +916,7 @@ def test_reserve_below_target_item_appears_and_disappears_once_target_is_met(
     item = next(row for row in present["items"] if row["actionKey"] == key)
     assert item["reason"] == "reserve_below_target"
     assert item["kind"] == "reserve"
+    assert item["amount"] == "2000.0000"
 
     # The same 1000 over a 100 baseline is 10.00 months, past the same target.
     _put_reserve_settings(target_months="6.0", manual_monthly_base="100.0000")

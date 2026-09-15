@@ -253,6 +253,15 @@ BEGIN
     ASSERT refusal LIKE '%action_mark_key_shape%', refusal;
   END;
 
+  BEGIN
+    INSERT INTO action_mark (household_id, action_key, dismiss_reason)
+    VALUES (f.h1, 'reserve.' || gen_random_uuid(), 'Synthetic reason');
+    RAISE EXCEPTION 'a dismissal on a non-card key must be refused';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%action_mark_dismissal_is_card%', refusal;
+  END;
+
   RAISE NOTICE 'PASS 0049 widened action_mark_key_shape';
 END $$;
 ROLLBACK;

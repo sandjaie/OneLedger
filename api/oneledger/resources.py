@@ -14,6 +14,13 @@ from uuid import UUID
 
 import psycopg
 
+from .emergency import (
+    Baseline,
+    eligible_native,
+    manual_baseline,
+    reference_period,
+    reference_period_baseline,
+)
 from .goals import ReservationProgress, goal_totals, reservation_progress
 from .investments.positions import current_rate_pair, read_positions
 from .money import translate
@@ -179,20 +186,45 @@ def holdings_inflow_native(
 # the reads above.
 
 
-def _rate_into(
-    cur: psycopg.Cursor[Any],
-    currency: str,
-    target_currency: str,
-    base: str,
-    secondary: str,
-    on: date,
+def household_currencies(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
+    cur.execute(
+        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
+    )
+    row = cur.fetchone()
+    assert row is not None
+    return str(row[0]).strip(), str(row[1]).strip()
+
+
+def goal_rate(
+    cur: psycopg.Cursor[Any], currency: str, goal_currency: str, base: str, secondary: str, on: date
 ) -> Decimal | None:
-    """The rate from `currency` into a reporting currency that is the household base or secondary
-    (a goal's or the emergency reserve's own currency); any other currency is unavailable rather
-    than guessed, the same rule `routes/goals.py`'s `_goal_rate` applies."""
+    """The rate from `currency` into a goal currency. fx_rate quotes only into the household base,
+    so a secondary-currency goal needs `current_rate_pair`'s cross leg; any other currency is
+    unavailable rather than guessed."""
     pair = current_rate_pair(cur, currency, base, secondary, on)
-    leg = {base: pair.to_base, secondary: pair.to_secondary}.get(target_currency)
+    leg = {base: pair.to_base, secondary: pair.to_secondary}.get(goal_currency)
     return None if leg is None else leg.rate
+
+
+def reservation_inflow(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    reservation: ReservationFact,
+    native: NativeValue | None,
+    native_now: Decimal | None,
+    as_of: date,
+) -> Decimal:
+    """The part of a reservation's change that is new money, by valuation mode (spec "Goal
+    progress"). An amount reservation never tracks its account, so it has no inflow."""
+    if reservation.kind == "amount" or native_now is None or native is None:
+        return Decimal("0.0000")
+    if native.valuationMode == "ledger_balance":
+        return native_now - reservation.nativeAmount
+    if native.valuationMode == "holdings":
+        return holdings_inflow_native(
+            cur, household_id, reservation.accountId, reservation.reservedOn, as_of
+        )
+    return Decimal("0.0000")  # snapshot: a snapshot's change is valuation movement
 
 
 @dataclass(frozen=True)
@@ -250,24 +282,42 @@ _SPENDING = """
       FROM scoped"""
 
 
-def spending_totals(
-    cur: psycopg.Cursor[Any], household_id: UUID, start: date, end: date, buckets: list[str]
-) -> tuple[Decimal, Decimal]:
-    """Bucketed spending and separately reported uncategorised spending over one reference period
-    (spec "Baseline"): `-sum(amount_base)` of `v_transaction_reportable` rows, never `income`,
-    joined to the household's effective category bucket (`routes/categories.py`'s
-    `COALESCE(o.bucket, c.bucket)` rule)."""
+def emergency_baseline(
+    cur: psycopg.Cursor[Any], household_id: UUID, settings: EmergencyReserveSettings, as_of: date
+) -> Baseline:
+    """The manual baseline, or the reference period's bucketed spending (spec "Baseline"):
+    `-sum(amount_base)` of `v_transaction_reportable` rows, never `income`, by the household's
+    effective category bucket (`routes/categories.py`'s `COALESCE(o.bucket, c.bucket)` rule), with
+    uncategorised spending reported separately."""
+    if settings.baselineMethod == "manual":
+        assert settings.manualMonthlyBase is not None
+        return manual_baseline(settings.manualMonthlyBase)
+    start, end = reference_period(as_of, settings.referenceMonths)
     cur.execute(
-        _SPENDING, {"household": household_id, "start": start, "end": end, "buckets": buckets}
+        _SPENDING,
+        {"household": household_id, "start": start, "end": end, "buckets": settings.buckets},
     )
     row = cur.fetchone()
     assert row is not None
-    return Decimal(row[0]), Decimal(row[1])
+    return reference_period_baseline(
+        as_of=as_of,
+        reference_months=settings.referenceMonths,
+        spending=Decimal(row[0]),
+        uncategorised=Decimal(row[1]),
+    )
+
+
+def _reserved_for(active: list[ReservationFact], purpose: str, value: Decimal | None) -> Decimal:
+    """What `purpose` holds on one account: its whole current value under an active
+    `whole_account` reservation (spec "Reservation rules"), else its amounts."""
+    rows = [r for r in active if r.purpose == purpose]
+    if value is not None and any(r.kind == "whole_account" for r in rows):
+        return value
+    return sum((r.nativeAmount for r in rows), Decimal("0.0000"))
 
 
 def eligible_native_and_base(
     cur: psycopg.Cursor[Any],
-    household_id: UUID,
     account_id: UUID,
     native: NativeValue | None,
     active_reservations: list[ReservationFact],
@@ -281,16 +331,13 @@ def eligible_native_and_base(
     "Coverage" — a missing value is excluded from the total, a missing rate makes it
     unavailable)."""
     active = [r for r in active_reservations if r.accountId == account_id]
-    goal_reserved = sum((r.nativeAmount for r in active if r.purpose == "goal"), Decimal("0.0000"))
-    emergency_reserved = sum(
-        (r.nativeAmount for r in active if r.purpose == "emergency"), Decimal("0.0000")
-    )
     value = native.value if native else None
-    eligible = None if value is None else max(value - goal_reserved, Decimal("0.0000"))
-    if value is None or eligible is None:
+    goal_reserved = _reserved_for(active, "goal", value)
+    emergency_reserved = _reserved_for(active, "emergency", value)
+    eligible = eligible_native(value, goal_reserved)
+    if native is None or eligible is None:
         return goal_reserved, emergency_reserved, None, None
-    currency = native.currency if native else base
-    rate = current_rate_pair(cur, currency, base, secondary, as_of).to_base
+    rate = current_rate_pair(cur, native.currency, base, secondary, as_of).to_base
     eligible_base = None if rate is None else translate(eligible, rate.rate)
     return goal_reserved, emergency_reserved, eligible, eligible_base
 
@@ -311,62 +358,44 @@ def goal_shortfalls(
     `action_list` "goal.<goalId>" items) — the same progress `routes/goals.py`'s `_goal_row`
     computes for the API, reused here through `goals.py`'s pure functions rather than importing
     that route module."""
-    cur.execute("SELECT id FROM goal WHERE household_id = %s AND state = 'active'", (household_id,))
-    goal_ids = [UUID(str(row[0])) for row in cur.fetchall()]
-    if not goal_ids:
+    cur.execute(
+        """SELECT id, name, target_amount, target_currency, target_date, planned_monthly
+             FROM goal WHERE household_id = %s AND state = 'active'""",
+        (household_id,),
+    )
+    goals = cur.fetchall()
+    if not goals:
         return []
     values = account_native_values(cur, household_id, base, secondary, as_of)
-    all_reservations = household_reservations(cur, household_id, active_only=True)
-    by_goal: dict[UUID, list[ReservationFact]] = {}
-    for reservation in all_reservations:
-        if reservation.goalId is not None:
-            by_goal.setdefault(reservation.goalId, []).append(reservation)
+    active = household_reservations(cur, household_id, active_only=True)
 
     results: list[GoalShortfall] = []
-    for goal_id in goal_ids:
-        cur.execute(
-            """SELECT name, target_amount, target_currency, target_date, planned_monthly
-                 FROM goal WHERE household_id = %s AND id = %s""",
-            (household_id, goal_id),
-        )
-        row = cur.fetchone()
-        assert row is not None
-        name, target_amount, target_currency_raw, target_date, planned_monthly = row
-        target_currency = str(target_currency_raw).strip()
+    for goal_id, name, target_amount, currency_raw, target_date, planned_monthly in goals:
+        target_currency = str(currency_raw).strip()
         progresses: list[ReservationProgress | None] = []
-        for reservation in by_goal.get(goal_id, []):
+        for reservation in (r for r in active if r.goalId == UUID(str(goal_id))):
             native = values.get(reservation.accountId)
             native_now = (
                 reservation.nativeAmount
                 if reservation.kind == "amount"
                 else (native.value if native else None)
             )
-            rate_now = _rate_into(
-                cur, reservation.currency, target_currency, base, secondary, as_of
-            )
-            if reservation.kind == "amount" or native_now is None or native is None:
-                inflow = Decimal("0.0000")
-            elif native.valuationMode == "ledger_balance":
-                inflow = native_now - reservation.nativeAmount
-            elif native.valuationMode == "holdings":
-                inflow = holdings_inflow_native(
-                    cur, household_id, reservation.accountId, reservation.reservedOn, as_of
-                )
-            else:  # snapshot
-                inflow = Decimal("0.0000")
             progresses.append(
                 reservation_progress(
                     native_amount=reservation.nativeAmount,
                     rate_at_reservation=reservation.rateAtReservation,
                     native_now=native_now,
-                    rate_now=rate_now,
-                    inflow_native=inflow,
+                    rate_now=goal_rate(
+                        cur, reservation.currency, target_currency, base, secondary, as_of
+                    ),
+                    inflow_native=reservation_inflow(
+                        cur, household_id, reservation, native, native_now, as_of
+                    ),
                 )
             )
-        planned = None if planned_monthly is None else Decimal(planned_monthly)
         totals = goal_totals(
             target_amount=Decimal(target_amount),
-            planned_monthly=planned,
+            planned_monthly=None if planned_monthly is None else Decimal(planned_monthly),
             target_date=target_date,
             as_of=as_of,
             reservation_progresses=progresses,
@@ -375,11 +404,7 @@ def goal_shortfalls(
         if totals.status == "available" and totals.shortfall is not None and totals.shortfall > 0:
             results.append(
                 GoalShortfall(
-                    goalId=goal_id,
-                    name=name,
-                    targetDate=target_date,
-                    currency=target_currency,
-                    shortfall=totals.shortfall,
+                    UUID(str(goal_id)), name, target_date, target_currency, totals.shortfall
                 )
             )
     return results

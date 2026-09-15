@@ -27,15 +27,15 @@ from ..auth import OwnerSession, require_owner
 from ..coverage import previous_month
 from ..db import connect
 from ..emergency import coverage as emergency_coverage
-from ..emergency import manual_baseline, reference_period, reference_period_baseline
 from ..resources import (
     account_native_values,
     eligible_account_ids,
     eligible_native_and_base,
+    emergency_baseline,
     goal_shortfalls,
+    household_currencies,
     household_reservations,
     read_emergency_reserve_settings,
-    spending_totals,
 )
 from .plans import DUE_WINDOW_DAYS, Certainty, _commitment_progress
 
@@ -348,7 +348,7 @@ def action_list(
             )
         )
 
-    base, secondary = _household_currencies(cur, household_id)
+    base, secondary = household_currencies(cur, household_id)
 
     for shortfall in goal_shortfalls(cur, household_id, as_of, base, secondary):
         action_key = f"goal.{shortfall.goalId}"
@@ -403,15 +403,6 @@ def action_list(
     return rows
 
 
-def _household_currencies(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
-    )
-    row = cur.fetchone()
-    assert row is not None
-    return str(row[0]).strip(), str(row[1]).strip()
-
-
 def _reserve_gap(
     cur: psycopg.Cursor[Any], household_id: UUID, as_of: date, base: str, secondary: str
 ) -> Decimal | None:
@@ -421,35 +412,20 @@ def _reserve_gap(
     settings = read_emergency_reserve_settings(cur, household_id)
     if settings is None:
         return None
-    if settings.baselineMethod == "manual":
-        assert settings.manualMonthlyBase is not None
-        baseline = manual_baseline(settings.manualMonthlyBase)
-    else:
-        ref_start, ref_end = reference_period(as_of, settings.referenceMonths)
-        spending, uncategorised = spending_totals(
-            cur, household_id, ref_start, ref_end, settings.buckets
-        )
-        baseline = reference_period_baseline(
-            as_of=as_of,
-            reference_months=settings.referenceMonths,
-            spending=spending,
-            uncategorised=uncategorised,
-        )
+    baseline = emergency_baseline(cur, household_id, settings, as_of)
     if baseline.status != "available":
         return None
 
-    eligible_ids = eligible_account_ids(cur, household_id)
-    if not eligible_ids:
-        return None
+    # No eligible account is zero coverage, the whole target short — still an item.
     values = account_native_values(cur, household_id, base, secondary, as_of)
     active_reservations = household_reservations(cur, household_id, active_only=True)
     eligible_bases: list[Decimal | None] = []
-    for account_id in eligible_ids:
+    for account_id in eligible_account_ids(cur, household_id):
         native = values.get(account_id)
         if native is None or native.value is None:
             continue
-        _goal_reserved, _emergency_reserved, _eligible, eligible_base = eligible_native_and_base(
-            cur, household_id, account_id, native, active_reservations, base, secondary, as_of
+        *_reserved, eligible_base = eligible_native_and_base(
+            cur, account_id, native, active_reservations, base, secondary, as_of
         )
         eligible_bases.append(eligible_base)
 

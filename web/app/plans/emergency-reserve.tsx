@@ -386,7 +386,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
               {data.baseline.method === "reference_period" && data.baseline.referenceStart && (
                 <> · {data.baseline.referenceStart} to {data.baseline.referenceEnd}</>
               )}
-              {data.baseline.uncategorisedBase && data.baseline.uncategorisedBase !== "0.0000" && (
+              {data.baseline.uncategorisedBase && (
                 <>
                   {" "}(excludes {moneyText(data.baseline.uncategorisedBase, data.baseCurrency, currencies)}{" "}
                   uncategorised)

@@ -22,26 +22,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ..auth import OwnerSession, require_owner
 from ..coverage import months_from_anchor
 from ..db import connect
-from ..emergency import (
-    Baseline,
-    coverage,
-    manual_baseline,
-    reference_period,
-    reference_period_baseline,
-)
+from ..emergency import Baseline, coverage
 from ..investments.positions import current_rate_pair
-from ..money import _money, _out, translate
+from ..money import _out, translate
 from ..resources import (
     NativeValueReason,
     ValuationMode,
     account_native_values,
     eligible_native_and_base,
+    emergency_baseline,
+    household_currencies,
     household_reservations,
     read_emergency_reserve_settings,
-    spending_totals,
 )
 from .coverage import coverage_rows
-from .goals import ReservationRow, _reservation_row
+from .goals import ReservationRow, _positive_money, _reservation_row
 from .plans import _commitment_progress
 
 router = APIRouter(tags=["emergency-reserve"])
@@ -49,14 +44,6 @@ router = APIRouter(tags=["emergency-reserve"])
 Bucket = Literal["need", "want", "investment", "debt_service"]
 _TARGET_MONTHS_RE = re.compile(r"^\d{1,2}(\.\d)?$")
 _UPCOMING_WINDOW_DAYS = 30
-
-
-def _positive_money(value: str) -> str:
-    checked = _money(value)
-    assert checked is not None
-    if Decimal(checked) <= 0:
-        raise ValueError("amount must be positive")
-    return checked
 
 
 def _normalize_note(value: str) -> str:
@@ -178,15 +165,6 @@ class EmergencyReserveResponse(BaseModel):
     reservations: list[ReservationRow]
 
 
-def _household_currencies(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
-    )
-    row = cur.fetchone()
-    assert row is not None
-    return str(row[0]).strip(), str(row[1]).strip()
-
-
 def _coverage_gap_months(
     cur: psycopg.Cursor[Any], household_id: UUID, as_of: date, start: date | None, end: date | None
 ) -> int:
@@ -247,20 +225,7 @@ def _emergency_response(
             buckets=raw_settings.buckets,
             manualMonthlyBase=_out(raw_settings.manualMonthlyBase),
         )
-        if raw_settings.baselineMethod == "manual":
-            assert raw_settings.manualMonthlyBase is not None
-            baseline = manual_baseline(raw_settings.manualMonthlyBase)
-        else:
-            ref_start, ref_end = reference_period(as_of, raw_settings.referenceMonths)
-            spending, uncategorised = spending_totals(
-                cur, household_id, ref_start, ref_end, raw_settings.buckets
-            )
-            baseline = reference_period_baseline(
-                as_of=as_of,
-                reference_months=raw_settings.referenceMonths,
-                spending=spending,
-                uncategorised=uncategorised,
-            )
+        baseline = emergency_baseline(cur, household_id, raw_settings, as_of)
 
     cur.execute(
         """SELECT e.account_id, a.name, e.access_days, e.restriction_note
@@ -283,14 +248,13 @@ def _emergency_response(
         aid = UUID(str(account_id))
         native = values.get(aid)
         goal_reserved, emergency_reserved, eligible, eligible_base = eligible_native_and_base(
-            cur, household_id, aid, native, active_reservations, base, secondary, as_of
+            cur, aid, native, active_reservations, base, secondary, as_of
         )
         value = native.value if native else None
-        if value is not None:
-            currency = native.currency if native else base
+        if native is not None and eligible is not None:
             eligible_bases.append(eligible_base)
-            currency_totals[currency] = currency_totals.get(currency, Decimal("0.0000")) + (
-                eligible if eligible is not None else Decimal("0.0000")
+            currency_totals[native.currency] = (
+                currency_totals.get(native.currency, Decimal("0.0000")) + eligible
             )
         accounts.append(
             EligibleAccountRow(
@@ -410,7 +374,7 @@ def read_emergency_reserve(
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         return _emergency_response(cur, owner.household_id, as_of, base, secondary)
 
 
@@ -420,7 +384,7 @@ def put_emergency_reserve(
 ) -> EmergencyReserveResponse:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(
             """INSERT INTO emergency_reserve (household_id, target_months, baseline_method,
                    reference_months, buckets, manual_monthly_base)
@@ -452,7 +416,7 @@ def put_eligible_account(
 ) -> EmergencyReserveResponse:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(
             "SELECT is_active, account_class::text FROM account "
             "WHERE household_id = %s AND id = %s",

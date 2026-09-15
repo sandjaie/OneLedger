@@ -332,6 +332,15 @@ def test_p07_in_full_goal_and_emergency_share_unreserved_and_release_frees_exact
     further = _reserve_emergency(live, live.account_id, amount="1.0000")
     assert further.status_code == 422
     assert "unreserved" in further.json()["detail"]
+    further_goal = client().post(
+        "/reservations",
+        json=_reservation_body(
+            live, "goal", live.account_id, goalId=goal.json()["id"], amount="1.0000"
+        ),
+        headers=ORIGIN,
+    )
+    assert further_goal.status_code == 422
+    assert "unreserved" in further_goal.json()["detail"]
 
     accounts = client().get("/goals", headers=ORIGIN).json()["accounts"]
     row = next(r for r in accounts if r["accountId"] == str(live.account_id))
@@ -411,6 +420,58 @@ def test_p08_six_thousand_eligible_over_two_thousand_baseline_and_emergency_not_
     assert view["coverageStatus"] == "available"
     assert view["eligibleBase"] == "6000.0000"
     assert view["coverageMonths"] == "3.00"
+    assert view["reservedMonths"] == "0.50"
+    assert view["targetBase"] == "12000.0000"
+    assert view["gapBase"] == "6000.0000"
+    assert [(c["currency"], c["eligibleNative"]) for c in view["currencies"]] == [
+        (live.currency, "6000.0000")
+    ]
+
+
+def test_whole_account_goal_reservation_leaves_nothing_eligible_after_a_later_deposit(
+    live: EmergencyFixture,
+) -> None:
+    _mark_eligible(live.account_id)
+    goal = client().post(
+        "/goals",
+        json={
+            "name": "Synthetic whole-account goal",
+            "targetAmount": "20000.0000",
+            "targetCurrency": live.currency,
+            "targetDate": str(TODAY + timedelta(days=365)),
+            "priority": 1,
+            "plannedMonthly": None,
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert goal.status_code == 201, goal.text
+    whole = client().post(
+        "/reservations",
+        json=_reservation_body(
+            live,
+            "goal",
+            live.account_id,
+            goalId=goal.json()["id"],
+            kind="whole_account",
+            amount=None,
+        ),
+        headers=ORIGIN,
+    )
+    assert whole.status_code == 201, whole.text
+    with live.connection.cursor() as cur:
+        _txn(cur, live.household_id, live.account_id, "2000.0000", TODAY, live.currency, None)
+    live.connection.commit()
+
+    _put_settings(baselineMethod="manual", manualMonthlyBase="1000.0000")
+    view = client().get("/emergency-reserve", headers=ORIGIN).json()
+    row = _account_row(view, live.account_id)
+    # The whole account, deposit included, is the goal's: none of it covers the reserve.
+    assert row["value"] == "12000.0000"
+    assert row["goalReserved"] == "12000.0000"
+    assert row["eligible"] == "0.0000"
+    assert view["eligibleBase"] == "0.0000"
+    assert view["coverageMonths"] == "0.00"
 
 
 # ---------------------------------------------------------------------------------------
