@@ -29,6 +29,10 @@ const REASON_TEXT: Record<ActionRow["reason"], string> = {
   follow_up: "Follow-up",
   goal_shortfall: "Goal shortfall",
   reserve_below_target: "Reserve below target",
+  renewal_due: "Renewal due",
+  maturity_due: "Maturity due",
+  deadline_due: "Deadline due",
+  review_due: "Review due",
 };
 
 function itemAmountText(item: ActionRow, currencies: Array<CurrencyRow>): string | undefined {
@@ -53,7 +57,7 @@ export function NeedsAttention({
   const [attempt, setAttempt] = useState(0);
   const [busyKey, setBusyKey] = useState<string>();
   const [problem, setProblem] = useState<string>();
-  const [openForm, setOpenForm] = useState<{ key: string; kind: "reason" | "snooze" }>();
+  const [openForm, setOpenForm] = useState<{ key: string; kind: "reason" | "snooze" | "renew" }>();
   const [draftText, setDraftText] = useState("");
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [showResolved, setShowResolved] = useState(false);
@@ -173,6 +177,43 @@ export function NeedsAttention({
     );
   }
 
+  function markRecordReviewed(item: ActionRow) {
+    if (!item.registerRecordId) return;
+    void run(
+      item.actionKey,
+      async () => {
+        await request(`/register/${item.registerRecordId}/reviewed`, { method: "POST" });
+      },
+      "This could not be marked reviewed.",
+    );
+  }
+
+  function completeRecordDeadline(item: ActionRow) {
+    if (!item.registerRecordId) return;
+    void run(
+      item.actionKey,
+      async () => {
+        await request(`/register/${item.registerRecordId}/complete`, { method: "POST" });
+      },
+      "This could not be completed.",
+    );
+  }
+
+  function renewRecord(item: ActionRow, nextRenewalDate: string) {
+    if (!item.registerRecordId) return;
+    void run(
+      item.actionKey,
+      async () => {
+        await request(`/register/${item.registerRecordId}/renewed`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nextRenewalDate }),
+        });
+      },
+      "This could not be marked renewed.",
+    );
+  }
+
   function completeFollowUp(item: ActionRow) {
     if (!item.actionItemId) return;
     void run(
@@ -269,7 +310,31 @@ export function NeedsAttention({
             type="button"
           >Complete</button>
         )}
-        {formOpen !== "reason" && item.kind !== "goal" && item.kind !== "reserve" && (
+        {item.kind === "record" && item.reason === "review_due" && (
+          <button
+            className="text-action"
+            disabled={busy}
+            onClick={() => markRecordReviewed(item)}
+            type="button"
+          >Mark reviewed</button>
+        )}
+        {item.kind === "record" && item.reason === "deadline_due" && (
+          <button
+            className="text-action"
+            disabled={busy}
+            onClick={() => completeRecordDeadline(item)}
+            type="button"
+          >Complete</button>
+        )}
+        {item.kind === "record" && item.reason === "renewal_due" && formOpen !== "renew" && (
+          <button
+            className="text-action"
+            disabled={busy}
+            onClick={() => { setOpenForm({ key: item.actionKey, kind: "renew" }); setDraftText(""); }}
+            type="button"
+          >Renewed</button>
+        )}
+        {formOpen !== "reason" && item.kind !== "goal" && item.kind !== "reserve" && item.kind !== "record" && (
           <button
             className="text-action"
             disabled={busy}
@@ -319,6 +384,23 @@ export function NeedsAttention({
               onClick={() => snooze(item, draftText)}
               type="button"
             >Confirm snooze</button>
+            <button className="text-action" onClick={closeForm} type="button">Cancel</button>
+          </span>
+        )}
+        {formOpen === "renew" && (
+          <span className="needs-attention-inline-form">
+            <input
+              aria-label={`Next renewal date for ${item.title}`}
+              onChange={(e) => setDraftText(e.target.value)}
+              type="date"
+              value={draftText}
+            />
+            <button
+              className="primary-action"
+              disabled={busy || !draftText}
+              onClick={() => renewRecord(item, draftText)}
+              type="button"
+            >Confirm renewal</button>
             <button className="text-action" onClick={closeForm} type="button">Cancel</button>
           </span>
         )}

@@ -19,6 +19,7 @@ import { EmergencyReserve } from "./emergency-reserve";
 import { Goals } from "./goals";
 import { MonthlyReview } from "./monthly-review";
 import { NeedsAttention } from "./needs-attention";
+import { Register } from "./register";
 import { SettlementPanel } from "./settlement-panel";
 
 // Spec "Card dues and actions (Task 2)": Plan payment pre-fills the negated statement balance —
@@ -304,6 +305,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
       <Goals accounts={accounts} currencies={currencies} request={request} />
 
       <EmergencyReserve accounts={accounts} currencies={currencies} request={request} />
+
+      <Register accounts={accounts} currencies={currencies} request={request} />
 
       <CashForecast
         accounts={accounts}
