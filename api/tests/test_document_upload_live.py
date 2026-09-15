@@ -228,6 +228,30 @@ def test_link_and_unlink_are_idempotent(live: UploadFixture) -> None:
     assert reunlinked.json()["documents"] == []
 
 
+def test_a_statement_document_cannot_be_linked(live: UploadFixture) -> None:
+    """Only a document of one of the six upload types may be linked to a record — an imported
+    statement is the household's own document and still refuses with 422, so the rule is not the
+    404 the foreign-document case already proves."""
+    statement_id = uuid4()
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO document (id, household_id, document_type, original_filename,
+                     storage_bucket, storage_path, mime_type, byte_size, sha256, parsed_status)
+               VALUES (%s, %s, 'bank_statement', 'synthetic.pdf', 'documents',
+                       'synthetic/statement.pdf', 'application/pdf', 10,
+                       encode(gen_random_bytes(32), 'hex'), 'parsed')""",
+            (statement_id, live.household_id),
+        )
+    live.connection.commit()
+
+    refused = _link(live.record_id, str(statement_id))
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["detail"] == "only an uploaded document can be linked to a record"
+
+    listed = client().get("/register", headers=ORIGIN).json()["records"]
+    assert next(r for r in listed if r["id"] == str(live.record_id))["documents"] == []
+
+
 def test_foreign_document_cannot_be_seen_or_linked(live: UploadFixture) -> None:
     app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
     foreign_document_id = _upload(_PDF_HEADER + b"six").json()["id"]

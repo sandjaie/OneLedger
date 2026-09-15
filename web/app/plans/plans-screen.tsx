@@ -383,6 +383,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         currencies={currencies}
         onPlanFromRecord={startRecordPlan}
         onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
         request={request}
       />
 

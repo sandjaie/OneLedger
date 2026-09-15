@@ -336,6 +336,102 @@ describe("plans screen", () => {
     expect(await screen.findByText("Nothing needs attention right now.")).toBeTruthy();
   });
 
+  it("plans a deposit's proceeds from the register: pre-fill, account filter, source, and refetch", async () => {
+    const depositAccount: AccountRow = {
+      ...account,
+      id: "00000000-0000-4000-8000-0000000000a4",
+      name: "Synthetic fixed deposit",
+      accountType: "fixed_deposit",
+    };
+    const otherCurrency: AccountRow = {
+      ...account,
+      id: "00000000-0000-4000-8000-0000000000a2",
+      name: "Synthetic other-currency account",
+      currency: "XBB",
+    };
+    const card: AccountRow = {
+      ...account,
+      id: "00000000-0000-4000-8000-0000000000cc",
+      name: "Synthetic card",
+      accountType: "credit_card",
+      accountClass: "liability",
+    };
+    const deposit = {
+      id: "00000000-0000-4000-8000-0000000000r2",
+      kind: "deposit",
+      title: "Synthetic deposit",
+      counterparty: "Synthetic institution",
+      covered: null,
+      amount: "1000.0000",
+      currency: "XAA",
+      premiumAmount: null,
+      premiumCadence: null,
+      keyDate: "2026-03-20",
+      accountId: depositAccount.id,
+      accountName: depositAccount.name,
+      instruction: null,
+      nomineeRecorded: null,
+      lastReviewedOn: null,
+      reviewDue: false,
+      completedAt: null,
+      archivedAt: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      documents: [],
+      plannedCommitment: null,
+    };
+    let registerCalls = 0;
+    let posted: Record<string, unknown> | undefined;
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/actions") return emptyActions;
+      if (path === "/monthly-review") return emptyMonthlyReview;
+      if (path === "/goals?includeClosed=true") return emptyGoals;
+      if (path === "/emergency-reserve") return emptyEmergencyReserve;
+      if (path === "/register?includeArchived=true") {
+        registerCalls += 1;
+        return { records: [deposit] };
+      }
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments" && init?.method === "POST") {
+        posted = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return commitment;
+      }
+      if (path === "/commitments") return { commitments: [] } satisfies CommitmentsResponse;
+      throw new ApiError(500, `unexpected ${path}`);
+    }) as Request;
+    render(
+      <PlansScreen
+        accounts={[depositAccount, otherCurrency, card, account]}
+        currencies={currencies}
+        request={request}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Plan proceeds" }));
+    expect(screen.getByRole("heading", { name: "Plan proceeds" })).toBeTruthy();
+    // The deposit's own account, another currency and a liability are all out: the proceeds land
+    // on an active asset account in the record's currency that is not the deposit itself.
+    const picker = screen.getByLabelText("Account") as HTMLSelectElement;
+    expect(Array.from(picker.options).map((option) => option.textContent)).toEqual([account.name]);
+    expect((screen.getByLabelText("Label") as HTMLInputElement).value).toBe("Synthetic deposit");
+    expect((screen.getByLabelText(/Amount/) as HTMLInputElement).value).toBe("1000.0000");
+    expect((screen.getByLabelText("First date") as HTMLInputElement).value).toBe("2026-03-20");
+
+    const before = registerCalls;
+    fireEvent.click(screen.getByRole("button", { name: "Add commitment" }));
+    await waitFor(() => expect(posted).toBeDefined());
+    expect(posted).toMatchObject({
+      accountId: account.id,
+      amount: "1000.0000",
+      cadence: "once",
+      firstDate: "2026-03-20",
+      sourceRegisterRecordId: deposit.id,
+      sourceCardStatementId: null,
+    });
+    // The register re-reads once the plan exists, so the record shows it without a reload.
+    await waitFor(() => expect(registerCalls).toBeGreaterThan(before));
+  });
+
   it("renders certainty, status, next due date and paid/remaining from server strings", async () => {
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;

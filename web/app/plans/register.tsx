@@ -25,6 +25,10 @@ type Props = {
   onPlanFromRecord: (record: RegisterRow) => void;
   // Settle reuses the Task 1 settlement panel PlansScreen already renders per commitment.
   onSettle: (commitmentId: string) => void;
+  // Bumped by PlansScreen whenever a commitment is created or settled, so a record's
+  // plannedCommitment appears without a reload — the same prop NeedsAttention and CashForecast
+  // already take.
+  refreshKey: number;
 };
 
 // spec "Document upload (Task 2)": the six types an owner can attach directly.
@@ -227,7 +231,14 @@ const STATUS_TEXT: Record<CommitmentRow["status"], string> = {
   cancelled: "Cancelled",
 };
 
-export function Register({ accounts, currencies, request, onPlanFromRecord, onSettle }: Props) {
+export function Register({
+  accounts,
+  currencies,
+  request,
+  onPlanFromRecord,
+  onSettle,
+  refreshKey,
+}: Props) {
   const [data, setData] = useState<RegisterResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -265,7 +276,7 @@ export function Register({ accounts, currencies, request, onPlanFromRecord, onSe
     return () => {
       current = false;
     };
-  }, [attempt, request]);
+  }, [attempt, refreshKey, request]);
 
   function refetch() {
     setAttempt((value) => value + 1);
@@ -508,7 +519,10 @@ export function Register({ accounts, currencies, request, onPlanFromRecord, onSe
                             onClick={() => toggleAttach(record)}
                             type="button"
                           >{attachingId === record.id ? "Close" : "Attach document"}</button>
-                          {PLAN_LABEL[kind] && !record.plannedCommitment && (
+                          {/* A record with no currency has no premium or expected amount to
+                              plan (the kind shape ties the two together), so it offers no
+                              plan action rather than a control that cannot submit. */}
+                          {PLAN_LABEL[kind] && record.currency && !record.plannedCommitment && (
                             <button
                               className="text-action"
                               onClick={() => onPlanFromRecord(record)}

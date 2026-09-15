@@ -89,6 +89,7 @@ function renderRegister(props: {
   request: Request;
   onPlanFromRecord?: (record: RegisterRow) => void;
   onSettle?: (commitmentId: string) => void;
+  refreshKey?: number;
 }) {
   return render(
     <Register
@@ -96,6 +97,7 @@ function renderRegister(props: {
       currencies={props.currencies ?? currencies}
       onPlanFromRecord={props.onPlanFromRecord ?? vi.fn()}
       onSettle={props.onSettle ?? vi.fn()}
+      refreshKey={props.refreshKey ?? 0}
       request={props.request}
     />,
   );
@@ -327,7 +329,7 @@ describe("register", () => {
   });
 
   it("attaches an existing library document and detaches it", async () => {
-    let documents = [{ documentId: "doc-1", documentType: "tax_document", title: "Synthetic tax", uploadedAt: "2026-01-01T00:00:00Z" }];
+    let documents: RegisterRow["documents"] = [];
     const request = requestFrom((path, init) => {
       if (path === "/register?includeArchived=true") return response({ records: [record({ documents })] });
       if (path === "/documents?limit=200") {
@@ -357,6 +359,12 @@ describe("register", () => {
           total: 1,
         };
       }
+      if (path === "/register/00000000-0000-4000-8000-0000000000r1/documents/doc-1" && init?.method === "PUT") {
+        documents = [
+          { documentId: "doc-1", documentType: "tax_document", title: "Synthetic tax", uploadedAt: "2026-01-01T00:00:00Z" },
+        ];
+        return record({ documents });
+      }
       if (path === "/register/00000000-0000-4000-8000-0000000000r1/documents/doc-1" && init?.method === "DELETE") {
         documents = [];
         return record({ documents });
@@ -364,6 +372,11 @@ describe("register", () => {
       throw new ApiError(500, `unexpected ${path}`);
     });
     renderRegister({ accounts: [account()], request });
+
+    await screen.findByText(/Synthetic policy/);
+    fireEvent.click(screen.getByRole("button", { name: "Attach document" }));
+    const picker = await screen.findByLabelText("Attach from the library");
+    fireEvent.change(picker, { target: { value: "doc-1" } });
 
     expect(await screen.findByRole("link", { name: "Synthetic tax" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Detach" }));
