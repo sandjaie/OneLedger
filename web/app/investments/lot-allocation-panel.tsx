@@ -16,9 +16,9 @@ type Props = {
   disposalEventId: string;
   disposalDate: string;
   request: typeof apiFetch;
-  // Called once a confirmed allocation returns, so the holding page (the source-of-truth
-  // record) can reload — this panel never re-fetches the holding itself.
-  onAllocated: () => void;
+  // Called with the confirmed server result, so the holding page can show it and reload — the
+  // panel unmounts with that reload, so the result must live in the holding page.
+  onAllocated: (result: LotAllocationResponse) => void;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -30,16 +30,30 @@ function lotLabel(lot: HoldingLotRow) {
   return `Acquired ${dateLabel(lot.acquiredOn)} · ${lot.remainingUnits} of ${lot.acquiredUnits} units remaining · cost basis ${lot.costBasisNative}`;
 }
 
+export function LotAllocationResult({ result }: { result: LotAllocationResponse }) {
+  return (
+    <div className="investment-lot-allocation-result" aria-label="Confirmed lot allocation">
+      <p className="investment-feedback" role="status">Lot allocation confirmed.</p>
+      <dl>
+        <div><dt>Realised cost</dt><dd>{result.realisedCostNative ?? "Not yet determinable"}</dd></div>
+        <div><dt>Realised gain</dt><dd>{result.realisedGainNative ?? "Not yet determinable"}</dd></div>
+        <div><dt>Remaining basis</dt><dd>{result.remainingBasisNative ?? "Not yet determinable"}</dd></div>
+      </dl>
+      {result.reviewReasons.length > 0 && <p>This disposal still has units to allocate.</p>}
+    </div>
+  );
+}
+
 export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, request, onAllocated }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [lots, setLots] = useState<Array<HoldingLotRow>>([]);
   const [draft, setDraft] = useState<Draft>({});
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [proposal, setProposal] = useState<LotAllocationProposalResponse>();
-  const [result, setResult] = useState<LotAllocationResponse>();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
   const [stale, setStale] = useState(false);
+  const [lotsAttempt, setLotsAttempt] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -55,7 +69,7 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
     return () => {
       current = false;
     };
-  }, [holdingId, request]);
+  }, [holdingId, request, lotsAttempt]);
 
   // Eligible lots dated on or before the disposal — the server itself refuses proposing more
   // than a lot's own remaining units, so this list is not further filtered by that string here.
@@ -76,7 +90,7 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
   function allocationBody(): Array<LotAllocationInput> {
     return Object.entries(draft)
       .filter(([, units]) => units.trim() !== "")
-      .map(([acquisitionLotId, allocatedUnits]) => ({ acquisitionLotId, allocatedUnits }));
+      .map(([acquisitionLotId, allocatedUnits]) => ({ acquisitionLotId, allocatedUnits: allocatedUnits.trim() }));
   }
 
   const allocations = allocationBody();
@@ -123,32 +137,18 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
           idempotencyKey: key,
         }),
       });
-      setResult(response);
-      onAllocated();
+      onAllocated(response);
     } catch (error) {
       setProblem(errorText(error, "The lot allocation was not confirmed."));
       if (error instanceof ApiError && error.status === 409) {
         setProposal(undefined);
         setIdempotencyKey("");
         setStale(true);
+        setLotsAttempt((value) => value + 1);
       }
     } finally {
       setBusy(false);
     }
-  }
-
-  if (result) {
-    return (
-      <div className="investment-lot-allocation-result" aria-label="Confirmed lot allocation">
-        <p className="investment-feedback" role="status">Lot allocation confirmed.</p>
-        <dl>
-          <div><dt>Realised cost</dt><dd>{result.realisedCostNative ?? "Not yet determinable"}</dd></div>
-          <div><dt>Realised gain</dt><dd>{result.realisedGainNative ?? "Not yet determinable"}</dd></div>
-          <div><dt>Remaining basis</dt><dd>{result.remainingBasisNative ?? "Not yet determinable"}</dd></div>
-        </dl>
-        {result.reviewReasons.length > 0 && <p>This disposal still has units to allocate.</p>}
-      </div>
-    );
   }
 
   return (

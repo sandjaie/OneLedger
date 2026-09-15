@@ -6,13 +6,20 @@ import { type FormEvent, useEffect, useState } from "react";
 import { EventCorrectionForm, isFundedEvent } from "@/app/investments/event-correction-form";
 import { FundingPanel, type FundableEvent } from "@/app/investments/funding-panel";
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
-import { LotAllocationPanel } from "@/app/investments/lot-allocation-panel";
+import { LotAllocationPanel, LotAllocationResult } from "@/app/investments/lot-allocation-panel";
 import { reasonText } from "@/app/investments/review-reasons";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
 import type { apiFetch } from "@/lib/api/client";
 import { ApiError, errorText } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
-import type { AccountRow, HoldingDetail, HoldingEventRow, ManualPriceCreate, ManualPriceRow } from "@/types/api";
+import type {
+  AccountRow,
+  HoldingDetail,
+  HoldingEventRow,
+  LotAllocationResponse,
+  ManualPriceCreate,
+  ManualPriceRow,
+} from "@/types/api";
 
 type Props = {
   holdingId: string;
@@ -50,6 +57,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
   const [correctingEventId, setCorrectingEventId] = useState<string>();
   const [correctionFeedback, setCorrectionFeedback] = useState("");
   const [allocatingEventId, setAllocatingEventId] = useState<string>();
+  const [allocationResult, setAllocationResult] = useState<LotAllocationResponse>();
   // Bumped only after a fresh holding has been stored, so the funding panel re-seeds from the
   // reloaded `cashLinks` rather than remounting against the stale ones.
   const [loadCount, setLoadCount] = useState(0);
@@ -170,6 +178,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
           <section aria-labelledby="holding-events-title">
             <p className="section-label" id="holding-events-title">Events ({events.length} of {detail.eventsTotal})</p>
             {correctionFeedback && <WealthRefreshNotice message={correctionFeedback} />}
+            {allocationResult && <LotAllocationResult result={allocationResult} />}
             {events.length === 0 && <p className="investment-state">No events recorded.</p>}
             {events.length > 0 && (
               <ul className="investment-holding-grid">
@@ -197,7 +206,10 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                         {event.lotAllocationOpen && (
                           <button
                             className="text-action"
-                            onClick={() => setAllocatingEventId(allocatingEventId === event.id ? undefined : event.id)}
+                            onClick={() => {
+                              setAllocationResult(undefined);
+                              setAllocatingEventId(allocatingEventId === event.id ? undefined : event.id);
+                            }}
                             type="button"
                           >
                             {allocatingEventId === event.id ? "Hide lot allocation" : "Allocate lots"}
@@ -221,7 +233,8 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                           disposalDate={event.eventDate}
                           disposalEventId={event.id}
                           holdingId={detail.holdingId}
-                          onAllocated={() => {
+                          onAllocated={(result) => {
+                            setAllocationResult(result);
                             setAllocatingEventId(undefined);
                             setCorrectionFeedback("Lot allocation confirmed. The events below show the refreshed state.");
                             setAttempt((value) => value + 1);

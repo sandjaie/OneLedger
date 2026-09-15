@@ -266,7 +266,7 @@ _EVENTS_SQL = """
         ON cp.household_id = t.household_id
        AND (cp.id = t.counterpart_transaction_id OR cp.counterpart_transaction_id = t.id)
      WHERE t.household_id = %s AND t.holding_id = %s
-     ORDER BY t.event_date DESC, t.created_at DESC
+     ORDER BY t.event_date DESC, t.created_at DESC, t.id DESC
      LIMIT %s OFFSET %s
 """
 
@@ -356,7 +356,16 @@ def read_holding_detail(
 
     cur.execute(_EVENTS_SQL, (household_id, holding.id, events_limit, events_offset))
     event_rows = cur.fetchall()
-    events_total = int(event_rows[0][20]) if event_rows else 0
+    if event_rows:
+        events_total = int(event_rows[0][20])
+    else:
+        # An offset past the end returns no row to carry the window count.
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                WHERE household_id = %s AND holding_id = %s""",
+            (household_id, holding.id),
+        )
+        events_total = int(cur.fetchone()[0])  # type: ignore[index]
     events = []
     for r in event_rows:
         event_id, event_kind, is_active = r[0], r[2], bool(r[13])

@@ -415,3 +415,11 @@ def test_events_page_by_offset_and_limit_while_the_total_stays_exact(
     assert len(second_page["events"]) == 1
     assert second_page["eventsTotal"] == 2
     assert second_page["events"][0]["eventKind"] == "purchase"
+
+    past_end = _client().get(
+        f"/portfolio/holdings/{acquired['holdingId']}",
+        params={"eventsLimit": 1, "eventsOffset": 5},
+    )
+    assert past_end.status_code == 200, past_end.text
+    assert past_end.json()["events"] == []
+    assert past_end.json()["eventsTotal"] == 2

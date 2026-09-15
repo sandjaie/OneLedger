@@ -9,6 +9,7 @@ import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   FundingProposalResponse,
   HoldingDetail,
+  HoldingEventRow,
   HoldingLotRow,
   HouseholdResponse,
   LotAllocationProposalResponse,
@@ -518,6 +519,70 @@ describe("HoldingScreen", () => {
       await screen.findByText(/Lot allocation confirmed\. The events below show the refreshed state\./),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Allocate lots" })).toBeNull();
+    const confirmed = screen.getByLabelText("Confirmed lot allocation");
+    expect(confirmed.textContent).toContain("50.5000");
+    expect(confirmed.textContent).toContain("9.5000");
+  });
+
+  it("reuses the lot allocation key on a retry and replaces it after an edit", async () => {
+    const disposalEventId = "00000000-0000-4000-8000-000000000072";
+    const lotId = "00000000-0000-4000-8000-000000000091";
+    const disposalEvent = {
+      ...detail().events[0],
+      id: disposalEventId,
+      eventDate: "2026-01-10",
+      eventKind: "sale",
+      units: "-5.00000000",
+      lotAllocationOpen: true,
+    } as HoldingEventRow;
+    const openDetail = detail({ events: [detail().events[0], disposalEvent], eventsTotal: 2 });
+    const lots: Array<HoldingLotRow> = [{
+      lotId,
+      acquisitionEventId: detail().events[0].id,
+      acquiredOn: "2026-01-05",
+      acquiredUnits: "10.00000000",
+      remainingUnits: "10.00000000",
+      costBasisNative: "101.0000",
+      eligible: true,
+    }];
+    const keys: Array<unknown> = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) return openDetail;
+      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) return lots;
+      if (path === "/investment-funding/lot-allocation-proposals" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { allocations: Array<{ allocatedUnits: string }> };
+        return {
+          state: "ready",
+          expectedState: "c".repeat(64),
+          disposalEventId,
+          allocations: [{ acquisitionLotId: lotId, allocatedUnits: body.allocations[0].allocatedUnits }],
+        };
+      }
+      if (path === "/investment-funding/lot-allocations" && init?.method === "POST") {
+        keys.push((JSON.parse(String(init.body)) as Record<string, unknown>).idempotencyKey);
+        throw new ApiError(500, "Synthetic failure");
+      }
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+    fireEvent.click(screen.getByRole("button", { name: "Allocate lots" }));
+    fireEvent.change(await screen.findByLabelText(/Acquired 5 Jan 2026/), { target: { value: "5.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[1]).toBe(keys[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit allocation" }));
+    fireEvent.change(await screen.findByLabelText(/Acquired 5 Jan 2026/), { target: { value: "4.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(3));
+    expect(keys[2]).not.toBe(keys[0]);
   });
 
   it("loads more events, appending to the first page without replacing it", async () => {
