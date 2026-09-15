@@ -460,7 +460,17 @@ opens a form — an account picker showing each account&#39;s value, reserved an
 amount or the whole account. Each reservation lists its account, reserved date, contributed and
 current value and offers <strong>Release</strong>. A resources table lists every reservable
 account&#39;s value, reserved, unreserved and an over-reserved warning. Phase 3.3 Task 2 adds
-Emergency reserve and Phase 3.4 adds protection/administration records within that same view.
+<strong>Emergency reserve</strong> (<code>emergency-reserve.tsx</code>, anchor <code>#reserve</code>)
+between Goals and the forecast: settings (target months, baseline method, reference months and
+buckets, or a manual monthly amount); the baseline with its period, the uncategorised spending it
+leaves out, and &quot;not enough information&quot; when so; eligible accounts with access days,
+restriction note, value, reserved for goals, eligible amount, upcoming commitments, and
+<strong>Reserve for emergencies</strong> / <strong>Release</strong>; <strong>Mark as emergency
+resource</strong> for other asset accounts; coverage months, target, gap, per-currency totals with
+rates, and an assumptions list (a resource reserved for a goal is not counted; a commitment due
+within 30 days is shown but not subtracted; coverage uses current rates; a reservation moves no
+money). Needs attention lists a goal shortfall and a reserve below target as their own reasons,
+snooze only. Phase 3.4 adds protection/administration records within that same view.
 Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
 every record type.</p>
