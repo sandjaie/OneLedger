@@ -15,6 +15,7 @@ import type {
 } from "@/types/api";
 
 import { CashForecast } from "./cash-forecast";
+import { MonthlyReview } from "./monthly-review";
 import { NeedsAttention } from "./needs-attention";
 import { SettlementPanel } from "./settlement-panel";
 
@@ -295,6 +296,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         refreshKey={attempt}
         request={request}
       />
+
+      <MonthlyReview accounts={accounts} currencies={currencies} request={request} />
 
       <CashForecast
         accounts={accounts}

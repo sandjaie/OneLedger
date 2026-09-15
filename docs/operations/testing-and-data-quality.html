@@ -755,6 +755,21 @@ on or before the balance date) are capped at 12 per commitment; <code>balanceAge
 <code>staleAccountIds</code> are exact; <code>unplannedCardDues</code> lists a due regardless of
 snooze or dismissal marks and excludes one past <code>asOf + 90</code>. <code>GET /forecast</code>
 changes no row.</li>
+<li>Phase 3.2 Task 2: V50 SQL proves the first-day check and owner/member/foreign/anonymous
+isolation. Against a synthetic month with one coverage gap, one transfer candidate pair, one
+unclassified reportable row and two complete stored month totals, <code>GET /monthly-review</code>
+returns the exact <code>gapCells</code>/<code>rowsWithGaps</code>, <code>candidateCount</code>,
+<code>unclassifiedCount</code> and a <code>changeBase</code> matching the two totals&#39; own
+difference; a month with an incomplete or absent stored total gives a null <code>changeBase</code>
+and null <code>totalBase</code>. <code>PUT .../completion</code> is 201 the first time and 200 with
+the same <code>completedAt</code> on a replay; <code>DELETE .../completion</code> is 204 and
+idempotent; a month after the current one is 422 on <code>GET</code> and <code>PUT
+.../completion</code>; a foreign household&#39;s real transfer pair, unclassified row, stored
+totals, commitments, follow-up and completions never enter another household&#39;s steps,
+completion state or <code>previousMonthReview</code>; <code>GET /monthly-review</code> changes no
+row, including an existing <code>completedAt</code>. <code>GET /actions</code>&#39;s
+<code>previousMonthReview</code> reflects a completion and a reopen. Member 403 on the three new
+routes is covered by the repo-wide owner-dependency inventory test, not a dedicated case.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

@@ -99,7 +99,13 @@ const followUpItem: ActionRow = {
 };
 
 function emptyResponse(): ActionsResponse {
-  return { asOf: "2026-02-01", items: [], snoozed: [], resolvedFollowUps: [] };
+  return {
+    asOf: "2026-02-01",
+    items: [],
+    snoozed: [],
+    resolvedFollowUps: [],
+    previousMonthReview: { month: "2026-01-01", completedAt: null },
+  };
 }
 
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {

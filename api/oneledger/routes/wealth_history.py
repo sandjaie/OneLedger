@@ -11,6 +11,7 @@ smaller, confident, wrong figure is worse than an absent one.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
@@ -124,9 +125,25 @@ _MONTHS = """
            round(sum(value_secondary) FILTER (WHERE status = 'available'), 4),
            bool_and(status = 'available') AS complete
       FROM month_end_position
-     WHERE household_id = %s
+     WHERE household_id = %s{filter}
      GROUP BY month_end
 """
+
+
+def month_totals(
+    cur: psycopg.Cursor[Any], household_id: UUID, month_ends: Sequence[date] | None = None
+) -> dict[date, tuple[Decimal | None, Decimal | None, bool]]:
+    """month_end -> (totalBase, totalSecondary, complete) from `month_end_position` — the same
+    read `GET /wealth-history` shows, restricted to `month_ends` when given. Shared with the
+    monthly review's position step, which reads exactly two months this way rather than through
+    a second query."""
+    restricted = "" if month_ends is None else " AND month_end = ANY(%s)"
+    params: tuple[Any, ...] = (
+        (household_id,) if month_ends is None else (household_id, list(month_ends))
+    )
+    cur.execute(_MONTHS.format(filter=restricted), params)
+    return {row[0]: (row[1], row[2], bool(row[3])) for row in cur.fetchall()}
+
 
 _STATUS_COUNTS = """
     SELECT month_end, status::text, count(*)
@@ -155,10 +172,7 @@ def read_wealth_history(
         for month_end_value, status, count in cur.fetchall():
             counts_by_month.setdefault(month_end_value, {})[status] = int(count)
 
-        cur.execute(_MONTHS, (owner.household_id,))
-        totals_by_month: dict[date, tuple[Decimal | None, Decimal | None, bool]] = {
-            row[0]: (row[1], row[2], bool(row[3])) for row in cur.fetchall()
-        }
+        totals_by_month = month_totals(cur, owner.household_id)
 
         rows: list[tuple[date, Decimal | None, Decimal | None, bool]] = []
         for month_end_value in stored_month_ends(computed_through):

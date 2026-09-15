@@ -40,6 +40,13 @@ def account_life(opened_on: date | None, closed_on: date | None, as_of: date) ->
     return (opened_on or HISTORY_ANCHOR, closed_on or as_of)
 
 
+def previous_month(today: date) -> date:
+    """The first day of the calendar month before `today`. Shared by the monthly review's own
+    default month and `GET /actions`'s `previousMonthReview`, so both name the same month."""
+    first_of_this_month = today.replace(day=1)
+    return (first_of_this_month - timedelta(days=1)).replace(day=1)
+
+
 def _covered_days(periods: Sequence[tuple[date, date]], start: date, end: date) -> int:
     """Count of distinct days in [start, end] covered by the union of `periods`.
 

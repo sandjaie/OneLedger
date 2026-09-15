@@ -70,7 +70,38 @@ function outOfBand(path: string): Promise<unknown> | undefined {
   // Needs attention (Task 2): the overview and plans screens both fetch this alongside their own
   // pinned sequence; every test here is about the rest of the screen, so it sees an empty list.
   if (path === "/actions") {
-    return Promise.resolve({ asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] });
+    return Promise.resolve({
+      asOf: "2026-03-01",
+      items: [],
+      snoozed: [],
+      resolvedFollowUps: [],
+      previousMonthReview: { month: "2026-02-01", completedAt: null },
+    });
+  }
+  // Monthly review (Task 2) fetches alongside the forecast and commitments on Plans; every test
+  // here is about the rest of the screen, so it gets a quiet, already-resolved response.
+  if (path.startsWith("/monthly-review")) {
+    return Promise.resolve({
+      month: "2026-02-01",
+      completedAt: null,
+      steps: {
+        coverage: { gapCells: 0, rowsWithGaps: 0 },
+        transfers: { candidateCount: 0 },
+        classification: { unclassifiedCount: 0 },
+        position: {
+          monthEnd: "2026-02-28",
+          totalBase: null,
+          complete: false,
+          previousMonthEnd: "2026-01-31",
+          previousTotalBase: null,
+          previousComplete: false,
+          changeBase: null,
+          baseCurrency: "XIN",
+        },
+        commitments: { dueNext30Days: 0, overdue: 0 },
+        actions: { open: 0, snoozed: 0 },
+      },
+    });
   }
   return undefined;
 }

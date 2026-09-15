@@ -559,6 +559,7 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── coverage_gap_acknowledgement            (V45, applied)
             ├── action_item                             (V49, applied)
             ├── action_mark                             (V49, applied)
+            ├── monthly_review                          (V50, applied)
             └── audit_log
 
 fx_rate                          -- global, not household-scoped
@@ -1066,6 +1067,12 @@ open/completed/dismissed). <code>action_mark</code> is the further lifecycle eve
 snooze (any kind) or a dismissal (a card key only); both are plain owner-scoped tables with no
 <code>SECURITY DEFINER</code> write path, the same convention as <code>commitment_resolution</code>.
 Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V49</code> (applied).</p>
+<p>Phase 3.2 Task 2 adds <code>monthly_review</code> — one row per household per calendar month,
+holding only <code>completed_at</code> once the owner marks that month's review complete. Every step
+the review walks (coverage gaps, transfer candidates, uncategorised postings, month-end position,
+upcoming commitments, open actions) is computed on read from tables this schema already has; no
+<code>SECURITY DEFINER</code> write path, the same convention as <code>action_item</code>/<code>action_mark</code>.
+Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V50</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
@@ -1233,6 +1240,9 @@ V48__commitment_lifecycle.sql         commitment gains certainty/next_due_date; 
 V49__card_source_and_actions.sql      commitment gains source_card_statement_id (one open plan per
                                       statement); action_item (follow-ups) and action_mark (snooze,
                                       card-only dismissal) for the Needs attention list (applied)
+V50__monthly_review.sql               monthly_review: one row per household per calendar month,
+                                      holding completed_at once the owner marks that month's
+                                      review complete; every step is computed on read (applied)
 
   then, in this order, numbered as they land:
 

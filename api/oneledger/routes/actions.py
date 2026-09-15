@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from ..auth import OwnerSession, require_owner
+from ..coverage import previous_month
 from ..db import connect
 from .plans import DUE_WINDOW_DAYS, Certainty, _commitment_progress
 
@@ -99,11 +100,21 @@ class FollowUpRow(BaseModel):
     updatedAt: datetime
 
 
+class PreviousMonthReview(BaseModel):
+    """Phase 3.2: whether the calendar month before `asOf` is marked reviewed, from one
+    `monthly_review` primary-key read — so Overview shows the review state without running the
+    review's own six-step computation."""
+
+    month: date
+    completedAt: datetime | None
+
+
 class ActionsResponse(BaseModel):
     asOf: date
     items: list[ActionRow]
     snoozed: list[ActionRow]
     resolvedFollowUps: list[FollowUpRow]
+    previousMonthReview: PreviousMonthReview
 
 
 class FollowUpCreate(BaseModel):
@@ -389,7 +400,23 @@ def list_actions(
             (owner.household_id, _RESOLVED_FOLLOW_UP_LIMIT),
         )
         resolved = [_followup_row(row) for row in cur.fetchall()]
-    return ActionsResponse(asOf=as_of, items=items, snoozed=snoozed, resolvedFollowUps=resolved)
+
+        review_month = previous_month(as_of)
+        cur.execute(
+            "SELECT completed_at FROM monthly_review WHERE household_id = %s AND review_month = %s",
+            (owner.household_id, review_month),
+        )
+        found = cur.fetchone()
+        previous_review = PreviousMonthReview(
+            month=review_month, completedAt=found[0] if found else None
+        )
+    return ActionsResponse(
+        asOf=as_of,
+        items=items,
+        snoozed=snoozed,
+        resolvedFollowUps=resolved,
+        previousMonthReview=previous_review,
+    )
 
 
 @router.post("/actions/follow-ups", response_model=FollowUpRow)

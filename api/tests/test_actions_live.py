@@ -22,6 +22,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from oneledger import auth
+from oneledger.coverage import previous_month
 from oneledger.main import app
 from oneledger.routes import actions
 
@@ -154,7 +155,9 @@ def live() -> Iterator[ActionsFixture]:
     finally:
         app.dependency_overrides.clear()
         with connection.cursor() as cur:
-            cur.execute("TRUNCATE commitment, action_item, action_mark, transaction CASCADE")
+            cur.execute(
+                "TRUNCATE commitment, action_item, action_mark, monthly_review, transaction CASCADE"
+            )
         connection.commit()
         connection.close()
 
@@ -768,3 +771,30 @@ def test_action_list_without_marks_ignores_snooze_and_dismissal(live: ActionsFix
     assert {row.actionKey: row.snoozedUntil for row in marked} == {
         commitment_key: date.fromisoformat(_d(3))
     }
+
+
+# --- previousMonthReview (Phase 3.2 Task 2): one primary-key read, before and after completion. --
+
+
+def test_previous_month_review_is_incomplete_before_any_completion(live: ActionsFixture) -> None:
+    result = _actions(live)
+    review = result["previousMonthReview"]
+    assert review["month"] == previous_month(AS_OF).isoformat()
+    assert review["completedAt"] is None
+
+
+def test_previous_month_review_reflects_completion(live: ActionsFixture) -> None:
+    month = previous_month(AS_OF).strftime("%Y-%m")
+    completed = client().put(f"/monthly-review/{month}/completion", headers=ORIGIN)
+    assert completed.status_code == 201, completed.text
+    completed_at = completed.json()["completedAt"]
+
+    result = _actions(live)
+    review = result["previousMonthReview"]
+    assert review["month"] == previous_month(AS_OF).isoformat()
+    assert review["completedAt"] == completed_at
+
+    reopened = client().delete(f"/monthly-review/{month}/completion", headers=ORIGIN)
+    assert reopened.status_code == 204, reopened.text
+    after_reopen = _actions(live)
+    assert after_reopen["previousMonthReview"]["completedAt"] is None

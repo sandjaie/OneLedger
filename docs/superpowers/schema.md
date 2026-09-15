@@ -2839,6 +2839,47 @@ dues) reads no mark at all: snoozed and dismissed items are both listed.
 
 ---
 
+## `V50` (applied)
+
+### Monthly review
+
+Phase 3.2 Task 2. The owner walks one calendar month's coverage gaps, transfer candidates,
+uncategorised postings, month-end position, upcoming commitments and open actions, then marks it
+reviewed. Every step is computed on read from tables and views this schema already has;
+`monthly_review` holds only the one fact none of them do — that the owner marked the month
+reviewed, and when.
+
+```sql
+CREATE TABLE monthly_review (
+  household_id UUID NOT NULL REFERENCES household(id),
+  review_month DATE NOT NULL,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, review_month),
+  CONSTRAINT monthly_review_month_is_first_day CHECK (
+    review_month = date_trunc('month', review_month)::date)
+);
+```
+
+`monthly_review` enables `household_isolation FOR ALL TO authenticated`, the same convention as
+`action_item`/`action_mark` (V49) — no `SECURITY DEFINER` write path. `routes/monthly_review.py`
+(registered in `main.py`) implements `GET /monthly-review` (`?month=YYYY-MM`, default the calendar
+month before today, 422 for a month after the current one), `PUT
+/monthly-review/{month}/completion` (`INSERT ... ON CONFLICT DO NOTHING RETURNING completed_at` —
+201 the first time, 200 keeping the original `completedAt` on a replay) and `DELETE
+/monthly-review/{month}/completion` (idempotent, 204). Every step reuses an existing computation
+rather than a second copy: `routes/coverage.py`'s `coverage_rows()` for the month's own
+missing/partial cells; a new `routes/transfers.py` `candidates_for_window()`, extracted from `GET
+/transfers/candidates` with no behaviour change, for the month's candidate count; a new
+`routes/wealth_history.py` `month_totals()`, extracted from `GET /wealth-history` with no
+behaviour change, for the month's and the prior month's stored totals (`changeBase` is the
+server's own `totalBase - previousTotalBase`, Python `Decimal`, only when both months are
+complete); `routes/actions.py`'s `action_list()` for open/snoozed counts at today. `GET /actions`
+gains `previousMonthReview: {month, completedAt}` from one `monthly_review` primary-key read, so
+Overview states the prior month's review status without running the review's own computation —
+both routes name that month through a shared `coverage.previous_month()`.
+
+---
+
 ## `0013`
 
 ### Loans

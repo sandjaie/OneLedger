@@ -37,6 +37,7 @@ from .routes import (
     investment_reviews,
     layouts,
     merchant_knowledge,
+    monthly_review,
     payslips,
     plans,
     portfolio,
@@ -207,6 +208,7 @@ app.include_router(investment_prices.router)
 app.include_router(investment_reviews.router)
 app.include_router(payslips.router)
 app.include_router(plans.router)
+app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)
 app.include_router(valuations.router)
