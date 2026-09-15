@@ -21,8 +21,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
-from ..forecast import is_occurrence, next_occurrence, occurrence_dates, project_balances
+from ..forecast import (
+    aggregate_currency,
+    is_occurrence,
+    lowest_balance,
+    next_occurrence,
+    occurrence_dates,
+    project_balances,
+    select_funding_accounts,
+)
 from ..money import _money
+from .coverage import coverage_rows
 from .dashboard import VALUATION_PERIOD_FOR_ACCOUNT
 
 router = APIRouter(tags=["plans"])
@@ -32,7 +41,15 @@ Certainty = Literal["confirmed", "estimated"]
 CommitmentSource = Literal["owner", "card_statement"]
 CommitmentStatus = Literal["upcoming", "due", "overdue", "finished", "cancelled"]
 ExcludedAccountReason = Literal["not_ledger_valued", "no_balance_date", "balance_after_as_of"]
-ExcludedCommitmentReason = Literal["account_closed", "account_excluded", "currency_mismatch"]
+ExcludedCommitmentReason = Literal[
+    "account_closed", "account_excluded", "currency_mismatch", "card_settlement_not_projected"
+]
+ForecastOccurrenceKind = Literal["commitment", "card_settlement"]
+
+# Phase 3.2 spec rule 6: a member is stale once its balance is this many days old.
+_STALE_BALANCE_AGE_DAYS = 35
+# Phase 3.2 spec rule 2: an unapplied occurrence list is capped per commitment.
+_UNAPPLIED_OCCURRENCE_CAP = 12
 
 # The open occurrence is "due" through this many days past `asOf` (Phase 3.1 spec "A commitment's
 # lifecycle"); shared by the commitments list, the forecast and, in Task 2, the action list.
@@ -133,6 +150,8 @@ class ForecastPoint(BaseModel):
     days: int
     date: date
     balance: str
+    # Phase 3.2 spec rule 3: the same point over confirmed occurrences only.
+    confirmedBalance: str
 
 
 class ForecastOccurrence(BaseModel):
@@ -142,6 +161,25 @@ class ForecastOccurrence(BaseModel):
     amount: str
     dueByAsOf: bool
     certainty: Certainty
+    # Phase 3.2 spec rule 9: "card_settlement" only for a mirror occurrence (rule 1).
+    kind: ForecastOccurrenceKind
+
+
+class LowestPoint(BaseModel):
+    balance: str
+    date: date
+
+
+class FundingAccount(BaseModel):
+    accountId: UUID
+    accountName: str
+    lowestBalance: str
+
+
+class Shortfall(BaseModel):
+    amount: str
+    date: date
+    fundingAccounts: list[FundingAccount]
 
 
 class ForecastAccount(BaseModel):
@@ -153,6 +191,17 @@ class ForecastAccount(BaseModel):
     balanceDate: date
     points: list[ForecastPoint]
     occurrences: list[ForecastOccurrence]
+    # Phase 3.2 spec rule 2: occurrences on or after next_due_date and on or before balanceDate —
+    # already possibly in the ledger, not applied, listed so the owner settles or dismisses them.
+    unappliedOccurrences: list[ForecastOccurrence]
+    lowest: LowestPoint
+    lowestConfirmed: LowestPoint
+    # Phase 3.2 spec rule 6: asOf - balanceDate, and the missing/partial cell count over the
+    # three calendar months ending with asOf's month from coverage_rows() (null: no such row).
+    balanceAgeDays: int
+    coverageGapMonths: int | None
+    # Phase 3.2 spec rule 5: only ever set on an asset account whose lowest balance is negative.
+    shortfall: Shortfall | None = None
 
 
 class ExcludedAccount(BaseModel):
@@ -168,11 +217,39 @@ class ExcludedCommitment(BaseModel):
     reason: ExcludedCommitmentReason
 
 
+class ForecastCurrency(BaseModel):
+    """Phase 3.2 spec rule 7: one entry per currency with at least one member (an included,
+    active liquid asset account or credit card); no conversion, ordered by currency code."""
+
+    currency: str
+    accountIds: list[UUID]
+    startBalance: str
+    points: list[ForecastPoint]
+    lowest: LowestPoint
+    lowestConfirmed: LowestPoint
+    excludedAccountIds: list[UUID]
+    staleAccountIds: list[UUID]
+
+
+class UnplannedCardDue(BaseModel):
+    """Phase 3.2 spec rule 8: a card statement meeting the Phase 3.1 `card_payment_unplanned`
+    rule regardless of snooze or dismissal marks, due within the forecast window."""
+
+    cardStatementId: UUID
+    accountId: UUID
+    accountName: str
+    currency: str
+    statementBalance: str
+    paymentDueDate: date
+
+
 class ForecastResponse(BaseModel):
     asOf: date
     accounts: list[ForecastAccount]
     excludedAccounts: list[ExcludedAccount]
     excludedCommitments: list[ExcludedCommitment]
+    currencies: list[ForecastCurrency]
+    unplannedCardDues: list[UnplannedCardDue]
 
 
 def _translate_database_error(exc: psycopg.Error) -> HTTPException:
@@ -760,19 +837,30 @@ def archive_commitment(
 _ACCOUNT_ORDER = "a.account_class, a.country, a.display_order, a.name"
 
 FORECAST_ACCOUNTS = f"""
-    SELECT a.id, a.name, a.account_class::text, a.currency, a.current_balance,
-           a.current_balance_as_of, period.valuation_mode::text
+    SELECT a.id, a.name, a.account_class::text, a.account_type::text, a.is_liquid, a.currency,
+           a.current_balance, a.current_balance_as_of, period.valuation_mode::text
       FROM account a
       JOIN account_valuation_period period ON period.id = {VALUATION_PERIOD_FOR_ACCOUNT}
      WHERE a.household_id = %s AND a.is_active
      ORDER BY {_ACCOUNT_ORDER}"""
 
+# The card-sourced commitment's own card account (its currency is read straight off `included`,
+# a live fact of this request, not a second column here) — NULL when the commitment is not
+# card-sourced.
 FORECAST_COMMITMENTS = """
     SELECT c.id, c.account_id, a.is_active, a.currency, c.label, c.amount, c.currency,
-           c.cadence::text, c.first_date, c.end_date, c.next_due_date, c.certainty::text
+           c.cadence::text, c.first_date, c.end_date, c.next_due_date, c.certainty::text,
+           c.source_card_statement_id, cs.account_id
       FROM commitment c
       JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id
+      LEFT JOIN card_statement cs
+        ON cs.household_id = c.household_id AND cs.id = c.source_card_statement_id
      WHERE c.household_id = %s AND c.archived_at IS NULL"""
+
+
+def _is_currency_member(account_class: str, account_type: str, is_liquid: bool) -> bool:
+    """Phase 3.2 spec rule 7: an active liquid asset account or a credit card."""
+    return (account_class == "asset" and is_liquid) or account_type == "credit_card"
 
 
 @router.get("/forecast", response_model=ForecastResponse)
@@ -792,16 +880,28 @@ def read_forecast(
         included: dict[UUID, dict[str, Any]] = {}
         ordered_ids: list[UUID] = []
         excluded_accounts: list[ExcludedAccount] = []
+        # Every account's currency/class/type/liquidity, included or not — rule 7's
+        # excludedAccountIds needs the facts of an account that never entered `included`.
+        account_facts: dict[UUID, dict[str, Any]] = {}
         for (
             account_id,
             name,
             account_class,
+            account_type,
+            is_liquid,
             currency,
             balance,
             balance_as_of,
             mode,
         ) in cur.fetchall():
             account_id = UUID(str(account_id))
+            currency = str(currency).strip()
+            account_facts[account_id] = {
+                "currency": currency,
+                "accountClass": account_class,
+                "accountType": account_type,
+                "isLiquid": is_liquid,
+            }
             if mode != "ledger_balance":
                 excluded_accounts.append(
                     ExcludedAccount(
@@ -827,11 +927,17 @@ def read_forecast(
             included[account_id] = {
                 "name": name,
                 "accountClass": account_class,
-                "currency": str(currency).strip(),
+                "accountType": account_type,
+                "isLiquid": is_liquid,
+                "currency": currency,
                 "start": Decimal(balance),
                 "balanceDate": balance_date,
+                # (date, amount, certainty) triples — applied occurrences, including any card
+                # settlement mirror (rule 1); used for both this account's own points/lowest and
+                # its currency's aggregation.
                 "occurrences": [],
                 "shown": [],
+                "unapplied": [],
             }
             ordered_ids.append(account_id)
 
@@ -861,11 +967,14 @@ def read_forecast(
             end_date,
             next_due_date,
             certainty,
+            source_card_statement_id,
+            card_account_id,
         ) in commitment_rows:
             commitment_id = UUID(str(commitment_id))
             account_id = UUID(str(account_id))
             currency = str(currency).strip()
             account_currency = str(account_currency).strip()
+            card_account_id = UUID(str(card_account_id)) if card_account_id is not None else None
             if not account_active:
                 reason: ExcludedCommitmentReason = "account_closed"
             elif account_id not in included:
@@ -875,11 +984,41 @@ def read_forecast(
             else:
                 slot = included[account_id]
                 amount_decimal = Decimal(amount)
+                remaining_next = remaining_by_commitment.get(commitment_id)
+                mirror_not_projected = False
                 if next_due_date is not None:
+                    # Rule 2: on or after next_due_date, on or before the account's own balance
+                    # date — already possibly in the ledger, so not applied, capped per commitment.
+                    unapplied_dates = occurrence_dates(
+                        cadence,
+                        first_date,
+                        end_date,
+                        next_due_date - timedelta(days=1),
+                        slot["balanceDate"],
+                    )[:_UNAPPLIED_OCCURRENCE_CAP]
+                    for occurred in unapplied_dates:
+                        if occurred == next_due_date:
+                            if remaining_next is None or Decimal(remaining_next) == 0:
+                                continue
+                            occurrence_amount = Decimal(remaining_next)
+                        else:
+                            occurrence_amount = amount_decimal
+                        slot["unapplied"].append(
+                            ForecastOccurrence(
+                                commitmentId=commitment_id,
+                                label=label,
+                                date=occurred,
+                                amount=str(occurrence_amount),
+                                dueByAsOf=True,
+                                certainty=certainty,
+                                kind="commitment",
+                            )
+                        )
+
+                    # Rule 4's window: applied occurrences are strictly after the balance date.
                     dates = occurrence_dates(
                         cadence, first_date, end_date, slot["balanceDate"], through
                     )
-                    remaining_next = remaining_by_commitment.get(commitment_id)
                     for occurred in dates:
                         if occurred < next_due_date:
                             continue
@@ -889,7 +1028,7 @@ def read_forecast(
                             occurrence_amount = Decimal(remaining_next)
                         else:
                             occurrence_amount = amount_decimal
-                        slot["occurrences"].append((occurred, occurrence_amount))
+                        slot["occurrences"].append((occurred, occurrence_amount, certainty))
                         slot["shown"].append(
                             ForecastOccurrence(
                                 commitmentId=commitment_id,
@@ -898,8 +1037,49 @@ def read_forecast(
                                 amount=str(occurrence_amount),
                                 dueByAsOf=occurred <= as_of,
                                 certainty=certainty,
+                                kind="commitment",
                             )
                         )
+                        if source_card_statement_id is not None:
+                            # Rule 1: mirror onto the card account only when it is included, in
+                            # the same currency, and its own balance is not already past this
+                            # payment date.
+                            mirror_target = (
+                                included.get(card_account_id)
+                                if card_account_id is not None
+                                else None
+                            )
+                            if (
+                                mirror_target is not None
+                                and mirror_target["currency"] == currency
+                                and occurred > mirror_target["balanceDate"]
+                            ):
+                                mirror_amount = -occurrence_amount
+                                mirror_target["occurrences"].append(
+                                    (occurred, mirror_amount, certainty)
+                                )
+                                mirror_target["shown"].append(
+                                    ForecastOccurrence(
+                                        commitmentId=commitment_id,
+                                        label=label,
+                                        date=occurred,
+                                        amount=str(mirror_amount),
+                                        dueByAsOf=occurred <= as_of,
+                                        certainty=certainty,
+                                        kind="card_settlement",
+                                    )
+                                )
+                            else:
+                                mirror_not_projected = True
+                if mirror_not_projected:
+                    excluded_commitments.append(
+                        ExcludedCommitment(
+                            commitmentId=commitment_id,
+                            label=label,
+                            accountId=account_id,
+                            reason="card_settlement_not_projected",
+                        )
+                    )
                 continue
             excluded_commitments.append(
                 ExcludedCommitment(
@@ -907,28 +1087,204 @@ def read_forecast(
                 )
             )
 
-        accounts_out = []
+        # Coverage.py's own row order/shape (rule 6): one lookup per household, not per account.
+        coverage_by_account = {
+            row.accountId: row
+            for row in coverage_rows(cur, owner.household_id, as_of)
+            if row.accountId is not None
+        }
+
+        def _points(
+            start: Decimal, occurrences: list[tuple[date, Decimal, str]], point_as_of: date
+        ) -> list[ForecastPoint]:
+            all_2tuple = [(d, a) for d, a, _c in occurrences]
+            confirmed_2tuple = [(d, a) for d, a, c in occurrences if c == "confirmed"]
+            all_points = project_balances(start, all_2tuple, point_as_of)
+            confirmed_points = project_balances(start, confirmed_2tuple, point_as_of)
+            return [
+                ForecastPoint(
+                    days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
+                )
+                for (days, point_date, balance), (_, _, cbal) in zip(
+                    all_points, confirmed_points, strict=True
+                )
+            ]
+
+        accounts_out: dict[UUID, ForecastAccount] = {}
+        account_lowest: dict[UUID, Decimal] = {}
         for account_id in ordered_ids:
             slot = included[account_id]
-            points = project_balances(slot["start"], slot["occurrences"], as_of)
-            accounts_out.append(
-                ForecastAccount(
-                    accountId=account_id,
-                    accountName=slot["name"],
-                    accountClass=slot["accountClass"],
-                    currency=slot["currency"],
-                    startBalance=str(slot["start"]),
-                    balanceDate=slot["balanceDate"],
-                    points=[
-                        ForecastPoint(days=days, date=point_date, balance=str(balance))
-                        for days, point_date, balance in points
-                    ],
-                    occurrences=sorted(slot["shown"], key=lambda o: (o.date, o.label)),
+            all_2tuple = [(d, a) for d, a, _c in slot["occurrences"]]
+            confirmed_2tuple = [(d, a) for d, a, c in slot["occurrences"] if c == "confirmed"]
+            lowest_bal, lowest_date = lowest_balance(slot["start"], slot["balanceDate"], all_2tuple)
+            lowest_conf_bal, lowest_conf_date = lowest_balance(
+                slot["start"], slot["balanceDate"], confirmed_2tuple
+            )
+            balance_age_days = (as_of - slot["balanceDate"]).days
+            coverage_row = coverage_by_account.get(account_id)
+            gap_months = (
+                None
+                if coverage_row is None
+                else sum(
+                    1 for cell in coverage_row.months[-3:] if cell.status in ("missing", "partial")
                 )
             )
+            account_lowest[account_id] = lowest_bal
+            accounts_out[account_id] = ForecastAccount(
+                accountId=account_id,
+                accountName=slot["name"],
+                accountClass=slot["accountClass"],
+                currency=slot["currency"],
+                startBalance=str(slot["start"]),
+                balanceDate=slot["balanceDate"],
+                points=_points(slot["start"], slot["occurrences"], as_of),
+                occurrences=sorted(slot["shown"], key=lambda o: (o.date, o.label)),
+                unappliedOccurrences=sorted(slot["unapplied"], key=lambda o: (o.date, o.label)),
+                lowest=LowestPoint(balance=str(lowest_bal), date=lowest_date),
+                lowestConfirmed=LowestPoint(balance=str(lowest_conf_bal), date=lowest_conf_date),
+                balanceAgeDays=balance_age_days,
+                coverageGapMonths=gap_months,
+            )
+
+        # Rule 5: a shortfall only on an asset account whose lowest balance went negative, funded
+        # by the other included liquid asset accounts in the same currency that can cover it on
+        # their own — informational, nothing here moves money.
+        for account_id in ordered_ids:
+            slot = included[account_id]
+            lowest_bal = account_lowest[account_id]
+            if slot["accountClass"] != "asset" or lowest_bal >= 0:
+                continue
+            amount_needed = -lowest_bal
+            candidates = [
+                (other_id, included[other_id]["name"], account_lowest[other_id])
+                for other_id in ordered_ids
+                if other_id != account_id
+                and included[other_id]["currency"] == slot["currency"]
+                and included[other_id]["accountClass"] == "asset"
+                and included[other_id]["isLiquid"]
+            ]
+            funding = select_funding_accounts(amount_needed, candidates)
+            accounts_out[account_id].shortfall = Shortfall(
+                amount=str(amount_needed),
+                date=accounts_out[account_id].lowest.date,
+                fundingAccounts=[
+                    FundingAccount(accountId=fid, accountName=fname, lowestBalance=str(flow))
+                    for fid, fname, flow in funding
+                ],
+            )
+
+        # Rule 7: one entry per currency with at least one member; excluded/stale accounts named.
+        currencies_out: list[ForecastCurrency] = []
+        member_currencies = sorted(
+            {
+                included[aid]["currency"]
+                for aid in ordered_ids
+                if _is_currency_member(
+                    included[aid]["accountClass"],
+                    included[aid]["accountType"],
+                    included[aid]["isLiquid"],
+                )
+            }
+        )
+        for currency in member_currencies:
+            member_ids = [
+                aid
+                for aid in ordered_ids
+                if included[aid]["currency"] == currency
+                and _is_currency_member(
+                    included[aid]["accountClass"],
+                    included[aid]["accountType"],
+                    included[aid]["isLiquid"],
+                )
+            ]
+            start_sum = sum((included[aid]["start"] for aid in member_ids), Decimal(0))
+            all_occurrences = [
+                (d, a) for aid in member_ids for d, a, _c in included[aid]["occurrences"]
+            ]
+            confirmed_occurrences = [
+                (d, a)
+                for aid in member_ids
+                for d, a, c in included[aid]["occurrences"]
+                if c == "confirmed"
+            ]
+            folded_start, rest = aggregate_currency(start_sum, all_occurrences, as_of)
+            folded_confirmed_start, rest_confirmed = aggregate_currency(
+                start_sum, confirmed_occurrences, as_of
+            )
+            all_points = project_balances(folded_start, rest, as_of)
+            confirmed_points = project_balances(folded_confirmed_start, rest_confirmed, as_of)
+            points = [
+                ForecastPoint(
+                    days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
+                )
+                for (days, point_date, balance), (_, _, cbal) in zip(
+                    all_points, confirmed_points, strict=True
+                )
+            ]
+            lowest_bal, lowest_date = lowest_balance(folded_start, as_of, rest)
+            lowest_conf_bal, lowest_conf_date = lowest_balance(
+                folded_confirmed_start, as_of, rest_confirmed
+            )
+            excluded_ids = [
+                aid
+                for aid, facts in account_facts.items()
+                if aid not in included
+                and facts["currency"] == currency
+                and _is_currency_member(
+                    facts["accountClass"], facts["accountType"], facts["isLiquid"]
+                )
+            ]
+            stale_ids = [
+                aid
+                for aid in member_ids
+                if accounts_out[aid].balanceAgeDays > _STALE_BALANCE_AGE_DAYS
+            ]
+            currencies_out.append(
+                ForecastCurrency(
+                    currency=currency,
+                    accountIds=member_ids,
+                    startBalance=str(folded_start),
+                    points=points,
+                    lowest=LowestPoint(balance=str(lowest_bal), date=lowest_date),
+                    lowestConfirmed=LowestPoint(
+                        balance=str(lowest_conf_bal), date=lowest_conf_date
+                    ),
+                    excludedAccountIds=excluded_ids,
+                    staleAccountIds=stale_ids,
+                )
+            )
+
+        # Rule 8: every card statement meeting the Phase 3.1 unplanned-due rule, marks ignored,
+        # due within the forecast window. Imported locally: routes/actions.py imports this
+        # module's own DUE_WINDOW_DAYS/Certainty/_commitment_progress at module load, so a
+        # top-level import here would cycle.
+        from .actions import action_list
+
+        unplanned_card_dues: list[UnplannedCardDue] = []
+        for item in action_list(cur, owner.household_id, as_of, apply_marks=False):
+            if item.kind != "card_due" or item.dueDate is None or item.dueDate > through:
+                continue
+            assert item.cardStatementId is not None
+            assert item.accountId is not None
+            assert item.accountName is not None
+            assert item.currency is not None
+            assert item.amount is not None
+            unplanned_card_dues.append(
+                UnplannedCardDue(
+                    cardStatementId=item.cardStatementId,
+                    accountId=item.accountId,
+                    accountName=item.accountName,
+                    currency=item.currency,
+                    statementBalance=item.amount,
+                    paymentDueDate=item.dueDate,
+                )
+            )
+
     return ForecastResponse(
         asOf=as_of,
-        accounts=accounts_out,
+        accounts=[accounts_out[aid] for aid in ordered_ids],
         excludedAccounts=excluded_accounts,
         excludedCommitments=excluded_commitments,
+        currencies=currencies_out,
+        unplannedCardDues=unplanned_card_dues,
     )

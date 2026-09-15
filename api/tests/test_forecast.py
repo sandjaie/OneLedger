@@ -6,7 +6,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from oneledger.forecast import is_occurrence, next_occurrence, occurrence_dates, project_balances
+from oneledger.forecast import (
+    aggregate_currency,
+    is_occurrence,
+    lowest_balance,
+    next_occurrence,
+    occurrence_dates,
+    project_balances,
+    select_funding_accounts,
+)
 
 
 def test_monthly_clamps_the_31st_to_the_shorter_month_end() -> None:
@@ -128,4 +136,65 @@ def test_project_balances_sums_exact_decimal_amounts_at_each_point() -> None:
         (30, date(2026, 1, 31), Decimal("899.5000")),
         (60, date(2026, 3, 2), Decimal("2899.5000")),
         (90, date(2026, 4, 1), Decimal("2899.5000")),
+    ]
+
+
+def test_lowest_balance_takes_the_start_when_nothing_goes_lower() -> None:
+    lowest, when = lowest_balance(
+        Decimal("1000.0000"), date(2026, 1, 1), [(date(2026, 1, 15), Decimal("500.0000"))]
+    )
+    assert (lowest, when) == (Decimal("1000.0000"), date(2026, 1, 1))
+
+
+def test_lowest_balance_ties_take_the_earliest_date() -> None:
+    # The start is 500; day 15 drops to 200 (the true minimum); day 20 returns to exactly 500 —
+    # a tie with the start, which must not displace the start's earlier date.
+    lowest, when = lowest_balance(
+        Decimal("500.0000"),
+        date(2026, 1, 1),
+        [
+            (date(2026, 1, 15), Decimal("-300.0000")),
+            (date(2026, 1, 20), Decimal("300.0000")),
+        ],
+    )
+    assert (lowest, when) == (Decimal("200.0000"), date(2026, 1, 15))
+
+
+def test_lowest_balance_sums_same_day_occurrences_before_comparing() -> None:
+    lowest, when = lowest_balance(
+        Decimal("1000.0000"),
+        date(2026, 1, 1),
+        [
+            (date(2026, 1, 10), Decimal("-400.0000")),
+            (date(2026, 1, 10), Decimal("-300.0000")),
+        ],
+    )
+    assert (lowest, when) == (Decimal("300.0000"), date(2026, 1, 10))
+
+
+def test_aggregate_currency_folds_on_or_before_as_of_into_the_start() -> None:
+    as_of = date(2026, 1, 10)
+    folded, rest = aggregate_currency(
+        Decimal("1000.0000"),
+        [
+            (date(2026, 1, 5), Decimal("-200.0000")),  # before as_of: folded in
+            (date(2026, 1, 10), Decimal("50.0000")),  # on as_of: folded in
+            (date(2026, 2, 1), Decimal("-75.0000")),  # after as_of: kept
+        ],
+        as_of,
+    )
+    assert folded == Decimal("850.0000")
+    assert rest == [(date(2026, 2, 1), Decimal("-75.0000"))]
+
+
+def test_select_funding_accounts_keeps_candidates_that_can_cover_the_amount_in_order() -> None:
+    candidates = [
+        ("acc-a", "A", Decimal("100.0000")),
+        ("acc-b", "B", Decimal("500.0000")),
+        ("acc-c", "C", Decimal("500.0000")),  # exactly covers: included
+    ]
+    selected = select_funding_accounts(Decimal("500.0000"), candidates)
+    assert selected == [
+        ("acc-b", "B", Decimal("500.0000")),
+        ("acc-c", "C", Decimal("500.0000")),
     ]
