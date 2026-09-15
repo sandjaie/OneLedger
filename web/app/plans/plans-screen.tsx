@@ -86,6 +86,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   // and its default only ever offer an active one.
   const activeAccounts = accounts.filter((account) => account.isActive);
   const [commitments, setCommitments] = useState<Array<CommitmentRow>>();
+  const [commitmentsFailed, setCommitmentsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<CommitmentRow>();
   const [form, setForm] = useState<FormState>(() => emptyForm(activeAccounts));
@@ -103,11 +104,13 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
     let current = true;
     request<CommitmentsResponse>("/commitments")
       .then((result) => {
-        if (current) setCommitments(result.commitments);
+        if (!current) return;
+        setCommitments(result.commitments);
+        setCommitmentsFailed(false);
       })
       .catch(() => {
-        // The commitments list has its own inline empty/error handling below (`commitments`
-        // stays undefined); Needs attention and the forecast each report their own fetch state.
+        // Needs attention and the forecast each report their own fetch state.
+        if (current) setCommitmentsFailed(true);
       });
     return () => {
       current = false;
@@ -304,6 +307,14 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
       <section aria-labelledby="plans-commitments-title">
         <h2 id="plans-commitments-title">Commitments</h2>
+        {commitmentsFailed && (
+          <div role="alert">
+            <p>The commitments could not be loaded.</p>
+            <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">
+              Try again
+            </button>
+          </div>
+        )}
         {commitments && commitments.length === 0 && <p>No commitments are recorded yet.</p>}
         {commitments && commitments.length > 0 && (
           <ul className="plans-commitment-list">

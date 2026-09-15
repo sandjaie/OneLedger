@@ -445,6 +445,25 @@ def test_p06_shortfall_names_the_funding_account_and_leaves_it_unchanged(
 ) -> None:
     with live.connection.cursor() as cur:
         _set_balance(cur, live.account_id, "1000.0000", date(2026, 1, 1))
+        # Each could cover 500 on its own but is not a funding candidate: illiquid, or another
+        # currency (the liability card in the fixture is the third negative case).
+        _account(
+            cur,
+            live.household_id,
+            live.person_id,
+            "Synthetic illiquid",
+            live.currency,
+            is_liquid=False,
+            opening="5000.0000",
+        )
+        _account(
+            cur,
+            live.household_id,
+            live.person_id,
+            "Synthetic other currency",
+            live.secondary_currency,
+            opening="5000.0000",
+        )
     live.connection.commit()
 
     outflow = _create_commitment(
@@ -478,6 +497,99 @@ def test_p06_shortfall_names_the_funding_account_and_leaves_it_unchanged(
     assert funding_row["occurrences"] == []
     assert funding_row["shortfall"] is None
     assert outflow["id"] != funding_row["accountId"]  # sanity: distinct rows
+
+
+# --- Rules 3, 4 and 7: confirmed-only figures and the per-currency fold -------------------------
+
+
+def test_confirmed_figures_and_currency_fold_pre_as_of_occurrences_into_an_as_of_start(
+    live: ForecastFixture,
+) -> None:
+    with live.connection.cursor() as cur:
+        _set_balance(cur, live.account_id, "1000.0000", date(2026, 3, 1))
+        _set_balance(cur, live.card_account_id, "300.0000", date(2026, 3, 1))
+    live.connection.commit()
+    # Funding keeps its 2000.0000 opening balance dated 2026-03-01.
+    for label, amount, when, certainty in (
+        ("Synthetic before asOf", "-400.0000", "2026-03-10", "confirmed"),
+        ("Synthetic estimated", "-900.0000", "2026-04-01", "estimated"),
+        ("Synthetic confirmed", "250.0000", "2026-04-20", "confirmed"),
+    ):
+        _create_commitment(
+            live, label=label, amount=amount, firstDate=when, nextDueDate=when, certainty=certainty
+        )
+
+    forecast = _forecast()
+    paying = _account_row(forecast, live.account_id)
+    assert [(p["balance"], p["confirmedBalance"]) for p in paying["points"]] == [
+        ("-300.0000", "600.0000"),
+        ("-50.0000", "850.0000"),
+        ("-50.0000", "850.0000"),
+    ]
+    assert paying["lowest"] == {"balance": "-300.0000", "date": "2026-04-01"}
+    assert paying["lowestConfirmed"] == {"balance": "600.0000", "date": "2026-03-10"}
+
+    currency_row = _currency_row(forecast, live.currency)
+    assert currency_row is not None
+    # 1000 + 2000 + 300 with the 2026-03-10 outflow folded into the start dated asOf.
+    assert currency_row["startBalance"] == "2900.0000"
+    assert [(p["balance"], p["confirmedBalance"]) for p in currency_row["points"]] == [
+        ("2000.0000", "2900.0000"),
+        ("2250.0000", "3150.0000"),
+        ("2250.0000", "3150.0000"),
+    ]
+    assert currency_row["lowest"] == {"balance": "2000.0000", "date": "2026-04-01"}
+    assert currency_row["lowestConfirmed"] == {"balance": "2900.0000", "date": AS_OF.isoformat()}
+
+
+def test_another_households_accounts_and_card_dues_are_invisible(live: ForecastFixture) -> None:
+    foreign_household, foreign_person = uuid4(), uuid4()
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (id, name, base_currency, secondary_currency)
+               VALUES (%s, 'foreign forecast household', %s, %s)""",
+            (foreign_household, live.currency, live.secondary_currency),
+        )
+        cur.execute(
+            """INSERT INTO person (id, household_id, display_name, is_self)
+               VALUES (%s, %s, 'foreign forecast owner', true)""",
+            (foreign_person, foreign_household),
+        )
+        foreign_ids = {
+            _account(cur, foreign_household, foreign_person, "Foreign savings", live.currency),
+            _account(
+                cur,
+                foreign_household,
+                foreign_person,
+                "Foreign undated",
+                live.currency,
+                no_balance_date=True,
+            ),
+        }
+        foreign_card = _account(
+            cur,
+            foreign_household,
+            foreign_person,
+            "Foreign card",
+            live.currency,
+            account_type="credit_card",
+            credit_limit="5000.0000",
+        )
+        foreign_ids.add(foreign_card)
+        foreign_statement = _card_statement(
+            cur, foreign_household, foreign_card, live.currency, due_date=date(2026, 4, 1)
+        )
+    live.connection.commit()
+
+    forecast = _forecast()
+    seen = {row["accountId"] for row in forecast["accounts"]}
+    seen |= {row["accountId"] for row in forecast["excludedAccounts"]}
+    for currency_row in forecast["currencies"]:
+        seen |= set(currency_row["accountIds"]) | set(currency_row["excludedAccountIds"])
+    assert not seen & {str(foreign_id) for foreign_id in foreign_ids}
+    assert str(foreign_statement) not in {
+        d["cardStatementId"] for d in forecast["unplannedCardDues"]
+    }
 
 
 # --- Rule 2: unapplied occurrences, capped -------------------------------------------------

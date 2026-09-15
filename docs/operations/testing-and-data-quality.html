@@ -745,7 +745,10 @@ both; a card account whose own balance date is on or after the payment gets no m
 excluded or currency-mismatched card account still applies the paying side while listing the
 commitment as <code>card_settlement_not_projected</code>. A 1,000 balance with a 1,500 outflow before
 a salary commitment shows an exact 500 <code>shortfall</code>, naming a second same-currency account
-with enough as <code>fundingAccounts</code> and leaving it unchanged. Archived commitments and
+with enough as <code>fundingAccounts</code> and leaving it unchanged, never an illiquid or
+other-currency one. Confirmed-only points and lowest balances are exact per account and per
+currency, with a currency's pre-<code>asOf</code> occurrences folded into its <code>asOf</code>-dated
+start; a foreign household's accounts and card dues never appear. Archived commitments and
 dismissed occurrences contribute nothing; unapplied occurrences (on or after <code>nextDueDate</code>,
 on or before the balance date) are capped at 12 per commitment; <code>balanceAgeDays</code>,
 <code>coverageGapMonths</code>, currency membership, <code>excludedAccountIds</code> and

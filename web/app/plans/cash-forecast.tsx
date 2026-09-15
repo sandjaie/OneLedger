@@ -266,8 +266,8 @@ export function CashForecast({
             dated after that balance date.
           </li>
           <li>
-            Nothing else changes: no other income or spending, interest, card settlement, prices
-            or exchange rates.
+            Nothing else changes: no other income or spending, interest, prices or exchange
+            rates.
           </li>
           <li>Balances stay in each account&rsquo;s own currency.</li>
           <li>A forecast posts nothing.</li>
