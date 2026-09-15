@@ -33,15 +33,18 @@ const history: WealthHistoryResponse = {
       complete: true,
       statusCounts: { available: 1 },
       computedAt: "2026-09-14T00:00:00Z",
+      chartRatio: "1.0000",
     },
     {
-      // Fails closed: an incomplete month's totals are null, never a partial sum.
+      // Fails closed: an incomplete month's totals are null, never a partial sum — and its
+      // chartRatio is null too, so the chart draws no bar for it.
       monthEnd: "2024-02-29",
       totalBase: null,
       totalSecondary: null,
       complete: false,
       statusCounts: { available: 1, before_opening: 1 },
       computedAt: "2026-09-14T00:00:00Z",
+      chartRatio: null,
     },
   ],
 };
@@ -96,6 +99,19 @@ describe("wealth screen", () => {
     expect(within(table).getByText("Complete")).toBeTruthy();
     expect(within(table).getByText("Incomplete month")).toBeTruthy();
     expect(within(table).getByText("Unavailable — incomplete")).toBeTruthy();
+  });
+
+  it("draws a chart bar from the server's ratio string and none for an incomplete month", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    const chart = await screen.findByRole("img", { name: /Month-end net worth/ });
+    const bars = chart.getElementsByClassName("wealth-chart-bar");
+    expect(bars).toHaveLength(1); // one bar for the complete month, none for the incomplete one
+    expect((bars[0] as HTMLElement).style.getPropertyValue("--ratio")).toBe("1.0000");
   });
 
   it("selecting a month shows its positions table with server strings only", async () => {

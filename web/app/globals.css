@@ -208,6 +208,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .date-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
 .date-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
 .fx-card .primary-action { justify-self: start; grid-column: 1 / -1; margin-top: 0; }
+.fx-backfill-dates { display: flex; flex-wrap: wrap; gap: 18px; }
 .fx-empty { grid-column: 1 / -1; margin: 0; color: var(--muted); }
 .fx-results { display: grid; grid-column: 1 / -1; gap: 14px; }
 .fx-result {
@@ -1708,4 +1709,25 @@ body { background: #eef2f0; }
 .coverage-table th[scope="row"] { text-align: left; font-weight: 500; }
 .coverage-cell { padding: 2px 6px; border: none; background: none; font: inherit; color: inherit; cursor: pointer; }
 .coverage-cell:disabled { cursor: default; color: var(--muted); }
+
+/* Wealth chart — one bar per month, its height set entirely by the server's `--ratio` string
+   (Task 3d): a zero-height baseline in the middle of each track, the bar's own transform-origin,
+   so `scaleY(var(--ratio))` grows it up for a positive ratio and flips it below the baseline for
+   a negative one. No arithmetic ever runs on `--ratio` in the browser. */
+.wealth-chart { display: flex; align-items: stretch; gap: 4px; height: 140px; margin: 4px 0 18px; padding: 0 2px; overflow-x: auto; }
+.wealth-chart-column { flex: 1 0 10px; min-width: 10px; display: flex; flex-direction: column; align-items: center; }
+.wealth-chart-track { position: relative; flex: 1; width: 100%; }
+.wealth-chart-track::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule); }
+.wealth-chart-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 70%;
+  max-width: 16px;
+  height: 50%;
+  background: var(--blue);
+  transform: translateX(-50%) scaleY(var(--ratio, 0));
+  transform-origin: bottom center;
+}
+.wealth-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
 .coverage-dialog { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--surface); max-width: 420px; }

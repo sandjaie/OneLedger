@@ -13,6 +13,7 @@ import json
 from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -584,6 +585,20 @@ def test_a_known_transaction_type_is_accepted(live: Fixture) -> None:
 # Loading a pack. `db/seeds/README.md` documented this and nothing performed it: `POST /rules`
 # stamps `user_created` by design, so the shipped pack loaded as thirty-seven of the owner's own
 # rules — ahead of themselves in the cascade, and in the wrong half of `GET /rules`.
+#
+# `GET /rules/packs` and `POST /rules/packs/{name}` load from the shipped
+# `api/oneledger/rules_packs/*.json` files by name, not from an arbitrary request body, so a test
+# of the load mechanics (slug resolution, the once-per-household refusal, the whole-pack
+# rollback) stubs `_available_packs` with synthetic content instead of editing the real file —
+# `test_the_shipped_pack_loads` below is the one test that exercises the file as committed.
+
+
+def _stub_pack(monkeypatch: pytest.MonkeyPatch, name: str, *rules: dict[str, object]) -> None:
+    """Swap in a synthetic pack for `_available_packs`, through `monkeypatch` so the stub does
+    not outlive this test."""
+    text = json.dumps({"rules": list(rules)})
+    entry = SimpleNamespace(name=f"{name}.json", read_text=lambda: text)
+    monkeypatch.setattr(rule_routes, "_available_packs", lambda: {name: entry})
 
 
 def a_category(live: Fixture, slug: str) -> UUID:
@@ -599,21 +614,17 @@ def a_category(live: Fixture, slug: str) -> UUID:
     return UUID(str(row[0]))
 
 
-def pack(*rules: dict[str, object]) -> dict[str, object]:
-    return {"rules": list(rules)}
-
-
-def test_a_pack_loads_as_seed_rules(live: Fixture) -> None:
+def test_a_pack_loads_as_seed_rules(live: Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """The whole point: a pack's rules rank behind the household's own, and `origin` is what
     the cascade reads to know it."""
-    loaded = client().post(
-        "/rules/pack",
-        json=pack(
-            rule_body(matchDescriptionPattern="SALARY", setTxnType="income", priority=400),
-            rule_body(matchDescriptionPattern="ATM WDL", setTxnType="expense", priority=440),
-        ),
-        headers=ORIGIN,
+    _stub_pack(
+        monkeypatch,
+        "synthetic",
+        rule_body(matchDescriptionPattern="SALARY", setTxnType="income", priority=400),
+        rule_body(matchDescriptionPattern="ATM WDL", setTxnType="expense", priority=440),
     )
+
+    loaded = client().post("/rules/packs/synthetic", headers=ORIGIN)
 
     assert loaded.status_code == 201
     assert [rule["origin"] for rule in loaded.json()] == ["seed", "seed"]
@@ -622,55 +633,75 @@ def test_a_pack_loads_as_seed_rules(live: Fixture) -> None:
     assert [rule["origin"] for rule in listed] == ["seed", "seed"]
 
 
-def test_a_pack_names_its_categories_by_slug(live: Fixture) -> None:
+def test_a_pack_names_its_categories_by_slug(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A pack cannot carry a category id — V9 generates a different one in every database —
     so it names the slug and the load resolves it."""
     expected = a_category(live, "pack-test-slug")
-
-    loaded = client().post(
-        "/rules/pack",
-        json=pack(
-            {
-                "matchDescriptionPattern": "GROCER",
-                "setCategorySlug": "pack-test-slug",
-                "priority": 400,
-            }
-        ),
-        headers=ORIGIN,
+    _stub_pack(
+        monkeypatch,
+        "synthetic",
+        {
+            "matchDescriptionPattern": "GROCER",
+            "setCategorySlug": "pack-test-slug",
+            "priority": 400,
+        },
     )
+
+    loaded = client().post("/rules/packs/synthetic", headers=ORIGIN)
 
     assert loaded.status_code == 201
     assert loaded.json()[0]["setCategoryId"] == str(expected)
 
 
-def test_a_slug_no_category_answers_to_is_refused_whole(live: Fixture) -> None:
+def test_a_slug_no_category_answers_to_is_refused_whole(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """And the rules before it in the pack are not left behind: one pack is one transaction."""
     a_category(live, "pack-test-slug")
-
-    refused = client().post(
-        "/rules/pack",
-        json=pack(
-            {"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"},
-            {"matchDescriptionPattern": "FUEL", "setCategorySlug": "no-such-slug"},
-        ),
-        headers=ORIGIN,
+    _stub_pack(
+        monkeypatch,
+        "synthetic",
+        {"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"},
+        {"matchDescriptionPattern": "FUEL", "setCategorySlug": "no-such-slug"},
     )
+
+    refused = client().post("/rules/packs/synthetic", headers=ORIGIN)
 
     assert refused.status_code == 422
     assert "no-such-slug" in refused.json()["detail"]
     assert client().get("/rules", headers=ORIGIN).json() == []
 
 
-def test_a_pack_loads_once_per_household(live: Fixture) -> None:
+def test_a_pack_loads_once_per_household(live: Fixture, monkeypatch: pytest.MonkeyPatch) -> None:
     """A second load would double every rule in the cascade. There is no name uniqueness to
     lean on, so the refusal is on the household already holding seed rules."""
-    body = pack(rule_body(matchDescriptionPattern="SALARY", setTxnType="income"))
-    assert client().post("/rules/pack", json=body, headers=ORIGIN).status_code == 201
+    _stub_pack(
+        monkeypatch, "synthetic", rule_body(matchDescriptionPattern="SALARY", setTxnType="income")
+    )
+    assert client().post("/rules/packs/synthetic", headers=ORIGIN).status_code == 201
 
-    again = client().post("/rules/pack", json=body, headers=ORIGIN)
+    again = client().post("/rules/packs/synthetic", headers=ORIGIN)
 
     assert again.status_code == 409
     assert len(client().get("/rules", headers=ORIGIN).json()) == 1
+
+
+def test_listing_packs_reports_the_shipped_pack(live: Fixture) -> None:
+    listed = client().get("/rules/packs", headers=ORIGIN).json()
+    assert {p["name"]: p["ruleCount"] for p in listed} == {"banking-narration": 37}
+
+
+def test_loading_an_unknown_pack_name_is_404(live: Fixture) -> None:
+    assert client().post("/rules/packs/no-such-pack", headers=ORIGIN).status_code == 404
+
+
+def test_a_pack_name_cannot_traverse_out_of_the_packs_directory(live: Fixture) -> None:
+    """`name` is checked against the listed stems, never built into a filesystem path — a value
+    that would escape the directory simply is not one of them."""
+    traversal = client().post("/rules/packs/..%2F..%2Fpyproject", headers=ORIGIN)
+    assert traversal.status_code == 404
 
 
 def test_a_rule_the_owner_writes_is_never_seed(live: Fixture) -> None:
@@ -686,9 +717,11 @@ def test_the_shipped_pack_loads(live: Fixture) -> None:
     """The file as committed, through the route as documented. `db/seeds/README.md` described
     this and nothing performed it, so the pack went in as thirty-seven `user_created` rules."""
     root = Path(__file__).resolve().parents[2]
-    body = json.loads((root / "db" / "seeds" / "rules" / "banking-narration.json").read_text())
+    body = json.loads(
+        (root / "api" / "oneledger" / "rules_packs" / "banking-narration.json").read_text()
+    )
 
-    loaded = client().post("/rules/pack", json=body, headers=ORIGIN)
+    loaded = client().post("/rules/packs/banking-narration", headers=ORIGIN)
 
     assert loaded.status_code == 201, loaded.text
     assert len(loaded.json()) == len(body["rules"])
@@ -700,7 +733,9 @@ def test_the_shipped_pack_loads(live: Fixture) -> None:
     assert resolved == len(named)
 
 
-def test_a_slug_both_answer_to_resolves_to_the_household_own(live: Fixture) -> None:
+def test_a_slug_both_answer_to_resolves_to_the_household_own(
+    live: Fixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A pack names V9's system slugs, and V9's unique indexes let a household hold a category
     on the same slug — `category_system_slug` and `category_household_slug` are separate. When
     both answer, the owner's own is the one they meant."""
@@ -711,12 +746,13 @@ def test_a_slug_both_answer_to_resolves_to_the_household_own(live: Fixture) -> N
         )
     live.conn.commit()
     theirs = a_category(live, "pack-test-slug")
-
-    loaded = client().post(
-        "/rules/pack",
-        json=pack({"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"}),
-        headers=ORIGIN,
+    _stub_pack(
+        monkeypatch,
+        "synthetic",
+        {"matchDescriptionPattern": "GROCER", "setCategorySlug": "pack-test-slug"},
     )
+
+    loaded = client().post("/rules/packs/synthetic", headers=ORIGIN)
 
     assert loaded.status_code == 201, loaded.text
     assert loaded.json()[0]["setCategoryId"] == str(theirs)

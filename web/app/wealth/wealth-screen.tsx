@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -211,6 +211,28 @@ export function WealthScreen({ currency, currencies, request }: Props) {
 
       {state === "ready" && history && (
         <>
+          {history.months.length > 0 && (
+            <div
+              aria-label={`Month-end net worth in ${history.baseCurrency}, as a bar chart — the table below states each figure`}
+              className="wealth-chart"
+              role="img"
+            >
+              {history.months.map((row) => (
+                <div className="wealth-chart-column" key={row.monthEnd}>
+                  <div className="wealth-chart-track">
+                    {row.chartRatio !== null && (
+                      <div
+                        className="wealth-chart-bar"
+                        style={{ "--ratio": row.chartRatio } as CSSProperties}
+                      />
+                    )}
+                  </div>
+                  <span className="wealth-chart-label">{row.monthEnd.slice(2, 7)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="wealth-table-wrap">
             <table className="wealth-table">
               <caption>Month-end net worth, in {currency.code}</caption>

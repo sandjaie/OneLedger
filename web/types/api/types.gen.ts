@@ -4563,6 +4563,10 @@ export type MonthSummary = {
      * Computedat
      */
     computedAt: string;
+    /**
+     * Chartratio
+     */
+    chartRatio: string | null;
 };
 
 /**
@@ -4630,111 +4634,17 @@ export type NetWorth = {
 export type Outcome = 'complete' | 'mask_only' | 'missing' | 'conflicting' | 'unsupported';
 
 /**
- * Pack
+ * PackSummary
  */
-export type Pack = {
-    /**
-     * Rules
-     */
-    rules: Array<PackRule>;
-};
-
-/**
- * PackRule
- *
- * A rule as a pack file writes it. The one addition is `setCategorySlug`: a pack cannot
- * carry a category id, because V9 generates a different one in every database, so it names
- * the slug and the load resolves it (`db/seeds/README.md`).
- */
-export type PackRule = {
+export type PackSummary = {
     /**
      * Name
      */
-    name?: string | null;
+    name: string;
     /**
-     * Priority
+     * Rulecount
      */
-    priority?: number;
-    /**
-     * Isactive
-     */
-    isActive?: boolean;
-    /**
-     * Matchdescriptionpattern
-     */
-    matchDescriptionPattern?: string | null;
-    /**
-     * Matchpatternkind
-     */
-    matchPatternKind?: 'exact' | 'prefix' | 'contains' | 'regex';
-    /**
-     * Matchaccountid
-     */
-    matchAccountId?: string | null;
-    /**
-     * Matchcurrency
-     */
-    matchCurrency?: string | null;
-    /**
-     * Matchamountmin
-     */
-    matchAmountMin?: string | null;
-    /**
-     * Matchamountmax
-     */
-    matchAmountMax?: string | null;
-    /**
-     * Matchamountexact
-     */
-    matchAmountExact?: string | null;
-    /**
-     * Matchdirection
-     */
-    matchDirection?: 'debit' | 'credit' | 'any';
-    /**
-     * Matchcountry
-     */
-    matchCountry?: string | null;
-    /**
-     * Matchreferencepattern
-     */
-    matchReferencePattern?: string | null;
-    /**
-     * Setcategoryid
-     */
-    setCategoryId?: string | null;
-    /**
-     * Setmerchantid
-     */
-    setMerchantId?: string | null;
-    /**
-     * Settxntype
-     */
-    setTxnType?: string | null;
-    /**
-     * Setpaymentmethod
-     */
-    setPaymentMethod?: string | null;
-    /**
-     * Setcountry
-     */
-    setCountry?: string | null;
-    /**
-     * Settags
-     */
-    setTags?: Array<string>;
-    /**
-     * Setistransfercandidate
-     */
-    setIsTransferCandidate?: boolean;
-    /**
-     * Setcounterpartyaccountid
-     */
-    setCounterpartyAccountId?: string | null;
-    /**
-     * Setcategoryslug
-     */
-    setCategorySlug?: string | null;
+    ruleCount: number;
 };
 
 /**
@@ -8836,32 +8746,64 @@ export type CreateRuleRulesPostResponses = {
 
 export type CreateRuleRulesPostResponse = CreateRuleRulesPostResponses[keyof CreateRuleRulesPostResponses];
 
-export type LoadPackRulesPackPostData = {
-    body: Pack;
+export type ListPacksRulesPacksGetData = {
+    body?: never;
     path?: never;
     query?: never;
-    url: '/rules/pack';
+    url: '/rules/packs';
 };
 
-export type LoadPackRulesPackPostErrors = {
+export type ListPacksRulesPacksGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type LoadPackRulesPackPostError = LoadPackRulesPackPostErrors[keyof LoadPackRulesPackPostErrors];
+export type ListPacksRulesPacksGetError = ListPacksRulesPacksGetErrors[keyof ListPacksRulesPacksGetErrors];
 
-export type LoadPackRulesPackPostResponses = {
+export type ListPacksRulesPacksGetResponses = {
     /**
-     * Response Load Pack Rules Pack Post
+     * Response List Packs Rules Packs Get
+     *
+     * Successful Response
+     */
+    200: Array<PackSummary>;
+};
+
+export type ListPacksRulesPacksGetResponse = ListPacksRulesPacksGetResponses[keyof ListPacksRulesPacksGetResponses];
+
+export type LoadPackRulesPacksNamePostData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/rules/packs/{name}';
+};
+
+export type LoadPackRulesPacksNamePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LoadPackRulesPacksNamePostError = LoadPackRulesPacksNamePostErrors[keyof LoadPackRulesPacksNamePostErrors];
+
+export type LoadPackRulesPacksNamePostResponses = {
+    /**
+     * Response Load Pack Rules Packs  Name  Post
      *
      * Successful Response
      */
     201: Array<RuleRow>;
 };
 
-export type LoadPackRulesPackPostResponse = LoadPackRulesPackPostResponses[keyof LoadPackRulesPackPostResponses];
+export type LoadPackRulesPacksNamePostResponse = LoadPackRulesPacksNamePostResponses[keyof LoadPackRulesPacksNamePostResponses];
 
 export type DeleteRuleRulesRuleIdDeleteData = {
     body?: never;

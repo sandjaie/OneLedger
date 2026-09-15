@@ -23,7 +23,7 @@ import { PlansScreen } from "@/app/plans/plans-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { WealthScreen } from "@/app/wealth/wealth-screen";
-import { ApiError, apiFetch } from "@/lib/api/client";
+import { ApiError, apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
 import type {
   AccountsResponse,
   CategoryRow,
@@ -59,6 +59,12 @@ type FxState =
   | { status: "ready"; requestedDate: string; rates: Array<FxRateResponse> }
   | { status: "empty"; requestedDate: string }
   | { status: "service"; requestedDate: string };
+
+type BackfillState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; written: number }
+  | { status: "error"; message: string };
 
 function authDestination(error: unknown) {
   if (!(error instanceof ApiError)) return undefined;
@@ -136,6 +142,9 @@ export function Workspace({
   const [fxDate, setFxDate] = useState("");
   const [fx, setFx] = useState<FxState>({ status: "idle" });
   const fxRequest = useRef<{ id: number; controller: AbortController } | undefined>(undefined);
+  const [backfillStart, setBackfillStart] = useState("");
+  const [backfillEnd, setBackfillEnd] = useState("");
+  const [backfill, setBackfill] = useState<BackfillState>({ status: "idle" });
 
   useEffect(() => {
     let current = true;
@@ -358,6 +367,22 @@ export function Workspace({
       const next = authDestination(error);
       if (next) leaveForAuth(next);
       else setFx({ status: "service", requestedDate });
+    }
+  }
+
+  async function runBackfill() {
+    if (!backfillStart || !backfillEnd || signingOut) return;
+    setBackfill({ status: "loading" });
+    try {
+      const result = await request<{ written: number }>(
+        `/fx/backfill?start=${encodeURIComponent(backfillStart)}&end=${encodeURIComponent(backfillEnd)}`,
+        { method: "POST", timeoutMs: LONG_REQUEST_TIMEOUT_MS },
+      );
+      setBackfill({ status: "ready", written: result.written });
+    } catch (error) {
+      const next = authDestination(error);
+      if (next) leaveForAuth(next);
+      else setBackfill({ status: "error", message: errorText(error, "Rates could not be backfilled.") });
     }
   }
 
@@ -658,6 +683,50 @@ export function Workspace({
                       </article>
                     ))}
                   </div>
+                )}
+              </section>
+
+              <section className="fx-card" aria-labelledby="fx-backfill-title">
+                <div>
+                  <p className="section-label">Exchange rates</p>
+                  <h2 id="fx-backfill-title">Backfill rates</h2>
+                </div>
+                <div className="fx-backfill-dates">
+                  <label className="date-field">
+                    <span>Start date</span>
+                    <input
+                      onChange={(event) => setBackfillStart(event.target.value)}
+                      required
+                      type="date"
+                      value={backfillStart}
+                    />
+                  </label>
+                  <label className="date-field">
+                    <span>End date</span>
+                    <input
+                      onChange={(event) => setBackfillEnd(event.target.value)}
+                      required
+                      type="date"
+                      value={backfillEnd}
+                    />
+                  </label>
+                </div>
+                <button
+                  className="primary-action"
+                  disabled={!backfillStart || !backfillEnd || signingOut || backfill.status === "loading"}
+                  onClick={() => void runBackfill()}
+                  type="button"
+                >
+                  {backfill.status === "loading" ? "Backfilling…" : "Backfill rates"}
+                </button>
+
+                {backfill.status === "ready" && (
+                  <p className="fx-empty" role="status" aria-atomic="true">
+                    Wrote {backfill.written} {backfill.written === 1 ? "rate" : "rates"}.
+                  </p>
+                )}
+                {backfill.status === "error" && (
+                  <p className="inline-alert" role="alert">{backfill.message}</p>
                 )}
               </section>
             </section>

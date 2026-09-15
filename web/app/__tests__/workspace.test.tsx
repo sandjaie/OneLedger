@@ -58,6 +58,7 @@ type Request = typeof apiFetch;
  */
 function outOfBand(path: string): Promise<unknown> | undefined {
   if (path === "/rules") return Promise.resolve([]);
+  if (path === "/rules/packs") return Promise.resolve([]);
   // Malformed on purpose: the analytics/suggestions panels render nothing until they see the
   // shape they expect (`.coverage`, `.suggestions`), so an empty object here is "no data yet",
   // exactly like every other section this sequence does not care about.
@@ -384,6 +385,29 @@ describe("authenticated workspace", () => {
     expect(await screen.findByText("0.0500000000")).toBeTruthy();
     expect(screen.getByText("As of 2024-02-02")).toBeTruthy();
     await waitFor(() => expect(screen.queryByText("9.9999999999")).toBeNull());
+  });
+
+  it("posts the backfill card's date range and shows how many rates were written", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const sequenced = vi
+      .fn()
+      .mockResolvedValueOnce(household)
+      .mockResolvedValueOnce(catalogue)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce({ written: 14 });
+    const request = withRules(sequenced as Request);
+    render(<Workspace request={request} navigate={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Settings" });
+
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2024-01-01" } });
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2024-01-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Backfill rates" }));
+
+    expect(await screen.findByText("Wrote 14 rates.")).toBeTruthy();
+    expect(sequenced).toHaveBeenLastCalledWith(
+      "/fx/backfill?start=2024-01-01&end=2024-01-31",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 
   it.each([
