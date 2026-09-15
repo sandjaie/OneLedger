@@ -14,8 +14,8 @@ Updated: 15 September 2026.
 | --- | --- | --- |
 | Current outcome | **Phase 2.4 — data quality and recovery** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | Outcome state | **Phase 2 implementation complete** — Phases 2.1–2.4 planned and reviewed together on 14 Sep 2026, all delivered; owner acceptance open on each | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
-| Next product action | Phase 3.3 Task 1 — goals and reservations | [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md#task-1--goals-and-reservations) |
-| Current implementation task | Phases 3.1–3.2 delivered via PRs #222–#225; Phases 3.3–3.4 specified and planned on 16 Sep 2026 and reviewed once together (dispatch after fixes: five blocking findings applied — goal currency fixed once reserved, whole-account contributions per valuation mode, review due from creation, uploads as `importKind: \"upload\"` with an owner title, document upload moved to Phase 3.4 Task 2); Phase 3.3 Task 1 on `feature/p3-3-goals-reservations` | [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
+| Next product action | Phase 3.4 Task 1 — register and record actions | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md#task-1--register-and-record-actions) |
+| Current implementation task | Phases 3.1–3.3 delivered via PRs #222–#227; Phase 3.4 Task 1 on `feature/p3-4-register`; after Phase 3.4, a Phase 3 UI audit and fix branch and the Phase 3.x hygiene pass (owner decision, 16 Sep 2026) | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
 
 ## Canonical phase status
 
@@ -40,8 +40,8 @@ Updated: 15 September 2026.
 | 2.4 — data quality and recovery | **Implementation complete; owner acceptance open** | [Phase 2.4 specification](specs/2026-09-14-phase-2-4-data-quality-recovery.md) · [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
 | 3.1 — commitments and actions | **Implementation complete; owner acceptance open** — PRs #222–#223 | [Phase 3.1 specification](specs/2026-09-15-phase-3-1-commitments-actions.md) · [Phase 3.1 plan](plans/2026-09-15-phase-3-1-commitments-actions.md) |
 | 3.2 — cash forecast and monthly review | **Implementation complete; owner acceptance open** — PRs #224–#225 | [Phase 3.2 specification](specs/2026-09-15-phase-3-2-cash-forecast-review.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
-| 3.3 — goals and emergency reserve | **In progress** — Task 1 of 2 | [Phase 3.3 specification](specs/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) |
-| 3.4 — protection and administration | **Planned and reviewed** — two branches | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
+| 3.3 — goals and emergency reserve | **Implementation complete; owner acceptance open** — PRs #226–#227 | [Phase 3.3 specification](specs/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) |
+| 3.4 — protection and administration | **In progress** — Task 1 of 2 | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
 | 4.1 — budgets and recurring discovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.2 — salary analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
