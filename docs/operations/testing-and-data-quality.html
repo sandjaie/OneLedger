@@ -814,6 +814,25 @@ snoozed; a dismissal reason on either is refused (422), matching the card-only r
 household&#39;s real settings, eligible-account and reservation rows never appear and stay
 unchanged; <code>GET /emergency-reserve</code> changes no row. Member 403 on the four new routes is
 covered by the repo-wide owner-dependency inventory test.</li>
+<li>Phase 3.4 Task 1: V53 SQL proves owner/member/foreign/anonymous isolation on
+<code>register_record</code>, the account scope key against a real foreign account, every kind
+shape refusal (a forced field present or a required field missing, for each of the five kinds),
+and archived preservation (every further update refused, delete always refused). The live suite
+covers create and update for each kind, a kind-forbidden field 422 before the database, a
+deposit account that is not an active <code>fixed_deposit</code>/<code>recurring_deposit</code>
+422, idempotent replay and a conflicting-key 409, reviewed idempotent on the same day, renewed
+refusing a non-policy kind and a next date not after the current one, complete/reopen restricted
+to a claim or administration record, and archiving refusing every subsequent write with 409. The
+action-item suite proves each of the four record items (renewal, maturity, deadline, review) at
+its window edge in and out and its overdue flag; P10 — completing a renewal clears that date&#39;s
+item and the next renewal returns inside its own window once <code>asOf</code> is close enough,
+with no second write, and a brand-new policy due soon carries no review item too; review due at
+exactly 365 days is not due, at 366 days it is, and a <code>reviewed</code> call clears it. Each
+item accepts a snooze mark and refuses a dismissal reason; a snooze on a stale key (the record
+archived or its date no longer the current <code>keyDate</code>) 404s. A foreign household&#39;s
+real register rows never appear and stay unchanged; <code>GET /register</code> changes no row.
+Member 403 on the eight new routes is covered by the repo-wide owner-dependency inventory
+test.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

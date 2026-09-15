@@ -544,15 +544,28 @@ assumptions shown: a resource reserved for a goal is not counted, a commitment d
 is shown but not subtracted, coverage uses current rates, and a reservation moves no money. Zero or
 unknown spending reads &quot;not enough information&quot;, never infinite runway; a known value with an
 unavailable exchange rate makes coverage unavailable rather than a total that silently drops it.</p>
+<p><strong>Register record</strong> — An insurance policy, deposit, claim, nominee record or
+administration deadline the owner keeps, one shape per kind: only the fields that kind uses are
+accepted, every other field stays null. A policy carries its provider, covered person or asset,
+coverage, premium and renewal date; a deposit its account (a fixed or recurring deposit), expected
+proceeds and maturity date; a claim its counterparty, expected amount and submission date; a
+nominee record only whether a nominee is recorded for an account — never a name, relationship or
+identity number; an administration record only a deadline. A record can be marked reviewed, a
+policy&#39;s renewal recorded (moving it to its next date), and a claim or administration deadline
+completed or reopened. Archiving is terminal — no further edit or delete. Documents, and a planned
+premium, proceeds or reimbursement, are Task 2.</p>
 <p><strong>In transit</strong> — An internal movement awaiting settlement evidence. Shown separately from settled available cash; an estimated value must be labelled and cleared on settlement.</p>
 <p><strong>Action</strong> — One item on the Needs attention list: a commitment occurrence due within
 seven days or overdue, a card statement with an amount due and no planned payment, or an
 owner-entered <strong>follow-up</strong> (a reason, linked account, optional due date, and
-open/completed/dismissed state, the only kind with its own row). Every kind shares one further
-lifecycle, a mark: <strong>snoozed</strong> (any kind, until a chosen date) or
-<strong>dismissed</strong> (a card due only; a commitment's dismissal is its occurrence's own
-resolution, not a mark). Nothing here is a second record of a commitment's or a card statement's
-own facts.</p>
+open/completed/dismissed state, the only kind with its own row); a goal shortfall or the emergency
+reserve below target; or one of a register record's four reasons — a policy's renewal or a
+deposit's maturity due within 30 days, an incomplete administration deadline due within 14 days,
+or a record unreviewed for a year. Every kind shares one further lifecycle, a mark:
+<strong>snoozed</strong> (any kind, until a chosen date) or <strong>dismissed</strong> (a card due
+only; a commitment's dismissal is its occurrence's own resolution, not a mark; a goal, reserve or
+register item accepts no dismissal at all). Nothing here is a second record of a commitment's,
+card statement's or register record's own facts.</p>
 <p>Full definitions and acceptance examples: <a href="../product/finance-os.html">finance OS requirements</a>.</p>
 <h2 id="system">System</h2>
 <p><strong>Audit log</strong> — Append-only record of every change to financial data. Insert-only at the database

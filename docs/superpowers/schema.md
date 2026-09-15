@@ -3040,6 +3040,115 @@ available progress and a positive shortfall) and one `reserve.<householdId>`
 
 ---
 
+## `V53` (applied)
+
+### Register
+
+Phase 3.4 Task 1. A register record is an owner assumption like `commitment` and `goal` — no
+`SECURITY DEFINER` write path, plain household-scoped RLS. Archiving is terminal.
+`register_document` is created here so Task 2's V54 needs no further migration; its routes, links
+and upload are Task 2 — nothing in Task 1 populates it.
+
+```sql
+CREATE TYPE register_kind AS ENUM (
+  'insurance_policy', 'deposit', 'claim', 'nominee', 'administration');
+
+CREATE TABLE register_record (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id      UUID NOT NULL REFERENCES household(id),
+  idempotency_key   UUID NOT NULL,
+  kind              register_kind NOT NULL,
+  title             TEXT NOT NULL,
+  counterparty      TEXT,
+  covered           TEXT,
+  amount            NUMERIC(20,4),
+  currency          CHAR(3) REFERENCES currency(code),
+  premium_amount    NUMERIC(20,4),
+  premium_cadence   commitment_cadence,
+  key_date          DATE,
+  account_id        UUID,
+  instruction       TEXT,
+  nominee_recorded  BOOLEAN,
+  last_reviewed_on  DATE,
+  completed_at      TIMESTAMPTZ,
+  archived_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_register_household_id UNIQUE (household_id, id),
+  CONSTRAINT uq_register_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT fk_register_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT register_texts_are_bounded CHECK (
+    char_length(title) BETWEEN 1 AND 120 AND title = btrim(title)
+    AND (counterparty IS NULL OR char_length(counterparty) BETWEEN 1 AND 120)
+    AND (covered IS NULL OR char_length(covered) BETWEEN 1 AND 120)
+    AND (instruction IS NULL OR char_length(instruction) BETWEEN 1 AND 200)),
+  CONSTRAINT register_amounts_are_valid CHECK (
+    (amount IS NULL OR amount > 0) AND (premium_amount IS NULL OR premium_amount > 0)
+    AND ((amount IS NULL AND premium_amount IS NULL) OR currency IS NOT NULL)
+    AND ((premium_amount IS NULL) = (premium_cadence IS NULL))
+    AND (premium_cadence IS NULL OR premium_cadence <> 'once')),
+  CONSTRAINT register_kind_shape CHECK (
+       (kind = 'insurance_policy' AND key_date IS NOT NULL AND account_id IS NULL
+        AND instruction IS NULL AND nominee_recorded IS NULL AND completed_at IS NULL)
+    OR (kind = 'deposit' AND key_date IS NOT NULL AND account_id IS NOT NULL
+        AND covered IS NULL AND premium_amount IS NULL AND nominee_recorded IS NULL
+        AND completed_at IS NULL)
+    OR (kind = 'claim' AND key_date IS NOT NULL AND counterparty IS NOT NULL
+        AND amount IS NOT NULL AND covered IS NULL AND premium_amount IS NULL
+        AND account_id IS NULL AND instruction IS NULL AND nominee_recorded IS NULL)
+    OR (kind = 'nominee' AND account_id IS NOT NULL AND nominee_recorded IS NOT NULL
+        AND amount IS NULL AND premium_amount IS NULL AND covered IS NULL
+        AND instruction IS NULL AND key_date IS NULL AND completed_at IS NULL)
+    OR (kind = 'administration' AND key_date IS NOT NULL AND amount IS NULL
+        AND premium_amount IS NULL AND covered IS NULL AND account_id IS NULL
+        AND instruction IS NULL AND nominee_recorded IS NULL))
+);
+
+CREATE TABLE register_document (
+  household_id UUID NOT NULL REFERENCES household(id),
+  record_id    UUID NOT NULL,
+  document_id  UUID NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, record_id, document_id),
+  CONSTRAINT fk_register_document_record FOREIGN KEY (household_id, record_id)
+    REFERENCES register_record (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_register_document_document FOREIGN KEY (household_id, document_id)
+    REFERENCES document (household_id, id) ON DELETE RESTRICT
+);
+```
+
+Meanings by kind: `insurance_policy` — `counterparty` provider, `covered` person or asset,
+`amount` coverage, `premium_amount`/`premium_cadence` the premium, `key_date` renewal date.
+`deposit` —
+`account_id` the deposit account (a `fixed_deposit` or `recurring_deposit` account, checked by the
+route), `counterparty` institution, `amount` expected proceeds, `key_date` maturity date,
+`instruction` renewal instruction. `claim` — `counterparty`, `amount` expected, `key_date`
+submission date, `completed_at` closed. `nominee` — `account_id`, `nominee_recorded`.
+`administration` — `key_date` deadline, `completed_at` done. `account.maturity_date` stays unused;
+the deposit record owns the maturity.
+
+Both tables enable `household_isolation FOR ALL TO authenticated`, the same convention as `goal`
+and `resource_reservation` (V51). `preserve_archived_register_record()` refuses any `UPDATE` to a
+record whose `archived_at` is set and refuses every `DELETE` — the same terminal shape as
+`preserve_closed_goal()` (V51) without a one-time exception, since a register record has no closing
+write that itself needs to pass.
+
+`api/oneledger/register_records.py` holds the record reads `routes/actions.py`'s `action_list()`
+needs (the renewal/maturity/deadline windows and the review-due rule), the same import-cycle
+convention `resources.py` already follows for goals and the emergency reserve.
+`routes/register.py` implements `GET /register`, `POST /register`,
+`PUT /register/{recordId}`, and `POST /register/{recordId}/archive|reviewed|renewed|complete|reopen`
+— kind-forbidden fields are refused in Pydantic before the database, and a deposit's account must
+be an active `fixed_deposit` or `recurring_deposit` account. `action_list()` adds
+`record.<id>.renewal.<keyDate>` (`renewal_due`, a policy due within 30 days), one
+`record.<id>.maturity.<keyDate>` (`maturity_due`, a deposit due within 30 days),
+`record.<id>.deadline.<keyDate>` (`deadline_due`, an incomplete administration record due within 14
+days) and `record.<id>.review` (`review_due`, `coalesce(last_reviewed_on, created_at::date)` more
+than 365 days before `asOf`) — every item accepts a snooze mark and refuses a dismissal reason.
+
+---
+
 ## `0013`
 
 ### Loans

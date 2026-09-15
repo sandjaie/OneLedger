@@ -470,7 +470,17 @@ resource</strong> for other asset accounts; coverage months, target, gap, per-cu
 rates, and an assumptions list (a resource reserved for a goal is not counted; a commitment due
 within 30 days is shown but not subtracted; coverage uses current rates; a reservation moves no
 money). Needs attention lists a goal shortfall and a reserve below target as their own reasons,
-snooze only. Phase 3.4 adds protection/administration records within that same view.
+snooze only. Phase 3.4 Task 1 adds <strong>Register</strong> (<code>register.tsx</code>, anchor
+<code>#register</code>) between Emergency reserve and the forecast: insurance policies, deposits,
+claims, nominee records and administration deadlines, grouped by kind, each showing its key facts
+and key date, review state and (Task 2) its documents. <strong>Edit</strong>,
+<strong>Mark reviewed</strong>, <strong>Renewed</strong> (a policy&#39;s next renewal date),
+<strong>Complete</strong> / <strong>Reopen</strong> (a claim or administration deadline) and
+<strong>Archive</strong>. <strong>Add record</strong> chooses a kind first and shows only that
+kind&#39;s fields, with a note that no identity numbers or credentials belong in a record. Needs
+attention lists a renewal, a maturity or a deadline coming due, and a record unreviewed for a
+year, each with its matching resolve control (Renewed, Mark reviewed, Complete) alongside Snooze —
+none of the four accepts a dismissal reason.
 Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
 every record type.</p>
