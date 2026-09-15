@@ -125,14 +125,17 @@ class PreviewBody(BaseModel):
         return self
 
 
-class ApplyBody(BaseModel):
+class _IdempotentBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
+class ApplyBody(_IdempotentBody):
     activateKnowledge: bool = True
 
 
-class UndoBody(ApplyBody):
+class UndoBody(_IdempotentBody):
     reason: str = Field(min_length=1, max_length=1000)
 
 

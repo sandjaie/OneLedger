@@ -1123,15 +1123,45 @@ def test_runs_list_is_scoped_paged_excludes_bridges_and_marks_undone(
         headers=ORIGIN,
     )
 
+    # A review-reset bridge run (V23 §apply): applying over a transaction whose only drift since
+    # the last correction is exactly the reviewed-to-unreviewed reset a description repair makes
+    # appends its own "applied" run under `_REVIEW_RESET_REASON`, the way
+    # `test_a_review_reset_after_an_earlier_correction_keeps_one_continuous_history` does. It must
+    # never reach this owner-facing list.
+    bridge_transaction = _transaction(live, amount="-9.0000")
+    TestClient(app).post(
+        f"/classification-runs/{_preview(live, [bridge_transaction]).json()['runId']}/apply",
+        json={"idempotencyKey": "synthetic-runs-list-bridge-first"},
+        headers=ORIGIN,
+    )
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE transaction SET is_reviewed = false WHERE id = %s", (bridge_transaction,)
+        )
+    live.conn.commit()
+    TestClient(app).post(
+        f"/classification-runs/{_preview(live, [bridge_transaction]).json()['runId']}/apply",
+        json={"idempotencyKey": "synthetic-runs-list-bridge-second"},
+        headers=ORIGIN,
+    )
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM classification_run WHERE household_id = %s AND reason = %s",
+            (live.household_id, classification_decisions._REVIEW_RESET_REASON),
+        )
+        bridge_run_id = cur.fetchone()[0]  # type: ignore[index]
+
     listed = TestClient(app).get(
         "/classification-runs", params={"limit": 200, "offset": 0}, headers=ORIGIN
     )
     assert listed.status_code == 200, listed.text
-    by_id = {row["runId"]: row for row in listed.json()}
+    listed_rows = listed.json()
+    by_id = {row["runId"]: row for row in listed_rows}
     assert by_id[first_applied["runId"]]["undone"] is True
     assert by_id[second_applied["runId"]]["undone"] is False
     assert by_id[first_applied["runId"]]["reason"] != classification_decisions._REVIEW_RESET_REASON
-    undo_row = next(row for row in listed.json() if row["sourceRunId"] == first_applied["runId"])
+    assert str(bridge_run_id) not in by_id
+    undo_row = next(row for row in listed_rows if row["sourceRunId"] == first_applied["runId"])
     assert undo_row["changed"] == 1
 
     paged = (
@@ -1140,6 +1170,14 @@ def test_runs_list_is_scoped_paged_excludes_bridges_and_marks_undone(
         .json()
     )
     assert len(paged) == 1
+    assert paged == listed_rows[:1]
+
+    offset_page = (
+        TestClient(app)
+        .get("/classification-runs", params={"limit": 200, "offset": 1}, headers=ORIGIN)
+        .json()
+    )
+    assert offset_page == listed_rows[1:]
 
 
 def test_runs_list_requires_an_owner_session_and_is_household_scoped(

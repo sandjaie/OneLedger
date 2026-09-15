@@ -7234,10 +7234,6 @@ export type UndoBody = {
      */
     idempotencyKey: string;
     /**
-     * Activateknowledge
-     */
-    activateKnowledge?: boolean;
-    /**
      * Reason
      */
     reason: string;

@@ -469,4 +469,49 @@ describe("grouped classification review", () => {
       body: expect.stringContaining("Owner requested undo"),
     });
   });
+
+  it("shows the refusal reason on a conflicted undo and no merchant-knowledge note", async () => {
+    const runs: Array<RunRow> = [
+      {
+        runId: "run-undoable",
+        appliedAt: "2026-09-10T00:00:00Z",
+        reason: "Owner reviewed SAMPLE MARKET",
+        changed: 3,
+        sourceRunId: null,
+        undone: false,
+        knowledgeDisplayName: "SAMPLE MARKET",
+      },
+    ];
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      void init;
+      if (path === "/classification-runs?limit=20&offset=0") return runs;
+      if (path === "/classification-review/groups?limit=50&offset=0") return response([]);
+      if (path === "/classification-runs/run-undoable/undo") {
+        return {
+          runId: "undo-run",
+          state: "conflict",
+          changed: 0,
+          conflicted: 1,
+          unresolved: 0,
+          sourceRunId: "run-undoable",
+          items: [
+            {
+              transactionId: "transaction-1",
+              status: "conflicted",
+              reason: "later classification correction exists",
+            },
+          ],
+        } satisfies RunResult;
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    render(<ClassificationReviewScreen categories={categories} request={request as never} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByText("later classification correction exists")).toBeTruthy();
+    expect(screen.getByText("The application could not be undone.")).toBeTruthy();
+    expect(screen.queryByText(/Settings › Merchant knowledge/)).toBeNull();
+    expect(screen.queryByText(/Undid/)).toBeNull();
+  });
 });

@@ -33,8 +33,9 @@ BEGIN
     'active', now()
   ) RETURNING id INTO active_version;
 
-  -- A second identity's pending guess must not be blocked by the one-active-version index,
-  -- which is scoped to state = 'active' and therefore has nothing to say about 'pending'.
+  -- A second, pending version appended under the SAME knowledge identity as the active one
+  -- above must not be blocked by the one-active-version index, which is scoped to
+  -- state = 'active' and therefore has nothing to say about a coexisting 'pending' row.
   INSERT INTO classification_knowledge_version (
     household_id, knowledge_id, version, source_kind, attribution, evidence_note,
     matcher_version, scope, state
