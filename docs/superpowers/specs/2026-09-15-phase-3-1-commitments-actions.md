@@ -1,9 +1,9 @@
 # Phase 3.1 — commitments and actions
 
-Owner-approved outcome: [roadmap Phase 3.1](../../product/roadmap.html), planned at personal scale on
-15 September 2026 together with [Phase 3.2](2026-09-15-phase-3-2-cash-forecast-review.md). The
-[dated plan](../plans/2026-09-15-phase-3-1-commitments-actions.md) declares both branches. Workspace:
-`/Users/sandjaieravi/dev/OneLedger`; every branch starts from and targets `develop`.
+Owner-approved outcome: [roadmap Phase 3.1](../../product/roadmap.html), planned at personal scale
+on 15 September 2026 together with [Phase 3.2](2026-09-15-phase-3-2-cash-forecast-review.md). The
+[dated plan](../plans/2026-09-15-phase-3-1-commitments-actions.md) declares both branches.
+Workspace: `/Users/sandjaieravi/dev/OneLedger`; every branch starts from and targets `develop`.
 
 ## Product outcome
 
@@ -27,8 +27,8 @@ classification or report.
 ## Authority and decisions in force
 
 - [ADR-0002](../../adr/0002-frozen-dual-currency-amounts.html),
-  [ADR-0010](../../adr/0010-signed-balance-convention.html): commitment amounts are native and signed
-  as a posting to their account; a payment posting must carry the same sign and currency.
+  [ADR-0010](../../adr/0010-signed-balance-convention.html): commitment amounts are native and
+  signed as a posting to their account; a payment posting must carry the same sign and currency.
 - [ADR-0013](../../adr/0013-python-backend-service.html),
   [ADR-0016](../../adr/0016-revocable-owner-sessions.html): owner-only routes, explicit
   `household_id` filters (the API connects as table owner), RLS as defence in depth.
@@ -175,8 +175,8 @@ item; a stale mark (its item gone) is harmless and never listed.
 `api/oneledger/forecast.py` keeps the occurrence math and gains two pure helpers beside
 `occurrence_dates`, both unit-tested:
 
-- `is_occurrence(cadence, first, end, candidate) -> bool` — `candidate` is `first` plus `n` (monthly)
-  or `12n` (annual) clamped months for some `n ≥ 0`, not after `end`; `once` only `first`.
+- `is_occurrence(cadence, first, end, candidate) -> bool` — `candidate` is `first` plus `n`
+  (monthly) or `12n` (annual) clamped months for some `n ≥ 0`, not after `end`; `once` only `first`.
 - `next_occurrence(cadence, first, end, due) -> date | None` — the scheduled occurrence strictly
   after `due`; `None` for `once` or past `end`. Clamping always restarts from `first` (31 January →
   28/29 February → 31 March).
@@ -233,12 +233,14 @@ sentences.
   required; completed and dismissed always close), `reason` (dismissed only, 1–200).
 - `ResolutionRow`: `id`, `dueDate`, `kind`, `closes`, `reason`, `createdAt`, `undoable` (the undo
   rule below, decided by the server), and for a payment `transaction: {transactionId, bookedDate,
-  amount, description, eligible}` — `description` through `_preview_redactor(None)` — where `eligible` re-reads
-  the V48 rule (a posting later split or excluded reads `false`; the owner undoes it).
+  amount, description, eligible}` — `description` through `_preview_redactor(None)` — where
+  `eligible` re-reads the V48 rule (a posting later split or excluded reads `false`; the owner
+  undoes it).
 - `PaymentCandidate`: `transactionId`, `bookedDate`, `amount`, `currency`, `description` (through
-  `routes/layouts.py` `_preview_redactor(None)`, as payslip deposit candidates use). Candidates satisfy
-  the V48 eligibility rule, are linked to no resolution, and are booked within 45 days either side
-  of the open occurrence's due date; ordered by distance from that date, then booked date, then id.
+  `routes/layouts.py` `_preview_redactor(None)`, as payslip deposit candidates use). Candidates
+  satisfy the V48 eligibility rule, are linked to no resolution, and are booked within 45 days
+  either side of the open occurrence's due date; ordered by distance from that date, then booked
+  date, then id.
 - **Create order:** lock household; 404 unknown commitment; replay check (below); 409 `an archived
   commitment is fixed`; 409 `this commitment has no open occurrence` when finished; 409 `this
   occurrence is not the commitment's next open occurrence` when `dueDate ≠ next_due_date`; insert
@@ -271,8 +273,8 @@ commitment's `next_due_date` (a finished commitment applies none), and the occur
 statement's own account or not an asset; 422 `the paying account must be in the card statement's
 currency`; 409 `a payment is already planned for this card statement` on
 `uq_commitment_open_card_statement`. `PUT /commitments/{id}` on a card-sourced commitment re-applies
-the account, currency, cadence and sign rules. The amount is the owner's (the full balance, the minimum or
-anything else); the due date defaults are the ordinary rules.
+the account, currency, cadence and sign rules. The amount is the owner's (the full balance, the
+minimum or anything else); the due date defaults are the ordinary rules.
 
 | Route | Contract |
 | --- | --- |
@@ -286,9 +288,9 @@ anything else); the due date defaults are the ordinary rules.
 
 `ActionsResponse`: `asOf`, `items[]` and `snoozed[]` of `ActionRow`, `resolvedFollowUps[]` (the 20
 most recently resolved `FollowUpRow`s). `ActionRow`: `actionKey`, `kind` (`commitment | card_due |
-follow_up`), `reason` (`commitment_overdue | commitment_due | card_payment_unplanned |
-follow_up`), `title`, `dueDate`, `overdue`, `snoozedUntil`, `accountId`, `accountName`, `amount`,
-`remaining`, `partlyPaid`, `currency`, `certainty`, `commitmentId`, `cardStatementId`, `actionItemId` (null where
+follow_up`), `reason` (`commitment_overdue | commitment_due | card_payment_unplanned | follow_up`),
+`title`, `dueDate`, `overdue`, `snoozedUntil`, `accountId`, `accountName`, `amount`, `remaining`,
+`partlyPaid`, `currency`, `certainty`, `commitmentId`, `cardStatementId`, `actionItemId` (null where
 not applicable). Items are:
 
 1. `commitment.<id>.<nextDueDate>` for each unarchived commitment with `next_due_date ≤ asOf + 7`:
@@ -313,8 +315,8 @@ Partly paid, Finished, Cancelled), next due date, and paid toward and remaining 
 occurrence. **Settle** opens a panel for the open occurrence: payment candidates with date,
 amount and description; selecting one offers **Record full payment** and **Record part payment**;
 **Mark done** and **Dismiss** (with a required reason) close the occurrence without a posting.
-**History** lists resolutions with each linked posting (and "no longer eligible" when so) and
-offers **Undo** only where the server marks a row `undoable`. After any write the commitments list and
+**History** lists resolutions with each linked posting (and "no longer eligible" when so) and offers
+**Undo** only where the server marks a row `undoable`. After any write the commitments list and
 forecast refetch. The forecast shows each occurrence's certainty and the assumptions list adds that
 a resolved occurrence is not projected and a part-paid occurrence projects its remainder.
 
@@ -326,7 +328,7 @@ negated statement balance, the due date and the source, with the account picker 
 asset accounts in the statement currency — plus **Dismiss** and **Snooze**. Follow-ups offer
 **Complete**, **Dismiss** and **Snooze**; **Add follow-up** takes a title, optional due date and
 optional account. Snoozed items sit in a collapsed list with **Wake**; resolved follow-ups with
-**Reopen**. Commitment rows show their source ("From <card> statement due <date>").
+**Reopen**. Commitment rows show their source ("From the card statement due on its date").
 **Overview** shows a **Needs attention** panel with the open count and the first five items linking
 to `/plans#actions`.
 
@@ -352,13 +354,13 @@ are synthetic; descriptions reach the UI only through the existing preview redac
   test migrates to V47, inserts synthetic once, month-end monthly, 29 February annual and ended
   commitments on accounts with past balance dates, applies V48 and asserts each `next_due_date`.
 - Unit: `is_occurrence` and `next_occurrence` across month-end and 29 February clamps and end dates.
-- Live API: create/update rules with and without resolutions (including a refused sign change); payment (full and part), completed,
-  dismissed, replays and every 409; `next_due_date` advancing and finishing; undo rules; a posting
-  used once only; `remainingNext` exact; the forecast dropping a settled occurrence and projecting a
-  part-paid remainder exactly; `GET /forecast`, candidates and `GET /actions` changing no row; card
-  source refusals and the one-open-plan rule; action list membership, window edges, snooze and
-  dismissal marks, follow-up lifecycle and replay; member and foreign-household refusal on every
-  write.
+- Live API: create/update rules with and without resolutions (including a refused sign change);
+  payment (full and part), completed, dismissed, replays and every 409; `next_due_date` advancing
+  and finishing; undo rules; a posting used once only; `remainingNext` exact; the forecast dropping
+  a settled occurrence and projecting a part-paid remainder exactly; `GET /forecast`, candidates and
+  `GET /actions` changing no row; card source refusals and the one-open-plan rule; action list
+  membership, window edges, snooze and dismissal marks, follow-up lifecycle and replay; member and
+  foreign-household refusal on every write.
 - Web: settlement panel sends the selected transaction and `closes`; undo offered only where
   allowed; Plan payment pre-fill; action controls post the right routes and refetch.
 

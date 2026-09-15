@@ -1,9 +1,10 @@
 # Phase 3.2 — cash forecast and monthly review
 
-Owner-approved outcome: [roadmap Phase 3.2](../../product/roadmap.html), planned at personal scale on
-15 September 2026 together with [Phase 3.1](2026-09-15-phase-3-1-commitments-actions.md), on which it
-depends. The [dated plan](../plans/2026-09-15-phase-3-2-cash-forecast-review.md) declares the two branches.
-Workspace: `/Users/sandjaieravi/dev/OneLedger`; each branch starts from and targets `develop`.
+Owner-approved outcome: [roadmap Phase 3.2](../../product/roadmap.html), planned at personal scale
+on 15 September 2026 together with [Phase 3.1](2026-09-15-phase-3-1-commitments-actions.md), on
+which it depends. The [dated plan](../plans/2026-09-15-phase-3-2-cash-forecast-review.md) declares
+the two branches. Workspace: `/Users/sandjaieravi/dev/OneLedger`; each branch starts from and
+targets `develop`.
 
 ## Product outcome
 
@@ -24,14 +25,14 @@ review complete and still sees the actions that remain.
 
 ## Authority and decisions in force
 
-- Everything in force for [Phase 3.1](2026-09-15-phase-3-1-commitments-actions.md#authority-and-decisions-in-force).
+- Everything in force for [Phase
+  3.1](2026-09-15-phase-3-1-commitments-actions.md#authority-and-decisions-in-force).
 - [Master plan boundary](../../product/master-implementation-plan.html): projections are never
   postings or bank-confirmed cash; every result shows evidence dates, incomplete coverage and
   owner-controlled assumptions. Balances stay in account currency; no rate is read.
 - [Finance OS F07/F08](../../product/finance-os.html), scenarios P05, P06, P10.
-- Existing reads reused, not copied: `routes/coverage.py` `coverage_rows()`,
-  `routes/transfers.py` candidate scoring, `routes/wealth_history.py` month totals, `routes/actions.py`
-  from Phase 3.1.
+- Existing reads reused, not copied: `routes/coverage.py` `coverage_rows()`, `routes/transfers.py`
+  candidate scoring, `routes/wealth_history.py` month totals, `routes/actions.py` from Phase 3.1.
 
 ## Data model contract
 
@@ -73,8 +74,8 @@ facts:
    applied occurrence date through `asOf + 90`, the minimum and its earliest date: `lowest:
    {balance, date}` and `lowestConfirmed: {balance, date}` (the same over confirmed occurrences).
 5. **Shortfall.** An asset account whose `lowest.balance < 0` has `shortfall: {amount, date,
-   fundingAccounts[]}` with `amount = −lowest.balance` and `date = lowest.date`; `fundingAccounts` are
-   the other included liquid asset accounts in the same currency whose own `lowest.balance ≥
+   fundingAccounts[]}` with `amount = −lowest.balance` and `date = lowest.date`; `fundingAccounts`
+   are the other included liquid asset accounts in the same currency whose own `lowest.balance ≥
    amount`, as `{accountId, accountName, lowestBalance}` in account order. Liabilities have none.
    Nothing is proposed as a transfer or posted.
 6. **Coverage.** Each account adds `balanceAgeDays` (`asOf − balanceDate`) and `coverageGapMonths`:
@@ -87,8 +88,8 @@ facts:
    staleAccountIds}` — sums of member start balances and occurrences (mirrors included); the
    currency's start is dated `asOf`, occurrences dated on or before `asOf` count at `asOf`, and the
    lowest is taken over that start and the union of later member occurrence dates;
-   `excludedAccountIds` are excluded accounts that would otherwise be members; `staleAccountIds` are members with `balanceAgeDays > 35`. Currencies are
-   ordered by code; no conversion is made.
+   `excludedAccountIds` are excluded accounts that would otherwise be members; `staleAccountIds` are
+   members with `balanceAgeDays > 35`. Currencies are ordered by code; no conversion is made.
 8. **Unplanned card dues.** `unplannedCardDues[]` lists every card statement that meets the Phase
    3.1 `card_payment_unplanned` rule regardless of snooze or dismissal marks (a snoozed or dismissed
    due is still not projected) and has `paymentDueDate ≤ asOf + 90`, as `{cardStatementId,
@@ -123,8 +124,8 @@ facts:
 - `actions: {open, snoozed}` — counts of `GET /actions` `items` and `snoozed` at today, from its
   shared list computation.
 
-This phase adds `previousMonthReview: {month, completedAt}` to `GET /actions` — one primary-key read —
-so Overview shows the review state without running the review's counts.
+This phase adds `previousMonthReview: {month, completedAt}` to `GET /actions` — one primary-key read
+— so Overview shows the review state without running the review's counts.
 
 ## Web workflows
 
@@ -169,9 +170,9 @@ are informational. Fixtures are synthetic; no description or identifier enters t
   unapplied occurrences, stale and gap counts, excluded members and unplanned card dues; the card
   account excluded path; `GET /forecast` and `GET /monthly-review` change no row.
 - V50 SQL: owner/member/foreign/anonymous isolation and the first-day check.
-- Live API: monthly review counts against a synthetic month (one coverage gap, one transfer pair, one
-  unclassified row, two stored month totals), completion idempotency, reopen, future-month refusal,
-  member and foreign refusal.
+- Live API: monthly review counts against a synthetic month (one coverage gap, one transfer pair,
+  one unclassified row, two stored month totals), completion idempotency, reopen, future-month
+  refusal, member and foreign refusal.
 - Web: shortfall and funding render; complete/reopen posts and refetches.
 
 ## Acceptance

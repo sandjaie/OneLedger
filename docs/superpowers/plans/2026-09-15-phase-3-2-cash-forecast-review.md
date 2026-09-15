@@ -7,8 +7,8 @@ figures, card settlement counted once, shortfalls with funding suggestions and v
 gaps; a monthly review the owner completes.
 
 **Architecture:** `GET /forecast` keeps its route and read-only transaction and gains the
-specification's fields from pure `forecast.py` functions; V50 adds `monthly_review`; the review route
-composes existing coverage, transfer, wealth-history and action computations through extracted
+specification's fields from pure `forecast.py` functions; V50 adds `monthly_review`; the review
+route composes existing coverage, transfer, wealth-history and action computations through extracted
 helpers. See the [Phase 3.2 specification](../specs/2026-09-15-phase-3-2-cash-forecast-review.md).
 
 **Stack:** Existing Flyway SQL, Python/FastAPI/psycopg and Next.js/React; no new dependency.
@@ -39,8 +39,9 @@ and is not projected.
 `web/app/plans/__tests__/cash-forecast.test.tsx`; update `api/oneledger/forecast.py`,
 `api/oneledger/routes/plans.py`, `api/oneledger/routes/actions.py` (expose `action_list(...,
 apply_marks=False)` only), `api/tests/test_forecast.py`, `api/tests/test_plans_live.py` where the
-response shape grew, `web/app/plans/plans-screen.tsx`, `web/app/plans/__tests__/plans-screen.test.tsx`,
-generated `web/types/api/`; the specification's forecast documents.
+response shape grew, `web/app/plans/plans-screen.tsx`,
+`web/app/plans/__tests__/plans-screen.test.tsx`, generated `web/types/api/`; the specification's
+forecast documents.
 **Contract:**
 
 - `forecast.py` adds pure functions for rules 3–5 and 7 over `(date, Decimal, certainty)`
@@ -68,9 +69,9 @@ generated `web/types/api/`; the specification's forecast documents.
 - Web: currency summary, shortfall and funding render from server strings; Settle and Plan payment
   open the Phase 3.1 flows.
 
-**Commands:** shared DB up;
-`(cd api && uv run pytest -q tests/test_forecast.py tests/test_plans_live.py tests/test_cash_forecast_live.py tests/test_actions_live.py)`;
-types; web `app/plans`; `scripts/check-diff-size.sh`.
+**Commands:** shared DB up; `(cd api && uv run pytest -q tests/test_forecast.py
+tests/test_plans_live.py tests/test_cash_forecast_live.py tests/test_actions_live.py)`; types; web
+`app/plans`; `scripts/check-diff-size.sh`.
 **Acceptance:** the specification's P05/P06, lowest-balance and named-gap sentences through `/plans`
 with synthetic data.
 
@@ -119,8 +120,9 @@ list).
 - Existing `test_transfers_live.py` and `test_wealth_history_live.py` pass unchanged.
 - Web: step counts and links; complete/reopen requests and refetch; overview review status.
 
-**Commands:** shared DB up and `scripts/hooks/db-tests.sh`;
-`(cd api && uv run pytest -q tests/test_monthly_review_live.py tests/test_actions_live.py tests/test_transfers_live.py tests/test_wealth_history_live.py)`;
-types; web `app/plans app/overview app/__tests__/workspace.test.tsx`; `scripts/check-diff-size.sh`.
+**Commands:** shared DB up and `scripts/hooks/db-tests.sh`; `(cd api && uv run pytest -q
+tests/test_monthly_review_live.py tests/test_actions_live.py tests/test_transfers_live.py
+tests/test_wealth_history_live.py)`; types; web `app/plans app/overview
+app/__tests__/workspace.test.tsx`; `scripts/check-diff-size.sh`.
 **Acceptance:** the specification's monthly review sentence through `/plans` and `/overview` with
 synthetic data; the full Phase 3.2 acceptance holds after this branch.

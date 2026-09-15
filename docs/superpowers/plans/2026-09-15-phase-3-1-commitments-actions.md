@@ -6,9 +6,9 @@
 card statement dues planned as commitments; one Needs attention list with a single action lifecycle.
 
 **Architecture:** V48 extends `commitment` and adds `commitment_resolution`; V49 adds the card
-source, `action_item` and `action_mark`. Occurrence math stays pure in `forecast.py`; routes lock the
-household and filter by it; the action list is derived on read. See the
-[Phase 3.1 specification](../specs/2026-09-15-phase-3-1-commitments-actions.md).
+source, `action_item` and `action_mark`. Occurrence math stays pure in `forecast.py`; routes lock
+the household and filter by it; the action list is derived on read. See the [Phase 3.1
+specification](../specs/2026-09-15-phase-3-1-commitments-actions.md).
 
 **Stack:** Existing Flyway SQL, Python/FastAPI/psycopg and Next.js/React; no new dependency.
 
@@ -26,8 +26,9 @@ household and filter by it; the action list is derived on read. See the
   `scripts/verify.sh`. The orchestrator runs one `/oneledger-code-review`, applies repairs (a
   confirmation pass only for repaired money, authorization or migration findings), then
   `scripts/verify.sh` once, push, PR, merge.
-- Shared commands: `eval "$(scripts/test-db.sh up)"`; `scripts/hooks/db-tests.sh`; types
-  `(cd web && npm run api:types)`; web `(cd web && npx vitest run <files> && npm run typecheck && npm run lint)`.
+- Shared commands: `eval "$(scripts/test-db.sh up)"`; `scripts/hooks/db-tests.sh`; types `(cd web &&
+  npm run api:types)`; web `(cd web && npx vitest run <files> && npm run typecheck && npm run
+  lint)`.
 
 ## Branch table
 
@@ -48,13 +49,13 @@ posting as a full or part payment, **Mark done**, or **Dismiss** with a reason; 
 leave its remainder.
 **Files:** create `db/migrations/V48__commitment_lifecycle.sql`,
 `db/tests/0045_commitment_lifecycle.sql`, `db/tests/0045_commitment_lifecycle_upgrade.sh` (modelled
-on `db/tests/0030_investment_allocations_upgrade.sh`), `api/oneledger/routes/commitment_resolutions.py`,
-`api/tests/test_commitment_resolutions_live.py`, `web/app/plans/settlement-panel.tsx`,
-`web/app/plans/__tests__/settlement-panel.test.tsx`; update `api/oneledger/forecast.py`,
-`api/oneledger/routes/plans.py`, `api/oneledger/main.py` (register the router),
-`api/tests/test_forecast.py`, `api/tests/test_plans_live.py`, `web/app/plans/plans-screen.tsx`,
-`web/app/plans/__tests__/plans-screen.test.tsx`, generated `web/types/api/`; the specification's
-documents for V48 and the Task 1 routes.
+on `db/tests/0030_investment_allocations_upgrade.sh`),
+`api/oneledger/routes/commitment_resolutions.py`, `api/tests/test_commitment_resolutions_live.py`,
+`web/app/plans/settlement-panel.tsx`, `web/app/plans/__tests__/settlement-panel.test.tsx`; update
+`api/oneledger/forecast.py`, `api/oneledger/routes/plans.py`, `api/oneledger/main.py` (register the
+router), `api/tests/test_forecast.py`, `api/tests/test_plans_live.py`,
+`web/app/plans/plans-screen.tsx`, `web/app/plans/__tests__/plans-screen.test.tsx`, generated
+`web/types/api/`; the specification's documents for V48 and the Task 1 routes.
 **Contract:**
 
 - V48 is the specification's DDL, backfill, `assert_commitment_payment()` (raising with the message
@@ -89,21 +90,22 @@ documents for V48 and the Task 1 routes.
 - Unit `test_forecast.py`: `is_occurrence`/`next_occurrence` for 31 January monthly, 29 February
   annual, end dates inclusive, once.
 - Live `test_commitment_resolutions_live.py`: full payment advances `nextDueDate`; part payment then
-  closing payment with exact `paidTowardNext`/`remainingNext`; completed and dismissed close; a
-  once commitment finishes; replays 200; stale `dueDate`, archived, finished, already resolved and
-  reused posting 409; wrong sign/account/currency/excluded 422 with no row; undo of a part payment,
-  of the latest closing row, refusal of an older one and of a closing row while the next occurrence
-  has a payment, with `undoable` agreeing each time; overpayment leaves `remainingNext` `"0.0000"`; candidates window edges and read-only; member 403 and foreign household 404 on
-  every route.
+  closing payment with exact `paidTowardNext`/`remainingNext`; completed and dismissed close; a once
+  commitment finishes; replays 200; stale `dueDate`, archived, finished, already resolved and reused
+  posting 409; wrong sign/account/currency/excluded 422 with no row; undo of a part payment, of the
+  latest closing row, refusal of an older one and of a closing row while the next occurrence has a
+  payment, with `undoable` agreeing each time; overpayment leaves `remainingNext` `"0.0000"`;
+  candidates window edges and read-only; member 403 and foreign household 404 on every route.
 - Live `test_plans_live.py` (existing forecast tests keep their expected balances; send an explicit
-  `nextDueDate` only where the new default differs from what a test intends): certainty and `nextDueDate` round trip; default next due date for a
-  past-start monthly commitment; schedule and sign edits refused once resolved; the forecast omits a settled
-  occurrence and projects a part-paid remainder exactly; `GET /forecast` still changes no row.
+  `nextDueDate` only where the new default differs from what a test intends): certainty and
+  `nextDueDate` round trip; default next due date for a past-start monthly commitment; schedule and
+  sign edits refused once resolved; the forecast omits a settled occurrence and projects a part-paid
+  remainder exactly; `GET /forecast` still changes no row.
 - Web: status and remainder strings rendered from the server; panel request bodies; undo gating.
 
-**Commands:** shared DB up and `scripts/hooks/db-tests.sh`;
-`(cd api && uv run pytest -q tests/test_forecast.py tests/test_plans_live.py tests/test_commitment_resolutions_live.py)`;
-types; web `app/plans`; `scripts/check-diff-size.sh`.
+**Commands:** shared DB up and `scripts/hooks/db-tests.sh`; `(cd api && uv run pytest -q
+tests/test_forecast.py tests/test_plans_live.py tests/test_commitment_resolutions_live.py)`; types;
+web `app/plans`; `scripts/check-diff-size.sh`.
 **Acceptance:** the specification's first three acceptance sentences through `/plans` with
 synthetic data.
 
@@ -120,8 +122,8 @@ Overview shows the open count and first five items.
 **Files:** create `db/migrations/V49__card_source_and_actions.sql`,
 `db/tests/0046_card_source_and_actions.sql`, `api/oneledger/routes/actions.py`,
 `api/tests/test_actions_live.py`, `web/app/plans/needs-attention.tsx`,
-`web/app/plans/__tests__/needs-attention.test.tsx`; update `api/oneledger/routes/plans.py`
-(card source on create, `source*` row fields), `api/oneledger/main.py`, `api/tests/test_plans_live.py`,
+`web/app/plans/__tests__/needs-attention.test.tsx`; update `api/oneledger/routes/plans.py` (card
+source on create, `source*` row fields), `api/oneledger/main.py`, `api/tests/test_plans_live.py`,
 `web/app/plans/plans-screen.tsx` (form pre-fill entry point, source label),
 `web/app/overview/overview-screen.tsx`, `web/app/overview/__tests__/` and
 `web/app/__tests__/workspace.test.tsx` where request sequences are pinned, generated
@@ -151,16 +153,17 @@ Overview shows the open count and first five items.
 - Live `test_actions_live.py`: commitment items at `asOf + 7` in and `+ 8` out, overdue ordering;
   card item membership (paid-in-full, zero balance, older cycle, due more than 7 days past, planned,
   dismissed all absent; archived plan present again); snooze moves an item to `snoozed[]` and back
-  after its date; snooze 404 for a foreign or stale key, 422 for a bad date or a reason on a non-card key; follow-up create,
-  replay, conflict, complete, dismiss, reopen and the 409 transitions; `GET /actions` changes no
-  row; member 403 and foreign 404 on every write.
-- Live `test_plans_live.py`: every card-source refusal on create and update and the 409 second plan; planning then
-  settling via the bank-side transfer leg clears the card item and the commitment item.
+  after its date; snooze 404 for a foreign or stale key, 422 for a bad date or a reason on a
+  non-card key; follow-up create, replay, conflict, complete, dismiss, reopen and the 409
+  transitions; `GET /actions` changes no row; member 403 and foreign 404 on every write.
+- Live `test_plans_live.py`: every card-source refusal on create and update and the 409 second plan;
+  planning then settling via the bank-side transfer leg clears the card item and the commitment
+  item.
 - Web: item controls post the right routes and refetch; Plan payment pre-fill and account filter;
   overview count and links.
 
-**Commands:** shared DB up and `scripts/hooks/db-tests.sh`;
-`(cd api && uv run pytest -q tests/test_actions_live.py tests/test_plans_live.py tests/test_commitment_resolutions_live.py)`;
+**Commands:** shared DB up and `scripts/hooks/db-tests.sh`; `(cd api && uv run pytest -q
+tests/test_actions_live.py tests/test_plans_live.py tests/test_commitment_resolutions_live.py)`;
 types; web `app/plans app/overview app/__tests__/workspace.test.tsx`; `scripts/check-diff-size.sh`.
 **Acceptance:** the specification's acceptance in full through `/plans` and `/overview` with
 synthetic data.
