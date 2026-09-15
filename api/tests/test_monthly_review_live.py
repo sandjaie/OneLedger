@@ -22,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from oneledger import auth
-from oneledger.coverage import month_end
+from oneledger.coverage import month_end, previous_month
 from oneledger.main import app
 
 from .live_database import connect_to_test_database
@@ -240,6 +240,33 @@ def _review(
             app.dependency_overrides[auth.require_owner] = lambda: fixture.owner
 
 
+def _commitment(account_id: UUID, currency: str, due: date) -> None:
+    response = client().post(
+        "/commitments",
+        json={
+            "accountId": str(account_id),
+            "label": "Synthetic review commitment",
+            "amount": "-100.0000",
+            "currency": currency,
+            "cadence": "once",
+            "firstDate": due.isoformat(),
+            "nextDueDate": due.isoformat(),
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert response.status_code == 201, response.text
+
+
+def _follow_up(title: str) -> dict[str, Any]:
+    response = client().post(
+        "/actions/follow-ups", json={"title": title, "idempotencyKey": str(uuid4())}, headers=ORIGIN
+    )
+    assert response.status_code in (200, 201), response.text
+    result: dict[str, Any] = response.json()
+    return result
+
+
 def _acknowledge_payslip_gap(fixture: ReviewFixture, month: date) -> None:
     response = client().put(
         "/coverage/acknowledgements",
@@ -310,44 +337,13 @@ def test_counts_for_a_synthetic_month_with_a_known_change(live: ReviewFixture) -
         "1500.0000",
     )
 
-    # A due-soon and an overdue commitment; an open and a snoozed follow-up.
-    due_soon = (TODAY + timedelta(days=10)).isoformat()
-    overdue = (TODAY - timedelta(days=5)).isoformat()
-    for due in (due_soon, overdue):
-        response = client().post(
-            "/commitments",
-            json={
-                "accountId": str(live.account_id),
-                "label": "Synthetic review commitment",
-                "amount": "-100.0000",
-                "currency": live.currency,
-                "cadence": "once",
-                "firstDate": due,
-                "nextDueDate": due,
-                "idempotencyKey": str(uuid4()),
-            },
-            headers=ORIGIN,
-        )
-        assert response.status_code == 201, response.text
+    # Commitments on both window edges: today and today + 30 are due next 30 days, today + 31 is
+    # neither, today - 5 is overdue. An open and a snoozed follow-up.
+    for offset in (0, 10, 30, 31, -5):
+        _commitment(live.account_id, live.currency, TODAY + timedelta(days=offset))
 
-    open_followup = (
-        client()
-        .post(
-            "/actions/follow-ups",
-            json={"title": "Synthetic open follow-up", "idempotencyKey": str(uuid4())},
-            headers=ORIGIN,
-        )
-        .json()
-    )
-    snoozed_followup = (
-        client()
-        .post(
-            "/actions/follow-ups",
-            json={"title": "Synthetic snoozed follow-up", "idempotencyKey": str(uuid4())},
-            headers=ORIGIN,
-        )
-        .json()
-    )
+    open_followup = _follow_up("Synthetic open follow-up")
+    snoozed_followup = _follow_up("Synthetic snoozed follow-up")
     snooze = client().put(
         f"/actions/marks/follow-up.{snoozed_followup['id']}",
         json={"until": (TODAY + timedelta(days=5)).isoformat()},
@@ -372,9 +368,10 @@ def test_counts_for_a_synthetic_month_with_a_known_change(live: ReviewFixture) -
     assert position["previousTotalBase"] == "1000.0000"
     assert position["changeBase"] == "500.0000"
     assert position["baseCurrency"] == live.currency
-    assert steps["commitments"] == {"dueNext30Days": 1, "overdue": 1}
-    assert steps["actions"]["open"] >= 1
-    assert steps["actions"]["snoozed"] == 1
+    assert steps["commitments"] == {"dueNext30Days": 3, "overdue": 1}
+    # GET /actions items at today: the overdue and today's commitment (inside its seven-day
+    # window) and the open follow-up; the snoozed follow-up alone is snoozed.
+    assert steps["actions"] == {"open": 3, "snoozed": 1}
 
 
 def test_incomplete_month_gives_null_change(live: ReviewFixture) -> None:
@@ -439,16 +436,59 @@ def test_future_month_is_422_on_get_and_completion(live: ReviewFixture) -> None:
     assert put_response.status_code == 422, put_response.text
 
 
+_WRITTEN_TABLES = (
+    "monthly_review",
+    "commitment",
+    "action_item",
+    "action_mark",
+    "transaction",
+    "month_end_position",
+    "coverage_gap_acknowledgement",
+)
+
+
+def _household_state(fixture: ReviewFixture) -> dict[str, Any]:
+    with fixture.connection.cursor() as cur:
+        state: dict[str, Any] = {}
+        for table in _WRITTEN_TABLES:
+            cur.execute(
+                f"SELECT count(*) FROM {table} WHERE household_id = %s", (fixture.household_id,)
+            )
+            found = cur.fetchone()
+            assert found is not None
+            state[table] = found[0]
+        cur.execute(
+            "SELECT review_month, completed_at FROM monthly_review WHERE household_id = %s "
+            "ORDER BY review_month",
+            (fixture.household_id,),
+        )
+        state["completions"] = cur.fetchall()
+    fixture.connection.commit()
+    return state
+
+
 def test_get_changes_no_row(live: ReviewFixture) -> None:
     month = REVIEW_MONTH.strftime("%Y-%m")
+    completed = client().put(f"/monthly-review/{month}/completion", headers=ORIGIN)
+    assert completed.status_code == 201, completed.text
+    _txn(
+        live.connection,
+        live.household_id,
+        live.account_id,
+        "-42.0000",
+        REVIEW_MONTH + timedelta(days=3),
+        live.currency,
+        "expense",
+    )
+    _commitment(live.account_id, live.currency, TODAY)
+    _follow_up("Synthetic unchanged follow-up")
+    before = _household_state(live)
+
     _review(live, month)
-    with live.connection.cursor() as cur:
-        cur.execute(
-            "SELECT count(*) FROM monthly_review WHERE household_id = %s", (live.household_id,)
-        )
-        found = cur.fetchone()
-        assert found is not None
-        assert found[0] == 0
+    _review(live)
+
+    assert _household_state(live) == before
+    assert before["monthly_review"] == 1
 
 
 # --- Completion: idempotent 201/200, and reopen. -------------------------------------------------
@@ -487,21 +527,69 @@ def test_reopen_is_204_and_idempotent(live: ReviewFixture) -> None:
 
 
 def test_foreign_household_data_does_not_leak_into_the_count(live: ReviewFixture) -> None:
+    # Every step's household filter, against real rows in the other household: a transfer pair,
+    # an unclassified row, two complete month totals, a due and an overdue commitment and an open
+    # follow-up. The API role bypasses RLS, so only the explicit filters keep these out.
+    with live.connection.cursor() as cur:
+        cur.execute("SELECT owner_person_id FROM account WHERE id = %s", (live.other_account_id,))
+        found = cur.fetchone()
+        assert found is not None
+        other_credit_id = _account(
+            cur,
+            live.other_household_id,
+            found[0],
+            "Other synthetic credit",
+            live.currency,
+            "brokerage",
+        )
+    live.connection.commit()
     pair_date = REVIEW_MONTH + timedelta(days=10)
-    _txn(
-        live.connection,
-        live.other_household_id,
-        live.other_account_id,
-        "-500.0000",
-        pair_date,
-        live.currency,
-        "expense",
-    )
-    month = REVIEW_MONTH.strftime("%Y-%m")
+    for account_id, amount, txn_type in (
+        (live.other_account_id, "-500.0000", "expense"),
+        (other_credit_id, "500.0000", "income"),
+    ):
+        _txn(
+            live.connection,
+            live.other_household_id,
+            account_id,
+            amount,
+            pair_date,
+            live.currency,
+            txn_type,
+        )
+    for month_end_value, value in ((PREVIOUS_END, "1000.0000"), (REVIEW_END, "1500.0000")):
+        _month_end_position(
+            live.connection,
+            live.other_household_id,
+            live.other_account_id,
+            month_end_value,
+            live.currency,
+            value,
+        )
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    try:
+        for offset in (0, -5):
+            _commitment(live.other_account_id, live.currency, TODAY + timedelta(days=offset))
+        _follow_up("Other synthetic follow-up")
+        other = _review(live, REVIEW_MONTH.strftime("%Y-%m"))
+        # The foreign rows are real: the other household's own review counts them.
+        assert other["steps"]["transfers"] == {"candidateCount": 1}
+        assert other["steps"]["classification"] == {"unclassifiedCount": 2}
+        assert other["steps"]["position"]["changeBase"] == "500.0000"
+        assert other["steps"]["commitments"] == {"dueNext30Days": 1, "overdue": 1}
+        assert other["steps"]["actions"] == {"open": 3, "snoozed": 0}
+    finally:
+        app.dependency_overrides[auth.require_owner] = lambda: live.owner
 
-    result = _review(live, month)
-    assert result["steps"]["transfers"] == {"candidateCount": 0}
-    assert result["steps"]["classification"] == {"unclassifiedCount": 0}
+    steps = _review(live, REVIEW_MONTH.strftime("%Y-%m"))["steps"]
+    assert steps["transfers"] == {"candidateCount": 0}
+    assert steps["classification"] == {"unclassifiedCount": 0}
+    assert steps["position"]["complete"] is False
+    assert steps["position"]["previousComplete"] is False
+    assert steps["position"]["totalBase"] is None
+    assert steps["position"]["changeBase"] is None
+    assert steps["commitments"] == {"dueNext30Days": 0, "overdue": 0}
+    assert steps["actions"] == {"open": 0, "snoozed": 0}
 
 
 def test_foreign_household_completion_is_independent(live: ReviewFixture) -> None:
@@ -515,3 +603,15 @@ def test_foreign_household_completion_is_independent(live: ReviewFixture) -> Non
 
     mine = _review(live, month)
     assert mine["completedAt"] is None
+
+    # The other household completing last month leaves this household's Overview status open.
+    last_month = previous_month(TODAY).strftime("%Y-%m")
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    try:
+        other_last = client().put(f"/monthly-review/{last_month}/completion", headers=ORIGIN)
+        assert other_last.status_code == 201, other_last.text
+    finally:
+        app.dependency_overrides[auth.require_owner] = lambda: live.owner
+    actions = client().get("/actions", headers=ORIGIN)
+    assert actions.status_code == 200, actions.text
+    assert actions.json()["previousMonthReview"]["completedAt"] is None
