@@ -39,7 +39,7 @@ type FormState = {
   nomineeRecorded: boolean;
 };
 
-function emptyForm(currencies: Array<CurrencyRow>, accounts: Array<AccountRow>): FormState {
+function emptyForm(currencies: Array<CurrencyRow>): FormState {
   return {
     title: "",
     counterparty: "",
@@ -49,19 +49,21 @@ function emptyForm(currencies: Array<CurrencyRow>, accounts: Array<AccountRow>):
     premiumAmount: "",
     premiumCadence: "annual",
     keyDate: "",
-    accountId: accounts[0]?.id ?? "",
+    // No preselected account: the picker is filtered by kind, so a default could name an account
+    // the chosen kind's picker does not offer.
+    accountId: "",
     instruction: "",
     nomineeRecorded: true,
   };
 }
 
-function formFromRecord(record: RegisterRow): FormState {
+function formFromRecord(record: RegisterRow, currencies: Array<CurrencyRow>): FormState {
   return {
     title: record.title,
     counterparty: record.counterparty ?? "",
     covered: record.covered ?? "",
     amount: record.amount ?? "",
-    currency: record.currency ?? "",
+    currency: record.currency ?? currencies[0]?.code ?? "",
     premiumAmount: record.premiumAmount ?? "",
     premiumCadence: (record.premiumCadence as PremiumCadence | null) ?? "annual",
     keyDate: record.keyDate ?? "",
@@ -192,7 +194,7 @@ export function Register({ accounts, currencies, request }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [creatingKind, setCreatingKind] = useState<RegisterKind>("insurance_policy");
   const [editing, setEditing] = useState<RegisterRow>();
-  const [form, setForm] = useState<FormState>(() => emptyForm(currencies, accounts));
+  const [form, setForm] = useState<FormState>(() => emptyForm(currencies));
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -228,14 +230,14 @@ export function Register({ accounts, currencies, request }: Props) {
   function startCreate(kind: RegisterKind) {
     setEditing(undefined);
     setCreatingKind(kind);
-    setForm(emptyForm(currencies, accounts));
+    setForm(emptyForm(currencies));
     setProblem(undefined);
     setFeedback(undefined);
   }
 
   function startEdit(record: RegisterRow) {
     setEditing(record);
-    setForm(formFromRecord(record));
+    setForm(formFromRecord(record, currencies));
     setRenewingId(undefined);
     setProblem(undefined);
     setFeedback(undefined);
@@ -243,7 +245,7 @@ export function Register({ accounts, currencies, request }: Props) {
 
   function cancelEdit() {
     setEditing(undefined);
-    setForm(emptyForm(currencies, accounts));
+    setForm(emptyForm(currencies));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
   }
@@ -271,7 +273,7 @@ export function Register({ accounts, currencies, request }: Props) {
         setFeedback("Record added.");
       }
       setEditing(undefined);
-      setForm(emptyForm(currencies, accounts));
+      setForm(emptyForm(currencies));
       setIdempotencyKey(crypto.randomUUID());
       refetch();
     } catch (error) {

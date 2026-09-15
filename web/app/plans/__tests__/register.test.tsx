@@ -142,8 +142,15 @@ describe("register", () => {
   });
 
   it("switches to the nominee kind's own fields and filters the account picker for a deposit", async () => {
-    const request = requestFrom((path) => {
+    const request = requestFrom((path, init) => {
       if (path === "/register?includeArchived=true") return response({ records: [] });
+      if (path === "/register" && init?.method === "POST") {
+        expect(JSON.parse(init.body as string)).toMatchObject({
+          kind: "deposit",
+          accountId: depositAccount.id,
+        });
+        return record({ kind: "deposit" });
+      }
       throw new ApiError(500, `unexpected ${path}`);
     });
     render(
@@ -166,6 +173,15 @@ describe("register", () => {
     fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "deposit" } });
     expect(screen.queryByRole("option", { name: account().name })).toBeNull();
     expect(screen.getByRole("option", { name: depositAccount.name })).toBeTruthy();
+
+    // No account is preselected: the first household account is not a deposit account.
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Synthetic deposit" } });
+    fireEvent.change(screen.getByLabelText("Maturity date"), { target: { value: "2027-06-01" } });
+    const add = screen.getByRole("button", { name: "Add record" }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Account"), { target: { value: depositAccount.id } });
+    fireEvent.click(add);
+    expect(await screen.findByText("Record added.")).toBeTruthy();
   });
 
   it("marks a policy reviewed", async () => {

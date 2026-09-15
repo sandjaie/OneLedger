@@ -71,8 +71,7 @@ _REASON_IS_CARD_ONLY = "a snooze reason applies to a card action only"
 _SNOOZE_WINDOW = f"snooze date must be after today and within {_SNOOZE_MAX_DAYS} days"
 
 # Mirrors V52's action_mark_key_shape CHECK in db/migrations/V52__emergency_reserve.sql — keep
-# both in sync. goal./reserve. are this phase's items; record.* is Phase 3.4's, parsed here (so a
-# snooze on one 404s rather than 422s) but with no items of its own yet.
+# both in sync. goal./reserve. are Phase 3.3's items; record.* are Phase 3.4's register items.
 _ACTION_KEY_RE = re.compile(
     r"^(?:follow-up\.(?P<followup_id>[0-9a-f-]{36})"
     r"|commitment\.(?P<commitment_id>[0-9a-f-]{36})\.(?P<due_date>\d{4}-\d{2}-\d{2})"

@@ -1040,6 +1040,15 @@ def test_deadline_item_excludes_completed_and_respects_its_window(live: ActionsF
     after_complete = _keys(_actions(live)["items"])
     assert key not in after_complete
 
+    overdue = _create_register(live, "administration", title="Synthetic overdue", keyDate=_d(-1))
+    overdue_item = next(
+        row
+        for row in _actions(live)["items"]
+        if row["actionKey"] == f"record.{overdue['id']}.deadline.{_d(-1)}"
+    )
+    assert overdue_item["overdue"] is True
+    assert overdue_item["dueDate"] == _d(-1)
+
 
 def _set_created_at(fixture: ActionsFixture, record_id: str, days_ago: int) -> None:
     # A parameter built from TODAY, not the database's own now(), so the boundary the test checks
@@ -1080,6 +1089,17 @@ def test_review_due_item_at_365_and_366_days_after_creation_and_after_review(
     assert reviewed.status_code == 200, reviewed.text
     assert review_key not in _keys(_actions(live)["items"])
 
+    # The last review, not the (older) creation, starts the year once one is recorded.
+    _set_created_at(live, policy["id"], 1000)
+    for days_ago, due in ((365, False), (366, True)):
+        with live.connection.cursor() as cur:
+            cur.execute(
+                "UPDATE register_record SET last_reviewed_on = %s WHERE id = %s",
+                (TODAY - timedelta(days=days_ago), policy["id"]),
+            )
+        live.connection.commit()
+        assert (review_key in _keys(_actions(live)["items"])) is due
+
 
 def test_p10_renewed_clears_the_item_and_a_new_policy_yields_one_item(
     live: ActionsFixture,
@@ -1100,6 +1120,8 @@ def test_p10_renewed_clears_the_item_and_a_new_policy_yields_one_item(
     after_renewal = _keys(_actions(live)["items"])
     assert key not in after_renewal
     assert f"record.{policy['id']}.renewal.{_d(400)}" not in after_renewal  # outside the window
+    stale = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert stale.status_code == 404, stale.text
 
     # No second write moves the date — the next renewal simply returns inside its own window once
     # `asOf` is close enough to it (P10's own "returns inside its window").
@@ -1124,8 +1146,18 @@ def test_record_item_snooze_accepted_and_dismissal_refused(live: ActionsFixture)
     )
     assert dismiss_refused.status_code == 422
 
-    # A stale key (its date no longer the record's key_date) 404s (spec "snooze key target
-    # existence").
+    # A foreign household's record neither appears nor accepts this owner's snooze.
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    foreign = _create_register(live, "administration", title="Foreign deadline", keyDate=_d(10))
+    app.dependency_overrides[auth.require_owner] = lambda: live.owner
+    foreign_key = f"record.{foreign['id']}.deadline.{_d(10)}"
+    assert foreign_key not in _keys(_actions(live)["items"])
+    foreign_refused = client().put(
+        f"/actions/marks/{foreign_key}", json={"until": _d(3)}, headers=ORIGIN
+    )
+    assert foreign_refused.status_code == 404
+
+    # An archived record's key 404s (spec "snooze key target existence").
     client().post(f"/register/{record['id']}/archive", headers=ORIGIN)
     stale = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
     assert stale.status_code == 404

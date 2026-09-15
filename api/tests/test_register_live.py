@@ -244,10 +244,14 @@ def test_create_and_update_each_kind(live: RegisterFixture) -> None:
         assert row["kind"] == kind
         assert row["archivedAt"] is None
         assert row["reviewDue"] is False
+        assert row["amount"] == body.get("amount")
+        assert row["premiumAmount"] == body.get("premiumAmount")
 
         replay = _create(body)
         assert replay.status_code == 200, replay.text
         assert replay.json()["id"] == row["id"]
+        conflict = _create({**body, "title": f"{body['title']} (other)"})
+        assert conflict.status_code == 409, conflict.text
 
         updated_body = dict(body)
         del updated_body["kind"]
@@ -271,6 +275,20 @@ def test_forbidden_field_for_each_kind_is_422(live: RegisterFixture) -> None:
         bad.update(refusals[kind])
         response = _create(bad)
         assert response.status_code == 422, (kind, response.text)
+
+    # PUT applies the same refusal before the database: a nominee counterparty is allowed by the
+    # CHECK, so only the route keeps it out.
+    nominee = _create(_kind_bodies(live)["nominee"]).json()
+    put_refused = _update(
+        nominee["id"],
+        {
+            "title": "Synthetic nominee",
+            "accountId": str(live.asset_account_id),
+            "nomineeRecorded": True,
+            "counterparty": "Synthetic person",
+        },
+    )
+    assert put_refused.status_code == 422, put_refused.text
 
 
 def test_create_requires_a_key_date_for_a_policy(live: RegisterFixture) -> None:
@@ -413,6 +431,27 @@ def test_household_isolation_with_real_foreign_rows(live: RegisterFixture) -> No
         headers=ORIGIN,
     )
     assert not_found.status_code == 404, not_found.text
+    for action in ("archive", "reviewed", "complete", "reopen"):
+        refused = client().post(f"/register/{foreign.json()['id']}/{action}", headers=ORIGIN)
+        assert refused.status_code == 404, (action, refused.text)
+    renew_refused = client().post(
+        f"/register/{foreign.json()['id']}/renewed",
+        json={"nextRenewalDate": _d(400)},
+        headers=ORIGIN,
+    )
+    assert renew_refused.status_code == 404, renew_refused.text
+    for kind in ("deposit", "nominee"):
+        foreign_account = _create(
+            {**_kind_bodies(live)[kind], "accountId": str(live.other_account_id)}
+        )
+        assert foreign_account.status_code == 404, (kind, foreign_account.text)
+    with live.connection.cursor() as cur:
+        cur.execute(
+            "SELECT title, completed_at, archived_at, last_reviewed_on FROM register_record "
+            "WHERE household_id = %s",
+            (live.other_household_id,),
+        )
+        assert cur.fetchall() == [("Foreign synthetic deadline", None, None, None)]
 
     app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
     foreign_view = client().get("/register", headers=ORIGIN).json()

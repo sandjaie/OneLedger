@@ -236,6 +236,13 @@ BEGIN
   INSERT INTO register_record (household_id, idempotency_key, kind, title, key_date)
   VALUES (f.h1, gen_random_uuid(), 'administration', 'Synthetic deadline', '2027-01-01')
   RETURNING id INTO rid;
+  BEGIN
+    DELETE FROM register_record WHERE household_id = f.h1 AND id = rid;
+    RAISE EXCEPTION 'a delete of an unarchived record must be refused';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%register record cannot be deleted%', refusal;
+  END;
   UPDATE register_record SET archived_at = now() WHERE household_id = f.h1 AND id = rid;
 
   BEGIN
