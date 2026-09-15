@@ -42,6 +42,7 @@ an inferred institution identity.
 | 14 Sep 2026 | Keep a linked payslip credit eligible when its ledger row is reclassified | Phase 1.7 checks eligibility when linking and reports it on read | Phase 4.2 planning |
 | 14 Sep 2026 | Search document contents | Phase 1.8 filters documents by type, account, period and import status; indexing statement text widens the private-data surface | Only through a separate privacy decision |
 | 15 Sep 2026 | Same-date valuation snapshot correction | UI completion Task 2a's `POST /accounts/{accountId}/valuation-snapshots` is append-only (`preserve_valuation_snapshot`): a mistyped same-date valuation has no correction route and needs a migration to add one | When a real mistyped same-date valuation occurs, or Phase 4.3 planning |
+| 15 Sep 2026 | Record a switch or systematic transfer into a not-yet-held security, or a platform transfer into a new account, from the app | UI completion Task 2b's `investment-event-form.tsx` picks a switch/systematic-transfer's "in" security from securities the household already holds in the same account (via `/portfolio/positions`), and a platform-transfer's "in" account from the existing accounts list; neither offers the catalogue-resolve lookup `entry-screen.tsx` uses for a first acquisition, so the destination must already exist | When the owner needs to switch or transfer into an instrument or account not yet recorded |
 
 ## Unapproved discoveries and improvement candidates
 

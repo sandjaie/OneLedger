@@ -167,6 +167,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                       </div>
                       {correctingEventId === event.id && (
                         <EventCorrectionForm
+                          accounts={accounts}
                           event={event}
                           holding={detail}
                           onCorrected={() => {

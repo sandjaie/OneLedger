@@ -31,11 +31,11 @@ type Props = {
   onRecorded: () => void;
 };
 
-type CashKind = "sale" | "redemption" | "maturity" | "cash_distribution" | "interest"
+export type CashKind = "sale" | "redemption" | "maturity" | "cash_distribution" | "interest"
   | "reinvested_distribution" | "charge" | "withheld_tax";
 type UnitKind = "bonus" | "rights" | "split" | "switch" | "systematic_transfer" | "platform_transfer";
 type Kind = CashKind | UnitKind;
-type CashField = "units" | "price" | "grossAmount" | "charges" | "withheldTax";
+export type CashField = "units" | "price" | "grossAmount" | "charges" | "withheldTax";
 
 const CASH_KINDS: Array<{ value: CashKind; label: string }> = [
   { value: "sale", label: "Sale" },
@@ -59,7 +59,7 @@ const UNIT_KINDS: Array<{ value: UnitKind; label: string }> = [
 // Which of the nullable acquisition-shaped fields each cash lifecycle kind sends — derived
 // straight from `CashLifecycleCreate.lifecycle_fields_agree` (api/oneledger/investments/schemas.py).
 // Every field not listed here is sent as null; `netAmount` is always required and always shown.
-const CASH_FIELDS: Record<CashKind, ReadonlyArray<CashField>> = {
+export const CASH_FIELDS: Record<CashKind, ReadonlyArray<CashField>> = {
   sale: ["units", "price", "grossAmount", "charges", "withheldTax"],
   redemption: ["units", "price", "grossAmount", "charges", "withheldTax"],
   maturity: ["units", "price", "grossAmount", "charges", "withheldTax"],
@@ -73,7 +73,7 @@ const CASH_FIELD_LABEL: Record<CashField, string> = {
   units: "Units", price: "Event price", grossAmount: "Gross amount", charges: "Charges", withheldTax: "Withheld tax",
 };
 
-function isCashKind(kind: Kind): kind is CashKind {
+export function isCashKind(kind: string): kind is CashKind {
   return kind in CASH_FIELDS;
 }
 

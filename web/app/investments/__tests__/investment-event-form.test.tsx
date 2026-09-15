@@ -5,12 +5,72 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import type { apiFetch } from "@/lib/api/client";
-import type { PortfolioPositions } from "@/types/api";
+import type { AccountRow, AcquisitionPosition, PortfolioPositions } from "@/types/api";
 
 type Request = typeof apiFetch;
 
 const HOLDING = { accountId: "00000000-0000-4000-8000-000000000010", securityId: "00000000-0000-4000-8000-000000000040", securityName: "Synthetic Growth Fund", currency: "XAA" };
 const EMPTY_POSITIONS: PortfolioPositions = { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+
+function position(overrides: Partial<AcquisitionPosition> = {}): AcquisitionPosition {
+  return {
+    holdingId: "00000000-0000-4000-8000-000000000051",
+    accountId: HOLDING.accountId,
+    securityId: "00000000-0000-4000-8000-000000000041",
+    securityName: "Synthetic Bond Fund",
+    assetClass: "fixed_income",
+    currency: "XAA",
+    asOf: "2026-02-06",
+    units: "5.00000000",
+    cumulativeContributionsNative: "50.0000",
+    cumulativeContributionsBase: "50.0000",
+    cumulativeContributionsSecondary: "100.0000",
+    priceStatus: "current",
+    valueStatus: "available",
+    price: "10.000000",
+    priceDate: "2026-02-06",
+    currentValueNative: "50.0000",
+    currentValueBase: "50.0000",
+    currentValueSecondary: "100.0000",
+    gainNative: "0.0000",
+    gainBase: "0.0000",
+    gainSecondary: "0.0000",
+    missingFx: [],
+    fxRates: [],
+    closed: false,
+    xirrPercent: null,
+    xirrReason: null,
+    ...overrides,
+  };
+}
+
+function account(overrides: Partial<AccountRow> = {}): AccountRow {
+  return {
+    id: "00000000-0000-4000-8000-000000000011",
+    name: "Synthetic second folio",
+    institutionId: null,
+    institutionName: null,
+    accountType: "brokerage",
+    accountClass: "asset",
+    accountSubtype: null,
+    currency: "XAA",
+    country: "XZ",
+    openedOn: "2026-01-01",
+    closedOn: null,
+    isActive: true,
+    includeInNetWorth: true,
+    isLiquid: false,
+    openingBalance: "0.0000",
+    openingBalanceDate: "2026-01-01",
+    openingBalanceNote: null,
+    openingBalanceConfirmedAt: "2026-01-01T00:00:00Z",
+    currentBalance: "0.0000",
+    currentBalanceAsOf: null,
+    creditLimit: null,
+    identifiers: [],
+    ...overrides,
+  };
+}
 
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn(async (path: string, init?: RequestInit) => handler(path, init)) as Request;
@@ -115,5 +175,93 @@ describe("InvestmentEventForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Confirm event" }));
     await vi.waitFor(() => expect(posted).toHaveLength(3));
     expect(posted[2].idempotencyKey).not.toBe(posted[0].idempotencyKey);
+  });
+
+  it("posts a split with only its own unitRatio field", async () => {
+    const posted: Array<unknown> = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return EMPTY_POSITIONS;
+      if (path === "/investment-events/unit-actions" && init?.method === "POST") {
+        posted.push(JSON.parse(String(init.body)));
+        return { kind: "split" };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<InvestmentEventForm accounts={[]} holding={HOLDING} onRecorded={vi.fn()} request={request} />);
+    fireEvent.change(await screen.findByLabelText("Event kind"), { target: { value: "split" } });
+    fireEvent.change(screen.getByLabelText("Event date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(screen.getByLabelText("Unit ratio"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review event" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm event" }));
+
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      kind: "split", accountId: HOLDING.accountId, securityId: HOLDING.securityId, eventDate: "2026-02-10",
+      unitRatio: "2", idempotencyKey: expect.any(String),
+    });
+  });
+
+  it("posts a switch's exact out and in leg strings, security chosen from another holding in the same account", async () => {
+    const posted: Array<unknown> = [];
+    const other = position();
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { ...EMPTY_POSITIONS, positions: [other] };
+      if (path === "/investment-events/unit-actions" && init?.method === "POST") {
+        posted.push(JSON.parse(String(init.body)));
+        return { kind: "switch" };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<InvestmentEventForm accounts={[]} holding={HOLDING} onRecorded={vi.fn()} request={request} />);
+    fireEvent.change(await screen.findByLabelText("Event kind"), { target: { value: "switch" } });
+    fireEvent.change(screen.getByLabelText("Event date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(await screen.findByLabelText("Security switched into"), { target: { value: other.securityId } });
+    fireEvent.change(screen.getByLabelText("Units out"), { target: { value: "-4.00000000" } });
+    fireEvent.change(screen.getByLabelText("Price out"), { target: { value: "10.000000" } });
+    fireEvent.change(screen.getByLabelText("Gross amount out (XAA)"), { target: { value: "40.0000" } });
+    fireEvent.change(screen.getByLabelText("Units in"), { target: { value: "8.00000000" } });
+    fireEvent.change(screen.getByLabelText("Price in"), { target: { value: "5.000000" } });
+    fireEvent.change(screen.getByLabelText("Gross amount in (XAA)"), { target: { value: "40.0000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review event" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm event" }));
+
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      kind: "switch", accountId: HOLDING.accountId, outSecurityId: HOLDING.securityId, inSecurityId: other.securityId,
+      eventDate: "2026-02-10", outUnits: "-4.00000000", outPrice: "10.000000", outGrossAmount: "40.0000",
+      inUnits: "8.00000000", inPrice: "5.000000", inGrossAmount: "40.0000", currency: "XAA",
+      idempotencyKey: expect.any(String),
+    });
+  });
+
+  it("posts a platform transfer's exact unit strings, receiving account chosen from the accounts list", async () => {
+    const posted: Array<unknown> = [];
+    const receiving = account();
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return EMPTY_POSITIONS;
+      if (path === "/investment-events/unit-actions" && init?.method === "POST") {
+        posted.push(JSON.parse(String(init.body)));
+        return { kind: "platform_transfer" };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<InvestmentEventForm accounts={[receiving]} holding={HOLDING} onRecorded={vi.fn()} request={request} />);
+    fireEvent.change(await screen.findByLabelText("Event kind"), { target: { value: "platform_transfer" } });
+    fireEvent.change(screen.getByLabelText("Event date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(screen.getByLabelText("Account transferred into"), { target: { value: receiving.id } });
+    fireEvent.change(screen.getByLabelText("Units out"), { target: { value: "-6.00000000" } });
+    fireEvent.change(screen.getByLabelText("Units in"), { target: { value: "6.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review event" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm event" }));
+
+    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toEqual({
+      kind: "platform_transfer", outAccountId: HOLDING.accountId, inAccountId: receiving.id,
+      securityId: HOLDING.securityId, eventDate: "2026-02-10", outUnits: "-6.00000000", inUnits: "6.00000000",
+      currency: "XAA", idempotencyKey: expect.any(String),
+    });
   });
 });

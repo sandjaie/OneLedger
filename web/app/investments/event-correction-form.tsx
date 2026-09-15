@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 
+import { CASH_FIELDS, isCashKind, type CashKind } from "@/app/investments/investment-event-form";
+import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import type {
+  AccountRow,
   AcquisitionCorrectionCreate,
   BonusActionCorrectionCreate,
   CashLifecycleCorrectionCreate,
@@ -17,50 +20,85 @@ import type {
   SystematicTransferActionCorrectionCreate,
 } from "@/types/api";
 
-// The generated client exposes each unit-action correction variant by name but not their union
-// (only the route's own inline request-body type carries it) — restated once here.
-type UnitActionCorrectionCreate = BonusActionCorrectionCreate | RightsActionCorrectionCreate
-  | SplitActionCorrectionCreate | SwitchActionCorrectionCreate
-  | SystematicTransferActionCorrectionCreate | PlatformTransferActionCorrectionCreate;
-
 type Props = {
   event: HoldingEventRow;
   holding: HoldingDetail;
+  accounts: Array<AccountRow>;
   request: typeof apiFetch;
   onCorrected: () => void;
 };
 
 const PURCHASE_KINDS = new Set(["purchase", "recurring_purchase"]);
-const CASH_LIFECYCLE_KINDS = new Set([
-  "sale", "redemption", "maturity", "cash_distribution", "interest",
-  "reinvested_distribution", "charge", "withheld_tax",
-]);
 const PAIR_KIND = {
   switch_out: "switch", switch_in: "switch",
   systematic_transfer_out: "systematic_transfer", systematic_transfer_in: "systematic_transfer",
   platform_transfer_out: "platform_transfer", platform_transfer_in: "platform_transfer",
 } as const;
+type PairKind = "switch" | "systematic_transfer" | "platform_transfer";
 
-/** Purchase kinds are "funded" once `fundingComplete`; every other kind's own cash link (role
- * `proceeds`, `cash_distribution` or `fee` — never `funding`) is read straight off the holding's
- * own `cashLinks` rather than restating the server's remaining-amount arithmetic. */
+/** V40's own correction trigger refuses correcting any event with an existing
+ * `investment_cash_allocation` row of any role, not only a purchase's own `funding` role — so
+ * every kind's funded state reads off the holding's own cash links, never `fundingComplete`
+ * (which is only meaningful for a purchase's remaining-amount arithmetic, not this refusal). */
 export function isFundedEvent(event: HoldingEventRow, cashLinks: Array<HoldingCashLink>): boolean {
-  return PURCHASE_KINDS.has(event.eventKind)
-    ? event.fundingComplete
-    : cashLinks.some((link) => link.investmentEventId === event.id);
+  return cashLinks.some((link) => link.investmentEventId === event.id);
+}
+
+// Every field a correction form ever edits, across every kind — a plain string draft, matching
+// the record-event form's own shape so both forms send exact typed strings, never a computed one.
+type Draft = {
+  units: string; price: string; grossAmount: string; charges: string; withheldTax: string; netAmount: string;
+  unitRatio: string;
+  outUnits: string; outPrice: string; outGrossAmount: string;
+  inUnits: string; inPrice: string; inGrossAmount: string;
+  inAccountId: string;
+};
+
+function isOutLeg(eventKind: string) {
+  return eventKind.endsWith("_out");
+}
+
+/** Every editable draft value pre-filled from the event's own stored facts (and, for a paired
+ * leg, its counterpart's) — nothing here is ever left for the owner to retype from scratch, and
+ * nothing here is computed: every string is one the holding detail already returned. */
+function initialDraft(event: HoldingEventRow, holding: HoldingDetail): Draft {
+  const pairKind = (PAIR_KIND as Record<string, PairKind | undefined>)[event.eventKind];
+  if (pairKind) {
+    const outLeg = isOutLeg(event.eventKind);
+    return {
+      units: "", price: "", grossAmount: "", charges: "", withheldTax: "", netAmount: "", unitRatio: "",
+      outUnits: (outLeg ? event.units : event.counterpartUnits) ?? "",
+      outPrice: (outLeg ? event.price : event.counterpartPrice) ?? "",
+      outGrossAmount: (outLeg ? event.grossAmount : event.counterpartGrossAmount) ?? "",
+      inUnits: (outLeg ? event.counterpartUnits : event.units) ?? "",
+      inPrice: (outLeg ? event.counterpartPrice : event.price) ?? "",
+      inGrossAmount: (outLeg ? event.counterpartGrossAmount : event.grossAmount) ?? "",
+      inAccountId: (outLeg ? event.counterpartAccountId : holding.accountId) ?? "",
+    };
+  }
+  return {
+    units: event.units ?? "", price: event.price ?? "", grossAmount: event.grossAmount ?? "",
+    charges: event.charges ?? "", withheldTax: event.withheldTax ?? "", netAmount: event.netAmount ?? "",
+    unitRatio: event.unitRatio ?? "",
+    outUnits: "", outPrice: "", outGrossAmount: "", inUnits: "", inPrice: "", inGrossAmount: "", inAccountId: "",
+  };
 }
 
 type CorrectionRequest = {
   path: string;
-  body: AcquisitionCorrectionCreate | CashLifecycleCorrectionCreate | UnitActionCorrectionCreate;
+  body: AcquisitionCorrectionCreate | CashLifecycleCorrectionCreate | BonusActionCorrectionCreate
+    | RightsActionCorrectionCreate | SplitActionCorrectionCreate | SwitchActionCorrectionCreate
+    | SystematicTransferActionCorrectionCreate | PlatformTransferActionCorrectionCreate;
 };
 
-/** The exact route and body for correcting one active event, built only from facts the holding
- * detail already returned (Task 2b) — nothing here is recomputed or guessed. Returns undefined
- * when the event's own pair data is missing, which disables the action rather than guessing. */
+/** The exact route and body for correcting one active event, sending the owner's edited draft —
+ * every field not offered for editing is still a fact the holding detail already returned, never
+ * guessed. Returns undefined when the event's own pair data is missing, which disables the
+ * action rather than submitting an incomplete correction. */
 export function correctionRequest(
   event: HoldingEventRow,
   holding: HoldingDetail,
+  draft: Draft,
   idempotencyKey: string,
   correctionReason: string,
 ): CorrectionRequest | undefined {
@@ -69,19 +107,17 @@ export function correctionRequest(
   const expectedCorrectionState = "uncorrected" as const;
 
   if (PURCHASE_KINDS.has(event.eventKind)) {
-    if (event.units === null || event.price === null || event.grossAmount === null
-      || event.charges === null || event.withheldTax === null || event.netAmount === null) return undefined;
     const body: AcquisitionCorrectionCreate = {
       accountId: holding.accountId,
       securityId: holding.securityId,
       eventDate,
       eventKind: event.eventKind as AcquisitionCorrectionCreate["eventKind"],
-      units: event.units,
-      price: event.price,
-      grossAmount: event.grossAmount,
-      charges: event.charges,
-      withheldTax: event.withheldTax,
-      netAmount: event.netAmount,
+      units: draft.units,
+      price: draft.price,
+      grossAmount: draft.grossAmount,
+      charges: draft.charges,
+      withheldTax: draft.withheldTax,
+      netAmount: draft.netAmount,
       currency,
       idempotencyKey,
       expectedCorrectionState,
@@ -90,19 +126,19 @@ export function correctionRequest(
     return { path: `/investment-events/${event.id}/corrections`, body };
   }
 
-  if (CASH_LIFECYCLE_KINDS.has(event.eventKind)) {
-    if (event.charges === null || event.withheldTax === null || event.netAmount === null) return undefined;
+  if (isCashKind(event.eventKind)) {
+    const fields = CASH_FIELDS[event.eventKind as CashKind];
     const body: CashLifecycleCorrectionCreate = {
       accountId: holding.accountId,
       securityId: holding.securityId,
       eventDate,
       eventKind: event.eventKind as CashLifecycleCorrectionCreate["eventKind"],
-      units: event.units,
-      price: event.price,
-      grossAmount: event.grossAmount,
-      charges: event.charges,
-      withheldTax: event.withheldTax,
-      netAmount: event.netAmount,
+      units: fields.includes("units") ? draft.units : null,
+      price: fields.includes("price") ? draft.price : null,
+      grossAmount: fields.includes("grossAmount") ? draft.grossAmount : null,
+      charges: fields.includes("charges") ? draft.charges : "0.0000",
+      withheldTax: fields.includes("withheldTax") ? draft.withheldTax : "0.0000",
+      netAmount: draft.netAmount,
       currency,
       idempotencyKey,
       expectedCorrectionState,
@@ -112,80 +148,102 @@ export function correctionRequest(
   }
 
   if (event.eventKind === "bonus") {
-    if (event.units === null) return undefined;
-    const body: UnitActionCorrectionCreate = {
+    const body: BonusActionCorrectionCreate = {
       kind: "bonus", accountId: holding.accountId, securityId: holding.securityId, eventDate,
-      units: event.units, currency, idempotencyKey, expectedCorrectionState, correctionReason,
+      units: draft.units, currency, idempotencyKey, expectedCorrectionState, correctionReason,
     };
     return { path: `/investment-events/${event.id}/unit-action-corrections`, body };
   }
   if (event.eventKind === "rights") {
-    if (event.units === null || event.price === null || event.grossAmount === null
-      || event.charges === null || event.withheldTax === null || event.netAmount === null) return undefined;
-    const body: UnitActionCorrectionCreate = {
+    const body: RightsActionCorrectionCreate = {
       kind: "rights", accountId: holding.accountId, securityId: holding.securityId, eventDate,
-      units: event.units, price: event.price, grossAmount: event.grossAmount, charges: event.charges,
-      withheldTax: event.withheldTax, netAmount: event.netAmount, currency,
+      units: draft.units, price: draft.price, grossAmount: draft.grossAmount, charges: draft.charges,
+      withheldTax: draft.withheldTax, netAmount: draft.netAmount, currency,
       idempotencyKey, expectedCorrectionState, correctionReason,
     };
     return { path: `/investment-events/${event.id}/unit-action-corrections`, body };
   }
   if (event.eventKind === "split") {
-    if (event.unitRatio === null) return undefined;
-    const body: UnitActionCorrectionCreate = {
+    const body: SplitActionCorrectionCreate = {
       kind: "split", accountId: holding.accountId, securityId: holding.securityId, eventDate,
-      unitRatio: event.unitRatio, idempotencyKey, expectedCorrectionState, correctionReason,
+      unitRatio: draft.unitRatio, idempotencyKey, expectedCorrectionState, correctionReason,
     };
     return { path: `/investment-events/${event.id}/unit-action-corrections`, body };
   }
 
-  const pairKind = (PAIR_KIND as Record<string, "switch" | "systematic_transfer" | "platform_transfer" | undefined>)[event.eventKind];
+  const pairKind = (PAIR_KIND as Record<string, PairKind | undefined>)[event.eventKind];
   if (!pairKind) return undefined;
-  const isOutLeg = event.eventKind.endsWith("_out");
-  const outLegId = isOutLeg ? event.id : event.counterpartEventId;
+  const outLeg = isOutLeg(event.eventKind);
+  const outLegId = outLeg ? event.id : event.counterpartEventId;
   if (!outLegId) return undefined;
-  const out = isOutLeg
-    ? { accountId: holding.accountId, securityId: holding.securityId, units: event.units, price: event.price, grossAmount: event.grossAmount }
-    : { accountId: event.counterpartAccountId, securityId: event.counterpartSecurityId, units: event.counterpartUnits, price: event.counterpartPrice, grossAmount: event.counterpartGrossAmount };
-  const inLeg = isOutLeg
-    ? { accountId: event.counterpartAccountId, securityId: event.counterpartSecurityId, units: event.counterpartUnits, price: event.counterpartPrice, grossAmount: event.counterpartGrossAmount }
-    : { accountId: holding.accountId, securityId: holding.securityId, units: event.units, price: event.price, grossAmount: event.grossAmount };
 
   if (pairKind === "platform_transfer") {
-    if (out.accountId === null || inLeg.accountId === null || out.securityId === null
-      || out.units === null || inLeg.units === null) return undefined;
-    const body: UnitActionCorrectionCreate = {
+    const outAccountId = outLeg ? holding.accountId : event.counterpartAccountId;
+    if (!outAccountId || !draft.inAccountId) return undefined;
+    const body: PlatformTransferActionCorrectionCreate = {
       kind: "platform_transfer",
-      outAccountId: out.accountId, inAccountId: inLeg.accountId, securityId: out.securityId,
-      eventDate, outUnits: out.units, inUnits: inLeg.units, currency,
+      outAccountId, inAccountId: draft.inAccountId, securityId: holding.securityId,
+      eventDate, outUnits: draft.outUnits, inUnits: draft.inUnits, currency,
       idempotencyKey, expectedCorrectionState, correctionReason,
     };
     return { path: `/investment-events/${outLegId}/unit-action-corrections`, body };
   }
-  if (out.accountId === null || out.securityId === null || inLeg.securityId === null
-    || out.units === null || out.price === null || out.grossAmount === null
-    || inLeg.units === null || inLeg.price === null || inLeg.grossAmount === null) return undefined;
-  const body: UnitActionCorrectionCreate = {
-    kind: pairKind, accountId: out.accountId, outSecurityId: out.securityId, inSecurityId: inLeg.securityId,
-    eventDate, outUnits: out.units, outPrice: out.price, outGrossAmount: out.grossAmount,
-    inUnits: inLeg.units, inPrice: inLeg.price, inGrossAmount: inLeg.grossAmount, currency,
+  const outSecurityId = outLeg ? holding.securityId : event.counterpartSecurityId;
+  const inSecurityId = outLeg ? event.counterpartSecurityId : holding.securityId;
+  if (!outSecurityId || !inSecurityId) return undefined;
+  const body: SwitchActionCorrectionCreate | SystematicTransferActionCorrectionCreate = {
+    kind: pairKind, accountId: holding.accountId, outSecurityId, inSecurityId,
+    eventDate, outUnits: draft.outUnits, outPrice: draft.outPrice, outGrossAmount: draft.outGrossAmount,
+    inUnits: draft.inUnits, inPrice: draft.inPrice, inGrossAmount: draft.inGrossAmount, currency,
     idempotencyKey, expectedCorrectionState, correctionReason,
   };
   return { path: `/investment-events/${outLegId}/unit-action-corrections`, body };
 }
 
-export function EventCorrectionForm({ event, holding, request, onCorrected }: Props) {
+const FIELD_LABEL: Record<string, string> = {
+  units: "Units", price: "Event price", grossAmount: "Gross amount", charges: "Charges", withheldTax: "Withheld tax",
+  netAmount: "Net cash amount", unitRatio: "Unit ratio",
+  outUnits: "Units out", outPrice: "Price out", outGrossAmount: "Gross amount out",
+  inUnits: "Units in", inPrice: "Price in", inGrossAmount: "Gross amount in",
+};
+
+function ratioFields(event: HoldingEventRow): Array<keyof Draft> {
+  if (PURCHASE_KINDS.has(event.eventKind) || event.eventKind === "rights") {
+    return ["units", "price", "grossAmount", "charges", "withheldTax", "netAmount"];
+  }
+  if (isCashKind(event.eventKind)) return [...CASH_FIELDS[event.eventKind as CashKind], "netAmount"];
+  if (event.eventKind === "bonus") return ["units"];
+  if (event.eventKind === "split") return ["unitRatio"];
+  if (event.eventKind.startsWith("platform_transfer")) return ["outUnits", "inUnits"];
+  if (event.eventKind in PAIR_KIND) return ["outUnits", "outPrice", "outGrossAmount", "inUnits", "inPrice", "inGrossAmount"];
+  return [];
+}
+
+export function EventCorrectionForm({ event, holding, accounts, request, onCorrected }: Props) {
+  const [draft, setDraft] = useState<Draft>(() => initialDraft(event, holding));
   const [reason, setReason] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
 
-  function changeReason(value: string) {
-    setReason(value);
+  const fields = ratioFields(event);
+  const isPlatformTransfer = event.eventKind.startsWith("platform_transfer");
+
+  function invalidate() {
     setIdempotencyKey("");
     setConfirming(false);
     setProblem("");
+  }
+
+  function changeField(field: keyof Draft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }));
+    invalidate();
+  }
+
+  function changeReason(value: string) {
+    setReason(value);
+    invalidate();
   }
 
   function review() {
@@ -198,7 +256,7 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
   async function submit() {
     const key = idempotencyKey || crypto.randomUUID();
     if (!idempotencyKey) setIdempotencyKey(key);
-    const built = correctionRequest(event, holding, key, reason.trim());
+    const built = correctionRequest(event, holding, draft, key, reason.trim());
     if (!built || busy) return;
     setBusy(true);
     setProblem("");
@@ -216,15 +274,33 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
     }
   }
 
-  const preview = idempotencyKey ? correctionRequest(event, holding, idempotencyKey, reason.trim()) : undefined;
+  const otherAccounts = accounts.filter((a) => a.isActive && INVESTMENT_ACCOUNT_TYPES.has(a.accountType));
+  const preview = idempotencyKey ? correctionRequest(event, holding, draft, idempotencyKey, reason.trim()) : undefined;
 
   return (
     <fieldset aria-label={`Correct the ${event.eventKind.replaceAll("_", " ")} on ${event.eventDate}`} className="investment-correction-form">
       <legend>Correct this event</legend>
+
+      {fields.map((field) => (
+        <label className="text-field" key={field}>
+          <span>{FIELD_LABEL[field]}</span>
+          <input disabled={confirming} inputMode="decimal" onChange={(change) => changeField(field, change.target.value)} required value={draft[field]} />
+        </label>
+      ))}
+      {isPlatformTransfer && (
+        <label className="select-field">
+          <span>Account transferred into</span>
+          <select disabled={confirming} onChange={(change) => changeField("inAccountId", change.target.value)} value={draft.inAccountId}>
+            <option value="">Choose the receiving account</option>
+            {otherAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </label>
+      )}
       <label className="text-field">
         <span>Correction reason</span>
-        <input onChange={(change) => changeReason(change.target.value)} required value={reason} />
+        <input disabled={confirming} onChange={(change) => changeReason(change.target.value)} required value={reason} />
       </label>
+
       {!confirming && (
         <button className="text-action" disabled={!reason.trim()} onClick={review} type="button">
           Review correction
@@ -233,6 +309,13 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
       {confirming && (
         <div className="investment-confirmation">
           <p>This appends a new owner-entered event replacing the one above. It cannot be edited afterward.</p>
+          {preview && (
+            <dl>
+              {Object.entries(preview.body)
+                .filter(([key]) => (fields as Array<string>).includes(key) || key === "inAccountId")
+                .map(([key, value]) => <div key={key}><dt>{FIELD_LABEL[key] ?? key}</dt><dd>{String(value)}</dd></div>)}
+            </dl>
+          )}
           {!preview && <p className="inline-alert" role="alert">This event&rsquo;s pair data is incomplete — correct it from its other leg&rsquo;s holding instead.</p>}
           {problem && <p className="inline-alert" role="alert">{problem}</p>}
           <div className="investment-confirm-actions">
