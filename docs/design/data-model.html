@@ -1119,6 +1119,22 @@ windows and the review-due rule), the same import-cycle convention <code>resourc
 already follows for goals and the emergency reserve; <code>action_mark_key_shape</code>'s
 <code>record.</code> keys, widened ahead of time in V52, now name real items.
 Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V53</code> (applied).</p>
+<p>Phase 3.4 Task 2 adds <code>commitment.source_register_record_id</code> &mdash; a policy's
+premium, a deposit's expected proceeds or a claim's expected reimbursement planned as a
+commitment, the same one-source shape V49 gave a card statement: at most one source per
+commitment (<code>commitment_has_one_source</code>) and at most one open commitment per record
+(<code>uq_commitment_open_register_record</code>, archiving frees the record for a new plan).
+<code>assert_commitment_payment()</code> is replaced to keep every V48 condition and refuse an
+<code>income</code>-typed posting settling a <code>claim</code>- or <code>deposit</code>-sourced
+commitment &mdash; a reimbursement or returned principal is never counted as newly earned income;
+<code>routes/commitment_resolutions.py</code>'s candidates predicate mirrors the same condition.
+<code>routes/plans.py</code> carries every kind-specific schedule, sign, account and currency rule;
+there is no further <code>CHECK</code> for them. <code>POST /documents</code> stores an owner PDF
+through the existing <code>ingest.storage.store</code> with a fixed safe label per type (no
+uploaded filename retained) and <code>ON CONFLICT (household_id, sha256)</code> reuse; an upload is
+not an import (owner decision), so <code>GET /documents</code> gains <code>importKind: "upload"</code>
+and <code>title</code> for the six upload types. Full DDL:
+<a href="../superpowers/schema.md">schema.md</a> <code>V54</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and

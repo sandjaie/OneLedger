@@ -3149,6 +3149,68 @@ than 365 days before `asOf`) — every item accepts a snooze mark and refuses a 
 
 ---
 
+## `V54` (applied)
+
+### Register-sourced commitments
+
+Phase 3.4 Task 2. A commitment may be planned from a register record's premium, expected proceeds
+or expected reimbursement — the same one-source shape V49 gave a card statement, extended to
+registers.
+
+```sql
+ALTER TABLE commitment
+  ADD COLUMN source_register_record_id UUID,
+  ADD CONSTRAINT fk_commitment_register_scope FOREIGN KEY (household_id, source_register_record_id)
+    REFERENCES register_record (household_id, id) ON DELETE RESTRICT,
+  ADD CONSTRAINT commitment_has_one_source CHECK (
+    num_nonnulls(source_card_statement_id, source_register_record_id) <= 1);
+CREATE UNIQUE INDEX uq_commitment_open_register_record ON commitment (source_register_record_id)
+  WHERE source_register_record_id IS NOT NULL AND archived_at IS NULL;
+```
+
+At most one source per commitment (`commitment_has_one_source`) and at most one open (unarchived)
+commitment per record (`uq_commitment_open_register_record`, archiving frees the record for a new
+plan) — no fixed CHECK constrains the per-kind schedule, sign, account or currency rules, since they
+vary by the source record's kind; `routes/plans.py` carries all of them.
+`CREATE OR REPLACE FUNCTION assert_commitment_payment()` keeps every V48 condition and adds one:
+when the commitment's source record is a `claim` or `deposit`, the settling posting's `txn_type`
+must not be `income` — a reimbursement or returned principal is never counted as newly earned
+income. `routes/commitment_resolutions.py`'s candidates predicate mirrors this addition, keeping its
+sync comment.
+
+`routes/plans.py`'s `POST`/`PUT /commitments` accept `sourceRegisterRecordId` (not with
+`sourceCardStatementId`, 422; fixed at creation, like the card source): an `insurance_policy` needs
+a premium (422 `this policy has no premium`), the given cadence equal to `premium_cadence` and a
+negative amount; a `deposit` needs expected proceeds and currency (422 `this deposit has no
+expected proceeds`), `once`, a positive amount, and an active asset receiving account in the
+record's currency that is not the deposit's own account (422 `choose the account that receives the
+proceeds`); a `claim` needs `once` and a positive amount, and refuses a completed claim (409); a
+`nominee` or `administration` record refuses with 422 `this record does not plan money`. A second
+open plan for the same record is 409 `money is already planned for this record`; an archived record
+is 409. `CommitmentRow.source` gains `register_record` with `sourceRegisterRecordId` and
+`sourceRegisterTitle`. `RegisterRow.plannedCommitment` reuses `plans._commitment_progress` — no
+second remaining-amount computation; a claim's outstanding amount is its `remainingNext` and what
+was received is `paidTowardNext`. `register_records.py`'s deposit maturity action item is omitted
+once an unarchived commitment is sourced from the record.
+
+### Document upload
+
+`POST /documents` stores an owner PDF (`tax_document | insurance_policy | property_document |
+fd_certificate | receipt | other`) through the same `ingest.storage.store` a statement import
+uses — a bounded 20 MB read, a `%PDF-` header check, a fixed safe label per type (no uploaded
+filename is retained), `parsed_status = 'not_applicable'`, and `ON CONFLICT (household_id, sha256)`
+reuse: the same bytes already stored under the same type return that row with 200; under another
+type, 409 `this file is already in the document library`. Owner decision (16 September 2026): an
+upload is not an import — `GET /documents` rows gain `importKind: "upload"` for the six upload
+types with no import, and `title`, non-null only for such a row (a statement, investment or payslip
+row keeps `title: null`).
+
+`PUT`/`DELETE /register/{recordId}/documents/{documentId}` link and unlink a household document of
+an upload type (422 otherwise; a foreign or unknown document is 404); both are idempotent.
+`RegisterRow.documents[]` is `{documentId, documentType, title, uploadedAt}`.
+
+---
+
 ## `0013`
 
 ### Loans
