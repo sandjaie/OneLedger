@@ -2653,7 +2653,7 @@ export type ExcludedCommitment = {
     /**
      * Reason
      */
-    reason: 'account_closed' | 'account_excluded' | 'currency_mismatch';
+    reason: 'account_closed' | 'account_excluded' | 'currency_mismatch' | 'card_settlement_not_projected';
 };
 
 /**
@@ -2784,6 +2784,56 @@ export type ForecastAccount = {
      * Occurrences
      */
     occurrences: Array<ForecastOccurrence>;
+    /**
+     * Unappliedoccurrences
+     */
+    unappliedOccurrences: Array<ForecastOccurrence>;
+    lowest: LowestPoint;
+    lowestConfirmed: LowestPoint;
+    /**
+     * Balanceagedays
+     */
+    balanceAgeDays: number;
+    /**
+     * Coveragegapmonths
+     */
+    coverageGapMonths: number | null;
+    shortfall?: Shortfall | null;
+};
+
+/**
+ * ForecastCurrency
+ *
+ * Phase 3.2 spec rule 7: one entry per currency with at least one member (an included,
+ * active liquid asset account or credit card); no conversion, ordered by currency code.
+ */
+export type ForecastCurrency = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Accountids
+     */
+    accountIds: Array<string>;
+    /**
+     * Startbalance
+     */
+    startBalance: string;
+    /**
+     * Points
+     */
+    points: Array<ForecastPoint>;
+    lowest: LowestPoint;
+    lowestConfirmed: LowestPoint;
+    /**
+     * Excludedaccountids
+     */
+    excludedAccountIds: Array<string>;
+    /**
+     * Staleaccountids
+     */
+    staleAccountIds: Array<string>;
 };
 
 /**
@@ -2814,6 +2864,10 @@ export type ForecastOccurrence = {
      * Certainty
      */
     certainty: 'confirmed' | 'estimated';
+    /**
+     * Kind
+     */
+    kind: 'commitment' | 'card_settlement';
 };
 
 /**
@@ -2832,6 +2886,10 @@ export type ForecastPoint = {
      * Balance
      */
     balance: string;
+    /**
+     * Confirmedbalance
+     */
+    confirmedBalance: string;
 };
 
 /**
@@ -2854,6 +2912,32 @@ export type ForecastResponse = {
      * Excludedcommitments
      */
     excludedCommitments: Array<ExcludedCommitment>;
+    /**
+     * Currencies
+     */
+    currencies: Array<ForecastCurrency>;
+    /**
+     * Unplannedcarddues
+     */
+    unplannedCardDues: Array<UnplannedCardDue>;
+};
+
+/**
+ * FundingAccount
+ */
+export type FundingAccount = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Lowestbalance
+     */
+    lowestBalance: string;
 };
 
 /**
@@ -4495,6 +4579,20 @@ export type LotAllocationResponse = {
      * Reviewreasons
      */
     reviewReasons: Array<'incomplete_lot_allocation'>;
+};
+
+/**
+ * LowestPoint
+ */
+export type LowestPoint = {
+    /**
+     * Balance
+     */
+    balance: string;
+    /**
+     * Date
+     */
+    date: string;
 };
 
 /**
@@ -6830,6 +6928,24 @@ export type SecurityRow = {
 export type SecurityTypeName = 'mutual_fund' | 'equity' | 'exchange_traded_fund' | 'bond' | 'deposit' | 'commodity' | 'real_asset' | 'alternative' | 'other';
 
 /**
+ * Shortfall
+ */
+export type Shortfall = {
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Date
+     */
+    date: string;
+    /**
+     * Fundingaccounts
+     */
+    fundingAccounts: Array<FundingAccount>;
+};
+
+/**
  * SkippedStatement
  */
 export type SkippedStatement = {
@@ -7747,6 +7863,39 @@ export type UnitActionResult = {
     event?: UnitActionEventRow | null;
     outEvent?: UnitActionLegRow | null;
     inEvent?: UnitActionLegRow | null;
+};
+
+/**
+ * UnplannedCardDue
+ *
+ * Phase 3.2 spec rule 8: a card statement meeting the Phase 3.1 `card_payment_unplanned`
+ * rule regardless of snooze or dismissal marks, due within the forecast window.
+ */
+export type UnplannedCardDue = {
+    /**
+     * Cardstatementid
+     */
+    cardStatementId: string;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Statementbalance
+     */
+    statementBalance: string;
+    /**
+     * Paymentduedate
+     */
+    paymentDueDate: string;
 };
 
 /**

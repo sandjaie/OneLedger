@@ -1,7 +1,8 @@
-"""Phase 1.7 Task 2: the pure forecast math (spec "Forecast computation" rules 4-6). Both
-functions are database-free so their edge cases — month-end clamping, inclusive end dates, the
-exclusive balance-date/inclusive day-90 window — are unit-tested directly; `routes/plans.py`
-supplies the account and commitment facts and does no arithmetic of its own beyond calling these.
+"""Phase 1.7 Task 2 and Phase 3.2 Task 1: the pure forecast math (spec "Forecast computation").
+Every function here is database-free so their edge cases — month-end clamping, inclusive end
+dates, the exclusive balance-date/inclusive day-90 window, lowest-balance ties, currency folding
+— are unit-tested directly; `routes/plans.py` supplies the account and commitment facts and does
+no arithmetic of its own beyond calling these.
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 import calendar
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 Cadence = Literal["once", "monthly", "annual"]
 
@@ -111,3 +112,50 @@ def project_balances(
         )
         results.append((days, point, total))
     return results
+
+
+def lowest_balance(
+    start: Decimal, start_date: date, occurrences: list[tuple[date, Decimal]]
+) -> tuple[Decimal, date]:
+    """Phase 3.2 spec rule 4/7: the minimum running balance from `start` at `start_date` through
+    every later occurrence date (same-date occurrences summed together before comparing, so a
+    date is one step, not one per occurrence), earliest date on a tie. `start` is compared first
+    and only a strictly lower balance replaces it, so a later occurrence that merely ties the
+    lowest never displaces its earlier date — exactly rule 4's "earliest date on ties, start
+    balance included"."""
+    by_date: dict[date, Decimal] = {}
+    for occurred, amount in occurrences:
+        by_date[occurred] = by_date.get(occurred, Decimal(0)) + amount
+    running = start
+    lowest, lowest_date = start, start_date
+    for occurred in sorted(by_date):
+        running += by_date[occurred]
+        if running < lowest:
+            lowest, lowest_date = running, occurred
+    return lowest, lowest_date
+
+
+def aggregate_currency(
+    start: Decimal, occurrences: list[tuple[date, Decimal]], as_of: date
+) -> tuple[Decimal, list[tuple[date, Decimal]]]:
+    """Phase 3.2 spec rule 7: occurrences dated on or before `as_of` are folded into `start`
+    (now dated `as_of`, summing every member's start already gave `start` its currency-wide
+    value); the rest are returned unchanged for `lowest_balance` and `project_balances`, both of
+    which already walk forward from a dated start."""
+    folded = start
+    rest: list[tuple[date, Decimal]] = []
+    for occurred, amount in occurrences:
+        if occurred <= as_of:
+            folded += amount
+        else:
+            rest.append((occurred, amount))
+    return folded, rest
+
+
+def select_funding_accounts(
+    amount: Decimal, candidates: list[tuple[Any, str, Decimal]]
+) -> list[tuple[Any, str, Decimal]]:
+    """Phase 3.2 spec rule 5: the other candidate accounts (`(id, name, own lowest balance)`,
+    already in account order) whose own lowest balance could cover `amount` on its own —
+    informational only; nothing here proposes a transfer or posts anything."""
+    return [candidate for candidate in candidates if candidate[2] >= amount]

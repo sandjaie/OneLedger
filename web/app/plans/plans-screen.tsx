@@ -11,9 +11,10 @@ import type {
   CommitmentRow,
   CommitmentsResponse,
   CurrencyRow,
-  ForecastResponse,
+  UnplannedCardDue,
 } from "@/types/api";
 
+import { CashForecast } from "./cash-forecast";
 import { NeedsAttention } from "./needs-attention";
 import { SettlementPanel } from "./settlement-panel";
 
@@ -54,18 +55,6 @@ function statusText(commitment: CommitmentRow): string {
   return commitment.partlyPaid ? `${base} · Partly paid` : base;
 }
 
-const EXCLUDED_ACCOUNT_TEXT: Record<string, string> = {
-  not_ledger_valued: "This account is valued from holdings or a snapshot, not the ledger.",
-  no_balance_date: "This account has no ledger balance date.",
-  balance_after_as_of: "This account's balance date is after the forecast date.",
-};
-
-const EXCLUDED_COMMITMENT_TEXT: Record<string, string> = {
-  account_closed: "Its account is closed.",
-  account_excluded: "Its account is excluded from the forecast.",
-  currency_mismatch: "Its currency no longer matches its account's currency.",
-};
-
 function emptyForm(accounts: Array<AccountRow>): FormState {
   return {
     accountId: accounts[0]?.id ?? "",
@@ -96,9 +85,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   // A closed account cannot receive a new commitment (the route refuses it, 422), so the picker
   // and its default only ever offer an active one.
   const activeAccounts = accounts.filter((account) => account.isActive);
-  const [forecast, setForecast] = useState<ForecastResponse>();
-  const [forecastState, setForecastState] = useState<"loading" | "ready" | "error">("loading");
   const [commitments, setCommitments] = useState<Array<CommitmentRow>>();
+  const [commitmentsFailed, setCommitmentsFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<CommitmentRow>();
   const [form, setForm] = useState<FormState>(() => emptyForm(activeAccounts));
@@ -114,18 +102,15 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
   useEffect(() => {
     let current = true;
-    Promise.all([
-      request<ForecastResponse>("/forecast"),
-      request<CommitmentsResponse>("/commitments"),
-    ])
-      .then(([nextForecast, nextCommitments]) => {
+    request<CommitmentsResponse>("/commitments")
+      .then((result) => {
         if (!current) return;
-        setForecast(nextForecast);
-        setCommitments(nextCommitments.commitments);
-        setForecastState("ready");
+        setCommitments(result.commitments);
+        setCommitmentsFailed(false);
       })
       .catch(() => {
-        if (current) setForecastState("error");
+        // Needs attention and the forecast each report their own fetch state.
+        if (current) setCommitmentsFailed(true);
       });
     return () => {
       current = false;
@@ -153,22 +138,29 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
     setProblem(undefined);
   }
 
-  // Plan payment (Needs attention, Task 2): the commitment form pre-filled from a card due item —
-  // a one-off, the negated statement balance, the due date, and the source; the account picker
-  // narrows to active asset accounts in the statement's currency (formAccounts below).
-  function startCardPlan(item: ActionRow) {
-    if (!item.cardStatementId || !item.currency || !item.amount) return;
+  // Plan payment (Needs attention Task 2, and the forecast's Card statements with no planned
+  // payment): the commitment form pre-filled from a card due — a one-off, the negated statement
+  // balance, the due date, and the source; the account picker narrows to active asset accounts
+  // in the statement's currency (formAccounts below). The two callers hand this a differently
+  // shaped server row, so each narrows to these five fields before calling in.
+  function applyCardPlan(due: {
+    cardStatementId: string;
+    currency: string;
+    title: string;
+    amount: string;
+    dueDate: string | null;
+  }) {
     setEditing(undefined);
-    setPlanningCard({ statementId: item.cardStatementId, currency: item.currency });
+    setPlanningCard({ statementId: due.cardStatementId, currency: due.currency });
     const firstChoice = accounts.find(
-      (account) => account.isActive && account.accountClass === "asset" && account.currency === item.currency,
+      (account) => account.isActive && account.accountClass === "asset" && account.currency === due.currency,
     );
     setForm({
       accountId: firstChoice?.id ?? "",
-      label: item.title,
-      amount: negateAmount(item.amount),
+      label: due.title,
+      amount: negateAmount(due.amount),
       cadence: "once",
-      firstDate: item.dueDate ?? "",
+      firstDate: due.dueDate ?? "",
       endDate: "",
       certainty: "confirmed",
       nextDueDate: "",
@@ -176,6 +168,27 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
     setFeedback(undefined);
+  }
+
+  function startCardPlan(item: ActionRow) {
+    if (!item.cardStatementId || !item.currency || !item.amount) return;
+    applyCardPlan({
+      cardStatementId: item.cardStatementId,
+      currency: item.currency,
+      title: item.title,
+      amount: item.amount,
+      dueDate: item.dueDate,
+    });
+  }
+
+  function startCardPlanFromDue(due: UnplannedCardDue) {
+    applyCardPlan({
+      cardStatementId: due.cardStatementId,
+      currency: due.currency,
+      title: due.accountName,
+      amount: due.statementBalance,
+      dueDate: due.paymentDueDate,
+    });
   }
 
   const selectedAccount = accounts.find((account) => account.id === form.accountId);
@@ -283,102 +296,25 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         request={request}
       />
 
-      <section aria-labelledby="plans-assumptions-title">
-        <h2 id="plans-assumptions-title">Assumptions</h2>
-        <ul className="plans-assumptions">
-          <li>Balances start from each account&rsquo;s latest ledger balance and its date.</li>
-          <li>
-            Every active commitment occurs in full on its scheduled date and is unposted when
-            dated after that balance date.
-          </li>
-          <li>
-            Nothing else changes: no other income or spending, interest, card settlement, prices
-            or exchange rates.
-          </li>
-          <li>Balances stay in each account&rsquo;s own currency.</li>
-          <li>A forecast posts nothing.</li>
-          <li>A resolved occurrence is not projected.</li>
-          <li>A part-paid occurrence projects its remainder, not its full amount.</li>
-        </ul>
-      </section>
-
-      <section aria-labelledby="plans-forecast-title">
-        <h2 id="plans-forecast-title">Forecast{forecast ? ` as of ${forecast.asOf}` : ""}</h2>
-        {forecastState === "loading" && <p role="status">Loading the forecast…</p>}
-        {forecastState === "error" && (
-          <div role="alert">
-            <p>The forecast could not be loaded.</p>
-            <button
-              className="text-action"
-              onClick={() => { setForecastState("loading"); setAttempt((value) => value + 1); }}
-              type="button"
-            >Try again</button>
-          </div>
-        )}
-        {forecastState === "ready" && forecast && (
-          <>
-            {forecast.accounts.length === 0 && <p>No account can be forecast yet.</p>}
-            <ul className="plans-account-list">
-              {forecast.accounts.map((account) => {
-                return (
-                  <li key={account.accountId}>
-                    <strong>{account.accountName}</strong>
-                    <p>
-                      Start {moneyText(account.startBalance, account.currency, currencies)} as of {account.balanceDate}
-                    </p>
-                    <ul className="plans-points">
-                      {account.points.map((point) => (
-                        <li key={point.days}>
-                          {point.days}d ({point.date}): {moneyText(point.balance, account.currency, currencies)}
-                        </li>
-                      ))}
-                    </ul>
-                    {account.occurrences.length > 0 && (
-                      <ul className="plans-occurrences">
-                        {account.occurrences.map((occurrence, index) => (
-                          <li key={index}>
-                            {occurrence.date} {occurrence.label}{" "}
-                            {moneyText(occurrence.amount, account.currency, currencies)}
-                            {occurrence.certainty === "estimated" && <small> · estimated</small>}
-                            {occurrence.dueByAsOf && <small> · not yet in the ledger</small>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {forecast.excludedAccounts.length > 0 && (
-              <div>
-                <h3>Accounts not forecast</h3>
-                <ul className="plans-exclusions">
-                  {forecast.excludedAccounts.map((excluded) => (
-                    <li key={excluded.accountId}>
-                      {excluded.accountName}: {EXCLUDED_ACCOUNT_TEXT[excluded.reason] ?? excluded.reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {forecast.excludedCommitments.length > 0 && (
-              <div>
-                <h3>Commitments not applied</h3>
-                <ul className="plans-exclusions">
-                  {forecast.excludedCommitments.map((excluded) => (
-                    <li key={excluded.commitmentId}>
-                      {excluded.label}: {EXCLUDED_COMMITMENT_TEXT[excluded.reason] ?? excluded.reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+      <CashForecast
+        accounts={accounts}
+        currencies={currencies}
+        onPlanCardPayment={startCardPlanFromDue}
+        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
+        request={request}
+      />
 
       <section aria-labelledby="plans-commitments-title">
         <h2 id="plans-commitments-title">Commitments</h2>
+        {commitmentsFailed && (
+          <div role="alert">
+            <p>The commitments could not be loaded.</p>
+            <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">
+              Try again
+            </button>
+          </div>
+        )}
         {commitments && commitments.length === 0 && <p>No commitments are recorded yet.</p>}
         {commitments && commitments.length > 0 && (
           <ul className="plans-commitment-list">

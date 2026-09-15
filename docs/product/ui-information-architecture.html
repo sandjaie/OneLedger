@@ -425,7 +425,19 @@ due date and optional account. Snoozed items sit behind a <strong>Show snoozed</
 with <strong>Wake</strong>; resolved follow-ups behind one with <strong>Reopen</strong>. A
 card-sourced commitment names its statement in the Commitments list below. Overview shows a
 matching panel with the open count and the first five items, linking to <code>/plans#actions</code>
-— rather than adding a second destination. Phase 3.3 and
+— rather than adding a second destination. Phase 3.2 Task 1 turns the forecast into a cash forecast
+(<code>cash-forecast.tsx</code>, anchor <code>#forecast</code>): a currency summary first (30/60/90
+totals with confirmed-only figures alongside, lowest balance and date, member count, named excluded
+and stale accounts), then each account&#39;s own points and confirmed balances, its lowest balance
+and date, a <strong>Shortfall</strong> callout naming which accounts could fund it (nothing moves),
+stale and coverage-gap badges, card-settlement occurrences labelled as such, and <strong>Not
+projected</strong> occurrences with <strong>Settle</strong> (the same panel). A <strong>Card
+statements with no planned payment</strong> list offers <strong>Plan payment</strong>, reusing the
+same commitment-form pre-fill Needs attention&#39;s card items use. The assumptions list states that
+confirmed and estimated figures are shown separately, a planned card payment reduces the card balance
+on the same date, an unplanned card due and an unsettled occurrence inside the balance date are not
+projected, funding accounts are suggestions only, and currency totals cover liquid asset accounts and
+credit cards with no conversion. Phase 3.3 and
 Phase 3.4 add goals, emergency-reserve coverage and protection/administration records within that
 same view. Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for

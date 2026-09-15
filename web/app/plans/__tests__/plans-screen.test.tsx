@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PlansScreen } from "@/app/plans/plans-screen";
@@ -67,6 +67,8 @@ const emptyForecast: ForecastResponse = {
   accounts: [],
   excludedAccounts: [],
   excludedCommitments: [],
+  currencies: [],
+  unplannedCardDues: [],
 };
 
 const forecastWithAccount: ForecastResponse = {
@@ -80,9 +82,9 @@ const forecastWithAccount: ForecastResponse = {
       startBalance: "10000.0000",
       balanceDate: "2026-01-01",
       points: [
-        { days: 30, date: "2026-03-31", balance: "15000.0000" },
-        { days: 60, date: "2026-04-30", balance: "20000.0000" },
-        { days: 90, date: "2026-05-30", balance: "25000.0000" },
+        { days: 30, date: "2026-03-31", balance: "15000.0000", confirmedBalance: "15000.0000" },
+        { days: 60, date: "2026-04-30", balance: "20000.0000", confirmedBalance: "20000.0000" },
+        { days: 90, date: "2026-05-30", balance: "25000.0000", confirmedBalance: "25000.0000" },
       ],
       occurrences: [
         {
@@ -92,12 +94,20 @@ const forecastWithAccount: ForecastResponse = {
           amount: "5000.0000",
           dueByAsOf: true,
           certainty: "confirmed",
+          kind: "commitment",
         },
       ],
+      unappliedOccurrences: [],
+      lowest: { balance: "10000.0000", date: "2026-01-01" },
+      lowestConfirmed: { balance: "10000.0000", date: "2026-01-01" },
+      balanceAgeDays: 59,
+      coverageGapMonths: null,
     },
   ],
   excludedAccounts: [],
   excludedCommitments: [],
+  currencies: [],
+  unplannedCardDues: [],
 };
 
 const emptyActions = { asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] };
@@ -301,6 +311,65 @@ describe("plans screen", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
     expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
+  });
+
+  it("the forecast's Settle and Plan payment open the Phase 3.1 settlement panel and card pre-fill", async () => {
+    const statementId = "00000000-0000-4000-8000-0000000000d2";
+    const withDues: ForecastResponse = {
+      ...forecastWithAccount,
+      accounts: [
+        {
+          ...forecastWithAccount.accounts[0],
+          unappliedOccurrences: [{ ...forecastWithAccount.accounts[0].occurrences[0], date: "2025-12-01" }],
+        },
+      ],
+      unplannedCardDues: [{
+        cardStatementId: statementId,
+        accountId: "00000000-0000-4000-8000-0000000000cc",
+        accountName: "Synthetic card",
+        currency: "XAA",
+        statementBalance: "300.0000",
+        paymentDueDate: "2026-04-01",
+      }],
+    };
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return withDues;
+      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: commitment.nextDueDate, candidates: [] };
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    const notProjected = (await screen.findByRole("heading", { name: "Not projected" })).parentElement as HTMLElement;
+    fireEvent.click(within(notProjected).getByRole("button", { name: "Settle" }));
+    expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan payment" }));
+    expect(screen.getByRole("heading", { name: "Plan the card payment" })).toBeTruthy();
+    expect((screen.getByLabelText("Label") as HTMLInputElement).value).toBe("Synthetic card");
+    expect((screen.getByLabelText(/Amount/) as HTMLInputElement).value).toBe("-300.0000");
+    expect((screen.getByLabelText("First date") as HTMLInputElement).value).toBe("2026-04-01");
+  });
+
+  it("shows a commitments load failure with a retry that refetches", async () => {
+    let calls = 0;
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") {
+        calls += 1;
+        if (calls === 1) return Promise.reject(new ApiError(500, "boom"));
+        return { commitments: [] } satisfies CommitmentsResponse;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(await screen.findByText("The commitments could not be loaded.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("No commitments are recorded yet.")).toBeTruthy();
   });
 
   it("offers History for a finished commitment", async () => {
