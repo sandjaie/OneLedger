@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import type { apiFetch } from "@/lib/api/client";
 import { errorText } from "@/lib/api/client";
@@ -84,15 +84,17 @@ export function ValuationPanel({
   const [sourceNote, setSourceNote] = useState("");
   const [reviewBusy, setReviewBusy] = useState(false);
   const [reviewProblem, setReviewProblem] = useState("");
-  const [preview, setPreview] = useState<ValuationSnapshotPreview>();
+  const [preview, setPreview] = useState<{ shown: ValuationSnapshotPreview; body: ValuationSnapshotCreate }>();
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmProblem, setConfirmProblem] = useState("");
   const [recorded, setRecorded] = useState<ValuationSnapshotRow>();
+  const draft = useRef(0);
 
-  // Editing any field after a review invalidates it: the owner must review again before
-  // confirming, so a stale preview is never confirmed against a since-changed draft.
+  // Editing any field invalidates a shown or pending review: the owner must review again, and
+  // confirm posts exactly the reviewed body, never the since-changed draft.
   function editField<T>(setter: (value: T) => void) {
     return (value: T) => {
+      draft.current += 1;
       setPreview(undefined);
       setConfirmProblem("");
       setter(value);
@@ -130,6 +132,7 @@ export function ValuationPanel({
     setReviewProblem("");
     setPreview(undefined);
     setRecorded(undefined);
+    const reviewedDraft = draft.current;
     try {
       const body: ValuationSnapshotCreate = {
         asOfDate,
@@ -137,15 +140,20 @@ export function ValuationPanel({
         method,
         confidence,
         sourceNote: sourceNote || null,
-        dryRun: true,
       };
       const shown = await request<ValuationSnapshotPreview>(
         `/accounts/${accountId}/valuation-snapshots`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, dryRun: true }),
+        },
       );
-      setPreview(shown);
+      if (draft.current === reviewedDraft) setPreview({ shown, body });
     } catch (error) {
-      setReviewProblem(errorText(error, "This valuation could not be reviewed. Retry."));
+      if (draft.current === reviewedDraft) {
+        setReviewProblem(errorText(error, "This valuation could not be reviewed. Retry."));
+      }
     } finally {
       setReviewBusy(false);
     }
@@ -156,17 +164,10 @@ export function ValuationPanel({
     setConfirmBusy(true);
     setConfirmProblem("");
     try {
-      const body: ValuationSnapshotCreate = {
-        asOfDate,
-        valueNative,
-        method,
-        confidence,
-        sourceNote: sourceNote || null,
-      };
       const row = await request<ValuationSnapshotRow>(`/accounts/${accountId}/valuation-snapshots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(preview.body),
       });
       setRecorded(row);
       setPreview(undefined);
@@ -282,8 +283,9 @@ export function ValuationPanel({
           {preview && (
             <div className="valuation-preview">
               <p role="status">
-                Review: {moneyText(preview.valueNative, currency, currencies)} as of {preview.asOfDate} — FX
-                rate date {preview.fxRateDate}, {moneyText(preview.valueBase, baseCurrency, currencies)} in the
+                Review: {moneyText(preview.shown.valueNative, currency, currencies)} as of {preview.shown.asOfDate}
+                {" "}— FX rate date {preview.shown.fxRateDate},{" "}
+                {moneyText(preview.shown.valueBase, baseCurrency, currencies)} in the
                 base currency. Nothing is recorded yet; a later valuation would supersede this one only from its
                 own date.
               </p>

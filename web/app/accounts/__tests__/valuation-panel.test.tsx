@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ValuationPanel } from "@/app/accounts/valuation-panel";
@@ -184,6 +184,41 @@ describe("ValuationPanel", () => {
     expect(await screen.findByText(/Review:/)).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Value (XBB)"), { target: { value: "1000.0001" } });
+
+    expect(screen.queryByText(/Review:/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm and record" })).toBeNull();
+  });
+
+  it("ignores a review that returns after a field was edited", async () => {
+    let answer: (value: ValuationSnapshotPreview) => void = () => undefined;
+    const request = requestFrom((path, init) => {
+      if (path === `/accounts/${ACCOUNT_ID}/valuations`) return valuations();
+      if (path === `/accounts/${ACCOUNT_ID}/valuation-snapshots` && init?.method === "POST") {
+        return new Promise<ValuationSnapshotPreview>((resolve) => {
+          answer = resolve;
+        });
+      }
+      throw new Error(`Unexpected synthetic route ${path} ${init?.method}`);
+    });
+
+    render(
+      <ValuationPanel
+        accountId={ACCOUNT_ID}
+        accountName="Synthetic retirement account"
+        baseCurrency="XAA"
+        currencies={currencies}
+        currency="XBB"
+        onChanged={vi.fn()}
+        onClose={vi.fn()}
+        request={request}
+      />,
+    );
+    await screen.findByText("No valuation recorded yet.");
+
+    fireEvent.change(screen.getByLabelText("Value (XBB)"), { target: { value: "1000.0000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review valuation" }));
+    fireEvent.change(screen.getByLabelText("Value (XBB)"), { target: { value: "2000.0000" } });
+    await act(async () => answer(SNAPSHOT_PREVIEW));
 
     expect(screen.queryByText(/Review:/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirm and record" })).toBeNull();
