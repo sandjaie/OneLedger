@@ -43,6 +43,7 @@ from .routes import (
     payslips,
     plans,
     portfolio,
+    register,
     rules,
     transactions,
     transfers,
@@ -212,6 +213,7 @@ app.include_router(payslips.router)
 app.include_router(plans.router)
 app.include_router(goals.router)
 app.include_router(emergency_reserve.router)
+app.include_router(register.router)
 app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)

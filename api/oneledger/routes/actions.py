@@ -27,6 +27,7 @@ from ..auth import OwnerSession, require_owner
 from ..coverage import previous_month
 from ..db import connect
 from ..emergency import coverage as emergency_coverage
+from ..register_records import register_action_items
 from ..resources import (
     account_native_values,
     eligible_account_ids,
@@ -41,7 +42,7 @@ from .plans import DUE_WINDOW_DAYS, Certainty, _commitment_progress
 
 router = APIRouter(tags=["actions"])
 
-ActionKind = Literal["commitment", "card_due", "follow_up", "goal", "reserve"]
+ActionKind = Literal["commitment", "card_due", "follow_up", "goal", "reserve", "record"]
 ActionReason = Literal[
     "commitment_overdue",
     "commitment_due",
@@ -49,7 +50,17 @@ ActionReason = Literal[
     "follow_up",
     "goal_shortfall",
     "reserve_below_target",
+    "renewal_due",
+    "maturity_due",
+    "deadline_due",
+    "review_due",
 ]
+_RECORD_REASON: dict[str, ActionReason] = {
+    "renewal": "renewal_due",
+    "maturity": "maturity_due",
+    "deadline": "deadline_due",
+    "review": "review_due",
+}
 FollowUpState = Literal["open", "completed", "dismissed"]
 
 _SNOOZE_MAX_DAYS = 366
@@ -106,6 +117,7 @@ class ActionRow(BaseModel):
     commitmentId: UUID | None
     cardStatementId: UUID | None
     actionItemId: UUID | None
+    registerRecordId: UUID | None
 
 
 class FollowUpRow(BaseModel):
@@ -281,6 +293,7 @@ def action_list(
                 commitmentId=commitment_id,
                 cardStatementId=None,
                 actionItemId=None,
+                registerRecordId=None,
             )
         )
 
@@ -318,6 +331,7 @@ def action_list(
                 commitmentId=None,
                 cardStatementId=statement_id,
                 actionItemId=None,
+                registerRecordId=None,
             )
         )
 
@@ -345,6 +359,7 @@ def action_list(
                 commitmentId=None,
                 cardStatementId=None,
                 actionItemId=item_id,
+                registerRecordId=None,
             )
         )
 
@@ -372,6 +387,7 @@ def action_list(
                 commitmentId=None,
                 cardStatementId=None,
                 actionItemId=None,
+                registerRecordId=None,
             )
         )
 
@@ -397,6 +413,39 @@ def action_list(
                 commitmentId=None,
                 cardStatementId=None,
                 actionItemId=None,
+                registerRecordId=None,
+            )
+        )
+
+    # Phase 3.4 Task 1: a policy's renewal, a deposit's maturity, an incomplete administration
+    # deadline, and a review due (spec `action_list`, items 1-4) — register_records.py computes the
+    # windows and the review rule so this module reads no register_record row directly.
+    for item in register_action_items(cur, household_id, as_of):
+        action_key = (
+            f"record.{item.recordId}.review"
+            if item.subKind == "review"
+            else f"record.{item.recordId}.{item.subKind}.{item.dueDate.isoformat()}"  # type: ignore[union-attr]
+        )
+        rows.append(
+            ActionRow(
+                actionKey=action_key,
+                kind="record",
+                reason=_RECORD_REASON[item.subKind],
+                title=item.title,
+                dueDate=item.dueDate,
+                overdue=item.overdue,
+                snoozedUntil=marks.get(action_key),
+                accountId=item.accountId,
+                accountName=item.accountName,
+                amount=None if item.amount is None else str(item.amount),
+                remaining=None if item.amount is None else str(item.amount),
+                partlyPaid=False,
+                currency=item.currency,
+                certainty=None,
+                commitmentId=None,
+                cardStatementId=None,
+                actionItemId=None,
+                registerRecordId=item.recordId,
             )
         )
 
@@ -690,10 +739,11 @@ def _assert_key_target_exists(
     cur: psycopg.Cursor[Any], household_id: UUID, match: re.Match[str]
 ) -> None:
     """404 unless the marked object exists in the household (spec "Card dues and actions (Task
-    2)", widened by "Emergency reserve and action keys (V52)"): a follow-up by id, a commitment
-    whose `next_due_date` is still the key's date, a card statement by id, an active goal, or the
-    owner's own household id for `reserve.`. A `record.` key (Phase 3.4) is parsed but names no
-    item yet, so it always 404s."""
+    2)", widened by "Emergency reserve and action keys (V52)" and Phase 3.4's register): a
+    follow-up by id, a commitment whose `next_due_date` is still the key's date, a card statement
+    by id, an active goal, the owner's own household id for `reserve.`, or an unarchived register
+    record whose `key_date` still matches a dated `record.` key (spec "snooze key target
+    existence")."""
     if match["followup_id"] is not None:
         cur.execute(
             "SELECT 1 FROM action_item WHERE household_id = %s AND id = %s",
@@ -727,7 +777,21 @@ def _assert_key_target_exists(
         if UUID(match["reserve_id"]) != household_id:
             raise HTTPException(status_code=404, detail="reserve not found")
     else:
-        raise HTTPException(status_code=404, detail="record not found")
+        record_id = UUID(match["record_id"])
+        if match["record_date"] is not None:
+            cur.execute(
+                """SELECT 1 FROM register_record WHERE household_id = %s AND id = %s
+                    AND archived_at IS NULL AND key_date = %s""",
+                (household_id, record_id, date.fromisoformat(match["record_date"])),
+            )
+        else:
+            cur.execute(
+                "SELECT 1 FROM register_record WHERE household_id = %s AND id = %s "
+                "AND archived_at IS NULL",
+                (household_id, record_id),
+            )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="record not found")
 
 
 @router.put("/actions/marks/{action_key}", status_code=204)
