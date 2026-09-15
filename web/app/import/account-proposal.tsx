@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { EyeIcon } from "@/app/accounts/eye-icon";
 import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money/format";
 import type {
   AccountCreate,
@@ -213,6 +213,7 @@ export function AccountProposalPanel({
       const account = await request<AccountRow>("/parse/account", {
         method: "POST",
         body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       await onResolved(account);
     } catch (error) {
@@ -273,6 +274,7 @@ export function AccountProposalPanel({
         RevealedStatementIdentifier | UnavailableStatementIdentifier
       >("/parse/identifier/reveal", {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         body: statementBody(file, password, layoutId),
         signal: controller.signal,
       });

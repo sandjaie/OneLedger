@@ -86,6 +86,14 @@ export function MerchantKnowledge({ categories, request }: Props) {
   const activeCategories = categories.filter((category) => category.isActive);
   const listPath = `/merchant-knowledge${includeInactive ? "?includeInactive=true" : ""}`;
 
+  // Settings renders its sections only after the workspace loads, so the browser's own jump to
+  // `#merchant-knowledge-title` (linked from Classify) happens before this heading exists.
+  useEffect(() => {
+    if (window.location.hash === "#merchant-knowledge-title") {
+      document.getElementById("merchant-knowledge-title")?.scrollIntoView?.();
+    }
+  }, []);
+
   // The state settles in the promise's continuation, not the effect's own body, so a mutation
   // handler's `reload()` (a plain async function, not called from an effect) is the only path
   // that ever calls `setRows` synchronously inside a React effect.

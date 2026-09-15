@@ -212,6 +212,9 @@ export function WealthScreen({ currency, currencies, request }: Props) {
       {state === "ready" && history && (
         <>
           {history.months.length > 0 && (
+            <p className="lede">The chart shows month-end net worth in {history.baseCurrency}.</p>
+          )}
+          {history.months.length > 0 && (
             <div
               aria-label={`Month-end net worth in ${history.baseCurrency}, as a bar chart — the table below states each figure`}
               className="wealth-chart"

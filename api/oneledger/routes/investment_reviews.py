@@ -22,7 +22,13 @@ _LIST_SQL = """
       LEFT JOIN holding h ON h.household_id = r.household_id AND h.id = r.holding_id
       LEFT JOIN security ON security.id = h.security_id
       LEFT JOIN account ON account.id = h.account_id
+      LEFT JOIN investment_import imp ON imp.household_id = r.household_id AND imp.id = r.import_id
      WHERE r.household_id = %s AND r.status = 'open'
+       -- Only reviews the owner can act on: an event's lot allocation, or an import still open.
+       -- ponytail: reviews on finished imports stay counted in Data Quality, not listed here;
+       -- add an acknowledge route when the owner needs to clear them.
+       AND (r.investment_transaction_id IS NOT NULL
+            OR imp.status IN ('staged', 'awaiting_review', 'partially_committed'))
      ORDER BY r.created_at DESC, r.id DESC
      LIMIT %s OFFSET %s
 """
