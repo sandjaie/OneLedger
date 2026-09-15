@@ -73,6 +73,8 @@ FETCHED_ROW = (
     Decimal("-4500.0000"),
     None,
     Decimal("20000.0000"),
+    "ledger_balance",
+    None,
 )
 
 CLOSED_ROW = (
@@ -96,6 +98,8 @@ CLOSED_ROW = (
     None,
     Decimal("100.0000"),
     None,
+    None,
+    "ledger_balance",
     None,
 )
 

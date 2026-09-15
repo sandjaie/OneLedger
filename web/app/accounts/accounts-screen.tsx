@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { EyeIcon } from "@/app/accounts/eye-icon";
+import { ValuationPanel } from "@/app/accounts/valuation-panel";
 import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
 import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
 import { formatOwed, moneyText } from "@/lib/money/format";
@@ -24,6 +25,7 @@ type Props = {
   totals: Array<AccountGroupTotal>;
   institutions: Array<InstitutionRow>;
   currencies: Array<CurrencyRow>;
+  baseCurrency: string;
   request: typeof apiFetch;
   onChanged: () => void;
 };
@@ -132,6 +134,14 @@ function signedOpening(accountType: string, value: string) {
   }
   return `-${value}`;
 }
+
+type ValuationMode = NonNullable<AccountRow["valuationMode"]>;
+
+const VALUATION_MODE_LABEL: Record<ValuationMode, string> = {
+  ledger_balance: "Ledger balance",
+  holdings: "Holdings",
+  snapshot: "Dated valuation",
+};
 
 function markFor(account: AccountRow, institutions: Array<InstitutionRow>) {
   const match = institutions.find((row) => row.id === account.institutionId);
@@ -326,11 +336,13 @@ export function AccountsScreen({
   totals,
   institutions,
   currencies,
+  baseCurrency,
   request,
   onChanged,
 }: Props) {
-  const [mode, setMode] = useState<"view" | "add" | "edit">("view");
+  const [mode, setMode] = useState<"view" | "add" | "edit" | "valuation">("view");
   const [editing, setEditing] = useState<AccountRow>();
+  const [valuing, setValuing] = useState<AccountRow>();
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(currencies, institutions));
   const [addingInstitution, setAddingInstitution] = useState(false);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionCreate>({
@@ -372,6 +384,12 @@ export function AccountsScreen({
     setMode("edit");
     setEditing(account);
     setDraft(draftFrom(account));
+    setProblem(undefined);
+  }
+
+  function openValuation(account: AccountRow) {
+    setMode("valuation");
+    setValuing(account);
     setProblem(undefined);
   }
 
@@ -712,7 +730,15 @@ export function AccountsScreen({
   }
 
   function renderRow(account: AccountRow) {
-    const meta = [account.institutionName, account.accountSubtype, account.currency].filter(Boolean).join(" · ");
+    const meta = [
+      account.institutionName,
+      account.accountSubtype,
+      account.currency,
+      account.accountClass === "asset" && account.valuationMode
+        ? VALUATION_MODE_LABEL[account.valuationMode]
+        : null,
+    ].filter(Boolean).join(" · ");
+    const needsFirstValuation = account.valuationMode === "snapshot" && !account.latestValuationDate;
     return (
       <tr className="account-card" key={account.id}>
         <td className="account-mark">{markFor(account, institutions)}</td>
@@ -780,6 +806,20 @@ export function AccountsScreen({
             >
               Edit
             </button>
+            {account.accountClass === "asset" && account.isActive && (
+              <button
+                aria-label={
+                  needsFirstValuation
+                    ? `Add valuation for ${account.name}`
+                    : `Valuation for ${account.name}`
+                }
+                disabled={locked}
+                onClick={() => openValuation(account)}
+                type="button"
+              >
+                {needsFirstValuation ? "Add valuation" : "Valuation"}
+              </button>
+            )}
             {account.isActive ? (
               <button
                 aria-label={`Close ${account.name}`}
@@ -835,7 +875,25 @@ export function AccountsScreen({
       </div>
 
       {problem && mode === "view" && <p className="inline-alert" role="alert">{problem}</p>}
-      {mode !== "view" && renderForm()}
+      {(mode === "add" || mode === "edit") && renderForm()}
+      {mode === "valuation" && valuing && (
+        <ValuationPanel
+          accountId={valuing.id}
+          accountName={valuing.name}
+          baseCurrency={baseCurrency}
+          currencies={currencies}
+          currency={valuing.currency}
+          onChanged={() => {
+            holdUntilRefresh();
+            onChanged();
+          }}
+          onClose={() => {
+            setMode("view");
+            setValuing(undefined);
+          }}
+          request={request}
+        />
+      )}
 
       {groups.map((key) => {
         const [accountClass, country] = key.split("\0") as ["asset" | "liability", string];

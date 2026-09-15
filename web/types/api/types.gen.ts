@@ -256,6 +256,14 @@ export type AccountRow = {
      */
     creditLimit: string | null;
     /**
+     * Valuationmode
+     */
+    valuationMode?: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Latestvaluationdate
+     */
+    latestValuationDate?: string | null;
+    /**
      * Identifiers
      */
     identifiers: Array<AccountIdentifierRow>;
@@ -333,6 +341,32 @@ export type AccountUpdate = {
      * Acknowledgeopeningbalance
      */
     acknowledgeOpeningBalance: boolean;
+};
+
+/**
+ * AccountValuationsResponse
+ */
+export type AccountValuationsResponse = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Currentmode
+     */
+    currentMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Currenteffectivefrom
+     */
+    currentEffectiveFrom: string;
+    /**
+     * Periods
+     */
+    periods: Array<ValuationPeriodRow>;
+    /**
+     * Snapshots
+     */
+    snapshots: Array<ValuationSnapshotRow>;
 };
 
 /**
@@ -7314,6 +7348,180 @@ export type ValidationError = {
 };
 
 /**
+ * ValuationModeCreate
+ */
+export type ValuationModeCreate = {
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Effectivefrom
+     */
+    effectiveFrom: string;
+};
+
+/**
+ * ValuationModeResponse
+ */
+export type ValuationModeResponse = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Effectivefrom
+     */
+    effectiveFrom: string;
+};
+
+/**
+ * ValuationPeriodRow
+ */
+export type ValuationPeriodRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Effectivefrom
+     */
+    effectiveFrom: string;
+    /**
+     * Effectiveto
+     */
+    effectiveTo: string | null;
+};
+
+/**
+ * ValuationSnapshotCreate
+ */
+export type ValuationSnapshotCreate = {
+    /**
+     * Asofdate
+     */
+    asOfDate: string;
+    /**
+     * Valuenative
+     */
+    valueNative: string;
+    /**
+     * Method
+     */
+    method: 'owner_entered' | 'statement';
+    /**
+     * Confidence
+     */
+    confidence: 'high' | 'medium' | 'low';
+    /**
+     * Sourcenote
+     */
+    sourceNote?: string | null;
+    /**
+     * Dryrun
+     */
+    dryRun?: boolean;
+};
+
+/**
+ * ValuationSnapshotPreview
+ *
+ * A dry-run's unsaved figures: no `id`/`createdAt` because nothing was recorded.
+ */
+export type ValuationSnapshotPreview = {
+    /**
+     * Asofdate
+     */
+    asOfDate: string;
+    /**
+     * Valuenative
+     */
+    valueNative: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string;
+};
+
+/**
+ * ValuationSnapshotRow
+ */
+export type ValuationSnapshotRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Asofdate
+     */
+    asOfDate: string;
+    /**
+     * Valuenative
+     */
+    valueNative: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string;
+    /**
+     * Fxratetobase
+     */
+    fxRateToBase: string;
+    /**
+     * Fxratetosecondary
+     */
+    fxRateToSecondary: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string;
+    /**
+     * Method
+     */
+    method: 'owner_entered' | 'market_quote' | 'indexed' | 'statement';
+    /**
+     * Confidence
+     */
+    confidence: 'high' | 'medium' | 'low';
+    /**
+     * Sourcenote
+     */
+    sourceNote: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+};
+
+/**
  * WealthHistoryResponse
  */
 export type WealthHistoryResponse = {
@@ -10429,6 +10637,104 @@ export type HoldingDetailPortfolioHoldingsHoldingIdGetResponses = {
 };
 
 export type HoldingDetailPortfolioHoldingsHoldingIdGetResponse = HoldingDetailPortfolioHoldingsHoldingIdGetResponses[keyof HoldingDetailPortfolioHoldingsHoldingIdGetResponses];
+
+export type ListValuationsAccountsAccountIdValuationsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/accounts/{account_id}/valuations';
+};
+
+export type ListValuationsAccountsAccountIdValuationsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListValuationsAccountsAccountIdValuationsGetError = ListValuationsAccountsAccountIdValuationsGetErrors[keyof ListValuationsAccountsAccountIdValuationsGetErrors];
+
+export type ListValuationsAccountsAccountIdValuationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AccountValuationsResponse;
+};
+
+export type ListValuationsAccountsAccountIdValuationsGetResponse = ListValuationsAccountsAccountIdValuationsGetResponses[keyof ListValuationsAccountsAccountIdValuationsGetResponses];
+
+export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostData = {
+    body: ValuationSnapshotCreate;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/accounts/{account_id}/valuation-snapshots';
+};
+
+export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostError = CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostErrors[keyof CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostErrors];
+
+export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses = {
+    /**
+     * Response 200 Create Valuation Snapshot Accounts  Account Id  Valuation Snapshots Post
+     *
+     * Identical replay, or a dryRun preview (never persisted)
+     */
+    200: ValuationSnapshotRow | ValuationSnapshotPreview;
+    /**
+     * Response Create Valuation Snapshot Accounts  Account Id  Valuation Snapshots Post
+     *
+     * Successful Response
+     */
+    201: ValuationSnapshotRow | ValuationSnapshotPreview;
+};
+
+export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponse = CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses[keyof CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses];
+
+export type ChangeValuationModeAccountsAccountIdValuationModePostData = {
+    body: ValuationModeCreate;
+    path: {
+        /**
+         * Account Id
+         */
+        account_id: string;
+    };
+    query?: never;
+    url: '/accounts/{account_id}/valuation-mode';
+};
+
+export type ChangeValuationModeAccountsAccountIdValuationModePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ChangeValuationModeAccountsAccountIdValuationModePostError = ChangeValuationModeAccountsAccountIdValuationModePostErrors[keyof ChangeValuationModeAccountsAccountIdValuationModePostErrors];
+
+export type ChangeValuationModeAccountsAccountIdValuationModePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ValuationModeResponse;
+};
+
+export type ChangeValuationModeAccountsAccountIdValuationModePostResponse = ChangeValuationModeAccountsAccountIdValuationModePostResponses[keyof ChangeValuationModeAccountsAccountIdValuationModePostResponses];
 
 export type ParseStatementParsePostData = {
     body: BodyParseStatementParsePost;
