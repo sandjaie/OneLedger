@@ -14,8 +14,8 @@ Updated: 15 September 2026.
 | --- | --- | --- |
 | Current outcome | **Phase 2.4 — data quality and recovery** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
 | Outcome state | **Phase 2 implementation complete** — Phases 2.1–2.4 planned and reviewed together on 14 Sep 2026, all delivered; owner acceptance open on each | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
-| Next product action | Begin Phase 3.1 — commitments and actions | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
-| Current implementation task | UI completion and UI gaps groups delivered (PRs #214–#221): every P1, P2 and P3 gap from the 15 Sep 2026 UI coverage audit is closed; no implementation task is in flight | [UI completion plan](plans/2026-09-15-ui-completion.md) · [UI gaps plan](plans/2026-09-15-ui-gaps-p2-p3.md) |
+| Next product action | Phase 3.1 Task 1 — commitment lifecycle and settlement | [Phase 3.1 plan](plans/2026-09-15-phase-3-1-commitments-actions.md#task-1--commitment-lifecycle-and-settlement) |
+| Current implementation task | Phases 3.1–3.2 specified and planned on 15 Sep 2026 and reviewed once together (dispatch after fixes; five blocking findings applied, Phase 3.2 split into two branches); Phase 3.1 Task 1 on `feature/p3-1-commitment-lifecycle` | [Phase 3.1 plan](plans/2026-09-15-phase-3-1-commitments-actions.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
 
 ## Canonical phase status
 
@@ -38,8 +38,8 @@ Updated: 15 September 2026.
 | 2.2 — wealth history and attribution | **Implementation complete; owner acceptance open** | [Phase 2.2 specification](specs/2026-09-14-phase-2-2-wealth-history-attribution.md) · [Phase 2.2 plan](plans/2026-09-14-phase-2-2-wealth-history-attribution.md) |
 | 2.3 — classification learning and review depth | **Implementation complete; owner acceptance open** | [Phase 2.3 specification](specs/2026-09-14-phase-2-3-classification-learning.md) · [Phase 2.3 plan](plans/2026-09-14-phase-2-3-classification-learning.md) |
 | 2.4 — data quality and recovery | **Implementation complete; owner acceptance open** | [Phase 2.4 specification](specs/2026-09-14-phase-2-4-data-quality-recovery.md) · [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
-| 3.1 — commitments and actions | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
-| 3.2 — cash forecast and monthly review | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
+| 3.1 — commitments and actions | **In progress** — Task 1 of 2 | [Phase 3.1 specification](specs/2026-09-15-phase-3-1-commitments-actions.md) · [Phase 3.1 plan](plans/2026-09-15-phase-3-1-commitments-actions.md) |
+| 3.2 — cash forecast and monthly review | **Planned and reviewed** — two branches | [Phase 3.2 specification](specs/2026-09-15-phase-3-2-cash-forecast-review.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
 | 3.3 — goals and emergency reserve | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 3.4 — protection and administration | **Planned** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | 4.1 — budgets and recurring discovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
