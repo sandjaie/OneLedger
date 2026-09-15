@@ -147,10 +147,10 @@ def live() -> Iterator[PlansFixture]:
     finally:
         app.dependency_overrides.clear()
         with connection.cursor() as cur:
-            # commitment is this branch's new table; other suites delete accounts and
-            # truncate transaction, so a fresh synthetic household per run is enough for
-            # everything else.
-            cur.execute("TRUNCATE commitment CASCADE")
+            # commitment is this branch's new table; Phase 3.1's forecast tests post real
+            # transactions (to settle a commitment), so transaction is truncated too — a fresh
+            # synthetic household per run is enough for everything else.
+            cur.execute("TRUNCATE commitment, transaction CASCADE")
         connection.commit()
         connection.close()
 
@@ -475,3 +475,212 @@ def test_forecast_writes_nothing(live: PlansFixture) -> None:
     assert commitments_after == commitments_before
     assert balance_after == balance_before
     assert after_dashboard == before_dashboard
+
+
+# --- Phase 3.1 Task 1: certainty, next due date and settlement's effect on the forecast --------
+
+
+def _raw_txn(
+    fixture: PlansFixture,
+    account_id: UUID,
+    amount: str,
+    booked_date: str,
+    txn_type: str = "expense",
+) -> UUID:
+    """A posting inserted straight into the ledger — this file sets balances directly rather than
+    posting through the manual-entry route (see the module docstring), and a settlement test
+    needs one real posting to link."""
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction (household_id, account_id, booked_date, description_raw,
+                       amount, currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                       amount_base, amount_secondary, txn_type, source, dedupe_hash)
+               VALUES (%s, %s, %s, 'SYNTHETIC PLANS POSTING', %s, %s, %s, 1, 1, %s, %s, %s,
+                       'manual', %s)
+               RETURNING id""",
+            (
+                fixture.owner.household_id,
+                account_id,
+                booked_date,
+                Decimal(amount),
+                fixture.currency,
+                booked_date,
+                Decimal(amount),
+                Decimal(amount),
+                txn_type,
+                f"plans-{uuid4()}",
+            ),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def test_certainty_and_next_due_date_round_trip(live: PlansFixture) -> None:
+    created = client().post(
+        "/commitments",
+        json=_body(live, certainty="estimated", nextDueDate="2026-03-01", firstDate="2026-01-01"),
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201, created.text
+    row = created.json()
+    assert row["certainty"] == "estimated"
+    assert row["nextDueDate"] == "2026-03-01"
+    assert row["status"] in {"upcoming", "due", "overdue"}
+    assert row["paidTowardNext"] == "0.0000"
+    assert row["partlyPaid"] is False
+    assert row["remainingNext"] == "5000.0000"
+
+    listed = client().get("/commitments", headers=ORIGIN).json()["commitments"][0]
+    assert listed["certainty"] == "estimated"
+    assert listed["nextDueDate"] == "2026-03-01"
+
+    updated = client().put(
+        f"/commitments/{row['id']}",
+        json={
+            k: v
+            for k, v in _body(live, certainty="confirmed", nextDueDate="2026-04-01").items()
+            if k != "idempotencyKey"
+        },
+        headers=ORIGIN,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["certainty"] == "confirmed"
+    assert updated.json()["nextDueDate"] == "2026-04-01"
+
+
+def test_default_next_due_date_for_a_past_start_monthly_commitment(live: PlansFixture) -> None:
+    # live.account_id's balance date is 2026-01-01 (the fixture's opening_balance_date).
+    created = client().post(
+        "/commitments",
+        json=_body(live, firstDate="2025-06-01"),
+        headers=ORIGIN,
+    )
+    assert created.status_code == 201, created.text
+    # The schedule is 2025-06-01, 07-01, ..., 2026-01-01; the first occurrence strictly after
+    # the account's 2026-01-01 balance date is 2026-02-01.
+    assert created.json()["nextDueDate"] == "2026-02-01"
+
+
+def test_schedule_and_sign_edits_refused_once_resolved(live: PlansFixture) -> None:
+    created = client().post(
+        "/commitments", json=_body(live, nextDueDate="2026-02-01"), headers=ORIGIN
+    )
+    commitment_id = created.json()["id"]
+    resolved = client().post(
+        f"/commitments/{commitment_id}/resolutions",
+        json={"dueDate": "2026-02-01", "kind": "completed"},
+        headers=ORIGIN,
+    )
+    assert resolved.status_code == 201, resolved.text
+
+    account_changed = client().put(
+        f"/commitments/{commitment_id}",
+        json={
+            k: v
+            for k, v in _body(live, accountId=str(live.secondary_account_id)).items()
+            if k != "idempotencyKey"
+        }
+        | {"currency": live.secondary_currency},
+        headers=ORIGIN,
+    )
+    assert account_changed.status_code == 409
+    assert "keeps its account and schedule" in account_changed.json()["detail"]
+
+    sign_changed = client().put(
+        f"/commitments/{commitment_id}",
+        json={k: v for k, v in _body(live, amount="-5000.0000").items() if k != "idempotencyKey"},
+        headers=ORIGIN,
+    )
+    assert sign_changed.status_code == 409
+    assert "keeps its account and schedule" in sign_changed.json()["detail"]
+
+    end_before_next_due = client().put(
+        f"/commitments/{commitment_id}",
+        json={k: v for k, v in _body(live, endDate="2026-02-15").items() if k != "idempotencyKey"},
+        headers=ORIGIN,
+    )
+    assert end_before_next_due.status_code == 422
+    assert "end date must not fall before the next due date" in end_before_next_due.json()["detail"]
+
+    # Label, certainty and an endDate on or after the new next due date remain editable.
+    label_changed = client().put(
+        f"/commitments/{commitment_id}",
+        json={
+            k: v
+            for k, v in _body(live, label="Synthetic salary renamed", endDate="2026-06-01").items()
+            if k != "idempotencyKey"
+        },
+        headers=ORIGIN,
+    )
+    assert label_changed.status_code == 200, label_changed.text
+    assert label_changed.json()["label"] == "Synthetic salary renamed"
+
+
+def test_forecast_omits_a_settled_occurrence_and_projects_a_part_paid_remainder(
+    live: PlansFixture,
+) -> None:
+    settled = client().post(
+        "/commitments",
+        json=_body(live, label="Synthetic settled", nextDueDate="2026-02-01"),
+        headers=ORIGIN,
+    )
+    settled_id = settled.json()["id"]
+    # Booked well before the account's balance date used below (2026-01-15) — the eligibility
+    # trigger has no date-proximity rule, and keeping the posting's date out of the forecast's
+    # own (balance-date, asOf+90] window isolates the *new* next-due-date filter this test is
+    # about from the pre-existing "unposted after the balance date" rule.
+    settle_txn = _raw_txn(live, live.account_id, "5000.0000", "2026-01-05", txn_type="income")
+    settle = client().post(
+        f"/commitments/{settled_id}/resolutions",
+        json={
+            "dueDate": "2026-02-01",
+            "kind": "payment",
+            "transactionId": str(settle_txn),
+            "closes": True,
+        },
+        headers=ORIGIN,
+    )
+    assert settle.status_code == 201, settle.text
+
+    part_paid = client().post(
+        "/commitments",
+        json=_body(
+            live, label="Synthetic part paid", idempotencyKey=str(uuid4()), nextDueDate="2026-02-01"
+        ),
+        headers=ORIGIN,
+    )
+    part_paid_id = part_paid.json()["id"]
+    part_txn = _raw_txn(live, live.account_id, "3000.0000", "2026-01-10", txn_type="income")
+    part = client().post(
+        f"/commitments/{part_paid_id}/resolutions",
+        json={
+            "dueDate": "2026-02-01",
+            "kind": "payment",
+            "transactionId": str(part_txn),
+            "closes": False,
+        },
+        headers=ORIGIN,
+    )
+    assert part.status_code == 201, part.text
+    assert part.json()["remainingNext"] == "2000.0000"
+
+    response = client().get("/forecast?asOf=2026-01-15", headers=ORIGIN)
+    assert response.status_code == 200
+    account = next(a for a in response.json()["accounts"] if a["accountId"] == str(live.account_id))
+    occurrences = account["occurrences"]
+    # The settled February occurrence is gone; the commitment's new open occurrence (March,
+    # advanced by closing February) still projects at its full, unpaid amount.
+    settled_shown = [o for o in occurrences if o["commitmentId"] == settled_id]
+    assert "2026-02-01" not in [o["date"] for o in settled_shown]
+    march = next(o for o in settled_shown if o["date"] == "2026-03-01")
+    assert march["amount"] == "5000.0000"
+
+    part_paid_shown = [o for o in occurrences if o["commitmentId"] == part_paid_id]
+    open_occurrence = next(o for o in part_paid_shown if o["date"] == "2026-02-01")
+    assert open_occurrence["amount"] == "2000.0000"
+    assert open_occurrence["certainty"] == "confirmed"
+    # A later, still-unpaid occurrence projects the full amount, not the remainder.
+    later_occurrence = next(o for o in part_paid_shown if o["date"] == "2026-03-01")
+    assert later_occurrence["amount"] == "5000.0000"
