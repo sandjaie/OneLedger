@@ -517,6 +517,19 @@ commitment only ever holds one open occurrence at a time. Its source is either t
 (<code>"owner"</code>) or a planned card statement (<code>"card_statement"</code>): a one-off, negative
 commitment the owner plans from a card statement's due amount, one open plan per statement.</p>
 <p><strong>Earmarking</strong> — Reserving existing resources for a goal or emergency reserve without moving money or changing wealth. The same resource cannot be reserved twice.</p>
+<p><strong>Reservation</strong> — A plan, not a ledger transaction: earmarking an amount of an asset
+account, or a whole account, for a goal (or, once eligible, the emergency reserve). It freezes its
+native amount and, for a goal, the rate into the goal's currency on the day it is made
+(<a href="../adr/0002-frozen-dual-currency-amounts.html">ADR-0002</a>) and never changes a balance,
+net worth or report. Immutable once made except a single release, which frees the resource and
+leaves wealth unchanged; an account may carry either any number of amount reservations or exactly
+one whole-account reservation, never both at once.</p>
+<p><strong>Goal</strong> — A target amount, currency (the household's base or secondary), date and
+priority, with an optional planned monthly contribution. Its current value splits into what was
+contributed, market movement and FX movement since each active reservation was made; a shortfall
+or surplus projects the planned monthly contribution to the target date. Closing a goal (achieved
+or abandoned) releases its active reservations and fixes it; its currency is fixed once it has any
+reservation, active or released.</p>
 <p><strong>Uncommitted resources</strong> — Accessible resources after accounting for applicable obligations and reservations once.</p>
 <p><strong>Emergency coverage</strong> — Eligible emergency resources divided by the user-selected monthly essential-spend baseline, with assumptions shown.</p>
 <p><strong>In transit</strong> — An internal movement awaiting settlement evidence. Shown separately from settled available cash; an estimated value must be labelled and cleared on settlement.</p>

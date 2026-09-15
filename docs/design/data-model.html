@@ -1073,6 +1073,23 @@ the review walks (coverage gaps, transfer candidates, uncategorised postings, mo
 upcoming commitments, open actions) is computed on read from tables this schema already has; no
 <code>SECURITY DEFINER</code> write path, the same convention as <code>action_item</code>/<code>action_mark</code>.
 Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V50</code> (applied).</p>
+<p>Phase 3.3 Task 1 adds <code>goal</code> (a target amount, currency, date and priority, with an
+optional planned monthly contribution) and <code>resource_reservation</code> — a reservation earmarks
+an amount of an asset account, or a whole account, for a goal; it is a plan, never a ledger
+transaction, so it changes no balance, net worth or report. A reservation freezes its native
+amount and, for a goal reservation, the rate into the goal's currency on the day it is made
+(<a href="../adr/0002-frozen-dual-currency-amounts.html">ADR-0002</a>); it is immutable once
+inserted except setting <code>released_at</code> and an optional reason once. A goal is edited in
+place until it closes, which releases its active reservations in the same transaction; a closed
+goal refuses every further update. Neither table carries a <code>SECURITY DEFINER</code> write path,
+the same plain owner-scoped convention as <code>commitment</code> and <code>action_item</code>/
+<code>action_mark</code>. <code>api/oneledger/resources.py</code> reads each reservable account's
+native value by reusing the existing valuation rules (<code>dashboard.VALUATION_PERIOD_FOR_ACCOUNT</code>,
+<code>investments.positions.read_positions</code>); <code>api/oneledger/goals.py</code> is the pure
+Decimal math that splits a reservation's current value into what was contributed, market movement
+and FX movement. An emergency-purpose reservation is refused until Phase 3.3 Task 2 adds
+<code>emergency_reserve</code> and <code>emergency_resource_account</code> and wires eligibility.
+Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V51</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
@@ -1243,6 +1260,10 @@ V49__card_source_and_actions.sql      commitment gains source_card_statement_id 
 V50__monthly_review.sql               monthly_review: one row per household per calendar month,
                                       holding completed_at once the owner marks that month's
                                       review complete; every step is computed on read (applied)
+V51__goals_and_reservations.sql       goal and resource_reservation: an earmark of an amount or a
+                                      whole asset account for a goal, immutable once inserted
+                                      except one release; a closed goal refuses further edits
+                                      (applied)
 
   then, in this order, numbered as they land:
 

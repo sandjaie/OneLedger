@@ -2880,6 +2880,94 @@ both routes name that month through a shared `coverage.previous_month()`.
 
 ---
 
+## `V51` (applied)
+
+### Goals and reservations
+
+Phase 3.3 Task 1. A reservation earmarks an amount of an asset account, or a whole account, for a
+goal; it is a plan, not a ledger transaction, so it never changes a balance, net worth or report.
+
+```sql
+CREATE TYPE goal_state AS ENUM ('active', 'achieved', 'abandoned');
+CREATE TYPE reservation_purpose AS ENUM ('goal', 'emergency');
+CREATE TYPE reservation_kind AS ENUM ('amount', 'whole_account');
+
+CREATE TABLE goal (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id         UUID NOT NULL REFERENCES household(id),
+  idempotency_key      UUID NOT NULL,
+  name                 TEXT NOT NULL,
+  target_amount        NUMERIC(20,4) NOT NULL,
+  target_currency      CHAR(3) NOT NULL REFERENCES currency(code),
+  target_date          DATE NOT NULL,
+  priority             SMALLINT NOT NULL,
+  planned_monthly      NUMERIC(20,4),
+  state                goal_state NOT NULL DEFAULT 'active',
+  closed_at            TIMESTAMPTZ,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_goal_household_id UNIQUE (household_id, id),
+  CONSTRAINT uq_goal_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT goal_name_is_bounded CHECK (char_length(name) BETWEEN 1 AND 80 AND name = btrim(name)),
+  CONSTRAINT goal_target_is_positive CHECK (target_amount > 0),
+  CONSTRAINT goal_priority_is_bounded CHECK (priority BETWEEN 1 AND 5),
+  CONSTRAINT goal_planned_is_nonnegative CHECK (planned_monthly IS NULL OR planned_monthly >= 0),
+  CONSTRAINT goal_closure_agrees CHECK ((state = 'active') = (closed_at IS NULL))
+);
+
+CREATE TABLE resource_reservation (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id           UUID NOT NULL REFERENCES household(id),
+  idempotency_key        UUID NOT NULL,
+  purpose                reservation_purpose NOT NULL,
+  goal_id                UUID,
+  account_id             UUID NOT NULL,
+  kind                   reservation_kind NOT NULL,
+  native_amount          NUMERIC(20,4) NOT NULL,
+  currency               CHAR(3) NOT NULL REFERENCES currency(code),
+  reserved_on            DATE NOT NULL,
+  rate_currency          CHAR(3) NOT NULL REFERENCES currency(code),
+  rate_at_reservation    NUMERIC(20,10) NOT NULL,
+  released_at            TIMESTAMPTZ,
+  release_reason         TEXT,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_reservation_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT fk_reservation_goal_scope FOREIGN KEY (household_id, goal_id)
+    REFERENCES goal (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_reservation_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT reservation_purpose_agrees CHECK ((purpose = 'goal') = (goal_id IS NOT NULL)),
+  CONSTRAINT reservation_amount_is_positive CHECK (native_amount > 0),
+  CONSTRAINT reservation_rate_is_positive CHECK (rate_at_reservation > 0),
+  CONSTRAINT reservation_release_agrees CHECK (
+    released_at IS NOT NULL OR release_reason IS NULL),
+  CONSTRAINT reservation_reason_is_bounded CHECK (release_reason IS NULL OR (
+    char_length(release_reason) BETWEEN 1 AND 200 AND release_reason = btrim(release_reason)))
+);
+CREATE UNIQUE INDEX uq_reservation_whole_account ON resource_reservation (account_id)
+  WHERE kind = 'whole_account' AND released_at IS NULL;
+CREATE INDEX idx_reservation_account_active ON resource_reservation (household_id, account_id)
+  WHERE released_at IS NULL;
+```
+
+`preserve_resource_reservation()` refuses `DELETE` and every `UPDATE` except setting
+`released_at` and `release_reason` once on a row whose `released_at` is null.
+`preserve_closed_goal()` refuses every `UPDATE` once a goal's `state` is off `'active'` — the
+close route's own state-and-`closed_at` write still fires because it runs while `OLD.state` is
+still `'active'`. Both tables enable `household_isolation FOR ALL TO authenticated`, the same
+plain owner-scoped convention as `commitment` (V43) and `action_item`/`action_mark` (V49) — no
+`SECURITY DEFINER` write path; both trigger functions are revoked from `PUBLIC`.
+
+`api/oneledger/resources.py` reads each active asset account's native value (ledger balance,
+latest in-period snapshot, or summed holdings) and every reservation; `api/oneledger/goals.py` is
+the pure Decimal math for a reservation's contributed/market/FX split and a goal's totals;
+`routes/goals.py` implements `GET /goals`, `POST /goals`, `PUT /goals/{goalId}`,
+`POST /goals/{goalId}/close`, `POST /reservations` and `POST /reservations/{id}/release`. An
+emergency-purpose reservation is refused (422) until Phase 3.3 Task 2 adds `emergency_reserve`
+and `emergency_resource_account` and wires eligibility.
+
+---
+
 ## `0013`
 
 ### Loans

@@ -78,6 +78,11 @@ function outOfBand(path: string): Promise<unknown> | undefined {
       previousMonthReview: { month: "2026-02-01", completedAt: null },
     });
   }
+  // Goals (Phase 3.3 Task 1) fetches alongside the forecast and commitments on Plans; every test
+  // here is about the rest of the screen, so it sees no goals or reservable accounts.
+  if (path === "/goals?includeClosed=true") {
+    return Promise.resolve({ asOf: "2026-03-01", goals: [], accounts: [] });
+  }
   // Monthly review (Task 2) fetches alongside the forecast and commitments on Plans; every test
   // here is about the rest of the screen, so it gets a quiet, already-resolved response.
   if (path.startsWith("/monthly-review")) {

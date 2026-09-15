@@ -140,9 +140,11 @@ const emptyMonthlyReview = {
   },
 };
 
-// Needs attention (Task 2) and the monthly review (Task 2) each fetch on mount alongside the
-// forecast and commitments; every test here is about the rest of the screen, so both get a
-// quiet, already-resolved response unless a test overrides one itself.
+const emptyGoals = { asOf: "2026-03-01", goals: [], accounts: [] };
+
+// Needs attention (Task 2), the monthly review (Task 2) and goals (Phase 3.3 Task 1) each fetch
+// on mount alongside the forecast and commitments; every test here is about the rest of the
+// screen, so all three get a quiet, already-resolved response unless a test overrides one itself.
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn((path: string, init?: RequestInit) => {
     if (path.startsWith("/actions") && (!init || init.method === undefined)) {
@@ -150,6 +152,9 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
     }
     if (path.startsWith("/monthly-review") && (!init || init.method === undefined)) {
       return Promise.resolve(emptyMonthlyReview);
+    }
+    if (path === "/goals?includeClosed=true") {
+      return Promise.resolve(emptyGoals);
     }
     return Promise.resolve(handler(path, init));
   }) as Request;

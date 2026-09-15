@@ -770,6 +770,27 @@ completion state or <code>previousMonthReview</code>; <code>GET /monthly-review<
 row, including an existing <code>completedAt</code>. <code>GET /actions</code>&#39;s
 <code>previousMonthReview</code> reflects a completion and a reopen. Member 403 on the three new
 routes is covered by the repo-wide owner-dependency inventory test, not a dedicated case.</li>
+<li>Phase 3.3 Task 1: V51 SQL proves owner/member/foreign/anonymous isolation on <code>goal</code> and
+<code>resource_reservation</code>, the goal and reservation shape checks, the whole-account unique
+index, the reservation preservation trigger (every update refused except one release; delete
+always refused) and the closed-goal preservation trigger. A 10,000 account reserves 6,000 for a
+goal; 4,001 more is refused as more than unreserved; a whole-account request on the same account
+is refused while the amount reservation is active, and the reverse holds for a whole-account
+reservation on another account; releasing a further 1,000 reservation frees exactly 1,000, and
+<code>GET /dashboard</code>&#39;s net worth is unchanged throughout. Each named refusal (inactive,
+liability or foreign account; no current value; over unreserved; exclusivity both ways; a closed
+goal; an emergency reservation, refused outright until Task 2; a missing exchange rate) returns
+its exact sentence. Replay and conflicting-key checks on both <code>POST /goals</code> and
+<code>POST /reservations</code>; closing a goal releases its active reservations in the same
+transaction, replays the same outcome at 200 and refuses a different one at 409; a goal&#39;s
+currency changes freely until any reservation (active or released) exists on it, then 409.
+Progress after a synthetic FX rate change on a later <code>asOf</code> matches the frozen-versus-
+current decomposition exactly, for a base-currency goal and a secondary-currency goal (the cross
+leg); a ledger-balance whole-account reservation counts a later deposit as contributed; a holdings-mode whole-account reservation with a later purchase and
+a price change splits contributed (the frozen value plus the purchase), market and FX exactly, fx
+staying zero in one currency throughout. A foreign household&#39;s real goal and reservation rows
+never appear and stay unchanged; <code>GET /goals</code> changes no row. Member 403 on the six new
+routes is covered by the repo-wide owner-dependency inventory test.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.
