@@ -331,7 +331,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
                   Group {group.groupNumber}: {group.status}
                   {group.reason && ` — ${commitReasonText(group.reason)}`}
                   {group.status === "committed" && (
-                    <> · <Link href="/investments">View the committed holding</Link></>
+                    <> · <Link href="/investments">View in portfolio</Link></>
                   )}
                 </li>
               ))}

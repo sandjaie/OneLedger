@@ -530,7 +530,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
       () =>
         request<{ considered: number; changed: number }>(
           `/classify${previewOnly ? "?preview=true" : ""}`,
-          { method: "POST" },
+          { method: "POST", timeoutMs: LONG_REQUEST_TIMEOUT_MS },
         ),
       "The classification pass did not run. Retry.",
     );

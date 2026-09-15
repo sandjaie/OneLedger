@@ -193,7 +193,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
         )}
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         {state === "ready" && history && history.months.length > 0 && (
-          <p>Last refreshed {history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)}</p>
+          <p>Last refreshed {new Date(history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)).toLocaleString()}</p>
         )}
       </header>
 

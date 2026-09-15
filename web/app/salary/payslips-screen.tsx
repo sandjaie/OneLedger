@@ -670,6 +670,9 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                       onChange={(e) => void saveDeductionRule(rule.label, e.target.value)}
                       value={rule.categoryId}
                     >
+                      {!expenseCategories.some((row) => row.id === rule.categoryId) && (
+                        <option disabled value={rule.categoryId}>Category no longer active</option>
+                      )}
                       {expenseCategories.map((row) => (
                         <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
                       ))}

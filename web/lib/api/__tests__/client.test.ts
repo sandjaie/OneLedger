@@ -222,9 +222,12 @@ describe("apiFetch", () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(stalledFetch));
     const result = apiFetch("/parse", { method: "POST", timeoutMs: 120_000 });
+    let settled = false;
+    result.catch(() => undefined).finally(() => { settled = true; });
     const rejection = expect(result).rejects.toMatchObject({ status: 0 });
     // Still running well past the default 10 seconds — the override is in effect.
     await vi.advanceTimersByTimeAsync(10_000);
+    expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(110_000);
     await rejection;
   });

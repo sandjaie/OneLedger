@@ -151,7 +151,7 @@ describe("wealth screen", () => {
 
     const table = await screen.findByRole("table", { name: /Month-end net worth/ });
     expect(within(table).getByText("Before opening: 1")).toBeTruthy();
-    expect(screen.getByText("Last refreshed 2026-09-14T00:00:00Z")).toBeTruthy();
+    expect(screen.getByText(/^Last refreshed /)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
 
