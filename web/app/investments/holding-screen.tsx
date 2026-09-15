@@ -42,6 +42,10 @@ export function HoldingScreen({ holdingId, request }: Props) {
   const [priceProblem, setPriceProblem] = useState("");
   const [priceFeedback, setPriceFeedback] = useState("");
   const [fundingEventId, setFundingEventId] = useState<string>();
+  // Bumped only after a fresh holding has been stored, so the funding panel re-seeds from the
+  // reloaded `cashLinks` rather than remounting against the stale ones.
+  const [loadCount, setLoadCount] = useState(0);
+  const [fundingNotice, setFundingNotice] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -49,6 +53,7 @@ export function HoldingScreen({ holdingId, request }: Props) {
       .then((next) => {
         if (!current) return;
         setDetail(next);
+        setLoadCount((value) => value + 1);
         setState("ready");
       })
       .catch((error: unknown) => {
@@ -211,7 +216,7 @@ export function HoldingScreen({ holdingId, request }: Props) {
                     </div>
                     <button
                       className="text-action"
-                      onClick={() => setFundingEventId(fundingEventId === event.id ? undefined : event.id)}
+                      onClick={() => { setFundingNotice(""); setFundingEventId(fundingEventId === event.id ? undefined : event.id); }}
                       type="button"
                     >
                       {fundingEventId === event.id ? "Hide funding" : event.fundingComplete ? "Review funding" : "Fund this purchase"}
@@ -219,6 +224,11 @@ export function HoldingScreen({ holdingId, request }: Props) {
                   </li>
                 ))}
               </ul>
+              {fundingNotice && (
+                <p className="section-label" role="status">
+                  {fundingNotice}
+                </p>
+              )}
               {fundingEvent && (
                 // Keyed on the event and the reload counter: switching purchases must not carry
                 // over another purchase's draft or seeded links, and a confirm/unlink reload
@@ -228,8 +238,11 @@ export function HoldingScreen({ holdingId, request }: Props) {
                   allowAdditionalFunding={!(fundingEventRow?.fundingComplete ?? false)}
                   events={[fundingEvent]}
                   existingLinks={detail.cashLinks}
-                  key={`${fundingEvent.id}-${attempt}`}
-                  onChanged={() => setAttempt((value) => value + 1)}
+                  key={`${fundingEvent.id}-${loadCount}`}
+                  onChanged={() => {
+                    setFundingNotice("Funding updated. The purchase below shows the refreshed status.");
+                    setAttempt((value) => value + 1);
+                  }}
                   request={request}
                 />
               )}

@@ -300,6 +300,10 @@ describe("HoldingScreen", () => {
     // the purchase's card — and the panel it re-seeds — reflect the server's own fresh answer.
     await waitFor(() => expect(holdingLoads).toBe(2));
     expect(await screen.findByText("Fully funded. Unlink existing funding before correcting this purchase.")).toBeTruthy();
+    // The outcome survives the reload, and the open panel re-seeds from the fresh holding: the
+    // purchase is now fully funded, so its allocation form is no longer offered.
+    expect(screen.getByText("Funding updated. The purchase below shows the refreshed status.")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("group", { name: "Funding allocation 1" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Hide funding" }));
     expect(screen.getByRole("button", { name: "Review funding" })).toBeTruthy();
   });
