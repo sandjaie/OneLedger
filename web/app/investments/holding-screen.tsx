@@ -86,6 +86,7 @@ export function HoldingScreen({ holdingId, request }: Props) {
 
   const purchases = detail ? purchaseEvents(detail) : [];
   const fundingEvent = detail && fundingEventId ? fundableEvent(detail, fundingEventId) : undefined;
+  const fundingEventRow = fundingEventId ? purchases.find((event) => event.id === fundingEventId) : undefined;
 
   return (
     <section className="workspace-content holding-screen" aria-labelledby="holding-title">
@@ -219,7 +220,18 @@ export function HoldingScreen({ holdingId, request }: Props) {
                 ))}
               </ul>
               {fundingEvent && (
-                <FundingPanel events={[fundingEvent]} existingLinks={detail.cashLinks} request={request} />
+                // Keyed on the event and the reload counter: switching purchases must not carry
+                // over another purchase's draft or seeded links, and a confirm/unlink reload
+                // must re-seed from the freshly loaded `cashLinks` rather than the stale ones
+                // this instance mounted with.
+                <FundingPanel
+                  allowAdditionalFunding={!(fundingEventRow?.fundingComplete ?? false)}
+                  events={[fundingEvent]}
+                  existingLinks={detail.cashLinks}
+                  key={`${fundingEvent.id}-${attempt}`}
+                  onChanged={() => setAttempt((value) => value + 1)}
+                  request={request}
+                />
               )}
             </section>
           )}

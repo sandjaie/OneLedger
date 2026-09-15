@@ -197,6 +197,51 @@ def test_a_purchase_is_marked_funded_once_confirmed(holding_live: EventFixture) 
         holding_live.connection.commit()
 
 
+def test_a_partly_funded_purchase_still_reports_fundingComplete_false(
+    holding_live: EventFixture,
+) -> None:
+    """A confirmed allocation short of the purchase's full net amount is real funding — the
+    holding page still needs to offer the rest, not report the purchase done."""
+    acquired = _acquire(holding_live)
+    event_id = acquired["id"]
+
+    cash_account = _cash_account(holding_live, holding_live.currency)
+    cash_id = _cash_debit(holding_live, cash_account, holding_live.currency, "-10.0000")
+    try:
+        allocation = {
+            "investmentEventId": event_id,
+            "cashTransactionId": str(cash_id),
+            # Short of the purchase's full "-21.0000" net amount.
+            "allocatedAmount": "10.0000",
+        }
+        proposal = TestClient(app).post(
+            "/investment-funding/proposals", json={"allocations": [allocation]}, headers=ORIGIN
+        )
+        assert proposal.status_code == 200, proposal.text
+        confirmation = TestClient(app).post(
+            "/investment-funding/confirmations",
+            json={"allocations": [allocation], "expectedState": proposal.json()["expectedState"]},
+            headers=ORIGIN,
+        )
+        assert confirmation.status_code == 201, confirmation.text
+
+        with holding_live.connection.cursor() as cur:
+            after = read_holding_detail(
+                cur, holding_live.owner.household_id, UUID(acquired["holdingId"])
+            )
+        assert after is not None
+        purchase_after = next(e for e in after.events if str(e.id) == event_id)
+        assert purchase_after.fundingComplete is False
+        assert len(after.cashLinks) == 1
+        assert after.cashLinks[0].allocatedAmount == "10.0000"
+    finally:
+        scope_to_owner(holding_live.connection, holding_live.owner.user_id)
+        with holding_live.connection.cursor() as cur:
+            cur.execute("SELECT unlink_investment_cash_allocations(%s)", (cash_id,))
+            cur.execute("DELETE FROM transaction WHERE id = %s", (cash_id,))
+        holding_live.connection.commit()
+
+
 def test_a_fully_closed_holdings_units_render_as_an_exact_zero(
     holding_live: EventFixture,
 ) -> None:

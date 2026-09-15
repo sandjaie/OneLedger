@@ -131,6 +131,34 @@ describe("HoldingScreen", () => {
     expect(loads).toBe(2);
   });
 
+  it("shows the service's own refusal when a dated price is not accepted, and does not reload", async () => {
+    let loads = 0;
+    const request = requestFrom((path, init) => {
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        loads += 1;
+        return detail();
+      }
+      if (path === "/investment-catalogue/securities/00000000-0000-4000-8000-000000000040/manual-prices" && init?.method === "POST") {
+        throw new ApiError(422, "manual prices require a household-owned security");
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(screen.getByLabelText("Price (XAA)"), { target: { value: "11.250000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Record price" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "manual prices require a household-owned security",
+    );
+    expect(screen.queryByText("Dated price recorded.")).toBeNull();
+    expect(loads).toBe(1);
+  });
+
   it("lists a purchase that is not fully funded and confirms funding through the existing flow", async () => {
     const unfunded = detail({
       events: [{
@@ -201,8 +229,38 @@ describe("HoldingScreen", () => {
         role: "funding",
       }],
     };
+    const funded = detail({
+      events: [{
+        id: "00000000-0000-4000-8000-000000000061",
+        eventDate: "2026-01-06",
+        eventKind: "purchase",
+        units: "5.00000000",
+        unitRatio: null,
+        price: "10.000000",
+        grossAmount: "50.0000",
+        charges: "0.0000",
+        withheldTax: "0.0000",
+        netAmount: "-50.0000",
+        currency: "XAA",
+        correctsEventId: null,
+        counterpartEventId: null,
+        correctionState: "active",
+        fundingComplete: true,
+      }],
+      cashLinks: [{
+        investmentEventId: "00000000-0000-4000-8000-000000000061",
+        cashTransactionId: "00000000-0000-4000-8000-000000000080",
+        role: "funding",
+        allocatedAmount: "50.0000",
+        currency: "XAA",
+      }],
+    });
+    let holdingLoads = 0;
     const request = requestFrom((path, init) => {
-      if (path === `/portfolio/holdings/${HOLDING_ID}`) return unfunded;
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        holdingLoads += 1;
+        return holdingLoads === 1 ? unfunded : funded;
+      }
       if (path === "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=0") return cashTransactions;
       if (path === "/investment-funding/proposals" && init?.method === "POST") return proposalResponse;
       if (path === "/investment-funding/confirmations" && init?.method === "POST") {
@@ -238,7 +296,12 @@ describe("HoldingScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review funding proposal" }));
     fireEvent.click(await screen.findByRole("button", { name: "Confirm funding" }));
 
-    expect(await screen.findByText("Funding confirmed from the reviewed server proposal.")).toBeTruthy();
+    // Confirming reloads the holding rather than trusting the panel's own transient state, so
+    // the purchase's card — and the panel it re-seeds — reflect the server's own fresh answer.
+    await waitFor(() => expect(holdingLoads).toBe(2));
+    expect(await screen.findByText("Fully funded. Unlink existing funding before correcting this purchase.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide funding" }));
+    expect(screen.getByRole("button", { name: "Review funding" })).toBeTruthy();
   });
 
   it("shows a not-found state for a foreign or missing holding without a generic error", async () => {
