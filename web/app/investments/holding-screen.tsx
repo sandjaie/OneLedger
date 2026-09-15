@@ -3,16 +3,19 @@
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 
+import { EventCorrectionForm, isFundedEvent } from "@/app/investments/event-correction-form";
 import { FundingPanel, type FundableEvent } from "@/app/investments/funding-panel";
+import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import { reasonText } from "@/app/investments/review-reasons";
 import type { apiFetch } from "@/lib/api/client";
 import { ApiError, errorText } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
-import type { HoldingDetail, ManualPriceCreate, ManualPriceRow } from "@/types/api";
+import type { AccountRow, HoldingDetail, ManualPriceCreate, ManualPriceRow } from "@/types/api";
 
 type Props = {
   holdingId: string;
   request: typeof apiFetch;
+  accounts: Array<AccountRow>;
 };
 
 type LoadState = "loading" | "ready" | "error" | "not_found";
@@ -32,7 +35,7 @@ function fundableEvent(detail: HoldingDetail, eventId: string): FundableEvent | 
   return { id: event.id, eventDate: event.eventDate, eventKind: event.eventKind, currency: event.currency, netAmount: event.netAmount };
 }
 
-export function HoldingScreen({ holdingId, request }: Props) {
+export function HoldingScreen({ holdingId, request, accounts }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [attempt, setAttempt] = useState(0);
   const [detail, setDetail] = useState<HoldingDetail>();
@@ -42,6 +45,8 @@ export function HoldingScreen({ holdingId, request }: Props) {
   const [priceProblem, setPriceProblem] = useState("");
   const [priceFeedback, setPriceFeedback] = useState("");
   const [fundingEventId, setFundingEventId] = useState<string>();
+  const [correctingEventId, setCorrectingEventId] = useState<string>();
+  const [correctionFeedback, setCorrectionFeedback] = useState("");
   // Bumped only after a fresh holding has been stored, so the funding panel re-seeds from the
   // reloaded `cashLinks` rather than remounting against the stale ones.
   const [loadCount, setLoadCount] = useState(0);
@@ -134,24 +139,59 @@ export function HoldingScreen({ holdingId, request }: Props) {
 
           <section aria-labelledby="holding-events-title">
             <p className="section-label" id="holding-events-title">Events ({detail.eventsTotal})</p>
+            {correctionFeedback && <p className="investment-feedback" role="status">{correctionFeedback}</p>}
             {detail.events.length === 0 && <p className="investment-state">No events recorded.</p>}
             {detail.events.length > 0 && (
               <ul className="investment-holding-grid">
-                {detail.events.map((event) => (
-                  <li aria-label={`${event.eventKind} on ${event.eventDate}`} className="investment-holding" key={event.id}>
-                    <div>
-                      <p className="section-label">{event.eventKind.replaceAll("_", " ")}{event.correctionState === "corrected" ? " · corrected" : ""}</p>
-                      <h3>{dateLabel(event.eventDate)}</h3>
-                      {event.units !== null && <p className="investment-exact">{event.units} units</p>}
-                    </div>
-                    <div className="investment-holding-value">
-                      {event.netAmount !== null && <strong>{event.currency} {event.netAmount}</strong>}
-                      {event.price !== null && <p>Price {event.currency} {event.price}</p>}
-                    </div>
-                  </li>
-                ))}
+                {detail.events.map((event) => {
+                  const funded = isFundedEvent(event, detail.cashLinks);
+                  return (
+                    <li aria-label={`${event.eventKind} on ${event.eventDate}`} className="investment-holding" key={event.id}>
+                      <div>
+                        <p className="section-label">{event.eventKind.replaceAll("_", " ")}{event.correctionState === "corrected" ? " · corrected" : ""}</p>
+                        <h3>{dateLabel(event.eventDate)}</h3>
+                        {event.units !== null && <p className="investment-exact">{event.units} units</p>}
+                      </div>
+                      <div className="investment-holding-value">
+                        {event.netAmount !== null && <strong>{event.currency} {event.netAmount}</strong>}
+                        {event.price !== null && <p>Price {event.currency} {event.price}</p>}
+                        {event.correctionState === "active" && (
+                          funded ? (
+                            <p>Unlink its funding first to correct this event.</p>
+                          ) : correctingEventId === event.id ? (
+                            <button className="text-action" onClick={() => setCorrectingEventId(undefined)} type="button">Cancel correction</button>
+                          ) : (
+                            <button className="text-action" onClick={() => { setCorrectionFeedback(""); setCorrectingEventId(event.id); }} type="button">Correct</button>
+                          )
+                        )}
+                      </div>
+                      {correctingEventId === event.id && (
+                        <EventCorrectionForm
+                          event={event}
+                          holding={detail}
+                          onCorrected={() => {
+                            setCorrectingEventId(undefined);
+                            setCorrectionFeedback("Correction recorded. The events below show the refreshed state.");
+                            setAttempt((value) => value + 1);
+                          }}
+                          request={request}
+                        />
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
+          </section>
+
+          <section aria-labelledby="holding-record-event-title">
+            <p className="section-label" id="holding-record-event-title">Record an event</p>
+            <InvestmentEventForm
+              accounts={accounts}
+              holding={{ accountId: detail.accountId, securityId: detail.securityId, securityName: detail.securityName, currency: detail.currency }}
+              onRecorded={() => setAttempt((value) => value + 1)}
+              request={request}
+            />
           </section>
 
           <section aria-labelledby="holding-cash-links-title">

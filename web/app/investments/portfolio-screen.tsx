@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import type { apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
 import type {
+  AccountRow,
   AcquisitionPosition,
   PortfolioPositions,
   PortfolioSummary,
@@ -15,6 +17,7 @@ import type {
 
 type Props = {
   request: typeof apiFetch;
+  accounts: Array<AccountRow>;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -77,7 +80,7 @@ function Metric({
   );
 }
 
-export function PortfolioScreen({ request }: Props) {
+export function PortfolioScreen({ request, accounts }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [attempt, setAttempt] = useState(0);
   const [summary, setSummary] = useState<PortfolioSummary>();
@@ -253,6 +256,15 @@ export function PortfolioScreen({ request }: Props) {
                 ))}
               </div>
             )}
+          </section>
+
+          <section aria-labelledby="portfolio-record-event-title">
+            <p className="section-label" id="portfolio-record-event-title">Record an event</p>
+            <InvestmentEventForm
+              accounts={accounts}
+              onRecorded={() => setAttempt((value) => value + 1)}
+              request={request}
+            />
           </section>
         </>
       )}

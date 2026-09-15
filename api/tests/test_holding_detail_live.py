@@ -13,16 +13,17 @@ from fastapi.testclient import TestClient
 
 from oneledger import auth
 from oneledger.db import scope_to_owner
-from oneledger.investments import cash_lifecycle
+from oneledger.investments import cash_lifecycle, unit_actions
 from oneledger.investments.portfolio import read_holding_detail
 from oneledger.main import app
 from oneledger.routes import dashboard, investment_catalogue, portfolio
 
 from .live_database import connect_to_test_database
 from .test_investment_events_live import EventFixture
+from .test_investment_unit_actions_live import UnitActionFixture, _post, _purchase, _switch_body
 from .test_portfolio_live import _acquire, _dispose, _price
 
-pytest_plugins = ("tests.test_investment_events_live",)
+pytest_plugins = ("tests.test_investment_events_live", "tests.test_investment_unit_actions_live")
 
 AS_OF = date(2026, 2, 5)
 ORIGIN = {"Origin": "http://localhost:3000"}
@@ -95,6 +96,65 @@ def test_holding_detail_lists_events_prices_and_no_lot_or_evidence_fields(
     assert forbidden.isdisjoint(detail)
     for event in detail["events"]:
         assert forbidden.isdisjoint(event)
+        # Neither a purchase nor a sale is a paired leg (Task 2b): no counterpart to report.
+        assert event["counterpartAccountId"] is None
+        assert event["counterpartSecurityId"] is None
+        assert event["counterpartUnits"] is None
+        assert event["counterpartPrice"] is None
+        assert event["counterpartGrossAmount"] is None
+
+
+@pytest.fixture
+def unit_action_holding_live(
+    live_unit_actions: UnitActionFixture, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[UnitActionFixture]:
+    monkeypatch.setattr(portfolio, "connect", connect_to_test_database)
+    monkeypatch.setattr(unit_actions, "connect", connect_to_test_database)
+    yield live_unit_actions
+
+
+def test_a_switch_legs_counterpart_fields_report_the_others_own_facts(
+    unit_action_holding_live: UnitActionFixture,
+) -> None:
+    """`HoldingEventRow` adds, for a paired leg, the counterpart leg's own account, security,
+    units, price and gross amount (Task 2b) — found from either leg, since only the "in" leg's
+    own row stores `counterpart_transaction_id` in the database."""
+    fixture = unit_action_holding_live
+    _purchase(fixture)
+    switch = _post("unit-actions", _switch_body(fixture))
+    assert switch.status_code == 201, switch.text
+    out_leg, in_leg = switch.json()["outEvent"], switch.json()["inEvent"]
+
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM holding WHERE household_id = %s AND security_id = %s",
+            (fixture.owner.household_id, fixture.security_id),
+        )
+        out_holding_id = cur.fetchone()
+        cur.execute(
+            "SELECT id FROM holding WHERE household_id = %s AND security_id = %s",
+            (fixture.owner.household_id, fixture.security_2_id),
+        )
+        in_holding_id = cur.fetchone()
+    assert out_holding_id is not None
+    assert in_holding_id is not None
+
+    out_detail = _detail(str(out_holding_id[0]))
+    out_event = next(e for e in out_detail["events"] if e["id"] == out_leg["id"])
+    assert out_event["counterpartEventId"] == in_leg["id"]
+    assert out_event["counterpartAccountId"] == str(fixture.account_id)
+    assert out_event["counterpartSecurityId"] == str(fixture.security_2_id)
+    assert out_event["counterpartUnits"] == in_leg["units"]
+    assert out_event["counterpartPrice"] == in_leg["price"]
+    assert out_event["counterpartGrossAmount"] == in_leg["grossAmount"]
+
+    in_event = next(e for e in _detail(str(in_holding_id[0]))["events"] if e["id"] == in_leg["id"])
+    assert in_event["counterpartEventId"] == out_leg["id"]
+    assert in_event["counterpartAccountId"] == str(fixture.account_id)
+    assert in_event["counterpartSecurityId"] == str(fixture.security_id)
+    assert in_event["counterpartUnits"] == out_leg["units"]
+    assert in_event["counterpartPrice"] == out_leg["price"]
+    assert in_event["counterpartGrossAmount"] == out_leg["grossAmount"]
 
 
 def _cash_account(fixture: EventFixture, currency: str) -> UUID:
