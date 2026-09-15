@@ -437,7 +437,20 @@ same commitment-form pre-fill Needs attention&#39;s card items use. The assumpti
 confirmed and estimated figures are shown separately, a planned card payment reduces the card balance
 on the same date, an unplanned card due and an unsettled occurrence inside the balance date are not
 projected, funding accounts are suggestions only, and currency totals cover liquid asset accounts and
-credit cards with no conversion. Phase 3.3 and
+credit cards with no conversion. Phase 3.2 Task 2 adds <strong>Monthly review</strong>
+(<code>monthly-review.tsx</code>, anchor <code>#review</code>) between Needs attention and the
+forecast: a month picker (default last month) and six steps, each with its own count and a link —
+<strong>Coverage</strong> (<code>/coverage</code>), <strong>Transfers</strong>
+(<code>/transactions</code>), <strong>Categories</strong> (<code>/review</code>),
+<strong>Position</strong> (the month-end total, the prior month&#39;s, and the server&#39;s own
+change, or a not-yet-refreshed notice linking <code>/wealth</code>), <strong>Commitments</strong>
+(<code>/plans#actions</code>, due-soon/overdue commitments and open/snoozed action counts together),
+and an inline <strong>Add follow-up</strong> form reusing the same create call Needs attention uses.
+<strong>Mark review complete</strong> and, once complete, <strong>Reopen review</strong> alongside
+the completion date and the remaining open-action count. Overview&#39;s Needs attention panel always
+renders — even with nothing else to attend to — to state whether last month&#39;s review is
+complete, linking <code>/plans#review</code>. No money arithmetic runs in the browser; every figure
+is a server string. Phase 3.3 and
 Phase 3.4 add goals, emergency-reserve coverage and protection/administration records within that
 same view. Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
