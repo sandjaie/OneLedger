@@ -48,6 +48,7 @@ function event(overrides: Partial<HoldingEventRow> = {}): HoldingEventRow {
     counterpartUnits: null,
     counterpartPrice: null,
     counterpartGrossAmount: null,
+    lotAllocationOpen: false,
     ...overrides,
   };
 }

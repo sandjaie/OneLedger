@@ -6,12 +6,13 @@ import { type FormEvent, useEffect, useState } from "react";
 import { EventCorrectionForm, isFundedEvent } from "@/app/investments/event-correction-form";
 import { FundingPanel, type FundableEvent } from "@/app/investments/funding-panel";
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
+import { LotAllocationPanel } from "@/app/investments/lot-allocation-panel";
 import { reasonText } from "@/app/investments/review-reasons";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
 import type { apiFetch } from "@/lib/api/client";
 import { ApiError, errorText } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
-import type { AccountRow, HoldingDetail, ManualPriceCreate, ManualPriceRow } from "@/types/api";
+import type { AccountRow, HoldingDetail, HoldingEventRow, ManualPriceCreate, ManualPriceRow } from "@/types/api";
 
 type Props = {
   holdingId: string;
@@ -24,14 +25,14 @@ type LoadState = "loading" | "ready" | "error" | "not_found";
 const PURCHASE_KINDS = new Set(["purchase", "recurring_purchase"]);
 
 /** Active purchases with a recorded net amount — the ones a funding action can ever apply to. */
-function purchaseEvents(detail: HoldingDetail) {
-  return detail.events.filter(
+function purchaseEvents(events: Array<HoldingEventRow>) {
+  return events.filter(
     (event) => PURCHASE_KINDS.has(event.eventKind) && event.correctionState === "active" && event.netAmount !== null,
   );
 }
 
-function fundableEvent(detail: HoldingDetail, eventId: string): FundableEvent | undefined {
-  const event = detail.events.find((item) => item.id === eventId);
+function fundableEvent(events: Array<HoldingEventRow>, eventId: string): FundableEvent | undefined {
+  const event = events.find((item) => item.id === eventId);
   if (!event || event.netAmount === null) return undefined;
   return { id: event.id, eventDate: event.eventDate, eventKind: event.eventKind, currency: event.currency, netAmount: event.netAmount };
 }
@@ -48,11 +49,18 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
   const [fundingEventId, setFundingEventId] = useState<string>();
   const [correctingEventId, setCorrectingEventId] = useState<string>();
   const [correctionFeedback, setCorrectionFeedback] = useState("");
+  const [allocatingEventId, setAllocatingEventId] = useState<string>();
   // Bumped only after a fresh holding has been stored, so the funding panel re-seeds from the
   // reloaded `cashLinks` rather than remounting against the stale ones.
   const [loadCount, setLoadCount] = useState(0);
   const [fundingNotice, setFundingNotice] = useState("");
   const [recordNotice, setRecordNotice] = useState("");
+  // Events beyond `detail.events`' own first page, appended by "Load more events" — reset
+  // whenever `detail` is freshly loaded from offset 0 (every write reloads this way, the
+  // simplest way to keep funding/correction/lot-allocation state consistent with the server).
+  const [moreEvents, setMoreEvents] = useState<Array<HoldingEventRow>>([]);
+  const [moreEventsBusy, setMoreEventsBusy] = useState(false);
+  const [moreEventsProblem, setMoreEventsProblem] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -60,6 +68,8 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
       .then((next) => {
         if (!current) return;
         setDetail(next);
+        setMoreEvents([]);
+        setMoreEventsProblem("");
         setLoadCount((value) => value + 1);
         setState("ready");
       })
@@ -71,6 +81,24 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
       current = false;
     };
   }, [holdingId, request, attempt]);
+
+  const events = detail ? [...detail.events, ...moreEvents] : [];
+
+  async function loadMoreEvents() {
+    if (!detail || moreEventsBusy) return;
+    setMoreEventsBusy(true);
+    setMoreEventsProblem("");
+    try {
+      const next = await request<HoldingDetail>(
+        `/portfolio/holdings/${holdingId}?eventsOffset=${events.length}`,
+      );
+      setMoreEvents((current) => [...current, ...next.events]);
+    } catch (error) {
+      setMoreEventsProblem(errorText(error, "More events could not be loaded. Retry."));
+    } finally {
+      setMoreEventsBusy(false);
+    }
+  }
 
   async function submitPrice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,8 +124,8 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
     }
   }
 
-  const purchases = detail ? purchaseEvents(detail) : [];
-  const fundingEvent = detail && fundingEventId ? fundableEvent(detail, fundingEventId) : undefined;
+  const purchases = purchaseEvents(events);
+  const fundingEvent = fundingEventId ? fundableEvent(events, fundingEventId) : undefined;
   const fundingEventRow = fundingEventId ? purchases.find((event) => event.id === fundingEventId) : undefined;
 
   return (
@@ -140,12 +168,12 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
           )}
 
           <section aria-labelledby="holding-events-title">
-            <p className="section-label" id="holding-events-title">Events ({detail.eventsTotal})</p>
+            <p className="section-label" id="holding-events-title">Events ({events.length} of {detail.eventsTotal})</p>
             {correctionFeedback && <WealthRefreshNotice message={correctionFeedback} />}
-            {detail.events.length === 0 && <p className="investment-state">No events recorded.</p>}
-            {detail.events.length > 0 && (
+            {events.length === 0 && <p className="investment-state">No events recorded.</p>}
+            {events.length > 0 && (
               <ul className="investment-holding-grid">
-                {detail.events.map((event) => {
+                {events.map((event) => {
                   const funded = isFundedEvent(event, detail.cashLinks);
                   return (
                     <li aria-label={`${event.eventKind} on ${event.eventDate}`} className="investment-holding" key={event.id}>
@@ -166,6 +194,15 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                             <button className="text-action" onClick={() => { setCorrectionFeedback(""); setCorrectingEventId(event.id); }} type="button">Correct</button>
                           )
                         )}
+                        {event.lotAllocationOpen && (
+                          <button
+                            className="text-action"
+                            onClick={() => setAllocatingEventId(allocatingEventId === event.id ? undefined : event.id)}
+                            type="button"
+                          >
+                            {allocatingEventId === event.id ? "Hide lot allocation" : "Allocate lots"}
+                          </button>
+                        )}
                       </div>
                       {correctingEventId === event.id && (
                         <EventCorrectionForm
@@ -179,10 +216,29 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                           request={request}
                         />
                       )}
+                      {allocatingEventId === event.id && (
+                        <LotAllocationPanel
+                          disposalDate={event.eventDate}
+                          disposalEventId={event.id}
+                          holdingId={detail.holdingId}
+                          onAllocated={() => {
+                            setAllocatingEventId(undefined);
+                            setCorrectionFeedback("Lot allocation confirmed. The events below show the refreshed state.");
+                            setAttempt((value) => value + 1);
+                          }}
+                          request={request}
+                        />
+                      )}
                     </li>
                   );
                 })}
               </ul>
+            )}
+            {moreEventsProblem && <p className="inline-alert" role="alert">{moreEventsProblem}</p>}
+            {events.length < detail.eventsTotal && (
+              <button className="text-action" disabled={moreEventsBusy} onClick={() => void loadMoreEvents()} type="button">
+                {moreEventsBusy ? "Loading more events…" : "Load more events"}
+              </button>
             )}
           </section>
 

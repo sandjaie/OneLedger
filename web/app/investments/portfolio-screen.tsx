@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
+import { ReviewQueue } from "@/app/investments/review-queue";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
@@ -224,6 +225,8 @@ export function PortfolioScreen({ request, accounts }: Props) {
               </div>
             </div>
           </section>
+
+          <ReviewQueue request={request} />
 
           <section aria-labelledby="holdings-title" className="investment-holdings">
             <div className="investment-section-head">
