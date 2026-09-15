@@ -524,7 +524,9 @@ def update_commitment(
                     WHERE household_id = %s AND commitment_id = %s""",
                 (owner.household_id, commitment_id),
             )
-            has_resolution = cur.fetchone()[0] > 0
+            counted = cur.fetchone()
+            assert counted is not None
+            has_resolution = counted[0] > 0
 
             if has_resolution:
                 if (
@@ -544,7 +546,9 @@ def update_commitment(
                             WHERE household_id = %s AND commitment_id = %s AND closes""",
                         (owner.household_id, commitment_id),
                     )
-                    latest_closed = cur.fetchone()[0]
+                    closed_row = cur.fetchone()
+                    assert closed_row is not None
+                    latest_closed = closed_row[0]
                 floor = stored_next_due if stored_next_due is not None else latest_closed
                 if body.endDate is not None and floor is not None and body.endDate < floor:
                     raise HTTPException(

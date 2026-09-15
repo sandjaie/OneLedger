@@ -147,7 +147,8 @@ def _commitment(fixture: ResolutionFixture, **overrides: object) -> dict[str, An
     body.update(overrides)
     response = client().post("/commitments", json=body, headers=ORIGIN)
     assert response.status_code == 201, response.text
-    return response.json()
+    created: dict[str, Any] = response.json()
+    return created
 
 
 def _txn(
@@ -169,7 +170,7 @@ def _txn(
         headers=ORIGIN,
     )
     assert response.status_code == 201, response.text
-    return response.json()["id"]
+    return str(response.json()["id"])
 
 
 def _raw_txn(
