@@ -67,6 +67,11 @@ function outOfBand(path: string): Promise<unknown> | undefined {
   if (path === "/doctor") return Promise.resolve({ sections: [] });
   if (path === "/merchant-knowledge") return Promise.resolve([]);
   if (path === "/classification-runs?limit=20&offset=0") return Promise.resolve([]);
+  // Needs attention (Task 2): the overview and plans screens both fetch this alongside their own
+  // pinned sequence; every test here is about the rest of the screen, so it sees an empty list.
+  if (path === "/actions") {
+    return Promise.resolve({ asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] });
+  }
   return undefined;
 }
 
@@ -768,7 +773,7 @@ describe("authenticated workspace", () => {
     expect(screen.queryByText("Inventory Savings")).toBeNull();
   });
 
-  it("loads the currency catalogue and the dashboard on overview, and nothing else", async () => {
+  it("loads the currency catalogue, the dashboard and needs attention on overview, and nothing else", async () => {
     const request = requestThat(household, catalogue, dashboard);
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByText("₹12,34,567.89");
@@ -776,6 +781,7 @@ describe("authenticated workspace", () => {
       "/household",
       "/currencies",
       "/dashboard",
+      "/actions",
     ]);
     expect(screen.queryByText(/Phase 0/)).toBeNull();
   });
