@@ -279,6 +279,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         onCommitmentResolved={() => setAttempt((value) => value + 1)}
         onPlanCardPayment={startCardPlan}
         onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
         request={request}
       />
 

@@ -18,10 +18,12 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from oneledger import auth
 from oneledger.main import app
+from oneledger.routes import actions
 
 from .live_database import connect_to_test_database
 
@@ -278,7 +280,7 @@ def test_card_item_absent_when_paid_in_full_or_zero_balance(live: ActionsFixture
     assert result["items"] == [] and result["snoozed"] == []
 
 
-def test_card_item_absent_for_an_older_cycle_when_the_latest_is_not_yet_due(
+def test_card_item_is_the_older_cycle_when_the_latest_is_dated_after_as_of(
     live: ActionsFixture,
 ) -> None:
     older = _card_statement(live, live.card_account_id, statement_date=_d(-14), due_date=_d(5))
@@ -288,6 +290,19 @@ def test_card_item_absent_for_an_older_cycle_when_the_latest_is_not_yet_due(
     result = _actions(live)
     card_keys = _keys([row for row in result["items"] if row["kind"] == "card_due"])
     assert card_keys == {f"card.{older}"}
+
+
+def test_card_item_absent_for_an_older_cycle_superseded_by_a_newer_statement(
+    live: ActionsFixture,
+) -> None:
+    # The latest statement dated on or before asOf decides membership: once a newer cycle is
+    # paid in full, an older cycle still inside the seven-day window is not listed.
+    _card_statement(live, live.card_account_id, statement_date=_d(-20), due_date=_d(-2))
+    _card_statement(
+        live, live.card_account_id, statement_date=_d(-1), due_date=_d(20), paid_in_full=True
+    )
+    result = _actions(live)
+    assert result["items"] == [] and result["snoozed"] == []
 
 
 def test_card_item_absent_when_due_more_than_seven_days_past(live: ActionsFixture) -> None:
@@ -417,6 +432,31 @@ def test_snooze_422_for_a_bad_date_or_a_reason_on_a_non_card_key(live: ActionsFi
 
     malformed = client().put("/actions/marks/not-a-real-key", json={"until": _d(3)}, headers=ORIGIN)
     assert malformed.status_code == 422
+
+
+def test_mark_key_and_body_are_refused_before_any_database_access(
+    live: ActionsFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_database() -> None:
+        raise AssertionError("the database must not be touched")
+
+    monkeypatch.setattr(actions, "connect", no_database)
+    item = uuid4()
+    refused = [
+        ("card." + "-" * 36, {"until": _d(3)}),
+        (f"card.{item.hex}----", {"until": _d(3)}),
+        (f"card.{str(item).upper()}", {"until": _d(3)}),
+        (f"commitment.{item}.2026-02-30", {"until": _d(3)}),
+        (f"follow-up.{item}", {"until": _d(0)}),
+        (f"follow-up.{item}", {"until": _d(367)}),
+        (f"follow-up.{item}", {"reason": "not a card"}),
+        (f"card.{item}", {}),
+        (f"card.{item}", {"until": _d(3), "reason": "both"}),
+    ]
+    for key, body in refused:
+        response = client().put(f"/actions/marks/{key}", json=body, headers=ORIGIN)
+        assert response.status_code == 422, (key, body, response.text)
+    assert client().delete("/actions/marks/card." + "-" * 36, headers=ORIGIN).status_code == 422
 
 
 # --- Follow-up lifecycle. ------------------------------------------------------------------------
@@ -586,3 +626,145 @@ def test_get_actions_changes_no_row(live: ActionsFixture) -> None:
         after_marks = cur.fetchone()
     assert after_items == before_items
     assert after_marks == before_marks
+
+
+# --- Household isolation with real foreign rows, and the owner-only boundary. ---------------------
+
+
+def _as_other_owner(fixture: ActionsFixture) -> None:
+    app.dependency_overrides[auth.require_owner] = lambda: fixture.other_owner
+
+
+def _as_owner(fixture: ActionsFixture) -> None:
+    app.dependency_overrides[auth.require_owner] = lambda: fixture.owner
+
+
+def test_actions_are_household_isolated_with_real_foreign_rows(live: ActionsFixture) -> None:
+    own_commitment = _commitment(live, _d(2), label="Synthetic own commitment")
+    own_card = _card_statement(live, live.card_account_id)
+    foreign_card = _card_statement(live, live.other_card_account_id, live.other_household_id)
+
+    _as_other_owner(live)
+    foreign_commitment = _commitment(
+        live, _d(2), accountId=str(live.other_account_id), label="Synthetic foreign commitment"
+    )
+    foreign_follow_up = client().post(
+        "/actions/follow-ups",
+        json={"title": "Synthetic foreign follow-up", "idempotencyKey": str(uuid4())},
+        headers=ORIGIN,
+    )
+    assert foreign_follow_up.status_code == 201, foreign_follow_up.text
+    foreign_follow_up_id = foreign_follow_up.json()["id"]
+    foreign_mark = client().put(
+        f"/actions/marks/card.{foreign_card}", json={"reason": "other household"}, headers=ORIGIN
+    )
+    assert foreign_mark.status_code == 204, foreign_mark.text
+    foreign_view = _actions(live)
+    _as_owner(live)
+
+    own_keys = _keys(_actions(live)["items"])
+    assert own_keys == {f"commitment.{own_commitment['id']}.{_d(2)}", f"card.{own_card}"}
+    # The other household sees only its own commitment and follow-up (its card is dismissed).
+    assert _keys(foreign_view["items"]) == {
+        f"commitment.{foreign_commitment['id']}.{_d(2)}",
+        f"follow-up.{foreign_follow_up_id}",
+    }
+
+    # Every mark on a real foreign object is 404, and nothing is written.
+    for key, body in (
+        (f"card.{foreign_card}", {"reason": "not mine"}),
+        (f"card.{foreign_card}", {"until": _d(3)}),
+        (f"commitment.{foreign_commitment['id']}.{_d(2)}", {"until": _d(3)}),
+        (f"follow-up.{foreign_follow_up_id}", {"until": _d(3)}),
+    ):
+        response = client().put(f"/actions/marks/{key}", json=body, headers=ORIGIN)
+        assert response.status_code == 404, (key, response.text)
+    # Deleting the other household's mark key from this household removes nothing of theirs.
+    assert client().delete(f"/actions/marks/card.{foreign_card}", headers=ORIGIN).status_code == 204
+
+    foreign_account = client().post(
+        "/actions/follow-ups",
+        json={
+            "title": "Synthetic follow-up on a foreign account",
+            "accountId": str(live.other_account_id),
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert foreign_account.status_code == 404
+
+    with live.connection.cursor() as cur:
+        cur.execute("SELECT household_id, dismiss_reason FROM action_mark ORDER BY household_id")
+        assert cur.fetchall() == [(live.other_household_id, "other household")]
+        cur.execute("SELECT household_id FROM action_item")
+        assert cur.fetchall() == [(live.other_household_id,)]
+    live.connection.commit()
+
+
+def test_every_action_write_is_owner_only(live: ActionsFixture) -> None:
+    item = client().post(
+        "/actions/follow-ups",
+        json={"title": "Synthetic follow-up", "idempotencyKey": str(uuid4())},
+        headers=ORIGIN,
+    )
+    assert item.status_code == 201, item.text
+    item_id = item.json()["id"]
+    key = f"follow-up.{item_id}"
+
+    def member() -> auth.OwnerSession:
+        # require_owner's own refusal for a signed-in member (auth.require_owner).
+        raise HTTPException(status_code=403, detail="not authorized")
+
+    app.dependency_overrides[auth.require_owner] = member
+    writes = [
+        client().get("/actions", headers=ORIGIN),
+        client().post(
+            "/actions/follow-ups",
+            json={"title": "Synthetic member follow-up", "idempotencyKey": str(uuid4())},
+            headers=ORIGIN,
+        ),
+        client().post(f"/actions/follow-ups/{item_id}/complete", headers=ORIGIN),
+        client().post(
+            f"/actions/follow-ups/{item_id}/dismiss", json={"reason": "member"}, headers=ORIGIN
+        ),
+        client().post(f"/actions/follow-ups/{item_id}/reopen", headers=ORIGIN),
+        client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN),
+        client().delete(f"/actions/marks/{key}", headers=ORIGIN),
+    ]
+    _as_owner(live)
+    assert [response.status_code for response in writes] == [403] * 7
+    with live.connection.cursor() as cur:
+        cur.execute("SELECT state::text FROM action_item")
+        assert cur.fetchall() == [("open",)]
+        cur.execute("SELECT count(*) FROM action_mark")
+        assert cur.fetchone() == (0,)
+    live.connection.commit()
+
+
+# --- action_list(apply_marks=False): the Phase 3.2 raw view ignores every mark. ------------------
+
+
+def test_action_list_without_marks_ignores_snooze_and_dismissal(live: ActionsFixture) -> None:
+    due = _commitment(live, _d(2))
+    commitment_key = f"commitment.{due['id']}.{_d(2)}"
+    card = _card_statement(live, live.card_account_id)
+    card_key = f"card.{card}"
+    assert (
+        client().put(f"/actions/marks/{commitment_key}", json={"until": _d(3)}, headers=ORIGIN)
+    ).status_code == 204
+    assert (
+        client().put(f"/actions/marks/{card_key}", json={"reason": "paid away"}, headers=ORIGIN)
+    ).status_code == 204
+
+    with live.connection.cursor() as cur:
+        raw = actions.action_list(cur, live.household_id, AS_OF, apply_marks=False)
+        marked = actions.action_list(cur, live.household_id, AS_OF, apply_marks=True)
+    live.connection.rollback()
+
+    assert {row.actionKey: row.snoozedUntil for row in raw} == {
+        commitment_key: None,
+        card_key: None,
+    }
+    assert {row.actionKey: row.snoozedUntil for row in marked} == {
+        commitment_key: date.fromisoformat(_d(3))
+    }

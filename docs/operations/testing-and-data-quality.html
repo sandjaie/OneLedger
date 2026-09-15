@@ -729,12 +729,15 @@ and <code>action_mark</code>, the cross-household account/card-statement referen
 card-source check and the one-open-plan index (an archived plan frees the statement for a new one),
 and the title/reason/mark shape checks. The live API suite proves commitment items in and out of the
 seven-day window with overdue-first ordering; card-item membership (paid in full, zero balance, an
-older cycle when the latest is not yet due, due more than seven days past, planned, dismissed all
-absent; an archived plan present again); a snooze moving an item to <code>snoozed</code> and back
-after its date, 404 on a foreign or stale key, 422 on a bad date or a reason on a non-card key;
+older cycle superseded by a newer statement, due more than seven days past, planned, dismissed all
+absent; an archived plan present again; <code>action_list(apply_marks=False)</code> listing snoozed
+and dismissed items); a snooze moving an item to <code>snoozed</code> and back
+after its date, 404 on a foreign or stale key, 422 before any database access on a malformed key,
+a bad date or a reason on a non-card key;
 follow-up create/replay/conflict/complete/dismiss/reopen and their 409 transitions; every card-source
 refusal on <code>POST</code>/<code>PUT /commitments</code> and the 409 second plan; <code>GET
-/actions</code>, <code>GET /forecast</code> and payment-candidates changing no row; and
+/actions</code>, <code>GET /forecast</code> and payment-candidates changing no row;
+household isolation of <code>GET /actions</code> against real foreign rows; and member 403 and
 foreign-household 404 on every write.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its

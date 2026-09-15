@@ -17,6 +17,9 @@ type Props = {
   // A commitment's Mark done or Dismiss changes its status and the forecast; PlansScreen
   // refetches both. Nothing else here (a card or follow-up mark) touches either.
   onCommitmentResolved: () => void;
+  // Bumped by PlansScreen after any commitment write (Plan payment, Settle, edit, archive) so the
+  // list refetches with it.
+  refreshKey: number;
 };
 
 const REASON_TEXT: Record<ActionRow["reason"], string> = {
@@ -41,6 +44,7 @@ export function NeedsAttention({
   onSettle,
   onPlanCardPayment,
   onCommitmentResolved,
+  refreshKey,
 }: Props) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [actions, setActions] = useState<ActionsResponse>();
@@ -72,7 +76,7 @@ export function NeedsAttention({
     return () => {
       current = false;
     };
-  }, [attempt, request]);
+  }, [attempt, refreshKey, request]);
 
   function refetch() {
     setAttempt((value) => value + 1);

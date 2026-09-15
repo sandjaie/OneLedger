@@ -126,6 +126,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -143,6 +144,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -162,6 +164,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={onSettle}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -191,6 +194,7 @@ describe("needs attention", () => {
         onCommitmentResolved={onCommitmentResolved}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -218,6 +222,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -251,6 +256,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -276,6 +282,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={onPlanCardPayment}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -307,6 +314,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -331,6 +339,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -359,6 +368,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );
@@ -397,6 +407,7 @@ describe("needs attention", () => {
         onCommitmentResolved={noop}
         onPlanCardPayment={noop}
         onSettle={noop}
+        refreshKey={0}
         request={request}
       />,
     );

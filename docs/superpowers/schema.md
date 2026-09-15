@@ -2825,18 +2825,17 @@ apply_marks)`, gathering:
 1. a `commitment.<id>.<nextDueDate>` item for each unarchived commitment with `next_due_date`
    within `plans.DUE_WINDOW_DAYS` days or overdue, its `remaining` and `partlyPaid` from
    `_commitment_progress()`;
-2. a `card.<statementId>` item for the latest `card_statement` per active credit-card account
-   that states an amount due, is not paid in full, is due within the window, has no unarchived
-   commitment sourced from it and no dismissal mark;
+2. a `card.<statementId>` item for the latest `card_statement` dated on or before `asOf` per
+   active credit-card account, when that statement states an amount due, is not paid in full, is
+   due within the window, has no unarchived commitment sourced from it and no dismissal mark;
 3. a `follow-up.<id>` item for each open `action_item`.
 
 A commitment item's completion and dismissal are always through `POST
 /commitments/{id}/resolutions` (Task 1); no route here writes `commitment_resolution`. A snoozed
 item (`action_mark.snoozed_until > asOf`) moves to the response's `snoozed[]`; a card item's
 dismissal (`action_mark.dismiss_reason`, card keys only — the database's own
-`action_mark_dismissal_is_card` check) hides it entirely, the same rule that decides whether it is
-an item at all, so `apply_marks=False` (a future caller wanting a raw count) still respects it and
-only turns off snooze marking.
+`action_mark_dismissal_is_card` check) hides it. `apply_marks=False` (Phase 3.2's unplanned card
+dues) reads no mark at all: snoozed and dismissed items are both listed.
 
 ---
 

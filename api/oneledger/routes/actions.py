@@ -47,7 +47,8 @@ _SNOOZE_WINDOW = f"snooze date must be after today and within {_SNOOZE_MAX_DAYS}
 _ACTION_KEY_RE = re.compile(
     r"^(?:follow-up\.(?P<followup_id>[0-9a-f-]{36})"
     r"|commitment\.(?P<commitment_id>[0-9a-f-]{36})\.(?P<due_date>\d{4}-\d{2}-\d{2})"
-    r"|card\.(?P<card_id>[0-9a-f-]{36}))$"
+    r"|card\.(?P<card_id>[0-9a-f-]{36}))$",
+    re.ASCII,
 )
 
 
@@ -164,26 +165,29 @@ _COMMITMENT_ACTION_ITEMS = """
      WHERE c.household_id = %s AND c.archived_at IS NULL AND c.next_due_date IS NOT NULL
        AND c.next_due_date <= %s"""
 
-# The latest cycle per active credit-card account, narrowed to spec item 2's own membership rule
-# (an amount actually due, not already planned). Dismissal is part of that rule, not a snooze
-# concern, so it is applied here regardless of `apply_marks` — see action_list()'s docstring.
+# The latest cycle per active credit-card account dated on or before asOf, then spec item 2's own
+# membership rule (an amount actually due, not already planned): a newer statement supersedes an
+# older cycle even when the newer one has nothing due. The dismissal clause is appended only when
+# marks apply (see action_list()).
 _CARD_ACTION_ITEMS = """
     SELECT latest.id, latest.account_id, latest.name, latest.currency, latest.payment_due_date,
            latest.statement_balance
       FROM (
         SELECT DISTINCT ON (c.account_id)
-               c.id, c.account_id, a.name, c.currency, c.payment_due_date, c.statement_balance
+               c.id, c.account_id, a.name, c.currency, c.payment_due_date, c.statement_balance,
+               c.is_paid_in_full
           FROM card_statement c
           JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id
-         WHERE c.household_id = %s AND a.is_active
-           AND c.statement_date <= %s AND c.statement_balance > 0
-           AND c.is_paid_in_full IS NOT TRUE AND c.payment_due_date >= %s
+         WHERE c.household_id = %s AND a.is_active AND c.statement_date <= %s
          ORDER BY c.account_id, c.period_end DESC
       ) latest
-     WHERE NOT EXISTS (
+     WHERE latest.statement_balance > 0 AND latest.is_paid_in_full IS NOT TRUE
+       AND latest.payment_due_date >= %s
+       AND NOT EXISTS (
        SELECT FROM commitment m
         WHERE m.household_id = %s AND m.source_card_statement_id = latest.id
-          AND m.archived_at IS NULL)
+          AND m.archived_at IS NULL)"""
+_CARD_NOT_DISMISSED = """
        AND NOT EXISTS (
        SELECT FROM action_mark k
         WHERE k.household_id = %s AND k.action_key = 'card.' || latest.id::text
@@ -200,13 +204,10 @@ def action_list(
     cur: psycopg.Cursor[Any], household_id: UUID, as_of: date, *, apply_marks: bool
 ) -> list[ActionRow]:
     """Every open action item — a commitment occurrence, a card due, a follow-up — as one list
-    (spec "Card dues and actions (Task 2)" items 1-3), each carrying `snoozedUntil` when
-    `apply_marks` is True and a snooze mark says so; the caller splits `items`/`snoozed` on that
-    (`GET /actions`). A card item's dismissal is always applied — it is part of what makes a
-    statement count as an item at all (item 2's own membership rule), not a snooze concern — so
-    `apply_marks=False` still hides a dismissed card due; it only turns off snooze marking,
-    leaving every item unsnoozed. Phase 3.2 is expected to reuse this with `apply_marks=False` for
-    a raw unplanned-card-due count that a snooze should not hide."""
+    (spec "Card dues and actions (Task 2)" items 1-3). With `apply_marks` True (`GET /actions`) a
+    dismissed card due is omitted and each item carries `snoozedUntil` from its snooze mark; the
+    caller splits `items`/`snoozed` on that. With `apply_marks` False (Phase 3.2 spec rule 8) no
+    mark is read: every item is listed, unsnoozed, whether snoozed or dismissed."""
     marks: dict[str, date] = {}
     if apply_marks:
         cur.execute(
@@ -251,10 +252,16 @@ def action_list(
             )
         )
 
-    cur.execute(
-        _CARD_ACTION_ITEMS,
-        (household_id, as_of, as_of - timedelta(days=DUE_WINDOW_DAYS), household_id, household_id),
+    card_params: tuple[object, ...] = (
+        household_id,
+        as_of,
+        as_of - timedelta(days=DUE_WINDOW_DAYS),
+        household_id,
     )
+    if apply_marks:
+        cur.execute(_CARD_ACTION_ITEMS + _CARD_NOT_DISMISSED, (*card_params, household_id))
+    else:
+        cur.execute(_CARD_ACTION_ITEMS, card_params)
     for sid, account_id, account_name, currency, due_date, balance in cur.fetchall():
         statement_id = UUID(str(sid))
         overdue = due_date < as_of
@@ -513,6 +520,17 @@ def reopen_follow_up(
 def _parse_action_key(action_key: str) -> re.Match[str]:
     match = _ACTION_KEY_RE.match(action_key)
     if match is None:
+        raise HTTPException(status_code=422, detail=_MALFORMED_KEY)
+    # The pattern admits any 36 of [0-9a-f-] and any 4-2-2 digits; only the canonical UUID text
+    # (what GET /actions emits) and a real calendar date name an item.
+    try:
+        item_id = match["followup_id"] or match["commitment_id"] or match["card_id"]
+        canonical = str(UUID(item_id)) == item_id
+        if match["due_date"] is not None:
+            date.fromisoformat(match["due_date"])
+    except ValueError:
+        canonical = False
+    if not canonical:
         raise HTTPException(status_code=422, detail=_MALFORMED_KEY)
     return match
 
