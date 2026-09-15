@@ -13,6 +13,11 @@ from ..fxrange import fill_range
 
 router = APIRouter(prefix="/fx", tags=["fx"])
 
+# A caller mistyping a year rather than a day still asks for a range no owner backfills in one
+# request; refusing it early names the fix (split the range) instead of running an ECB fetch
+# that would take minutes.
+_MAX_BACKFILL_DAYS = 400
+
 
 class FxRateResponse(BaseModel):
     base: str = Field(min_length=3, max_length=3)
@@ -38,6 +43,11 @@ def backfill(
         raise HTTPException(status_code=422, detail="end date is in the future")
     if start > end:
         raise HTTPException(status_code=422, detail="start date is after end date")
+    if (end - start).days > _MAX_BACKFILL_DAYS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"range exceeds {_MAX_BACKFILL_DAYS} days; split it into smaller backfills",
+        )
 
     with connect() as conn:
         return {"written": fill_range(conn, start, end)}

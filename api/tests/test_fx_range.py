@@ -372,6 +372,23 @@ def test_the_backfill_route_refuses_a_future_end_and_a_reversed_range(
     assert called == [], "neither refusal reaches the range"
 
 
+def test_the_backfill_route_refuses_a_range_over_400_days(monkeypatch: MonkeyPatch) -> None:
+    """Task 3d: an owner backfilling a wrong year, not a wrong day, still asks for a range no
+    one request should run — refused before the range reaches `fill_range` at all."""
+    called = _route_stub(monkeypatch)
+    client = _owned_client()
+    try:
+        too_wide = client.post("/fx/backfill?start=2024-01-01&end=2025-06-01")  # 517 days
+        at_the_limit = client.post("/fx/backfill?start=2025-01-01&end=2026-02-05")  # 400 days
+    finally:
+        app.dependency_overrides.clear()
+
+    assert too_wide.status_code == 422
+    assert "400 days" in too_wide.json()["detail"]
+    assert at_the_limit.status_code == 200, at_the_limit.text
+    assert called == [(date(2025, 1, 1), date(2026, 2, 5))], "the boundary itself is allowed"
+
+
 def test_the_backfill_route_passes_its_range_through_in_order(monkeypatch: MonkeyPatch) -> None:
     """The extraction has to preserve argument order: `fill_range(conn, end, start)` fetches
     nothing and reports a clean backfill, which is worse than an error."""

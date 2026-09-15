@@ -6,6 +6,7 @@ import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/cli
 import type {
   CategoryRow,
   ClassifyResult,
+  PackSummary,
   RuleAnalytics,
   RuleRow,
   RuleSuggestion,
@@ -405,6 +406,81 @@ function SuggestedRules({
 }
 
 /**
+ * Task 3d: the starter packs shipped with the app (`GET /rules/packs`), offered only while this
+ * household holds no seed rules yet — decided from `origin` on the rules already loaded, the
+ * same field the cascade itself reads, rather than a second flag that could disagree with it.
+ * Loading posts `POST /rules/packs/{name}`, which repeats the same 409 the route always gave a
+ * second load; that server sentence is shown as-is rather than guessed at client-side.
+ */
+function StarterRulePacks({
+  onLoaded,
+  request,
+  rules,
+}: {
+  onLoaded: () => void;
+  request: typeof apiFetch;
+  rules: Array<RuleRow>;
+}) {
+  const [packs, setPacks] = useState<Array<PackSummary>>();
+  const [busy, setBusy] = useState<string>();
+  const [problem, setProblem] = useState<string>();
+  const hasSeedRules = rules.some((rule) => rule.origin === "seed");
+
+  useEffect(() => {
+    if (hasSeedRules) return;
+    let current = true;
+    void request<Array<PackSummary>>("/rules/packs")
+      // Renders nothing until the response is actually the array this route promises — a
+      // caller whose mock has not wired `/rules/packs` in (most existing tests) sees no panel
+      // rather than a crash, the same defence `RuleAnalyticsPanel` above takes on its own shape.
+      .then((result) => { if (current && Array.isArray(result)) setPacks(result); })
+      .catch((error: unknown) => {
+        if (current) setProblem(errorText(error, "Starter packs could not be loaded."));
+      });
+    return () => { current = false; };
+  }, [hasSeedRules, request]);
+
+  if (hasSeedRules) return null;
+  if (!packs) return problem ? <p className="inline-alert" role="alert">{problem}</p> : null;
+  if (packs.length === 0) return null;
+
+  async function load(name: string) {
+    setBusy(name);
+    setProblem(undefined);
+    try {
+      await request<Array<RuleRow>>(`/rules/packs/${encodeURIComponent(name)}`, {
+        method: "POST",
+      });
+      onLoaded();
+    } catch (error) {
+      setProblem(errorText(error, "This pack could not be loaded."));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  return (
+    <div className="rule-starter-packs">
+      <h3>Starter rules</h3>
+      <p className="lede">
+        A pack of rules for common narration (salary, interest, fees, transfers), loaded once.
+      </p>
+      {problem && <p className="inline-alert" role="alert">{problem}</p>}
+      <ul>
+        {packs.map((pack) => (
+          <li key={pack.name}>
+            <span>{pack.name} ({pack.ruleCount} rules)</span>{" "}
+            <button disabled={busy !== undefined} onClick={() => void load(pack.name)} type="button">
+              {busy === pack.name ? "Loading…" : "Load starter rules"}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
  * The section loads its own rules rather than being handed them.
  *
  * Deliberate: the settings loader is a fixed sequence of awaits and four existing tests count
@@ -552,6 +628,15 @@ export function RulesManager({ categories, request, onChanged }: Props) {
       </p>
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
+
+      <StarterRulePacks
+        onLoaded={() => {
+          void reload();
+          onChanged();
+        }}
+        request={request}
+        rules={rules}
+      />
 
       <ul className="rules-list">
         {rules.map((rule) => (

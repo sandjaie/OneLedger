@@ -2,7 +2,7 @@
 
 The same shape `test_seeded_layouts.py` sets, for the same reason: a seed is edited by hand and
 applied by hand, and the first thing to notice a rule the endpoint refuses is the owner,
-mid-import. A pack dropped into `db/seeds/rules/` is covered on the day it lands.
+mid-import. A pack dropped into `api/oneledger/rules_packs/` is covered on the day it lands.
 
 Two things beyond the shape are checked here because only this file can check them.
 
@@ -33,7 +33,7 @@ from oneledger.routes.rules import RuleBody
 RESOLVED = UUID(int=1)
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKS = sorted((ROOT / "db" / "seeds" / "rules").glob("*.json"))
+PACKS = sorted((ROOT / "api" / "oneledger" / "rules_packs").glob("*.json"))
 # V9 creates the shared taxonomy and Flyway checksums it, so the migration is a fixed and
 # authoritative list of the slugs a pack may name — and reading it needs no database, which
 # means this runs on every push rather than only where one is reachable.
@@ -71,7 +71,7 @@ def _pack(path: Path) -> dict[str, Any]:
 def test_the_rules_directory_holds_packs_to_check() -> None:
     """The guard on the guard: a glob that matches nothing parametrizes to nothing and reports
     green, so without this the suite would go on passing after a rename or a move."""
-    assert PACKS, f"no rule pack found in {ROOT / 'db' / 'seeds' / 'rules'}"
+    assert PACKS, f"no rule pack found in {ROOT / 'api' / 'oneledger' / 'rules_packs'}"
 
 
 def test_the_seed_taxonomy_was_actually_read() -> None:

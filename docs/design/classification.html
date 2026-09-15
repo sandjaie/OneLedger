@@ -707,7 +707,7 @@ personal, and the product should not argue about it.</p>
 a pack that always loads and one pack per country. Which country packs load is not a setup
 question — it is <code>SELECT DISTINCT country FROM account</code>. Opening an account in a new country
 loads that country&#39;s pack; there is no list to keep in sync with reality.</p>
-<pre><code>db/seeds/rules/
+<pre><code>api/oneledger/rules_packs/   (planned layout)
   global.yaml            always loaded
     Netflix · Spotify · YouTube · Apple · Google · Microsoft · Adobe
     AWS · GitHub · OpenAI · Anthropic · Steam · Uber · Amazon
@@ -729,8 +729,9 @@ needed first, not because they are privileged: a pack is one YAML file, added wi
 any other, and a household in a country with no pack gets the tree, the global merchants, and a
 first import that classifies less — see <a href="../adr/0008-seed-taxonomy-with-buckets.html">ADR-0008</a>
 for what that costs.</p>
-<p>Maintained as YAML in <code>db/seeds/rules/</code>, loaded by migration, and versioned so an updated seed set
-can be applied without disturbing user rules.</p>
+<p>Packs ship as JSON in <code>api/oneledger/rules_packs/</code> and load once per household on request
+through <code>POST /rules/packs/{name}</code> as <code>seed</code> rules, which never overwrite user rules.
+Only <code>banking-narration</code> exists today; the regional packs above are the planned layout.</p>
 <hr>
 <h2 id="4-learning-from-corrections">4. Learning from corrections</h2>
 <p><strong>Explicit, never silent.</strong> Recategorizing a transaction opens a prompt:</p>

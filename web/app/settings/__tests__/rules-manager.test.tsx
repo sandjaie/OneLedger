@@ -434,3 +434,51 @@ describe("suggested rules", () => {
     ).toBeTruthy();
   });
 });
+
+describe("starter rule packs", () => {
+  it("offers a shipped pack when no seed rules are loaded, and loads it on click", async () => {
+    const { request, calls } = serving([], {
+      "/rules/packs": [{ name: "banking-narration", ruleCount: 37 }],
+      "/rules/packs/banking-narration": [rule({ id: "seed-1", origin: "seed" })],
+    });
+    const onChanged = mount(request);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Load starter rules" }),
+    );
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.path === "/rules/packs/banking-narration")).toBe(true),
+    );
+    expect(onChanged).toHaveBeenCalled();
+    // Reloading afterwards is the same `GET /rules` every other write already triggers.
+    expect(calls.filter((call) => call.path === "/rules" && !call.init?.method).length).toBe(2);
+  });
+
+  it("hides the starter section once the household already holds a seed rule", async () => {
+    const { request } = serving([rule({ id: "seed-1", origin: "seed" })]);
+    mount(request);
+
+    await screen.findAllByRole("listitem");
+    expect(screen.queryByText("Starter rules")).toBeNull();
+  });
+
+  it("shows the server's sentence when a pack has already been loaded once", async () => {
+    const { request } = serving([], {
+      "/rules/packs": [{ name: "banking-narration", ruleCount: 37 }],
+      "/rules/packs/banking-narration": new ApiError(
+        409,
+        "this household already holds seed rules; a pack loads once",
+      ),
+    });
+    mount(request);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Load starter rules" }),
+    );
+
+    expect(
+      await screen.findByText("this household already holds seed rules; a pack loads once"),
+    ).toBeTruthy();
+  });
+});

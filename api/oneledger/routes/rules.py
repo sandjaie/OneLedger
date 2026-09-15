@@ -12,11 +12,13 @@ cascade is re-run only when the owner asks for it, by the route 3a3b adds.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, ClassVar, Literal
+from importlib import resources
+from typing import Annotated, Any, ClassVar, Literal, Protocol
 from uuid import UUID
 
 import psycopg
@@ -354,18 +356,70 @@ def _category_by_slug(cur: psycopg.Cursor[Any], slug: str, household_id: UUID) -
     return UUID(str(found[0]))
 
 
-@router.post("/rules/pack", status_code=201)
-def load_pack(pack: Pack, owner: Annotated[OwnerSession, Depends(require_owner)]) -> list[RuleRow]:
-    """The shipped packs in `db/seeds/rules/`, loaded once per household as `seed` rules.
+# The starter packs ship inside this package (`oneledger/rules_packs/*.json`) rather than in
+# `db/seeds/rules/`, one source of truth for the file `POST /rules/packs/{name}` loads and the
+# one `test_seeded_rules.py` checks. `importlib.resources` reads it the same way whether this
+# runs from a checkout or an installed wheel — a plain filesystem path relative to `__file__`
+# would not survive the second.
+_PACKS_PACKAGE = "oneledger.rules_packs"
+
+
+class _PackFile(Protocol):
+    """The two `Traversable` members this module actually uses — narrowed to a `Protocol`
+    rather than the full `importlib.resources.abc.Traversable` interface, so a test can stub one
+    with a plain object instead of implementing `iterdir`/`open`/`joinpath` it never calls."""
+
+    @property
+    def name(self) -> str: ...
+
+    def read_text(self) -> str: ...
+
+
+def _available_packs() -> dict[str, _PackFile]:
+    """Every shipped pack, by file stem. A `dict` rather than a directory listing at each call
+    site, so `POST /rules/packs/{name}` can validate `name` against exactly these keys — never
+    against a path built from the caller's string, which is how a `name` of `../../etc/passwd`
+    would read a file outside this directory."""
+    return {
+        entry.name.removesuffix(".json"): entry
+        for entry in sorted(resources.files(_PACKS_PACKAGE).iterdir(), key=lambda e: e.name)
+        if entry.name.endswith(".json")
+    }
+
+
+class PackSummary(BaseModel):
+    name: str
+    ruleCount: int
+
+
+@router.get("/rules/packs")
+def list_packs(_: Annotated[OwnerSession, Depends(require_owner)]) -> list[PackSummary]:
+    """Every shipped pack this household could load, whether or not it already has. The rules
+    manager decides what to offer from this list plus its own `GET /rules`."""
+    return [
+        PackSummary(name=name, ruleCount=len(json.loads(entry.read_text()).get("rules", [])))
+        for name, entry in _available_packs().items()
+    ]
+
+
+@router.post("/rules/packs/{name}", status_code=201)
+def load_pack(name: str, owner: Annotated[OwnerSession, Depends(require_owner)]) -> list[RuleRow]:
+    """One of the shipped packs, loaded once per household as `seed` rules.
 
     This exists because `POST /rules` refuses to set `origin` and must keep refusing: a rule
     the owner writes in Settings is `user_created`, and a body that could claim otherwise
     would put itself in the wrong half of the cascade and lie about where it came from.
     `origin` is decided by what did the writing, and this route is that writer.
 
-    One pack is one transaction. A slug nothing answers to refuses the whole load rather than
-    leaving the rules before it behind, because half a pack is a cascade nobody designed.
+    `name` is checked against `_available_packs()` before anything else — an unknown name is
+    404, never a path the route goes looking for. One pack is one transaction: a slug nothing
+    answers to refuses the whole load rather than leaving the rules before it behind, because
+    half a pack is a cascade nobody designed.
     """
+    entry = _available_packs().get(name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"no such pack: {name}")
+    pack = Pack.model_validate(json.loads(entry.read_text()))
     try:
         with connect() as conn, conn.cursor() as cur:
             cur.execute(

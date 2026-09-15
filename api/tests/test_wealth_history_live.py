@@ -894,3 +894,111 @@ def test_31_december_2023_is_listed_even_with_no_account_open_that_day() -> None
             cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
         connection.commit()
         connection.close()
+
+
+def test_chart_ratio_is_exact_for_mixed_sign_months_and_null_for_incomplete() -> None:
+    """Task 3d: `chartRatio` is a complete month's `totalBase` over the largest absolute
+    complete-month `totalBase`, `Decimal` at 4 places half-even, and null on an incomplete one.
+
+    One base-currency account, so no `missing_rate` account ever makes a later month incomplete
+    on its own (as the large multi-status fixture above deliberately does): February is
+    `before_opening` (its `opening_balance_date` is 1 March, not `opened_on`, so it stays
+    counted but has no balance yet — the same status `test_before_opening_month_is_incomplete`
+    exercises) and incomplete; March, April and May are complete with 1000, -2000 and 500, so
+    -2000 is the largest magnitude and the three ratios are exact fifths of it.
+    """
+    connection = connect_to_test_database()
+    household_id, person_id, user_id = uuid4(), uuid4(), uuid4()
+    owner = auth.OwnerSession(user_id, household_id, uuid4(), "wealth-ratio-owner@example.invalid")
+    with connection.cursor() as cur:
+        cur.execute("SELECT min(code), max(code) FROM currency")
+        found = cur.fetchone()
+        assert found is not None
+        base, secondary = str(found[0]).strip(), str(found[1]).strip()
+        cur.execute(
+            """INSERT INTO household (id, name, base_currency, secondary_currency)
+               VALUES (%s, 'wealth ratio household', %s, %s)""",
+            (household_id, base, secondary),
+        )
+        cur.execute(
+            """INSERT INTO person (id, household_id, display_name, is_self)
+               VALUES (%s, %s, 'wealth ratio owner', true)""",
+            (person_id, household_id),
+        )
+        cur.execute(
+            """INSERT INTO app_user (id, household_id, person_id, email, role)
+               VALUES (%s, %s, %s, %s, 'owner')""",
+            (user_id, household_id, person_id, owner.email),
+        )
+        account_id = _account(
+            cur,
+            household_id,
+            person_id,
+            "savings",
+            base,
+            opened_on=None,
+            opening_balance="1000",
+            opening_balance_date=date(2024, 3, 1),
+        )
+        # `post_ledger_transaction` freezes through `money._frozen`, which needs an exact rate
+        # row on the booked date (never a carry, unlike the month-end translation below); one
+        # row well before the counted history carries forward for every month-end translation.
+        for on in (date(2024, 1, 1), date(2024, 4, 15), date(2024, 5, 15)):
+            _secondary_to_base_rate(cur, on, secondary, base, "2.0000000000")
+    connection.commit()
+
+    with connection.cursor() as cur:
+        post_ledger_transaction(
+            cur,
+            household_id,
+            account_id,
+            date(2024, 4, 15),
+            "Synthetic large debit",
+            Decimal("-3000"),
+            "expense",
+            None,
+        )
+        post_ledger_transaction(
+            cur,
+            household_id,
+            account_id,
+            date(2024, 5, 15),
+            "Synthetic credit",
+            Decimal("2500"),
+            "income",
+            None,
+        )
+    connection.commit()
+
+    app.dependency_overrides[auth.require_owner] = lambda: owner
+    try:
+        refreshed = _client().post("/wealth-history/refresh", headers=ORIGIN)
+        assert refreshed.status_code == 200
+
+        history = _client().get("/wealth-history", headers=ORIGIN).json()
+        by_month = {m["monthEnd"]: m for m in history["months"]}
+
+        assert by_month["2024-02-29"]["complete"] is False
+        assert by_month["2024-02-29"]["chartRatio"] is None
+
+        assert by_month["2024-03-31"]["totalBase"] == "1000.0000"
+        assert by_month["2024-03-31"]["chartRatio"] == "0.5000"
+        assert by_month["2024-04-30"]["totalBase"] == "-2000.0000"
+        assert by_month["2024-04-30"]["chartRatio"] == "-1.0000"
+        assert by_month["2024-05-31"]["totalBase"] == "500.0000"
+        assert by_month["2024-05-31"]["chartRatio"] == "0.2500"
+    finally:
+        app.dependency_overrides.clear()
+        with connection.cursor() as cur:
+            cur.execute(
+                "DELETE FROM wealth_history_refresh WHERE household_id = %s", (household_id,)
+            )
+            cur.execute("DELETE FROM month_end_position WHERE household_id = %s", (household_id,))
+            clear_synthetic_account_valuation_periods(cur)
+            cur.execute("DELETE FROM transaction WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM account WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM app_user WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM person WHERE household_id = %s", (household_id,))
+            cur.execute("DELETE FROM household WHERE id = %s", (household_id,))
+        connection.commit()
+        connection.close()

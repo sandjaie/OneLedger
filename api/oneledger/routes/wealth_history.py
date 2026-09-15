@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -31,6 +31,7 @@ from ..wealth_history import RefreshCounts, refresh, stored_month_ends
 router = APIRouter(tags=["wealth-history"])
 
 _ZERO = Decimal("0.0000")
+_RATIO_PLACES = Decimal("0.0001")
 
 
 class MonthSummary(BaseModel):
@@ -42,6 +43,11 @@ class MonthSummary(BaseModel):
     complete: bool
     statusCounts: dict[str, int]
     computedAt: datetime
+    # A complete month's totalBase divided by the largest absolute complete-month totalBase,
+    # 4 places half-even, in [-1, 1] — the web chart's `--ratio` CSS custom property, so the
+    # bar height comes from a server string rather than browser arithmetic on money. Null for
+    # an incomplete month, "0.0000" for every complete month when that largest total is zero.
+    chartRatio: str | None
 
 
 class WealthHistoryResponse(BaseModel):
@@ -75,6 +81,21 @@ class MonthPositionsResponse(BaseModel):
     baseCurrency: str
     secondaryCurrency: str
     positions: list[MonthEndPosition]
+
+
+def _chart_ratios(complete_totals: dict[date, Decimal]) -> dict[date, str]:
+    """Half-even at 4 places, as every other stored rate here rounds — never half-up, which
+    would nudge a value exactly between two bars a fixed direction on every chart. `"0.0000"`
+    for every month when the largest complete-month magnitude is zero, so a chart of an
+    all-zero history draws flat bars instead of a division by zero."""
+    max_abs = max((abs(total) for total in complete_totals.values()), default=_ZERO)
+    if max_abs == 0:
+        return {month_end: "0.0000" for month_end in complete_totals}
+    return {
+        # `+ _ZERO` turns a rounded negative zero into "0.0000".
+        month_end: str((total / max_abs).quantize(_RATIO_PLACES, rounding=ROUND_HALF_EVEN) + _ZERO)
+        for month_end, total in complete_totals.items()
+    }
 
 
 def _household_pair(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
@@ -139,27 +160,38 @@ def read_wealth_history(
             row[0]: (row[1], row[2], bool(row[3])) for row in cur.fetchall()
         }
 
-        months = []
+        rows: list[tuple[date, Decimal | None, Decimal | None, bool]] = []
         for month_end_value in stored_month_ends(computed_through):
             found = totals_by_month.get(month_end_value)
-            total_base: Decimal | None
-            total_secondary: Decimal | None
             if found is None:
                 # No stored position row at all for this month (e.g. no account existed yet):
                 # nothing was omitted from a sum, so the month is vacuously complete at zero.
-                total_base, total_secondary, complete = _ZERO, _ZERO, True
+                rows.append((month_end_value, _ZERO, _ZERO, True))
             else:
                 total_base, total_secondary, complete = found
-            months.append(
-                MonthSummary(
-                    monthEnd=month_end_value,
-                    totalBase=_out(total_base) if complete else None,
-                    totalSecondary=_out(total_secondary) if complete else None,
-                    complete=complete,
-                    statusCounts=counts_by_month.get(month_end_value, {}),
-                    computedAt=computed_at,
-                )
+                rows.append((month_end_value, total_base, total_secondary, complete))
+
+        # `complete` is true only when the SQL's `bool_and` found rows to aggregate, so a
+        # complete month's sums are never actually null — asserted here rather than trusted,
+        # since the column type itself stays nullable for the incomplete case.
+        complete_totals: dict[date, Decimal] = {}
+        for month_end_value, total_base, _total_secondary, complete in rows:
+            if complete:
+                assert total_base is not None
+                complete_totals[month_end_value] = total_base
+        chart_ratios = _chart_ratios(complete_totals)
+        months = [
+            MonthSummary(
+                monthEnd=month_end_value,
+                totalBase=_out(total_base) if complete else None,
+                totalSecondary=_out(total_secondary) if complete else None,
+                complete=complete,
+                statusCounts=counts_by_month.get(month_end_value, {}),
+                computedAt=computed_at,
+                chartRatio=chart_ratios.get(month_end_value) if complete else None,
             )
+            for month_end_value, total_base, total_secondary, complete in rows
+        ]
     return WealthHistoryResponse(baseCurrency=base, secondaryCurrency=secondary, months=months)
 
 
