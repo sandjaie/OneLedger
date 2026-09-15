@@ -92,7 +92,8 @@ def _chart_ratios(complete_totals: dict[date, Decimal]) -> dict[date, str]:
     if max_abs == 0:
         return {month_end: "0.0000" for month_end in complete_totals}
     return {
-        month_end: str((total / max_abs).quantize(_RATIO_PLACES, rounding=ROUND_HALF_EVEN))
+        # `+ _ZERO` turns a rounded negative zero into "0.0000".
+        month_end: str((total / max_abs).quantize(_RATIO_PLACES, rounding=ROUND_HALF_EVEN) + _ZERO)
         for month_end, total in complete_totals.items()
     }
 

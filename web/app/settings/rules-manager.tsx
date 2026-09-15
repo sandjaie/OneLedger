@@ -440,7 +440,9 @@ function StarterRulePacks({
     return () => { current = false; };
   }, [hasSeedRules, request]);
 
-  if (hasSeedRules || !packs || packs.length === 0) return null;
+  if (hasSeedRules) return null;
+  if (!packs) return problem ? <p className="inline-alert" role="alert">{problem}</p> : null;
+  if (packs.length === 0) return null;
 
   async function load(name: string) {
     setBusy(name);

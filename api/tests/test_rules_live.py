@@ -700,8 +700,10 @@ def test_loading_an_unknown_pack_name_is_404(live: Fixture) -> None:
 def test_a_pack_name_cannot_traverse_out_of_the_packs_directory(live: Fixture) -> None:
     """`name` is checked against the listed stems, never built into a filesystem path — a value
     that would escape the directory simply is not one of them."""
-    traversal = client().post("/rules/packs/..%2F..%2Fpyproject", headers=ORIGIN)
-    assert traversal.status_code == 404
+    for name in ("__init__", "banking-narration.json"):
+        refused = client().post(f"/rules/packs/{name}", headers=ORIGIN)
+        assert refused.status_code == 404
+        assert refused.json()["detail"] == f"no such pack: {name}"
 
 
 def test_a_rule_the_owner_writes_is_never_seed(live: Fixture) -> None:
