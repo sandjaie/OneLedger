@@ -3,10 +3,8 @@
 import { useState } from "react";
 
 import { CASH_FIELDS, isCashKind, type CashKind } from "@/app/investments/investment-event-form";
-import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import type {
-  AccountRow,
   AcquisitionCorrectionCreate,
   BonusActionCorrectionCreate,
   CashLifecycleCorrectionCreate,
@@ -23,7 +21,6 @@ import type {
 type Props = {
   event: HoldingEventRow;
   holding: HoldingDetail;
-  accounts: Array<AccountRow>;
   request: typeof apiFetch;
   onCorrected: () => void;
 };
@@ -51,7 +48,6 @@ type Draft = {
   unitRatio: string;
   outUnits: string; outPrice: string; outGrossAmount: string;
   inUnits: string; inPrice: string; inGrossAmount: string;
-  inAccountId: string;
 };
 
 function isOutLeg(eventKind: string) {
@@ -61,7 +57,7 @@ function isOutLeg(eventKind: string) {
 /** Every editable draft value pre-filled from the event's own stored facts (and, for a paired
  * leg, its counterpart's) — nothing here is ever left for the owner to retype from scratch, and
  * nothing here is computed: every string is one the holding detail already returned. */
-function initialDraft(event: HoldingEventRow, holding: HoldingDetail): Draft {
+function initialDraft(event: HoldingEventRow): Draft {
   const pairKind = (PAIR_KIND as Record<string, PairKind | undefined>)[event.eventKind];
   if (pairKind) {
     const outLeg = isOutLeg(event.eventKind);
@@ -73,14 +69,13 @@ function initialDraft(event: HoldingEventRow, holding: HoldingDetail): Draft {
       inUnits: (outLeg ? event.counterpartUnits : event.units) ?? "",
       inPrice: (outLeg ? event.counterpartPrice : event.price) ?? "",
       inGrossAmount: (outLeg ? event.counterpartGrossAmount : event.grossAmount) ?? "",
-      inAccountId: (outLeg ? event.counterpartAccountId : holding.accountId) ?? "",
     };
   }
   return {
     units: event.units ?? "", price: event.price ?? "", grossAmount: event.grossAmount ?? "",
     charges: event.charges ?? "", withheldTax: event.withheldTax ?? "", netAmount: event.netAmount ?? "",
     unitRatio: event.unitRatio ?? "",
-    outUnits: "", outPrice: "", outGrossAmount: "", inUnits: "", inPrice: "", inGrossAmount: "", inAccountId: "",
+    outUnits: "", outPrice: "", outGrossAmount: "", inUnits: "", inPrice: "", inGrossAmount: "",
   };
 }
 
@@ -178,11 +173,13 @@ export function correctionRequest(
   if (!outLegId) return undefined;
 
   if (pairKind === "platform_transfer") {
+    // The receiving account is not editable: the database keeps each corrected leg on its own account.
     const outAccountId = outLeg ? holding.accountId : event.counterpartAccountId;
-    if (!outAccountId || !draft.inAccountId) return undefined;
+    const inAccountId = outLeg ? event.counterpartAccountId : holding.accountId;
+    if (!outAccountId || !inAccountId) return undefined;
     const body: PlatformTransferActionCorrectionCreate = {
       kind: "platform_transfer",
-      outAccountId, inAccountId: draft.inAccountId, securityId: holding.securityId,
+      outAccountId, inAccountId, securityId: holding.securityId,
       eventDate, outUnits: draft.outUnits, inUnits: draft.inUnits, currency,
       idempotencyKey, expectedCorrectionState, correctionReason,
     };
@@ -219,8 +216,8 @@ function ratioFields(event: HoldingEventRow): Array<keyof Draft> {
   return [];
 }
 
-export function EventCorrectionForm({ event, holding, accounts, request, onCorrected }: Props) {
-  const [draft, setDraft] = useState<Draft>(() => initialDraft(event, holding));
+export function EventCorrectionForm({ event, holding, request, onCorrected }: Props) {
+  const [draft, setDraft] = useState<Draft>(() => initialDraft(event));
   const [reason, setReason] = useState("");
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -228,7 +225,6 @@ export function EventCorrectionForm({ event, holding, accounts, request, onCorre
   const [problem, setProblem] = useState("");
 
   const fields = ratioFields(event);
-  const isPlatformTransfer = event.eventKind.startsWith("platform_transfer");
 
   function invalidate() {
     setIdempotencyKey("");
@@ -274,7 +270,6 @@ export function EventCorrectionForm({ event, holding, accounts, request, onCorre
     }
   }
 
-  const otherAccounts = accounts.filter((a) => a.isActive && INVESTMENT_ACCOUNT_TYPES.has(a.accountType));
   const preview = idempotencyKey ? correctionRequest(event, holding, draft, idempotencyKey, reason.trim()) : undefined;
 
   return (
@@ -287,15 +282,6 @@ export function EventCorrectionForm({ event, holding, accounts, request, onCorre
           <input disabled={confirming} inputMode="decimal" onChange={(change) => changeField(field, change.target.value)} required value={draft[field]} />
         </label>
       ))}
-      {isPlatformTransfer && (
-        <label className="select-field">
-          <span>Account transferred into</span>
-          <select disabled={confirming} onChange={(change) => changeField("inAccountId", change.target.value)} value={draft.inAccountId}>
-            <option value="">Choose the receiving account</option>
-            {otherAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-        </label>
-      )}
       <label className="text-field">
         <span>Correction reason</span>
         <input disabled={confirming} onChange={(change) => changeReason(change.target.value)} required value={reason} />
@@ -312,7 +298,7 @@ export function EventCorrectionForm({ event, holding, accounts, request, onCorre
           {preview && (
             <dl>
               {Object.entries(preview.body)
-                .filter(([key]) => (fields as Array<string>).includes(key) || key === "inAccountId")
+                .filter(([key]) => (fields as Array<string>).includes(key))
                 .map(([key, value]) => <div key={key}><dt>{FIELD_LABEL[key] ?? key}</dt><dd>{String(value)}</dd></div>)}
             </dl>
           )}

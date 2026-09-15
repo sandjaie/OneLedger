@@ -52,7 +52,7 @@ function event(overrides: Partial<HoldingEventRow> = {}): HoldingEventRow {
   };
 }
 
-const SALE_DRAFT = { units: "-1.00000000", price: "6.000000", grossAmount: "6.0000", charges: "0.0000", withheldTax: "0.0000", netAmount: "6.0000", unitRatio: "", outUnits: "", outPrice: "", outGrossAmount: "", inUnits: "", inPrice: "", inGrossAmount: "", inAccountId: "" };
+const SALE_DRAFT = { units: "-1.00000000", price: "6.000000", grossAmount: "6.0000", charges: "0.0000", withheldTax: "0.0000", netAmount: "6.0000", unitRatio: "", outUnits: "", outPrice: "", outGrossAmount: "", inUnits: "", inPrice: "", inGrossAmount: "" };
 
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn(async (path: string, init?: RequestInit) => handler(path, init)) as Request;
@@ -139,7 +139,7 @@ describe("correctionRequest", () => {
     expect(built?.body).toMatchObject({ kind: "switch", outSecurityId: "security-1", inSecurityId: "security-2" });
   });
 
-  it("corrects a platform transfer's out leg, allowing an edited receiving account", () => {
+  it("corrects a platform transfer's out leg on its stored receiving account", () => {
     const outLeg = event({
       id: "out-leg", eventKind: "platform_transfer_out", units: "-6.00000000", price: null, grossAmount: null,
       netAmount: null, counterpartEventId: "in-leg",
@@ -149,12 +149,12 @@ describe("correctionRequest", () => {
 
     const built = correctionRequest(
       outLeg, HOLDING,
-      { ...SALE_DRAFT, outUnits: "-6.00000000", inUnits: "6.00000000", inAccountId: "account-3" },
+      { ...SALE_DRAFT, outUnits: "-6.00000000", inUnits: "6.00000000" },
       "key-6", "Wrong account",
     );
 
     expect(built?.body).toMatchObject({
-      kind: "platform_transfer", outAccountId: HOLDING.accountId, inAccountId: "account-3",
+      kind: "platform_transfer", outAccountId: HOLDING.accountId, inAccountId: "account-2",
       securityId: HOLDING.securityId, outUnits: "-6.00000000", inUnits: "6.00000000",
     });
   });
@@ -194,7 +194,7 @@ describe("EventCorrectionForm", () => {
     });
     const onCorrected = vi.fn();
 
-    render(<EventCorrectionForm accounts={[]} event={event()} holding={HOLDING} onCorrected={onCorrected} request={request} />);
+    render(<EventCorrectionForm event={event()} holding={HOLDING} onCorrected={onCorrected} request={request} />);
 
     expect(screen.getByLabelText("Units")).toHaveProperty("value", "-1.00000000");
     fireEvent.change(screen.getByLabelText("Units"), { target: { value: "-2.00000000" } });
@@ -224,7 +224,7 @@ describe("EventCorrectionForm", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<EventCorrectionForm accounts={[]} event={event()} holding={HOLDING} onCorrected={vi.fn()} request={request} />);
+    render(<EventCorrectionForm event={event()} holding={HOLDING} onCorrected={vi.fn()} request={request} />);
     fireEvent.change(screen.getByLabelText("Correction reason"), { target: { value: "First reason" } });
     fireEvent.click(screen.getByRole("button", { name: "Review correction" }));
     fireEvent.click(screen.getByRole("button", { name: "Go back" }));
