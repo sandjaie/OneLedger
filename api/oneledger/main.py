@@ -25,6 +25,7 @@ from .routes import (
     description_reparse,
     doctor,
     documents,
+    emergency_reserve,
     fx,
     goals,
     household,
@@ -210,6 +211,7 @@ app.include_router(investment_reviews.router)
 app.include_router(payslips.router)
 app.include_router(plans.router)
 app.include_router(goals.router)
+app.include_router(emergency_reserve.router)
 app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)

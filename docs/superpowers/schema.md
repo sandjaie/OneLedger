@@ -2963,8 +2963,80 @@ latest in-period snapshot, or summed holdings) and every reservation; `api/onele
 the pure Decimal math for a reservation's contributed/market/FX split and a goal's totals;
 `routes/goals.py` implements `GET /goals`, `POST /goals`, `PUT /goals/{goalId}`,
 `POST /goals/{goalId}/close`, `POST /reservations` and `POST /reservations/{id}/release`. An
-emergency-purpose reservation is refused (422) until Phase 3.3 Task 2 adds `emergency_reserve`
-and `emergency_resource_account` and wires eligibility.
+emergency-purpose reservation is refused (422 `mark this account as an emergency resource first`)
+unless V52's `emergency_resource_account` names the account eligible.
+
+---
+
+## `V52` (applied)
+
+### Emergency reserve and action keys
+
+Phase 3.3 Task 2. The emergency reserve's target, its baseline (chosen category buckets over a
+reference period, or a manual monthly amount), and which asset accounts the owner marks eligible
+to cover it. The action key shape widens to admit `goal.<goalId>` and `reserve.<householdId>`
+(this task) and Phase 3.4's `record.` keys, so that phase needs no further constraint change.
+
+```sql
+CREATE TYPE baseline_method AS ENUM ('reference_period', 'manual');
+
+CREATE TABLE emergency_reserve (
+  household_id         UUID PRIMARY KEY REFERENCES household(id),
+  target_months        NUMERIC(4,1) NOT NULL,
+  baseline_method       baseline_method NOT NULL,
+  reference_months      SMALLINT NOT NULL DEFAULT 6,
+  buckets               category_bucket[] NOT NULL DEFAULT '{need,debt_service}',
+  manual_monthly_base   NUMERIC(20,4),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT emergency_target_is_bounded CHECK (target_months > 0 AND target_months <= 60),
+  CONSTRAINT emergency_reference_is_bounded CHECK (reference_months BETWEEN 1 AND 24),
+  CONSTRAINT emergency_buckets_are_spending CHECK (
+    cardinality(buckets) >= 1
+    AND buckets <@ '{need,want,investment,debt_service}'::category_bucket[]),
+  CONSTRAINT emergency_manual_agrees CHECK (
+    (baseline_method = 'manual') = (manual_monthly_base IS NOT NULL)
+    AND (manual_monthly_base IS NULL OR manual_monthly_base > 0))
+);
+
+CREATE TABLE emergency_resource_account (
+  household_id     UUID NOT NULL REFERENCES household(id),
+  account_id       UUID NOT NULL,
+  access_days      SMALLINT NOT NULL DEFAULT 0,
+  restriction_note TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, account_id),
+  CONSTRAINT fk_emergency_account_scope FOREIGN KEY (household_id, account_id)
+    REFERENCES account (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT emergency_access_is_bounded CHECK (access_days BETWEEN 0 AND 365),
+  CONSTRAINT emergency_note_is_bounded CHECK (restriction_note IS NULL OR (
+    char_length(restriction_note) BETWEEN 1 AND 200 AND restriction_note = btrim(restriction_note)))
+);
+
+ALTER TABLE action_mark DROP CONSTRAINT action_mark_key_shape;
+ALTER TABLE action_mark ADD CONSTRAINT action_mark_key_shape CHECK (action_key ~ (
+  '^((follow-up|card|goal|reserve)\.[0-9a-f-]{36}'
+  || '|commitment\.[0-9a-f-]{36}\.[0-9]{4}-[0-9]{2}-[0-9]{2}'
+  || '|record\.[0-9a-f-]{36}\.(review|(renewal|maturity|deadline)\.[0-9]{4}-[0-9]{2}-[0-9]{2}))$'));
+```
+
+Both new tables enable `household_isolation FOR ALL TO authenticated` — plain owner-scoped RLS,
+no `SECURITY DEFINER` write path, the same convention as `goal` and `resource_reservation` (V51).
+The widened key shape also admits Phase 3.4's `record.` keys so that phase needs no further
+constraint change; `action_mark_dismissal_is_card` is unchanged — a `goal.`/`reserve.` mark is
+snooze only, never dismissal.
+
+`api/oneledger/emergency.py` is the pure Decimal baseline and coverage math (a bucketed
+reference-period average or a manual monthly figure; eligible resources not reserved for a goal,
+divided by the baseline); `api/oneledger/resources.py` adds the settings, spending-totals and
+eligible-account reads both `routes/emergency_reserve.py` and `routes/actions.py` share, plus
+`goal_shortfalls()` for the `goal.<goalId>` action item, so `routes/actions.py` still imports no
+other route module. `routes/emergency_reserve.py` implements `GET /emergency-reserve`,
+`PUT /emergency-reserve`, `PUT /emergency-reserve/accounts/{accountId}` and
+`DELETE /emergency-reserve/accounts/{accountId}` (409 while an emergency reservation is active).
+`routes/actions.py`'s `action_list()` adds `goal.<goalId>` (`goal_shortfall`, an active goal with
+available progress and a positive shortfall) and one `reserve.<householdId>`
+(`reserve_below_target`, when the reserve is configured, coverage is available and
+`coverageMonths < target_months`) item; both accept a snooze mark and refuse a dismissal reason.
 
 ---
 

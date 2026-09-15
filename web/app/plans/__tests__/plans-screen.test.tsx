@@ -142,6 +142,25 @@ const emptyMonthlyReview = {
 
 const emptyGoals = { asOf: "2026-03-01", goals: [], accounts: [] };
 
+const emptyEmergencyReserve = {
+  asOf: "2026-03-01",
+  configured: false,
+  settings: null,
+  baseline: null,
+  accounts: [],
+  eligibleBase: null,
+  coverageMonths: null,
+  reservedMonths: null,
+  targetBase: null,
+  gapBase: null,
+  coverageStatus: "not_enough_information",
+  reasons: ["not_configured"],
+  currencies: [],
+  coverageGapMonths: 0,
+  baseCurrency: "XAA",
+  reservations: [],
+};
+
 // Needs attention (Task 2), the monthly review (Task 2) and goals (Phase 3.3 Task 1) each fetch
 // on mount alongside the forecast and commitments; every test here is about the rest of the
 // screen, so all three get a quiet, already-resolved response unless a test overrides one itself.
@@ -155,6 +174,9 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
     }
     if (path === "/goals?includeClosed=true") {
       return Promise.resolve(emptyGoals);
+    }
+    if (path === "/emergency-reserve") {
+      return Promise.resolve(emptyEmergencyReserve);
     }
     return Promise.resolve(handler(path, init));
   }) as Request;

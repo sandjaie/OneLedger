@@ -779,8 +779,9 @@ is refused while the amount reservation is active, and the reverse holds for a w
 reservation on another account; releasing a further 1,000 reservation frees exactly 1,000, and
 <code>GET /dashboard</code>&#39;s net worth is unchanged throughout. Each named refusal (inactive,
 liability or foreign account; no current value; over unreserved; exclusivity both ways; a closed
-goal; an emergency reservation, refused outright until Task 2; a missing exchange rate) returns
-its exact sentence. Replay and conflicting-key checks on both <code>POST /goals</code> and
+goal; an emergency reservation on an account not yet marked an emergency resource; a missing
+exchange rate) returns its exact sentence. Replay and conflicting-key checks on both
+<code>POST /goals</code> and
 <code>POST /reservations</code>; closing a goal releases its active reservations in the same
 transaction, replays the same outcome at 200 and refuses a different one at 409; a goal&#39;s
 currency changes freely until any reservation (active or released) exists on it, then 409.
@@ -791,6 +792,28 @@ a price change splits contributed (the frozen value plus the purchase), market a
 staying zero in one currency throughout. A foreign household&#39;s real goal and reservation rows
 never appear and stay unchanged; <code>GET /goals</code> changes no row. Member 403 on the six new
 routes is covered by the repo-wide owner-dependency inventory test.</li>
+<li>Phase 3.3 Task 2: V52 SQL proves owner/member/foreign/anonymous isolation on
+<code>emergency_reserve</code> and <code>emergency_resource_account</code>, the target/reference/
+bucket/manual-agreement checks, and the widened <code>action_mark_key_shape</code> accepting every
+documented key form (<code>follow-up.</code>, <code>card.</code>, <code>commitment.</code>,
+<code>goal.</code>, <code>reserve.</code>, <code>record.</code>) and refusing a malformed one. P07 in
+full: 10,000 on one account, 6,000 for a goal and 4,000 for the emergency reserve, any further
+reservation refused, releasing frees exactly what was released, <code>GET /dashboard</code>&#39;s net
+worth unchanged throughout. P08: 6,000 eligible over a 2,000 baseline is exactly <code>3.00</code>
+months, and a goal reservation on the same account is not subtracted from eligibility a second
+time by an emergency reservation. A reference-period baseline by bucket counts only the configured
+buckets and reports an uncategorised row separately, excluded from the total; a manual baseline
+uses the stated amount; a zero or negative baseline reads <code>not_enough_information</code>, never
+a computed figure; a known value with an unavailable rate makes coverage
+<code>unavailable</code>, never a total that silently drops the account. Eligibility add, a 422 on
+an inactive or liability account, a 409 while an emergency reservation is active, then release and
+remove; an eligible account&#39;s upcoming commitments (due within 30 days) are listed, never
+subtracted. <code>GET /actions</code>&#39;s <code>goal.&lt;id&gt;</code> and
+<code>reserve.&lt;householdId&gt;</code> items appear, disappear once resolved, and can be
+snoozed; a dismissal reason on either is refused (422), matching the card-only rule. A foreign
+household&#39;s real settings, eligible-account and reservation rows never appear and stay
+unchanged; <code>GET /emergency-reserve</code> changes no row. Member 403 on the four new routes is
+covered by the repo-wide owner-dependency inventory test.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

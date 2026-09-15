@@ -27,6 +27,8 @@ const REASON_TEXT: Record<ActionRow["reason"], string> = {
   commitment_due: "Due soon",
   card_payment_unplanned: "Card payment due",
   follow_up: "Follow-up",
+  goal_shortfall: "Goal shortfall",
+  reserve_below_target: "Reserve below target",
 };
 
 function itemAmountText(item: ActionRow, currencies: Array<CurrencyRow>): string | undefined {
@@ -267,7 +269,7 @@ export function NeedsAttention({
             type="button"
           >Complete</button>
         )}
-        {formOpen !== "reason" && (
+        {formOpen !== "reason" && item.kind !== "goal" && item.kind !== "reserve" && (
           <button
             className="text-action"
             disabled={busy}

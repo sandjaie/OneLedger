@@ -531,7 +531,19 @@ or surplus projects the planned monthly contribution to the target date. Closing
 or abandoned) releases its active reservations and fixes it; its currency is fixed once it has any
 reservation, active or released.</p>
 <p><strong>Uncommitted resources</strong> — Accessible resources after accounting for applicable obligations and reservations once.</p>
-<p><strong>Emergency coverage</strong> — Eligible emergency resources divided by the user-selected monthly essential-spend baseline, with assumptions shown.</p>
+<p><strong>Emergency reserve</strong> — A household's target in months, its essential-spend baseline
+(chosen category buckets averaged over a reference period, or a manual monthly amount) and which
+asset accounts the owner has marked eligible, each with an access delay in days and an optional
+restriction note. Configured through <code>PUT /emergency-reserve</code> and
+<code>PUT&#47;DELETE /emergency-reserve/accounts/{accountId}</code>; removing an account&#39;s
+eligibility is refused while it still carries an active emergency reservation.</p>
+<p><strong>Emergency coverage</strong> — Eligible emergency resources (each eligible account&#39;s
+value less what a goal has reserved on it, never below zero — an emergency reservation does not
+reduce it again) divided by the essential-spend baseline, in months, with a target, a gap and the
+assumptions shown: a resource reserved for a goal is not counted, a commitment due within 30 days
+is shown but not subtracted, coverage uses current rates, and a reservation moves no money. Zero or
+unknown spending reads &quot;not enough information&quot;, never infinite runway; a known value with an
+unavailable exchange rate makes coverage unavailable rather than a total that silently drops it.</p>
 <p><strong>In transit</strong> — An internal movement awaiting settlement evidence. Shown separately from settled available cash; an estimated value must be labelled and cleared on settlement.</p>
 <p><strong>Action</strong> — One item on the Needs attention list: a commitment occurrence due within
 seven days or overdue, a card statement with an amount due and no planned payment, or an

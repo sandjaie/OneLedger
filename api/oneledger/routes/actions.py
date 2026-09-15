@@ -26,13 +26,29 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from ..auth import OwnerSession, require_owner
 from ..coverage import previous_month
 from ..db import connect
+from ..emergency import coverage as emergency_coverage
+from ..resources import (
+    account_native_values,
+    eligible_account_ids,
+    eligible_native_and_base,
+    emergency_baseline,
+    goal_shortfalls,
+    household_currencies,
+    household_reservations,
+    read_emergency_reserve_settings,
+)
 from .plans import DUE_WINDOW_DAYS, Certainty, _commitment_progress
 
 router = APIRouter(tags=["actions"])
 
-ActionKind = Literal["commitment", "card_due", "follow_up"]
+ActionKind = Literal["commitment", "card_due", "follow_up", "goal", "reserve"]
 ActionReason = Literal[
-    "commitment_overdue", "commitment_due", "card_payment_unplanned", "follow_up"
+    "commitment_overdue",
+    "commitment_due",
+    "card_payment_unplanned",
+    "follow_up",
+    "goal_shortfall",
+    "reserve_below_target",
 ]
 FollowUpState = Literal["open", "completed", "dismissed"]
 
@@ -43,12 +59,17 @@ _MALFORMED_KEY = "this is not a valid action key"
 _REASON_IS_CARD_ONLY = "a snooze reason applies to a card action only"
 _SNOOZE_WINDOW = f"snooze date must be after today and within {_SNOOZE_MAX_DAYS} days"
 
-# Mirrors V49's action_mark_key_shape CHECK in db/migrations/V49__card_source_and_actions.sql —
-# keep both in sync.
+# Mirrors V52's action_mark_key_shape CHECK in db/migrations/V52__emergency_reserve.sql — keep
+# both in sync. goal./reserve. are this phase's items; record.* is Phase 3.4's, parsed here (so a
+# snooze on one 404s rather than 422s) but with no items of its own yet.
 _ACTION_KEY_RE = re.compile(
     r"^(?:follow-up\.(?P<followup_id>[0-9a-f-]{36})"
     r"|commitment\.(?P<commitment_id>[0-9a-f-]{36})\.(?P<due_date>\d{4}-\d{2}-\d{2})"
-    r"|card\.(?P<card_id>[0-9a-f-]{36}))$",
+    r"|card\.(?P<card_id>[0-9a-f-]{36})"
+    r"|goal\.(?P<goal_id>[0-9a-f-]{36})"
+    r"|reserve\.(?P<reserve_id>[0-9a-f-]{36})"
+    r"|record\.(?P<record_id>[0-9a-f-]{36})\.(?:review"
+    r"|(?:renewal|maturity|deadline)\.(?P<record_date>\d{4}-\d{2}-\d{2})))$",
     re.ASCII,
 )
 
@@ -327,7 +348,102 @@ def action_list(
             )
         )
 
+    base, secondary = household_currencies(cur, household_id)
+
+    for shortfall in goal_shortfalls(cur, household_id, as_of, base, secondary):
+        action_key = f"goal.{shortfall.goalId}"
+        overdue = shortfall.targetDate < as_of
+        rows.append(
+            ActionRow(
+                actionKey=action_key,
+                kind="goal",
+                reason="goal_shortfall",
+                title=shortfall.name,
+                dueDate=shortfall.targetDate,
+                overdue=overdue,
+                snoozedUntil=marks.get(action_key),
+                accountId=None,
+                accountName=None,
+                amount=str(shortfall.shortfall),
+                remaining=str(shortfall.shortfall),
+                partlyPaid=False,
+                currency=shortfall.currency,
+                certainty=None,
+                commitmentId=None,
+                cardStatementId=None,
+                actionItemId=None,
+            )
+        )
+
+    reserve_gap = _reserve_gap(cur, household_id, as_of, base, secondary)
+    if reserve_gap is not None:
+        action_key = f"reserve.{household_id}"
+        rows.append(
+            ActionRow(
+                actionKey=action_key,
+                kind="reserve",
+                reason="reserve_below_target",
+                title="Emergency reserve",
+                dueDate=None,
+                overdue=False,
+                snoozedUntil=marks.get(action_key),
+                accountId=None,
+                accountName=None,
+                amount=str(reserve_gap),
+                remaining=str(reserve_gap),
+                partlyPaid=False,
+                currency=base,
+                certainty=None,
+                commitmentId=None,
+                cardStatementId=None,
+                actionItemId=None,
+            )
+        )
+
     return rows
+
+
+def _reserve_gap(
+    cur: psycopg.Cursor[Any], household_id: UUID, as_of: date, base: str, secondary: str
+) -> Decimal | None:
+    """The emergency reserve's `gapBase` when configured, coverage is available and coverage
+    falls short of the target (spec `action_list` "reserve.<householdId>" item) — `None`
+    otherwise, so `action_list` adds no item."""
+    settings = read_emergency_reserve_settings(cur, household_id)
+    if settings is None:
+        return None
+    baseline = emergency_baseline(cur, household_id, settings, as_of)
+    if baseline.status != "available":
+        return None
+
+    # No eligible account is zero coverage, the whole target short — still an item.
+    values = account_native_values(cur, household_id, base, secondary, as_of)
+    active_reservations = household_reservations(cur, household_id, active_only=True)
+    eligible_bases: list[Decimal | None] = []
+    for account_id in eligible_account_ids(cur, household_id):
+        native = values.get(account_id)
+        if native is None or native.value is None:
+            continue
+        *_reserved, eligible_base = eligible_native_and_base(
+            cur, account_id, native, active_reservations, base, secondary, as_of
+        )
+        eligible_bases.append(eligible_base)
+
+    result = emergency_coverage(
+        baseline=baseline,
+        target_months=settings.targetMonths,
+        eligible_bases=eligible_bases,
+        emergency_reserved_base=Decimal("0.0000"),
+    )
+    if (
+        result.status == "available"
+        and result.coverageMonths is not None
+        and result.coverageMonths < settings.targetMonths
+        and result.gapBase is not None
+        and result.gapBase > 0
+    ):
+        return result.gapBase
+    return None
 
 
 def _followup_row(row: tuple[Any, ...]) -> FollowUpRow:
@@ -551,10 +667,18 @@ def _parse_action_key(action_key: str) -> re.Match[str]:
     # The pattern admits any 36 of [0-9a-f-] and any 4-2-2 digits; only the canonical UUID text
     # (what GET /actions emits) and a real calendar date name an item.
     try:
-        item_id = match["followup_id"] or match["commitment_id"] or match["card_id"]
-        canonical = str(UUID(item_id)) == item_id
-        if match["due_date"] is not None:
-            date.fromisoformat(match["due_date"])
+        item_id = (
+            match["followup_id"]
+            or match["commitment_id"]
+            or match["card_id"]
+            or match["goal_id"]
+            or match["reserve_id"]
+            or match["record_id"]
+        )
+        canonical = item_id is not None and str(UUID(item_id)) == item_id
+        for group in ("due_date", "record_date"):
+            if match[group] is not None:
+                date.fromisoformat(match[group])
     except ValueError:
         canonical = False
     if not canonical:
@@ -566,8 +690,10 @@ def _assert_key_target_exists(
     cur: psycopg.Cursor[Any], household_id: UUID, match: re.Match[str]
 ) -> None:
     """404 unless the marked object exists in the household (spec "Card dues and actions (Task
-    2)"): a follow-up by id, a commitment whose `next_due_date` is still the key's date, or a
-    card statement by id."""
+    2)", widened by "Emergency reserve and action keys (V52)"): a follow-up by id, a commitment
+    whose `next_due_date` is still the key's date, a card statement by id, an active goal, or the
+    owner's own household id for `reserve.`. A `record.` key (Phase 3.4) is parsed but names no
+    item yet, so it always 404s."""
     if match["followup_id"] is not None:
         cur.execute(
             "SELECT 1 FROM action_item WHERE household_id = %s AND id = %s",
@@ -583,13 +709,25 @@ def _assert_key_target_exists(
         )
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="commitment not found")
-    else:
+    elif match["card_id"] is not None:
         cur.execute(
             "SELECT 1 FROM card_statement WHERE household_id = %s AND id = %s",
             (household_id, UUID(match["card_id"])),
         )
         if cur.fetchone() is None:
             raise HTTPException(status_code=404, detail="card statement not found")
+    elif match["goal_id"] is not None:
+        cur.execute(
+            "SELECT 1 FROM goal WHERE household_id = %s AND id = %s AND state = 'active'",
+            (household_id, UUID(match["goal_id"])),
+        )
+        if cur.fetchone() is None:
+            raise HTTPException(status_code=404, detail="goal not found")
+    elif match["reserve_id"] is not None:
+        if UUID(match["reserve_id"]) != household_id:
+            raise HTTPException(status_code=404, detail="reserve not found")
+    else:
+        raise HTTPException(status_code=404, detail="record not found")
 
 
 @router.put("/actions/marks/{action_key}", status_code=204)

@@ -1087,9 +1087,23 @@ the same plain owner-scoped convention as <code>commitment</code> and <code>acti
 native value by reusing the existing valuation rules (<code>dashboard.VALUATION_PERIOD_FOR_ACCOUNT</code>,
 <code>investments.positions.read_positions</code>); <code>api/oneledger/goals.py</code> is the pure
 Decimal math that splits a reservation's current value into what was contributed, market movement
-and FX movement. An emergency-purpose reservation is refused until Phase 3.3 Task 2 adds
-<code>emergency_reserve</code> and <code>emergency_resource_account</code> and wires eligibility.
+and FX movement. An emergency-purpose reservation is refused (422) unless <code>emergency_resource_account</code>
+(Phase 3.3 Task 2, V52) names the account eligible.
 Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V51</code> (applied).</p>
+<p>Phase 3.3 Task 2 adds <code>emergency_reserve</code> (one row per household: a target in months, a
+baseline method &mdash; chosen category buckets over a reference period, or a manual monthly amount
+&mdash; and the buckets and reference length that method uses) and
+<code>emergency_resource_account</code> (which asset accounts the owner marks eligible, with an access
+delay in days and an optional restriction note). Neither carries a <code>SECURITY DEFINER</code> write
+path, the same plain owner-scoped convention as <code>goal</code> and <code>resource_reservation</code>.
+<code>action_mark_key_shape</code> widens to admit <code>goal.&lt;goalId&gt;</code> and
+<code>reserve.&lt;householdId&gt;</code> (this task) and Phase 3.4's <code>record.</code> keys, so that
+phase needs no further constraint change. <code>api/oneledger/emergency.py</code> is the pure Decimal
+baseline and coverage math; <code>api/oneledger/resources.py</code> adds the settings, spending-totals,
+eligible-account and goal-shortfall reads both <code>routes/emergency_reserve.py</code> and
+<code>routes/actions.py</code> share, so <code>routes/actions.py</code> still imports no other route
+module (the Phase 3.2 import-cycle deviation).
+Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V52</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
@@ -1264,6 +1278,10 @@ V51__goals_and_reservations.sql       goal and resource_reservation: an earmark 
                                       whole asset account for a goal, immutable once inserted
                                       except one release; a closed goal refuses further edits
                                       (applied)
+V52__emergency_reserve.sql            emergency_reserve (target months, baseline method/reference/
+                                      buckets or a manual amount) and emergency_resource_account
+                                      (eligible accounts); widens action_mark_key_shape for
+                                      goal./reserve. and Phase 3.4's record. keys (applied)
 
   then, in this order, numbered as they land:
 

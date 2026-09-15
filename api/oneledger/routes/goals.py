@@ -25,7 +25,6 @@ from ..goals import (
     reservation_progress,
     resource_totals,
 )
-from ..investments.positions import current_rate_pair
 from ..money import _money, _out, translate
 from ..resources import (
     NativeValue,
@@ -35,8 +34,10 @@ from ..resources import (
     ReservationPurpose,
     ValuationMode,
     account_native_values,
-    holdings_inflow_native,
+    goal_rate,
+    household_currencies,
     household_reservations,
+    reservation_inflow,
 )
 
 router = APIRouter(tags=["goals"])
@@ -251,15 +252,6 @@ def _translate_reservation_error(exc: psycopg.Error) -> HTTPException:
     raise exc
 
 
-def _household_currencies(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
-    )
-    row = cur.fetchone()
-    assert row is not None
-    return str(row[0]).strip(), str(row[1]).strip()
-
-
 def _assert_goal_currency(base: str, secondary: str, currency: str) -> None:
     if currency not in (base, secondary):
         raise HTTPException(status_code=422, detail=_GOAL_CURRENCY)
@@ -302,17 +294,6 @@ def _resource_state(
     return values, all_reservations, totals_by_account, over_reserved
 
 
-def _goal_rate(
-    cur: psycopg.Cursor[Any], currency: str, goal_currency: str, base: str, secondary: str, on: date
-) -> Decimal | None:
-    """The rate from `currency` into a goal currency. fx_rate quotes only into the household base,
-    so a secondary-currency goal needs `current_rate_pair`'s cross leg; any other currency is
-    unavailable rather than guessed."""
-    pair = current_rate_pair(cur, currency, base, secondary, on)
-    leg = {base: pair.to_base, secondary: pair.to_secondary}.get(goal_currency)
-    return None if leg is None else leg.rate
-
-
 def _native_now_and_current(
     cur: psycopg.Cursor[Any],
     currency: str,
@@ -325,7 +306,7 @@ def _native_now_and_current(
     as_of: date,
 ) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
     native_now = native_amount if kind == "amount" else (native.value if native else None)
-    rate_now = _goal_rate(cur, currency, target_currency, base, secondary, as_of)
+    rate_now = goal_rate(cur, currency, target_currency, base, secondary, as_of)
     current_value = (
         None if native_now is None or rate_now is None else translate(native_now, rate_now)
     )
@@ -374,8 +355,7 @@ def _reservation_row(
         found = cur.fetchone()
         target_currency = str(found[0]).strip() if found else currency
     else:
-        # Task 2: an emergency reservation always rates into the household base currency. Task 1
-        # never inserts one (the route refuses every emergency reservation), so this is unreached.
+        # An emergency reservation always rates into the household base currency.
         target_currency = base
 
     values = account_native_values(cur, household_id, base, secondary, as_of)
@@ -483,25 +463,15 @@ def _goal_row(
         )
         if reservation.releasedAt is not None:
             continue
-        if reservation.kind == "amount" or native_now is None or native is None:
-            # ponytail: an amount reservation never tracks its account's holdings, so it has no
-            # inflow to measure — the same degenerate case as a missing account value.
-            inflow = Decimal("0.0000")
-        elif native.valuationMode == "ledger_balance":
-            inflow = native_now - reservation.nativeAmount
-        elif native.valuationMode == "holdings":
-            inflow = holdings_inflow_native(
-                cur, household_id, reservation.accountId, reservation.reservedOn, as_of
-            )
-        else:  # snapshot
-            inflow = Decimal("0.0000")
         progresses.append(
             reservation_progress(
                 native_amount=reservation.nativeAmount,
                 rate_at_reservation=reservation.rateAtReservation,
                 native_now=native_now,
                 rate_now=rate_now,
-                inflow_native=inflow,
+                inflow_native=reservation_inflow(
+                    cur, household_id, reservation, native, native_now, as_of
+                ),
             )
         )
 
@@ -561,7 +531,7 @@ def read_goals(
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         values, all_reservations, totals_by_account, over_reserved = _resource_state(
             cur, owner.household_id, as_of, base, secondary
         )
@@ -613,7 +583,7 @@ def create_goal(
     try:
         with connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-            base, secondary = _household_currencies(cur, owner.household_id)
+            base, secondary = household_currencies(cur, owner.household_id)
             cur.execute(
                 """SELECT id, name, target_amount, target_currency, target_date, priority,
                           planned_monthly
@@ -672,7 +642,7 @@ def update_goal(
     try:
         with connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-            base, secondary = _household_currencies(cur, owner.household_id)
+            base, secondary = household_currencies(cur, owner.household_id)
             cur.execute(
                 "SELECT state::text, target_currency FROM goal WHERE household_id = %s AND id = %s "
                 "FOR UPDATE",
@@ -721,7 +691,7 @@ def close_goal(
 ) -> GoalRow:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(
             "SELECT state::text FROM goal WHERE household_id = %s AND id = %s FOR UPDATE",
             (owner.household_id, goalId),
@@ -758,7 +728,7 @@ def create_reservation(
     try:
         with connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-            base, secondary = _household_currencies(cur, owner.household_id)
+            base, secondary = household_currencies(cur, owner.household_id)
 
             cur.execute(
                 """SELECT id, purpose::text, goal_id, account_id, kind::text, native_amount
@@ -850,13 +820,20 @@ def create_reservation(
                     )
                 rate_currency = str(goal_currency).strip()
             else:
-                # Task 2 wires eligibility; until then no account is eligible for an emergency
-                # reservation.
-                raise HTTPException(
-                    status_code=422, detail="mark this account as an emergency resource first"
+                cur.execute(
+                    "SELECT 1 FROM emergency_resource_account "
+                    "WHERE household_id = %s AND account_id = %s",
+                    (owner.household_id, body.accountId),
                 )
+                if cur.fetchone() is None:
+                    raise HTTPException(
+                        status_code=422, detail="mark this account as an emergency resource first"
+                    )
+                # An emergency reservation always rates into the household base currency (spec
+                # "Data model contract").
+                rate_currency = base
 
-            rate = _goal_rate(cur, currency, rate_currency, base, secondary, as_of)
+            rate = goal_rate(cur, currency, rate_currency, base, secondary, as_of)
             if rate is None:
                 raise HTTPException(
                     status_code=422, detail="no exchange rate is available for this reservation"
@@ -900,7 +877,7 @@ def release_reservation(
 ) -> ReservationRow:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(
             "SELECT released_at FROM resource_reservation WHERE household_id = %s AND id = %s "
             "FOR UPDATE",
