@@ -1071,6 +1071,24 @@ export type BodyRevealStatementIdentifierParseIdentifierRevealPost = {
 };
 
 /**
+ * Body_upload_document_documents_post
+ */
+export type BodyUploadDocumentDocumentsPost = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Documenttype
+     */
+    documentType: string;
+    /**
+     * Title
+     */
+    title: string;
+};
+
+/**
  * BonusActionCorrectionCreate
  */
 export type BonusActionCorrectionCreate = {
@@ -1893,6 +1911,10 @@ export type CommitmentCreate = {
      * Sourcecardstatementid
      */
     sourceCardStatementId?: string | null;
+    /**
+     * Sourceregisterrecordid
+     */
+    sourceRegisterRecordId?: string | null;
 };
 
 /**
@@ -1974,7 +1996,7 @@ export type CommitmentRow = {
     /**
      * Source
      */
-    source: 'owner' | 'card_statement';
+    source: 'owner' | 'card_statement' | 'register_record';
     /**
      * Sourcecardstatementid
      */
@@ -1983,6 +2005,14 @@ export type CommitmentRow = {
      * Sourcecardaccountname
      */
     sourceCardAccountName: string | null;
+    /**
+     * Sourceregisterrecordid
+     */
+    sourceRegisterRecordId: string | null;
+    /**
+     * Sourceregistertitle
+     */
+    sourceRegisterTitle: string | null;
 };
 
 /**
@@ -2658,6 +2688,10 @@ export type DocumentRow = {
      * Newerlayoutid
      */
     newerLayoutId: string | null;
+    /**
+     * Title
+     */
+    title: string | null;
 };
 
 /**
@@ -5946,6 +5980,52 @@ export type PeersResponse = {
 };
 
 /**
+ * PlannedCommitment
+ */
+export type PlannedCommitment = {
+    /**
+     * Commitmentid
+     */
+    commitmentId: string;
+    /**
+     * Cadence
+     */
+    cadence: 'once' | 'monthly' | 'annual';
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Nextduedate
+     */
+    nextDueDate: string | null;
+    /**
+     * Status
+     */
+    status: 'upcoming' | 'due' | 'overdue' | 'finished' | 'cancelled';
+    /**
+     * Paidtowardnext
+     */
+    paidTowardNext: string;
+    /**
+     * Remainingnext
+     */
+    remainingNext: string | null;
+    /**
+     * Partlypaid
+     */
+    partlyPaid: boolean;
+};
+
+/**
  * PlatformTransferActionCorrectionCreate
  */
 export type PlatformTransferActionCorrectionCreate = {
@@ -6504,6 +6584,28 @@ export type RegisterCreate = {
 };
 
 /**
+ * RegisterDocumentRow
+ */
+export type RegisterDocumentRow = {
+    /**
+     * Documentid
+     */
+    documentId: string;
+    /**
+     * Documenttype
+     */
+    documentType: string;
+    /**
+     * Title
+     */
+    title: string | null;
+    /**
+     * Uploadedat
+     */
+    uploadedAt: string;
+};
+
+/**
  * RegisterRenewed
  */
 export type RegisterRenewed = {
@@ -6607,6 +6709,11 @@ export type RegisterRow = {
      * Updatedat
      */
     updatedAt: string;
+    /**
+     * Documents
+     */
+    documents: Array<RegisterDocumentRow>;
+    plannedCommitment: PlannedCommitment | null;
 };
 
 /**
@@ -11192,6 +11299,31 @@ export type ListDocumentsDocumentsGetResponses = {
 
 export type ListDocumentsDocumentsGetResponse = ListDocumentsDocumentsGetResponses[keyof ListDocumentsDocumentsGetResponses];
 
+export type UploadDocumentDocumentsPostData = {
+    body: BodyUploadDocumentDocumentsPost;
+    path?: never;
+    query?: never;
+    url: '/documents';
+};
+
+export type UploadDocumentDocumentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadDocumentDocumentsPostError = UploadDocumentDocumentsPostErrors[keyof UploadDocumentDocumentsPostErrors];
+
+export type UploadDocumentDocumentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DocumentRow;
+};
+
+export type UploadDocumentDocumentsPostResponse = UploadDocumentDocumentsPostResponses[keyof UploadDocumentDocumentsPostResponses];
+
 export type DownloadOriginalDocumentsDocumentIdOriginalGetData = {
     body?: never;
     path: {
@@ -12915,6 +13047,74 @@ export type ReopenRegisterRegisterRecordIdReopenPostResponses = {
 };
 
 export type ReopenRegisterRegisterRecordIdReopenPostResponse = ReopenRegisterRegisterRecordIdReopenPostResponses[keyof ReopenRegisterRegisterRecordIdReopenPostResponses];
+
+export type UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+        /**
+         * Documentid
+         */
+        documentId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/documents/{documentId}';
+};
+
+export type UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteError = UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteErrors[keyof UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteErrors];
+
+export type UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteResponse = UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteResponses[keyof UnlinkDocumentRegisterRecordIdDocumentsDocumentIdDeleteResponses];
+
+export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+        /**
+         * Documentid
+         */
+        documentId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/documents/{documentId}';
+};
+
+export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutError = LinkDocumentRegisterRecordIdDocumentsDocumentIdPutErrors[keyof LinkDocumentRegisterRecordIdDocumentsDocumentIdPutErrors];
+
+export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponse = LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses[keyof LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses];
 
 export type ReadMonthlyReviewMonthlyReviewGetData = {
     body?: never;

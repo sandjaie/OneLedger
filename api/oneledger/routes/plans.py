@@ -38,7 +38,7 @@ router = APIRouter(tags=["plans"])
 
 Cadence = Literal["once", "monthly", "annual"]
 Certainty = Literal["confirmed", "estimated"]
-CommitmentSource = Literal["owner", "card_statement"]
+CommitmentSource = Literal["owner", "card_statement", "register_record"]
 CommitmentStatus = Literal["upcoming", "due", "overdue", "finished", "cancelled"]
 ExcludedAccountReason = Literal["not_ledger_valued", "no_balance_date", "balance_after_as_of"]
 ExcludedCommitmentReason = Literal[
@@ -112,6 +112,15 @@ class CommitmentCreate(_CommitmentFields):
     # Task 2: planning a card statement's due amount. Fixed at creation — CommitmentUpdate carries
     # no such field, so an existing commitment's source can never change.
     sourceCardStatementId: UUID | None = None
+    # Phase 3.4 Task 2: planning a register record's premium, expected proceeds or expected
+    # reimbursement — the same fixed-at-creation shape as the card source above.
+    sourceRegisterRecordId: UUID | None = None
+
+    @model_validator(mode="after")
+    def _one_source(self) -> CommitmentCreate:
+        if self.sourceCardStatementId is not None and self.sourceRegisterRecordId is not None:
+            raise ValueError(_REGISTER_SOURCE_TWO)
+        return self
 
 
 class CommitmentUpdate(_CommitmentFields):
@@ -140,6 +149,8 @@ class CommitmentRow(BaseModel):
     source: CommitmentSource
     sourceCardStatementId: UUID | None
     sourceCardAccountName: str | None
+    sourceRegisterRecordId: UUID | None
+    sourceRegisterTitle: str | None
 
 
 class CommitmentsResponse(BaseModel):
@@ -281,6 +292,12 @@ def _translate_database_error(exc: psycopg.Error) -> HTTPException:
         return HTTPException(
             status_code=409, detail="a payment is already planned for this card statement"
         )
+    if constraint == "fk_commitment_register_scope":
+        return HTTPException(status_code=404, detail="record not found")
+    if constraint == "commitment_has_one_source":
+        return HTTPException(status_code=422, detail=_REGISTER_SOURCE_TWO)
+    if constraint == "uq_commitment_open_register_record":
+        return HTTPException(status_code=409, detail=_RECORD_ALREADY_PLANNED)
     if exc.sqlstate in {"22003", "22023", "23502", "23503", "23514"}:
         return HTTPException(
             status_code=422, detail="commitment violates its required field matrix"
@@ -354,6 +371,112 @@ def _assert_card_source_fields(
         raise HTTPException(status_code=422, detail=_CARD_SOURCE_ACCOUNT)
     if currency != card_currency:
         raise HTTPException(status_code=422, detail=_CARD_SOURCE_CURRENCY)
+
+
+_REGISTER_SOURCE_TWO = (
+    "a commitment must not carry both a card statement and a register record source"
+)
+_RECORD_ALREADY_PLANNED = "money is already planned for this record"
+_RECORD_NOT_PLANNABLE = "this record does not plan money"
+_POLICY_NO_PREMIUM = "this policy has no premium"
+_POLICY_SCHEDULE = (
+    "a policy-sourced commitment must use its premium's cadence with a negative amount"
+)
+_POLICY_CURRENCY = "the paying account must be in the policy's currency"
+_DEPOSIT_NO_PROCEEDS = "this deposit has no expected proceeds"
+_DEPOSIT_SCHEDULE = "a deposit-sourced commitment must be a one-off payment with a positive amount"
+_DEPOSIT_CURRENCY = "the receiving account must be in the deposit's currency"
+_DEPOSIT_OWN_ACCOUNT = "choose the account that receives the proceeds"
+_CLAIM_SCHEDULE = "a claim-sourced commitment must be a one-off payment with a positive amount"
+_CLAIM_CURRENCY = "the receiving account must be in the claim's currency"
+_COMPLETED_CLAIM = "a completed claim cannot plan money"
+_NOT_AN_ASSET = "choose an active asset account to receive the money"
+_ARCHIVED_RECORD_SOURCE = "an archived register record cannot plan money"
+
+
+def _assert_asset_account(
+    cur: psycopg.Cursor[Any], household_id: UUID, account_id: UUID, currency: str
+) -> None:
+    """The receiving-account rule a deposit's proceeds or a claim's reimbursement always carries:
+    an active asset account in the record's currency (spec "Task 2 — documents on records and
+    commitments from records")."""
+    cur.execute(
+        "SELECT is_active, account_class::text, currency FROM account "
+        "WHERE household_id = %s AND id = %s",
+        (household_id, account_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    is_active, account_class, account_currency = found
+    if not is_active or account_class != "asset" or str(account_currency).strip() != currency:
+        raise HTTPException(status_code=422, detail=_NOT_AN_ASSET)
+
+
+def _assert_register_source_fields(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    record_id: UUID,
+    account_id: UUID,
+    currency: str,
+    cadence: Cadence,
+    amount: str,
+) -> None:
+    """Every kind-specific rule a register-sourced commitment carries (spec "Task 2 — documents on
+    records and commitments from records") — checked on create and re-applied on every update of
+    an already register-sourced commitment, the same convention as `_assert_card_source_fields`."""
+    cur.execute(
+        """SELECT kind::text, archived_at, amount, currency, premium_amount, premium_cadence::text,
+                  account_id, completed_at
+             FROM register_record WHERE household_id = %s AND id = %s""",
+        (household_id, record_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=404, detail="record not found")
+    (
+        kind,
+        archived_at,
+        record_amount,
+        record_currency,
+        premium_amount,
+        premium_cadence,
+        deposit_account_id,
+        completed_at,
+    ) = found
+    if archived_at is not None:
+        raise HTTPException(status_code=409, detail=_ARCHIVED_RECORD_SOURCE)
+    record_currency_str = None if record_currency is None else str(record_currency).strip()
+    amount_decimal = Decimal(amount)
+
+    if kind == "insurance_policy":
+        if premium_amount is None:
+            raise HTTPException(status_code=422, detail=_POLICY_NO_PREMIUM)
+        if cadence != premium_cadence or amount_decimal >= 0:
+            raise HTTPException(status_code=422, detail=_POLICY_SCHEDULE)
+        if currency != record_currency_str:
+            raise HTTPException(status_code=422, detail=_POLICY_CURRENCY)
+        _assert_account(cur, household_id, account_id, currency)
+    elif kind == "deposit":
+        if record_amount is None or record_currency_str is None:
+            raise HTTPException(status_code=422, detail=_DEPOSIT_NO_PROCEEDS)
+        if cadence != "once" or amount_decimal <= 0:
+            raise HTTPException(status_code=422, detail=_DEPOSIT_SCHEDULE)
+        if currency != record_currency_str:
+            raise HTTPException(status_code=422, detail=_DEPOSIT_CURRENCY)
+        if account_id == UUID(str(deposit_account_id)):
+            raise HTTPException(status_code=422, detail=_DEPOSIT_OWN_ACCOUNT)
+        _assert_asset_account(cur, household_id, account_id, currency)
+    elif kind == "claim":
+        if completed_at is not None:
+            raise HTTPException(status_code=409, detail=_COMPLETED_CLAIM)
+        if cadence != "once" or amount_decimal <= 0:
+            raise HTTPException(status_code=422, detail=_CLAIM_SCHEDULE)
+        if currency != record_currency_str:
+            raise HTTPException(status_code=422, detail=_CLAIM_CURRENCY)
+        _assert_asset_account(cur, household_id, account_id, currency)
+    else:
+        raise HTTPException(status_code=422, detail=_RECORD_NOT_PLANNABLE)
 
 
 def _replay_source_matches(stored: object, given: UUID | None) -> bool:
@@ -471,11 +594,12 @@ def _commitment_progress(
 
 
 # Column order shared by every commitment read; _commitment_row() maps one result tuple. The
-# card-statement source is read through a left join — most commitments have none.
+# card-statement and register-record sources are each read through a left join — most
+# commitments have neither.
 _COMMITMENT_COLUMNS = """c.id, c.account_id, a.name, c.label, c.amount, c.currency, c.cadence::text,
                          c.first_date, c.end_date, c.archived_at, c.created_at, c.updated_at,
                          c.certainty::text, c.next_due_date, c.source_card_statement_id,
-                         card_account.name"""
+                         card_account.name, c.source_register_record_id, source_record.title"""
 _COMMITMENT_FROM = """FROM commitment c
                        JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id
                        LEFT JOIN card_statement cs
@@ -483,7 +607,10 @@ _COMMITMENT_FROM = """FROM commitment c
                         AND cs.id = c.source_card_statement_id
                        LEFT JOIN account card_account
                          ON card_account.household_id = cs.household_id
-                        AND card_account.id = cs.account_id"""
+                        AND card_account.id = cs.account_id
+                       LEFT JOIN register_record source_record
+                         ON source_record.household_id = c.household_id
+                        AND source_record.id = c.source_register_record_id"""
 
 
 def _commitment_row(
@@ -491,6 +618,14 @@ def _commitment_row(
 ) -> CommitmentRow:
     status, partly_paid, paid_toward_next, remaining_next = progress
     source_card_statement_id = row[14]
+    source_register_record_id = row[16]
+    source: CommitmentSource
+    if source_card_statement_id is not None:
+        source = "card_statement"
+    elif source_register_record_id is not None:
+        source = "register_record"
+    else:
+        source = "owner"
     return CommitmentRow(
         id=row[0],
         accountId=row[1],
@@ -510,9 +645,11 @@ def _commitment_row(
         paidTowardNext=paid_toward_next,
         partlyPaid=partly_paid,
         remainingNext=remaining_next,
-        source="card_statement" if source_card_statement_id is not None else "owner",
+        source=source,
         sourceCardStatementId=source_card_statement_id,
         sourceCardAccountName=row[15],
+        sourceRegisterRecordId=source_register_record_id,
+        sourceRegisterTitle=row[17],
     )
 
 
@@ -570,7 +707,7 @@ def create_commitment(
             cur.execute(
                 """SELECT id, account_id, label, amount, currency, cadence::text,
                           first_date, end_date, certainty::text, next_due_date,
-                          source_card_statement_id
+                          source_card_statement_id, source_register_record_id
                      FROM commitment WHERE household_id = %s AND idempotency_key = %s""",
                 (owner.household_id, body.idempotencyKey),
             )
@@ -588,6 +725,7 @@ def create_commitment(
                     ecertainty,
                     enext,
                     esource,
+                    eregister,
                 ) = existing
                 if (
                     UUID(str(eaccount)) == body.accountId
@@ -600,6 +738,7 @@ def create_commitment(
                     and ecertainty == body.certainty
                     and (body.nextDueDate is None or enext == body.nextDueDate)
                     and _replay_source_matches(esource, body.sourceCardStatementId)
+                    and _replay_source_matches(eregister, body.sourceRegisterRecordId)
                 ):
                     response.status_code = status.HTTP_200_OK
                     return _row(cur, owner.household_id, UUID(str(eid)))
@@ -624,6 +763,16 @@ def create_commitment(
                     body.cadence,
                     body.amount,
                 )
+            if body.sourceRegisterRecordId is not None:
+                _assert_register_source_fields(
+                    cur,
+                    owner.household_id,
+                    body.sourceRegisterRecordId,
+                    body.accountId,
+                    body.currency,
+                    body.cadence,
+                    body.amount,
+                )
             _assert_account(cur, owner.household_id, body.accountId, body.currency)
             next_due = _resolved_next_due_date(
                 cur,
@@ -637,9 +786,10 @@ def create_commitment(
             cur.execute(
                 """INSERT INTO commitment (household_id, idempotency_key, account_id, label,
                                             amount, currency, cadence, first_date, end_date,
-                                            certainty, next_due_date, source_card_statement_id)
+                                            certainty, next_due_date, source_card_statement_id,
+                                            source_register_record_id)
                    VALUES (%s, %s, %s, %s, %s, %s, %s::commitment_cadence, %s, %s,
-                           %s::commitment_certainty, %s, %s)
+                           %s::commitment_certainty, %s, %s, %s)
                    RETURNING id""",
                 (
                     owner.household_id,
@@ -654,6 +804,7 @@ def create_commitment(
                     body.certainty,
                     next_due,
                     body.sourceCardStatementId,
+                    body.sourceRegisterRecordId,
                 ),
             )
             created = cur.fetchone()
@@ -681,7 +832,8 @@ def update_commitment(
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             cur.execute(
                 """SELECT archived_at, account_id, currency, cadence::text, first_date, end_date,
-                          amount, next_due_date, source_card_statement_id
+                          amount, next_due_date, source_card_statement_id,
+                          source_register_record_id
                      FROM commitment WHERE household_id = %s AND id = %s FOR UPDATE""",
                 (owner.household_id, commitment_id),
             )
@@ -698,6 +850,7 @@ def update_commitment(
                 stored_amount,
                 stored_next_due,
                 stored_source_card_statement_id,
+                stored_source_register_record_id,
             ) = found
             if archived_at is not None:
                 raise HTTPException(status_code=409, detail="an archived commitment is fixed")
@@ -710,6 +863,16 @@ def update_commitment(
                     owner.household_id,
                     card_account_id,
                     card_currency,
+                    body.accountId,
+                    body.currency,
+                    body.cadence,
+                    body.amount,
+                )
+            elif stored_source_register_record_id is not None:
+                _assert_register_source_fields(
+                    cur,
+                    owner.household_id,
+                    UUID(str(stored_source_register_record_id)),
                     body.accountId,
                     body.currency,
                     body.cadence,

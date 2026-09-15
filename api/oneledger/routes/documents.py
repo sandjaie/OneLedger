@@ -1,11 +1,17 @@
 # api/oneledger/routes/documents.py
-"""Phase 1.8 Task 2: the document library and the owner-only original download.
+"""Phase 1.8 Task 2: the document library and the owner-only original download. Phase 3.4 Task 2
+adds `POST /documents`: the owner's own PDF (a policy schedule, a deposit certificate, and so on)
+stored through the same `ingest.storage.store` a statement import uses, with a fixed safe label
+per type — no uploaded filename is retained. An upload is not an import (owner decision,
+16 September 2026): `importKind` gains `"upload"` for the six owner-upload types, and the row
+gains `title`, non-null only for such uploads.
 
 One query lists every stored document with its parse and import status, whatever produced it —
 a statement batch, an investment import or a payslip — through lateral lookups that each repeat
 the household predicate (schema.md 0018's tenancy rule applies to a join the same as a table).
 The row never carries a private column: no filename, storage location, hash, size, notes, tags,
-parse error or extracted metadata reaches the wire (security-and-privacy.html).
+parse error or extracted metadata reaches the wire (security-and-privacy.html) — `title` is the
+one exception, and it is the owner's own words, never a source filename.
 
 `GET /documents/{id}/original` is the one route that reads the bytes back, through
 `description_reparse.verified_original` — the same path and hash checks the description re-read
@@ -14,18 +20,47 @@ already trusted its original to.
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import date, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+import psycopg
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect
+from ..ingest import storage
 from .description_reparse import verified_original
 
 router = APIRouter(tags=["documents"])
+
+# spec "Document upload (Task 2)": the six types an owner can upload directly — every other
+# document_type value is produced only by an import pipeline. A fixed, safe label per type is
+# stored in place of the uploaded filename (the same convention `payslips.py` uses for its own
+# import), so no uploaded name — however chosen — ever reaches storage or the database.
+_UPLOAD_TYPES = (
+    "tax_document",
+    "insurance_policy",
+    "property_document",
+    "fd_certificate",
+    "receipt",
+    "other",
+)
+_UPLOAD_LABELS = {upload_type: f"{upload_type}.pdf" for upload_type in _UPLOAD_TYPES}
+_MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+_ALREADY_IN_LIBRARY = "this file is already in the document library"
 
 # schema.md 0008's `document_type` enum, restated as a closed set so an unknown value is this
 # route's own 422 rather than a database CHECK failure with a less legible message.
@@ -87,6 +122,10 @@ class DocumentRow(BaseModel):
     layoutId: UUID | None
     layoutVersion: int | None
     newerLayoutId: UUID | None
+    # Task 2: the owner's own title, non-null only for an upload-type document with no import
+    # (spec "Document upload (Task 2)" owner decision) — a statement, investment or payslip row
+    # always carries `title: null`.
+    title: str | None
 
 
 class DocumentsResponse(BaseModel):
@@ -96,29 +135,36 @@ class DocumentsResponse(BaseModel):
 
 # The document's own kind, and where its import identity and status come from — never a filename,
 # a title or anything else the document table would otherwise carry off this route.
-_ROW = """
+_UPLOAD_TYPES_SQL = "'" + "', '".join(_UPLOAD_TYPES) + "'"
+
+_ROW = f"""
     d.id, d.document_type::text, d.page_count, d.is_password_protected,
     d.parsed_status::text, d.uploaded_at, d.account_id, a.name,
     mask.masked_value, d.period_start, d.period_end, batch.period_is_derived,
     CASE WHEN d.document_type = 'payslip' THEN 'payslip'
          WHEN d.document_type = 'investment_statement' THEN 'investment'
+         WHEN d.document_type IN ({_UPLOAD_TYPES_SQL}) THEN 'upload'
          ELSE 'statement' END,
     CASE WHEN d.document_type = 'payslip' THEN NULL
          WHEN d.document_type = 'investment_statement' THEN inv.import_id
+         WHEN d.document_type IN ({_UPLOAD_TYPES_SQL}) THEN NULL
          ELSE batch.import_id END,
     CASE WHEN d.document_type = 'payslip'
               THEN (CASE WHEN payslip.referenced THEN 'completed' END)
          WHEN d.document_type = 'investment_statement' THEN inv.import_status
+         WHEN d.document_type IN ({_UPLOAD_TYPES_SQL}) THEN NULL
          ELSE batch.import_status END,
     CASE WHEN d.document_type NOT IN ('payslip', 'investment_statement')
+              AND d.document_type NOT IN ({_UPLOAD_TYPES_SQL})
               THEN batch.reconciliation_status END,
-    d.statement_layout_id, d.layout_version, newer.newer_layout_id"""
+    d.statement_layout_id, d.layout_version, newer.newer_layout_id,
+    CASE WHEN d.document_type IN ({_UPLOAD_TYPES_SQL}) THEN d.title END"""
 
 _COLUMN_NAMES = (
     "id, document_type, page_count, is_password_protected, parsed_status, uploaded_on, "
     "account_id, account_name, account_number_masked, period_start, period_end, "
     "period_is_derived, import_kind, import_id, import_status, reconciliation_status, "
-    "layout_id, layout_version, newer_layout_id"
+    "layout_id, layout_version, newer_layout_id, title"
 )
 
 _FROM = """
@@ -178,6 +224,7 @@ _FIELDS = [
     "layoutId",
     "layoutVersion",
     "newerLayoutId",
+    "title",
 ]
 
 
@@ -205,7 +252,20 @@ def _document_row(values: tuple[Any, ...]) -> DocumentRow:
         layoutId=fields["layoutId"],
         layoutVersion=fields["layoutVersion"],
         newerLayoutId=fields["newerLayoutId"],
+        title=fields["title"],
     )
+
+
+def _document_row_by_id(
+    cur: psycopg.Cursor[Any], household_id: UUID, document_id: UUID
+) -> DocumentRow:
+    cur.execute(
+        f"SELECT {_ROW} {_FROM} WHERE d.household_id = %s AND d.id = %s",
+        (household_id, document_id),
+    )
+    row = cur.fetchone()
+    assert row is not None
+    return _document_row(row)
 
 
 @router.get("/documents")
@@ -267,6 +327,82 @@ def list_documents(
         )
         rows = [_document_row(row) for row in cur.fetchall()]
     return DocumentsResponse(documents=rows, total=total)
+
+
+def _normalize_title(value: str) -> str:
+    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
+    if not 1 <= len(collapsed) <= 120:
+        raise ValueError("title must be 1-120 characters")
+    return collapsed
+
+
+def _bounded_read(file: UploadFile) -> bytes:
+    """Read at most `_MAX_UPLOAD_BYTES` + 1 — the repository has no shared upload limit to reuse
+    (spec "Document upload (Task 2)"), so a file over the limit is refused without ever holding
+    the whole thing in memory."""
+    data = file.file.read(_MAX_UPLOAD_BYTES + 1)
+    if not data:
+        raise HTTPException(status_code=422, detail="the uploaded file is empty")
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=422, detail="the uploaded file is larger than 20 MB")
+    return data
+
+
+@router.post("/documents", response_model=DocumentRow)
+def upload_document(
+    response: Response,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    file: Annotated[UploadFile, File()],
+    documentType: Annotated[str, Form(pattern="^(" + "|".join(_UPLOAD_TYPES) + ")$")],
+    title: Annotated[str, Form()],
+) -> DocumentRow:
+    try:
+        normalized_title = _normalize_title(title)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    data = _bounded_read(file)
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status_code=422, detail="the uploaded file is not a PDF")
+    try:
+        stored = storage.store(data, owner.household_id, _UPLOAD_LABELS[documentType])
+    except storage.StorageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        cur.execute(
+            """INSERT INTO document (household_id, document_type, title, original_filename,
+                   storage_bucket, storage_path, mime_type, byte_size, sha256, parsed_status,
+                   uploaded_by)
+               VALUES (%s, %s::document_type, %s, %s, 'documents', %s, 'application/pdf', %s, %s,
+                       'not_applicable', %s)
+               ON CONFLICT (household_id, sha256) DO NOTHING
+               RETURNING id""",
+            (
+                owner.household_id,
+                documentType,
+                normalized_title,
+                stored.masked_filename,
+                str(stored.path),
+                stored.byte_size,
+                stored.sha256,
+                owner.user_id,
+            ),
+        )
+        created = cur.fetchone()
+        if created is not None:
+            response.status_code = status.HTTP_201_CREATED
+            return _document_row_by_id(cur, owner.household_id, UUID(str(created[0])))
+        cur.execute(
+            "SELECT id, document_type::text FROM document WHERE household_id = %s AND sha256 = %s",
+            (owner.household_id, stored.sha256),
+        )
+        existing = cur.fetchone()
+        assert existing is not None
+        existing_id, existing_type = existing
+        if existing_type != documentType:
+            raise HTTPException(status_code=409, detail=_ALREADY_IN_LIBRARY)
+        response.status_code = status.HTTP_200_OK
+        return _document_row_by_id(cur, owner.household_id, UUID(str(existing_id)))
 
 
 @router.get("/documents/{document_id}/original")

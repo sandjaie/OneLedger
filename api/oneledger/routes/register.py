@@ -3,8 +3,13 @@ administration deadlines (spec "API boundary", `routes/register.py`). A register
 owner assumption like `commitment` and `goal` — no SECURITY DEFINER write path; every write locks
 the household row first and filters explicitly by it. Kind-forbidden fields are refused in
 Pydantic before the database (`_check_record_shape`, shared by create and update); the database's
-own `register_kind_shape` CHECK is the backstop. Document links, upload and planned commitments are
-Task 2 — nothing here reads or writes `register_document` or `commitment`."""
+own `register_kind_shape` CHECK is the backstop.
+
+Task 2 adds the two document-link routes and `RegisterRow.documents[]`/`plannedCommitment` — a
+record's documents are `register_document` rows joined to `document` (only an upload-type
+document may be linked, spec "Document upload (Task 2)"), and its planned commitment reuses
+`plans._commitment_progress`, the same helper `GET /commitments` and the action list already share,
+so there is no second remaining-amount computation."""
 
 from __future__ import annotations
 
@@ -22,7 +27,9 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect, first_line
 from ..money import _out
 from ..register_records import review_due
+from .documents import _UPLOAD_TYPES
 from .goals import _positive_money
+from .plans import Cadence, CommitmentStatus, _commitment_progress
 
 router = APIRouter(tags=["register"])
 
@@ -137,6 +144,26 @@ class RegisterRenewed(BaseModel):
     nextRenewalDate: date
 
 
+class RegisterDocumentRow(BaseModel):
+    documentId: UUID
+    documentType: str
+    title: str | None
+    uploadedAt: datetime
+
+
+class PlannedCommitment(BaseModel):
+    commitmentId: UUID
+    cadence: Cadence
+    amount: str
+    currency: str
+    accountName: str
+    nextDueDate: date | None
+    status: CommitmentStatus
+    paidTowardNext: str
+    remainingNext: str | None
+    partlyPaid: bool
+
+
 class RegisterRow(BaseModel):
     id: UUID
     kind: RegisterKind
@@ -158,6 +185,8 @@ class RegisterRow(BaseModel):
     archivedAt: datetime | None
     createdAt: datetime
     updatedAt: datetime
+    documents: list[RegisterDocumentRow]
+    plannedCommitment: PlannedCommitment | None
 
 
 class RegisterResponse(BaseModel):
@@ -246,6 +275,74 @@ def _register_row(
         created_at,
         updated_at,
     ) = row
+
+    cur.execute(
+        """SELECT d.id, d.document_type::text, d.title, d.uploaded_at
+             FROM register_document rd
+             JOIN document d ON d.household_id = rd.household_id AND d.id = rd.document_id
+            WHERE rd.household_id = %s AND rd.record_id = %s
+            ORDER BY d.uploaded_at DESC, d.id""",
+        (household_id, record_id),
+    )
+    documents = [
+        RegisterDocumentRow(
+            documentId=UUID(str(doc_id)),
+            documentType=doc_type,
+            title=doc_title,
+            uploadedAt=uploaded,
+        )
+        for doc_id, doc_type, doc_title, uploaded in cur.fetchall()
+    ]
+
+    cur.execute(
+        """SELECT c.id, c.account_id, a.name, c.amount, c.currency, c.cadence::text,
+                  c.next_due_date, c.archived_at
+             FROM commitment c
+             JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id
+            WHERE c.household_id = %s AND c.source_register_record_id = %s
+              AND c.archived_at IS NULL""",
+        (household_id, record_id),
+    )
+    commitment_found = cur.fetchone()
+    planned_commitment: PlannedCommitment | None = None
+    if commitment_found is not None:
+        (
+            commitment_id,
+            _commitment_account_id,
+            commitment_account_name,
+            commitment_amount,
+            commitment_currency,
+            commitment_cadence,
+            commitment_next_due,
+            commitment_archived_at,
+        ) = commitment_found
+        progress = _commitment_progress(
+            cur,
+            household_id,
+            as_of,
+            [
+                (
+                    UUID(str(commitment_id)),
+                    commitment_archived_at,
+                    commitment_next_due,
+                    Decimal(commitment_amount),
+                )
+            ],
+        )
+        c_status, partly_paid, paid_toward_next, remaining_next = progress[UUID(str(commitment_id))]
+        planned_commitment = PlannedCommitment(
+            commitmentId=UUID(str(commitment_id)),
+            cadence=commitment_cadence,
+            amount=str(Decimal(commitment_amount)),
+            currency=str(commitment_currency).strip(),
+            accountName=commitment_account_name,
+            nextDueDate=commitment_next_due,
+            status=c_status,
+            paidTowardNext=paid_toward_next,
+            remainingNext=remaining_next,
+            partlyPaid=partly_paid,
+        )
+
     return RegisterRow(
         id=record_id,
         kind=kind,
@@ -267,6 +364,8 @@ def _register_row(
         archivedAt=archived_at,
         createdAt=created_at,
         updatedAt=updated_at,
+        documents=documents,
+        plannedCommitment=planned_commitment,
     )
 
 
@@ -574,4 +673,63 @@ def reopen_register(
                 "WHERE household_id = %s AND id = %s",
                 (owner.household_id, recordId),
             )
+        return _register_row(cur, owner.household_id, recordId, date.today())
+
+
+# ---------------------------------------------------------------------------------------
+# Task 2: document links. Only a household document of an upload type may be linked (spec
+# "Task 2 — documents on records and commitments from records"); the upload itself is
+# `POST /documents`.
+
+
+@router.put("/register/{recordId}/documents/{documentId}", response_model=RegisterRow)
+def link_document(
+    recordId: UUID,
+    documentId: UUID,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> RegisterRow:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        (archived_at,) = _locked_record(cur, owner.household_id, recordId, "archived_at")
+        if archived_at is not None:
+            raise HTTPException(
+                status_code=409, detail="an archived register record cannot be edited"
+            )
+        cur.execute(
+            "SELECT document_type::text FROM document WHERE household_id = %s AND id = %s",
+            (owner.household_id, documentId),
+        )
+        found = cur.fetchone()
+        if found is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        if found[0] not in _UPLOAD_TYPES:
+            raise HTTPException(
+                status_code=422, detail="only an uploaded document can be linked to a record"
+            )
+        cur.execute(
+            """INSERT INTO register_document (household_id, record_id, document_id)
+               VALUES (%s, %s, %s) ON CONFLICT DO NOTHING""",
+            (owner.household_id, recordId, documentId),
+        )
+        return _register_row(cur, owner.household_id, recordId, date.today())
+
+
+@router.delete("/register/{recordId}/documents/{documentId}", response_model=RegisterRow)
+def unlink_document(
+    recordId: UUID,
+    documentId: UUID,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> RegisterRow:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        (archived_at,) = _locked_record(cur, owner.household_id, recordId, "archived_at")
+        if archived_at is not None:
+            raise HTTPException(
+                status_code=409, detail="an archived register record cannot be edited"
+            )
+        cur.execute(
+            """DELETE FROM register_document
+                WHERE household_id = %s AND record_id = %s AND document_id = %s""",
+            (owner.household_id, recordId, documentId),
+        )
         return _register_row(cur, owner.household_id, recordId, date.today())
