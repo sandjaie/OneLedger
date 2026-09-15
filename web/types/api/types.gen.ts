@@ -2991,6 +2991,44 @@ export type HoldingEventRow = {
      * Counterpartgrossamount
      */
     counterpartGrossAmount: string | null;
+    /**
+     * Lotallocationopen
+     */
+    lotAllocationOpen: boolean;
+};
+
+/**
+ * HoldingLotRow
+ */
+export type HoldingLotRow = {
+    /**
+     * Lotid
+     */
+    lotId: string;
+    /**
+     * Acquisitioneventid
+     */
+    acquisitionEventId: string;
+    /**
+     * Acquiredon
+     */
+    acquiredOn: string;
+    /**
+     * Acquiredunits
+     */
+    acquiredUnits: string;
+    /**
+     * Remainingunits
+     */
+    remainingUnits: string;
+    /**
+     * Costbasisnative
+     */
+    costBasisNative: string;
+    /**
+     * Eligible
+     */
+    eligible: boolean;
 };
 
 /**
@@ -5652,6 +5690,45 @@ export type ReviewGroup = {
      * Rows
      */
     rows: Array<ReviewRow>;
+};
+
+/**
+ * ReviewItemRow
+ */
+export type ReviewItemRow = {
+    /**
+     * Id
+     */
+    id: string;
+    reason: ReviewReason;
+    /**
+     * Isblocking
+     */
+    isBlocking: boolean;
+    /**
+     * Holdingid
+     */
+    holdingId: string | null;
+    /**
+     * Securityname
+     */
+    securityName: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * Importid
+     */
+    importId: string | null;
+    /**
+     * Investmenttransactionid
+     */
+    investmentTransactionId: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
 };
 
 /**
@@ -10125,6 +10202,42 @@ export type PriceRefreshInvestmentPricesRefreshPostResponses = {
 
 export type PriceRefreshInvestmentPricesRefreshPostResponse = PriceRefreshInvestmentPricesRefreshPostResponses[keyof PriceRefreshInvestmentPricesRefreshPostResponses];
 
+export type ListReviewsInvestmentReviewsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/investment-reviews';
+};
+
+export type ListReviewsInvestmentReviewsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListReviewsInvestmentReviewsGetError = ListReviewsInvestmentReviewsGetErrors[keyof ListReviewsInvestmentReviewsGetErrors];
+
+export type ListReviewsInvestmentReviewsGetResponses = {
+    /**
+     * Response List Reviews Investment Reviews Get
+     *
+     * Successful Response
+     */
+    200: Array<ReviewItemRow>;
+};
+
+export type ListReviewsInvestmentReviewsGetResponse = ListReviewsInvestmentReviewsGetResponses[keyof ListReviewsInvestmentReviewsGetResponses];
+
 export type ListPayslipsPayslipsGetData = {
     body?: never;
     path?: never;
@@ -10690,7 +10803,16 @@ export type HoldingDetailPortfolioHoldingsHoldingIdGetData = {
          */
         holdingId: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Eventsoffset
+         */
+        eventsOffset?: number;
+        /**
+         * Eventslimit
+         */
+        eventsLimit?: number;
+    };
     url: '/portfolio/holdings/{holdingId}';
 };
 
@@ -10711,6 +10833,38 @@ export type HoldingDetailPortfolioHoldingsHoldingIdGetResponses = {
 };
 
 export type HoldingDetailPortfolioHoldingsHoldingIdGetResponse = HoldingDetailPortfolioHoldingsHoldingIdGetResponses[keyof HoldingDetailPortfolioHoldingsHoldingIdGetResponses];
+
+export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Holdingid
+         */
+        holdingId: string;
+    };
+    query?: never;
+    url: '/portfolio/holdings/{holdingId}/lots';
+};
+
+export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetError = HoldingLotsPortfolioHoldingsHoldingIdLotsGetErrors[keyof HoldingLotsPortfolioHoldingsHoldingIdLotsGetErrors];
+
+export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses = {
+    /**
+     * Response Holding Lots Portfolio Holdings  Holdingid  Lots Get
+     *
+     * Successful Response
+     */
+    200: Array<HoldingLotRow>;
+};
+
+export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponse = HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses[keyof HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses];
 
 export type ListValuationsAccountsAccountIdValuationsGetData = {
     body?: never;

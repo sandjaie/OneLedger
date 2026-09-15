@@ -314,3 +314,112 @@ def test_a_fully_closed_holdings_units_render_as_an_exact_zero(
 
     assert detail["units"] == "0.00000000"
     assert "0E-8" not in str(detail)
+
+
+def _lots(holding_id: str) -> list[dict[str, Any]]:
+    response = _client().get(f"/portfolio/holdings/{holding_id}/lots")
+    assert response.status_code == 200, response.text
+    result: list[dict[str, Any]] = response.json()
+    return result
+
+
+def test_a_foreign_or_missing_holdings_lots_is_404(holding_live: EventFixture) -> None:
+    acquired = _acquire(holding_live)
+
+    app.dependency_overrides[auth.require_owner] = lambda: holding_live.other_owner
+    try:
+        response = _client().get(f"/portfolio/holdings/{acquired['holdingId']}/lots")
+    finally:
+        app.dependency_overrides[auth.require_owner] = lambda: holding_live.owner
+
+    assert response.status_code == 404
+    assert response.status_code == _client().get(f"/portfolio/holdings/{uuid4()}/lots").status_code
+
+
+def test_lots_report_remaining_units_and_a_disposal_marks_lot_allocation_open(
+    holding_live: EventFixture,
+) -> None:
+    """`GET .../lots`' `remainingUnits` and the holding page's `lotAllocationOpen` both read the
+    same allocated-units facts `_load_lot_state()` checks, so a confirmed allocation moves both
+    together (Task 3c)."""
+    acquired = _acquire(holding_live)
+    _price(holding_live, date(2026, 2, 1), "6.000000")
+    _dispose(holding_live, date(2026, 2, 2), "1.00000000", "6.0000")
+
+    detail = _detail(acquired["holdingId"])
+    sale = next(e for e in detail["events"] if e["eventKind"] == "sale")
+    purchase = next(e for e in detail["events"] if e["eventKind"] == "purchase")
+    assert sale["lotAllocationOpen"] is True
+    assert purchase["lotAllocationOpen"] is False
+
+    lots_before = _lots(acquired["holdingId"])
+    assert len(lots_before) == 1
+    lot = lots_before[0]
+    assert lot["acquisitionEventId"] == acquired["id"]
+    assert lot["acquiredOn"] == "2026-02-01"
+    assert lot["acquiredUnits"] == "4.00000000"
+    assert lot["remainingUnits"] == "4.00000000"
+    assert lot["costBasisNative"] == "21.0000"
+    assert lot["eligible"] is True
+
+    allocation = {"acquisitionLotId": lot["lotId"], "allocatedUnits": "1.00000000"}
+    proposal = _client().post(
+        "/investment-funding/lot-allocation-proposals",
+        json={"disposalEventId": sale["id"], "allocations": [allocation]},
+        headers=ORIGIN,
+    )
+    assert proposal.status_code == 200, proposal.text
+    confirmation = _client().post(
+        "/investment-funding/lot-allocations",
+        json={
+            "disposalEventId": sale["id"],
+            "allocations": [allocation],
+            "expectedState": proposal.json()["expectedState"],
+            "idempotencyKey": str(uuid4()),
+        },
+        headers=ORIGIN,
+    )
+    assert confirmation.status_code == 201, confirmation.text
+
+    lots_after = _lots(acquired["holdingId"])
+    assert lots_after[0]["remainingUnits"] == "3.00000000"
+
+    after = _detail(acquired["holdingId"])
+    sale_after = next(e for e in after["events"] if e["eventKind"] == "sale")
+    assert sale_after["lotAllocationOpen"] is False
+
+
+def test_events_page_by_offset_and_limit_while_the_total_stays_exact(
+    holding_live: EventFixture,
+) -> None:
+    acquired = _acquire(holding_live)
+    _price(holding_live, date(2026, 2, 1), "6.000000")
+    _dispose(holding_live, date(2026, 2, 2), "1.00000000", "6.0000")
+
+    first = _client().get(
+        f"/portfolio/holdings/{acquired['holdingId']}",
+        params={"eventsLimit": 1, "eventsOffset": 0},
+    )
+    assert first.status_code == 200, first.text
+    first_page = first.json()
+    assert len(first_page["events"]) == 1
+    assert first_page["eventsTotal"] == 2
+    assert first_page["events"][0]["eventKind"] == "sale"
+
+    second = _client().get(
+        f"/portfolio/holdings/{acquired['holdingId']}",
+        params={"eventsLimit": 1, "eventsOffset": 1},
+    )
+    assert second.status_code == 200, second.text
+    second_page = second.json()
+    assert len(second_page["events"]) == 1
+    assert second_page["eventsTotal"] == 2
+    assert second_page["events"][0]["eventKind"] == "purchase"
+
+    past_end = _client().get(
+        f"/portfolio/holdings/{acquired['holdingId']}",
+        params={"eventsLimit": 1, "eventsOffset": 5},
+    )
+    assert past_end.status_code == 200, past_end.text
+    assert past_end.json()["events"] == []
+    assert past_end.json()["eventsTotal"] == 2

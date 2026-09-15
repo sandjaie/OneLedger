@@ -459,6 +459,106 @@ def confirm_funding(
         return FundingConfirmationResponse(allocations=allocations)
 
 
+def _lot_rows_by_id(
+    cur: psycopg.Cursor[Any], household_id: UUID, lot_ids: list[UUID], as_of: date | None
+) -> dict[UUID, _Lot]:
+    """Every requested lot's own acquisition facts, allocated units (active disposals only) and
+    eligibility (an active correction on its origin event, or an active successor). Shared by the
+    disposal proposal (`as_of` bounds the successor check to that disposal's own date) and the
+    holding's lot listing (`as_of=None`: any active successor, regardless of date) — one query so
+    the two can never disagree about a lot's remaining units."""
+    cur.execute(
+        """SELECT lot.id, lot.holding_id, lot.origin_transaction_id, lot.acquisition_date,
+                  origin.event_date, lot.acquired_units, lot.cost_basis_native,
+                  COALESCE(sum(allocation.allocated_units)
+                           FILTER (WHERE alloc_disposal.id IS NOT NULL), 0),
+                  EXISTS (SELECT FROM investment_transaction correction
+                           WHERE correction.household_id = origin.household_id
+                             AND correction.corrects_transaction_id = origin.id),
+                  EXISTS (SELECT FROM acquisition_lot successor
+                          JOIN investment_transaction succ_origin
+                            ON succ_origin.household_id = successor.household_id
+                           AND succ_origin.id = successor.origin_transaction_id
+                          WHERE successor.household_id = lot.household_id
+                            AND successor.predecessor_lot_id = lot.id
+                            AND (%(as_of)s::date IS NULL OR succ_origin.event_date <= %(as_of)s)
+                            AND NOT EXISTS (
+                              SELECT FROM investment_transaction c2
+                               WHERE c2.corrects_transaction_id = succ_origin.id))
+             FROM acquisition_lot lot
+             JOIN investment_transaction origin
+               ON origin.household_id = lot.household_id AND origin.id = lot.origin_transaction_id
+             LEFT JOIN investment_lot_allocation allocation
+               ON allocation.household_id = lot.household_id
+              AND allocation.acquisition_lot_id = lot.id
+             LEFT JOIN investment_transaction alloc_disposal
+               ON alloc_disposal.household_id = allocation.household_id
+              AND alloc_disposal.id = allocation.disposal_transaction_id
+              AND NOT EXISTS (
+                SELECT FROM investment_transaction correction
+                 WHERE correction.household_id = alloc_disposal.household_id
+                   AND correction.corrects_transaction_id = alloc_disposal.id)
+            WHERE lot.household_id = %(household_id)s AND lot.id = ANY(%(lot_ids)s::UUID[])
+            GROUP BY lot.id, origin.id ORDER BY lot.id""",
+        {"as_of": as_of, "household_id": household_id, "lot_ids": lot_ids},
+    )
+    return {
+        UUID(str(row[0])): _Lot(
+            UUID(str(row[1])),
+            UUID(str(row[2])),
+            row[3],
+            row[4],
+            Decimal(row[5]),
+            Decimal(row[6]),
+            Decimal(row[7]),
+            bool(row[8]),
+            bool(row[9]),
+        )
+        for row in cur.fetchall()
+    }
+
+
+@dataclass(frozen=True)
+class LotFact:
+    id: UUID
+    origin_event_id: UUID
+    acquisition_date: date
+    acquired_units: Decimal
+    remaining_units: Decimal
+    cost_basis: Decimal
+    eligible: bool
+
+
+def lots_for_holding(
+    cur: psycopg.Cursor[Any], household_id: UUID, holding_id: UUID
+) -> list[LotFact]:
+    """Every acquisition lot for one holding, oldest first — remaining units and eligibility
+    from the same `_lot_rows_by_id()` a disposal proposal uses."""
+    cur.execute(
+        "SELECT id FROM acquisition_lot WHERE household_id = %s AND holding_id = %s",
+        (household_id, holding_id),
+    )
+    lot_ids = [UUID(str(row[0])) for row in cur.fetchall()]
+    if not lot_ids:
+        return []
+    lots = _lot_rows_by_id(cur, household_id, lot_ids, as_of=None)
+    return [
+        LotFact(
+            id=lot_id,
+            origin_event_id=lot.origin_event_id,
+            acquisition_date=lot.acquisition_date,
+            acquired_units=lot.acquired_units,
+            remaining_units=lot.acquired_units - lot.allocated_units,
+            cost_basis=lot.cost_basis,
+            eligible=not (lot.has_correction or lot.has_active_successor),
+        )
+        for lot_id, lot in sorted(
+            lots.items(),
+            key=lambda kv: (kv[1].acquisition_date, kv[1].origin_event_date, str(kv[0])),
+        )
+    ]
+
+
 def _load_lot_state(
     cur: psycopg.Cursor[Any], owner: OwnerSession, body: LotAllocationRequest
 ) -> _LotState:
@@ -486,55 +586,7 @@ def _load_lot_state(
         raise FundingError(404, "lot allocation reference not found")
     disposal_date = event[2]
     lot_ids = [item.acquisitionLotId for item in body.allocations]
-    cur.execute(
-        """SELECT lot.id, lot.holding_id, lot.origin_transaction_id, lot.acquisition_date,
-                  origin.event_date, lot.acquired_units, lot.cost_basis_native,
-                  COALESCE(sum(allocation.allocated_units)
-                           FILTER (WHERE alloc_disposal.id IS NOT NULL), 0),
-                  EXISTS (SELECT FROM investment_transaction correction
-                           WHERE correction.household_id = origin.household_id
-                             AND correction.corrects_transaction_id = origin.id),
-                  EXISTS (SELECT FROM acquisition_lot successor
-                          JOIN investment_transaction succ_origin
-                            ON succ_origin.household_id = successor.household_id
-                           AND succ_origin.id = successor.origin_transaction_id
-                          WHERE successor.household_id = lot.household_id
-                            AND successor.predecessor_lot_id = lot.id
-                            AND succ_origin.event_date <= %s
-                            AND NOT EXISTS (
-                              SELECT FROM investment_transaction c2
-                               WHERE c2.corrects_transaction_id = succ_origin.id))
-             FROM acquisition_lot lot
-             JOIN investment_transaction origin
-               ON origin.household_id = lot.household_id AND origin.id = lot.origin_transaction_id
-             LEFT JOIN investment_lot_allocation allocation
-               ON allocation.household_id = lot.household_id
-              AND allocation.acquisition_lot_id = lot.id
-             LEFT JOIN investment_transaction alloc_disposal
-               ON alloc_disposal.household_id = allocation.household_id
-              AND alloc_disposal.id = allocation.disposal_transaction_id
-              AND NOT EXISTS (
-                SELECT FROM investment_transaction correction
-                 WHERE correction.household_id = alloc_disposal.household_id
-                   AND correction.corrects_transaction_id = alloc_disposal.id)
-            WHERE lot.household_id = %s AND lot.id = ANY(%s::UUID[])
-            GROUP BY lot.id, origin.id ORDER BY lot.id""",
-        (disposal_date, owner.household_id, lot_ids),
-    )
-    lots = {
-        UUID(str(row[0])): _Lot(
-            UUID(str(row[1])),
-            UUID(str(row[2])),
-            row[3],
-            row[4],
-            Decimal(row[5]),
-            Decimal(row[6]),
-            Decimal(row[7]),
-            bool(row[8]),
-            bool(row[9]),
-        )
-        for row in cur.fetchall()
-    }
+    lots = _lot_rows_by_id(cur, owner.household_id, lot_ids, disposal_date)
     if set(lots) != set(lot_ids):
         raise FundingError(404, "lot allocation reference not found")
     return _LotState(

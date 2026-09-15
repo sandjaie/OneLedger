@@ -42,6 +42,7 @@ export function DataQuality({ request }: Props) {
     <section aria-labelledby="data-quality-title" className="settings-block">
       <h2 id="data-quality-title">Data Quality</h2>
       <p><Link href="/coverage">View history coverage</Link></p>
+      <p><Link href="/investments">View investment reviews</Link></p>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {report?.sections.map((section) => (
         <div key={section.title}>

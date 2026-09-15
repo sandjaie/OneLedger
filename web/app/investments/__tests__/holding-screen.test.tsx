@@ -9,7 +9,11 @@ import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   FundingProposalResponse,
   HoldingDetail,
+  HoldingEventRow,
+  HoldingLotRow,
   HouseholdResponse,
+  LotAllocationProposalResponse,
+  LotAllocationResponse,
   TransactionsResponse,
 } from "@/types/api";
 
@@ -64,6 +68,7 @@ function detail(overrides: Partial<HoldingDetail> = {}): HoldingDetail {
         counterpartUnits: null,
         counterpartPrice: null,
         counterpartGrossAmount: null,
+        lotAllocationOpen: false,
       },
     ],
     eventsTotal: 1,
@@ -104,7 +109,7 @@ describe("HoldingScreen", () => {
 
     expect(await screen.findByRole("heading", { name: "Synthetic Growth Fund" })).toBeTruthy();
     expect(screen.getByText("This disposal is not fully allocated to existing lots.")).toBeTruthy();
-    expect(screen.getByText("Events (1)")).toBeTruthy();
+    expect(screen.getByText("Events (1 of 1)")).toBeTruthy();
     expect(screen.getByLabelText("purchase on 2026-01-05")).toBeTruthy();
     expect(screen.getByText("funding")).toBeTruthy();
     expect(screen.getByText("XAA 101.0000")).toBeTruthy();
@@ -143,6 +148,7 @@ describe("HoldingScreen", () => {
             counterpartUnits: null,
             counterpartPrice: null,
             counterpartGrossAmount: null,
+        lotAllocationOpen: false,
           }],
           cashLinks: [{
             investmentEventId: "00000000-0000-4000-8000-000000000060",
@@ -243,6 +249,7 @@ describe("HoldingScreen", () => {
         counterpartUnits: null,
         counterpartPrice: null,
         counterpartGrossAmount: null,
+        lotAllocationOpen: false,
       }],
       cashLinks: [],
     });
@@ -317,6 +324,7 @@ describe("HoldingScreen", () => {
         counterpartUnits: null,
         counterpartPrice: null,
         counterpartGrossAmount: null,
+        lotAllocationOpen: false,
       }],
       cashLinks: [{
         investmentEventId: "00000000-0000-4000-8000-000000000061",
@@ -412,5 +420,192 @@ describe("HoldingScreen", () => {
     );
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/login"));
+  });
+
+  it("allocates lots for an open disposal and reloads the holding on success", async () => {
+    const disposalEventId = "00000000-0000-4000-8000-000000000062";
+    const acquisitionEventId = "00000000-0000-4000-8000-000000000060";
+    const lotId = "00000000-0000-4000-8000-000000000090";
+    const disposalEvent = {
+      id: disposalEventId,
+      eventDate: "2026-01-10",
+      eventKind: "sale",
+      units: "-5.00000000",
+      unitRatio: null,
+      price: "12.000000",
+      grossAmount: "60.0000",
+      charges: "0.0000",
+      withheldTax: "0.0000",
+      netAmount: "60.0000",
+      currency: "XAA",
+      correctsEventId: null,
+      counterpartEventId: null,
+      correctionState: "active",
+      fundingComplete: true,
+      counterpartAccountId: null,
+      counterpartSecurityId: null,
+      counterpartUnits: null,
+      counterpartPrice: null,
+      counterpartGrossAmount: null,
+      lotAllocationOpen: true,
+    } as const;
+    const openDetail = detail({ events: [detail().events[0], disposalEvent], eventsTotal: 2 });
+    const resolvedDetail = detail({
+      events: [detail().events[0], { ...disposalEvent, lotAllocationOpen: false }],
+      eventsTotal: 2,
+    });
+    const lots: Array<HoldingLotRow> = [{
+      lotId,
+      acquisitionEventId,
+      acquiredOn: "2026-01-05",
+      acquiredUnits: "10.00000000",
+      remainingUnits: "10.00000000",
+      costBasisNative: "101.0000",
+      eligible: true,
+    }];
+    const proposal: LotAllocationProposalResponse = {
+      state: "ready",
+      expectedState: "b".repeat(64),
+      disposalEventId,
+      allocations: [{ acquisitionLotId: lotId, allocatedUnits: "5.00000000" }],
+    };
+    const confirmation: LotAllocationResponse = {
+      state: "confirmed",
+      disposalEventId,
+      allocations: [{ acquisitionLotId: lotId, allocatedUnits: "5.00000000" }],
+      realisedCostNative: "50.5000",
+      realisedGainNative: "9.5000",
+      remainingBasisNative: "50.5000",
+      reviewReasons: [],
+    };
+    let holdingLoads = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        holdingLoads += 1;
+        return holdingLoads === 1 ? openDetail : resolvedDetail;
+      }
+      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) return lots;
+      if (path === "/investment-funding/lot-allocation-proposals" && init?.method === "POST") {
+        expect(JSON.parse(String(init.body))).toEqual({
+          disposalEventId,
+          allocations: [{ acquisitionLotId: lotId, allocatedUnits: "5.00000000" }],
+        });
+        return proposal;
+      }
+      if (path === "/investment-funding/lot-allocations" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(body.disposalEventId).toBe(disposalEventId);
+        expect(body.allocations).toEqual([{ acquisitionLotId: lotId, allocatedUnits: "5.00000000" }]);
+        expect(body.expectedState).toBe(proposal.expectedState);
+        expect(typeof body.idempotencyKey).toBe("string");
+        return confirmation;
+      }
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Allocate lots" }));
+    await screen.findByRole("heading", { name: "Allocate lots" });
+    const unitsInput = await screen.findByLabelText(/Acquired 5 Jan 2026/);
+    fireEvent.change(unitsInput, { target: { value: "5.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+
+    await waitFor(() => expect(holdingLoads).toBe(2));
+    expect(
+      await screen.findByText(/Lot allocation confirmed\. The events below show the refreshed state\./),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Allocate lots" })).toBeNull();
+    const confirmed = screen.getByLabelText("Confirmed lot allocation");
+    expect(confirmed.textContent).toContain("50.5000");
+    expect(confirmed.textContent).toContain("9.5000");
+  });
+
+  it("reuses the lot allocation key on a retry and replaces it after an edit", async () => {
+    const disposalEventId = "00000000-0000-4000-8000-000000000072";
+    const lotId = "00000000-0000-4000-8000-000000000091";
+    const disposalEvent = {
+      ...detail().events[0],
+      id: disposalEventId,
+      eventDate: "2026-01-10",
+      eventKind: "sale",
+      units: "-5.00000000",
+      lotAllocationOpen: true,
+    } as HoldingEventRow;
+    const openDetail = detail({ events: [detail().events[0], disposalEvent], eventsTotal: 2 });
+    const lots: Array<HoldingLotRow> = [{
+      lotId,
+      acquisitionEventId: detail().events[0].id,
+      acquiredOn: "2026-01-05",
+      acquiredUnits: "10.00000000",
+      remainingUnits: "10.00000000",
+      costBasisNative: "101.0000",
+      eligible: true,
+    }];
+    const keys: Array<unknown> = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) return openDetail;
+      if (path === `/portfolio/holdings/${HOLDING_ID}/lots`) return lots;
+      if (path === "/investment-funding/lot-allocation-proposals" && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as { allocations: Array<{ allocatedUnits: string }> };
+        return {
+          state: "ready",
+          expectedState: "c".repeat(64),
+          disposalEventId,
+          allocations: [{ acquisitionLotId: lotId, allocatedUnits: body.allocations[0].allocatedUnits }],
+        };
+      }
+      if (path === "/investment-funding/lot-allocations" && init?.method === "POST") {
+        keys.push((JSON.parse(String(init.body)) as Record<string, unknown>).idempotencyKey);
+        throw new ApiError(500, "Synthetic failure");
+      }
+      throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+    fireEvent.click(screen.getByRole("button", { name: "Allocate lots" }));
+    fireEvent.change(await screen.findByLabelText(/Acquired 5 Jan 2026/), { target: { value: "5.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(2));
+    expect(keys[1]).toBe(keys[0]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit allocation" }));
+    fireEvent.change(await screen.findByLabelText(/Acquired 5 Jan 2026/), { target: { value: "4.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review allocation proposal" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm allocation" }));
+    await waitFor(() => expect(keys).toHaveLength(3));
+    expect(keys[2]).not.toBe(keys[0]);
+  });
+
+  it("loads more events, appending to the first page without replacing it", async () => {
+    const firstPageDetail = detail({ eventsTotal: 3 });
+    const secondEvent = { ...firstPageDetail.events[0], id: "00000000-0000-4000-8000-000000000063", eventDate: "2026-01-06" };
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) return firstPageDetail;
+      if (path === `/portfolio/holdings/${HOLDING_ID}?eventsOffset=1`) {
+        return { ...firstPageDetail, events: [secondEvent] };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    expect(screen.getByText("Events (1 of 3)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load more events" }));
+
+    expect(await screen.findByText("Events (2 of 3)")).toBeTruthy();
+    expect(screen.getByLabelText("purchase on 2026-01-06")).toBeTruthy();
+    expect(screen.getByLabelText("purchase on 2026-01-05")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Load more events" })).toBeTruthy();
   });
 });

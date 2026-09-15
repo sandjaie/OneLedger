@@ -17,6 +17,7 @@ import psycopg
 from pydantic import BaseModel
 
 from ..money import _out
+from . import funding
 from .adapters import ReviewReason
 from .positions import read_positions
 from .prices import PriceStatus, read_status
@@ -202,6 +203,9 @@ class HoldingEventRow(BaseModel):
     counterpartUnits: str | None
     counterpartPrice: str | None
     counterpartGrossAmount: str | None
+    # True when an open `incomplete_lot_allocation` review exists for this event — a disposal
+    # the holding page offers to allocate lots for.
+    lotAllocationOpen: bool
 
 
 class HoldingDetail(BaseModel):
@@ -221,6 +225,16 @@ class HoldingDetail(BaseModel):
     openReviewReasons: list[ReviewReason]
 
 
+class HoldingLotRow(BaseModel):
+    lotId: UUID
+    acquisitionEventId: UUID
+    acquiredOn: date
+    acquiredUnits: str
+    remainingUnits: str
+    costBasisNative: str
+    eligible: bool
+
+
 _HOLDING_SQL = """
     SELECT h.id, h.account_id, h.security_id, security.name, security.asset_class::text,
            security.currency, h.current_units, h.opened_on, h.closed_on
@@ -237,7 +251,14 @@ _EVENTS_SQL = """
                SELECT FROM investment_transaction c WHERE c.corrects_transaction_id = t.id
            ) AS is_active,
            cp.id, cp.account_id, cp.security_id, cp.units, cp.price, cp.gross_amount,
-           count(*) OVER () AS total
+           count(*) OVER () AS total,
+           EXISTS (
+               SELECT FROM investment_review_item review
+                WHERE review.household_id = t.household_id
+                  AND review.investment_transaction_id = t.id
+                  AND review.reason = 'incomplete_lot_allocation'
+                  AND review.status = 'open'
+           ) AS lot_allocation_open
       FROM investment_transaction t
       -- `counterpart_transaction_id` is only ever stored on the "in" leg (V40), pointing at the
       -- "out" leg's id — this join finds the pair's other row from either leg.
@@ -245,8 +266,8 @@ _EVENTS_SQL = """
         ON cp.household_id = t.household_id
        AND (cp.id = t.counterpart_transaction_id OR cp.counterpart_transaction_id = t.id)
      WHERE t.household_id = %s AND t.holding_id = %s
-     ORDER BY t.event_date DESC, t.created_at DESC
-     LIMIT 200
+     ORDER BY t.event_date DESC, t.created_at DESC, t.id DESC
+     LIMIT %s OFFSET %s
 """
 
 _CASH_LINKS_SQL = """
@@ -289,7 +310,12 @@ class _Holding:
 
 
 def read_holding_detail(
-    cur: psycopg.Cursor[Any], household_id: UUID, holding_id: UUID
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    holding_id: UUID,
+    *,
+    events_offset: int = 0,
+    events_limit: int = 200,
 ) -> HoldingDetail | None:
     """The owner's own facts for one holding; no lot, evidence or identifier ever appears."""
     cur.execute(_HOLDING_SQL, (household_id, holding_id))
@@ -328,9 +354,18 @@ def read_holding_detail(
         for r in cash_link_rows
     ]
 
-    cur.execute(_EVENTS_SQL, (household_id, holding.id))
+    cur.execute(_EVENTS_SQL, (household_id, holding.id, events_limit, events_offset))
     event_rows = cur.fetchall()
-    events_total = int(event_rows[0][20]) if event_rows else 0
+    if event_rows:
+        events_total = int(event_rows[0][20])
+    else:
+        # An offset past the end returns no row to carry the window count.
+        cur.execute(
+            """SELECT count(*) FROM investment_transaction
+                WHERE household_id = %s AND holding_id = %s""",
+            (household_id, holding.id),
+        )
+        events_total = int(cur.fetchone()[0])  # type: ignore[index]
     events = []
     for r in event_rows:
         event_id, event_kind, is_active = r[0], r[2], bool(r[13])
@@ -366,6 +401,7 @@ def read_holding_detail(
                 counterpartUnits=_out(None if r[17] is None else Decimal(r[17])),
                 counterpartPrice=_out(None if r[18] is None else Decimal(r[18])),
                 counterpartGrossAmount=_out(None if r[19] is None else Decimal(r[19])),
+                lotAllocationOpen=bool(r[21]),
             )
         )
 
@@ -398,13 +434,41 @@ def read_holding_detail(
     )
 
 
+_HOLDING_EXISTS_SQL = "SELECT 1 FROM holding WHERE household_id = %s AND id = %s"
+
+
+def read_holding_lots(
+    cur: psycopg.Cursor[Any], household_id: UUID, holding_id: UUID
+) -> list[HoldingLotRow] | None:
+    """One holding's own acquisition lots, oldest first, with remaining units and eligibility
+    from `investments.funding.lots_for_holding()` — the same facts a disposal proposal checks,
+    so this list and that proposal can never disagree. None for a foreign or missing holding."""
+    cur.execute(_HOLDING_EXISTS_SQL, (household_id, holding_id))
+    if cur.fetchone() is None:
+        return None
+    return [
+        HoldingLotRow(
+            lotId=fact.id,
+            acquisitionEventId=fact.origin_event_id,
+            acquiredOn=fact.acquisition_date,
+            acquiredUnits=f"{fact.acquired_units:.8f}",
+            remainingUnits=f"{fact.remaining_units:.8f}",
+            costBasisNative=_money(fact.cost_basis),
+            eligible=fact.eligible,
+        )
+        for fact in funding.lots_for_holding(cur, household_id, holding_id)
+    ]
+
+
 __all__ = [
     "AllocationGroupRow",
     "HoldingCashLink",
     "HoldingDetail",
     "HoldingEventRow",
+    "HoldingLotRow",
     "HoldingPriceRow",
     "PortfolioSummary",
     "read_holding_detail",
+    "read_holding_lots",
     "read_summary",
 ]
