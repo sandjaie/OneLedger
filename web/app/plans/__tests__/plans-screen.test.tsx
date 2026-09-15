@@ -57,6 +57,9 @@ const commitment: CommitmentRow = {
   paidTowardNext: "0.0000",
   partlyPaid: false,
   remainingNext: "5000.0000",
+  source: "owner",
+  sourceCardStatementId: null,
+  sourceCardAccountName: null,
 };
 
 const emptyForecast: ForecastResponse = {
@@ -97,8 +100,18 @@ const forecastWithAccount: ForecastResponse = {
   excludedCommitments: [],
 };
 
+const emptyActions = { asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] };
+
+// Needs attention (Task 2) fetches /actions on mount alongside the forecast and commitments;
+// every test here is about the rest of the screen, so it gets a quiet empty response unless a
+// test overrides /actions itself.
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
-  return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
+  return vi.fn((path: string, init?: RequestInit) => {
+    if (path.startsWith("/actions") && (!init || init.method === undefined)) {
+      return Promise.resolve(emptyActions);
+    }
+    return Promise.resolve(handler(path, init));
+  }) as Request;
 }
 
 afterEach(() => {
