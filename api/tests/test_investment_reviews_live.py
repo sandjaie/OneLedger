@@ -93,6 +93,21 @@ def test_a_resolved_allocation_removes_the_review_and_another_household_never_se
     assert foreign.json() == []
 
 
+def test_a_review_nothing_in_the_app_can_resolve_is_not_listed(
+    live_funding: FundingFixture,
+) -> None:
+    _event(live_funding, "10.0000", kind="purchase")
+    with live_funding.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO investment_review_item (household_id, holding_id, reason)
+               SELECT household_id, holding_id, 'unit_mismatch'
+                 FROM investment_transaction WHERE household_id = %s LIMIT 1""",
+            (live_funding.owner.household_id,),
+        )
+
+    assert _reviews().json() == []
+
+
 def test_investment_reviews_are_paged_newest_first(live_funding: FundingFixture) -> None:
     _event(live_funding, "10.0000", kind="purchase")
     _event(live_funding, "10.0000", kind="purchase")
