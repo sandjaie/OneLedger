@@ -688,6 +688,102 @@ export type AcquisitionPosition = {
 };
 
 /**
+ * ActionRow
+ */
+export type ActionRow = {
+    /**
+     * Actionkey
+     */
+    actionKey: string;
+    /**
+     * Kind
+     */
+    kind: 'commitment' | 'card_due' | 'follow_up';
+    /**
+     * Reason
+     */
+    reason: 'commitment_overdue' | 'commitment_due' | 'card_payment_unplanned' | 'follow_up';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Duedate
+     */
+    dueDate: string | null;
+    /**
+     * Overdue
+     */
+    overdue: boolean;
+    /**
+     * Snoozeduntil
+     */
+    snoozedUntil: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * Amount
+     */
+    amount: string | null;
+    /**
+     * Remaining
+     */
+    remaining: string | null;
+    /**
+     * Partlypaid
+     */
+    partlyPaid: boolean;
+    /**
+     * Currency
+     */
+    currency: string | null;
+    /**
+     * Certainty
+     */
+    certainty: 'confirmed' | 'estimated' | null;
+    /**
+     * Commitmentid
+     */
+    commitmentId: string | null;
+    /**
+     * Cardstatementid
+     */
+    cardStatementId: string | null;
+    /**
+     * Actionitemid
+     */
+    actionItemId: string | null;
+};
+
+/**
+ * ActionsResponse
+ */
+export type ActionsResponse = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Items
+     */
+    items: Array<ActionRow>;
+    /**
+     * Snoozed
+     */
+    snoozed: Array<ActionRow>;
+    /**
+     * Resolvedfollowups
+     */
+    resolvedFollowUps: Array<FollowUpRow>;
+};
+
+/**
  * AllocationGroupRow
  */
 export type AllocationGroupRow = {
@@ -1734,6 +1830,10 @@ export type CommitmentCreate = {
      * Idempotencykey
      */
     idempotencyKey: string;
+    /**
+     * Sourcecardstatementid
+     */
+    sourceCardStatementId?: string | null;
 };
 
 /**
@@ -1812,6 +1912,18 @@ export type CommitmentRow = {
      * Remainingnext
      */
     remainingNext: string | null;
+    /**
+     * Source
+     */
+    source: 'owner' | 'card_statement';
+    /**
+     * Sourcecardstatementid
+     */
+    sourceCardStatementId: string | null;
+    /**
+     * Sourcecardaccountname
+     */
+    sourceCardAccountName: string | null;
 };
 
 /**
@@ -2556,6 +2668,84 @@ export type Finding = {
      * Message
      */
     message: string;
+};
+
+/**
+ * FollowUpCreate
+ */
+export type FollowUpCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Duedate
+     */
+    dueDate?: string | null;
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * FollowUpDismiss
+ */
+export type FollowUpDismiss = {
+    /**
+     * Reason
+     */
+    reason: string;
+};
+
+/**
+ * FollowUpRow
+ */
+export type FollowUpRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Duedate
+     */
+    dueDate: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * State
+     */
+    state: 'open' | 'completed' | 'dismissed';
+    /**
+     * Dismissreason
+     */
+    dismissReason: string | null;
+    /**
+     * Resolvedat
+     */
+    resolvedAt: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
 };
 
 /**
@@ -4349,6 +4539,20 @@ export type ManualPriceRow = {
      * Status
      */
     status?: 'recorded';
+};
+
+/**
+ * MarkBody
+ */
+export type MarkBody = {
+    /**
+     * Until
+     */
+    until?: string | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
 };
 
 /**
@@ -7874,6 +8078,211 @@ export type OneledgerRoutesRulesPreviewResult = {
      */
     sample: Array<MatchedRow>;
 };
+
+export type ListActionsActionsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/actions';
+};
+
+export type ListActionsActionsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListActionsActionsGetError = ListActionsActionsGetErrors[keyof ListActionsActionsGetErrors];
+
+export type ListActionsActionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActionsResponse;
+};
+
+export type ListActionsActionsGetResponse = ListActionsActionsGetResponses[keyof ListActionsActionsGetResponses];
+
+export type CreateFollowUpActionsFollowUpsPostData = {
+    body: FollowUpCreate;
+    path?: never;
+    query?: never;
+    url: '/actions/follow-ups';
+};
+
+export type CreateFollowUpActionsFollowUpsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateFollowUpActionsFollowUpsPostError = CreateFollowUpActionsFollowUpsPostErrors[keyof CreateFollowUpActionsFollowUpsPostErrors];
+
+export type CreateFollowUpActionsFollowUpsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FollowUpRow;
+};
+
+export type CreateFollowUpActionsFollowUpsPostResponse = CreateFollowUpActionsFollowUpsPostResponses[keyof CreateFollowUpActionsFollowUpsPostResponses];
+
+export type CompleteFollowUpActionsFollowUpsActionItemIdCompletePostData = {
+    body?: never;
+    path: {
+        /**
+         * Action Item Id
+         */
+        action_item_id: string;
+    };
+    query?: never;
+    url: '/actions/follow-ups/{action_item_id}/complete';
+};
+
+export type CompleteFollowUpActionsFollowUpsActionItemIdCompletePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CompleteFollowUpActionsFollowUpsActionItemIdCompletePostError = CompleteFollowUpActionsFollowUpsActionItemIdCompletePostErrors[keyof CompleteFollowUpActionsFollowUpsActionItemIdCompletePostErrors];
+
+export type CompleteFollowUpActionsFollowUpsActionItemIdCompletePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FollowUpRow;
+};
+
+export type CompleteFollowUpActionsFollowUpsActionItemIdCompletePostResponse = CompleteFollowUpActionsFollowUpsActionItemIdCompletePostResponses[keyof CompleteFollowUpActionsFollowUpsActionItemIdCompletePostResponses];
+
+export type DismissFollowUpActionsFollowUpsActionItemIdDismissPostData = {
+    body: FollowUpDismiss;
+    path: {
+        /**
+         * Action Item Id
+         */
+        action_item_id: string;
+    };
+    query?: never;
+    url: '/actions/follow-ups/{action_item_id}/dismiss';
+};
+
+export type DismissFollowUpActionsFollowUpsActionItemIdDismissPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DismissFollowUpActionsFollowUpsActionItemIdDismissPostError = DismissFollowUpActionsFollowUpsActionItemIdDismissPostErrors[keyof DismissFollowUpActionsFollowUpsActionItemIdDismissPostErrors];
+
+export type DismissFollowUpActionsFollowUpsActionItemIdDismissPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FollowUpRow;
+};
+
+export type DismissFollowUpActionsFollowUpsActionItemIdDismissPostResponse = DismissFollowUpActionsFollowUpsActionItemIdDismissPostResponses[keyof DismissFollowUpActionsFollowUpsActionItemIdDismissPostResponses];
+
+export type ReopenFollowUpActionsFollowUpsActionItemIdReopenPostData = {
+    body?: never;
+    path: {
+        /**
+         * Action Item Id
+         */
+        action_item_id: string;
+    };
+    query?: never;
+    url: '/actions/follow-ups/{action_item_id}/reopen';
+};
+
+export type ReopenFollowUpActionsFollowUpsActionItemIdReopenPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReopenFollowUpActionsFollowUpsActionItemIdReopenPostError = ReopenFollowUpActionsFollowUpsActionItemIdReopenPostErrors[keyof ReopenFollowUpActionsFollowUpsActionItemIdReopenPostErrors];
+
+export type ReopenFollowUpActionsFollowUpsActionItemIdReopenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: FollowUpRow;
+};
+
+export type ReopenFollowUpActionsFollowUpsActionItemIdReopenPostResponse = ReopenFollowUpActionsFollowUpsActionItemIdReopenPostResponses[keyof ReopenFollowUpActionsFollowUpsActionItemIdReopenPostResponses];
+
+export type DeleteMarkActionsMarksActionKeyDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Action Key
+         */
+        action_key: string;
+    };
+    query?: never;
+    url: '/actions/marks/{action_key}';
+};
+
+export type DeleteMarkActionsMarksActionKeyDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteMarkActionsMarksActionKeyDeleteError = DeleteMarkActionsMarksActionKeyDeleteErrors[keyof DeleteMarkActionsMarksActionKeyDeleteErrors];
+
+export type DeleteMarkActionsMarksActionKeyDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteMarkActionsMarksActionKeyDeleteResponse = DeleteMarkActionsMarksActionKeyDeleteResponses[keyof DeleteMarkActionsMarksActionKeyDeleteResponses];
+
+export type PutMarkActionsMarksActionKeyPutData = {
+    body: MarkBody;
+    path: {
+        /**
+         * Action Key
+         */
+        action_key: string;
+    };
+    query?: never;
+    url: '/actions/marks/{action_key}';
+};
+
+export type PutMarkActionsMarksActionKeyPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutMarkActionsMarksActionKeyPutError = PutMarkActionsMarksActionKeyPutErrors[keyof PutMarkActionsMarksActionKeyPutErrors];
+
+export type PutMarkActionsMarksActionKeyPutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PutMarkActionsMarksActionKeyPutResponse = PutMarkActionsMarksActionKeyPutResponses[keyof PutMarkActionsMarksActionKeyPutResponses];
 
 export type LoginAuthLoginGetData = {
     body?: never;
