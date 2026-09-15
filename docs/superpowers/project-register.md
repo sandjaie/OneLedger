@@ -41,6 +41,7 @@ an inferred institution identity.
 | 14 Sep 2026 | Employer-contribution and reimbursement payslip lines | Phase 1.7 records payment and deduction lines only | Phase 4.2 planning |
 | 14 Sep 2026 | Keep a linked payslip credit eligible when its ledger row is reclassified | Phase 1.7 checks eligibility when linking and reports it on read | Phase 4.2 planning |
 | 14 Sep 2026 | Search document contents | Phase 1.8 filters documents by type, account, period and import status; indexing statement text widens the private-data surface | Only through a separate privacy decision |
+| 15 Sep 2026 | Same-date valuation snapshot correction | UI completion Task 2a's `POST /accounts/{accountId}/valuation-snapshots` is append-only (`preserve_valuation_snapshot`): a mistyped same-date valuation has no correction route and needs a migration to add one | When a real mistyped same-date valuation occurs, or Phase 4.3 planning |
 
 ## Unapproved discoveries and improvement candidates
 

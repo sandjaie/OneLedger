@@ -462,9 +462,10 @@ export function Workspace({
             />
           )}
 
-          {activeSection === "accounts" && inventory && institutions && currencies && (
+          {activeSection === "accounts" && inventory && institutions && currencies && household && (
             <AccountsScreen
               accounts={inventory.accounts}
+              baseCurrency={household.baseCurrency}
               currencies={currencies}
               institutions={institutions}
               onChanged={() => setAttempt((value) => value + 1)}

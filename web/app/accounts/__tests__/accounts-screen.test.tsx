@@ -96,6 +96,7 @@ const props = {
   ],
   institutions,
   currencies,
+  baseCurrency: "XIN",
   request: vi.fn() as unknown as typeof apiFetch,
   onChanged: vi.fn(),
 };
