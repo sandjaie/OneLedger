@@ -231,6 +231,82 @@ BEGIN
 END $$;
 ROLLBACK;
 
+-- V47: a version may sit pending (created by a preview-time guess) until an apply activates it,
+-- or be revoked unused. Every other edge — including reversing an activation, or entering
+-- pending from any state but its own creation — must still be refused.
+BEGIN;
+DO $$
+DECLARE f RECORD; knowledge UUID; pending_to_active UUID; pending_to_revoked UUID; refusal TEXT;
+BEGIN
+  SELECT * INTO f FROM pg_temp.t0020_fixture();
+  INSERT INTO classification_knowledge (household_id)
+  VALUES (f.h1) RETURNING id INTO knowledge;
+  INSERT INTO classification_knowledge_version (
+    household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+    matcher_version, scope, state
+  ) VALUES (
+    f.h1, knowledge, 1, 'owner', 'owner one', 'pending synthetic evidence',
+    'matcher-v1', '{"direction":"debit"}', 'pending'
+  ) RETURNING id INTO pending_to_active;
+  INSERT INTO classification_knowledge_version (
+    household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+    matcher_version, scope, state
+  ) VALUES (
+    f.h1, knowledge, 2, 'owner', 'owner one', 'pending synthetic evidence, unused',
+    'matcher-v1', '{"direction":"credit"}', 'pending'
+  ) RETURNING id INTO pending_to_revoked;
+
+  BEGIN
+    INSERT INTO classification_knowledge_version (
+      household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+      matcher_version, scope, state, revoked_at
+    ) VALUES (
+      f.h1, knowledge, 3, 'owner', 'owner one', 'pending with a revocation time',
+      'matcher-v1', '{}', 'pending', now()
+    );
+    RAISE EXCEPTION 'a pending version with revoked_at set must be refused';
+  EXCEPTION WHEN check_violation THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%classification_evidence_revocation_agrees%',
+      'expected classification_evidence_revocation_agrees, got ' || refusal;
+  END;
+
+  UPDATE classification_knowledge_version SET state = 'active' WHERE id = pending_to_active;
+  ASSERT (SELECT state FROM classification_knowledge_version WHERE id = pending_to_active)
+           = 'active',
+    'a pending version can activate';
+  ASSERT (SELECT revoked_at FROM classification_knowledge_version WHERE id = pending_to_active)
+           IS NULL,
+    'activating a pending version leaves no revocation time';
+
+  UPDATE classification_knowledge_version
+     SET state = 'revoked', revoked_at = now() WHERE id = pending_to_revoked;
+  ASSERT (SELECT state FROM classification_knowledge_version WHERE id = pending_to_revoked)
+           = 'revoked',
+    'a pending version can be revoked unused';
+
+  BEGIN
+    UPDATE classification_knowledge_version SET state = 'pending' WHERE id = pending_to_active;
+    RAISE EXCEPTION 'an active version must not re-enter pending';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%lifecycle only allows%',
+      'expected lifecycle refusal, got ' || refusal;
+  END;
+
+  BEGIN
+    UPDATE classification_knowledge_version
+       SET state = 'active', revoked_at = NULL WHERE id = pending_to_revoked;
+    RAISE EXCEPTION 'a revoked version must not reactivate';
+  EXCEPTION WHEN raise_exception THEN
+    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
+    ASSERT refusal LIKE '%lifecycle only allows%',
+      'expected lifecycle refusal, got ' || refusal;
+  END;
+  RAISE NOTICE 'PASS 0020 pending knowledge activates or revokes and no other edge is allowed';
+END $$;
+ROLLBACK;
+
 -- Composite foreign keys carry the household alongside every reference. A valid UUID from a
 -- different household is not merely hidden by RLS; it is impossible to persist.
 BEGIN;

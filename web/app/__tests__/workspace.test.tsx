@@ -64,6 +64,8 @@ function outOfBand(path: string): Promise<unknown> | undefined {
   if (path === "/rules/analytics") return Promise.resolve({});
   if (path === "/rules/suggestions") return Promise.resolve({});
   if (path === "/doctor") return Promise.resolve({ sections: [] });
+  if (path === "/merchant-knowledge") return Promise.resolve([]);
+  if (path === "/classification-runs?limit=20&offset=0") return Promise.resolve([]);
   return undefined;
 }
 

@@ -11,6 +11,7 @@ import type {
   KnowledgeRow,
   OneledgerRoutesClassificationDecisionsPreviewResult as PreviewResult,
   RunResult,
+  RunRow,
 } from "@/types/api";
 
 const categories = [
@@ -99,7 +100,12 @@ afterEach(cleanup);
 describe("grouped classification review", () => {
   it("shows loading, grouped explanations and an empty state without financial amounts", async () => {
     let resolve!: (value: ClassificationReviewResponse) => void;
-    const request = vi.fn(() => new Promise<ClassificationReviewResponse>((done) => { resolve = done; }));
+    const request = vi.fn((path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return Promise.resolve([]);
+      return new Promise<ClassificationReviewResponse>((done) => {
+        resolve = done;
+      });
+    });
 
     const view = render(
       <ClassificationReviewScreen categories={categories} request={request as never} />,
@@ -125,6 +131,7 @@ describe("grouped classification review", () => {
   it("previews the exact saved-knowledge scope before applying it", async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       void init;
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);
       if (path === "/classification-runs/preview") return preview();
       if (path === "/classification-runs/run-1/apply") return applied();
@@ -168,6 +175,7 @@ describe("grouped classification review", () => {
   it("offers conditional undo and reports conflicts without claiming a full reversal", async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       void init;
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);
       if (path === "/classification-runs/preview") return preview();
       if (path.endsWith("/apply")) return applied();
@@ -210,8 +218,9 @@ describe("grouped classification review", () => {
     } as KnowledgeRow;
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       void init;
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([unresolved]);
-      if (path === "/merchant-knowledge") return knowledge;
+      if (path === "/merchant-knowledge?pending=true") return knowledge;
       if (path === "/classification-runs/preview") return preview({ changed: 2 });
       if (path.endsWith("/apply")) return applied({ changed: 1 });
       if (path === "/merchant-knowledge/alias-1") return undefined;
@@ -225,7 +234,7 @@ describe("grouped classification review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remember and preview 2" }));
     expect(await screen.findByText("2 can change · 0 conflicts · 0 unresolved")).toBeTruthy();
 
-    const createCall = request.mock.calls.find(([path]) => path === "/merchant-knowledge");
+    const createCall = request.mock.calls.find(([path]) => path === "/merchant-knowledge?pending=true");
     expect(JSON.parse(createCall?.[1]?.body as string)).toMatchObject({
       displayName: "SAMPLE MARKET",
       kind: "unresolved",
@@ -245,18 +254,28 @@ describe("grouped classification review", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Apply to one only" }));
     await screen.findByText("Applied to 1 transaction; the wording was not remembered.");
-    const oneOffCreate = request.mock.calls.find(([path]) => path === "/merchant-knowledge");
+    const oneOffCreate = request.mock.calls.find(
+      ([path]) => path === "/merchant-knowledge?pending=true",
+    );
     expect(JSON.parse(oneOffCreate?.[1]?.body as string)).toMatchObject({
       displayName: "Temporary owner decision",
       pattern: "Temporary owner decision",
+    });
+    const oneOffApply = request.mock.calls.find(([path]) => (path as string).endsWith("/apply"));
+    expect(JSON.parse(oneOffApply?.[1]?.body as string)).toMatchObject({
+      activateKnowledge: false,
     });
     expect(request).toHaveBeenCalledWith("/merchant-knowledge/alias-1", { method: "DELETE" });
   });
 
   it("blocks incomplete scopes and lets a failed queue load retry", async () => {
-    const request = vi.fn()
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce(response([group({ transactionIdsTruncated: true })]));
+    let groupsCalls = 0;
+    const request = vi.fn(async (path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return [];
+      groupsCalls += 1;
+      if (groupsCalls === 1) throw new Error("offline");
+      return response([group({ transactionIdsTruncated: true })]);
+    });
     render(<ClassificationReviewScreen categories={categories} request={request as never} />);
 
     expect((await screen.findByRole("alert")).textContent).toContain("The review queue could not be loaded.");
@@ -288,6 +307,7 @@ describe("grouped classification review", () => {
   it("shows economic role separately and applies the classifier's stated provenance", async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       void init;
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") {
         return response([group({ proposedClassifiedBy: "prior_match", proposedTxnType: "refund" })]);
       }
@@ -315,8 +335,9 @@ describe("grouped classification review", () => {
     });
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       void init;
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([unresolved]);
-      if (path === "/merchant-knowledge") {
+      if (path === "/merchant-knowledge?pending=true") {
         return { aliasId: "alias-1", knowledgeVersionId: "version-1" } as KnowledgeRow;
       }
       if (path === "/classification-runs/preview") return preview();
@@ -333,7 +354,7 @@ describe("grouped classification review", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remember and preview 3" }));
 
     await screen.findByText("3 can change · 0 conflicts · 0 unresolved");
-    const call = request.mock.calls.find(([path]) => path === "/merchant-knowledge");
+    const call = request.mock.calls.find(([path]) => path === "/merchant-knowledge?pending=true");
     expect(JSON.parse(call?.[1]?.body as string)).toMatchObject({
       displayName: "SAMPLE",
       pattern: "SAMPLE",
@@ -347,6 +368,7 @@ describe("grouped classification review", () => {
     const later = response([group({ groupKey: "group-2", description: "SECOND MARKET" })]);
     later.totalGroups = 2;
     const request = vi.fn(async (path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return first;
       if (path === "/classification-review/groups?limit=50&offset=1") return later;
       throw new Error(`Unexpected path ${path}`);
@@ -360,6 +382,7 @@ describe("grouped classification review", () => {
   it("re-fetches with sort=impact when the owner switches sort order", async () => {
     const impactOnly = response([group({ groupKey: "group-2", description: "BIG SPEND" })]);
     const request = vi.fn(async (path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);
       if (path === "/classification-review/groups?limit=50&offset=0&sort=impact") return impactOnly;
       throw new Error(`Unexpected path ${path}`);
@@ -374,6 +397,7 @@ describe("grouped classification review", () => {
 
   it("keeps stale and manually protected preview results visibly unapplied", async () => {
     const request = vi.fn(async (path: string) => {
+      if (path === "/classification-runs?limit=20&offset=0") return [];
       if (path === "/classification-review/groups?limit=50&offset=0") return response([group()]);
       if (path === "/classification-runs/preview") {
         return preview({
@@ -389,5 +413,105 @@ describe("grouped classification review", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Preview 3 proposed changes" }));
     expect(await screen.findByText("0 can change · 0 conflicts · 1 unresolved")).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Apply 0 changes" }).disabled).toBe(true);
+  });
+
+  it("shows recent applied runs and offers undo only where it applies", async () => {
+    const runs: Array<RunRow> = [
+      {
+        runId: "run-undoable",
+        appliedAt: "2026-09-10T00:00:00Z",
+        reason: "Owner reviewed SAMPLE MARKET",
+        changed: 3,
+        sourceRunId: null,
+        undone: false,
+        knowledgeDisplayName: "SAMPLE MARKET",
+      },
+      {
+        runId: "run-already-undone",
+        appliedAt: "2026-09-09T00:00:00Z",
+        reason: "Owner reviewed OTHER MARKET",
+        changed: 1,
+        sourceRunId: null,
+        undone: true,
+        knowledgeDisplayName: "OTHER MARKET",
+      },
+      {
+        runId: "run-is-an-undo",
+        appliedAt: "2026-09-08T00:00:00Z",
+        reason: "Owner requested undo",
+        changed: 1,
+        sourceRunId: "run-some-source",
+        undone: false,
+        knowledgeDisplayName: null,
+      },
+    ];
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      void init;
+      if (path === "/classification-runs?limit=20&offset=0") return runs;
+      if (path === "/classification-review/groups?limit=50&offset=0") return response([]);
+      if (path === "/classification-runs/run-undoable/undo") {
+        return applied({ runId: "run-undo-new", changed: 3, sourceRunId: "run-undoable" });
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    render(<ClassificationReviewScreen categories={categories} request={request as never} />);
+
+    await screen.findByText("Recent changes");
+    const undoButtons = screen.getAllByRole("button", { name: "Undo" });
+    expect(undoButtons).toHaveLength(1);
+
+    fireEvent.click(undoButtons[0]);
+    expect(await screen.findByText(/Undid 3 changes\./)).toBeTruthy();
+    expect(screen.getByText(/Settings › Merchant knowledge/)).toBeTruthy();
+    expect(request).toHaveBeenCalledWith("/classification-runs/run-undoable/undo", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: expect.stringContaining("Owner requested undo"),
+    });
+  });
+
+  it("shows the refusal reason on a conflicted undo and no merchant-knowledge note", async () => {
+    const runs: Array<RunRow> = [
+      {
+        runId: "run-undoable",
+        appliedAt: "2026-09-10T00:00:00Z",
+        reason: "Owner reviewed SAMPLE MARKET",
+        changed: 3,
+        sourceRunId: null,
+        undone: false,
+        knowledgeDisplayName: "SAMPLE MARKET",
+      },
+    ];
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      void init;
+      if (path === "/classification-runs?limit=20&offset=0") return runs;
+      if (path === "/classification-review/groups?limit=50&offset=0") return response([]);
+      if (path === "/classification-runs/run-undoable/undo") {
+        return {
+          runId: "undo-run",
+          state: "conflict",
+          changed: 0,
+          conflicted: 1,
+          unresolved: 0,
+          sourceRunId: "run-undoable",
+          items: [
+            {
+              transactionId: "transaction-1",
+              status: "conflicted",
+              reason: "later classification correction exists",
+            },
+          ],
+        } satisfies RunResult;
+      }
+      throw new Error(`Unexpected path ${path}`);
+    });
+    render(<ClassificationReviewScreen categories={categories} request={request as never} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByText("later classification correction exists")).toBeTruthy();
+    expect(screen.getByText("The application could not be undone.")).toBeTruthy();
+    expect(screen.queryByText(/Settings › Merchant knowledge/)).toBeNull();
+    expect(screen.queryByText(/Undid/)).toBeNull();
   });
 });

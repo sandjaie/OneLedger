@@ -1000,12 +1000,18 @@ column says it recorded none (Invariant I7).</p><p class="ddl-ref">Full DDL: <a 
 <h3 id="classification-decision-evidence">Decision evidence and preview scope</h3>
 <p><code>classification_knowledge</code> gives a household fact a stable identity, while numbered
 <code>classification_knowledge_version</code> rows preserve its bounded source attribution, matcher
-version, scope and active/revoked lifecycle. Identity and evidence fields never change in place:
-revocation is the only lifecycle transition, and changed evidence appends a successor version. The
-supported evidence sources are private owner input, a public source, a statement or a model proposal.
-Public-source URLs are stored as references only; copied pages, private search queries and transaction
-originals do not belong in the evidence payload. Shared community packs are a later opt-in
-distribution mechanism, not a different evidence source or a public copy of household knowledge.</p>
+version, scope and <code>active</code>/<code>pending</code>/<code>revoked</code> lifecycle. Identity and
+evidence fields never change in place; the only lifecycle transitions are active&rarr;revoked,
+pending&rarr;active and pending&rarr;revoked, and changed evidence appends a successor version.
+A version created through <code>POST /merchant-knowledge?pending=true</code> — the grouped
+classification review's own preview-time guess — sits pending, invisible to
+<code>GET /merchant-knowledge</code> and to every classifier's <code>load_knowledge()</code> read, until
+a conflict-free <code>classification-runs</code> apply activates it (or an owner revokes it unused);
+nothing previewed changes future classification before that apply succeeds. The supported evidence
+sources are private owner input, a public source, a statement or a model proposal. Public-source URLs
+are stored as references only; copied pages, private search queries and transaction originals do not
+belong in the evidence payload. Shared community packs are a later opt-in distribution mechanism, not
+a different evidence source or a public copy of household knowledge.</p>
 <p>A <code>classification_run</code> owns an expiring, household-scoped preview and its idempotency
 key. Every <code>classification_run_item</code> names one exact transaction, its immutable source key
 and update version, and complete expected/proposed derived state. The state allowlist contains
@@ -1017,7 +1023,7 @@ before/after state. A correction is a new event for the same transaction whose b
 the prior event's after state; <code>supersedes_decision_id</code> preserves the chain. This is dedicated
 classification history required for guarded apply and conditional undo. It does not implement the
 broader planned <code>audit_log</code>, and V23 adds no mutation API or background automation.</p>
-<p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V23</code>.</p>
+<p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V23</code>, <code>V47</code>.</p>
 <hr>
 <h2 id="14-derived-and-reporting-tables">14. Derived and reporting tables</h2>
 <table><thead><tr><th>Table</th><th>What it holds</th></tr></thead><tbody><tr><td><code>month_end_position</code></td><td>One row per counted account, or per holding of a counted holdings-mode account, at a month end: native value, evidence date, translation rates to both reporting currencies with their dates and carried flags, translated values and a status — <em>with the rates used</em>, so a past figure is reproducible. A recomputable cache, replaced in one transaction by <code>wealth_history.refresh</code>, not edited in place.</td></tr><tr><td><code>wealth_history_refresh</code></td><td>One row per household: when it was last refreshed (<code>computed_at</code>) and through which month end (<code>computed_through</code>). <code>GET /wealth-history</code> lists every month from the history anchor through <code>computed_through</code> from this row, including a month with no <code>month_end_position</code> row, and a household with no row here has never refreshed.</td></tr></tbody></table><p class="ddl-ref">Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V46</code>.</p>

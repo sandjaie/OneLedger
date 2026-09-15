@@ -55,7 +55,9 @@ Add the following concepts in bounded migrations after checking existing `audit_
   a payment. Reuse merchant identity rather than maintaining a second business-name catalogue.
 - **Knowledge evidence:** source kind (`owner`, `public_source`, `statement`, `model_proposal`),
   public source URL where applicable, verification time, author/source attribution, matcher
-  version, scope and active/revoked state. Store no copied web pages or private search queries.
+  version, scope and `active`/`pending`/`revoked` state — a version created pending is invisible to
+  every classifier and to `GET /merchant-knowledge` until a conflict-free apply activates it, or an
+  owner revokes it unused. Store no copied web pages or private search queries.
 - **Classification decision:** immutable before/after values for changed derived fields,
   transaction, household, knowledge version, actor, reason, run ID and time; corrections append
   a superseding event. Undo is a conditional new event, never deletion of history.

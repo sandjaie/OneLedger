@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import psycopg
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -125,13 +125,17 @@ class PreviewBody(BaseModel):
         return self
 
 
-class ApplyBody(BaseModel):
+class _IdempotentBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
-class UndoBody(ApplyBody):
+class ApplyBody(_IdempotentBody):
+    activateKnowledge: bool = True
+
+
+class UndoBody(_IdempotentBody):
     reason: str = Field(min_length=1, max_length=1000)
 
 
@@ -174,6 +178,16 @@ class Proposal(BaseModel):
 
 class PreviewResult(RunResult):
     proposals: list[Proposal]
+
+
+class RunRow(BaseModel):
+    runId: UUID
+    appliedAt: datetime
+    reason: str
+    changed: int
+    sourceRunId: UUID | None
+    undone: bool
+    knowledgeDisplayName: str | None
 
 
 _FIELD_NAMES = {
@@ -439,6 +453,51 @@ def _bridge_review_resets(
     return heads
 
 
+@router.get("")
+def list_runs(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> list[RunRow]:
+    """This household's applied runs, newest first, without the review-reset bridge runs a
+    guarded description repair creates for its own audit trail rather than an owner decision."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """SELECT r.id, r.resolved_at, r.reason, (r.result->>'changed')::int,
+                      NULLIF(r.result->>'sourceRunId', '')::uuid,
+                      EXISTS (
+                        SELECT FROM classification_run undo_run
+                         WHERE undo_run.household_id = r.household_id
+                           AND undo_run.state = 'applied'
+                           AND undo_run.result->>'sourceRunId' = r.id::text
+                      ),
+                      counterparty.display_name
+                 FROM classification_run r
+            LEFT JOIN counterparty_alias a
+                   ON a.household_id = r.household_id
+                  AND a.knowledge_version_id = r.knowledge_version_id
+            LEFT JOIN counterparty
+                   ON counterparty.id = a.counterparty_id
+                  AND counterparty.household_id = a.household_id
+                WHERE r.household_id = %s AND r.state = 'applied' AND r.reason <> %s
+                ORDER BY r.resolved_at DESC, r.id DESC
+                LIMIT %s OFFSET %s""",
+            (owner.household_id, _REVIEW_RESET_REASON, limit, offset),
+        )
+        return [
+            RunRow(
+                runId=row[0],
+                appliedAt=row[1],
+                reason=row[2],
+                changed=row[3],
+                sourceRunId=row[4],
+                undone=row[5],
+                knowledgeDisplayName=row[6],
+            )
+            for row in cur.fetchall()
+        ]
+
+
 @router.post("/preview")
 def preview(
     body: PreviewBody, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -447,7 +506,7 @@ def preview(
         _lock_household(cur, owner.household_id)
         cur.execute(
             """SELECT 1 FROM classification_knowledge_version
-                WHERE id = %s AND household_id = %s AND state = 'active' FOR SHARE""",
+                WHERE id = %s AND household_id = %s AND state IN ('active', 'pending') FOR SHARE""",
             (body.knowledgeVersionId, owner.household_id),
         )
         if cur.fetchone() is None:
@@ -635,7 +694,7 @@ def apply(
                 head_count,
             ) = row
             conflict: str | None = None
-            if evidence is None or evidence[0] != "active":
+            if evidence is None or evidence[0] not in {"active", "pending"}:
                 conflict = "knowledge version is no longer active"
             elif transfer_id is not None:
                 conflict = "confirmed transfer leg is protected"
@@ -697,6 +756,12 @@ def apply(
             )
             changed.append(
                 ResultItem(transactionId=transaction_id, status="changed", reason=reason)
+            )
+        if body.activateKnowledge:
+            cur.execute(
+                """UPDATE classification_knowledge_version SET state = 'active'
+                    WHERE id = %s AND household_id = %s AND state = 'pending'""",
+                (knowledge_version_id, owner.household_id),
             )
         unresolved = int(prior_result.get("unresolved", 0))
         prior_items = [ResultItem.model_validate(item) for item in prior_result.get("items", [])]

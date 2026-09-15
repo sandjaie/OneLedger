@@ -10,6 +10,7 @@ import { OverviewScreen } from "@/app/overview/overview-screen";
 import { CategoriesManager } from "@/app/settings/categories-manager";
 import { DataQuality } from "@/app/settings/data-quality";
 import { HouseholdForm } from "@/app/settings/household-form";
+import { MerchantKnowledge } from "@/app/settings/merchant-knowledge";
 import { RulesManager } from "@/app/settings/rules-manager";
 import { ImportScreen } from "@/app/import/import-screen";
 import { InvestmentEntryScreen } from "@/app/investments/entry-screen";
@@ -610,6 +611,13 @@ export function Workspace({
                 <RulesManager
                   categories={categories}
                   onChanged={() => setAttempt((value) => value + 1)}
+                  request={wrappedRequest}
+                />
+              )}
+
+              {categories && (
+                <MerchantKnowledge
+                  categories={categories}
                   request={wrappedRequest}
                 />
               )}

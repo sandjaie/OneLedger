@@ -319,12 +319,14 @@ def _insert_version(
     knowledge_id: UUID,
     version: int,
     body: KnowledgeBody,
+    *,
+    state: Literal["active", "pending"] = "active",
 ) -> UUID:
     cur.execute(
         """INSERT INTO classification_knowledge_version
              (household_id, knowledge_id, version, source_kind, source_url, attribution,
-              evidence_note, matcher_version, scope, verified_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+              evidence_note, matcher_version, scope, state, verified_at)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (
             household_id,
             knowledge_id,
@@ -335,6 +337,7 @@ def _insert_version(
             body.evidenceNote,
             body.matcherVersion,
             Json(_scope(body)),
+            state,
             body.verifiedAt,
         ),
     )
@@ -374,7 +377,7 @@ def list_knowledge(
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             f"""{_SELECT}
-                 WHERE a.household_id = %s
+                 WHERE a.household_id = %s AND v.state <> 'pending'
                    AND (%s OR (a.is_active AND c.is_active AND v.state = 'active'))
                  ORDER BY v.version DESC, a.created_at DESC""",
             (owner.household_id, includeInactive),
@@ -384,7 +387,9 @@ def list_knowledge(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_knowledge(
-    body: KnowledgeBody, owner: Annotated[OwnerSession, Depends(require_owner)]
+    body: KnowledgeBody,
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+    pending: bool = False,
 ) -> KnowledgeRow:
     def write() -> KnowledgeRow:
         with connect() as conn, conn.cursor() as cur:
@@ -396,7 +401,14 @@ def create_knowledge(
                 (owner.household_id,),
             )
             knowledge_id = cur.fetchone()[0]  # type: ignore[index]
-            version_id = _insert_version(cur, owner.household_id, knowledge_id, 1, body)
+            version_id = _insert_version(
+                cur,
+                owner.household_id,
+                knowledge_id,
+                1,
+                body,
+                state="pending" if pending else "active",
+            )
             cur.execute(
                 """INSERT INTO counterparty
                      (household_id, kind, display_name, merchant_id, own_account_id)

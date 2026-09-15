@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import type {
@@ -13,6 +14,7 @@ import type {
   OneledgerRoutesClassificationDecisionsPreviewResult as PreviewResult,
   PreviewBody,
   RunResult,
+  RunRow,
 } from "@/types/api";
 
 type Props = {
@@ -141,7 +143,7 @@ function GroupCard({
   async function createKnowledge(rememberedPattern = pattern) {
     return postJson<KnowledgeRow>(
       request,
-      "/merchant-knowledge",
+      "/merchant-knowledge?pending=true",
       knowledgeBody(group, categoryId, rememberedPattern),
     );
   }
@@ -220,7 +222,7 @@ function GroupCard({
       const result = await postJson<RunResult>(
         request,
         `/classification-runs/${onePreview.runId}/apply`,
-        { idempotencyKey: key("classification-one") },
+        { idempotencyKey: key("classification-one"), activateKnowledge: false },
       );
       if (result.state === "applied") {
         setMessage(`Applied to ${result.changed} transaction; the wording was not remembered.`);
@@ -361,6 +363,118 @@ function GroupCard({
   );
 }
 
+// Undo is atomic (V23 §undo): a conflict leaves nothing undone, so the only two shapes a
+// result ever takes are "every item changed" (`state === "applied"`) or "nothing changed, here
+// is why" (`state === "conflict"`, one reason per unresolved item). There is no partial case to
+// render.
+type UndoOutcome =
+  | { kind: "result"; result: RunResult }
+  | { kind: "error"; message: string };
+
+function RecentRuns({ request }: { request: typeof apiFetch }) {
+  const [runs, setRuns] = useState<Array<RunRow>>();
+  const [problem, setProblem] = useState<string>();
+  const [busyRunId, setBusyRunId] = useState<string>();
+  const [outcomes, setOutcomes] = useState<Record<string, UndoOutcome>>({});
+
+  const load = useCallback(async () => {
+    try {
+      const result = await request<Array<RunRow>>("/classification-runs?limit=20&offset=0");
+      setRuns(result);
+    } catch (error) {
+      setProblem(errorText(error, "Recent changes could not be loaded."));
+    }
+  }, [request]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function undo(run: RunRow) {
+    setBusyRunId(run.runId);
+    setOutcomes((current) => {
+      const next = { ...current };
+      delete next[run.runId];
+      return next;
+    });
+    try {
+      const result = await postJson<RunResult>(
+        request,
+        `/classification-runs/${run.runId}/undo`,
+        { idempotencyKey: key("classification-runs-undo"), reason: "Owner requested undo" },
+      );
+      setOutcomes((current) => ({ ...current, [run.runId]: { kind: "result", result } }));
+      void load();
+    } catch (error) {
+      setOutcomes((current) => ({
+        ...current,
+        [run.runId]: {
+          kind: "error",
+          message: errorText(error, "This application could not be undone."),
+        },
+      }));
+    } finally {
+      setBusyRunId(undefined);
+    }
+  }
+
+  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
+  if (!runs) return null;
+
+  return (
+    <section aria-labelledby="classification-recent-runs-title" className="classification-recent-runs">
+      <h2 id="classification-recent-runs-title">Recent changes</h2>
+      {runs.length === 0 && <p className="classification-empty">No applied changes yet.</p>}
+      {runs.length > 0 && (
+        <ul>
+          {runs.map((run) => {
+            const outcome = outcomes[run.runId];
+            return (
+              <li key={run.runId}>
+                <span>{run.appliedAt}</span>
+                <span>{run.reason}</span>
+                <span>{run.changed} {run.changed === 1 ? "change" : "changes"}</span>
+                {run.knowledgeDisplayName && <span>{run.knowledgeDisplayName}</span>}
+                {!run.undone && run.sourceRunId === null && (
+                  <button
+                    disabled={busyRunId === run.runId}
+                    onClick={() => undo(run)}
+                    type="button"
+                  >Undo</button>
+                )}
+                {outcome?.kind === "error" && (
+                  <p className="inline-alert" role="alert">{outcome.message}</p>
+                )}
+                {outcome?.kind === "result" && outcome.result.state === "conflict" && (
+                  <div role="alert">
+                    <p>The application could not be undone.</p>
+                    <ul>
+                      {outcome.result.items.map((item) => (
+                        <li key={item.transactionId}>{item.reason}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {outcome?.kind === "result" && outcome.result.state === "applied" && (
+                  <p role="status">
+                    Undid {outcome.result.changed} changes.{" "}
+                    {run.knowledgeDisplayName && (
+                      <>
+                        The remembered merchant stays active — see{" "}
+                        <Link href="/settings#merchant-knowledge-title">Settings › Merchant knowledge</Link>.
+                      </>
+                    )}
+                  </p>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function ClassificationReviewScreen({ categories, request }: Props) {
   const [page, setPage] = useState<ClassificationReviewResponse>();
   const [loading, setLoading] = useState(true);
@@ -475,6 +589,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
           )}
         </>
       )}
+
+      <RecentRuns request={request} />
     </section>
   );
 }
