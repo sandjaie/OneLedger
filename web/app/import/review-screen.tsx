@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
@@ -192,6 +192,7 @@ export function ReviewScreen({
     try {
       const result = await request<{ rowsImported: number }>(`/import/${batchId}/commit`, {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setImported(result.rowsImported);
       reload();

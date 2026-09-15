@@ -147,8 +147,11 @@ export function OverviewScreen({ household, currency, currencies, request, child
     return row ? formatOwed(value, row) : `${value} ${code}`;
   };
   const percent = (value: string | null) => (value === null ? "Not applicable" : formatPercent(value));
-  const coverageHref = (item: InvestmentCoverage) =>
-    item.holdingId ? `/investments/${item.holdingId}` : "/accounts";
+  const coverageHref = (item: InvestmentCoverage) => {
+    if (item.holdingId) return `/investments/${item.holdingId}`;
+    if (item.valuationMode === "snapshot") return `/accounts?valuation=${item.accountId}`;
+    return "/accounts";
+  };
   const coverageLabel = (item: InvestmentCoverage) => (item.holdingId ? "View holding" : "View account");
 
   return (
@@ -229,7 +232,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
               aria-label={`Net worth in ${side.code}: ${money(side.net, side.code)}`}
               className="overview-net-worth"
             >
-              {money(side.net, side.code)}
+              <Link href="/wealth">{money(side.net, side.code)}</Link>
             </h3>
           ) : (
             <p className="overview-secondary-worth">{money(side.net, side.code)}</p>
@@ -250,7 +253,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
           <div className="overview-primary-position">
             <p className="section-label">Primary reporting currency · {primary.code}</p>
             {detail(primary, true)}
-            <p className="overview-hero-date">As of {worth.asOf}</p>
+            <p className="overview-hero-date">As of {worth.asOf} · <Link href="/coverage">Coverage</Link></p>
           </div>
           <div className="overview-secondary-position">
             <p className="section-label">Also shown in {secondary.code}</p>
@@ -322,7 +325,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
             <div><dt>Spending</dt><dd>{money(ytd.spending, shown)}</dd></div>
             <div><dt>Saved</dt><dd>{money(ytd.net, shown)}</dd></div>
             <div><dt>Savings rate</dt><dd>{percent(ytd.savings)}</dd></div>
-            <div><dt>Invested</dt><dd>{money(ytd.invested, shown)}</dd></div>
+            <div><dt>Invested</dt><dd><Link href="/investments">{money(ytd.invested, shown)}</Link></dd></div>
           </dl>
         </section>
 

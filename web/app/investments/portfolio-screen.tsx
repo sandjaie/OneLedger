@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
-import type { apiFetch } from "@/lib/api/client";
+import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
 import type {
   AccountRow,
@@ -89,6 +90,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState("");
   const [refreshProblem, setRefreshProblem] = useState(false);
+  const [eventNotice, setEventNotice] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -118,6 +120,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
     try {
       const outcome = await request<RefreshOutcome>("/investment-prices/refresh", {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setRefreshMessage(
         outcome.outcome === "refreshed"
@@ -260,9 +263,13 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
           <section aria-labelledby="portfolio-record-event-title">
             <p className="section-label" id="portfolio-record-event-title">Record an event</p>
+            {eventNotice && <WealthRefreshNotice message={eventNotice} />}
             <InvestmentEventForm
               accounts={accounts}
-              onRecorded={() => setAttempt((value) => value + 1)}
+              onRecorded={() => {
+                setEventNotice("Event recorded.");
+                setAttempt((value) => value + 1);
+              }}
               request={request}
             />
           </section>

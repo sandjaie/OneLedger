@@ -630,8 +630,8 @@ describe("authenticated workspace", () => {
       />,
     );
 
-    expect((await screen.findByRole("link", { name: "Review" })).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("heading", { name: "Review" })).toBeTruthy();
+    expect((await screen.findByRole("link", { name: "Classify" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Classify" })).toBeTruthy();
     expect(await screen.findByText("Nothing needs classification review.")).toBeTruthy();
   });
 

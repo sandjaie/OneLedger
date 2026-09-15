@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type { ClassifyResult, RuleRow, TransactionRow } from "@/types/api";
 
 type Preview = {
@@ -104,6 +104,7 @@ export function ClassifyPrompt({
       });
       const applied = await request<ClassifyResult>(`/classify?ruleId=${saved.id}`, {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setResult(applied);
       await onApplied();

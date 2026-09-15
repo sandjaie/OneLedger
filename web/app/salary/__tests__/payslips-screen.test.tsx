@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
@@ -89,6 +89,7 @@ afterEach(() => {
 describe("salary screen", () => {
   it("lists a recorded payslip with its money formatted in its own currency", async () => {
     const request = requestFrom((path) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
       throw new ApiError(500, "unexpected");
     });
@@ -103,6 +104,7 @@ describe("salary screen", () => {
     let firstKey: string | undefined;
     let calls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [], total: 0 } satisfies PayslipsResponse;
       }
@@ -154,6 +156,7 @@ describe("salary screen", () => {
       ],
     };
     const request = requestFrom((path, init) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [], total: 0 } satisfies PayslipsResponse;
       if (path === "/payslips/import" && init?.method === "POST") return preview;
       throw new ApiError(500, "unexpected");
@@ -182,6 +185,7 @@ describe("salary screen", () => {
     };
     let linkCalls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
       if (path === `/payslips/${payslip.id}/deposit-candidates`) return { candidates: [candidate] };
       if (path === `/payslips/${payslip.id}/deposit` && init?.method === "PUT") {
@@ -219,6 +223,7 @@ describe("salary screen", () => {
     };
     let unlinkCalls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [unlinkCalls > 0 ? payslip : linked], total: 1 } satisfies PayslipsResponse;
       }
@@ -241,6 +246,7 @@ describe("salary screen", () => {
     let deleteCalls = 0;
     let current = payslip;
     const request = requestFrom((path, init) => {
+      if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [current], total: 1 } satisfies PayslipsResponse;
       }
@@ -277,5 +283,43 @@ describe("salary screen", () => {
     fireEvent.click(screen.getByLabelText("Count as spending"));
     await waitFor(() => expect(deleteCalls).toBe(1));
     await waitFor(() => expect((screen.getByLabelText("Count as spending") as HTMLInputElement).checked).toBe(false));
+  });
+
+  it("lists, saves and removes deduction rules with the label URI-encoded", async () => {
+    let rules: Array<{ label: string; categoryId: string }> = [
+      { label: "Pension & NI", categoryId: categories[0].id },
+    ];
+    let putBody: unknown;
+    let putPath: string | undefined;
+    let deleteCalls = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/payslips") return { payslips: [], total: 0 } satisfies PayslipsResponse;
+      if (path === "/payslips/deduction-rules") return { rules };
+      if (path === "/payslips/deduction-rules/Pension%20%26%20NI" && init?.method === "PUT") {
+        putPath = path;
+        putBody = JSON.parse(String(init.body));
+        rules = [{ label: "Pension & NI", categoryId: categories[1].id }];
+        return { label: "Pension & NI", categoryId: categories[1].id };
+      }
+      if (path === "/payslips/deduction-rules/Pension%20%26%20NI" && init?.method === "DELETE") {
+        deleteCalls += 1;
+        rules = [];
+        return undefined;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
+
+    await screen.findByText("Pension & NI");
+    fireEvent.change(screen.getByDisplayValue("Travel"), { target: { value: categories[1].id } });
+
+    await waitFor(() => expect(putPath).toBe("/payslips/deduction-rules/Pension%20%26%20NI"));
+    expect(putBody).toEqual({ categoryId: categories[1].id });
+    await screen.findByDisplayValue("Travel → Flights");
+
+    const ruleRow = screen.getByText("Pension & NI").closest("li") as HTMLElement;
+    fireEvent.click(within(ruleRow).getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(deleteCalls).toBe(1));
+    await screen.findByText("No deduction rules are recorded yet.");
   });
 });

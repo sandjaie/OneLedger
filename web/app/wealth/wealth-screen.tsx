@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { errorText, type apiFetch } from "@/lib/api/client";
+import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
   AttributionLeg,
@@ -12,8 +13,37 @@ import type {
   MonthEndPosition,
   MonthPositionsResponse,
   MonthSummary,
+  RefreshCounts,
   WealthHistoryResponse,
 } from "@/types/api";
+
+// The five position statuses `/wealth-history` computes (Phase 2.2 spec): a label for each, and
+// where the owner would go to resolve it. `available` has nowhere to go — nothing is wrong.
+const STATUS_LABEL: Record<string, string> = {
+  available: "Available",
+  missing_price: "Missing price",
+  missing_rate: "Missing exchange rate",
+  no_snapshot: "No valuation",
+  before_opening: "Before opening",
+};
+const STATUS_HREF: Record<string, string> = {
+  missing_price: "/investments",
+  no_snapshot: "/accounts",
+  missing_rate: "/settings",
+};
+
+function statusLabel(status: string) {
+  return STATUS_LABEL[status] ?? status.replaceAll("_", " ");
+}
+
+/** Every incomplete month's non-zero status counts, as one short line — e.g. "Missing price: 2,
+ * No valuation: 1" — so the owner sees why without opening the month. */
+function statusCountsLine(counts: MonthSummary["statusCounts"]) {
+  return Object.entries(counts)
+    .filter(([status, count]) => count > 0 && status !== "available")
+    .map(([status, count]) => `${statusLabel(status)}: ${count}`)
+    .join(", ");
+}
 
 type Props = {
   // The reporting currency chosen in the masthead — the month table and the position values
@@ -61,6 +91,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   const [attempt, setAttempt] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [problem, setProblem] = useState<string>();
+  const [refreshCounts, setRefreshCounts] = useState<RefreshCounts>();
   const [selected, setSelected] = useState<string>();
   const [month, setMonth] = useState<MonthPositionsResponse>();
   const [monthState, setMonthState] = useState<MonthState>("idle");
@@ -90,8 +121,13 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   async function refresh() {
     setRefreshing(true);
     setProblem(undefined);
+    setRefreshCounts(undefined);
     try {
-      await request("/wealth-history/refresh", { method: "POST" });
+      const counts = await request<RefreshCounts>("/wealth-history/refresh", {
+        method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+      });
+      setRefreshCounts(counts);
       setAttempt((value) => value + 1);
       // The month table reloads from the `attempt` effect above; a month already open on screen
       // would otherwise keep showing its pre-refresh positions until the owner reselects it.
@@ -149,7 +185,16 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           onClick={() => void refresh()}
           type="button"
         >{refreshing ? "Refreshing…" : "Refresh history"}</button>
+        {refreshCounts && (
+          <p role="status">
+            Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}
+            {refreshCounts.positionsComputed} {refreshCounts.positionsComputed === 1 ? "position" : "positions"}.
+          </p>
+        )}
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
+        {state === "ready" && history && history.months.length > 0 && (
+          <p>Last refreshed {history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)}</p>
+        )}
       </header>
 
       {state === "loading" && <p role="status">Loading wealth history…</p>}
@@ -197,7 +242,18 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                           ? "Unavailable — incomplete"
                           : moneyText(total, currency.code, currencies)}
                       </td>
-                      <td>{row.complete ? "Complete" : "Incomplete month"}</td>
+                      <td>
+                        {row.complete
+                          ? "Complete"
+                          : (
+                            <>
+                              Incomplete month
+                              {statusCountsLine(row.statusCounts) && (
+                                <><br /><small>{statusCountsLine(row.statusCounts)}</small></>
+                              )}
+                            </>
+                          )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -250,7 +306,13 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                             </td>
                             <td>{position.evidenceDate ?? "—"}</td>
                             <td>{value === null ? "—" : moneyText(value, currency.code, currencies)}</td>
-                            <td>{position.status}</td>
+                            <td>
+                              {STATUS_HREF[position.status] ? (
+                                <Link href={STATUS_HREF[position.status]}>{statusLabel(position.status)}</Link>
+                              ) : (
+                                statusLabel(position.status)
+                              )}
+                            </td>
                           </tr>
                         );
                       })}

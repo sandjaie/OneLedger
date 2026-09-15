@@ -310,19 +310,13 @@ def test_ambiguous_isin_across_two_codes_leaves_the_security_unmapped(
     assert response.json()["status"]["unmappedCount"] == 1
 
 
-def test_status_is_read_only_and_reflects_a_prior_refresh(
-    live_prices: PricesFixture, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("OFFICIAL_NAV_CURRENCY", live_prices.currency)
-    _refresh(monkeypatch, _PUBLICATION)
-
+def test_status_route_is_removed(live_prices: PricesFixture) -> None:
+    # UI gaps Task 3a: the standalone status read was never used by the web app — the portfolio
+    # page reads the same status through `/portfolio/summary` — so the route is gone. The shared
+    # `read_status()` function stays; only this endpoint was removed.
     response = TestClient(app).get("/investment-prices/status", headers=ORIGIN)
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["mappedCount"] == 1
-    assert body["latestPriceDate"] == "2026-09-01"
-    assert body["lastSuccessfulCheck"] is not None
+    assert response.status_code == 404
 
 
 def test_refresh_is_refused_without_an_owner_session(live_prices: PricesFixture) -> None:

@@ -4,7 +4,7 @@ import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { LayoutMapper, type LayoutMapperSeed } from "@/app/import/layout-mapper";
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
@@ -243,6 +243,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
       const parsed = await request<ParseResponse>("/parse", {
         method: "POST",
         body: body(item, false, accountId),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       const resolved = accounts.find((account) => account.id === parsed.accountId);
       update(item.key, {
@@ -300,6 +301,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
         const proposal = await request<{ draft: LayoutCreate }>("/layouts/propose", {
           method: "POST",
           body: mapperBody(item),
+          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         });
         update(item.key, {
           mapping: true,
@@ -342,6 +344,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
       const staged = await request<ParseResponse>("/parse", {
         method: "POST",
         body: body(item, true, accountId),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       if (staged.staged && staged.batchId) {
         // The password is done: the document is stored and every later request names the batch.
@@ -400,6 +403,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
         const parsed = await request<ParseResponse>("/parse", {
           method: "POST",
           body: body(withAccount, false, ""),
+          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         });
         update(candidate.key, {
           state: "checked",

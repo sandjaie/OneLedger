@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DescriptionRepair } from "@/app/documents/description-repair";
-import { type apiFetch } from "@/lib/api/client";
+import { ApiError, type apiFetch } from "@/lib/api/client";
 import type { DocumentRow } from "@/types/api";
 
 function document(overrides: Partial<DocumentRow>): DocumentRow {
@@ -61,6 +61,7 @@ describe("the description repair panel", () => {
       method: "POST",
       body: JSON.stringify({ layoutId: "layout-2", apply: false, password: null }),
       headers: { "Content-Type": "application/json" },
+      timeoutMs: 120_000,
     });
     expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
   });
@@ -98,6 +99,7 @@ describe("the description repair panel", () => {
       method: "POST",
       body: JSON.stringify({ layoutId: "layout-2", apply: false, password: "secret" }),
       headers: { "Content-Type": "application/json" },
+      timeoutMs: 120_000,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -107,7 +109,7 @@ describe("the description repair panel", () => {
   });
 
   it("shows the service sentence when the re-read is refused", async () => {
-    const request = vi.fn().mockRejectedValue(new Error("the reparsed statement does not match"));
+    const request = vi.fn().mockRejectedValue(new ApiError(422, "the reparsed statement does not match"));
     render(
       <DescriptionRepair
         document={document({})}

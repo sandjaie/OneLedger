@@ -111,8 +111,51 @@ describe("wealth screen", () => {
     const positions = await screen.findByRole("table", { name: /2024-01-31, one row per/ });
     expect(within(positions).getByText("Synthetic savings account")).toBeTruthy();
     expect(within(positions).getByText("ledger_balance")).toBeTruthy();
-    expect(within(positions).getByText("available")).toBeTruthy();
+    expect(within(positions).getByText("Available")).toBeTruthy();
     expect(within(positions).getAllByText("AED 1,500.0000").length).toBeGreaterThan(0);
+  });
+
+  it("labels each position status and links the ones that leave a figure unavailable", async () => {
+    const withGaps: MonthPositionsResponse = {
+      ...january,
+      positions: [
+        { ...january.positions[0], accountId: "acct-price", status: "missing_price" },
+        { ...january.positions[0], accountId: "acct-snapshot", status: "no_snapshot" },
+        { ...january.positions[0], accountId: "acct-rate", status: "missing_rate" },
+      ],
+    };
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-01-31") return withGaps;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "2024-01-31" }));
+    const positions = await screen.findByRole("table", { name: /2024-01-31, one row per/ });
+
+    expect(within(positions).getByRole("link", { name: "Missing price" })).toHaveProperty("pathname", "/investments");
+    expect(within(positions).getByRole("link", { name: "No valuation" })).toHaveProperty("pathname", "/accounts");
+    expect(within(positions).getByRole("link", { name: "Missing exchange rate" })).toHaveProperty("pathname", "/settings");
+  });
+
+  it("shows an incomplete month's status counts, the refresh counts, and last refreshed", async () => {
+    const request = requestFrom((path, init) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/refresh" && init?.method === "POST") {
+        return { monthsComputed: 2, positionsComputed: 3, byStatus: { available: 2, before_opening: 1 } } satisfies RefreshCounts;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    const table = await screen.findByRole("table", { name: /Month-end net worth/ });
+    expect(within(table).getByText("Before opening: 1")).toBeTruthy();
+    expect(screen.getByText("Last refreshed 2026-09-14T00:00:00Z")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
+
+    expect(await screen.findByText("Refreshed 2 months, 3 positions.")).toBeTruthy();
   });
 
   it("refresh posts to the refresh route and reloads the month table", async () => {

@@ -143,6 +143,17 @@ describe("overview screen", () => {
     expect(within(summary).queryByText("Cash available")).toBeNull();
   });
 
+  it("links net worth to Wealth, invested to Investments, and offers a Coverage link", async () => {
+    renderWith(payload());
+    const worth = await screen.findByRole("region", { name: "Net worth" });
+
+    expect(within(worth).getByRole("link", { name: "-₹39,04,500.00" })).toHaveProperty("pathname", "/wealth");
+    expect(screen.getByRole("link", { name: "Coverage" })).toHaveProperty("pathname", "/coverage");
+
+    const year = screen.getByRole("region", { name: "This year so far" });
+    expect(within(year).getByRole("link", { name: "₹2,00,000.00" })).toHaveProperty("pathname", "/investments");
+  });
+
   it("renders net worth in both currencies, flipping a liability in presentation only", async () => {
     const request = renderWith(payload());
     const worth = await screen.findByRole("region", { name: "Net worth" });
@@ -356,7 +367,10 @@ describe("overview screen", () => {
       "/investments/holding-1",
     );
     expect(within(region).getByText(/carried forward/)).toBeTruthy();
-    expect(within(region).getByRole("link", { name: "View account" })).toHaveProperty("pathname", "/accounts");
+    const snapshotLink = within(region).getByRole("link", { name: "View account" });
+    expect(snapshotLink).toHaveProperty("pathname", "/accounts");
+    // A snapshot-mode account's coverage reason opens straight into its valuation panel.
+    expect(snapshotLink).toHaveProperty("search", "?valuation=acct-2");
     // The fully current entry names no reason and gets no row.
     expect(within(region).getAllByRole("listitem")).toHaveLength(2);
   });

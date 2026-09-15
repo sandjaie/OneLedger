@@ -427,7 +427,7 @@ export function Workspace({
               href="/investments"
             >Investments</Link>
             <Link aria-current={activeSection === "investments-import" ? "page" : undefined} href="/investments/import">Import investments</Link>
-            <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Review</Link>
+            <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Classify</Link>
             <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
             <Link aria-current={activeSection === "plans" ? "page" : undefined} href="/plans">Plans</Link>
             <Link aria-current={activeSection === "coverage" ? "page" : undefined} href="/coverage">Coverage</Link>
@@ -572,7 +572,11 @@ export function Workspace({
             <section className="workspace-content" aria-labelledby="settings-title">
               <p className="eyebrow">Owner settings</p>
               <h1 className="workspace-title" id="settings-title">Settings</h1>
-              <p className="lede">Choose a date to inspect recorded exchange rates, their sources and whether a prior rate was carried forward.</p>
+              <p className="lede">
+                Manage the household, data quality, categories, classification rules and stored
+                exchange rates. Choose a date below to inspect recorded exchange rates, their
+                sources and whether a prior rate was carried forward.
+              </p>
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
 
               <DataQuality
@@ -653,7 +657,7 @@ export function Workspace({
         </main>
       )}
 
-      <footer className="footer"><p>Private owner workspace</p><p className="edition">Phase 1</p></footer>
+      <footer className="footer"><p>Private owner workspace</p></footer>
     </div>
   );
 }

@@ -236,6 +236,51 @@ describe("InvestmentEventForm", () => {
     });
   });
 
+  it("shows a retryable error when positions fail to load, and clears it on retry", async () => {
+    let attempts = 0;
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") {
+        attempts += 1;
+        if (attempts === 1) throw new Error("network hiccup");
+        return EMPTY_POSITIONS;
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<InvestmentEventForm accounts={[]} holding={HOLDING} onRecorded={vi.fn()} request={request} />);
+
+    const retry = await screen.findByRole("button", { name: "Try again" });
+    fireEvent.click(retry);
+
+    await vi.waitFor(() => expect(attempts).toBe(2));
+    await vi.waitFor(() => expect(screen.queryByRole("button", { name: "Try again" })).toBeNull());
+  });
+
+  it("reloads positions after a successful record", async () => {
+    let loads = 0;
+    const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") {
+        loads += 1;
+        return EMPTY_POSITIONS;
+      }
+      if (path === "/investment-events/unit-actions" && init?.method === "POST") {
+        return { kind: "bonus" };
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<InvestmentEventForm accounts={[]} holding={HOLDING} onRecorded={vi.fn()} request={request} />);
+    await vi.waitFor(() => expect(loads).toBe(1));
+
+    fireEvent.change(await screen.findByLabelText("Event kind"), { target: { value: "bonus" } });
+    fireEvent.change(screen.getByLabelText("Event date"), { target: { value: "2026-02-10" } });
+    fireEvent.change(screen.getByLabelText("Bonus units"), { target: { value: "2.00000000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Review event" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm event" }));
+
+    await vi.waitFor(() => expect(loads).toBe(2));
+  });
+
   it("posts a platform transfer's exact unit strings, receiving account chosen from the accounts list", async () => {
     const posted: Array<unknown> = [];
     const receiving = account();
