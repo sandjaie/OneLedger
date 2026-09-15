@@ -374,8 +374,7 @@ def _reservation_row(
         found = cur.fetchone()
         target_currency = str(found[0]).strip() if found else currency
     else:
-        # Task 2: an emergency reservation always rates into the household base currency. Task 1
-        # never inserts one (the route refuses every emergency reservation), so this is unreached.
+        # An emergency reservation always rates into the household base currency.
         target_currency = base
 
     values = account_native_values(cur, household_id, base, secondary, as_of)
@@ -850,11 +849,18 @@ def create_reservation(
                     )
                 rate_currency = str(goal_currency).strip()
             else:
-                # Task 2 wires eligibility; until then no account is eligible for an emergency
-                # reservation.
-                raise HTTPException(
-                    status_code=422, detail="mark this account as an emergency resource first"
+                cur.execute(
+                    "SELECT 1 FROM emergency_resource_account "
+                    "WHERE household_id = %s AND account_id = %s",
+                    (owner.household_id, body.accountId),
                 )
+                if cur.fetchone() is None:
+                    raise HTTPException(
+                        status_code=422, detail="mark this account as an emergency resource first"
+                    )
+                # An emergency reservation always rates into the household base currency (spec
+                # "Data model contract").
+                rate_currency = base
 
             rate = _goal_rate(cur, currency, rate_currency, base, secondary, as_of)
             if rate is None:
