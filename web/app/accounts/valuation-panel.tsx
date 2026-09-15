@@ -12,6 +12,7 @@ import type {
   ValuationModeCreate,
   ValuationModeResponse,
   ValuationSnapshotCreate,
+  ValuationSnapshotPreview,
   ValuationSnapshotRow,
 } from "@/types/api";
 
@@ -56,6 +57,12 @@ function today() {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+function dayAfter(isoDate: string) {
+  const next = new Date(`${isoDate}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
 export function ValuationPanel({
   accountId,
   accountName,
@@ -75,9 +82,22 @@ export function ValuationPanel({
   const [method, setMethod] = useState<(typeof METHODS)[number]>("owner_entered");
   const [confidence, setConfidence] = useState<(typeof CONFIDENCES)[number]>("high");
   const [sourceNote, setSourceNote] = useState("");
-  const [snapshotBusy, setSnapshotBusy] = useState(false);
-  const [snapshotProblem, setSnapshotProblem] = useState("");
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewProblem, setReviewProblem] = useState("");
+  const [preview, setPreview] = useState<ValuationSnapshotPreview>();
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmProblem, setConfirmProblem] = useState("");
   const [recorded, setRecorded] = useState<ValuationSnapshotRow>();
+
+  // Editing any field after a review invalidates it: the owner must review again before
+  // confirming, so a stale preview is never confirmed against a since-changed draft.
+  function editField<T>(setter: (value: T) => void) {
+    return (value: T) => {
+      setPreview(undefined);
+      setConfirmProblem("");
+      setter(value);
+    };
+  }
 
   const [newMode, setNewMode] = useState<(typeof VALUATION_MODES)[number]>("snapshot");
   const [effectiveFrom, setEffectiveFrom] = useState(today());
@@ -103,12 +123,38 @@ export function ValuationPanel({
     };
   }, [accountId, request, attempt]);
 
-  async function submitSnapshot(event: FormEvent<HTMLFormElement>) {
+  async function reviewSnapshot(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (snapshotBusy) return;
-    setSnapshotBusy(true);
-    setSnapshotProblem("");
+    if (reviewBusy) return;
+    setReviewBusy(true);
+    setReviewProblem("");
+    setPreview(undefined);
     setRecorded(undefined);
+    try {
+      const body: ValuationSnapshotCreate = {
+        asOfDate,
+        valueNative,
+        method,
+        confidence,
+        sourceNote: sourceNote || null,
+        dryRun: true,
+      };
+      const shown = await request<ValuationSnapshotPreview>(
+        `/accounts/${accountId}/valuation-snapshots`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+      );
+      setPreview(shown);
+    } catch (error) {
+      setReviewProblem(errorText(error, "This valuation could not be reviewed. Retry."));
+    } finally {
+      setReviewBusy(false);
+    }
+  }
+
+  async function confirmSnapshot() {
+    if (confirmBusy || !preview) return;
+    setConfirmBusy(true);
+    setConfirmProblem("");
     try {
       const body: ValuationSnapshotCreate = {
         asOfDate,
@@ -123,14 +169,15 @@ export function ValuationPanel({
         body: JSON.stringify(body),
       });
       setRecorded(row);
+      setPreview(undefined);
       setValueNative("");
       setSourceNote("");
       setAttempt((value) => value + 1);
       onChanged();
     } catch (error) {
-      setSnapshotProblem(errorText(error, "This valuation could not be recorded. Retry."));
+      setConfirmProblem(errorText(error, "This valuation could not be recorded. Retry."));
     } finally {
-      setSnapshotBusy(false);
+      setConfirmBusy(false);
     }
   }
 
@@ -179,13 +226,13 @@ export function ValuationPanel({
           )}
 
           {data.currentMode === "snapshot" && (
-            <form className="valuation-form" onSubmit={(event) => void submitSnapshot(event)}>
+            <form className="valuation-form" onSubmit={(event) => void reviewSnapshot(event)}>
               <h4>Add valuation</h4>
               <label className="date-field">
                 <span>As of date</span>
                 <input
                   max={today()}
-                  onChange={(event) => setAsOfDate(event.target.value)}
+                  onChange={(event) => editField(setAsOfDate)(event.target.value)}
                   required
                   type="date"
                   value={asOfDate}
@@ -195,7 +242,7 @@ export function ValuationPanel({
                 <span>Value ({currency})</span>
                 <input
                   inputMode="decimal"
-                  onChange={(event) => setValueNative(event.target.value)}
+                  onChange={(event) => editField(setValueNative)(event.target.value)}
                   required
                   type="text"
                   value={valueNative}
@@ -203,7 +250,10 @@ export function ValuationPanel({
               </label>
               <label className="select-field">
                 <span>Method</span>
-                <select onChange={(event) => setMethod(event.target.value as (typeof METHODS)[number])} value={method}>
+                <select
+                  onChange={(event) => editField(setMethod)(event.target.value as (typeof METHODS)[number])}
+                  value={method}
+                >
                   {METHODS.map((option) => (
                     <option key={option} value={option}>{METHOD_LABEL[option]}</option>
                   ))}
@@ -212,7 +262,7 @@ export function ValuationPanel({
               <label className="select-field">
                 <span>Confidence</span>
                 <select
-                  onChange={(event) => setConfidence(event.target.value as (typeof CONFIDENCES)[number])}
+                  onChange={(event) => editField(setConfidence)(event.target.value as (typeof CONFIDENCES)[number])}
                   value={confidence}
                 >
                   {CONFIDENCES.map((option) => (
@@ -222,11 +272,31 @@ export function ValuationPanel({
               </label>
               <label className="text-field">
                 <span>Source note</span>
-                <input onChange={(event) => setSourceNote(event.target.value)} value={sourceNote} />
+                <input onChange={(event) => editField(setSourceNote)(event.target.value)} value={sourceNote} />
               </label>
-              {snapshotProblem && <p className="inline-alert" role="alert">{snapshotProblem}</p>}
-              <button className="primary-action" disabled={snapshotBusy} type="submit">Record valuation</button>
+              {reviewProblem && <p className="inline-alert" role="alert">{reviewProblem}</p>}
+              <button className="primary-action" disabled={reviewBusy} type="submit">Review valuation</button>
             </form>
+          )}
+
+          {preview && (
+            <div className="valuation-preview">
+              <p role="status">
+                Review: {moneyText(preview.valueNative, currency, currencies)} as of {preview.asOfDate} — FX
+                rate date {preview.fxRateDate}, {moneyText(preview.valueBase, baseCurrency, currencies)} in the
+                base currency. Nothing is recorded yet; a later valuation would supersede this one only from its
+                own date.
+              </p>
+              {confirmProblem && <p className="inline-alert" role="alert">{confirmProblem}</p>}
+              <button
+                className="primary-action"
+                disabled={confirmBusy}
+                onClick={() => void confirmSnapshot()}
+                type="button"
+              >
+                Confirm and record
+              </button>
+            </div>
           )}
 
           {recorded && (
@@ -253,6 +323,7 @@ export function ValuationPanel({
             <label className="date-field">
               <span>Effective from</span>
               <input
+                min={dayAfter(data.currentEffectiveFrom)}
                 onChange={(event) => setEffectiveFrom(event.target.value)}
                 required
                 type="date"

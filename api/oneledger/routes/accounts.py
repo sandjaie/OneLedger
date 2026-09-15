@@ -109,6 +109,10 @@ class AccountRow(BaseModel):
     currentBalance: str
     currentBalanceAsOf: datetime | None
     creditLimit: str | None
+    # Defaulted (rather than required) so the many existing fixtures for unrelated screens that
+    # build an AccountRow do not all need updating; the query below always supplies a real value.
+    valuationMode: Literal["ledger_balance", "holdings", "snapshot"] = "ledger_balance"
+    latestValuationDate: date | None = None
     identifiers: list[AccountIdentifierRow]
 
 
@@ -230,6 +234,11 @@ COLUMNS = """a.id, a.name, a.institution_id, i.name, a.account_type::text, a.acc
              a.closed_on, a.is_active, a.include_in_net_worth, a.is_liquid, a.opening_balance,
              a.opening_balance_date, a.opening_balance_note, a.opening_balance_confirmed_at,
              a.current_balance, a.current_balance_as_of, a.credit_limit,
+             (SELECT avp.valuation_mode::text FROM account_valuation_period avp
+               WHERE avp.household_id = a.household_id AND avp.account_id = a.id
+                 AND avp.effective_to IS NULL),
+             (SELECT max(vs.as_of_date) FROM valuation_snapshot vs
+               WHERE vs.household_id = a.household_id AND vs.account_id = a.id),
              (SELECT COALESCE(
                        jsonb_agg(jsonb_build_object(
                          'id', ai.id, 'kind', ai.kind, 'masked', ai.masked_value,
@@ -266,6 +275,8 @@ FIELDS = [
     "currentBalance",
     "currentBalanceAsOf",
     "creditLimit",
+    "valuationMode",
+    "latestValuationDate",
     "identifiers",
 ]
 MONEY_FIELDS = {"openingBalance", "currentBalance", "creditLimit"}

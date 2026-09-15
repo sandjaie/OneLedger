@@ -135,6 +135,14 @@ function signedOpening(accountType: string, value: string) {
   return `-${value}`;
 }
 
+type ValuationMode = NonNullable<AccountRow["valuationMode"]>;
+
+const VALUATION_MODE_LABEL: Record<ValuationMode, string> = {
+  ledger_balance: "Ledger balance",
+  holdings: "Holdings",
+  snapshot: "Dated valuation",
+};
+
 function markFor(account: AccountRow, institutions: Array<InstitutionRow>) {
   const match = institutions.find((row) => row.id === account.institutionId);
   const source = match?.shortName || account.institutionName || account.name;
@@ -722,7 +730,15 @@ export function AccountsScreen({
   }
 
   function renderRow(account: AccountRow) {
-    const meta = [account.institutionName, account.accountSubtype, account.currency].filter(Boolean).join(" · ");
+    const meta = [
+      account.institutionName,
+      account.accountSubtype,
+      account.currency,
+      account.accountClass === "asset" && account.valuationMode
+        ? VALUATION_MODE_LABEL[account.valuationMode]
+        : null,
+    ].filter(Boolean).join(" · ");
+    const needsFirstValuation = account.valuationMode === "snapshot" && !account.latestValuationDate;
     return (
       <tr className="account-card" key={account.id}>
         <td className="account-mark">{markFor(account, institutions)}</td>
@@ -792,12 +808,16 @@ export function AccountsScreen({
             </button>
             {account.accountClass === "asset" && account.isActive && (
               <button
-                aria-label={`Valuation for ${account.name}`}
+                aria-label={
+                  needsFirstValuation
+                    ? `Add valuation for ${account.name}`
+                    : `Valuation for ${account.name}`
+                }
                 disabled={locked}
                 onClick={() => openValuation(account)}
                 type="button"
               >
-                Valuation
+                {needsFirstValuation ? "Add valuation" : "Valuation"}
               </button>
             )}
             {account.isActive ? (

@@ -193,6 +193,59 @@ def test_different_value_on_the_same_date_is_409(live: ValuationFixture) -> None
     assert second.status_code == 409, second.text
 
 
+def test_dry_run_previews_exact_frozen_figures_without_persisting(live: ValuationFixture) -> None:
+    response = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots",
+        json=_snapshot_body(dryRun=True),
+        headers=ORIGIN,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "asOfDate": str(RATE_DATE),
+        "valueNative": "1000.0000",
+        "currency": live.currency,
+        "fxRateDate": str(RATE_DATE),
+        "valueBase": "1000.0000",
+        "valueSecondary": "2000.0000",
+    }
+
+    listed = client().get(f"/accounts/{live.account_id}/valuations", headers=ORIGIN)
+    assert listed.json()["snapshots"] == []
+
+    # The household lock and connection are still usable for a real create afterwards.
+    created = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots", json=_snapshot_body(), headers=ORIGIN
+    )
+    assert created.status_code == 201, created.text
+
+
+def test_dry_run_identical_to_stored_returns_its_figures(live: ValuationFixture) -> None:
+    first = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots", json=_snapshot_body(), headers=ORIGIN
+    )
+    assert first.status_code == 201, first.text
+    response = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots",
+        json=_snapshot_body(dryRun=True),
+        headers=ORIGIN,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == first.json()
+
+
+def test_dry_run_different_from_stored_is_409(live: ValuationFixture) -> None:
+    first = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots", json=_snapshot_body(), headers=ORIGIN
+    )
+    assert first.status_code == 201, first.text
+    response = client().post(
+        f"/accounts/{live.account_id}/valuation-snapshots",
+        json=_snapshot_body(valueNative="1000.0001", dryRun=True),
+        headers=ORIGIN,
+    )
+    assert response.status_code == 409, response.text
+
+
 def test_wrong_mode_is_422(live: ValuationFixture) -> None:
     response = client().post(
         f"/accounts/{live.wrong_mode_account_id}/valuation-snapshots",
@@ -200,6 +253,32 @@ def test_wrong_mode_is_422(live: ValuationFixture) -> None:
         headers=ORIGIN,
     )
     assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "the date is before the account's snapshot valuation period"
+
+
+def test_snapshot_date_outside_account_lifetime_is_422_with_a_specific_message(
+    live: ValuationFixture,
+) -> None:
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (
+                   household_id, owner_person_id, name, account_type, currency, country,
+                   opening_balance, opening_balance_date, closed_on)
+               VALUES (%s, (SELECT owner_person_id FROM account WHERE id = %s),
+                       'Synthetic closed retirement account', 'retirement', %s, 'XZ', 0,
+                       '2026-01-01', '2026-02-01') RETURNING id""",
+            (live.owner.household_id, live.account_id, live.currency),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        closed_account_id = UUID(str(row[0]))
+    live.connection.commit()
+
+    response = client().post(
+        f"/accounts/{closed_account_id}/valuation-snapshots", json=_snapshot_body(), headers=ORIGIN
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"] == "the date is outside the account's lifetime"
 
 
 def test_future_date_is_422(live: ValuationFixture) -> None:
@@ -249,6 +328,7 @@ def _coverage_for(body: dict[str, Any], account_id: UUID) -> list[dict[str, Any]
 
 def test_dashboard_net_worth_available_once_a_snapshot_exists(live: ValuationFixture) -> None:
     before = client().get("/dashboard", params={"asOf": str(RATE_DATE)}, headers=ORIGIN).json()
+    assert before["netWorth"]["totalBase"] is None
     coverage_before = _coverage_for(before, live.account_id)
     assert coverage_before == [
         {
@@ -270,6 +350,9 @@ def test_dashboard_net_worth_available_once_a_snapshot_exists(live: ValuationFix
     assert created.status_code == 201, created.text
 
     after = client().get("/dashboard", params={"asOf": str(RATE_DATE)}, headers=ORIGIN).json()
+    # Both accounts are in the household base currency: the snapshot's frozen base value
+    # (1000.0000) plus the savings account's zero opening balance.
+    assert after["netWorth"]["totalBase"] == "1000.0000"
     coverage_after = _coverage_for(after, live.account_id)
     assert coverage_after[0]["status"] == "current_snapshot"
     assert coverage_after[0]["valueDate"] == str(RATE_DATE)

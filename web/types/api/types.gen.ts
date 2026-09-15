@@ -256,6 +256,14 @@ export type AccountRow = {
      */
     creditLimit: string | null;
     /**
+     * Valuationmode
+     */
+    valuationMode?: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Latestvaluationdate
+     */
+    latestValuationDate?: string | null;
+    /**
      * Identifiers
      */
     identifiers: Array<AccountIdentifierRow>;
@@ -7417,6 +7425,42 @@ export type ValuationSnapshotCreate = {
      * Sourcenote
      */
     sourceNote?: string | null;
+    /**
+     * Dryrun
+     */
+    dryRun?: boolean;
+};
+
+/**
+ * ValuationSnapshotPreview
+ *
+ * A dry-run's unsaved figures: no `id`/`createdAt` because nothing was recorded.
+ */
+export type ValuationSnapshotPreview = {
+    /**
+     * Asofdate
+     */
+    asOfDate: string;
+    /**
+     * Valuenative
+     */
+    valueNative: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Fxratedate
+     */
+    fxRateDate: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string;
+    /**
+     * Valuesecondary
+     */
+    valueSecondary: string;
 };
 
 /**
@@ -10647,13 +10691,17 @@ export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostError 
 
 export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses = {
     /**
-     * Identical replay
+     * Response 200 Create Valuation Snapshot Accounts  Account Id  Valuation Snapshots Post
+     *
+     * Identical replay, or a dryRun preview (never persisted)
      */
-    200: ValuationSnapshotRow;
+    200: ValuationSnapshotRow | ValuationSnapshotPreview;
     /**
+     * Response Create Valuation Snapshot Accounts  Account Id  Valuation Snapshots Post
+     *
      * Successful Response
      */
-    201: ValuationSnapshotRow;
+    201: ValuationSnapshotRow | ValuationSnapshotPreview;
 };
 
 export type CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponse = CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses[keyof CreateValuationSnapshotAccountsAccountIdValuationSnapshotsPostResponses];

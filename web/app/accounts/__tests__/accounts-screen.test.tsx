@@ -78,6 +78,14 @@ const card = account({
     },
   ],
 });
+const retirementNoSnapshot = account({
+  id: "acct-retirement",
+  name: "Inventory Retirement",
+  accountType: "retirement",
+  accountSubtype: null,
+  valuationMode: "snapshot",
+  latestValuationDate: null,
+});
 const closed = account({
   id: "acct-old",
   name: "Old Savings",
@@ -602,6 +610,16 @@ describe("Accounts", () => {
       />,
     );
     expect(screen.getByRole("row", { name: /Off books/ }).textContent).toContain("Excluded from totals");
+  });
+
+  it("shows the valuation mode and a direct Add valuation entry for an unvalued snapshot account", () => {
+    render(<AccountsScreen {...props} accounts={[retirementNoSnapshot]} totals={[]} />);
+    expect(screen.getByRole("row", { name: /Inventory Retirement/ }).textContent).toContain(
+      "Dated valuation",
+    );
+    expect(
+      screen.getByRole("button", { name: "Add valuation for Inventory Retirement" }),
+    ).toBeTruthy();
   });
 
   it("drops a leftover credit limit when the type is not a card", async () => {

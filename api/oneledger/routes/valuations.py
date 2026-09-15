@@ -40,6 +40,7 @@ class ValuationSnapshotCreate(BaseModel):
     method: Literal["owner_entered", "statement"]
     confidence: ValuationConfidence
     sourceNote: str | None = None
+    dryRun: bool = False
 
     @field_validator("valueNative")
     @classmethod
@@ -71,6 +72,17 @@ class ValuationSnapshotRow(BaseModel):
     confidence: ValuationConfidence
     sourceNote: str | None
     createdAt: datetime
+
+
+class ValuationSnapshotPreview(BaseModel):
+    """A dry-run's unsaved figures: no `id`/`createdAt` because nothing was recorded."""
+
+    asOfDate: date
+    valueNative: str
+    currency: str
+    fxRateDate: date
+    valueBase: str
+    valueSecondary: str
 
 
 class ValuationPeriodRow(BaseModel):
@@ -147,6 +159,17 @@ def _snapshot_row(row: tuple[Any, ...]) -> ValuationSnapshotRow:
     )
 
 
+def _preview_row(row: ValuationSnapshotRow) -> ValuationSnapshotPreview:
+    return ValuationSnapshotPreview(
+        asOfDate=row.asOfDate,
+        valueNative=row.valueNative,
+        currency=row.currency,
+        fxRateDate=row.fxRateDate,
+        valueBase=row.valueBase,
+        valueSecondary=row.valueSecondary,
+    )
+
+
 def _translate_snapshot_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint in {
@@ -158,7 +181,20 @@ def _translate_snapshot_error(exc: psycopg.Error) -> HTTPException:
         # The household row lock below serializes writes for one household, so this is a
         # defensive fallback rather than an expected path.
         return HTTPException(status_code=409, detail="a valuation already exists for this date")
-    if exc.sqlstate in {"22003", "22023", "23502", "23503", "23514"}:
+    if exc.sqlstate == "23514":
+        if constraint == "valuation_target_uses_snapshot_mode":
+            return HTTPException(
+                status_code=422,
+                detail="the date is before the account's snapshot valuation period",
+            )
+        if constraint == "valuation_date_is_in_account_period":
+            return HTTPException(
+                status_code=422, detail="the date is outside the account's lifetime"
+            )
+        return HTTPException(
+            status_code=422, detail="valuation snapshot violates its required field matrix"
+        )
+    if exc.sqlstate in {"22003", "22023", "23502", "23503"}:
         return HTTPException(
             status_code=422, detail="valuation snapshot violates its required field matrix"
         )
@@ -206,16 +242,21 @@ def list_valuations(
 
 @router.post(
     "/accounts/{account_id}/valuation-snapshots",
-    response_model=ValuationSnapshotRow,
+    response_model=ValuationSnapshotRow | ValuationSnapshotPreview,
     status_code=status.HTTP_201_CREATED,
-    responses={200: {"model": ValuationSnapshotRow, "description": "Identical replay"}},
+    responses={
+        200: {
+            "model": ValuationSnapshotRow | ValuationSnapshotPreview,
+            "description": "Identical replay, or a dryRun preview (never persisted)",
+        }
+    },
 )
 def create_valuation_snapshot(
     account_id: UUID,
     body: ValuationSnapshotCreate,
     response: Response,
     owner: Annotated[OwnerSession, Depends(require_owner)],
-) -> ValuationSnapshotRow:
+) -> ValuationSnapshotRow | ValuationSnapshotPreview:
     try:
         with connect() as conn, conn.cursor() as cur:
             if body.sourceNote is not None:
@@ -253,37 +294,51 @@ def create_valuation_snapshot(
                     detail="a different valuation is already recorded for this date",
                 )
 
-            rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
-                cur, body.asOfDate, currency, base, secondary
-            )
-            native = Decimal(body.valueNative)
-            cur.execute(
-                f"""INSERT INTO valuation_snapshot (
-                        household_id, account_id, as_of_date, value_native, currency,
-                        fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
-                        value_base, value_secondary, method, confidence, source_note)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::valuation_method,
-                            %s::valuation_confidence, %s)
-                    RETURNING {_SNAPSHOT_COLUMNS}""",
-                (
-                    owner.household_id,
-                    account_id,
-                    body.asOfDate,
-                    native,
-                    currency,
-                    rate_date,
-                    rate_to_base,
-                    rate_to_secondary,
-                    translate(native, rate_to_base),
-                    translate(native, rate_to_secondary),
-                    body.method,
-                    body.confidence,
-                    body.sourceNote,
-                ),
-            )
-            created = cur.fetchone()
-            assert created is not None
-            return _snapshot_row(created)
+            # A dry run inserts for real (so the frozen figures are exactly what a commit would
+            # produce) inside a savepoint, then raises psycopg.Rollback to undo just that insert
+            # — the outer transaction (holding only the household row lock so far) still commits
+            # normally, and the connection is left usable for the rest of this request.
+            result: ValuationSnapshotRow | ValuationSnapshotPreview | None = None
+            with conn.transaction():
+                rate_to_base, rate_to_secondary, _carried, rate_date = _frozen(
+                    cur, body.asOfDate, currency, base, secondary
+                )
+                native = Decimal(body.valueNative)
+                cur.execute(
+                    f"""INSERT INTO valuation_snapshot (
+                            household_id, account_id, as_of_date, value_native, currency,
+                            fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                            value_base, value_secondary, method, confidence, source_note)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::valuation_method,
+                                %s::valuation_confidence, %s)
+                        RETURNING {_SNAPSHOT_COLUMNS}""",
+                    (
+                        owner.household_id,
+                        account_id,
+                        body.asOfDate,
+                        native,
+                        currency,
+                        rate_date,
+                        rate_to_base,
+                        rate_to_secondary,
+                        translate(native, rate_to_base),
+                        translate(native, rate_to_secondary),
+                        body.method,
+                        body.confidence,
+                        body.sourceNote,
+                    ),
+                )
+                created = cur.fetchone()
+                assert created is not None
+                row = _snapshot_row(created)
+                if body.dryRun:
+                    result = _preview_row(row)
+                    raise psycopg.Rollback()
+                result = row
+            assert result is not None
+            if body.dryRun:
+                response.status_code = status.HTTP_200_OK
+            return result
     except psycopg.Error as exc:
         raise _translate_snapshot_error(exc) from None
 
