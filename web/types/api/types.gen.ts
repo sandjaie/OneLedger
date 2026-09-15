@@ -3158,6 +3158,196 @@ export type FxRateResponse = {
 };
 
 /**
+ * GoalClose
+ */
+export type GoalClose = {
+    /**
+     * State
+     */
+    state: string;
+};
+
+/**
+ * GoalCreate
+ */
+export type GoalCreate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Targetamount
+     */
+    targetAmount: string;
+    /**
+     * Targetcurrency
+     */
+    targetCurrency: string;
+    /**
+     * Targetdate
+     */
+    targetDate: string;
+    /**
+     * Priority
+     */
+    priority: number;
+    /**
+     * Plannedmonthly
+     */
+    plannedMonthly?: string | null;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * GoalRow
+ */
+export type GoalRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Targetamount
+     */
+    targetAmount: string;
+    /**
+     * Targetcurrency
+     */
+    targetCurrency: string;
+    /**
+     * Targetdate
+     */
+    targetDate: string;
+    /**
+     * Priority
+     */
+    priority: number;
+    /**
+     * Plannedmonthly
+     */
+    plannedMonthly: string | null;
+    /**
+     * State
+     */
+    state: string;
+    /**
+     * Closedat
+     */
+    closedAt: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+    /**
+     * Progressstatus
+     */
+    progressStatus: string;
+    /**
+     * Reasons
+     */
+    reasons: Array<string>;
+    /**
+     * Current
+     */
+    current: string | null;
+    /**
+     * Contributed
+     */
+    contributed: string | null;
+    /**
+     * Market
+     */
+    market: string | null;
+    /**
+     * Fx
+     */
+    fx: string | null;
+    /**
+     * Projected
+     */
+    projected: string | null;
+    /**
+     * Shortfall
+     */
+    shortfall: string | null;
+    /**
+     * Surplus
+     */
+    surplus: string | null;
+    /**
+     * Percent
+     */
+    percent: string | null;
+    /**
+     * Monthsremaining
+     */
+    monthsRemaining: number;
+    /**
+     * Reservations
+     */
+    reservations: Array<ReservationRow>;
+};
+
+/**
+ * GoalUpdate
+ */
+export type GoalUpdate = {
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Targetamount
+     */
+    targetAmount: string;
+    /**
+     * Targetcurrency
+     */
+    targetCurrency: string;
+    /**
+     * Targetdate
+     */
+    targetDate: string;
+    /**
+     * Priority
+     */
+    priority: number;
+    /**
+     * Plannedmonthly
+     */
+    plannedMonthly?: string | null;
+};
+
+/**
+ * GoalsResponse
+ */
+export type GoalsResponse = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Goals
+     */
+    goals: Array<GoalRow>;
+    /**
+     * Accounts
+     */
+    accounts: Array<ResourceAccountRow>;
+};
+
+/**
  * GroupResponse
  */
 export type GroupResponse = {
@@ -6012,6 +6202,108 @@ export type RefreshOutcome = {
 };
 
 /**
+ * ReservationCreate
+ */
+export type ReservationCreate = {
+    /**
+     * Purpose
+     */
+    purpose: 'goal' | 'emergency';
+    /**
+     * Goalid
+     */
+    goalId?: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Kind
+     */
+    kind: 'amount' | 'whole_account';
+    /**
+     * Amount
+     */
+    amount?: string | null;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * ReservationRelease
+ */
+export type ReservationRelease = {
+    /**
+     * Reason
+     */
+    reason?: string | null;
+};
+
+/**
+ * ReservationRow
+ */
+export type ReservationRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Purpose
+     */
+    purpose: 'goal' | 'emergency';
+    /**
+     * Goalid
+     */
+    goalId: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Kind
+     */
+    kind: 'amount' | 'whole_account';
+    /**
+     * Nativeamount
+     */
+    nativeAmount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Reservedon
+     */
+    reservedOn: string;
+    /**
+     * Rateatreservation
+     */
+    rateAtReservation: string;
+    /**
+     * Nativenow
+     */
+    nativeNow: string | null;
+    /**
+     * Currentvalue
+     */
+    currentValue: string | null;
+    /**
+     * Releasedat
+     */
+    releasedAt: string | null;
+    /**
+     * Releasereason
+     */
+    releaseReason: string | null;
+};
+
+/**
  * ResolutionCreate
  */
 export type ResolutionCreate = {
@@ -6106,6 +6398,56 @@ export type ResolutionsResponse = {
      * Resolutions
      */
     resolutions: Array<ResolutionRow>;
+};
+
+/**
+ * ResourceAccountRow
+ */
+export type ResourceAccountRow = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Valuationmode
+     */
+    valuationMode: 'ledger_balance' | 'holdings' | 'snapshot';
+    /**
+     * Value
+     */
+    value: string | null;
+    /**
+     * Valuedate
+     */
+    valueDate: string | null;
+    /**
+     * Reason
+     */
+    reason: 'missing_snapshot' | 'missing_price' | 'mixed_currency' | null;
+    /**
+     * Reserved
+     */
+    reserved: string | null;
+    /**
+     * Unreserved
+     */
+    unreserved: string | null;
+    /**
+     * Overreserved
+     */
+    overReserved: boolean;
+    /**
+     * Wholeaccountreserved
+     */
+    wholeAccountReserved: boolean;
 };
 
 /**
@@ -11561,6 +11903,180 @@ export type ReadForecastForecastGetResponses = {
 };
 
 export type ReadForecastForecastGetResponse = ReadForecastForecastGetResponses[keyof ReadForecastForecastGetResponses];
+
+export type ReadGoalsGoalsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+        /**
+         * Includeclosed
+         */
+        includeClosed?: boolean;
+    };
+    url: '/goals';
+};
+
+export type ReadGoalsGoalsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadGoalsGoalsGetError = ReadGoalsGoalsGetErrors[keyof ReadGoalsGoalsGetErrors];
+
+export type ReadGoalsGoalsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoalsResponse;
+};
+
+export type ReadGoalsGoalsGetResponse = ReadGoalsGoalsGetResponses[keyof ReadGoalsGoalsGetResponses];
+
+export type CreateGoalGoalsPostData = {
+    body: GoalCreate;
+    path?: never;
+    query?: never;
+    url: '/goals';
+};
+
+export type CreateGoalGoalsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateGoalGoalsPostError = CreateGoalGoalsPostErrors[keyof CreateGoalGoalsPostErrors];
+
+export type CreateGoalGoalsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoalRow;
+};
+
+export type CreateGoalGoalsPostResponse = CreateGoalGoalsPostResponses[keyof CreateGoalGoalsPostResponses];
+
+export type UpdateGoalGoalsGoalIdPutData = {
+    body: GoalUpdate;
+    path: {
+        /**
+         * Goalid
+         */
+        goalId: string;
+    };
+    query?: never;
+    url: '/goals/{goalId}';
+};
+
+export type UpdateGoalGoalsGoalIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateGoalGoalsGoalIdPutError = UpdateGoalGoalsGoalIdPutErrors[keyof UpdateGoalGoalsGoalIdPutErrors];
+
+export type UpdateGoalGoalsGoalIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoalRow;
+};
+
+export type UpdateGoalGoalsGoalIdPutResponse = UpdateGoalGoalsGoalIdPutResponses[keyof UpdateGoalGoalsGoalIdPutResponses];
+
+export type CloseGoalGoalsGoalIdClosePostData = {
+    body: GoalClose;
+    path: {
+        /**
+         * Goalid
+         */
+        goalId: string;
+    };
+    query?: never;
+    url: '/goals/{goalId}/close';
+};
+
+export type CloseGoalGoalsGoalIdClosePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CloseGoalGoalsGoalIdClosePostError = CloseGoalGoalsGoalIdClosePostErrors[keyof CloseGoalGoalsGoalIdClosePostErrors];
+
+export type CloseGoalGoalsGoalIdClosePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GoalRow;
+};
+
+export type CloseGoalGoalsGoalIdClosePostResponse = CloseGoalGoalsGoalIdClosePostResponses[keyof CloseGoalGoalsGoalIdClosePostResponses];
+
+export type CreateReservationReservationsPostData = {
+    body: ReservationCreate;
+    path?: never;
+    query?: never;
+    url: '/reservations';
+};
+
+export type CreateReservationReservationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateReservationReservationsPostError = CreateReservationReservationsPostErrors[keyof CreateReservationReservationsPostErrors];
+
+export type CreateReservationReservationsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReservationRow;
+};
+
+export type CreateReservationReservationsPostResponse = CreateReservationReservationsPostResponses[keyof CreateReservationReservationsPostResponses];
+
+export type ReleaseReservationReservationsReservationIdReleasePostData = {
+    body: ReservationRelease;
+    path: {
+        /**
+         * Reservationid
+         */
+        reservationId: string;
+    };
+    query?: never;
+    url: '/reservations/{reservationId}/release';
+};
+
+export type ReleaseReservationReservationsReservationIdReleasePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReleaseReservationReservationsReservationIdReleasePostError = ReleaseReservationReservationsReservationIdReleasePostErrors[keyof ReleaseReservationReservationsReservationIdReleasePostErrors];
+
+export type ReleaseReservationReservationsReservationIdReleasePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReservationRow;
+};
+
+export type ReleaseReservationReservationsReservationIdReleasePostResponse = ReleaseReservationReservationsReservationIdReleasePostResponses[keyof ReleaseReservationReservationsReservationIdReleasePostResponses];
 
 export type ReadMonthlyReviewMonthlyReviewGetData = {
     body?: never;
