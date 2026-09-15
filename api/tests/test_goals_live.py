@@ -300,9 +300,8 @@ def test_p07_reserve_refuse_exclusivity_and_release_leave_net_worth_unchanged(
 
 
 def test_whole_account_exclusivity_the_other_direction(live: GoalsFixture) -> None:
-    """A whole-account reservation active on an account leaves it with zero unreserved value, so
-    a later amount request there is refused by the unreserved check (spec order: amount-above-
-    unreserved precedes exclusivity) rather than by the exclusivity refusal itself."""
+    """An active whole-account reservation refuses any further reservation on the account as
+    already reserved (409), even though its unreserved value is also zero."""
     goal = _create_goal(live)
     whole = client().post(
         "/reservations",
@@ -324,12 +323,9 @@ def test_whole_account_exclusivity_the_other_direction(live: GoalsFixture) -> No
         ),
         headers=ORIGIN,
     )
-    assert blocked_amount.status_code == 422
-    assert blocked_amount.json()["detail"] == (
-        "this reservation is more than the account's unreserved value"
-    )
+    assert blocked_amount.status_code == 409
+    assert blocked_amount.json()["detail"] == "this account is already reserved"
 
-    # A second whole-account request on the same account hits the exclusivity refusal directly.
     blocked_whole = client().post(
         "/reservations",
         json=_reservation_body(
@@ -560,6 +556,42 @@ def test_progress_reflects_a_rate_change_since_reservation(live: GoalsFixture) -
     assert row["current"] == "1200.0000"
     assert row["market"] == "0.0000"
     assert row["fx"] == "200.0000"
+
+    # A goal in the secondary currency rates through current_rate_pair's cross leg, since fx_rate
+    # quotes only into base: 1000 base at 1/0.25 = 4000.0000, now at 1/0.30 = 3333.3333.
+    secondary_goal = _create_goal(live, targetCurrency=live.secondary_currency)
+    crossed = _reserve(live, secondary_goal["id"], amount="1000.0000")
+    assert crossed.status_code == 201, crossed.text
+    assert crossed.json()["rateAtReservation"] == "4.0000000000"
+    response = client().get("/goals", params={"asOf": str(later)}, headers=ORIGIN)
+    row = next(g for g in response.json()["goals"] if g["id"] == secondary_goal["id"])
+    assert (row["contributed"], row["current"]) == ("4000.0000", "3333.3333")
+    assert (row["market"], row["fx"]) == ("0.0000", "-666.6667")
+
+
+def test_ledger_whole_account_counts_a_later_deposit_as_contributed(live: GoalsFixture) -> None:
+    goal = _create_goal(live)
+    whole = _reserve(
+        live, goal["id"], accountId=str(live.whole_account_id), kind="whole_account", amount=None
+    )
+    assert whole.status_code == 201, whole.text
+    assert whole.json()["nativeAmount"] == "5000.0000"
+    with live.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction (household_id, account_id, booked_date, description_raw,
+                       amount, currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                       amount_base, amount_secondary, txn_type, source, dedupe_hash)
+               VALUES (%s, %s, %s, 'SYNTHETIC GOAL DEPOSIT', 700.0000, %s, %s, 1, 1, 700.0000,
+                       700.0000, 'income', 'manual', %s)""",
+            (live.owner.household_id, live.whole_account_id, TODAY, live.currency, TODAY, uuid4()),
+        )
+    live.connection.commit()
+    row = next(
+        g for g in client().get("/goals", headers=ORIGIN).json()["goals"] if g["id"] == goal["id"]
+    )
+    # ledger_balance: every change is new money, so none of it is market or FX movement.
+    assert (row["current"], row["contributed"]) == ("5700.0000", "5700.0000")
+    assert (row["market"], row["fx"]) == ("0.0000", "0.0000")
 
 
 # ---------------------------------------------------------------------------------------

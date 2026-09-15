@@ -73,10 +73,6 @@ function goalFormFrom(goal: GoalRow): GoalFormState {
   };
 }
 
-function isZero(value: string | null): boolean {
-  return value === null || /^-?0(\.0+)?$/.test(value);
-}
-
 export function Goals({ accounts, currencies, request }: Props) {
   const activeAssetAccounts = accounts.filter(
     (account) => account.isActive && account.accountClass === "asset",
@@ -314,12 +310,11 @@ export function Goals({ accounts, currencies, request }: Props) {
                           {moneyText(goal.projected ?? "0", goal.targetCurrency, currencies)}
                         </p>
                       )}
-                      {!isZero(goal.shortfall) && (
-                        <p>Shortfall {moneyText(goal.shortfall ?? "0", goal.targetCurrency, currencies)}</p>
-                      )}
-                      {isZero(goal.shortfall) && !isZero(goal.surplus) && (
-                        <p>Surplus {moneyText(goal.surplus ?? "0", goal.targetCurrency, currencies)}</p>
-                      )}
+                      {/* Both server figures, never compared in TypeScript; at most one is non-zero. */}
+                      <p>
+                        Shortfall {moneyText(goal.shortfall ?? "0", goal.targetCurrency, currencies)}
+                        {" · Surplus "}{moneyText(goal.surplus ?? "0", goal.targetCurrency, currencies)}
+                      </p>
                       {goal.reasons.includes("over_reserved") && (
                         <p className="inline-alert" role="alert">
                           {reasonText(["over_reserved"])}

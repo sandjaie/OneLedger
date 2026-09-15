@@ -302,6 +302,17 @@ def _resource_state(
     return values, all_reservations, totals_by_account, over_reserved
 
 
+def _goal_rate(
+    cur: psycopg.Cursor[Any], currency: str, goal_currency: str, base: str, secondary: str, on: date
+) -> Decimal | None:
+    """The rate from `currency` into a goal currency. fx_rate quotes only into the household base,
+    so a secondary-currency goal needs `current_rate_pair`'s cross leg; any other currency is
+    unavailable rather than guessed."""
+    pair = current_rate_pair(cur, currency, base, secondary, on)
+    leg = {base: pair.to_base, secondary: pair.to_secondary}.get(goal_currency)
+    return None if leg is None else leg.rate
+
+
 def _native_now_and_current(
     cur: psycopg.Cursor[Any],
     currency: str,
@@ -309,15 +320,16 @@ def _native_now_and_current(
     native_amount: Decimal,
     native: NativeValue | None,
     target_currency: str,
+    base: str,
+    secondary: str,
     as_of: date,
-) -> tuple[Decimal | None, Decimal | None]:
+) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
     native_now = native_amount if kind == "amount" else (native.value if native else None)
-    pair = current_rate_pair(cur, currency, target_currency, target_currency, as_of)
-    rate_now = pair.to_base.rate if pair.to_base is not None else None
+    rate_now = _goal_rate(cur, currency, target_currency, base, secondary, as_of)
     current_value = (
         None if native_now is None or rate_now is None else translate(native_now, rate_now)
     )
-    return native_now, current_value
+    return native_now, rate_now, current_value
 
 
 def _reservation_row(
@@ -367,8 +379,16 @@ def _reservation_row(
         target_currency = base
 
     values = account_native_values(cur, household_id, base, secondary, as_of)
-    native_now, current_value = _native_now_and_current(
-        cur, currency, kind, Decimal(native_amount), values.get(account_id), target_currency, as_of
+    native_now, _rate_now, current_value = _native_now_and_current(
+        cur,
+        currency,
+        kind,
+        Decimal(native_amount),
+        values.get(account_id),
+        target_currency,
+        base,
+        secondary,
+        as_of,
     )
     names = _account_names(cur, household_id, [account_id])
     return ReservationRow(
@@ -394,6 +414,8 @@ def _goal_row(
     household_id: UUID,
     goal_id: UUID,
     as_of: date,
+    base: str,
+    secondary: str,
     values: dict[UUID, NativeValue],
     all_reservations: list[ReservationFact],
     over_reserved_accounts: set[UUID],
@@ -430,13 +452,15 @@ def _goal_row(
         reservations, key=lambda r: (r.releasedAt is not None, r.reservedOn, r.id)
     ):
         native = values.get(reservation.accountId)
-        native_now, current_value = _native_now_and_current(
+        native_now, rate_now, current_value = _native_now_and_current(
             cur,
             reservation.currency,
             reservation.kind,
             reservation.nativeAmount,
             native,
             target_currency,
+            base,
+            secondary,
             as_of,
         )
         reservation_rows.append(
@@ -471,8 +495,6 @@ def _goal_row(
             )
         else:  # snapshot
             inflow = Decimal("0.0000")
-        pair = current_rate_pair(cur, reservation.currency, target_currency, target_currency, as_of)
-        rate_now = pair.to_base.rate if pair.to_base is not None else None
         progresses.append(
             reservation_progress(
                 native_amount=reservation.nativeAmount,
@@ -483,7 +505,9 @@ def _goal_row(
             )
         )
 
-    over_reserved = bool(account_ids & over_reserved_accounts)
+    # Only an active reservation is "reserving" an account (spec "Goal progress").
+    active_ids = {r.accountId for r in reservations if r.releasedAt is None}
+    over_reserved = bool(active_ids & over_reserved_accounts)
     planned = None if planned_monthly is None else Decimal(planned_monthly)
     progress = goal_totals(
         target_amount=Decimal(target_amount),
@@ -518,6 +542,14 @@ def _goal_row(
         monthsRemaining=progress.monthsRemaining,
         reservations=reservation_rows,
     )
+
+
+def _goal_row_today(
+    cur: psycopg.Cursor[Any], household_id: UUID, goal_id: UUID, base: str, secondary: str
+) -> GoalRow:
+    today = date.today()
+    values, reservations, _totals, over = _resource_state(cur, household_id, today, base, secondary)
+    return _goal_row(cur, household_id, goal_id, today, base, secondary, values, reservations, over)
 
 
 @router.get("/goals", response_model=GoalsResponse)
@@ -563,6 +595,8 @@ def read_goals(
                 owner.household_id,
                 UUID(str(row[0])),
                 as_of,
+                base,
+                secondary,
                 values,
                 all_reservations,
                 over_reserved,
@@ -602,18 +636,7 @@ def create_goal(
                 )
                 if matches:
                     response.status_code = status.HTTP_200_OK
-                    values, all_reservations, _totals, over_reserved = _resource_state(
-                        cur, owner.household_id, date.today(), base, secondary
-                    )
-                    return _goal_row(
-                        cur,
-                        owner.household_id,
-                        UUID(str(eid)),
-                        date.today(),
-                        values,
-                        all_reservations,
-                        over_reserved,
-                    )
+                    return _goal_row_today(cur, owner.household_id, UUID(str(eid)), base, secondary)
                 raise HTTPException(
                     status_code=409, detail="idempotency key reused with a different request"
                 )
@@ -637,18 +660,7 @@ def create_goal(
             created = cur.fetchone()
             assert created is not None
             response.status_code = status.HTTP_201_CREATED
-            values, all_reservations, _totals, over_reserved = _resource_state(
-                cur, owner.household_id, date.today(), base, secondary
-            )
-            return _goal_row(
-                cur,
-                owner.household_id,
-                UUID(str(created[0])),
-                date.today(),
-                values,
-                all_reservations,
-                over_reserved,
-            )
+            return _goal_row_today(cur, owner.household_id, UUID(str(created[0])), base, secondary)
     except psycopg.Error as exc:
         raise _translate_goal_error(exc) from None
 
@@ -698,18 +710,7 @@ def update_goal(
                     goalId,
                 ),
             )
-            values, all_reservations, _totals, over_reserved = _resource_state(
-                cur, owner.household_id, date.today(), base, secondary
-            )
-            return _goal_row(
-                cur,
-                owner.household_id,
-                goalId,
-                date.today(),
-                values,
-                all_reservations,
-                over_reserved,
-            )
+            return _goal_row_today(cur, owner.household_id, goalId, base, secondary)
     except psycopg.Error as exc:
         raise _translate_goal_error(exc) from None
 
@@ -745,12 +746,7 @@ def close_goal(
             raise HTTPException(
                 status_code=409, detail="this goal is already closed with a different outcome"
             )
-        values, all_reservations, _totals, over_reserved = _resource_state(
-            cur, owner.household_id, date.today(), base, secondary
-        )
-        return _goal_row(
-            cur, owner.household_id, goalId, date.today(), values, all_reservations, over_reserved
-        )
+        return _goal_row_today(cur, owner.household_id, goalId, base, secondary)
 
 
 @router.post("/reservations", response_model=ReservationRow)
@@ -823,6 +819,10 @@ def create_reservation(
                 [r.nativeAmount for r in active if r.kind == "amount"],
                 whole_account_active=whole_active,
             )
+            # Exclusivity first: an active whole-account reservation leaves zero unreserved, so the
+            # amount check below would otherwise mask the 409 the spec names for it.
+            if whole_active or (body.kind == "whole_account" and active):
+                raise HTTPException(status_code=409, detail="this account is already reserved")
             amount_decimal: Decimal | None = None
             if body.kind == "amount":
                 assert body.amount is not None
@@ -832,8 +832,6 @@ def create_reservation(
                         status_code=422,
                         detail="this reservation is more than the account's unreserved value",
                     )
-            if whole_active or (body.kind == "whole_account" and active):
-                raise HTTPException(status_code=409, detail="this account is already reserved")
 
             if body.purpose == "goal":
                 assert body.goalId is not None
@@ -858,15 +856,12 @@ def create_reservation(
                     status_code=422, detail="mark this account as an emergency resource first"
                 )
 
-            pair = current_rate_pair(cur, currency, rate_currency, rate_currency, as_of)
-            rate = pair.to_base
+            rate = _goal_rate(cur, currency, rate_currency, base, secondary, as_of)
             if rate is None:
                 raise HTTPException(
                     status_code=422, detail="no exchange rate is available for this reservation"
                 )
 
-            if body.kind == "amount":
-                assert amount_decimal is not None
             native_amount = amount_decimal if body.kind == "amount" else value
             cur.execute(
                 """INSERT INTO resource_reservation (household_id, idempotency_key, purpose,
@@ -884,7 +879,7 @@ def create_reservation(
                     currency,
                     as_of,
                     rate_currency,
-                    rate.rate,
+                    rate,
                 ),
             )
             created = cur.fetchone()

@@ -785,7 +785,8 @@ its exact sentence. Replay and conflicting-key checks on both <code>POST /goals<
 transaction, replays the same outcome at 200 and refuses a different one at 409; a goal&#39;s
 currency changes freely until any reservation (active or released) exists on it, then 409.
 Progress after a synthetic FX rate change on a later <code>asOf</code> matches the frozen-versus-
-current decomposition exactly; a holdings-mode whole-account reservation with a later purchase and
+current decomposition exactly, for a base-currency goal and a secondary-currency goal (the cross
+leg); a ledger-balance whole-account reservation counts a later deposit as contributed; a holdings-mode whole-account reservation with a later purchase and
 a price change splits contributed (the frozen value plus the purchase), market and FX exactly, fx
 staying zero in one currency throughout. A foreign household&#39;s real goal and reservation rows
 never appear and stay unchanged; <code>GET /goals</code> changes no row. Member 403 on the six new

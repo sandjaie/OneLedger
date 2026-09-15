@@ -31,7 +31,7 @@ def resource_totals(
     if whole_account_active:
         reserved = value
     else:
-        reserved = sum(active_native_amounts, _ZERO) if active_native_amounts else _ZERO
+        reserved = sum(active_native_amounts, _ZERO)
     unreserved = None if (value is None or reserved is None) else max(value - reserved, _ZERO)
     over_reserved = value is not None and reserved is not None and reserved > value
     return ResourceTotals(reserved, unreserved, over_reserved, whole_account_active)
