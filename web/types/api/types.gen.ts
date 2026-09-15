@@ -2967,6 +2967,26 @@ export type HoldingEventRow = {
      * Fundingcomplete
      */
     fundingComplete: boolean;
+    /**
+     * Counterpartaccountid
+     */
+    counterpartAccountId: string | null;
+    /**
+     * Counterpartsecurityid
+     */
+    counterpartSecurityId: string | null;
+    /**
+     * Counterpartunits
+     */
+    counterpartUnits: string | null;
+    /**
+     * Counterpartprice
+     */
+    counterpartPrice: string | null;
+    /**
+     * Counterpartgrossamount
+     */
+    counterpartGrossAmount: string | null;
 };
 
 /**

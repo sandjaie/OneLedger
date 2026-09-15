@@ -59,6 +59,11 @@ function detail(overrides: Partial<HoldingDetail> = {}): HoldingDetail {
         counterpartEventId: null,
         correctionState: "active",
         fundingComplete: true,
+        counterpartAccountId: null,
+        counterpartSecurityId: null,
+        counterpartUnits: null,
+        counterpartPrice: null,
+        counterpartGrossAmount: null,
       },
     ],
     eventsTotal: 1,
@@ -94,7 +99,7 @@ describe("HoldingScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
 
     expect(await screen.findByRole("heading", { name: "Synthetic Growth Fund" })).toBeTruthy();
     expect(screen.getByText("This disposal is not fully allocated to existing lots.")).toBeTruthy();
@@ -103,6 +108,57 @@ describe("HoldingScreen", () => {
     expect(screen.getByText("funding")).toBeTruthy();
     expect(screen.getByText("XAA 101.0000")).toBeTruthy();
     expect(screen.getByText("XAA 10.500000")).toBeTruthy();
+    // The event already has a confirmed cash link, so it is funded and cannot be corrected —
+    // matching V40's own trigger, which refuses a correction against any existing allocation.
+    expect(screen.getByText("Unlink its funding first to correct this event.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Correct" })).toBeNull();
+  });
+
+  it("shows the unlink message for a purchase that is only partly funded, not the Correct action", async () => {
+    const request = requestFrom((path) => {
+      if (path === `/portfolio/holdings/${HOLDING_ID}`) {
+        return detail({
+          events: [{
+            id: "00000000-0000-4000-8000-000000000060",
+            eventDate: "2026-01-05",
+            eventKind: "purchase",
+            units: "10.00000000",
+            unitRatio: null,
+            price: "10.000000",
+            grossAmount: "100.0000",
+            charges: "1.0000",
+            withheldTax: "0.0000",
+            netAmount: "-101.0000",
+            currency: "XAA",
+            correctsEventId: null,
+            counterpartEventId: null,
+            correctionState: "active",
+            // Not fully funded by the remaining-amount comparison, but one allocation already
+            // exists — V40's correction trigger refuses regardless of how much is covered.
+            fundingComplete: false,
+            counterpartAccountId: null,
+            counterpartSecurityId: null,
+            counterpartUnits: null,
+            counterpartPrice: null,
+            counterpartGrossAmount: null,
+          }],
+          cashLinks: [{
+            investmentEventId: "00000000-0000-4000-8000-000000000060",
+            cashTransactionId: "00000000-0000-4000-8000-000000000070",
+            role: "funding",
+            allocatedAmount: "40.0000",
+            currency: "XAA",
+          }],
+        });
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
+    await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
+
+    expect(screen.getByText("Unlink its funding first to correct this event.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Correct" })).toBeNull();
   });
 
   it("records a dated price with the exact strings typed and reloads the holding", async () => {
@@ -119,7 +175,7 @@ describe("HoldingScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
     await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
 
     fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-02-10" } });
@@ -144,7 +200,7 @@ describe("HoldingScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
     await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
 
     fireEvent.change(screen.getByLabelText("Price date"), { target: { value: "2026-02-10" } });
@@ -177,6 +233,11 @@ describe("HoldingScreen", () => {
         counterpartEventId: null,
         correctionState: "active",
         fundingComplete: false,
+        counterpartAccountId: null,
+        counterpartSecurityId: null,
+        counterpartUnits: null,
+        counterpartPrice: null,
+        counterpartGrossAmount: null,
       }],
       cashLinks: [],
     });
@@ -246,6 +307,11 @@ describe("HoldingScreen", () => {
         counterpartEventId: null,
         correctionState: "active",
         fundingComplete: true,
+        counterpartAccountId: null,
+        counterpartSecurityId: null,
+        counterpartUnits: null,
+        counterpartPrice: null,
+        counterpartGrossAmount: null,
       }],
       cashLinks: [{
         investmentEventId: "00000000-0000-4000-8000-000000000061",
@@ -283,7 +349,7 @@ describe("HoldingScreen", () => {
       throw new Error(`Unexpected synthetic route ${init?.method ?? "GET"} ${path}`);
     });
 
-    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
     await screen.findByRole("heading", { name: "Synthetic Growth Fund" });
 
     expect(screen.getByText("Not fully funded.")).toBeTruthy();
@@ -314,7 +380,7 @@ describe("HoldingScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<HoldingScreen holdingId={HOLDING_ID} request={request} />);
+    render(<HoldingScreen accounts={[]} holdingId={HOLDING_ID} request={request} />);
 
     expect(await screen.findByText("This holding could not be found.")).toBeTruthy();
   });
@@ -323,6 +389,7 @@ describe("HoldingScreen", () => {
     const navigate = vi.fn();
     const request = requestFrom((path) => {
       if (path === "/household") return household;
+      if (path === "/accounts") return { accounts: [], totals: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) throw new ApiError(401, "synthetic");
       throw new Error(`Unexpected synthetic route ${path}`);
     });

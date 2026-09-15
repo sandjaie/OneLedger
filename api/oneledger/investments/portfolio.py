@@ -193,6 +193,15 @@ class HoldingEventRow(BaseModel):
     # `investments/funding.py`'s proposal validation makes, so the holding page and the funding
     # route agree on what "funded" means without restating either's arithmetic in TypeScript.
     fundingComplete: bool
+    # Present only for a switch/systematic-transfer/platform-transfer leg (Task 2b): the other
+    # leg's own account, security, units, price and gross amount, so a correction form can show
+    # and resubmit the whole pair from either leg without a second fetch. None for every other
+    # event kind.
+    counterpartAccountId: UUID | None
+    counterpartSecurityId: UUID | None
+    counterpartUnits: str | None
+    counterpartPrice: str | None
+    counterpartGrossAmount: str | None
 
 
 class HoldingDetail(BaseModel):
@@ -227,8 +236,14 @@ _EVENTS_SQL = """
            NOT EXISTS (
                SELECT FROM investment_transaction c WHERE c.corrects_transaction_id = t.id
            ) AS is_active,
+           cp.id, cp.account_id, cp.security_id, cp.units, cp.price, cp.gross_amount,
            count(*) OVER () AS total
       FROM investment_transaction t
+      -- `counterpart_transaction_id` is only ever stored on the "in" leg (V40), pointing at the
+      -- "out" leg's id — this join finds the pair's other row from either leg.
+      LEFT JOIN investment_transaction cp
+        ON cp.household_id = t.household_id
+       AND (cp.id = t.counterpart_transaction_id OR cp.counterpart_transaction_id = t.id)
      WHERE t.household_id = %s AND t.holding_id = %s
      ORDER BY t.event_date DESC, t.created_at DESC
      LIMIT 200
@@ -315,7 +330,7 @@ def read_holding_detail(
 
     cur.execute(_EVENTS_SQL, (household_id, holding.id))
     event_rows = cur.fetchall()
-    events_total = int(event_rows[0][14]) if event_rows else 0
+    events_total = int(event_rows[0][20]) if event_rows else 0
     events = []
     for r in event_rows:
         event_id, event_kind, is_active = r[0], r[2], bool(r[13])
@@ -326,6 +341,9 @@ def read_holding_detail(
             or net_amount is None
             or funded_by_event.get(event_id, Decimal(0)) >= abs(net_amount)
         )
+        # `cp.id` is the pair's other leg from either direction (see the join above), so it also
+        # corrects the original `t.counterpart_transaction_id` column, which was only ever set
+        # on the "in" leg — the "out" leg now reports its counterpart too.
         events.append(
             HoldingEventRow(
                 id=r[0],
@@ -340,9 +358,14 @@ def read_holding_detail(
                 netAmount=_out(net_amount),
                 currency=str(r[10]).strip(),
                 correctsEventId=r[11],
-                counterpartEventId=r[12],
+                counterpartEventId=r[14],
                 correctionState="active" if is_active else "corrected",
                 fundingComplete=funding_complete,
+                counterpartAccountId=r[15],
+                counterpartSecurityId=r[16],
+                counterpartUnits=_out(None if r[17] is None else Decimal(r[17])),
+                counterpartPrice=_out(None if r[18] is None else Decimal(r[18])),
+                counterpartGrossAmount=_out(None if r[19] is None else Decimal(r[19])),
             )
         )
 

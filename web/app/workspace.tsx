@@ -200,7 +200,10 @@ export function Workspace({
           setInventory(nextInventory);
           setCurrencies(catalogue);
         }
-        if (activeSection === "investments-entry" || activeSection === "investments-import") {
+        if (
+          activeSection === "investments-entry" || activeSection === "investments-import"
+          || activeSection === "investments" || activeSection === "investments-holding"
+        ) {
           const nextInventory = await request<AccountsResponse>("/accounts");
           if (!current) return;
           setInventory(nextInventory);
@@ -498,14 +501,16 @@ export function Workspace({
             />
           )}
 
-          {activeSection === "investments" && (
+          {activeSection === "investments" && inventory && (
             <PortfolioScreen
+              accounts={inventory.accounts}
               request={wrappedRequest}
             />
           )}
 
-          {activeSection === "investments-holding" && holdingId && (
+          {activeSection === "investments-holding" && holdingId && inventory && (
             <HoldingScreen
+              accounts={inventory.accounts}
               holdingId={holdingId}
               request={wrappedRequest}
             />

@@ -114,7 +114,7 @@ describe("PortfolioScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<PortfolioScreen request={request} />);
+    render(<PortfolioScreen accounts={[]} request={request} />);
 
     expect((await screen.findByLabelText("Value")).textContent).toContain("XAA 100.0000");
     expect(screen.getByText("No sign change across the cash flows.")).toBeTruthy();
@@ -136,7 +136,7 @@ describe("PortfolioScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<PortfolioScreen request={request} />);
+    render(<PortfolioScreen accounts={[]} request={request} />);
 
     const button = await screen.findByRole("button", { name: "Check for new prices" });
     fireEvent.click(button);
@@ -154,7 +154,7 @@ describe("PortfolioScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<PortfolioScreen request={request} />);
+    render(<PortfolioScreen accounts={[]} request={request} />);
 
     expect(await screen.findByText("Checked within the last 24 hours.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Check for new prices" })).toBeNull();
@@ -190,7 +190,7 @@ describe("PortfolioScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<PortfolioScreen request={request} />);
+    render(<PortfolioScreen accounts={[]} request={request} />);
 
     expect(await screen.findByText(/Price XAA 10.000000/, { selector: "p" })).toBeTruthy();
     expect(screen.getByText("No dated price recorded.")).toBeTruthy();
@@ -204,7 +204,7 @@ describe("PortfolioScreen", () => {
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
-    render(<PortfolioScreen request={request} />);
+    render(<PortfolioScreen accounts={[]} request={request} />);
 
     expect(await screen.findByText("Incomplete — one or more holdings are unvalued.")).toBeTruthy();
   });
@@ -213,6 +213,7 @@ describe("PortfolioScreen", () => {
     const navigate = vi.fn();
     const request = requestFrom((path) => {
       if (path === "/household") return household;
+      if (path === "/accounts") return { accounts: [], totals: [] };
       if (path === "/portfolio/summary") throw new ApiError(401, "synthetic");
       if (path === "/portfolio/positions?includeClosed=true") return positions([]);
       throw new Error(`Unexpected synthetic route ${path}`);
