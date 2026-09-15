@@ -508,7 +508,12 @@ historical trend is reproducible.</p>
 <p><strong>Verified position</strong> — A position tied to dated statement or valuation evidence, with account/period coverage disclosed.</p>
 <p><strong>Estimated position</strong> — A projection from dated evidence and explicit assumptions; not a bank-confirmed balance.</p>
 <p><strong>Retained income</strong> — Income less net consumption spending and external household outflows. It may be held in cash, invested or used to reduce debt.</p>
-<p><strong>Commitment</strong> — A confirmed or estimated future payment/receipt with an account, currency, date and settlement status; not a posted ledger row.</p>
+<p><strong>Commitment</strong> — A confirmed or estimated future payment/receipt with an account, currency,
+cadence and a lifecycle over exactly one open occurrence, its next due date; not a posted ledger row.
+The owner resolves that occurrence by linking the ledger posting that paid or received it (in full or
+in part), marking it done without a posting, or dismissing it with a reason — a <strong>resolution</strong>.
+Closing a resolution advances the commitment to its next scheduled occurrence, so a recurring
+commitment only ever holds one open occurrence at a time.</p>
 <p><strong>Earmarking</strong> — Reserving existing resources for a goal or emergency reserve without moving money or changing wealth. The same resource cannot be reserved twice.</p>
 <p><strong>Uncommitted resources</strong> — Accessible resources after accounting for applicable obligations and reservations once.</p>
 <p><strong>Emergency coverage</strong> — Eligible emergency resources divided by the user-selected monthly essential-spend baseline, with assumptions shown.</p>

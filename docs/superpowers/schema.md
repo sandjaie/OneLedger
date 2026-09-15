@@ -2661,6 +2661,91 @@ edges: `active`→`revoked` (unchanged), `pending`→`active` (`revoked_at` stay
 
 ---
 
+## `V48` (applied)
+
+### Commitment lifecycle
+
+Phase 3.1 Task 1. A commitment's lifecycle over exactly one open occurrence, resolved by linking
+a ledger posting (in full or in part), marking it done, or dismissing it with a reason.
+`commitment_resolution` follows `payslip`'s convention (V42): a plain owner-scoped table, one
+trigger deciding eligibility, one trigger enforcing immutability, no `SECURITY DEFINER` write
+path.
+
+```sql
+CREATE TYPE commitment_certainty AS ENUM ('confirmed', 'estimated');
+CREATE TYPE commitment_resolution_kind AS ENUM ('payment', 'completed', 'dismissed');
+
+ALTER TABLE commitment
+  ADD COLUMN certainty commitment_certainty NOT NULL DEFAULT 'confirmed',
+  ADD COLUMN next_due_date DATE,
+  ADD CONSTRAINT uq_commitment_household_id UNIQUE (household_id, id),
+  ADD CONSTRAINT commitment_next_due_in_schedule CHECK (
+    next_due_date IS NULL OR (next_due_date >= first_date
+                              AND (end_date IS NULL OR next_due_date <= end_date)));
+
+CREATE TABLE commitment_resolution (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id   UUID NOT NULL REFERENCES household(id),
+  commitment_id  UUID NOT NULL,
+  due_date       DATE NOT NULL,
+  kind           commitment_resolution_kind NOT NULL,
+  closes         BOOLEAN NOT NULL,
+  transaction_id UUID,
+  reason         TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT fk_commitment_resolution_commitment_scope FOREIGN KEY (household_id, commitment_id)
+    REFERENCES commitment (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_commitment_resolution_transaction_scope FOREIGN KEY (household_id, transaction_id)
+    REFERENCES transaction (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT commitment_resolution_shape CHECK (
+       (kind = 'payment'   AND transaction_id IS NOT NULL AND reason IS NULL)
+    OR (kind = 'completed' AND transaction_id IS NULL AND closes AND reason IS NULL)
+    OR (kind = 'dismissed' AND transaction_id IS NULL AND closes AND reason IS NOT NULL
+        AND char_length(reason) BETWEEN 1 AND 200 AND reason = btrim(reason)))
+);
+CREATE UNIQUE INDEX uq_commitment_resolution_closing
+  ON commitment_resolution (commitment_id, due_date) WHERE closes;
+CREATE UNIQUE INDEX uq_commitment_resolution_transaction
+  ON commitment_resolution (transaction_id) WHERE transaction_id IS NOT NULL;
+CREATE INDEX idx_commitment_resolution_commitment
+  ON commitment_resolution (household_id, commitment_id, due_date DESC);
+```
+
+**Backfill.** Every existing commitment gets `next_due_date` by the default next-due rule (spec
+"Occurrence rules"), evaluated at the migration's `current_date` against the account's
+`current_balance_as_of`: `first_date` for `once`; for `monthly`/`annual` the first occurrence
+strictly after the balance date when that is before today, else the first on or after today, or
+`NULL` when none remains before `end_date`. Occurrence `n` is `(first_date + make_interval(months
+=> n * step))::date`, PostgreSQL's own month-end clamp, which equals `forecast._add_months(first_date,
+n * step)`.
+
+**Eligibility.** `assert_commitment_payment()` fires `BEFORE INSERT ... WHEN (NEW.kind =
+'payment')` and raises `commitment_payment_is_eligible` unless the linked transaction is a leaf
+row of `v_transaction_posting` in the same household, not `is_excluded`, not `opening_balance` or
+`adjustment`, on the commitment's account and currency, signed like the commitment's amount, and
+not one leg of a `payslip_line_posting` pair. A transfer leg is eligible — a card payment or
+planned transfer is a real cash movement on the paying account. `routes/commitment_resolutions.py`
+mirrors this predicate in SQL for its candidates read and its eligibility re-check, each naming the
+other in a comment. `preserve_commitment_resolution()` refuses every `UPDATE`; `DELETE` is the undo
+path, gated by the route rather than the database. Both trigger functions are revoked from
+`PUBLIC`. `commitment_resolution` enables `household_isolation FOR ALL TO authenticated` as on
+every other household-scoped table.
+
+`routes/plans.py`'s `_commitment_progress()` computes each commitment's lifecycle `status`
+(`archivedAt` set is `cancelled`; `next_due_date NULL` is `finished`; else `overdue` before
+`asOf`, `due` through `asOf + 7`, else `upcoming`), `paidTowardNext` (the sum of payment amounts
+against the open occurrence), `partlyPaid` and `remainingNext` (`amount − paidTowardNext` when
+`|paidTowardNext| < |amount|`, else `"0.0000"`) in one query over `commitment_resolution` joined
+to `v_transaction_posting`, reused by `list_commitments`, the resolutions router after a write,
+and — Task 2 — the action list. `routes/commitment_resolutions.py` (registered in `main.py`)
+implements the four resolution routes (`docs/design/api-contracts.html`); a closing resolution
+advances `commitment.next_due_date` to `forecast.next_occurrence(cadence, first_date, end_date,
+due_date)` in the same transaction. `GET /forecast` gains a floor at `next_due_date` (a finished
+commitment applies no occurrence) and substitutes `remainingNext` for the occurrence equal to
+`next_due_date`, omitted when zero; each occurrence carries its commitment's `certainty`.
+
+---
+
 ## `0013`
 
 ### Loans

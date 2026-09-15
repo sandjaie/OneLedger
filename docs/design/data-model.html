@@ -555,7 +555,7 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── payslip ──── payslip_line               (V42, applied)
             │                 └── payslip_line_posting  (V44, applied)
             ├── payslip_deduction_rule                  (V44, applied)
-            ├── commitment                              (V43, applied)
+            ├── commitment ──── commitment_resolution    (V43, applied; V48, applied)
             ├── coverage_gap_acknowledgement            (V45, applied)
             └── audit_log
 
@@ -1046,8 +1046,16 @@ Task 1 applies them exactly, through <code>record_payslip()</code>. Full DDL: <a
 inferred from the ledger — has also moved out of this speculative set: Phase 1.7 Task 2 applies it
 to drive the read-only 30/60/90-day forecast in <code>routes/plans.py</code>. It carries no
 <code>SECURITY DEFINER</code> function; the owner assumption is replaced in place and archiving is
-terminal. Certainty, source, settlement and next-occurrence lifecycle stay the Phase 3.1 commitments
-and actions concept above and may extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</code> (applied).</p>
+terminal. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</code> (applied).</p>
+<p>Phase 3.1 Task 1 extends it with a lifecycle over exactly one open occurrence: <code>certainty</code>
+(<code>confirmed</code>/<code>estimated</code>) and <code>next_due_date</code> on <code>commitment</code>, and the new
+<code>commitment_resolution</code> table — a payment link, a mark-done or a dismissal, immutable once
+inserted, with a trigger deciding payment eligibility and no <code>SECURITY DEFINER</code> write path
+(the same owner-assumption convention). Closing a resolution advances <code>next_due_date</code> to the
+schedule's next occurrence in the same transaction, so a recurring commitment only ever holds its
+next occurrence. The card-statement source and the action list remain the Phase 3.1 Task 2 concept
+above and extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a>
+<code>V48</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
@@ -1209,6 +1217,9 @@ V44__payslip_deduction_spending.sql   payslip_deduction_rule and payslip_line_po
                                       counted as spending through a balanced pair (applied)
 V45__history_coverage.sql             coverage_gap_acknowledgement: owner-declared history gaps;
                                       the coverage grid is computed on read (applied)
+V48__commitment_lifecycle.sql         commitment gains certainty/next_due_date; commitment_resolution:
+                                      a payment link, mark-done or dismissal, immutable once inserted,
+                                      with the payment-eligibility trigger (applied)
 
   then, in this order, numbered as they land:
 
