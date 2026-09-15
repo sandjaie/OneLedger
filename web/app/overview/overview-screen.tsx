@@ -295,21 +295,36 @@ export function OverviewScreen({ household, currency, currencies, request, child
           )}
         </section>
 
-        {actionsState === "ready" && actions && actions.items.length > 0 && (
+        {actionsState === "ready" && actions && (
           <section className="overview-panel" aria-labelledby="actions-title">
             <h2 id="actions-title">
-              <Link href="/plans#actions">Needs attention ({actions.items.length})</Link>
+              {actions.items.length > 0 ? (
+                <Link href="/plans#actions">Needs attention ({actions.items.length})</Link>
+              ) : (
+                "Needs attention"
+              )}
             </h2>
-            <ul className="overview-notes">
-              {actions.items.slice(0, NEEDS_ATTENTION_PREVIEW).map((item) => (
-                <li key={item.actionKey}>
-                  {item.title}
-                  {item.dueDate && <> · {item.dueDate}</>}
-                  {item.overdue && <> · overdue</>}
-                </li>
-              ))}
-            </ul>
-            <p><Link href="/plans#actions">View all</Link></p>
+            {actions.items.length > 0 && (
+              <>
+                <ul className="overview-notes">
+                  {actions.items.slice(0, NEEDS_ATTENTION_PREVIEW).map((item) => (
+                    <li key={item.actionKey}>
+                      {item.title}
+                      {item.dueDate && <> · {item.dueDate}</>}
+                      {item.overdue && <> · overdue</>}
+                    </li>
+                  ))}
+                </ul>
+                <p><Link href="/plans#actions">View all</Link></p>
+              </>
+            )}
+            <p>
+              <Link href="/plans#review">
+                {actions.previousMonthReview.completedAt
+                  ? `Last month's review is complete (${actions.previousMonthReview.completedAt})`
+                  : "Last month's review is not yet complete"}
+              </Link>
+            </p>
           </section>
         )}
         {actionsState === "error" && (

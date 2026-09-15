@@ -781,6 +781,21 @@ export type ActionsResponse = {
      * Resolvedfollowups
      */
     resolvedFollowUps: Array<FollowUpRow>;
+    previousMonthReview: PreviousMonthReview;
+};
+
+/**
+ * ActionsStep
+ */
+export type ActionsStep = {
+    /**
+     * Open
+     */
+    open: number;
+    /**
+     * Snoozed
+     */
+    snoozed: number;
 };
 
 /**
@@ -1725,6 +1740,16 @@ export type ClassificationState = {
 };
 
 /**
+ * ClassificationStep
+ */
+export type ClassificationStep = {
+    /**
+     * Unclassifiedcount
+     */
+    unclassifiedCount: number;
+};
+
+/**
  * ClassifyResult
  *
  * `preview=true` reports what would change and writes nothing; otherwise `changed` is what
@@ -1979,6 +2004,20 @@ export type CommitmentsResponse = {
 };
 
 /**
+ * CommitmentsStep
+ */
+export type CommitmentsStep = {
+    /**
+     * Duenext30Days
+     */
+    dueNext30Days: number;
+    /**
+     * Overdue
+     */
+    overdue: number;
+};
+
+/**
  * CommittedGroupResponse
  */
 export type CommittedGroupResponse = {
@@ -2139,6 +2178,20 @@ export type CoverageRow = {
      */
     months: Array<MonthCell>;
     counts: CoverageCounts;
+};
+
+/**
+ * CoverageStep
+ */
+export type CoverageStep = {
+    /**
+     * Gapcells
+     */
+    gapCells: number;
+    /**
+     * Rowswithgaps
+     */
+    rowsWithGaps: number;
 };
 
 /**
@@ -4916,6 +4969,33 @@ export type MonthSummary = {
 };
 
 /**
+ * MonthlyReviewResponse
+ */
+export type MonthlyReviewResponse = {
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Completedat
+     */
+    completedAt: string | null;
+    steps: MonthlyReviewSteps;
+};
+
+/**
+ * MonthlyReviewSteps
+ */
+export type MonthlyReviewSteps = {
+    coverage: CoverageStep;
+    transfers: TransfersStep;
+    classification: ClassificationStep;
+    position: PositionStep;
+    commitments: CommitmentsStep;
+    actions: ActionsStep;
+};
+
+/**
  * NetWorth
  */
 export type NetWorth = {
@@ -5647,6 +5727,44 @@ export type PositionFxRate = {
 };
 
 /**
+ * PositionStep
+ */
+export type PositionStep = {
+    /**
+     * Monthend
+     */
+    monthEnd: string;
+    /**
+     * Totalbase
+     */
+    totalBase: string | null;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Previousmonthend
+     */
+    previousMonthEnd: string;
+    /**
+     * Previoustotalbase
+     */
+    previousTotalBase: string | null;
+    /**
+     * Previouscomplete
+     */
+    previousComplete: boolean;
+    /**
+     * Changebase
+     */
+    changeBase: string | null;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+};
+
+/**
  * PreviewBody
  */
 export type PreviewBody = {
@@ -5677,6 +5795,24 @@ export type PreviewItem = {
      * Reason
      */
     reason?: string | null;
+};
+
+/**
+ * PreviousMonthReview
+ *
+ * Phase 3.2: whether the calendar month before `asOf` is marked reviewed, from one
+ * `monthly_review` primary-key read — so Overview shows the review state without running the
+ * review's own six-step computation.
+ */
+export type PreviousMonthReview = {
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Completedat
+     */
+    completedAt: string | null;
 };
 
 /**
@@ -7683,6 +7819,16 @@ export type TransfersResponse = {
      * Total
      */
     total: number;
+};
+
+/**
+ * TransfersStep
+ */
+export type TransfersStep = {
+    /**
+     * Candidatecount
+     */
+    candidateCount: number;
 };
 
 /**
@@ -11415,6 +11561,96 @@ export type ReadForecastForecastGetResponses = {
 };
 
 export type ReadForecastForecastGetResponse = ReadForecastForecastGetResponses[keyof ReadForecastForecastGetResponses];
+
+export type ReadMonthlyReviewMonthlyReviewGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Month
+         */
+        month?: string | null;
+    };
+    url: '/monthly-review';
+};
+
+export type ReadMonthlyReviewMonthlyReviewGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadMonthlyReviewMonthlyReviewGetError = ReadMonthlyReviewMonthlyReviewGetErrors[keyof ReadMonthlyReviewMonthlyReviewGetErrors];
+
+export type ReadMonthlyReviewMonthlyReviewGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MonthlyReviewResponse;
+};
+
+export type ReadMonthlyReviewMonthlyReviewGetResponse = ReadMonthlyReviewMonthlyReviewGetResponses[keyof ReadMonthlyReviewMonthlyReviewGetResponses];
+
+export type ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Month
+         */
+        month: string;
+    };
+    query?: never;
+    url: '/monthly-review/{month}/completion';
+};
+
+export type ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteError = ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteErrors[keyof ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteErrors];
+
+export type ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteResponse = ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteResponses[keyof ReopenMonthlyReviewMonthlyReviewMonthCompletionDeleteResponses];
+
+export type CompleteMonthlyReviewMonthlyReviewMonthCompletionPutData = {
+    body?: never;
+    path: {
+        /**
+         * Month
+         */
+        month: string;
+    };
+    query?: never;
+    url: '/monthly-review/{month}/completion';
+};
+
+export type CompleteMonthlyReviewMonthlyReviewMonthCompletionPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CompleteMonthlyReviewMonthlyReviewMonthCompletionPutError = CompleteMonthlyReviewMonthlyReviewMonthCompletionPutErrors[keyof CompleteMonthlyReviewMonthlyReviewMonthCompletionPutErrors];
+
+export type CompleteMonthlyReviewMonthlyReviewMonthCompletionPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: MonthlyReviewResponse;
+};
+
+export type CompleteMonthlyReviewMonthlyReviewMonthCompletionPutResponse = CompleteMonthlyReviewMonthlyReviewMonthCompletionPutResponses[keyof CompleteMonthlyReviewMonthlyReviewMonthCompletionPutResponses];
 
 export type PaymentCandidatesCommitmentsCommitmentIdPaymentCandidatesGetData = {
     body?: never;

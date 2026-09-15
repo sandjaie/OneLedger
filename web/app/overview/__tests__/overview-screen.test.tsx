@@ -110,7 +110,13 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
 function renderWith(
   body: DashboardResponse | Error,
   currency = household.currencies[0],
-  actions: unknown = { asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] },
+  actions: unknown = {
+    asOf: "2026-03-01",
+    items: [],
+    snoozed: [],
+    resolvedFollowUps: [],
+    previousMonthReview: { month: "2026-02-01", completedAt: null },
+  },
 ) {
   // Needs attention (Task 2) fetches /actions alongside /dashboard; every test here is about
   // the rest of the screen, so it gets a quiet empty response unless a test overrides it.
@@ -402,7 +408,13 @@ describe("overview screen", () => {
       cardStatementId: null,
       actionItemId: null,
     }));
-    renderWith(payload(), undefined, { asOf: "2026-03-01", items, snoozed: [], resolvedFollowUps: [] });
+    renderWith(payload(), undefined, {
+      asOf: "2026-03-01",
+      items,
+      snoozed: [],
+      resolvedFollowUps: [],
+      previousMonthReview: { month: "2026-02-01", completedAt: null },
+    });
 
     const heading = await screen.findByRole("link", { name: "Needs attention (6)" });
     expect(heading).toHaveProperty("pathname", "/plans");
@@ -413,10 +425,30 @@ describe("overview screen", () => {
     expect(within(region).queryByText(/Synthetic item 5/)).toBeNull();
   });
 
-  it("shows nothing when there is nothing to attend to", async () => {
+  it("shows only the review status when there is nothing else to attend to", async () => {
     renderWith(payload());
     await screen.findByRole("heading", { name: "Overview", level: 1 });
-    expect(screen.queryByText(/Needs attention/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Needs attention \(/ })).toBeNull();
+    const region = screen.getByRole("region", { name: "Needs attention" });
+    expect(within(region).queryAllByRole("listitem")).toHaveLength(0);
+    const reviewLink = within(region).getByRole("link", { name: "Last month's review is not yet complete" });
+    expect(reviewLink).toHaveProperty("pathname", "/plans");
+    expect(reviewLink).toHaveProperty("hash", "#review");
+  });
+
+  it("states when last month's review is complete, linking to Plans", async () => {
+    renderWith(payload(), undefined, {
+      asOf: "2026-03-01",
+      items: [],
+      snoozed: [],
+      resolvedFollowUps: [],
+      previousMonthReview: { month: "2026-02-01", completedAt: "2026-03-02T10:00:00Z" },
+    });
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    const reviewLink = screen.getByRole("link", {
+      name: "Last month's review is complete (2026-03-02T10:00:00Z)",
+    });
+    expect(reviewLink).toHaveProperty("hash", "#review");
   });
 
   it("renders the service's own sentence when the request fails", async () => {
