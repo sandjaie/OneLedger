@@ -67,6 +67,8 @@ const emptyForecast: ForecastResponse = {
   accounts: [],
   excludedAccounts: [],
   excludedCommitments: [],
+  currencies: [],
+  unplannedCardDues: [],
 };
 
 const forecastWithAccount: ForecastResponse = {
@@ -80,9 +82,9 @@ const forecastWithAccount: ForecastResponse = {
       startBalance: "10000.0000",
       balanceDate: "2026-01-01",
       points: [
-        { days: 30, date: "2026-03-31", balance: "15000.0000" },
-        { days: 60, date: "2026-04-30", balance: "20000.0000" },
-        { days: 90, date: "2026-05-30", balance: "25000.0000" },
+        { days: 30, date: "2026-03-31", balance: "15000.0000", confirmedBalance: "15000.0000" },
+        { days: 60, date: "2026-04-30", balance: "20000.0000", confirmedBalance: "20000.0000" },
+        { days: 90, date: "2026-05-30", balance: "25000.0000", confirmedBalance: "25000.0000" },
       ],
       occurrences: [
         {
@@ -92,12 +94,20 @@ const forecastWithAccount: ForecastResponse = {
           amount: "5000.0000",
           dueByAsOf: true,
           certainty: "confirmed",
+          kind: "commitment",
         },
       ],
+      unappliedOccurrences: [],
+      lowest: { balance: "10000.0000", date: "2026-01-01" },
+      lowestConfirmed: { balance: "10000.0000", date: "2026-01-01" },
+      balanceAgeDays: 59,
+      coverageGapMonths: null,
     },
   ],
   excludedAccounts: [],
   excludedCommitments: [],
+  currencies: [],
+  unplannedCardDues: [],
 };
 
 const emptyActions = { asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] };

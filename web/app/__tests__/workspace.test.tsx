@@ -708,7 +708,14 @@ describe("authenticated workspace", () => {
       }],
       totals: [],
     };
-    const forecast = { asOf: "2026-03-01", accounts: [], excludedAccounts: [], excludedCommitments: [] };
+    const forecast = {
+      asOf: "2026-03-01",
+      accounts: [],
+      excludedAccounts: [],
+      excludedCommitments: [],
+      currencies: [],
+      unplannedCardDues: [],
+    };
     render(
       <Workspace
         section="plans"
