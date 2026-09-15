@@ -26,6 +26,7 @@ from .routes import (
     doctor,
     documents,
     fx,
+    goals,
     household,
     identity_backfill,
     ingest,
@@ -208,6 +209,7 @@ app.include_router(investment_prices.router)
 app.include_router(investment_reviews.router)
 app.include_router(payslips.router)
 app.include_router(plans.router)
+app.include_router(goals.router)
 app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)
