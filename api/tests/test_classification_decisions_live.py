@@ -197,6 +197,61 @@ def _preview(live: RepairFixture, transaction_ids: list[UUID]) -> Response:
     )
 
 
+def _pending_version(live: RepairFixture) -> UUID:
+    """A second, brand-new knowledge identity created straight into `pending` — the state a
+    guarded review preview creates through `POST /merchant-knowledge?pending=true` before an
+    apply either activates or discards it."""
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO classification_knowledge (household_id) VALUES (%s) RETURNING id",
+            (live.household_id,),
+        )
+        knowledge_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO classification_knowledge_version
+                 (household_id, knowledge_id, version, source_kind, attribution, evidence_note,
+                  matcher_version, scope, state)
+               VALUES (%s, %s, 1, 'owner', 'synthetic owner', 'pending synthetic guess',
+                       'repair-v1', '{"direction":"debit"}', 'pending') RETURNING id""",
+            (live.household_id, knowledge_id),
+        )
+        version_id = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+    return UUID(str(version_id))
+
+
+def _knowledge_state(live: RepairFixture, knowledge_version_id: UUID) -> str:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "SELECT state FROM classification_knowledge_version WHERE id = %s",
+            (knowledge_version_id,),
+        )
+        return str(cur.fetchone()[0])  # type: ignore[index]
+
+
+def _preview_for(
+    live: RepairFixture, transaction_ids: list[UUID], knowledge_version_id: UUID
+) -> Response:
+    return cast(
+        Response,
+        TestClient(app).post(
+            "/classification-runs/preview",
+            json={
+                "knowledgeVersionId": str(knowledge_version_id),
+                "reason": "synthetic pending knowledge preview",
+                "items": [
+                    {
+                        "transactionId": str(transaction_id),
+                        "changes": {"txnType": "expense", "categoryId": str(live.category_id)},
+                    }
+                    for transaction_id in transaction_ids
+                ],
+            },
+            headers=ORIGIN,
+        ),
+    )
+
+
 def _stored(live: RepairFixture, transaction_id: UUID) -> tuple[Any, ...]:
     with live.conn.cursor() as cur:
         cur.execute(
@@ -956,3 +1011,164 @@ def test_confirmed_transfer_legs_are_unresolved_and_never_relinked(live: RepairF
     with live.conn.cursor() as cur:
         cur.execute("SELECT transfer_id, txn_type::text FROM transaction WHERE id = %s", (debit,))
         assert cur.fetchone() == (transfer_id, "transfer_out")
+
+
+def test_preview_accepts_pending_knowledge_and_apply_activates_it_by_default(
+    live: RepairFixture,
+) -> None:
+    version_id = _pending_version(live)
+    transaction_id = _transaction(live)
+
+    preview = _preview_for(live, [transaction_id], version_id)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["changed"] == 1
+    assert _knowledge_state(live, version_id) == "pending"
+
+    applied = TestClient(app).post(
+        f"/classification-runs/{preview.json()['runId']}/apply",
+        json={"idempotencyKey": "synthetic-pending-default-activate"},
+        headers=ORIGIN,
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["state"] == "applied"
+    assert _knowledge_state(live, version_id) == "active"
+
+
+def test_apply_with_activate_knowledge_false_leaves_the_version_pending(
+    live: RepairFixture,
+) -> None:
+    version_id = _pending_version(live)
+    transaction_id = _transaction(live)
+    preview = _preview_for(live, [transaction_id], version_id).json()
+
+    applied = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-pending-no-activate", "activateKnowledge": False},
+        headers=ORIGIN,
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["state"] == "applied"
+    assert _knowledge_state(live, version_id) == "pending"
+
+
+def test_a_conflicted_apply_leaves_pending_knowledge_pending(live: RepairFixture) -> None:
+    version_id = _pending_version(live)
+    transaction_id = _transaction(live)
+    preview = _preview_for(live, [transaction_id], version_id).json()
+    with live.conn.cursor() as cur:
+        cur.execute("UPDATE transaction SET txn_type = 'fee' WHERE id = %s", (transaction_id,))
+    live.conn.commit()
+
+    applied = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-pending-conflict"},
+        headers=ORIGIN,
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["state"] == "conflict"
+    assert _knowledge_state(live, version_id) == "pending"
+
+
+def test_only_a_revoked_knowledge_version_conflicts_a_pending_apply(live: RepairFixture) -> None:
+    version_id = _pending_version(live)
+    transaction_id = _transaction(live)
+    preview = _preview_for(live, [transaction_id], version_id).json()
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE classification_knowledge_version SET state = 'revoked', revoked_at = now()"
+            " WHERE id = %s",
+            (version_id,),
+        )
+    live.conn.commit()
+
+    applied = TestClient(app).post(
+        f"/classification-runs/{preview['runId']}/apply",
+        json={"idempotencyKey": "synthetic-revoked-conflict"},
+        headers=ORIGIN,
+    )
+
+    assert applied.status_code == 200, applied.text
+    assert applied.json()["items"][0]["reason"] == "knowledge version is no longer active"
+
+
+def test_runs_list_is_scoped_paged_excludes_bridges_and_marks_undone(
+    live: RepairFixture,
+) -> None:
+    first = _transaction(live)
+    second = _transaction(live, amount="-18.7500")
+    first_applied = (
+        TestClient(app)
+        .post(
+            f"/classification-runs/{_preview(live, [first]).json()['runId']}/apply",
+            json={"idempotencyKey": "synthetic-runs-list-first"},
+            headers=ORIGIN,
+        )
+        .json()
+    )
+    second_applied = (
+        TestClient(app)
+        .post(
+            f"/classification-runs/{_preview(live, [second]).json()['runId']}/apply",
+            json={"idempotencyKey": "synthetic-runs-list-second"},
+            headers=ORIGIN,
+        )
+        .json()
+    )
+    TestClient(app).post(
+        f"/classification-runs/{first_applied['runId']}/undo",
+        json={"idempotencyKey": "synthetic-runs-list-undo", "reason": "owner undid it"},
+        headers=ORIGIN,
+    )
+
+    listed = TestClient(app).get(
+        "/classification-runs", params={"limit": 200, "offset": 0}, headers=ORIGIN
+    )
+    assert listed.status_code == 200, listed.text
+    by_id = {row["runId"]: row for row in listed.json()}
+    assert by_id[first_applied["runId"]]["undone"] is True
+    assert by_id[second_applied["runId"]]["undone"] is False
+    assert by_id[first_applied["runId"]]["reason"] != classification_decisions._REVIEW_RESET_REASON
+    undo_row = next(row for row in listed.json() if row["sourceRunId"] == first_applied["runId"])
+    assert undo_row["changed"] == 1
+
+    paged = (
+        TestClient(app)
+        .get("/classification-runs", params={"limit": 1, "offset": 0}, headers=ORIGIN)
+        .json()
+    )
+    assert len(paged) == 1
+
+
+def test_runs_list_requires_an_owner_session_and_is_household_scoped(
+    live: RepairFixture,
+) -> None:
+    app.dependency_overrides.clear()
+    try:
+        unauthenticated = TestClient(app).get("/classification-runs")
+    finally:
+        app.dependency_overrides[auth.require_owner] = live.owner
+    assert unauthenticated.status_code == 401
+
+    transaction_id = _transaction(live)
+    TestClient(app).post(
+        f"/classification-runs/{_preview(live, [transaction_id]).json()['runId']}/apply",
+        json={"idempotencyKey": "synthetic-runs-list-household"},
+        headers=ORIGIN,
+    )
+
+    other_household = auth.OwnerSession(
+        user_id=uuid4(),
+        household_id=uuid4(),
+        session_id=UUID(int=9),
+        email="other-household@example.invalid",
+    )
+    app.dependency_overrides[auth.require_owner] = lambda: other_household
+    try:
+        foreign = TestClient(app).get("/classification-runs", headers=ORIGIN)
+    finally:
+        app.dependency_overrides[auth.require_owner] = live.owner
+    assert foreign.status_code == 200, foreign.text
+    assert foreign.json() == []

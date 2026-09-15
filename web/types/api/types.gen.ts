@@ -713,6 +713,10 @@ export type ApplyBody = {
      * Idempotencykey
      */
     idempotencyKey: string;
+    /**
+     * Activateknowledge
+     */
+    activateKnowledge?: boolean;
 };
 
 export type AssetClassName = 'equity' | 'fixed_income' | 'cash' | 'commodity' | 'real_asset' | 'alternative' | 'other';
@@ -6262,6 +6266,40 @@ export type RunResult = {
 };
 
 /**
+ * RunRow
+ */
+export type RunRow = {
+    /**
+     * Runid
+     */
+    runId: string;
+    /**
+     * Appliedat
+     */
+    appliedAt: string;
+    /**
+     * Reason
+     */
+    reason: string;
+    /**
+     * Changed
+     */
+    changed: number;
+    /**
+     * Sourcerunid
+     */
+    sourceRunId: string | null;
+    /**
+     * Undone
+     */
+    undone: boolean;
+    /**
+     * Knowledgedisplayname
+     */
+    knowledgeDisplayName: string | null;
+};
+
+/**
  * SecurityCandidate
  */
 export type SecurityCandidate = {
@@ -7195,6 +7233,10 @@ export type UndoBody = {
      * Idempotencykey
      */
     idempotencyKey: string;
+    /**
+     * Activateknowledge
+     */
+    activateKnowledge?: boolean;
     /**
      * Reason
      */
@@ -8298,6 +8340,42 @@ export type UpdateCategoryCategoriesCategoryIdPatchResponses = {
 
 export type UpdateCategoryCategoriesCategoryIdPatchResponse = UpdateCategoryCategoriesCategoryIdPatchResponses[keyof UpdateCategoryCategoriesCategoryIdPatchResponses];
 
+export type ListRunsClassificationRunsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/classification-runs';
+};
+
+export type ListRunsClassificationRunsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRunsClassificationRunsGetError = ListRunsClassificationRunsGetErrors[keyof ListRunsClassificationRunsGetErrors];
+
+export type ListRunsClassificationRunsGetResponses = {
+    /**
+     * Response List Runs Classification Runs Get
+     *
+     * Successful Response
+     */
+    200: Array<RunRow>;
+};
+
+export type ListRunsClassificationRunsGetResponse = ListRunsClassificationRunsGetResponses[keyof ListRunsClassificationRunsGetResponses];
+
 export type PreviewClassificationRunsPreviewPostData = {
     body: PreviewBody;
     path?: never;
@@ -8546,7 +8624,12 @@ export type ListKnowledgeMerchantKnowledgeGetResponse = ListKnowledgeMerchantKno
 export type CreateKnowledgeMerchantKnowledgePostData = {
     body: KnowledgeBody;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Pending
+         */
+        pending?: boolean;
+    };
     url: '/merchant-knowledge';
 };
 

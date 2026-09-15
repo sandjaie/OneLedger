@@ -142,6 +142,45 @@ def test_create_list_revise_and_deactivate_preserves_history(live: Fixture) -> N
     assert [(row["version"], row["active"]) for row in history] == [(2, False), (1, False)]
 
 
+def test_pending_knowledge_is_hidden_from_every_listing_and_never_classifies(
+    live: Fixture,
+) -> None:
+    created = TestClient(app).post(
+        "/merchant-knowledge", params={"pending": True}, json=body(live), headers=ORIGIN
+    )
+    assert created.status_code == 201, created.text
+    first = created.json()
+    assert first["active"] is False
+
+    assert TestClient(app).get("/merchant-knowledge").json() == []
+    assert TestClient(app).get("/merchant-knowledge", params={"includeInactive": True}).json() == []
+
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction
+                 (household_id, account_id, booked_date, description_raw, description_clean,
+                  amount, currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                  amount_base, amount_secondary, txn_type, source, dedupe_hash,
+                  classified_by, classification_confidence)
+               VALUES (%s, %s, DATE '2026-06-01', 'SYNTHETIC MARKET', 'SYNTHETIC MARKET',
+                       -12, %s, DATE '2026-06-01', 1, 1, -12, -12,
+                       'expense', 'manual', %s, 'unclassified', 0)""",
+            (live.household_id, live.account_id, live.currency, uuid4().hex + uuid4().hex),
+        )
+    live.conn.commit()
+
+    preview = TestClient(app).post("/classify", params={"preview": True}, headers=ORIGIN)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["changed"] == 0
+
+    assert (
+        TestClient(app)
+        .delete(f"/merchant-knowledge/{first['aliasId']}", headers=ORIGIN)
+        .status_code
+        == 204
+    )
+
+
 def test_cross_household_references_are_refused(live: Fixture) -> None:
     with live.conn.cursor() as cur:
         cur.execute("SELECT secondary_currency FROM household WHERE id = %s", (live.household_id,))

@@ -2642,6 +2642,25 @@ route recomputes — both read exactly what the last refresh stored.
 
 ---
 
+## `V47` (applied)
+
+### Pending classification knowledge
+
+Applied as `db/migrations/V47__pending_classification_knowledge.sql`. Extends
+`classification_knowledge_version.state` from `active`/`revoked` to `active`/`pending`/`revoked`,
+so a version created through `POST /merchant-knowledge?pending=true` (the grouped classification
+review's own preview-time guess) can sit invisible to every classifier and to
+`GET /merchant-knowledge` until a `classification-runs` apply activates it, without a schema change
+to `classification_run`/`classification_run_item`/`classification_decision` — those tables already
+accept an `active` **or** `pending` knowledge version's preview and apply. The one-active-version
+partial unique index is untouched (`WHERE state = 'active'`), so a pending version never contends
+with it. `assert_classification_knowledge_version_immutable()` widens to allow exactly three lifecycle
+edges: `active`→`revoked` (unchanged), `pending`→`active` (`revoked_at` stays `NULL`) and
+`pending`→`revoked`. `classification_evidence_revocation_agrees` widens the same way: `revoked_at` is
+`NULL` for `active` or `pending`, and non-`NULL` only for `revoked`.
+
+---
+
 ## `0013`
 
 ### Loans
