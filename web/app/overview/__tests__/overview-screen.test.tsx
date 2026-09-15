@@ -107,8 +107,15 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
   };
 }
 
-function renderWith(body: DashboardResponse | Error, currency = household.currencies[0]) {
-  const request = vi.fn(async () => {
+function renderWith(
+  body: DashboardResponse | Error,
+  currency = household.currencies[0],
+  actions: unknown = { asOf: "2026-03-01", items: [], snoozed: [], resolvedFollowUps: [] },
+) {
+  // Needs attention (Task 2) fetches /actions alongside /dashboard; every test here is about
+  // the rest of the screen, so it gets a quiet empty response unless a test overrides it.
+  const request = vi.fn(async (path: string) => {
+    if (path === "/actions") return actions;
     if (body instanceof Error) throw body;
     return body;
   });
@@ -165,7 +172,7 @@ describe("overview screen", () => {
     expect(within(worth).getByText("You owe AED 180,500.00")).toBeTruthy();
     expect(within(worth).getByText("₹1,00,000.00")).toBeTruthy();
     expect(within(worth).getByText("₹95,500.00")).toBeTruthy();
-    expect(request.mock.calls.map((call: unknown[]) => call[0])).toEqual(["/dashboard"]);
+    expect(request.mock.calls.map((call: unknown[]) => call[0])).toEqual(["/dashboard", "/actions"]);
   });
 
   it("labels a carried rate with its real date, and states a missing rate instead of a number", async () => {
@@ -373,6 +380,43 @@ describe("overview screen", () => {
     expect(snapshotLink).toHaveProperty("search", "?valuation=acct-2");
     // The fully current entry names no reason and gets no row.
     expect(within(region).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("shows the open count and the first five needs-attention items, linking to Plans", async () => {
+    const items = Array.from({ length: 6 }, (_, i) => ({
+      actionKey: `commitment.item-${i}.2026-03-0${i + 1}`,
+      kind: "commitment" as const,
+      reason: "commitment_due" as const,
+      title: `Synthetic item ${i}`,
+      dueDate: `2026-03-0${i + 1}`,
+      overdue: false,
+      snoozedUntil: null,
+      accountId: null,
+      accountName: null,
+      amount: "-100.0000",
+      remaining: "-100.0000",
+      partlyPaid: false,
+      currency: "XIN",
+      certainty: "confirmed" as const,
+      commitmentId: `item-${i}`,
+      cardStatementId: null,
+      actionItemId: null,
+    }));
+    renderWith(payload(), undefined, { asOf: "2026-03-01", items, snoozed: [], resolvedFollowUps: [] });
+
+    const heading = await screen.findByRole("link", { name: "Needs attention (6)" });
+    expect(heading).toHaveProperty("pathname", "/plans");
+    expect(heading).toHaveProperty("hash", "#actions");
+    const region = screen.getByRole("region", { name: "Needs attention (6)" });
+    expect(within(region).getAllByRole("listitem")).toHaveLength(5);
+    expect(within(region).getByText(/Synthetic item 4/)).toBeTruthy();
+    expect(within(region).queryByText(/Synthetic item 5/)).toBeNull();
+  });
+
+  it("shows nothing when there is nothing to attend to", async () => {
+    renderWith(payload());
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    expect(screen.queryByText(/Needs attention/)).toBeNull();
   });
 
   it("renders the service's own sentence when the request fails", async () => {

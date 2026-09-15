@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 from .auth import OwnerSession, auth_mode, require_owner, session_secret
 from .routes import (
     accounts,
+    actions,
     auth,
     card_cycles,
     categories,
@@ -177,6 +178,7 @@ async def reject_cross_origin_mutations(
     return await call_next(request)
 
 
+app.include_router(actions.router)
 app.include_router(auth.router)
 app.include_router(fx.router)
 app.include_router(household.router)

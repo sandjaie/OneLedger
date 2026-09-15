@@ -6,6 +6,7 @@ import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
+  ActionRow,
   CommitmentCreate,
   CommitmentRow,
   CommitmentsResponse,
@@ -13,7 +14,15 @@ import type {
   ForecastResponse,
 } from "@/types/api";
 
+import { NeedsAttention } from "./needs-attention";
 import { SettlementPanel } from "./settlement-panel";
+
+// Spec "Card dues and actions (Task 2)": Plan payment pre-fills the negated statement balance —
+// a sign toggle on the server's own string, not a computed total, so it stays outside the
+// "no TypeScript money arithmetic" rule the same way formatMoney's sign handling does.
+function negateAmount(value: string): string {
+  return value.startsWith("-") ? value.slice(1) : `-${value}`;
+}
 
 type Props = {
   accounts: Array<AccountRow>;
@@ -98,6 +107,10 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [settlingId, setSettlingId] = useState<string>();
+  // Set only while planning a card statement's payment (Plan payment); cleared on cancel, on any
+  // other edit start, and after a successful submit. Limits the account picker to active asset
+  // accounts in the statement's currency and is sent as the create body's sourceCardStatementId.
+  const [planningCard, setPlanningCard] = useState<{ statementId: string; currency: string }>();
 
   useEffect(() => {
     let current = true;
@@ -127,18 +140,52 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   function startEdit(commitment: CommitmentRow) {
     setEditing(commitment);
     setForm(formFromCommitment(commitment));
+    setPlanningCard(undefined);
     setProblem(undefined);
     setFeedback(undefined);
   }
 
   function cancelEdit() {
     setEditing(undefined);
+    setPlanningCard(undefined);
     setForm(emptyForm(activeAccounts));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
   }
 
+  // Plan payment (Needs attention, Task 2): the commitment form pre-filled from a card due item —
+  // a one-off, the negated statement balance, the due date, and the source; the account picker
+  // narrows to active asset accounts in the statement's currency (formAccounts below).
+  function startCardPlan(item: ActionRow) {
+    if (!item.cardStatementId || !item.currency || !item.amount) return;
+    setEditing(undefined);
+    setPlanningCard({ statementId: item.cardStatementId, currency: item.currency });
+    const firstChoice = accounts.find(
+      (account) => account.isActive && account.accountClass === "asset" && account.currency === item.currency,
+    );
+    setForm({
+      accountId: firstChoice?.id ?? "",
+      label: item.title,
+      amount: negateAmount(item.amount),
+      cadence: "once",
+      firstDate: item.dueDate ?? "",
+      endDate: "",
+      certainty: "confirmed",
+      nextDueDate: "",
+    });
+    setIdempotencyKey(crypto.randomUUID());
+    setProblem(undefined);
+    setFeedback(undefined);
+  }
+
   const selectedAccount = accounts.find((account) => account.id === form.accountId);
+  // The ordinary picker offers every active account; planning a card payment narrows it to the
+  // spec's own rule (active asset accounts in the statement's currency).
+  const formAccounts = planningCard
+    ? activeAccounts.filter(
+        (account) => account.accountClass === "asset" && account.currency === planningCard.currency,
+      )
+    : activeAccounts;
 
   async function submit() {
     if (!selectedAccount) return;
@@ -180,6 +227,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
           certainty: form.certainty,
           nextDueDate: form.nextDueDate || null,
           idempotencyKey,
+          sourceCardStatementId: planningCard?.statementId ?? null,
         };
         await request<CommitmentRow>("/commitments", {
           method: "POST",
@@ -189,6 +237,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         setFeedback("Commitment added.");
       }
       setEditing(undefined);
+      setPlanningCard(undefined);
       setForm(emptyForm(activeAccounts));
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
@@ -223,6 +272,16 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         <h1 className="workspace-title" id="plans-title">Plans</h1>
         <p>Commitments drive a 30, 60 and 90-day forecast; the forecast itself posts nothing.</p>
       </header>
+
+      <NeedsAttention
+        accounts={accounts}
+        currencies={currencies}
+        onCommitmentResolved={() => setAttempt((value) => value + 1)}
+        onPlanCardPayment={startCardPlan}
+        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
+        request={request}
+      />
 
       <section aria-labelledby="plans-assumptions-title">
         <h2 id="plans-assumptions-title">Assumptions</h2>
@@ -331,6 +390,9 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                     {moneyText(commitment.amount, commitment.currency, currencies)} · {commitment.cadence}
                     {" · "}
                     {commitment.certainty === "estimated" ? "Estimated" : "Confirmed"}
+                    {commitment.source === "card_statement" && (
+                      <> · From the {commitment.sourceCardAccountName} card statement due on its date</>
+                    )}
                   </span>
                   <span>
                     {statusText(commitment)}
@@ -381,11 +443,17 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
           </ul>
         )}
 
-        <h3>{editing ? `Edit ${editing.label}` : "Add a commitment"}</h3>
+        <h3>
+          {editing
+            ? `Edit ${editing.label}`
+            : planningCard
+              ? "Plan the card payment"
+              : "Add a commitment"}
+        </h3>
         <label className="select-field">
           <span>Account</span>
           <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
-            {activeAccounts.map((account) => (
+            {formAccounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
           </select>
@@ -427,7 +495,9 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
           {busy ? "Saving…" : editing ? "Save changes" : "Add commitment"}
         </button>
-        {editing && <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>}
+        {(editing || planningCard) && (
+          <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
+        )}
       </section>
     </section>
   );

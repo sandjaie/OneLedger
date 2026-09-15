@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { type Currency, formatOwed, formatPercent, moneyText } from "@/lib/money/format";
 import type {
+  ActionsResponse,
   CardDue,
   CurrencyRow,
   DashboardResponse,
@@ -16,6 +17,8 @@ import type {
   MonthFlows,
   YearToDate,
 } from "@/types/api";
+
+const NEEDS_ATTENTION_PREVIEW = 5;
 
 type Props = {
   household: HouseholdResponse;
@@ -137,6 +140,30 @@ export function OverviewScreen({ household, currency, currencies, request, child
       current = false;
     };
   }, [attempt]);
+
+  // Needs attention (Phase 3.1 Task 2): its own fetch, own loading/error state, and its own
+  // retry — the panel is secondary to net worth and never blocks or reorders the dashboard load
+  // above (this effect is declared after it, so /dashboard always fires first).
+  const [actionsState, setActionsState] = useState<"loading" | "ready" | "error">("loading");
+  const [actions, setActions] = useState<ActionsResponse>();
+  const [actionsAttempt, setActionsAttempt] = useState(0);
+  useEffect(() => {
+    let current = true;
+    latest
+      .current<ActionsResponse>("/actions")
+      .then((result) => {
+        if (current) {
+          setActions(result);
+          setActionsState("ready");
+        }
+      })
+      .catch(() => {
+        if (current) setActionsState("error");
+      });
+    return () => {
+      current = false;
+    };
+  }, [actionsAttempt]);
 
   const rowFor = (code: string): Currency | undefined =>
     household.currencies.find((row) => row.code === code) ?? currencies.find((row) => row.code === code);
@@ -267,6 +294,37 @@ export function OverviewScreen({ household, currency, currencies, request, child
             </ul>
           )}
         </section>
+
+        {actionsState === "ready" && actions && actions.items.length > 0 && (
+          <section className="overview-panel" aria-labelledby="actions-title">
+            <h2 id="actions-title">
+              <Link href="/plans#actions">Needs attention ({actions.items.length})</Link>
+            </h2>
+            <ul className="overview-notes">
+              {actions.items.slice(0, NEEDS_ATTENTION_PREVIEW).map((item) => (
+                <li key={item.actionKey}>
+                  {item.title}
+                  {item.dueDate && <> · {item.dueDate}</>}
+                  {item.overdue && <> · overdue</>}
+                </li>
+              ))}
+            </ul>
+            <p><Link href="/plans#actions">View all</Link></p>
+          </section>
+        )}
+        {actionsState === "error" && (
+          <section className="overview-panel" aria-labelledby="actions-title">
+            <h2 id="actions-title">Needs attention</h2>
+            <p className="inline-alert" role="alert">
+              Needs attention could not be loaded.{" "}
+              <button
+                className="text-action"
+                onClick={() => setActionsAttempt((value) => value + 1)}
+                type="button"
+              >Try again</button>
+            </p>
+          </section>
+        )}
 
         {worth.investmentCoverage.filter(isCoverageConcern).length > 0 && (
           <section className="overview-panel" aria-labelledby="coverage-title">

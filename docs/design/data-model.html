@@ -555,8 +555,10 @@ personal finance software, and it is designed out here rather than tested for.</
             ├── payslip ──── payslip_line               (V42, applied)
             │                 └── payslip_line_posting  (V44, applied)
             ├── payslip_deduction_rule                  (V44, applied)
-            ├── commitment ──── commitment_resolution    (V43, applied; V48, applied)
+            ├── commitment ──── commitment_resolution    (V43, applied; V48, applied; V49, applied)
             ├── coverage_gap_acknowledgement            (V45, applied)
+            ├── action_item                             (V49, applied)
+            ├── action_mark                             (V49, applied)
             └── audit_log
 
 fx_rate                          -- global, not household-scoped
@@ -1053,9 +1055,17 @@ terminal. Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V43</
 inserted, with a trigger deciding payment eligibility and no <code>SECURITY DEFINER</code> write path
 (the same owner-assumption convention). Closing a resolution advances <code>next_due_date</code> to the
 schedule's next occurrence in the same transaction, so a recurring commitment only ever holds its
-next occurrence. The card-statement source and the action list remain the Phase 3.1 Task 2 concept
-above and extend this table then. Full DDL: <a href="../superpowers/schema.md">schema.md</a>
+next occurrence. Full DDL: <a href="../superpowers/schema.md">schema.md</a>
 <code>V48</code> (applied).</p>
+<p>Phase 3.1 Task 2 adds <code>commitment.source_card_statement_id</code> — a one-off, negative
+commitment the owner plans from a <code>card_statement</code>'s due amount, one open (unarchived)
+plan per statement — and one Needs attention list gathered on read from three sources: a
+commitment occurrence, a <code>card_statement</code> with an amount due and no plan, and the new
+<code>action_item</code> table (owner-entered follow-ups: a title, optional due date and account,
+open/completed/dismissed). <code>action_mark</code> is the further lifecycle every kind shares — a
+snooze (any kind) or a dismissal (a card key only); both are plain owner-scoped tables with no
+<code>SECURITY DEFINER</code> write path, the same convention as <code>commitment_resolution</code>.
+Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V49</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and
@@ -1220,6 +1230,9 @@ V45__history_coverage.sql             coverage_gap_acknowledgement: owner-declar
 V48__commitment_lifecycle.sql         commitment gains certainty/next_due_date; commitment_resolution:
                                       a payment link, mark-done or dismissal, immutable once inserted,
                                       with the payment-eligibility trigger (applied)
+V49__card_source_and_actions.sql      commitment gains source_card_statement_id (one open plan per
+                                      statement); action_item (follow-ups) and action_mark (snooze,
+                                      card-only dismissal) for the Needs attention list (applied)
 
   then, in this order, numbered as they land:
 

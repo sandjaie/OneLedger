@@ -29,6 +29,7 @@ router = APIRouter(tags=["plans"])
 
 Cadence = Literal["once", "monthly", "annual"]
 Certainty = Literal["confirmed", "estimated"]
+CommitmentSource = Literal["owner", "card_statement"]
 CommitmentStatus = Literal["upcoming", "due", "overdue", "finished", "cancelled"]
 ExcludedAccountReason = Literal["not_ledger_valued", "no_balance_date", "balance_after_as_of"]
 ExcludedCommitmentReason = Literal["account_closed", "account_excluded", "currency_mismatch"]
@@ -91,6 +92,9 @@ class _CommitmentFields(BaseModel):
 
 class CommitmentCreate(_CommitmentFields):
     idempotencyKey: UUID
+    # Task 2: planning a card statement's due amount. Fixed at creation — CommitmentUpdate carries
+    # no such field, so an existing commitment's source can never change.
+    sourceCardStatementId: UUID | None = None
 
 
 class CommitmentUpdate(_CommitmentFields):
@@ -116,6 +120,9 @@ class CommitmentRow(BaseModel):
     paidTowardNext: str
     partlyPaid: bool
     remainingNext: str | None
+    source: CommitmentSource
+    sourceCardStatementId: UUID | None
+    sourceCardAccountName: str | None
 
 
 class CommitmentsResponse(BaseModel):
@@ -189,6 +196,14 @@ def _translate_database_error(exc: psycopg.Error) -> HTTPException:
         return HTTPException(
             status_code=422, detail="next due date is not on this commitment's schedule"
         )
+    if constraint == "fk_commitment_card_statement_scope":
+        return HTTPException(status_code=404, detail="card statement not found")
+    if constraint == "commitment_card_source_is_one_payment":
+        return HTTPException(status_code=422, detail=_CARD_SOURCE_SCHEDULE)
+    if constraint == "uq_commitment_open_card_statement":
+        return HTTPException(
+            status_code=409, detail="a payment is already planned for this card statement"
+        )
     if exc.sqlstate in {"22003", "22023", "23502", "23503", "23514"}:
         return HTTPException(
             status_code=422, detail="commitment violates its required field matrix"
@@ -213,6 +228,61 @@ def _assert_account(
         raise HTTPException(
             status_code=422, detail="commitment currency must match the account's currency"
         )
+
+
+_CARD_SOURCE_SCHEDULE = "a card-sourced commitment must be a one-off payment with a negative amount"
+_CARD_SOURCE_ACCOUNT = "choose the account that pays the card"
+_CARD_SOURCE_CURRENCY = "the paying account must be in the card statement's currency"
+
+
+def _card_statement_facts(
+    cur: psycopg.Cursor[Any], household_id: UUID, statement_id: UUID
+) -> tuple[UUID, str, Decimal]:
+    """The statement's own account, currency and what it states is due — 404 unless it is this
+    household's (spec "Card dues and actions (Task 2)")."""
+    cur.execute(
+        """SELECT account_id, currency, statement_balance
+             FROM card_statement WHERE household_id = %s AND id = %s""",
+        (household_id, statement_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=404, detail="card statement not found")
+    return UUID(str(found[0])), str(found[1]).strip(), Decimal(found[2])
+
+
+def _assert_card_source_fields(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    card_account_id: UUID,
+    card_currency: str,
+    account_id: UUID,
+    currency: str,
+    cadence: Cadence,
+    amount: str,
+) -> None:
+    """The account, currency, cadence and sign rules a card-sourced commitment always carries —
+    checked on create (alongside the statement's own facts, `_card_statement_facts`) and
+    re-applied on every update of an already card-sourced commitment."""
+    if cadence != "once" or Decimal(amount) >= 0:
+        raise HTTPException(status_code=422, detail=_CARD_SOURCE_SCHEDULE)
+    cur.execute(
+        "SELECT account_class::text FROM account WHERE household_id = %s AND id = %s",
+        (household_id, account_id),
+    )
+    found = cur.fetchone()
+    if found is None:
+        raise HTTPException(status_code=404, detail="account not found")
+    if account_id == card_account_id or found[0] != "asset":
+        raise HTTPException(status_code=422, detail=_CARD_SOURCE_ACCOUNT)
+    if currency != card_currency:
+        raise HTTPException(status_code=422, detail=_CARD_SOURCE_CURRENCY)
+
+
+def _replay_source_matches(stored: object, given: UUID | None) -> bool:
+    if given is None:
+        return stored is None
+    return stored is not None and UUID(str(stored)) == given
 
 
 def _default_next_due_date(
@@ -323,18 +393,27 @@ def _commitment_progress(
     return result
 
 
-# Column order shared by every commitment read; _commitment_row() maps one result tuple.
+# Column order shared by every commitment read; _commitment_row() maps one result tuple. The
+# card-statement source is read through a left join — most commitments have none.
 _COMMITMENT_COLUMNS = """c.id, c.account_id, a.name, c.label, c.amount, c.currency, c.cadence::text,
                          c.first_date, c.end_date, c.archived_at, c.created_at, c.updated_at,
-                         c.certainty::text, c.next_due_date"""
+                         c.certainty::text, c.next_due_date, c.source_card_statement_id,
+                         card_account.name"""
 _COMMITMENT_FROM = """FROM commitment c
-                       JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id"""
+                       JOIN account a ON a.household_id = c.household_id AND a.id = c.account_id
+                       LEFT JOIN card_statement cs
+                         ON cs.household_id = c.household_id
+                        AND cs.id = c.source_card_statement_id
+                       LEFT JOIN account card_account
+                         ON card_account.household_id = cs.household_id
+                        AND card_account.id = cs.account_id"""
 
 
 def _commitment_row(
     row: tuple[Any, ...], progress: tuple[CommitmentStatus, bool, str, str | None]
 ) -> CommitmentRow:
     status, partly_paid, paid_toward_next, remaining_next = progress
+    source_card_statement_id = row[14]
     return CommitmentRow(
         id=row[0],
         accountId=row[1],
@@ -354,6 +433,9 @@ def _commitment_row(
         paidTowardNext=paid_toward_next,
         partlyPaid=partly_paid,
         remainingNext=remaining_next,
+        source="card_statement" if source_card_statement_id is not None else "owner",
+        sourceCardStatementId=source_card_statement_id,
+        sourceCardAccountName=row[15],
     )
 
 
@@ -410,7 +492,8 @@ def create_commitment(
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             cur.execute(
                 """SELECT id, account_id, label, amount, currency, cadence::text,
-                          first_date, end_date, certainty::text, next_due_date
+                          first_date, end_date, certainty::text, next_due_date,
+                          source_card_statement_id
                      FROM commitment WHERE household_id = %s AND idempotency_key = %s""",
                 (owner.household_id, body.idempotencyKey),
             )
@@ -427,6 +510,7 @@ def create_commitment(
                     eend,
                     ecertainty,
                     enext,
+                    esource,
                 ) = existing
                 if (
                     UUID(str(eaccount)) == body.accountId
@@ -438,11 +522,30 @@ def create_commitment(
                     and eend == body.endDate
                     and ecertainty == body.certainty
                     and (body.nextDueDate is None or enext == body.nextDueDate)
+                    and _replay_source_matches(esource, body.sourceCardStatementId)
                 ):
                     response.status_code = status.HTTP_200_OK
                     return _row(cur, owner.household_id, UUID(str(eid)))
                 raise HTTPException(
                     status_code=409, detail="idempotency key reused with a different request"
+                )
+            if body.sourceCardStatementId is not None:
+                card_account_id, card_currency, statement_balance = _card_statement_facts(
+                    cur, owner.household_id, body.sourceCardStatementId
+                )
+                if statement_balance <= 0:
+                    raise HTTPException(
+                        status_code=422, detail="nothing is due on this card statement"
+                    )
+                _assert_card_source_fields(
+                    cur,
+                    owner.household_id,
+                    card_account_id,
+                    card_currency,
+                    body.accountId,
+                    body.currency,
+                    body.cadence,
+                    body.amount,
                 )
             _assert_account(cur, owner.household_id, body.accountId, body.currency)
             next_due = _resolved_next_due_date(
@@ -457,9 +560,9 @@ def create_commitment(
             cur.execute(
                 """INSERT INTO commitment (household_id, idempotency_key, account_id, label,
                                             amount, currency, cadence, first_date, end_date,
-                                            certainty, next_due_date)
+                                            certainty, next_due_date, source_card_statement_id)
                    VALUES (%s, %s, %s, %s, %s, %s, %s::commitment_cadence, %s, %s,
-                           %s::commitment_certainty, %s)
+                           %s::commitment_certainty, %s, %s)
                    RETURNING id""",
                 (
                     owner.household_id,
@@ -473,6 +576,7 @@ def create_commitment(
                     body.endDate,
                     body.certainty,
                     next_due,
+                    body.sourceCardStatementId,
                 ),
             )
             created = cur.fetchone()
@@ -500,7 +604,7 @@ def update_commitment(
             cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
             cur.execute(
                 """SELECT archived_at, account_id, currency, cadence::text, first_date, end_date,
-                          amount, next_due_date
+                          amount, next_due_date, source_card_statement_id
                      FROM commitment WHERE household_id = %s AND id = %s FOR UPDATE""",
                 (owner.household_id, commitment_id),
             )
@@ -516,9 +620,24 @@ def update_commitment(
                 stored_end,
                 stored_amount,
                 stored_next_due,
+                stored_source_card_statement_id,
             ) = found
             if archived_at is not None:
                 raise HTTPException(status_code=409, detail="an archived commitment is fixed")
+            if stored_source_card_statement_id is not None:
+                card_account_id, card_currency, _balance = _card_statement_facts(
+                    cur, owner.household_id, UUID(str(stored_source_card_statement_id))
+                )
+                _assert_card_source_fields(
+                    cur,
+                    owner.household_id,
+                    card_account_id,
+                    card_currency,
+                    body.accountId,
+                    body.currency,
+                    body.cadence,
+                    body.amount,
+                )
             cur.execute(
                 """SELECT count(*) FROM commitment_resolution
                     WHERE household_id = %s AND commitment_id = %s""",

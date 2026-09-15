@@ -413,8 +413,19 @@ done</strong>, <strong>Dismiss</strong> with a reason, and a <strong>History</st
 <strong>Undo</strong> only where the server marks a row undoable; every write refetches the
 commitments list and the forecast, which now shows each occurrence&#39;s certainty and states that a
 resolved occurrence is not projected and a part-paid one projects its remainder. Task 2 adds the
-<strong>Needs attention</strong> list (commitment, card-due and follow-up items) ahead of
-Commitments, and Overview a matching panel — rather than adding a second destination. Phase 3.3 and
+<strong>Needs attention</strong> list first on Plans (anchor <code>#actions</code>), ahead of
+Commitments: a commitment item offers <strong>Settle</strong> (the same panel), <strong>Mark
+done</strong>, <strong>Dismiss</strong> and <strong>Snooze</strong>; a card item offers
+<strong>Plan payment</strong> — the commitment form pre-filled with a label from the card name,
+one-off, the negated statement balance, the due date and the source, its account picker narrowed
+to active asset accounts in the statement&#39;s currency — plus <strong>Dismiss</strong> and
+<strong>Snooze</strong>; a follow-up offers <strong>Complete</strong>, <strong>Dismiss</strong>
+and <strong>Snooze</strong>, and an <strong>Add follow-up</strong> form takes a title, optional
+due date and optional account. Snoozed items sit behind a <strong>Show snoozed</strong> toggle
+with <strong>Wake</strong>; resolved follow-ups behind one with <strong>Reopen</strong>. A
+card-sourced commitment names its statement in the Commitments list below. Overview shows a
+matching panel with the open count and the first five items, linking to <code>/plans#actions</code>
+— rather than adding a second destination. Phase 3.3 and
 Phase 3.4 add goals, emergency-reserve coverage and protection/administration records within that
 same view. Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
