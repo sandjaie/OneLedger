@@ -11,6 +11,7 @@ import type {
   CommitmentRow,
   CommitmentsResponse,
   CurrencyRow,
+  RegisterRow,
   UnplannedCardDue,
 } from "@/types/api";
 
@@ -103,6 +104,15 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   // other edit start, and after a successful submit. Limits the account picker to active asset
   // accounts in the statement's currency and is sent as the create body's sourceCardStatementId.
   const [planningCard, setPlanningCard] = useState<{ statementId: string; currency: string }>();
+  // Set only while planning a register record's money (Plan premium / Plan proceeds / Expect
+  // reimbursement); cleared the same way as planningCard. excludeAccountId keeps a deposit's own
+  // account out of its own proceeds picker (spec "choose the account that receives the proceeds").
+  const [planningRecord, setPlanningRecord] = useState<{
+    recordId: string;
+    kind: RegisterRow["kind"];
+    currency: string;
+    excludeAccountId?: string;
+  }>();
 
   useEffect(() => {
     let current = true;
@@ -130,6 +140,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
     setEditing(commitment);
     setForm(formFromCommitment(commitment));
     setPlanningCard(undefined);
+    setPlanningRecord(undefined);
     setProblem(undefined);
     setFeedback(undefined);
   }
@@ -137,6 +148,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   function cancelEdit() {
     setEditing(undefined);
     setPlanningCard(undefined);
+    setPlanningRecord(undefined);
     setForm(emptyForm(activeAccounts));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
@@ -195,14 +207,72 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
     });
   }
 
+  // Plan premium / Plan proceeds / Expect reimbursement (spec "Web workflows › Task 2"): the
+  // commitment form pre-filled from the record — label from the title, cadence, the negated
+  // premium or the expected amount, first date the renewal or maturity date (today for a claim),
+  // and the source — with the account picker narrowed below in formAccounts.
+  function startRecordPlan(record: RegisterRow) {
+    if (!record.currency) return;
+    setEditing(undefined);
+    setPlanningCard(undefined);
+    setPlanningRecord({
+      recordId: record.id,
+      kind: record.kind,
+      currency: record.currency,
+      excludeAccountId: record.kind === "deposit" ? (record.accountId ?? undefined) : undefined,
+    });
+    const eligible =
+      record.kind === "insurance_policy"
+        ? activeAccounts.find((account) => account.currency === record.currency)
+        : activeAccounts.find(
+            (account) =>
+              account.accountClass === "asset"
+              && account.currency === record.currency
+              && account.id !== record.accountId,
+          );
+    if (record.kind === "insurance_policy") {
+      setForm({
+        accountId: eligible?.id ?? "",
+        label: record.title,
+        amount: negateAmount(record.premiumAmount ?? "0"),
+        cadence: (record.premiumCadence as FormState["cadence"]) ?? "monthly",
+        firstDate: record.keyDate ?? "",
+        endDate: "",
+        certainty: "confirmed",
+        nextDueDate: "",
+      });
+    } else {
+      setForm({
+        accountId: eligible?.id ?? "",
+        label: record.title,
+        amount: record.amount ?? "",
+        cadence: "once",
+        firstDate: record.kind === "claim" ? new Date().toISOString().slice(0, 10) : (record.keyDate ?? ""),
+        endDate: "",
+        certainty: "confirmed",
+        nextDueDate: "",
+      });
+    }
+    setIdempotencyKey(crypto.randomUUID());
+    setProblem(undefined);
+    setFeedback(undefined);
+  }
+
   const selectedAccount = accounts.find((account) => account.id === form.accountId);
-  // The ordinary picker offers every active account; planning a card payment narrows it to the
-  // spec's own rule (active asset accounts in the statement's currency).
+  // The ordinary picker offers every active account; planning a card payment or a deposit/claim's
+  // proceeds narrows it to the spec's own rules — a policy's premium accepts any active account
+  // (a card included) in the record's currency.
   const formAccounts = planningCard
     ? activeAccounts.filter(
         (account) => account.accountClass === "asset" && account.currency === planningCard.currency,
       )
-    : activeAccounts;
+    : planningRecord
+      ? activeAccounts.filter((account) => {
+          if (account.currency !== planningRecord.currency) return false;
+          if (planningRecord.kind === "insurance_policy") return true;
+          return account.accountClass === "asset" && account.id !== planningRecord.excludeAccountId;
+        })
+      : activeAccounts;
 
   async function submit() {
     if (!selectedAccount) return;
@@ -245,16 +315,18 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
           nextDueDate: form.nextDueDate || null,
           idempotencyKey,
           sourceCardStatementId: planningCard?.statementId ?? null,
+          sourceRegisterRecordId: planningRecord?.recordId ?? null,
         };
         await request<CommitmentRow>("/commitments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        setFeedback("Commitment added.");
+        setFeedback(planningRecord ? "Money planned for this record." : "Commitment added.");
       }
       setEditing(undefined);
       setPlanningCard(undefined);
+      setPlanningRecord(undefined);
       setForm(emptyForm(activeAccounts));
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
@@ -306,7 +378,14 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
       <EmergencyReserve accounts={accounts} currencies={currencies} request={request} />
 
-      <Register accounts={accounts} currencies={currencies} request={request} />
+      <Register
+        accounts={accounts}
+        currencies={currencies}
+        onPlanFromRecord={startRecordPlan}
+        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        refreshKey={attempt}
+        request={request}
+      />
 
       <CashForecast
         accounts={accounts}
@@ -340,6 +419,9 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                     {commitment.certainty === "estimated" ? "Estimated" : "Confirmed"}
                     {commitment.source === "card_statement" && (
                       <> · From the {commitment.sourceCardAccountName} card statement due on its date</>
+                    )}
+                    {commitment.source === "register_record" && (
+                      <> · From the register record “{commitment.sourceRegisterTitle}”</>
                     )}
                   </span>
                   <span>
@@ -396,7 +478,13 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
             ? `Edit ${editing.label}`
             : planningCard
               ? "Plan the card payment"
-              : "Add a commitment"}
+              : planningRecord?.kind === "insurance_policy"
+                ? "Plan premium"
+                : planningRecord?.kind === "deposit"
+                  ? "Plan proceeds"
+                  : planningRecord?.kind === "claim"
+                    ? "Expect reimbursement"
+                    : "Add a commitment"}
         </h3>
         <label className="select-field">
           <span>Account</span>
@@ -443,7 +531,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
           {busy ? "Saving…" : editing ? "Save changes" : "Add commitment"}
         </button>
-        {(editing || planningCard) && (
+        {(editing || planningCard || planningRecord) && (
           <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
         )}
       </section>

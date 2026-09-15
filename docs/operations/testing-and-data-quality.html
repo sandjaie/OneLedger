@@ -833,6 +833,26 @@ archived or its date no longer the current <code>keyDate</code>) 404s. A foreign
 real register rows never appear and stay unchanged; <code>GET /register</code> changes no row.
 Member 403 on the eight new routes is covered by the repo-wide owner-dependency inventory
 test.</li>
+<li>Phase 3.4 Task 2: V54 SQL proves the register scope key and one-source-per-commitment check
+against a real foreign record and a card statement together, one open (unarchived) commitment per
+record freed by archiving, and the replaced <code>assert_commitment_payment()</code> refusing an
+<code>income</code> posting for a claim- or deposit-sourced commitment while accepting one for a
+policy- or owner-sourced commitment and a wrong-account posting still refused for a
+register-sourced one; <code>register_document</code>&#39;s own isolation and both scope keys (a
+foreign record, a foreign document) are proved for the first time here. The live upload suite
+covers a synthetic PDF stored and listed with <code>importKind: "upload"</code> and its title,
+same bytes and type 200 with the same id, same bytes as another type 409, a non-PDF and an
+oversized file 422, a statement type 422, document link/unlink idempotency and a foreign document
+404. The live commitments suite covers P09 exactly (a 1,000 claim, a planned reimbursement, a
+400 refund part payment leaves <code>remainingNext</code> <code>600.0000</code> and
+<code>paidTowardNext</code> <code>400.0000</code>, the dashboard&#39;s month income unchanged, and
+an <code>income</code>-typed posting refused 422); plan premium&#39;s cadence/sign/currency rules
+and any active account including a card; plan proceeds&#39; expected-proceeds requirement, its
+own-account and not-an-asset refusals, and the maturity action item disappearing once planned and
+settling against a transfer-in leg; a completed claim 409 and a nominee/administration 422; an
+archived record 409; a second open plan 409; and household isolation with a real foreign
+commitment sourced from a real foreign record. Member 403 on the four new routes is covered by the
+repo-wide owner-dependency inventory test.</li>
 </ul>
 <p>Run the scenario checks as each feature lands. Every included native balance reconciles to its
 source; real-data coverage and valuation uncertainty are reported separately from unexplained errors.

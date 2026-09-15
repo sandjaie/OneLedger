@@ -40,6 +40,8 @@ const commitment: CommitmentRow = {
   source: "owner",
   sourceCardStatementId: null,
   sourceCardAccountName: null,
+  sourceRegisterRecordId: null,
+  sourceRegisterTitle: null,
 };
 
 const candidate = {
@@ -246,5 +248,58 @@ describe("settlement panel", () => {
     expect(confirm.hasAttribute("disabled")).toBe(true);
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "not needed" } });
     expect(confirm.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("hints that income cannot settle a claim or deposit-sourced commitment", async () => {
+    const request = requestFrom((path) => {
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: "2026-02-01", candidates: [] } satisfies PaymentCandidatesResponse;
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) {
+        return { resolutions: [] } satisfies ResolutionsResponse;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(
+      <SettlementPanel
+        commitment={{
+          ...commitment,
+          amount: "1000.0000",
+          source: "register_record",
+          sourceRegisterRecordId: "00000000-0000-4000-8000-0000000000r1",
+          sourceRegisterTitle: "Synthetic claim",
+        }}
+        currencies={currencies}
+        request={request}
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByText(/An income posting cannot settle this/)).toBeTruthy();
+  });
+
+  it("shows no income hint for an owner commitment", async () => {
+    const request = requestFrom((path) => {
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: "2026-02-01", candidates: [] } satisfies PaymentCandidatesResponse;
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) {
+        return { resolutions: [] } satisfies ResolutionsResponse;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(
+      <SettlementPanel
+        commitment={commitment}
+        currencies={currencies}
+        request={request}
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+      />,
+    );
+
+    await screen.findByText("No resolutions are recorded yet.");
+    expect(screen.queryByText(/An income posting cannot settle this/)).toBeNull();
   });
 });

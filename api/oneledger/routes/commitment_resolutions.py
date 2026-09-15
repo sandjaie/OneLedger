@@ -32,10 +32,12 @@ ResolutionKind = Literal["payment", "completed", "dismissed"]
 _RESOLUTION_ALREADY = "this occurrence is already resolved"
 _ONLY_LATEST_UNDOABLE = "only the latest resolution can be undone"
 
-# Mirrors V48's assert_commitment_payment() predicate in
-# db/migrations/V48__commitment_lifecycle.sql — keep both in sync; a change to either eligibility
+# Mirrors V48's (V54's CREATE OR REPLACE of) assert_commitment_payment() predicate in
+# db/migrations/V54__register_commitments.sql — keep both in sync; a change to either eligibility
 # rule must update the other. Placeholders, in order: account_id, currency, a signed amount whose
-# sign the posting must match.
+# sign the posting must match. The income-refusal clause is appended only when the commitment's
+# source record is a claim or a deposit (spec "Register-sourced commitments (V54)") — see
+# `_eligible_predicate()`.
 _ELIGIBLE_POSTING_PREDICATE = """
     NOT t.is_excluded
     AND t.txn_type NOT IN ('opening_balance', 'adjustment')
@@ -47,6 +49,28 @@ _ELIGIBLE_POSTING_PREDICATE = """
        WHERE p.household_id = t.household_id
          AND (p.income_transaction_id = t.id OR p.expense_transaction_id = t.id))
 """
+_INCOME_REFUSED_CLAUSE = "AND t.txn_type <> 'income'\n"
+
+
+def _eligible_predicate(income_refused: bool) -> str:
+    return _ELIGIBLE_POSTING_PREDICATE + (_INCOME_REFUSED_CLAUSE if income_refused else "")
+
+
+def _source_income_refused(
+    cur: psycopg.Cursor[Any], household_id: UUID, source_register_record_id: object
+) -> bool:
+    """Whether this commitment's source record is a claim or a deposit — the one condition V54
+    added to `assert_commitment_payment()`, mirrored here for the candidates read and the
+    resolutions list's own eligibility check."""
+    if source_register_record_id is None:
+        return False
+    cur.execute(
+        "SELECT kind::text FROM register_record WHERE household_id = %s AND id = %s",
+        (household_id, source_register_record_id),
+    )
+    found = cur.fetchone()
+    return found is not None and found[0] in ("claim", "deposit")
+
 
 _CANDIDATE_WINDOW_DAYS = 45
 _CANDIDATE_LIMIT = 20
@@ -148,7 +172,7 @@ def _commitment_core(
     suffix = " FOR UPDATE" if lock else ""
     cur.execute(
         f"""SELECT archived_at, next_due_date, account_id, currency, amount, cadence::text,
-                   first_date, end_date
+                   first_date, end_date, source_register_record_id
              FROM commitment WHERE household_id = %s AND id = %s{suffix}""",
         (household_id, commitment_id),
     )
@@ -209,11 +233,13 @@ def _transaction_eligible(
     account_id: UUID,
     currency: str,
     amount: Decimal,
+    *,
+    income_refused: bool,
 ) -> bool:
     cur.execute(
         f"""SELECT EXISTS (
               SELECT FROM v_transaction_posting t
-               WHERE t.household_id = %s AND t.id = %s AND {_ELIGIBLE_POSTING_PREDICATE}
+               WHERE t.household_id = %s AND t.id = %s AND {_eligible_predicate(income_refused)}
             )""",
         (household_id, transaction_id, account_id, currency, amount),
     )
@@ -232,15 +258,24 @@ def payment_candidates(
         core = _commitment_core(cur, owner.household_id, commitment_id, lock=False)
         if core is None:
             raise HTTPException(status_code=404, detail="commitment not found")
-        archived_at, next_due_date, account_id, currency, amount, *_rest = core
+        (
+            archived_at,
+            next_due_date,
+            account_id,
+            currency,
+            amount,
+            *_rest,
+            source_register_record_id,
+        ) = core
         if archived_at is not None or next_due_date is None:
             return PaymentCandidatesResponse(dueDate=None, candidates=[])
+        income_refused = _source_income_refused(cur, owner.household_id, source_register_record_id)
         redact = _preview_redactor(None)
         cur.execute(
             f"""SELECT t.id, t.booked_date, t.amount, t.currency, t.description_clean,
                        t.description_raw
                   FROM v_transaction_posting t
-                 WHERE t.household_id = %s AND {_ELIGIBLE_POSTING_PREDICATE}
+                 WHERE t.household_id = %s AND {_eligible_predicate(income_refused)}
                    AND NOT EXISTS (
                      SELECT FROM commitment_resolution r
                       WHERE r.household_id = t.household_id AND r.transaction_id = t.id)
@@ -279,7 +314,16 @@ def list_resolutions(
         core = _commitment_core(cur, owner.household_id, commitment_id, lock=False)
         if core is None:
             raise HTTPException(status_code=404, detail="commitment not found")
-        archived_at, next_due_date, account_id, currency, amount, *_rest = core
+        (
+            archived_at,
+            next_due_date,
+            account_id,
+            currency,
+            amount,
+            *_rest,
+            source_register_record_id,
+        ) = core
+        income_refused = _source_income_refused(cur, owner.household_id, source_register_record_id)
         latest_closed = _latest_closed_due_date(cur, owner.household_id, commitment_id)
         next_has_payment = (
             _has_payment_on(cur, owner.household_id, commitment_id, next_due_date)
@@ -311,7 +355,13 @@ def list_resolutions(
                     amount=str(trow[1]),
                     description=redact(trow[2] or trow[3] or ""),
                     eligible=_transaction_eligible(
-                        cur, owner.household_id, txn_id, account_id, currency, amount
+                        cur,
+                        owner.household_id,
+                        txn_id,
+                        account_id,
+                        currency,
+                        amount,
+                        income_refused=income_refused,
                     ),
                 )
             out.append(
@@ -396,6 +446,7 @@ def create_resolution(
                 cadence,
                 first_date,
                 end_date,
+                _source_register_record_id,
             ) = core
             if archived_at is not None:
                 raise HTTPException(status_code=409, detail="an archived commitment is fixed")

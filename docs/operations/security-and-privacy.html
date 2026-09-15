@@ -418,9 +418,19 @@ label as a household alias for the institution already bound by that completed i
 binds that private assessment without returning the label. No backup or encryption-key check gates
 the owner's local data.</p>
 <p>The document library (<code>GET /documents</code>) is owner-only and read-only. Its row never carries the
-original filename, title, storage location, hash, size, notes, tags, parse error or extracted
+original filename, storage location, hash, size, notes, tags, parse error or extracted
 metadata — only safe UUIDs, fixed type/status vocabularies, the account's ordinary mask and the
-period the document covers. Its own original is served only through
+period the document covers. Phase 3.4 Task 2's <code>POST /documents</code> is the one exception to
+"no title": it lets the owner attach their own PDF (a policy schedule, a deposit certificate) with
+a <code>documentType</code> and a <code>title</code> of their own words, 1–120 characters, NFKC-normalized —
+never the uploaded filename, which is discarded before anything is written, the same convention
+<code>payslips.py</code>'s own import already follows. The bytes are stored through the same
+content-addressed <code>ingest.storage.store</code> under a fixed safe label per type; the same bytes
+already stored under the same type return that row rather than a duplicate, and under a different
+type are refused rather than silently reclassified. <code>GET /documents</code> answers this row with
+<code>importKind: "upload"</code> and the owner's <code>title</code>; every other row — a statement, an
+investment statement or a payslip — keeps <code>title: null</code>, since a source filename must never
+reach the wire even as a "title". Its own original is served only through
 <code>GET /documents/{documentId}/original</code>, which requires <code>storage_bucket = 'documents'</code> and
 proves the same path, symbolic-link, escape and SHA-256 checks the identity-backfill preview and
 the description re-read already trust their originals to before returning bytes; any failure is a

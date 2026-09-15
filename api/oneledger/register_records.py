@@ -48,7 +48,9 @@ class RegisterActionItem:
 
 _RECORDS = """
     SELECT r.id, r.kind::text, r.title, r.key_date, r.premium_amount, r.currency, r.account_id,
-           a.name, r.completed_at, r.last_reviewed_on, r.created_at
+           a.name, r.completed_at, r.last_reviewed_on, r.created_at,
+           EXISTS (SELECT FROM commitment c WHERE c.household_id = r.household_id
+                     AND c.source_register_record_id = r.id AND c.archived_at IS NULL) AS has_plan
       FROM register_record r
       LEFT JOIN account a ON a.household_id = r.household_id AND a.id = r.account_id
      WHERE r.household_id = %s AND r.archived_at IS NULL"""
@@ -60,7 +62,7 @@ def register_action_items(
     """`action_list`'s four record item kinds (spec `action_list`, items 1-4): a policy's renewal,
     a deposit's maturity, an incomplete administration deadline, and a review due — each within its
     own window, an unarchived record only. Only the renewal item carries an amount (the premium);
-    Task 2 omits the maturity item once its proceeds are planned."""
+    Task 2 omits the maturity item once an unarchived commitment is sourced from the record."""
     items: list[RegisterActionItem] = []
     cur.execute(_RECORDS, (household_id,))
     for (
@@ -75,6 +77,7 @@ def register_action_items(
         completed_at,
         last_reviewed_on,
         created_at,
+        has_plan,
     ) in cur.fetchall():
         record_id = UUID(str(rid))
         account_uuid = None if account_id is None else UUID(str(account_id))
@@ -92,7 +95,11 @@ def register_action_items(
                     currency=str(currency).strip() if currency is not None else None,
                 )
             )
-        elif kind == "deposit" and key_date <= as_of + timedelta(days=MATURITY_WINDOW_DAYS):
+        elif (
+            kind == "deposit"
+            and not has_plan
+            and key_date <= as_of + timedelta(days=MATURITY_WINDOW_DAYS)
+        ):
             items.append(
                 RegisterActionItem(
                     recordId=record_id,

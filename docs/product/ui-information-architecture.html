@@ -473,14 +473,26 @@ money). Needs attention lists a goal shortfall and a reserve below target as the
 snooze only. Phase 3.4 Task 1 adds <strong>Register</strong> (<code>register.tsx</code>, anchor
 <code>#register</code>) between Emergency reserve and the forecast: insurance policies, deposits,
 claims, nominee records and administration deadlines, grouped by kind, each showing its key facts
-and key date, review state and (Task 2) its documents. <strong>Edit</strong>,
-<strong>Mark reviewed</strong>, <strong>Renewed</strong> (a policy&#39;s next renewal date),
-<strong>Complete</strong> / <strong>Reopen</strong> (a claim or administration deadline) and
-<strong>Archive</strong>. <strong>Add record</strong> chooses a kind first and shows only that
-kind&#39;s fields, with a note that no identity numbers or credentials belong in a record. Needs
-attention lists a renewal, a maturity or a deadline coming due, and a record unreviewed for a
-year, each with its matching resolve control (Renewed, Mark reviewed, Complete) alongside Snooze —
-none of the four accepts a dismissal reason.
+and key date, review state and (Task 2) its documents, opened through the existing original route.
+<strong>Edit</strong>, <strong>Mark reviewed</strong>, <strong>Renewed</strong> (a policy&#39;s next
+renewal date), <strong>Complete</strong> / <strong>Reopen</strong> (a claim or administration
+deadline), <strong>Archive</strong> and (Task 2) <strong>Attach document</strong> — pick an
+uploaded document from the library by title, or <strong>Upload PDF</strong> with a type and a
+title — and <strong>Detach</strong> per document. <strong>Add record</strong> chooses a kind first
+and shows only that kind&#39;s fields, with a note that no identity numbers or credentials belong
+in a record. Task 2 also adds, per record, whichever of <strong>Plan premium</strong> (a policy),
+<strong>Plan proceeds</strong> (a deposit) or <strong>Expect reimbursement</strong> (a claim)
+applies, once no commitment is already planned for it — each opens the one Commitments form below,
+pre-filled from the record (label, cadence, the negated premium or the expected amount, first date
+the renewal or maturity date, or today for a claim) with the account picker narrowed to eligible
+accounts. A record with a planned commitment shows its status, next due date and, for a claim,
+<strong>Expected</strong>, <strong>Received</strong> and <strong>Outstanding</strong>, plus
+<strong>Settle</strong> (the same settlement panel a commitment offers elsewhere) — whose panel
+explains, for a claim or deposit, that an income posting cannot settle it and links to the
+transaction to recategorise it as a refund or a transfer. The Documents library shows an upload by
+its own title, with no import link. Needs attention lists a renewal, a maturity or a deadline
+coming due, and a record unreviewed for a year, each with its matching resolve control (Renewed,
+Mark reviewed, Complete) alongside Snooze — none of the four accepts a dismissal reason.
 Phase 1.7 Task 1 adds Salary for entered and imported payslips; Phase 4.x adds Budgets and
 Recurring and deepens Salary as needed. Phase 5.2 adds Ask. Avoid a separate top-level destination for
 every record type.</p>

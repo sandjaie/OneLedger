@@ -513,9 +513,13 @@ cadence and a lifecycle over exactly one open occurrence, its next due date; not
 The owner resolves that occurrence by linking the ledger posting that paid or received it (in full or
 in part), marking it done without a posting, or dismissing it with a reason — a <strong>resolution</strong>.
 Closing a resolution advances the commitment to its next scheduled occurrence, so a recurring
-commitment only ever holds one open occurrence at a time. Its source is either the owner
-(<code>"owner"</code>) or a planned card statement (<code>"card_statement"</code>): a one-off, negative
-commitment the owner plans from a card statement's due amount, one open plan per statement.</p>
+commitment only ever holds one open occurrence at a time. Its source is the owner
+(<code>"owner"</code>), a planned card statement (<code>"card_statement"</code>: a one-off, negative
+commitment the owner plans from a card statement's due amount, one open plan per statement), or a
+register record (<code>"register_record"</code>: a policy's premium, a deposit's expected proceeds
+or a claim's expected reimbursement, one open plan per record). A register-sourced commitment whose
+record is a claim or a deposit refuses an <code>income</code>-typed posting as a resolution — a
+reimbursement or returned principal is never counted as newly earned income.</p>
 <p><strong>Earmarking</strong> — Reserving existing resources for a goal or emergency reserve without moving money or changing wealth. The same resource cannot be reserved twice.</p>
 <p><strong>Reservation</strong> — A plan, not a ledger transaction: earmarking an amount of an asset
 account, or a whole account, for a goal (or, once eligible, the emergency reserve). It freezes its
@@ -552,8 +556,17 @@ proceeds and maturity date; a claim its counterparty, expected amount and submis
 nominee record only whether a nominee is recorded for an account — never a name, relationship or
 identity number; an administration record only a deadline. A record can be marked reviewed, a
 policy&#39;s renewal recorded (moving it to its next date), and a claim or administration deadline
-completed or reopened. Archiving is terminal — no further edit or delete. Documents, and a planned
-premium, proceeds or reimbursement, are Task 2.</p>
+completed or reopened. Archiving is terminal — no further edit or delete. Task 2 adds its linked
+documents (attached from the library or freshly uploaded, detachable) and its planned commitment: a
+policy's premium, a deposit's expected proceeds or a claim's expected reimbursement, shown with
+status, next due date and, for a claim, what is expected, received and outstanding.</p>
+<p><strong>Document upload</strong> — The owner's own PDF (a policy schedule, a deposit certificate,
+a receipt) stored under one of six types
+(<code>tax_document</code>/<code>insurance_policy</code>/<code>property_document</code>/<code>fd_certificate</code>/<code>receipt</code>/<code>other</code>)
+with a title of the owner's own words; the uploaded filename is never retained. Not an import — the
+document library marks it <code>importKind: "upload"</code>, shows its title and offers no import
+link. The same bytes already stored under the same type return that row; under a different type,
+the upload is refused rather than reclassified.</p>
 <p><strong>In transit</strong> — An internal movement awaiting settlement evidence. Shown separately from settled available cash; an estimated value must be labelled and cleared on settlement.</p>
 <p><strong>Action</strong> — One item on the Needs attention list: a commitment occurrence due within
 seven days or overdue, a card statement with an amount due and no planned payment, or an

@@ -3,14 +3,43 @@
 import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
+import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
-import type { AccountRow, CurrencyRow, RegisterResponse, RegisterRow } from "@/types/api";
+import type {
+  AccountRow,
+  CommitmentRow,
+  CurrencyRow,
+  DocumentRow,
+  DocumentsResponse,
+  RegisterResponse,
+  RegisterRow,
+} from "@/types/api";
 
 type Props = {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
   request: typeof apiFetch;
+  // Plan premium / Plan proceeds / Expect reimbursement: PlansScreen owns the one commitment
+  // form and pre-fills it from this record (spec "Task 2 — documents on records and commitments
+  // from records"), the same shape as its own onPlanCardPayment.
+  onPlanFromRecord: (record: RegisterRow) => void;
+  // Settle reuses the Task 1 settlement panel PlansScreen already renders per commitment.
+  onSettle: (commitmentId: string) => void;
+  // Bumped by PlansScreen whenever a commitment is created or settled, so a record's
+  // plannedCommitment appears without a reload — the same prop NeedsAttention and CashForecast
+  // already take.
+  refreshKey: number;
 };
+
+// spec "Document upload (Task 2)": the six types an owner can attach directly.
+const UPLOAD_TYPES = [
+  "tax_document",
+  "insurance_policy",
+  "property_document",
+  "fd_certificate",
+  "receipt",
+  "other",
+] as const;
 
 type RegisterKind = RegisterRow["kind"];
 type PremiumCadence = "monthly" | "annual";
@@ -188,7 +217,28 @@ function recordSummary(record: RegisterRow, currencies: Array<CurrencyRow>): str
   return parts.join(" · ");
 }
 
-export function Register({ accounts, currencies, request }: Props) {
+const PLAN_LABEL: Record<string, string> = {
+  insurance_policy: "Plan premium",
+  deposit: "Plan proceeds",
+  claim: "Expect reimbursement",
+};
+
+const STATUS_TEXT: Record<CommitmentRow["status"], string> = {
+  upcoming: "Upcoming",
+  due: "Due",
+  overdue: "Overdue",
+  finished: "Finished",
+  cancelled: "Cancelled",
+};
+
+export function Register({
+  accounts,
+  currencies,
+  request,
+  onPlanFromRecord,
+  onSettle,
+  refreshKey,
+}: Props) {
   const [data, setData] = useState<RegisterResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
@@ -201,6 +251,16 @@ export function Register({ accounts, currencies, request }: Props) {
   const [feedback, setFeedback] = useState<string>();
   const [renewingId, setRenewingId] = useState<string>();
   const [renewalDate, setRenewalDate] = useState("");
+
+  // Attach/upload documents: one panel open at a time, and the library of upload-type documents
+  // fetched lazily the first time it is needed (spec "Attach document — pick from the library's
+  // upload-type documents by title, or Upload PDF").
+  const [attachingId, setAttachingId] = useState<string>();
+  const [library, setLibrary] = useState<Array<DocumentRow>>();
+  const [libraryState, setLibraryState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [uploadType, setUploadType] = useState<(typeof UPLOAD_TYPES)[number]>("other");
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadFile, setUploadFile] = useState<File>();
 
   useEffect(() => {
     let current = true;
@@ -216,7 +276,7 @@ export function Register({ accounts, currencies, request }: Props) {
     return () => {
       current = false;
     };
-  }, [attempt, request]);
+  }, [attempt, refreshKey, request]);
 
   function refetch() {
     setAttempt((value) => value + 1);
@@ -332,6 +392,63 @@ export function Register({ accounts, currencies, request }: Props) {
     }, "This record could not be archived.");
   }
 
+  async function ensureLibrary() {
+    if (library || libraryState === "loading") return;
+    setLibraryState("loading");
+    try {
+      const result = await request<DocumentsResponse>("/documents?limit=200");
+      setLibrary(result.documents.filter((doc) => doc.importKind === "upload"));
+      setLibraryState("ready");
+    } catch {
+      setLibraryState("error");
+    }
+  }
+
+  function toggleAttach(record: RegisterRow) {
+    const opening = attachingId !== record.id;
+    setAttachingId(opening ? record.id : undefined);
+    setUploadType("other");
+    setUploadTitle("");
+    setUploadFile(undefined);
+    setProblem(undefined);
+    if (opening) void ensureLibrary();
+  }
+
+  function attachExisting(record: RegisterRow, documentId: string) {
+    if (!documentId) return;
+    void run(async () => {
+      await request(`/register/${record.id}/documents/${documentId}`, { method: "PUT" });
+      setAttachingId(undefined);
+    }, "This document could not be attached.");
+  }
+
+  function detachDocument(record: RegisterRow, documentId: string) {
+    void run(async () => {
+      await request(`/register/${record.id}/documents/${documentId}`, { method: "DELETE" });
+    }, "This document could not be detached.");
+  }
+
+  async function uploadAndAttach(record: RegisterRow) {
+    if (!uploadFile || !uploadTitle) return;
+    setBusy(true);
+    setProblem(undefined);
+    try {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      form.append("documentType", uploadType);
+      form.append("title", uploadTitle);
+      const uploaded = await request<DocumentRow>("/documents", { method: "POST", body: form });
+      await request(`/register/${record.id}/documents/${uploaded.id}`, { method: "PUT" });
+      setAttachingId(undefined);
+      setLibrary(undefined);
+      refetch();
+    } catch (error) {
+      setProblem(errorText(error, "This file could not be uploaded."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // The kind driving both the form fields shown and the request built: fixed to the record's own
   // kind while editing (kind cannot change), otherwise the kind chosen for a new record.
   const activeKind = editing?.kind ?? creatingKind;
@@ -364,7 +481,9 @@ export function Register({ accounts, currencies, request }: Props) {
               <div key={kind}>
                 <h3>{label}</h3>
                 <ul className="plans-register-list">
-                  {records.map((record) => (
+                  {records.map((record) => {
+                    const planned = record.plannedCommitment;
+                    return (
                     <li key={record.id}>
                       <span>{recordSummary(record, currencies)}</span>
                       {!record.archivedAt && (
@@ -395,6 +514,21 @@ export function Register({ accounts, currencies, request }: Props) {
                             onClick={() => archive(record)}
                             type="button"
                           >Archive</button>
+                          <button
+                            className="text-action"
+                            onClick={() => toggleAttach(record)}
+                            type="button"
+                          >{attachingId === record.id ? "Close" : "Attach document"}</button>
+                          {/* A record with no currency has no premium or expected amount to
+                              plan (the kind shape ties the two together), so it offers no
+                              plan action rather than a control that cannot submit. */}
+                          {PLAN_LABEL[kind] && record.currency && !record.plannedCommitment && (
+                            <button
+                              className="text-action"
+                              onClick={() => onPlanFromRecord(record)}
+                              type="button"
+                            >{PLAN_LABEL[kind]}</button>
+                          )}
                         </div>
                       )}
                       {renewingId === record.id && (
@@ -414,8 +548,113 @@ export function Register({ accounts, currencies, request }: Props) {
                           <button className="text-action" onClick={() => setRenewingId(undefined)} type="button">Cancel</button>
                         </span>
                       )}
+
+                      {record.documents.length > 0 && (
+                        <ul className="plans-register-documents">
+                          {record.documents.map((doc) => (
+                            <li key={doc.documentId}>
+                              <a href={apiUrl(`/documents/${doc.documentId}/original`)} rel="noreferrer" target="_blank">
+                                {doc.title ?? doc.documentType}
+                              </a>
+                              {!record.archivedAt && (
+                                <button
+                                  className="text-action"
+                                  disabled={busy}
+                                  onClick={() => detachDocument(record, doc.documentId)}
+                                  type="button"
+                                >Detach</button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {attachingId === record.id && (
+                        <div className="needs-attention-inline-form">
+                          {libraryState === "loading" && <p role="status">Loading the document library…</p>}
+                          {libraryState === "ready" && library && library.length > 0 && (
+                            <label className="select-field">
+                              <span>Attach from the library</span>
+                              <select
+                                defaultValue=""
+                                onChange={(e) => attachExisting(record, e.target.value)}
+                              >
+                                <option disabled value="">Choose a document</option>
+                                {library
+                                  .filter((doc) => !record.documents.some((d) => d.documentId === doc.id))
+                                  .map((doc) => (
+                                    <option key={doc.id} value={doc.id}>{doc.title ?? doc.documentType}</option>
+                                  ))}
+                              </select>
+                            </label>
+                          )}
+                          <p><small>Or upload a new PDF:</small></p>
+                          <label className="select-field">
+                            <span>Type</span>
+                            <select
+                              onChange={(e) => setUploadType(e.target.value as (typeof UPLOAD_TYPES)[number])}
+                              value={uploadType}
+                            >
+                              {UPLOAD_TYPES.map((type) => (
+                                <option key={type} value={type}>{type}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="text-field">
+                            <span>Title</span>
+                            <input onChange={(e) => setUploadTitle(e.target.value)} value={uploadTitle} />
+                          </label>
+                          <label className="file-field">
+                            <span>File</span>
+                            <input
+                              accept="application/pdf,.pdf"
+                              onChange={(e) => setUploadFile(e.target.files?.[0])}
+                              type="file"
+                            />
+                          </label>
+                          <button
+                            className="primary-action"
+                            disabled={busy || !uploadFile || !uploadTitle}
+                            onClick={() => void uploadAndAttach(record)}
+                            type="button"
+                          >Upload and attach</button>
+                        </div>
+                      )}
+
+                      {planned && (
+                        <p className="plans-register-planned">
+                          {STATUS_TEXT[planned.status]}
+                          {planned.nextDueDate && <> · Next due {planned.nextDueDate}</>}
+                          {kind === "claim" ? (
+                            <>
+                              {" · Expected "}
+                              {moneyText(planned.amount, planned.currency, currencies)}
+                              {" · Received "}
+                              {moneyText(planned.paidTowardNext, planned.currency, currencies)}
+                              {planned.remainingNext !== null && (
+                                <>
+                                  {" · Outstanding "}
+                                  {moneyText(planned.remainingNext, planned.currency, currencies)}
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              {" · "}
+                              {moneyText(planned.amount, planned.currency, currencies)}
+                            </>
+                          )}
+                          {" "}
+                          <button
+                            className="text-action"
+                            onClick={() => onSettle(planned.commitmentId)}
+                            type="button"
+                          >Settle</button>
+                        </p>
+                      )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </div>
             );

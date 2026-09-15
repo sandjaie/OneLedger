@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitForElementToBeRemoved } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Register } from "@/app/plans/register";
@@ -69,6 +69,8 @@ function record(overrides: Partial<RegisterRow> = {}): RegisterRow {
     archivedAt: null,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
+    documents: [],
+    plannedCommitment: null,
     ...overrides,
   };
 }
@@ -79,6 +81,26 @@ function response(overrides: Partial<RegisterResponse> = {}): RegisterResponse {
 
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn(async (path: string, init?: RequestInit) => handler(path, init)) as Request;
+}
+
+function renderRegister(props: {
+  accounts: Array<AccountRow>;
+  currencies?: Array<CurrencyRow>;
+  request: Request;
+  onPlanFromRecord?: (record: RegisterRow) => void;
+  onSettle?: (commitmentId: string) => void;
+  refreshKey?: number;
+}) {
+  return render(
+    <Register
+      accounts={props.accounts}
+      currencies={props.currencies ?? currencies}
+      onPlanFromRecord={props.onPlanFromRecord ?? vi.fn()}
+      onSettle={props.onSettle ?? vi.fn()}
+      refreshKey={props.refreshKey ?? 0}
+      request={props.request}
+    />,
+  );
 }
 
 afterEach(() => {
@@ -92,7 +114,7 @@ describe("register", () => {
       if (path === "/register?includeArchived=true") return response();
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
 
     expect(screen.getByText("Loading the register…")).toBeTruthy();
 
@@ -105,7 +127,7 @@ describe("register", () => {
     const request = requestFrom(() => {
       throw new ApiError(500, "boom");
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
     expect(await screen.findByText("The register could not be loaded.")).toBeTruthy();
   });
 
@@ -130,7 +152,7 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
     await screen.findByText("No records are kept yet.");
 
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Synthetic new policy" } });
@@ -153,13 +175,7 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(
-      <Register
-        accounts={[account(), depositAccount]}
-        currencies={currencies}
-        request={request}
-      />,
-    );
+    renderRegister({ accounts: [account(), depositAccount], request });
     await screen.findByText("No records are kept yet.");
 
     fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "nominee" } });
@@ -196,7 +212,7 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
     fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
     expect(await screen.findByText(/Reviewed 2026-06-01/)).toBeTruthy();
   });
@@ -213,7 +229,7 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
     fireEvent.click(await screen.findByRole("button", { name: "Renewed" }));
     fireEvent.change(screen.getByLabelText(/Next renewal date/), {
       target: { value: "2028-01-01" },
@@ -238,7 +254,7 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete" }));
     const reopenButton = await screen.findByRole("button", { name: "Reopen" });
@@ -258,11 +274,161 @@ describe("register", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Register accounts={[account()]} currencies={currencies} request={request} />);
+    renderRegister({ accounts: [account()], request });
 
     fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
     expect(await screen.findByText(/Archived/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  it("offers Plan premium for a policy with no planned commitment, and hides it once planned", async () => {
+    const onPlanFromRecord = vi.fn();
+    const request = requestFrom((path) => {
+      if (path === "/register?includeArchived=true") return response();
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    renderRegister({ accounts: [account()], request, onPlanFromRecord });
+
+    const plan = await screen.findByRole("button", { name: "Plan premium" });
+    fireEvent.click(plan);
+    expect(onPlanFromRecord).toHaveBeenCalledWith(expect.objectContaining({ id: record().id }));
+  });
+
+  it("shows a claim's expected, received and outstanding amounts from server strings, and Settle", async () => {
+    const onSettle = vi.fn();
+    const planned = record({
+      kind: "claim",
+      keyDate: "2026-01-01",
+      plannedCommitment: {
+        commitmentId: "00000000-0000-4000-8000-0000000000c1",
+        cadence: "once",
+        amount: "1000.0000",
+        currency: "XAA",
+        accountName: "Synthetic asset account",
+        nextDueDate: "2026-01-01",
+        status: "due",
+        paidTowardNext: "400.0000",
+        remainingNext: "600.0000",
+        partlyPaid: true,
+      },
+    });
+    const request = requestFrom((path) => {
+      if (path === "/register?includeArchived=true") return response({ records: [planned] });
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    renderRegister({ accounts: [account()], request, onSettle });
+
+    expect(await screen.findByText(/Expected/)).toBeTruthy();
+    expect(screen.getByText(/Received/)).toBeTruthy();
+    expect(screen.getByText(/Outstanding/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Expect reimbursement" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Settle" }));
+    expect(onSettle).toHaveBeenCalledWith("00000000-0000-4000-8000-0000000000c1");
+  });
+
+  it("attaches an existing library document and detaches it", async () => {
+    let documents: RegisterRow["documents"] = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/register?includeArchived=true") return response({ records: [record({ documents })] });
+      if (path === "/documents?limit=200") {
+        return {
+          documents: [
+            {
+              id: "doc-1",
+              documentType: "tax_document",
+              pageCount: null,
+              isPasswordProtected: false,
+              parsedStatus: "not_applicable",
+              uploadedOn: "2026-01-01T00:00:00Z",
+              accountId: null,
+              accountName: null,
+              accountNumberMasked: null,
+              period: { start: null, end: null, isDerived: null },
+              importKind: "upload",
+              importId: null,
+              importStatus: null,
+              reconciliationStatus: null,
+              layoutId: null,
+              layoutVersion: null,
+              newerLayoutId: null,
+              title: "Synthetic tax",
+            },
+          ],
+          total: 1,
+        };
+      }
+      if (path === "/register/00000000-0000-4000-8000-0000000000r1/documents/doc-1" && init?.method === "PUT") {
+        documents = [
+          { documentId: "doc-1", documentType: "tax_document", title: "Synthetic tax", uploadedAt: "2026-01-01T00:00:00Z" },
+        ];
+        return record({ documents });
+      }
+      if (path === "/register/00000000-0000-4000-8000-0000000000r1/documents/doc-1" && init?.method === "DELETE") {
+        documents = [];
+        return record({ documents });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    renderRegister({ accounts: [account()], request });
+
+    await screen.findByText(/Synthetic policy/);
+    fireEvent.click(screen.getByRole("button", { name: "Attach document" }));
+    const picker = await screen.findByLabelText("Attach from the library");
+    fireEvent.change(picker, { target: { value: "doc-1" } });
+
+    expect(await screen.findByRole("link", { name: "Synthetic tax" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Detach" }));
+    await waitForElementToBeRemoved(() => screen.queryByRole("link", { name: "Synthetic tax" }));
+  });
+
+  it("uploads a new PDF and attaches it", async () => {
+    let documents: RegisterRow["documents"] = [];
+    const request = requestFrom((path, init) => {
+      if (path === "/register?includeArchived=true") return response({ records: [record({ documents })] });
+      if (path === "/documents" && init?.method === "POST") {
+        expect(init.body).toBeInstanceOf(FormData);
+        return {
+          id: "doc-9",
+          documentType: "receipt",
+          pageCount: null,
+          isPasswordProtected: false,
+          parsedStatus: "not_applicable",
+          uploadedOn: "2026-01-01T00:00:00Z",
+          accountId: null,
+          accountName: null,
+          accountNumberMasked: null,
+          period: { start: null, end: null, isDerived: null },
+          importKind: "upload",
+          importId: null,
+          importStatus: null,
+          reconciliationStatus: null,
+          layoutId: null,
+          layoutVersion: null,
+          newerLayoutId: null,
+          title: "Synthetic receipt",
+        };
+      }
+      if (path === "/register/00000000-0000-4000-8000-0000000000r1/documents/doc-9" && init?.method === "PUT") {
+        documents = [
+          { documentId: "doc-9", documentType: "receipt", title: "Synthetic receipt", uploadedAt: "2026-01-01T00:00:00Z" },
+        ];
+        return record({ documents });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    renderRegister({ accounts: [account()], request });
+
+    await screen.findByText(/Synthetic policy/);
+    fireEvent.click(screen.getByRole("button", { name: "Attach document" }));
+    // Two "Title" fields exist once the attach panel is open: the upload sub-form's own (first
+    // in document order, inside this record's <li>) and the "Add a record" form's below it.
+    fireEvent.change(screen.getAllByLabelText("Title")[0], { target: { value: "Synthetic receipt" } });
+    const file = new File(["%PDF-1.4"], "ignored.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("File"), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload and attach" }));
+
+    expect(await screen.findByRole("link", { name: "Synthetic receipt" })).toBeTruthy();
   });
 });
