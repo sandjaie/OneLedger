@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { apiFetch } from "@/lib/api/client";
+import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import type { DescriptionReparseResult, DocumentRow } from "@/types/api";
 
 type Props = {
@@ -34,16 +34,13 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
             password: document.isPasswordProtected ? password || null : null,
           }),
           headers: { "Content-Type": "application/json" },
+          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         },
       );
       setPreview(result);
       if (apply) onApplied();
     } catch (error) {
-      setProblem(
-        error instanceof Error && error.message
-          ? error.message
-          : "The re-read could not be completed. Check the password and retry.",
-      );
+      setProblem(errorText(error, "The re-read could not be completed. Check the password and retry."));
     } finally {
       setBusy(false);
     }

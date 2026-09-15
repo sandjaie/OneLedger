@@ -7,6 +7,7 @@ import { EventCorrectionForm, isFundedEvent } from "@/app/investments/event-corr
 import { FundingPanel, type FundableEvent } from "@/app/investments/funding-panel";
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import { reasonText } from "@/app/investments/review-reasons";
+import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
 import type { apiFetch } from "@/lib/api/client";
 import { ApiError, errorText } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
@@ -51,6 +52,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
   // reloaded `cashLinks` rather than remounting against the stale ones.
   const [loadCount, setLoadCount] = useState(0);
   const [fundingNotice, setFundingNotice] = useState("");
+  const [recordNotice, setRecordNotice] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -139,7 +141,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
 
           <section aria-labelledby="holding-events-title">
             <p className="section-label" id="holding-events-title">Events ({detail.eventsTotal})</p>
-            {correctionFeedback && <p className="investment-feedback" role="status">{correctionFeedback}</p>}
+            {correctionFeedback && <WealthRefreshNotice message={correctionFeedback} />}
             {detail.events.length === 0 && <p className="investment-state">No events recorded.</p>}
             {detail.events.length > 0 && (
               <ul className="investment-holding-grid">
@@ -186,10 +188,14 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
 
           <section aria-labelledby="holding-record-event-title">
             <p className="section-label" id="holding-record-event-title">Record an event</p>
+            {recordNotice && <WealthRefreshNotice message={recordNotice} />}
             <InvestmentEventForm
               accounts={accounts}
               holding={{ accountId: detail.accountId, securityId: detail.securityId, securityName: detail.securityName, currency: detail.currency }}
-              onRecorded={() => setAttempt((value) => value + 1)}
+              onRecorded={() => {
+                setRecordNotice("Event recorded.");
+                setAttempt((value) => value + 1);
+              }}
               request={request}
             />
           </section>
@@ -225,7 +231,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
             <form className="investment-record-price" onSubmit={(event) => void submitPrice(event)}>
               <h3>Record a dated price</h3>
               {priceProblem && <p className="inline-alert" role="alert">{priceProblem}</p>}
-              {priceFeedback && <p className="investment-feedback" role="status">{priceFeedback}</p>}
+              {priceFeedback && <WealthRefreshNotice message={priceFeedback} />}
               <label className="date-field">
                 <span>Price date</span>
                 <input disabled={priceBusy} onChange={(event) => setPriceDate(event.target.value)} required type="date" value={priceDate} />
@@ -264,11 +270,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                   </li>
                 ))}
               </ul>
-              {fundingNotice && (
-                <p className="section-label" role="status">
-                  {fundingNotice}
-                </p>
-              )}
+              {fundingNotice && <WealthRefreshNotice message={fundingNotice} />}
               {fundingEvent && (
                 // Keyed on the event and the reload counter: switching purchases must not carry
                 // over another purchase's draft or seeded links, and a confirm/unlink reload

@@ -3,6 +3,10 @@ import "client-only";
 import { apiUrl } from "@/lib/api/url";
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/** For the handful of calls that parse a statement, commit an import, or refresh prices/wealth
+ * history/rule analytics — genuinely slow server work the 10-second default would cut off. */
+export const LONG_REQUEST_TIMEOUT_MS = 120_000;
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -20,16 +24,21 @@ export function errorText(error: unknown, fallback: string): string {
   return typeof detail === "string" && detail ? detail : fallback;
 }
 
+function isTimeout(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "TimeoutError";
+}
+
 export async function apiFetch<T>(
   path: string,
-  init: RequestInit = {},
+  init: RequestInit & { timeoutMs?: number } = {},
 ): Promise<T> {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...requestInit } = init;
   const controller = new AbortController();
-  const callerSignal = init.signal;
+  const callerSignal = requestInit.signal;
   const abortFromCaller = () => controller.abort(callerSignal?.reason);
   const timeout = setTimeout(
     () => controller.abort(new DOMException("Request timed out", "TimeoutError")),
-    REQUEST_TIMEOUT_MS,
+    timeoutMs,
   );
 
   if (callerSignal?.aborted) abortFromCaller();
@@ -37,7 +46,7 @@ export async function apiFetch<T>(
 
   try {
     const response = await fetch(apiUrl(path), {
-      ...init,
+      ...requestInit,
       credentials: "include",
       signal: controller.signal,
     });
@@ -51,6 +60,15 @@ export async function apiFetch<T>(
     }
 
     return (await response.json()) as T;
+  } catch (error) {
+    // A write that timed out may still be running on the server (the household lock does not
+    // release just because the browser gave up waiting) — that is a different sentence from "this
+    // failed", so it is distinguished here, once, from the plain `TimeoutError` a GET raises.
+    const method = (requestInit.method ?? "GET").toUpperCase();
+    if (isTimeout(error) && method !== "GET") {
+      throw new ApiError(0, "The server may still be finishing this request. Reload before retrying.");
+    }
+    throw error;
   } finally {
     clearTimeout(timeout);
     callerSignal?.removeEventListener("abort", abortFromCaller);

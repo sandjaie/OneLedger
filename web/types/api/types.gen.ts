@@ -10021,31 +10021,6 @@ export type GetInvestmentImportInvestmentImportsImportIdGetResponses = {
 
 export type GetInvestmentImportInvestmentImportsImportIdGetResponse = GetInvestmentImportInvestmentImportsImportIdGetResponses[keyof GetInvestmentImportInvestmentImportsImportIdGetResponses];
 
-export type PriceStatusInvestmentPricesStatusGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/investment-prices/status';
-};
-
-export type PriceStatusInvestmentPricesStatusGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type PriceStatusInvestmentPricesStatusGetError = PriceStatusInvestmentPricesStatusGetErrors[keyof PriceStatusInvestmentPricesStatusGetErrors];
-
-export type PriceStatusInvestmentPricesStatusGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: PriceStatus;
-};
-
-export type PriceStatusInvestmentPricesStatusGetResponse = PriceStatusInvestmentPricesStatusGetResponses[keyof PriceStatusInvestmentPricesStatusGetResponses];
-
 export type PriceRefreshInvestmentPricesRefreshPostData = {
     body?: never;
     path?: never;

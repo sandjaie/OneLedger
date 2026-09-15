@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 
 from ..auth import OwnerSession, require_owner
 from ..db import connect, scope_to_owner
-from ..investments.prices import PriceStatus, RefreshOutcome, read_status, refresh
+from ..investments.prices import RefreshOutcome, refresh
 
 router = APIRouter(prefix="/investment-prices", tags=["investment prices"])
 
@@ -18,13 +18,6 @@ router = APIRouter(prefix="/investment-prices", tags=["investment prices"])
 def get_price_client() -> Iterator[httpx.Client]:
     with httpx.Client() as client:
         yield client
-
-
-@router.get("/status", response_model=PriceStatus)
-def price_status(owner: Annotated[OwnerSession, Depends(require_owner)]) -> PriceStatus:
-    with connect() as conn, conn.cursor() as cur:
-        scope_to_owner(conn, owner.user_id)
-        return read_status(cur, owner.household_id)
 
 
 @router.post("/refresh", response_model=RefreshOutcome)

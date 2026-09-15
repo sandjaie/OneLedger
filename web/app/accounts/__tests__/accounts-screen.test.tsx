@@ -622,6 +622,36 @@ describe("Accounts", () => {
     ).toBeTruthy();
   });
 
+  it("opens the valuation panel for a ?valuation= account id from the overview's coverage link", async () => {
+    window.history.replaceState(null, "", "/accounts?valuation=acct-retirement");
+    const request = vi.fn().mockResolvedValue({
+      accountId: "acct-retirement",
+      currentMode: "snapshot",
+      currentEffectiveFrom: "2026-01-01",
+      periods: [{ id: "period-1", valuationMode: "snapshot", effectiveFrom: "2026-01-01", effectiveTo: null }],
+      snapshots: [],
+    });
+    render(
+      <AccountsScreen
+        {...props}
+        accounts={[retirementNoSnapshot]}
+        request={request as unknown as typeof apiFetch}
+        totals={[]}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Valuation — Inventory Retirement" })).toBeTruthy();
+    window.history.replaceState(null, "", "/accounts");
+  });
+
+  it("ignores a ?valuation= id that is not an active asset account", () => {
+    window.history.replaceState(null, "", `/accounts?valuation=${closed.id}`);
+    render(<AccountsScreen {...props} />);
+
+    expect(screen.queryByRole("heading", { name: /^Valuation/ })).toBeNull();
+    window.history.replaceState(null, "", "/accounts");
+  });
+
   it("drops a leftover credit limit when the type is not a card", async () => {
     const request = vi.fn().mockResolvedValue(props.accounts[0]);
     render(<AccountsScreen {...props} request={request} />);

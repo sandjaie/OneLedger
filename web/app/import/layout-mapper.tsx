@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 
 import { ACCOUNT_TYPES } from "@/lib/accounts/types";
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type { LayoutColumn, LayoutCreate, LayoutProfile, LayoutProposal } from "@/types/api";
 
 /** What the form starts from. `remap` locks the name field: saving always creates that
@@ -176,6 +176,7 @@ export function LayoutMapper({
       const result = await request<LayoutProposal>("/layouts/propose", {
         method: "POST",
         body: previewBody(file, password, draft),
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setPreview(result);
       setPreviewedJson(JSON.stringify(draft));

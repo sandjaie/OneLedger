@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type {
   CategoryRow,
   ClassifyResult,
@@ -117,7 +117,7 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
 
   useEffect(() => {
     let current = true;
-    void request<RuleAnalytics>("/rules/analytics")
+    void request<RuleAnalytics>("/rules/analytics", { timeoutMs: LONG_REQUEST_TIMEOUT_MS })
       .then((result) => { if (current) setAnalytics(result); })
       .catch((error: unknown) => {
         if (current) setProblem(errorText(error, "Coverage could not be loaded."));
@@ -275,6 +275,7 @@ function SuggestedRuleCard({
     try {
       const result = await request<ClassifyResult>(`/classify?ruleId=${rule.id}&preview=true`, {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setPreview(result);
     } catch (error) {
@@ -291,6 +292,7 @@ function SuggestedRuleCard({
     try {
       const result = await request<ClassifyResult>(`/classify?ruleId=${rule.id}`, {
         method: "POST",
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setApplied(result);
     } catch (error) {
@@ -367,7 +369,7 @@ function SuggestedRules({
 
   useEffect(() => {
     let current = true;
-    void request<RuleSuggestionsResponse>("/rules/suggestions")
+    void request<RuleSuggestionsResponse>("/rules/suggestions", { timeoutMs: LONG_REQUEST_TIMEOUT_MS })
       .then((result) => { if (current) setData(result); })
       .catch((error: unknown) => {
         if (current) setProblem(errorText(error, "Suggested rules could not be loaded."));
@@ -528,7 +530,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
       () =>
         request<{ considered: number; changed: number }>(
           `/classify${previewOnly ? "?preview=true" : ""}`,
-          { method: "POST" },
+          { method: "POST", timeoutMs: LONG_REQUEST_TIMEOUT_MS },
         ),
       "The classification pass did not run. Retry.",
     );

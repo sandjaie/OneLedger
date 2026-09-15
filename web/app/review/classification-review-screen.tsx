@@ -422,7 +422,7 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
       <header className="classification-review-head">
         <div>
           <p className="classification-kicker">Household knowledge</p>
-          <h1 id="classification-review-title">Review</h1>
+          <h1 id="classification-review-title">Classify</h1>
           <p>Answer recurring classification questions once, then inspect the exact scope before anything changes.</p>
         </div>
         {page && (

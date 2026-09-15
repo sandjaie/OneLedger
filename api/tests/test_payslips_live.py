@@ -1058,6 +1058,17 @@ def test_deduction_rules_are_saved_listed_and_removed(live: PayslipFixture) -> N
     assert removed.status_code == 204
     assert client().get("/payslips/deduction-rules", headers=ORIGIN).json()["rules"] == []
 
+    # A label with a slash, as the web sends it URI-encoded, still reaches its rule.
+    slashed = client().put(
+        "/payslips/deduction-rules/Tax%2FNI",
+        json={"categoryId": str(flights_category)},
+        headers=ORIGIN,
+    )
+    assert slashed.status_code == 200
+    assert slashed.json()["label"] == "Tax/NI"
+    removed = client().delete("/payslips/deduction-rules/Tax%2FNI", headers=ORIGIN)
+    assert removed.status_code == 204
+
 
 def test_invalid_rule_label_path_parameter_is_422_not_500(live: PayslipFixture) -> None:
     flights_category = _category_id(live, "travel-flights")

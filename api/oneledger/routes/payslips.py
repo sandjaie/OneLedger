@@ -1000,7 +1000,7 @@ def list_deduction_rules(
     return DeductionRulesResponse(rules=rules)
 
 
-@router.put("/payslips/deduction-rules/{label}", response_model=DeductionRuleRow)
+@router.put("/payslips/deduction-rules/{label:path}", response_model=DeductionRuleRow)
 def save_deduction_rule(
     label: str,
     body: DeductionRuleIn,
@@ -1023,7 +1023,7 @@ def save_deduction_rule(
     return DeductionRuleRow(label=normalized, categoryId=body.categoryId)
 
 
-@router.delete("/payslips/deduction-rules/{label}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/payslips/deduction-rules/{label:path}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_deduction_rule(
     label: str, owner: Annotated[OwnerSession, Depends(require_owner)]
 ) -> Response:

@@ -172,6 +172,8 @@ function buildRequest(kind: Kind, holding: EventHolding, draft: Draft, idempoten
 
 export function InvestmentEventForm({ request, accounts, holding, onRecorded }: Props) {
   const [positions, setPositions] = useState<Array<AcquisitionPosition>>([]);
+  const [positionsState, setPositionsState] = useState<"loading" | "ready" | "error">("loading");
+  const [positionsAttempt, setPositionsAttempt] = useState(0);
   const [selectedHoldingId, setSelectedHoldingId] = useState("");
   const [kind, setKind] = useState<Kind>("sale");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
@@ -183,11 +185,17 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
 
   useEffect(() => {
     let current = true;
-    request<PortfolioPositions>("/portfolio/positions").then((next) => {
-      if (current) setPositions(next.positions.filter((p) => !p.closed));
-    }).catch(() => undefined);
+    request<PortfolioPositions>("/portfolio/positions")
+      .then((next) => {
+        if (!current) return;
+        setPositions(next.positions.filter((p) => !p.closed));
+        setPositionsState("ready");
+      })
+      .catch(() => {
+        if (current) setPositionsState("error");
+      });
     return () => { current = false; };
-  }, [request]);
+  }, [request, positionsAttempt]);
 
   const pickedPosition = positions.find((p) => p.holdingId === selectedHoldingId);
   const selected: EventHolding | undefined = holding
@@ -233,6 +241,7 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
       });
       setFeedback("Event recorded.");
       resetDraft(kind);
+      setPositionsAttempt((value) => value + 1);
       onRecorded();
     } catch (error) {
       setProblem(errorText(error, "This event was not recorded. Retry."));
@@ -250,6 +259,16 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
     <form className="investment-record-event" onSubmit={(e) => { e.preventDefault(); review(); }}>
       <h3>Record an event</h3>
       {feedback && <p className="investment-feedback" role="status">{feedback}</p>}
+      {positionsState === "error" && (
+        <p className="inline-alert" role="alert">
+          Open holdings could not be loaded.{" "}
+          <button
+            className="text-action"
+            onClick={() => { setPositionsState("loading"); setPositionsAttempt((value) => value + 1); }}
+            type="button"
+          >Try again</button>
+        </p>
+      )}
 
       {!holding && (
         <label className="select-field">

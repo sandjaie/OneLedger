@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { reasonText } from "@/app/investments/review-reasons";
 import { SecurityForm } from "@/app/investments/security-form";
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
-import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
+import { ApiError, LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type {
   AccountRow,
   CommittedGroupResponse,
@@ -195,6 +196,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       const result = await request<InvestmentParseResponse>("/investment-imports/parse", {
         method: "POST",
         body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setPreview(result);
       setLocked(false);
@@ -220,6 +222,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       const result = await request<InvestmentParseResponse>("/investment-imports/parse", {
         method: "POST",
         body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       if (result.staged) {
         setImported(result);
@@ -255,6 +258,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ expectedState: imported.expectedState }),
+          timeoutMs: LONG_REQUEST_TIMEOUT_MS,
         },
       );
       setCommitResult(result);
@@ -326,9 +330,17 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
                 <li key={group.groupNumber}>
                   Group {group.groupNumber}: {group.status}
                   {group.reason && ` — ${commitReasonText(group.reason)}`}
+                  {group.status === "committed" && (
+                    <> · <Link href="/investments">View in portfolio</Link></>
+                  )}
                 </li>
               ))}
             </ul>
+            <p>
+              <Link href="/investments">View the portfolio</Link>
+              {" · "}
+              <Link href="/settings">Settings &rsaquo; Data quality</Link>
+            </p>
           </div>
         )}
 

@@ -93,6 +93,7 @@ afterEach(cleanup);
 describe("HoldingScreen", () => {
   it("renders events, cash links, prices and review reasons as server strings", async () => {
     const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) {
         return detail({ openReviewReasons: ["incomplete_lot_allocation"] });
       }
@@ -116,6 +117,7 @@ describe("HoldingScreen", () => {
 
   it("shows the unlink message for a purchase that is only partly funded, not the Correct action", async () => {
     const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) {
         return detail({
           events: [{
@@ -164,6 +166,7 @@ describe("HoldingScreen", () => {
   it("records a dated price with the exact strings typed and reloads the holding", async () => {
     let loads = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) {
         loads += 1;
         return loads === 1 ? detail() : detail({ prices: [{ priceDate: "2026-02-10", price: "11.250000" }] });
@@ -182,7 +185,8 @@ describe("HoldingScreen", () => {
     fireEvent.change(screen.getByLabelText("Price (XAA)"), { target: { value: "11.250000" } });
     fireEvent.click(screen.getByRole("button", { name: "Record price" }));
 
-    expect(await screen.findByText("Dated price recorded.")).toBeTruthy();
+    expect(await screen.findByText(/Dated price recorded\./)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Refresh Wealth" })).toHaveProperty("pathname", "/wealth");
     expect(await screen.findByText("XAA 11.250000")).toBeTruthy();
     expect(loads).toBe(2);
   });
@@ -190,6 +194,7 @@ describe("HoldingScreen", () => {
   it("shows the service's own refusal when a dated price is not accepted, and does not reload", async () => {
     let loads = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) {
         loads += 1;
         return detail();
@@ -211,7 +216,7 @@ describe("HoldingScreen", () => {
       "textContent",
       "manual prices require a household-owned security",
     );
-    expect(screen.queryByText("Dated price recorded.")).toBeNull();
+    expect(screen.queryByText(/Dated price recorded\./)).toBeNull();
     expect(loads).toBe(1);
   });
 
@@ -323,6 +328,7 @@ describe("HoldingScreen", () => {
     });
     let holdingLoads = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) {
         holdingLoads += 1;
         return holdingLoads === 1 ? unfunded : funded;
@@ -368,7 +374,7 @@ describe("HoldingScreen", () => {
     expect(await screen.findByText("Fully funded. Unlink existing funding before correcting this purchase.")).toBeTruthy();
     // The outcome survives the reload, and the open panel re-seeds from the fresh holding: the
     // purchase is now fully funded, so its allocation form is no longer offered.
-    expect(screen.getByText("Funding updated. The purchase below shows the refreshed status.")).toBeTruthy();
+    expect(screen.getByText(/Funding updated\. The purchase below shows the refreshed status\./)).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("group", { name: "Funding allocation 1" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Hide funding" }));
     expect(screen.getByRole("button", { name: "Review funding" })).toBeTruthy();
@@ -376,6 +382,7 @@ describe("HoldingScreen", () => {
 
   it("shows a not-found state for a foreign or missing holding without a generic error", async () => {
     const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) throw new ApiError(404, "holding not found");
       throw new Error(`Unexpected synthetic route ${path}`);
     });
@@ -388,6 +395,7 @@ describe("HoldingScreen", () => {
   it("routes a protected read returning 401 through the workspace to login", async () => {
     const navigate = vi.fn();
     const request = requestFrom((path) => {
+      if (path === "/portfolio/positions") return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: [] };
       if (path === "/household") return household;
       if (path === "/accounts") return { accounts: [], totals: [] };
       if (path === `/portfolio/holdings/${HOLDING_ID}`) throw new ApiError(401, "synthetic");

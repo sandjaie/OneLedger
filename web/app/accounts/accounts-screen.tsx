@@ -62,6 +62,20 @@ const MONTHS: Record<string, string> = {
   "12": "Dec",
 };
 
+// The overview's coverage reasons deep-link a snapshot-mode account straight into its valuation
+// panel (`/accounts?valuation={accountId}`), the same query-string convention `workspace.tsx`
+// already reads for `sourceDocumentId`. `accounts` is always the fully loaded list by the time
+// this screen mounts (Workspace withholds it until `/accounts` resolves), so the target is read
+// once as each state's own lazy initializer rather than a mount effect — an id that resolves to
+// no real, active asset account is silently ignored rather than opening a panel for a closed
+// account or a liability.
+function deepLinkedValuationAccount(accounts: Array<AccountRow>): AccountRow | undefined {
+  if (typeof window === "undefined") return undefined;
+  const accountId = new URLSearchParams(window.location.search).get("valuation");
+  if (!accountId) return undefined;
+  return accounts.find((row) => row.id === accountId && row.isActive && row.accountClass === "asset");
+}
+
 function emptyDraft(currencies: Array<CurrencyRow>, institutions: Array<InstitutionRow>): Draft {
   return {
     name: "",
@@ -340,9 +354,11 @@ export function AccountsScreen({
   request,
   onChanged,
 }: Props) {
-  const [mode, setMode] = useState<"view" | "add" | "edit" | "valuation">("view");
+  const [mode, setMode] = useState<"view" | "add" | "edit" | "valuation">(() =>
+    deepLinkedValuationAccount(accounts) ? "valuation" : "view",
+  );
   const [editing, setEditing] = useState<AccountRow>();
-  const [valuing, setValuing] = useState<AccountRow>();
+  const [valuing, setValuing] = useState<AccountRow | undefined>(() => deepLinkedValuationAccount(accounts));
   const [draft, setDraft] = useState<Draft>(() => emptyDraft(currencies, institutions));
   const [addingInstitution, setAddingInstitution] = useState(false);
   const [institutionDraft, setInstitutionDraft] = useState<InstitutionCreate>({

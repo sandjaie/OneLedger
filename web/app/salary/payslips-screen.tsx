@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
   CategoryRow,
   CurrencyRow,
+  DeductionRuleRow,
+  DeductionRulesResponse,
   DepositCandidate,
   PayslipCreate,
   PayslipImportResponse,
@@ -107,6 +109,14 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
   const [spendingBusy, setSpendingBusy] = useState<string>();
   const [spendingProblem, setSpendingProblem] = useState<{ key: string; message: string }>();
 
+  const [deductionRules, setDeductionRules] = useState<Array<DeductionRuleRow>>();
+  const [deductionRulesState, setDeductionRulesState] = useState<"loading" | "ready" | "error">("loading");
+  const [deductionRulesAttempt, setDeductionRulesAttempt] = useState(0);
+  const [newRuleLabel, setNewRuleLabel] = useState("");
+  const [newRuleCategoryId, setNewRuleCategoryId] = useState("");
+  const [deductionRuleBusy, setDeductionRuleBusy] = useState<string>();
+  const [deductionRuleProblem, setDeductionRuleProblem] = useState<string>();
+
   useEffect(() => {
     let current = true;
     request<PayslipsResponse>("/payslips")
@@ -122,6 +132,56 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       current = false;
     };
   }, [attempt, request]);
+
+  useEffect(() => {
+    let current = true;
+    request<DeductionRulesResponse>("/payslips/deduction-rules")
+      .then((result) => {
+        if (!current) return;
+        setDeductionRules(result.rules);
+        setDeductionRulesState("ready");
+      })
+      .catch(() => {
+        if (current) setDeductionRulesState("error");
+      });
+    return () => {
+      current = false;
+    };
+  }, [deductionRulesAttempt, request]);
+
+  async function saveDeductionRule(label: string, categoryId: string) {
+    if (!label.trim() || !categoryId) return;
+    const key = label.trim();
+    setDeductionRuleBusy(key);
+    setDeductionRuleProblem(undefined);
+    try {
+      await request<DeductionRuleRow>(`/payslips/deduction-rules/${encodeURIComponent(key)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId }),
+      });
+      setNewRuleLabel("");
+      setNewRuleCategoryId("");
+      setDeductionRulesAttempt((value) => value + 1);
+    } catch (error) {
+      setDeductionRuleProblem(errorText(error, "This deduction rule was not saved."));
+    } finally {
+      setDeductionRuleBusy(undefined);
+    }
+  }
+
+  async function removeDeductionRule(label: string) {
+    setDeductionRuleBusy(label);
+    setDeductionRuleProblem(undefined);
+    try {
+      await request<void>(`/payslips/deduction-rules/${encodeURIComponent(label)}`, { method: "DELETE" });
+      setDeductionRulesAttempt((value) => value + 1);
+    } catch (error) {
+      setDeductionRuleProblem(errorText(error, "This deduction rule was not removed."));
+    } finally {
+      setDeductionRuleBusy(undefined);
+    }
+  }
 
   function changeForm<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -269,6 +329,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       const result = await request<PayslipImportResponse>("/payslips/import", {
         method: "POST",
         body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setPreview(result);
       setLocked(false);
@@ -293,6 +354,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
       const result = await request<PayslipImportResponse>("/payslips/import", {
         method: "POST",
         body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setImportResult(result);
       setAttempt((value) => value + 1);
@@ -574,6 +636,79 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="salary-deduction-rules-title">
+        <h2 id="salary-deduction-rules-title">Deduction rules</h2>
+        <p>
+          A rule remembers a deduction label&rsquo;s spending category. It affects payslips linked
+          afterwards, not deductions already counted as spending.
+        </p>
+        {deductionRulesState === "loading" && <p role="status">Loading deduction rules…</p>}
+        {deductionRulesState === "error" && (
+          <div role="alert">
+            <p>Deduction rules could not be loaded.</p>
+            <button
+              className="text-action"
+              onClick={() => { setDeductionRulesState("loading"); setDeductionRulesAttempt((v) => v + 1); }}
+              type="button"
+            >Try again</button>
+          </div>
+        )}
+        {deductionRuleProblem && <p className="inline-alert" role="alert">{deductionRuleProblem}</p>}
+        {deductionRulesState === "ready" && deductionRules && (
+          <>
+            {deductionRules.length === 0 && <p>No deduction rules are recorded yet.</p>}
+            {deductionRules.length > 0 && (
+              <ul className="salary-deduction-rules">
+                {deductionRules.map((rule) => (
+                  <li key={rule.label}>
+                    <span>{rule.label}</span>
+                    <select
+                      disabled={deductionRuleBusy === rule.label}
+                      onChange={(e) => void saveDeductionRule(rule.label, e.target.value)}
+                      value={rule.categoryId}
+                    >
+                      {!expenseCategories.some((row) => row.id === rule.categoryId) && (
+                        <option disabled value={rule.categoryId}>Category no longer active</option>
+                      )}
+                      {expenseCategories.map((row) => (
+                        <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="text-action"
+                      disabled={deductionRuleBusy === rule.label}
+                      onClick={() => void removeDeductionRule(rule.label)}
+                      type="button"
+                    >Remove</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="salary-deduction-rule-form">
+              <label className="text-field">
+                <span>Deduction label</span>
+                <input onChange={(e) => setNewRuleLabel(e.target.value)} value={newRuleLabel} />
+              </label>
+              <label className="select-field">
+                <span>Category</span>
+                <select onChange={(e) => setNewRuleCategoryId(e.target.value)} value={newRuleCategoryId}>
+                  <option value="">Choose a category</option>
+                  {expenseCategories.map((row) => (
+                    <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="primary-action"
+                disabled={!newRuleLabel.trim() || !newRuleCategoryId || deductionRuleBusy === newRuleLabel.trim()}
+                onClick={() => void saveDeductionRule(newRuleLabel, newRuleCategoryId)}
+                type="button"
+              >Add rule</button>
+            </div>
+          </>
         )}
       </section>
     </section>

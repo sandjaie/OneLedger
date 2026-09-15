@@ -217,4 +217,39 @@ describe("apiFetch", () => {
     await expect(apiFetch("/fx/on", { signal: caller.signal }))
       .rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("honors a longer caller-supplied timeoutMs instead of the 10-second default", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const result = apiFetch("/parse", { method: "POST", timeoutMs: 120_000 });
+    let settled = false;
+    result.catch(() => undefined).finally(() => { settled = true; });
+    const rejection = expect(result).rejects.toMatchObject({ status: 0 });
+    // Still running well past the default 10 seconds — the override is in effect.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(110_000);
+    await rejection;
+  });
+
+  it("tells a timed-out write the server may still be finishing, not that it failed", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const result = apiFetch("/import/abc/commit", { method: "POST" });
+    const rejection = expect(result).rejects.toMatchObject({
+      status: 0,
+      detail: "The server may still be finishing this request. Reload before retrying.",
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+  });
+
+  it("leaves a timed-out GET as a plain TimeoutError", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(stalledFetch));
+    const result = apiFetch("/rules/analytics", { timeoutMs: 120_000 });
+    const rejection = expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+    await vi.advanceTimersByTimeAsync(120_000);
+    await rejection;
+  });
 });
