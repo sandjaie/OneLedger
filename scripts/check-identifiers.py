@@ -220,6 +220,9 @@ BASE_TABLE_READERS = {
     "api/oneledger/investments/portfolio.py",
     # A balance and the guards on an account's anchor must include every movement, transfers too.
     "api/oneledger/routes/accounts.py",
+    # A resolution's linked posting is read by its own id, including one later split: the history
+    # still shows its original date and amount with `eligible: false`, not a missing row.
+    "api/oneledger/routes/commitment_resolutions.py",
     # Data Quality counts the rows a backup does not hold, and a backup holds every row.
     "api/oneledger/routes/doctor.py",
     # The backup manifest sums every row a restored dump must reproduce, transfer legs and
