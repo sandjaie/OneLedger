@@ -51,6 +51,12 @@ const commitment: CommitmentRow = {
   archivedAt: null,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
+  certainty: "confirmed",
+  nextDueDate: "2026-02-01",
+  status: "upcoming",
+  paidTowardNext: "0.0000",
+  partlyPaid: false,
+  remainingNext: "5000.0000",
 };
 
 const emptyForecast: ForecastResponse = {
@@ -76,7 +82,14 @@ const forecastWithAccount: ForecastResponse = {
         { days: 90, date: "2026-05-30", balance: "25000.0000" },
       ],
       occurrences: [
-        { commitmentId: commitment.id, label: commitment.label, date: "2026-03-01", amount: "5000.0000", dueByAsOf: true },
+        {
+          commitmentId: commitment.id,
+          label: commitment.label,
+          date: "2026-03-01",
+          amount: "5000.0000",
+          dueByAsOf: true,
+          certainty: "confirmed",
+        },
       ],
     },
   ],
@@ -151,5 +164,48 @@ describe("plans screen", () => {
     await waitFor(() => expect(commitmentsCall).toBe(2));
     expect(await screen.findByText("Commitment added.")).toBeTruthy();
     expect(screen.getByText(/Synthetic salary account · Synthetic salary/)).toBeTruthy();
+  });
+
+  it("renders certainty, status, next due date and paid/remaining from server strings", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(await screen.findByText(/Confirmed/)).toBeTruthy();
+    expect(screen.getByText(/Upcoming/)).toBeTruthy();
+    expect(screen.getByText(/Next due 2026-02-01/)).toBeTruthy();
+    expect(screen.getByText(/Paid A 0\.00/)).toBeTruthy();
+    expect(screen.getByText(/Remaining A 5,000\.00/)).toBeTruthy();
+  });
+
+  it("shows Partly paid alongside the status when the server marks it so", async () => {
+    const partlyPaid: CommitmentRow = { ...commitment, partlyPaid: true, paidTowardNext: "2000.0000" };
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") return { commitments: [partlyPaid] } satisfies CommitmentsResponse;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(await screen.findByText(/Upcoming · Partly paid/)).toBeTruthy();
+  });
+
+  it("opens the settlement panel for a commitment with an open occurrence", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: commitment.nextDueDate, candidates: [] };
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
+    expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
   });
 });

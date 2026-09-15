@@ -13,6 +13,8 @@ import type {
   ForecastResponse,
 } from "@/types/api";
 
+import { SettlementPanel } from "./settlement-panel";
+
 type Props = {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
@@ -26,7 +28,22 @@ type FormState = {
   cadence: "once" | "monthly" | "annual";
   firstDate: string;
   endDate: string;
+  certainty: "confirmed" | "estimated";
+  nextDueDate: string;
 };
+
+const STATUS_TEXT: Record<CommitmentRow["status"], string> = {
+  upcoming: "Upcoming",
+  due: "Due",
+  overdue: "Overdue",
+  finished: "Finished",
+  cancelled: "Cancelled",
+};
+
+function statusText(commitment: CommitmentRow): string {
+  const base = STATUS_TEXT[commitment.status];
+  return commitment.partlyPaid ? `${base} · Partly paid` : base;
+}
 
 const EXCLUDED_ACCOUNT_TEXT: Record<string, string> = {
   not_ledger_valued: "This account is valued from holdings or a snapshot, not the ledger.",
@@ -48,6 +65,8 @@ function emptyForm(accounts: Array<AccountRow>): FormState {
     cadence: "monthly",
     firstDate: "",
     endDate: "",
+    certainty: "confirmed",
+    nextDueDate: "",
   };
 }
 
@@ -59,6 +78,8 @@ function formFromCommitment(commitment: CommitmentRow): FormState {
     cadence: commitment.cadence,
     firstDate: commitment.firstDate,
     endDate: commitment.endDate ?? "",
+    certainty: commitment.certainty,
+    nextDueDate: commitment.nextDueDate ?? "",
   };
 }
 
@@ -76,6 +97,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
+  const [settlingId, setSettlingId] = useState<string>();
 
   useEffect(() => {
     let current = true;
@@ -136,6 +158,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
             cadence: form.cadence,
             firstDate: form.firstDate,
             endDate: form.endDate || null,
+            certainty: form.certainty,
+            nextDueDate: form.nextDueDate || null,
           }),
         });
         setFeedback("Commitment updated.");
@@ -148,6 +172,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
           cadence: form.cadence,
           firstDate: form.firstDate,
           endDate: form.endDate || null,
+          certainty: form.certainty,
+          nextDueDate: form.nextDueDate || null,
           idempotencyKey,
         };
         await request<CommitmentRow>("/commitments", {
@@ -207,6 +233,8 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
           </li>
           <li>Balances stay in each account&rsquo;s own currency.</li>
           <li>A forecast posts nothing.</li>
+          <li>A resolved occurrence is not projected.</li>
+          <li>A part-paid occurrence projects its remainder, not its full amount.</li>
         </ul>
       </section>
 
@@ -247,6 +275,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                           <li key={index}>
                             {occurrence.date} {occurrence.label}{" "}
                             {moneyText(occurrence.amount, account.currency, currencies)}
+                            {occurrence.certainty === "estimated" && <small> · estimated</small>}
                             {occurrence.dueByAsOf && <small> · not yet in the ledger</small>}
                           </li>
                         ))}
@@ -295,11 +324,36 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                   <span>
                     {commitment.accountName} · {commitment.label} ·{" "}
                     {moneyText(commitment.amount, commitment.currency, currencies)} · {commitment.cadence}
+                    {" · "}
+                    {commitment.certainty === "estimated" ? "Estimated" : "Confirmed"}
+                  </span>
+                  <span>
+                    {statusText(commitment)}
+                    {commitment.nextDueDate && <> · Next due {commitment.nextDueDate}</>}
+                    {commitment.nextDueDate && (
+                      <>
+                        {" · Paid "}
+                        {moneyText(commitment.paidTowardNext, commitment.currency, currencies)}
+                        {commitment.remainingNext !== null && (
+                          <>
+                            {" · Remaining "}
+                            {moneyText(commitment.remainingNext, commitment.currency, currencies)}
+                          </>
+                        )}
+                      </>
+                    )}
                   </span>
                   {commitment.archivedAt ? (
                     <small>Archived</small>
                   ) : (
                     <>
+                      {commitment.nextDueDate && (
+                        <button
+                          className="text-action"
+                          onClick={() => setSettlingId(commitment.id)}
+                          type="button"
+                        >Settle</button>
+                      )}
                       <button className="text-action" onClick={() => startEdit(commitment)} type="button">Edit</button>
                       <button
                         className="text-action"
@@ -308,6 +362,15 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                         type="button"
                       >Archive</button>
                     </>
+                  )}
+                  {settlingId === commitment.id && (
+                    <SettlementPanel
+                      commitment={commitment}
+                      currencies={currencies}
+                      request={request}
+                      onClose={() => setSettlingId(undefined)}
+                      onChanged={() => setAttempt((value) => value + 1)}
+                    />
                   )}
                 </li>
               );
@@ -341,6 +404,20 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         {form.cadence !== "once" && (
           <label className="date-field"><span>End date (optional)</span><input onChange={(e) => changeForm("endDate", e.target.value)} type="date" value={form.endDate} /></label>
         )}
+        <label className="select-field">
+          <span>Certainty</span>
+          <select
+            onChange={(e) => changeForm("certainty", e.target.value as FormState["certainty"])}
+            value={form.certainty}
+          >
+            <option value="confirmed">Confirmed</option>
+            <option value="estimated">Estimated</option>
+          </select>
+        </label>
+        <label className="date-field">
+          <span>Next due date (optional)</span>
+          <input onChange={(e) => changeForm("nextDueDate", e.target.value)} type="date" value={form.nextDueDate} />
+        </label>
 
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         {feedback && <p role="status">{feedback}</p>}
