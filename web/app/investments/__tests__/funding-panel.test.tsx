@@ -9,6 +9,7 @@ import type {
   FundingConfirmationResponse,
   FundingProposalResponse,
   FundingUnlinkResponse,
+  HoldingCashLink,
   InvestmentEventRow,
   TransactionRow,
   TransactionsResponse,
@@ -20,6 +21,9 @@ const EVENT_C = "00000000-0000-4000-8000-000000000103";
 const CASH_A = "00000000-0000-4000-8000-000000000201";
 const CASH_B = "00000000-0000-4000-8000-000000000202";
 const CASH_TRANSFER = "00000000-0000-4000-8000-000000000203";
+// Never appears among the candidate `transactions` fixture below — a seeded link naming it
+// stays "unloaded" no matter what the owner does in the panel.
+const CASH_SEEDED = "00000000-0000-4000-8000-000000000205";
 
 function investmentEvent(overrides: Partial<InvestmentEventRow> = {}): InvestmentEventRow {
   return {
@@ -360,6 +364,75 @@ describe("investment funding", () => {
     expect(request.mock.calls.filter(([path]) => path.startsWith("/transactions?"))).toHaveLength(2);
   });
 
+  it("keeps a seeded link listed and still offers the draft form for a partly funded purchase", async () => {
+    const seeded: HoldingCashLink = {
+      investmentEventId: EVENT_A,
+      cashTransactionId: CASH_SEEDED,
+      role: "funding",
+      allocatedAmount: "10.0000",
+      currency: "XAA",
+    };
+    const request = routes({ ...candidateReads() });
+    render(
+      <FundingPanel
+        allowAdditionalFunding
+        events={[investmentEvent()]}
+        existingLinks={[seeded]}
+        request={request as unknown as typeof apiFetch}
+      />,
+    );
+
+    // The seeded link renders immediately — no "Find cash entries" click needed — and with no
+    // transaction ever loaded for it, the currency comes from the link itself.
+    const record = await screen.findByRole("article", { name: "Confirmed funding for cash entry" });
+    expect(within(record).getByText("XAA 10.0000")).toBeTruthy();
+    expect(within(record).getByRole("button", { name: /Review removal/ })).toBeTruthy();
+
+    // A purchase that is not fully funded still offers to fund the remainder.
+    fireEvent.click(screen.getByRole("button", { name: "Find cash entries" }));
+    expect(await screen.findByRole("group", { name: "Funding allocation 1" })).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Confirmed funding for cash entry" })).toBeTruthy();
+  });
+
+  it("unlinks a seeded link through the exact existing route and reports a result without its transaction ever loaded", async () => {
+    const seeded: HoldingCashLink = {
+      investmentEventId: EVENT_A,
+      cashTransactionId: CASH_SEEDED,
+      role: "funding",
+      allocatedAmount: "10.0000",
+      currency: "XAA",
+    };
+    const unlinked: FundingUnlinkResponse = {
+      state: "unlinked",
+      cashTransactionId: CASH_SEEDED,
+      restoredTransactionType: "expense",
+      removedAllocationCount: 1,
+    };
+    const onChanged = vi.fn();
+    const request = routes({ [`DELETE /investment-funding/cash-transactions/${CASH_SEEDED}`]: unlinked });
+    render(
+      <FundingPanel
+        events={[investmentEvent()]}
+        existingLinks={[seeded]}
+        onChanged={onChanged}
+        request={request as unknown as typeof apiFetch}
+      />,
+    );
+
+    const record = await screen.findByRole("article", { name: "Confirmed funding for cash entry" });
+    fireEvent.click(within(record).getByRole("button", { name: /Review removal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove funding link" }));
+
+    expect(request).toHaveBeenCalledWith(
+      `/investment-funding/cash-transactions/${CASH_SEEDED}`,
+      { method: "DELETE" },
+    );
+    const result = (await screen.findByText("This cash entry")).closest("p");
+    expect(result?.textContent).toContain("1 funding allocation removed. Cash entry restored to expense.");
+    expect(screen.queryByRole("article", { name: "Confirmed funding for cash entry" })).toBeNull();
+    expect(onChanged).toHaveBeenCalledOnce();
+  });
+
   it("targets one confirmed cash leaf for reviewed removal and preserves its context and focus", async () => {
     const fundingEvents = [
       investmentEvent(),
@@ -466,7 +539,7 @@ describe("investment funding", () => {
     const removal = screen.getByRole("group", { name: "Confirm funding removal" });
     expect(within(removal).getByText(/Synthetic second debit/)).toBeTruthy();
     expect(within(removal).getByText(/XAA -11.0000/)).toBeTruthy();
-    expect(within(removal).getByText("2 confirmed funding allocations will be removed from this cash leaf.")).toBeTruthy();
+    expect(within(removal).getByText("All funding allocations on this cash entry will be removed.")).toBeTruthy();
     expect(request.mock.calls.some(([path]) => path.includes("cash-transactions"))).toBe(false);
     expect(within(removal).queryByText(/Synthetic investment debit/)).toBeNull();
     expect(document.activeElement).toBe(within(removal).getByRole("button", { name: "Remove funding link" }));

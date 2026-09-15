@@ -8,26 +8,57 @@ import type {
   FundingConfirmationResponse,
   FundingProposalResponse,
   FundingUnlinkResponse,
-  InvestmentEventRow,
+  HoldingCashLink,
   TransactionRow,
   TransactionsResponse,
 } from "@/types/api";
 
+/** Every field this panel actually reads off an event — a strict subset of both
+ * `InvestmentEventRow` (the acquisition route's own response, used fresh from entry-screen) and
+ * the holding page's thinner `HoldingEventRow`, so either satisfies it without a cast. */
+export type FundableEvent = {
+  id: string;
+  eventDate: string;
+  eventKind: string;
+  currency: string;
+  netAmount: string;
+};
+
+/** Every field this panel reads off a confirmed allocation — carries its own currency (neither
+ * `ConfirmedFundingAllocation` nor a seeded `HoldingCashLink` share one shape that has it in the
+ * same place) rather than depending on the cash transaction being loaded to display one. */
+type FundedAllocation = { id: string; cashTransactionId: string; allocatedAmount: string; currency: string };
+
 type Props = {
-  events: Array<InvestmentEventRow>;
+  events: Array<FundableEvent>;
   request: typeof apiFetch;
+  // Cash already linked to these events before this panel opened (the holding page's own
+  // `HoldingDetail.cashLinks`) — seeded so the owner can review and unlink prior funding, not
+  // only funding confirmed in this session.
+  existingLinks?: Array<HoldingCashLink>;
+  // False (the default) matches the original single-shot flow: once anything is confirmed, the
+  // draft form is done and only the confirmed/seeded list shows. A caller that knows the event
+  // is not yet fully funded — the holding page, from the server's own `fundingComplete` — passes
+  // true so the draft form stays offered alongside seeded or just-confirmed links. The server
+  // remains the authority on whether a further proposal is actually accepted.
+  allowAdditionalFunding?: boolean;
+  // Called after a confirmation or an unlink succeeds, so a caller holding the source-of-truth
+  // record (the holding page's own `HoldingDetail`) can reload it — this panel never re-fetches
+  // its own seed.
+  onChanged?: () => void;
 };
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type AllocationDraft = FundingAllocationInput & { key: number };
 type UnverifiedOutcome = { kind: "confirmation" | "removal"; detail: string };
-type RemovalResult = { transaction: TransactionRow; response: FundingUnlinkResponse };
+type RemovalResult = { label: string; response: FundingUnlinkResponse };
+type Confirmed = { allocations: Array<FundedAllocation> } | undefined;
 
 const TRANSACTION_QUERY = "/transactions?amountMax=0&sort=bookedDate&direction=desc&limit=50&offset=";
 const MAX_AUTO_PAGES = 4;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function purchaseLabel(event: InvestmentEventRow) {
+function purchaseLabel(event: FundableEvent) {
   return `${event.eventDate} · ${event.eventKind.replaceAll("_", " ")} · ${event.currency} ${event.netAmount}`;
 }
 
@@ -42,7 +73,7 @@ function isEligible(transaction: TransactionRow) {
     && !transaction.txnType.startsWith("investment_");
 }
 
-function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDraft {
+function newDraft(key: number, events: Array<FundableEvent>): AllocationDraft {
   return {
     key,
     investmentEventId: events.length === 1 ? events[0].id : "",
@@ -51,7 +82,7 @@ function newDraft(key: number, events: Array<InvestmentEventRow>): AllocationDra
   };
 }
 
-export function FundingPanel({ events, request }: Props) {
+export function FundingPanel({ events, request, existingLinks = [], allowAdditionalFunding = false, onChanged }: Props) {
   const nextKey = useRef(2);
   const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -66,7 +97,20 @@ export function FundingPanel({ events, request }: Props) {
   const [transactionTotal, setTransactionTotal] = useState(0);
   const [drafts, setDrafts] = useState<Array<AllocationDraft>>([newDraft(1, events)]);
   const [proposal, setProposal] = useState<FundingProposalResponse>();
-  const [confirmed, setConfirmed] = useState<FundingConfirmationResponse>();
+  // Seeded once, from the links this panel opened with — a purchase funded before this session
+  // shows the same "review removal" action as one confirmed just now.
+  const [confirmed, setConfirmed] = useState<Confirmed>(() => {
+    const eventIds = new Set(events.map((event) => event.id));
+    const seeded = existingLinks
+      .filter((link) => link.role === "funding" && eventIds.has(link.investmentEventId))
+      .map((link) => ({
+        id: `${link.investmentEventId}:${link.cashTransactionId}`,
+        cashTransactionId: link.cashTransactionId,
+        allocatedAmount: link.allocatedAmount,
+        currency: link.currency,
+      }));
+    return seeded.length > 0 ? { allocations: seeded } : undefined;
+  });
   const [removingCashId, setRemovingCashId] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
@@ -216,9 +260,22 @@ export function FundingPanel({ events, request }: Props) {
           expectedState: proposal.expectedState,
         }),
       });
-      setConfirmed(response);
+      // The confirmation response carries no currency; the event it funds always shares its
+      // own (the proposal route refuses a currency mismatch), so that is the honest source.
+      const justConfirmed = response.allocations.map((allocation) => ({
+        id: allocation.id,
+        cashTransactionId: allocation.cashTransactionId,
+        allocatedAmount: allocation.allocatedAmount,
+        currency: eventFor(allocation.investmentEventId)?.currency ?? "",
+      }));
+      setConfirmed((current) => ({
+        allocations: [...(current?.allocations ?? []), ...justConfirmed],
+      }));
       setProposal(undefined);
+      setDrafts([newDraft(nextKey.current, events)]);
+      nextKey.current += 1;
       setFeedback("Funding confirmed from the reviewed server proposal.");
+      onChanged?.();
     } catch (error) {
       setProposal(undefined);
       const detail = errorText(error, "The funding confirmation response was not received.");
@@ -262,8 +319,13 @@ export function FundingPanel({ events, request }: Props) {
         const allocations = current.allocations.filter((allocation) => allocation.cashTransactionId !== cashId);
         return allocations.length > 0 ? { ...current, allocations } : undefined;
       });
-      if (transaction) setRemovalResult({ transaction, response });
+      // A seeded link's cash transaction was likely never loaded (loading it needs "Find cash
+      // entries", which a review-and-unlink of an already-funded purchase has no reason to
+      // press first) — the removal still happened and still gets a result, just without the
+      // transaction's own description.
+      setRemovalResult({ label: transaction ? cashLabel(transaction) : "This cash entry", response });
       closeRemoval();
+      onChanged?.();
     } catch (error) {
       setProblem("");
       setRemovingCashId("");
@@ -288,9 +350,6 @@ export function FundingPanel({ events, request }: Props) {
     confirmed?.allocations.map((allocation) => allocation.cashTransactionId) ?? [],
   ));
   const removingTransaction = transactionFor(removingCashId);
-  const removingAllocationCount = confirmed?.allocations.filter(
-    (allocation) => allocation.cashTransactionId === removingCashId,
-  ).length ?? 0;
 
   return (
     <section aria-labelledby="funding-title" className="investment-funding-panel">
@@ -306,7 +365,7 @@ export function FundingPanel({ events, request }: Props) {
       {feedback && <p className="investment-feedback" role="status">{feedback}</p>}
       {removalResult && (
         <p className="investment-feedback investment-removal-result" role="status">
-          <strong>{cashLabel(removalResult.transaction)}</strong>
+          <strong>{removalResult.label}</strong>
           <span>{removalResult.response.removedAllocationCount} funding allocation{removalResult.response.removedAllocationCount === 1 ? "" : "s"} removed. Cash entry restored to {removalResult.response.restoredTransactionType}.</span>
         </p>
       )}
@@ -350,7 +409,7 @@ export function FundingPanel({ events, request }: Props) {
         </aside>
       )}
 
-      {!unverified && loadState === "ready" && eligible.length > 0 && !confirmed && !proposal && !stale && (
+      {!unverified && loadState === "ready" && eligible.length > 0 && (!confirmed || allowAdditionalFunding) && !proposal && !stale && (
         <div className="investment-funding-drafts">
           {drafts.map((draft, index) => {
             const event = eventFor(draft.investmentEventId);
@@ -453,10 +512,11 @@ export function FundingPanel({ events, request }: Props) {
                 <h3>{transaction?.descriptionRaw ?? "Recorded cash entry"}</h3>
                 {allocations.map((allocation) => (
                   <p className="investment-exact" key={allocation.id}>
-                    {transaction?.currency} {allocation.allocatedAmount}
+                    {allocation.currency} {allocation.allocatedAmount}
                   </p>
                 ))}
                 <p>{allocations.length} recorded allocation{allocations.length === 1 ? "" : "s"}. The purchase and any confirmed transfer chain remain separate ledger records.</p>
+                <p>Unlink this funding before correcting the purchase it funds.</p>
                 <button
                   aria-label={`Review removal for ${transaction?.descriptionRaw ?? "cash entry"}`}
                   className="text-action"
@@ -474,7 +534,11 @@ export function FundingPanel({ events, request }: Props) {
         <fieldset aria-label="Confirm funding removal" className="investment-funding-removal">
           <legend>Remove cash-leaf allocations</legend>
           {removingTransaction && <strong>{cashLabel(removingTransaction)}</strong>}
-          <p>{removingAllocationCount} confirmed funding allocation{removingAllocationCount === 1 ? "" : "s"} will be removed from this cash leaf.</p>
+          {/* This panel only ever seeds or confirms the allocations for its own events, so a
+              count drawn from its own state could undercount a cash leaf that also funds an
+              event outside that scope — the unlink route removes every allocation on the leaf
+              regardless, so the sentence never claims a number it cannot vouch for. */}
+          <p>All funding allocations on this cash entry will be removed.</p>
           <p>The cash entry returns to its recorded prior type. The purchase and transfer chain remain unchanged.</p>
           <div className="investment-confirm-actions">
             <button className="primary-action" disabled={busy} onClick={() => void unlink()} ref={removeButton} type="button">
