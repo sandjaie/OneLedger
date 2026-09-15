@@ -108,6 +108,11 @@ function outOfBand(path: string): Promise<unknown> | undefined {
       },
     });
   }
+  // Register (Phase 3.4 Task 1) fetches alongside the forecast and commitments on Plans; every
+  // test here is about the rest of the screen, so it sees an empty register.
+  if (path === "/register?includeArchived=true") {
+    return Promise.resolve({ records: [] });
+  }
   // Emergency reserve (Phase 3.3 Task 2) fetches alongside the forecast and commitments on
   // Plans; every test here is about the rest of the screen, so it sees an unconfigured reserve.
   if (path === "/emergency-reserve") {

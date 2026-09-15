@@ -1104,6 +1104,21 @@ eligible-account and goal-shortfall reads both <code>routes/emergency_reserve.py
 <code>routes/actions.py</code> share, so <code>routes/actions.py</code> still imports no other route
 module (the Phase 3.2 import-cycle deviation).
 Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V52</code> (applied).</p>
+<p>Phase 3.4 Task 1 adds <code>register_record</code> &mdash; insurance policies, deposits,
+claims, nominee records and administration deadlines, one shape per <code>register_kind</code>
+enforced by a single <code>CHECK</code> forcing every field a kind does not use to <code>NULL</code>
+&mdash; and <code>register_document</code> (Task 2's document links, created now so its own
+migration needs no further schema change). A register record is an owner assumption like
+<code>commitment</code> and <code>goal</code>: no <code>SECURITY DEFINER</code> write path, plain
+household-scoped RLS. Archiving is terminal &mdash; <code>preserve_archived_register_record()</code>
+refuses any further <code>UPDATE</code> and every <code>DELETE</code>, the same shape as
+<code>preserve_closed_goal()</code> without the one-time exception, since no write needs to pass
+after a record is archived. <code>api/oneledger/register_records.py</code> holds the record reads
+<code>routes/actions.py</code>'s <code>action_list()</code> needs (the renewal/maturity/deadline
+windows and the review-due rule), the same import-cycle convention <code>resources.py</code>
+already follows for goals and the emergency reserve; <code>action_mark_key_shape</code>'s
+<code>record.</code> keys, widened ahead of time in V52, now name real items.
+Full DDL: <a href="../superpowers/schema.md">schema.md</a> <code>V53</code> (applied).</p>
 <p><code>payslip_deduction_rule</code> maps a deduction label to an expense category, and
 <code>payslip_line_posting</code> records the balanced <code>income</code>/<code>expense</code> transaction pair a
 deduction line posts when the owner counts it as spending (Phase 1.7 Task 3). Both carry household RLS and

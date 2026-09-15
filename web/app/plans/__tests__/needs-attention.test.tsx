@@ -56,6 +56,7 @@ const commitmentItem: ActionRow = {
   commitmentId: "00000000-0000-4000-8000-0000000000c1",
   cardStatementId: null,
   actionItemId: null,
+  registerRecordId: null,
 };
 
 const cardItem: ActionRow = {
@@ -76,6 +77,7 @@ const cardItem: ActionRow = {
   commitmentId: null,
   cardStatementId: "00000000-0000-4000-8000-0000000000s1",
   actionItemId: null,
+  registerRecordId: null,
 };
 
 const followUpItem: ActionRow = {
@@ -96,6 +98,7 @@ const followUpItem: ActionRow = {
   commitmentId: null,
   cardStatementId: null,
   actionItemId: "00000000-0000-4000-8000-0000000000f1",
+  registerRecordId: null,
 };
 
 function emptyResponse(): ActionsResponse {

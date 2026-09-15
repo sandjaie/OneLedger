@@ -161,9 +161,12 @@ const emptyEmergencyReserve = {
   reservations: [],
 };
 
-// Needs attention (Task 2), the monthly review (Task 2) and goals (Phase 3.3 Task 1) each fetch
-// on mount alongside the forecast and commitments; every test here is about the rest of the
-// screen, so all three get a quiet, already-resolved response unless a test overrides one itself.
+const emptyRegister = { records: [] };
+
+// Needs attention (Task 2), the monthly review (Task 2), goals (Phase 3.3 Task 1), the emergency
+// reserve (Phase 3.3 Task 2) and the register (Phase 3.4 Task 1) each fetch on mount alongside the
+// forecast and commitments; every test here is about the rest of the screen, so all of them get a
+// quiet, already-resolved response unless a test overrides one itself.
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn((path: string, init?: RequestInit) => {
     if (path.startsWith("/actions") && (!init || init.method === undefined)) {
@@ -177,6 +180,9 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
     }
     if (path === "/emergency-reserve") {
       return Promise.resolve(emptyEmergencyReserve);
+    }
+    if (path === "/register?includeArchived=true") {
+      return Promise.resolve(emptyRegister);
     }
     return Promise.resolve(handler(path, init));
   }) as Request;

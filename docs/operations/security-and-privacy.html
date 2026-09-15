@@ -812,7 +812,14 @@ decision is not made in this document, and not made implicitly by shipping a fea
 data and use the same owner authorization and log-redaction rules as the ledger. Store only metadata
 allowed by the storage boundary; a policy register does not justify a financial-action credential.
 A complete source financial identifier is stored only when the product needs to match or show it,
-through ADR-0021's household-scoped identifier relation rather than an arbitrary text field.</p>
+through ADR-0021's household-scoped identifier relation rather than an arbitrary text field.
+Phase 3.4's register applies this concretely: a nominee record (<code>register_record</code>,
+<code>kind = 'nominee'</code>) holds only which account, whether a nominee is recorded, a review
+date and its linked documents — never a nominee's name, relationship, contact detail or identity
+number, and the API refuses any of that in a nominee record's fields since a nominee record uses
+only <code>accountId</code> and <code>nomineeRecorded</code>. The same boundary applies to every
+kind: a policy, deposit, claim or administration record carries no identity number or credential
+either, and the web form says so.</p>
 <p>Owner exports are delivered through authorized routes, contain only selected records and documents,
 and omit secrets. Temporary archives must not be publicly served and must be removed after a bounded
 retrieval period. Record the export event without logging financial contents. A downloaded archive

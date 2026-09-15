@@ -698,11 +698,11 @@ export type ActionRow = {
     /**
      * Kind
      */
-    kind: 'commitment' | 'card_due' | 'follow_up' | 'goal' | 'reserve';
+    kind: 'commitment' | 'card_due' | 'follow_up' | 'goal' | 'reserve' | 'record';
     /**
      * Reason
      */
-    reason: 'commitment_overdue' | 'commitment_due' | 'card_payment_unplanned' | 'follow_up' | 'goal_shortfall' | 'reserve_below_target';
+    reason: 'commitment_overdue' | 'commitment_due' | 'card_payment_unplanned' | 'follow_up' | 'goal_shortfall' | 'reserve_below_target' | 'renewal_due' | 'maturity_due' | 'deadline_due' | 'review_due';
     /**
      * Title
      */
@@ -759,6 +759,10 @@ export type ActionRow = {
      * Actionitemid
      */
     actionItemId: string | null;
+    /**
+     * Registerrecordid
+     */
+    registerRecordId: string | null;
 };
 
 /**
@@ -6439,6 +6443,220 @@ export type RefreshOutcome = {
      */
     outcome: string;
     status: PriceStatus;
+};
+
+/**
+ * RegisterCreate
+ */
+export type RegisterCreate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Counterparty
+     */
+    counterparty?: string | null;
+    /**
+     * Covered
+     */
+    covered?: string | null;
+    /**
+     * Amount
+     */
+    amount?: string | null;
+    /**
+     * Currency
+     */
+    currency?: string | null;
+    /**
+     * Premiumamount
+     */
+    premiumAmount?: string | null;
+    /**
+     * Premiumcadence
+     */
+    premiumCadence?: 'monthly' | 'annual' | null;
+    /**
+     * Keydate
+     */
+    keyDate?: string | null;
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Instruction
+     */
+    instruction?: string | null;
+    /**
+     * Nomineerecorded
+     */
+    nomineeRecorded?: boolean | null;
+    /**
+     * Kind
+     */
+    kind: 'insurance_policy' | 'deposit' | 'claim' | 'nominee' | 'administration';
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * RegisterRenewed
+ */
+export type RegisterRenewed = {
+    /**
+     * Nextrenewaldate
+     */
+    nextRenewalDate: string;
+};
+
+/**
+ * RegisterResponse
+ */
+export type RegisterResponse = {
+    /**
+     * Records
+     */
+    records: Array<RegisterRow>;
+};
+
+/**
+ * RegisterRow
+ */
+export type RegisterRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Kind
+     */
+    kind: 'insurance_policy' | 'deposit' | 'claim' | 'nominee' | 'administration';
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Counterparty
+     */
+    counterparty: string | null;
+    /**
+     * Covered
+     */
+    covered: string | null;
+    /**
+     * Amount
+     */
+    amount: string | null;
+    /**
+     * Currency
+     */
+    currency: string | null;
+    /**
+     * Premiumamount
+     */
+    premiumAmount: string | null;
+    /**
+     * Premiumcadence
+     */
+    premiumCadence: string | null;
+    /**
+     * Keydate
+     */
+    keyDate: string | null;
+    /**
+     * Accountid
+     */
+    accountId: string | null;
+    /**
+     * Accountname
+     */
+    accountName: string | null;
+    /**
+     * Instruction
+     */
+    instruction: string | null;
+    /**
+     * Nomineerecorded
+     */
+    nomineeRecorded: boolean | null;
+    /**
+     * Lastreviewedon
+     */
+    lastReviewedOn: string | null;
+    /**
+     * Reviewdue
+     */
+    reviewDue: boolean;
+    /**
+     * Completedat
+     */
+    completedAt: string | null;
+    /**
+     * Archivedat
+     */
+    archivedAt: string | null;
+    /**
+     * Createdat
+     */
+    createdAt: string;
+    /**
+     * Updatedat
+     */
+    updatedAt: string;
+};
+
+/**
+ * RegisterUpdate
+ */
+export type RegisterUpdate = {
+    /**
+     * Title
+     */
+    title: string;
+    /**
+     * Counterparty
+     */
+    counterparty?: string | null;
+    /**
+     * Covered
+     */
+    covered?: string | null;
+    /**
+     * Amount
+     */
+    amount?: string | null;
+    /**
+     * Currency
+     */
+    currency?: string | null;
+    /**
+     * Premiumamount
+     */
+    premiumAmount?: string | null;
+    /**
+     * Premiumcadence
+     */
+    premiumCadence?: 'monthly' | 'annual' | null;
+    /**
+     * Keydate
+     */
+    keyDate?: string | null;
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Instruction
+     */
+    instruction?: string | null;
+    /**
+     * Nomineerecorded
+     */
+    nomineeRecorded?: boolean | null;
 };
 
 /**
@@ -12454,6 +12672,249 @@ export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses = {
 };
 
 export type PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponse = PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses[keyof PutEligibleAccountEmergencyReserveAccountsAccountIdPutResponses];
+
+export type ListRegisterRegisterGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Kind
+         */
+        kind?: 'insurance_policy' | 'deposit' | 'claim' | 'nominee' | 'administration' | null;
+        /**
+         * Includearchived
+         */
+        includeArchived?: boolean;
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/register';
+};
+
+export type ListRegisterRegisterGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListRegisterRegisterGetError = ListRegisterRegisterGetErrors[keyof ListRegisterRegisterGetErrors];
+
+export type ListRegisterRegisterGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterResponse;
+};
+
+export type ListRegisterRegisterGetResponse = ListRegisterRegisterGetResponses[keyof ListRegisterRegisterGetResponses];
+
+export type CreateRegisterRegisterPostData = {
+    body: RegisterCreate;
+    path?: never;
+    query?: never;
+    url: '/register';
+};
+
+export type CreateRegisterRegisterPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRegisterRegisterPostError = CreateRegisterRegisterPostErrors[keyof CreateRegisterRegisterPostErrors];
+
+export type CreateRegisterRegisterPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type CreateRegisterRegisterPostResponse = CreateRegisterRegisterPostResponses[keyof CreateRegisterRegisterPostResponses];
+
+export type UpdateRegisterRegisterRecordIdPutData = {
+    body: RegisterUpdate;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}';
+};
+
+export type UpdateRegisterRegisterRecordIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRegisterRegisterRecordIdPutError = UpdateRegisterRegisterRecordIdPutErrors[keyof UpdateRegisterRegisterRecordIdPutErrors];
+
+export type UpdateRegisterRegisterRecordIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type UpdateRegisterRegisterRecordIdPutResponse = UpdateRegisterRegisterRecordIdPutResponses[keyof UpdateRegisterRegisterRecordIdPutResponses];
+
+export type ArchiveRegisterRegisterRecordIdArchivePostData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/archive';
+};
+
+export type ArchiveRegisterRegisterRecordIdArchivePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ArchiveRegisterRegisterRecordIdArchivePostError = ArchiveRegisterRegisterRecordIdArchivePostErrors[keyof ArchiveRegisterRegisterRecordIdArchivePostErrors];
+
+export type ArchiveRegisterRegisterRecordIdArchivePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type ArchiveRegisterRegisterRecordIdArchivePostResponse = ArchiveRegisterRegisterRecordIdArchivePostResponses[keyof ArchiveRegisterRegisterRecordIdArchivePostResponses];
+
+export type MarkReviewedRegisterRecordIdReviewedPostData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/reviewed';
+};
+
+export type MarkReviewedRegisterRecordIdReviewedPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MarkReviewedRegisterRecordIdReviewedPostError = MarkReviewedRegisterRecordIdReviewedPostErrors[keyof MarkReviewedRegisterRecordIdReviewedPostErrors];
+
+export type MarkReviewedRegisterRecordIdReviewedPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type MarkReviewedRegisterRecordIdReviewedPostResponse = MarkReviewedRegisterRecordIdReviewedPostResponses[keyof MarkReviewedRegisterRecordIdReviewedPostResponses];
+
+export type MarkRenewedRegisterRecordIdRenewedPostData = {
+    body: RegisterRenewed;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/renewed';
+};
+
+export type MarkRenewedRegisterRecordIdRenewedPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MarkRenewedRegisterRecordIdRenewedPostError = MarkRenewedRegisterRecordIdRenewedPostErrors[keyof MarkRenewedRegisterRecordIdRenewedPostErrors];
+
+export type MarkRenewedRegisterRecordIdRenewedPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type MarkRenewedRegisterRecordIdRenewedPostResponse = MarkRenewedRegisterRecordIdRenewedPostResponses[keyof MarkRenewedRegisterRecordIdRenewedPostResponses];
+
+export type CompleteRegisterRegisterRecordIdCompletePostData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/complete';
+};
+
+export type CompleteRegisterRegisterRecordIdCompletePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CompleteRegisterRegisterRecordIdCompletePostError = CompleteRegisterRegisterRecordIdCompletePostErrors[keyof CompleteRegisterRegisterRecordIdCompletePostErrors];
+
+export type CompleteRegisterRegisterRecordIdCompletePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type CompleteRegisterRegisterRecordIdCompletePostResponse = CompleteRegisterRegisterRecordIdCompletePostResponses[keyof CompleteRegisterRegisterRecordIdCompletePostResponses];
+
+export type ReopenRegisterRegisterRecordIdReopenPostData = {
+    body?: never;
+    path: {
+        /**
+         * Recordid
+         */
+        recordId: string;
+    };
+    query?: never;
+    url: '/register/{recordId}/reopen';
+};
+
+export type ReopenRegisterRegisterRecordIdReopenPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReopenRegisterRegisterRecordIdReopenPostError = ReopenRegisterRegisterRecordIdReopenPostErrors[keyof ReopenRegisterRegisterRecordIdReopenPostErrors];
+
+export type ReopenRegisterRegisterRecordIdReopenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RegisterRow;
+};
+
+export type ReopenRegisterRegisterRecordIdReopenPostResponse = ReopenRegisterRegisterRecordIdReopenPostResponses[keyof ReopenRegisterRegisterRecordIdReopenPostResponses];
 
 export type ReadMonthlyReviewMonthlyReviewGetData = {
     body?: never;

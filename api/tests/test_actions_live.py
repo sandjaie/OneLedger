@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -939,3 +939,225 @@ def test_reserve_below_target_item_appears_and_disappears_once_target_is_met(
     foreign_refused = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
     assert foreign_refused.status_code == 404
     app.dependency_overrides[auth.require_owner] = lambda: live.owner
+
+
+# --- record.<id>.* items (Phase 3.4 Task 1). -----------------------------------------------
+
+
+def _deposit_account(fixture: ActionsFixture) -> UUID:
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            """INSERT INTO account (household_id, owner_person_id, name, account_type, currency,
+                                     country, opening_balance, opening_balance_date)
+               VALUES (%s, %s, 'Synthetic register deposit', 'fixed_deposit', %s, 'XZ', 5000,
+                       '2020-01-01')
+               RETURNING id""",
+            (fixture.household_id, fixture.person_id, fixture.currency),
+        )
+        row = cur.fetchone()
+        assert row is not None
+    fixture.connection.commit()
+    return UUID(str(row[0]))
+
+
+def _create_register(fixture: ActionsFixture, kind: str, **fields: object) -> dict[str, Any]:
+    body: dict[str, object] = {"kind": kind, "idempotencyKey": str(uuid4())}
+    body.update(fields)
+    response = client().post("/register", json=body, headers=ORIGIN)
+    assert response.status_code == 201, response.text
+    payload: dict[str, Any] = response.json()
+    return payload
+
+
+def test_renewal_and_maturity_items_at_their_window_edges(live: ActionsFixture) -> None:
+    deposit_account = _deposit_account(live)
+    in_window_policy = _create_register(
+        live,
+        "insurance_policy",
+        title="Synthetic policy in window",
+        keyDate=_d(30),
+        premiumAmount="120.0000",
+        premiumCadence="annual",
+        currency=live.currency,
+    )
+    out_window_policy = _create_register(
+        live,
+        "insurance_policy",
+        title="Synthetic policy out of window",
+        keyDate=_d(31),
+    )
+    in_window_deposit = _create_register(
+        live,
+        "deposit",
+        title="Synthetic deposit in window",
+        keyDate=_d(30),
+        accountId=str(deposit_account),
+        currency=live.currency,
+        amount="5000.0000",
+    )
+    out_window_deposit = _create_register(
+        live,
+        "deposit",
+        title="Synthetic deposit out of window",
+        keyDate=_d(31),
+        accountId=str(deposit_account),
+    )
+
+    items = _actions(live)["items"]
+    keys = _keys(items)
+    renewal_key = f"record.{in_window_policy['id']}.renewal.{_d(30)}"
+    maturity_key = f"record.{in_window_deposit['id']}.maturity.{_d(30)}"
+    assert renewal_key in keys
+    assert maturity_key in keys
+    assert f"record.{out_window_policy['id']}.renewal.{_d(31)}" not in keys
+    assert f"record.{out_window_deposit['id']}.maturity.{_d(31)}" not in keys
+
+    renewal_item = next(row for row in items if row["actionKey"] == renewal_key)
+    assert renewal_item["reason"] == "renewal_due"
+    assert renewal_item["kind"] == "record"
+    assert renewal_item["amount"] == "120.0000"
+    maturity_item = next(row for row in items if row["actionKey"] == maturity_key)
+    assert maturity_item["reason"] == "maturity_due"
+    assert maturity_item["amount"] is None
+    assert maturity_item["accountId"] == str(deposit_account)
+
+
+def test_deadline_item_excludes_completed_and_respects_its_window(live: ActionsFixture) -> None:
+    in_window = _create_register(
+        live, "administration", title="Synthetic deadline in window", keyDate=_d(14)
+    )
+    out_window = _create_register(
+        live, "administration", title="Synthetic deadline out of window", keyDate=_d(15)
+    )
+    key = f"record.{in_window['id']}.deadline.{_d(14)}"
+
+    present = _keys(_actions(live)["items"])
+    assert key in present
+    assert f"record.{out_window['id']}.deadline.{_d(15)}" not in present
+
+    completed = client().post(f"/register/{in_window['id']}/complete", headers=ORIGIN)
+    assert completed.status_code == 200, completed.text
+    after_complete = _keys(_actions(live)["items"])
+    assert key not in after_complete
+
+    overdue = _create_register(live, "administration", title="Synthetic overdue", keyDate=_d(-1))
+    overdue_item = next(
+        row
+        for row in _actions(live)["items"]
+        if row["actionKey"] == f"record.{overdue['id']}.deadline.{_d(-1)}"
+    )
+    assert overdue_item["overdue"] is True
+    assert overdue_item["dueDate"] == _d(-1)
+
+
+def _set_created_at(fixture: ActionsFixture, record_id: str, days_ago: int) -> None:
+    # A parameter built from TODAY, not the database's own now(), so the boundary the test checks
+    # (exactly 365 vs 366 days before as_of) cannot drift with any clock or timezone skew between
+    # the test process and the database server — noon UTC keeps the calendar date unambiguous.
+    created_at = datetime.combine(TODAY - timedelta(days=days_ago), time(12), tzinfo=UTC)
+    with fixture.connection.cursor() as cur:
+        cur.execute(
+            "UPDATE register_record SET created_at = %s WHERE household_id = %s AND id = %s",
+            (created_at, fixture.household_id, record_id),
+        )
+    fixture.connection.commit()
+
+
+def test_review_due_item_at_365_and_366_days_after_creation_and_after_review(
+    live: ActionsFixture,
+) -> None:
+    record = _create_register(
+        live, "administration", title="Synthetic non-reviewed kind", keyDate=_d(400)
+    )
+    # administration is not a reviewed kind, even long unreviewed.
+    _set_created_at(live, record["id"], 1000)
+    assert f"record.{record['id']}.review" not in _keys(_actions(live)["items"])
+
+    policy = _create_register(
+        live, "insurance_policy", title="Synthetic reviewed policy", keyDate=_d(400)
+    )
+    review_key = f"record.{policy['id']}.review"
+    assert review_key not in _keys(_actions(live)["items"])
+
+    _set_created_at(live, policy["id"], 365)
+    assert review_key not in _keys(_actions(live)["items"])
+
+    _set_created_at(live, policy["id"], 366)
+    assert review_key in _keys(_actions(live)["items"])
+
+    reviewed = client().post(f"/register/{policy['id']}/reviewed", headers=ORIGIN)
+    assert reviewed.status_code == 200, reviewed.text
+    assert review_key not in _keys(_actions(live)["items"])
+
+    # The last review, not the (older) creation, starts the year once one is recorded.
+    _set_created_at(live, policy["id"], 1000)
+    for days_ago, due in ((365, False), (366, True)):
+        with live.connection.cursor() as cur:
+            cur.execute(
+                "UPDATE register_record SET last_reviewed_on = %s WHERE id = %s",
+                (TODAY - timedelta(days=days_ago), policy["id"]),
+            )
+        live.connection.commit()
+        assert (review_key in _keys(_actions(live)["items"])) is due
+
+
+def test_p10_renewed_clears_the_item_and_a_new_policy_yields_one_item(
+    live: ActionsFixture,
+) -> None:
+    policy = _create_register(
+        live, "insurance_policy", title="Synthetic P10 policy", keyDate=_d(10)
+    )
+    key = f"record.{policy['id']}.renewal.{_d(10)}"
+    present = _actions(live)["items"]
+    assert key in _keys(present)
+    # A brand-new policy is never review-due at once (P10's own second half).
+    assert f"record.{policy['id']}.review" not in _keys(present)
+
+    renewed = client().post(
+        f"/register/{policy['id']}/renewed", json={"nextRenewalDate": _d(400)}, headers=ORIGIN
+    )
+    assert renewed.status_code == 200, renewed.text
+    after_renewal = _keys(_actions(live)["items"])
+    assert key not in after_renewal
+    assert f"record.{policy['id']}.renewal.{_d(400)}" not in after_renewal  # outside the window
+    stale = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert stale.status_code == 404, stale.text
+
+    # No second write moves the date — the next renewal simply returns inside its own window once
+    # `asOf` is close enough to it (P10's own "returns inside its window").
+    later = _actions(live, as_of=TODAY + timedelta(days=400 - 25))
+    assert f"record.{policy['id']}.renewal.{_d(400)}" in _keys(later["items"])
+
+
+def test_record_item_snooze_accepted_and_dismissal_refused(live: ActionsFixture) -> None:
+    record = _create_register(
+        live, "administration", title="Synthetic snoozable deadline", keyDate=_d(10)
+    )
+    key = f"record.{record['id']}.deadline.{_d(10)}"
+
+    snoozed = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert snoozed.status_code == 204, snoozed.text
+    while_snoozed = _actions(live)
+    assert key not in _keys(while_snoozed["items"])
+    assert key in _keys(while_snoozed["snoozed"])
+
+    dismiss_refused = client().put(
+        f"/actions/marks/{key}", json={"reason": "not applicable"}, headers=ORIGIN
+    )
+    assert dismiss_refused.status_code == 422
+
+    # A foreign household's record neither appears nor accepts this owner's snooze.
+    app.dependency_overrides[auth.require_owner] = lambda: live.other_owner
+    foreign = _create_register(live, "administration", title="Foreign deadline", keyDate=_d(10))
+    app.dependency_overrides[auth.require_owner] = lambda: live.owner
+    foreign_key = f"record.{foreign['id']}.deadline.{_d(10)}"
+    assert foreign_key not in _keys(_actions(live)["items"])
+    foreign_refused = client().put(
+        f"/actions/marks/{foreign_key}", json={"until": _d(3)}, headers=ORIGIN
+    )
+    assert foreign_refused.status_code == 404
+
+    # An archived record's key 404s (spec "snooze key target existence").
+    client().post(f"/register/{record['id']}/archive", headers=ORIGIN)
+    stale = client().put(f"/actions/marks/{key}", json={"until": _d(3)}, headers=ORIGIN)
+    assert stale.status_code == 404
