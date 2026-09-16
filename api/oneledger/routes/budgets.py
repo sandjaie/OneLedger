@@ -6,7 +6,8 @@ A budget line is an assumption in the household base currency. It posts nothing,
 transaction, and never becomes income or spending. It is scoped to exactly one of a category or a
 bucket for one month (V55's `budget_line_scope_shape`), so a category line and a bucket line
 cannot silently double-count the same row: a bucket line's actual excludes categories that carry
-their own line that month, and the response states that exclusion via `excludedCategoryIds`.
+their own line that month, and the response states that exclusion via `excludedCategoryIds`, which
+names only the excluded categories in that line's own bucket.
 
 `category` is a shared seed table with no `UNIQUE (household_id, id)` (V55's own comment), so
 `budget_line.category_id` is a plain `REFERENCES category(id)` and the tenant boundary is this
