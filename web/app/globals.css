@@ -1733,6 +1733,34 @@ body { background: #eef2f0; }
 .wealth-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
 .coverage-dialog { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--surface); max-width: 420px; }
 
+/* Spending chart (Phase 4.1 Task 1) — one bar per category, again sized entirely by the
+   server's `--ratio` string, but rising from a zero baseline at the track's own bottom rather
+   than the wealth chart's midline: spending totals are all one sign, so there is nothing to
+   grow downward from. The table of figures is always rendered alongside it, as wealth does. */
+.spending-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 4px 0 18px; }
+.spending-totals { display: flex; flex-wrap: wrap; gap: 24px; margin: 0 0 18px; padding: 0; }
+.spending-totals div { display: grid; gap: 4px; }
+.spending-totals dt { color: var(--muted); font-size: 0.72rem; }
+.spending-totals dd { margin: 0; font-size: 1.1rem; }
+.spending-chart { display: flex; align-items: stretch; gap: 4px; height: 140px; margin: 4px 0 18px; padding: 0 2px; overflow-x: auto; }
+.spending-chart-column { flex: 1 0 24px; min-width: 24px; display: flex; flex-direction: column; align-items: center; }
+.spending-chart-track { position: relative; flex: 1; width: 100%; }
+.spending-chart-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 70%;
+  max-width: 24px;
+  height: 100%;
+  background: var(--blue);
+  transform: translateX(-50%) scaleY(var(--ratio, 0));
+  transform-origin: bottom center;
+}
+.spending-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+.spending-table { border-collapse: collapse; width: 100%; margin: 0 0 18px; }
+.spending-table th, .spending-table td { border-bottom: 1px solid var(--rule); padding: 6px 8px; text-align: left; }
+.spending-table th[scope="row"] { font-weight: 500; }
+
 /* Plans (commitments, needs attention, forecast, goals, emergency reserve, monthly review,
    register) — one house style for every list added across Phase 3: a bare `<ul>` with a top
    rule between rows, a wrapping row of `.text-action` controls, and `.inline-alert`'s warm

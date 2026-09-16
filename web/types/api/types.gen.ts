@@ -1165,6 +1165,36 @@ export type BonusActionCreate = {
 };
 
 /**
+ * BucketSpending
+ */
+export type BucketSpending = {
+    /**
+     * Bucket
+     */
+    bucket: string;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Amountsecondary
+     */
+    amountSecondary: string;
+    /**
+     * Transactioncount
+     */
+    transactionCount: number;
+    /**
+     * Previousamountbase
+     */
+    previousAmountBase: string;
+    /**
+     * Chartratio
+     */
+    chartRatio: string;
+};
+
+/**
  * CancelResult
  *
  * What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
@@ -1544,6 +1574,52 @@ export type CategoryRow = {
      * Isactive
      */
     isActive: boolean;
+};
+
+/**
+ * CategorySpending
+ */
+export type CategorySpending = {
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string;
+    /**
+     * Parentcategoryid
+     */
+    parentCategoryId: string | null;
+    /**
+     * Parentcategoryname
+     */
+    parentCategoryName: string | null;
+    /**
+     * Bucket
+     */
+    bucket: string | null;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Amountsecondary
+     */
+    amountSecondary: string;
+    /**
+     * Transactioncount
+     */
+    transactionCount: number;
+    /**
+     * Previousamountbase
+     */
+    previousAmountBase: string;
+    /**
+     * Chartratio
+     */
+    chartRatio: string;
 };
 
 /**
@@ -8003,6 +8079,48 @@ export type SkippedStatement = {
 };
 
 /**
+ * SpendingResponse
+ */
+export type SpendingResponse = {
+    /**
+     * Bycategory
+     */
+    byCategory: Array<CategorySpending>;
+    /**
+     * Bybucket
+     */
+    byBucket: Array<BucketSpending>;
+    /**
+     * Totalbase
+     */
+    totalBase: string;
+    /**
+     * Totalsecondary
+     */
+    totalSecondary: string;
+    /**
+     * Previoustotalbase
+     */
+    previousTotalBase: string;
+    /**
+     * From
+     */
+    from: string;
+    /**
+     * To
+     */
+    to: string;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Secondarycurrency
+     */
+    secondaryCurrency: string;
+};
+
+/**
  * SplitActionCorrectionCreate
  */
 export type SplitActionCorrectionCreate = {
@@ -13464,6 +13582,72 @@ export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses = {
 };
 
 export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponse = HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses[keyof HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses];
+
+export type ReadSpendingSpendingGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+    };
+    url: '/spending';
+};
+
+export type ReadSpendingSpendingGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadSpendingSpendingGetError = ReadSpendingSpendingGetErrors[keyof ReadSpendingSpendingGetErrors];
+
+export type ReadSpendingSpendingGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SpendingResponse;
+};
+
+export type ReadSpendingSpendingGetResponse = ReadSpendingSpendingGetResponses[keyof ReadSpendingSpendingGetResponses];
+
+export type ExportSpendingCsvSpendingExportCsvGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * From
+         */
+        from: string;
+        /**
+         * To
+         */
+        to: string;
+    };
+    url: '/spending/export.csv';
+};
+
+export type ExportSpendingCsvSpendingExportCsvGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportSpendingCsvSpendingExportCsvGetError = ExportSpendingCsvSpendingExportCsvGetErrors[keyof ExportSpendingCsvSpendingExportCsvGetErrors];
+
+export type ExportSpendingCsvSpendingExportCsvGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ListValuationsAccountsAccountIdValuationsGetData = {
     body?: never;

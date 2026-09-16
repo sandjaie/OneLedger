@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from decimal import ROUND_HALF_EVEN, Decimal
+from decimal import Decimal
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -26,14 +26,11 @@ from .. import attribution
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..investments.positions import current_rate_pair
-from ..money import _out
+from ..money import _ZERO, _out, chart_ratios
 from ..resources import household_currencies
 from ..wealth_history import RefreshCounts, refresh, stored_month_ends
 
 router = APIRouter(tags=["wealth-history"])
-
-_ZERO = Decimal("0.0000")
-_RATIO_PLACES = Decimal("0.0001")
 
 
 class MonthSummary(BaseModel):
@@ -83,21 +80,6 @@ class MonthPositionsResponse(BaseModel):
     baseCurrency: str
     secondaryCurrency: str
     positions: list[MonthEndPosition]
-
-
-def _chart_ratios(complete_totals: dict[date, Decimal]) -> dict[date, str]:
-    """Half-even at 4 places, as every other stored rate here rounds — never half-up, which
-    would nudge a value exactly between two bars a fixed direction on every chart. `"0.0000"`
-    for every month when the largest complete-month magnitude is zero, so a chart of an
-    all-zero history draws flat bars instead of a division by zero."""
-    max_abs = max((abs(total) for total in complete_totals.values()), default=_ZERO)
-    if max_abs == 0:
-        return {month_end: "0.0000" for month_end in complete_totals}
-    return {
-        # `+ _ZERO` turns a rounded negative zero into "0.0000".
-        month_end: str((total / max_abs).quantize(_RATIO_PLACES, rounding=ROUND_HALF_EVEN) + _ZERO)
-        for month_end, total in complete_totals.items()
-    }
 
 
 @router.post("/wealth-history/refresh")
@@ -185,7 +167,7 @@ def read_wealth_history(
             if complete:
                 assert total_base is not None
                 complete_totals[month_end_value] = total_base
-        chart_ratios = _chart_ratios(complete_totals)
+        ratios = chart_ratios(complete_totals)
         months = [
             MonthSummary(
                 monthEnd=month_end_value,
@@ -194,7 +176,7 @@ def read_wealth_history(
                 complete=complete,
                 statusCounts=counts_by_month.get(month_end_value, {}),
                 computedAt=computed_at,
-                chartRatio=chart_ratios.get(month_end_value) if complete else None,
+                chartRatio=ratios.get(month_end_value) if complete else None,
             )
             for month_end_value, total_base, total_secondary, complete in rows
         ]

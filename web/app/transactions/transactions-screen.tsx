@@ -30,6 +30,13 @@ type Props = {
   // Carried from `/transactions?sourceDocumentId=…` — the Documents screen's own link — so the
   // filter that already produced the first page is what the form shows too.
   initialSourceDocumentId?: string;
+  // Carried from the Spending screen's own drill-through link
+  // (`/transactions?categoryId=…&dateFrom=…&dateTo=…`); Workspace has already checked the
+  // category id against the loaded taxonomy and the dates against a plain date pattern, so
+  // whatever arrives here is applied as-is.
+  initialCategoryId?: string;
+  initialDateFrom?: string;
+  initialDateTo?: string;
 };
 
 // The manual-entry set: linked types (transfers, investments, loans) arrive with their
@@ -129,10 +136,20 @@ export function TransactionsScreen({
   request,
   onChanged,
   initialSourceDocumentId,
+  initialCategoryId,
+  initialDateFrom,
+  initialDateTo,
 }: Props) {
   const initialFilters: Filters = initialSourceDocumentId
     ? { ...NO_FILTERS, sourceDocumentId: initialSourceDocumentId }
-    : NO_FILTERS;
+    : initialCategoryId || initialDateFrom || initialDateTo
+      ? {
+          ...NO_FILTERS,
+          categoryId: initialCategoryId ?? "",
+          dateFrom: initialDateFrom ?? "",
+          dateTo: initialDateTo ?? "",
+        }
+      : NO_FILTERS;
   const [rows, setRows] = useState(transactions);
   const [count, setCount] = useState(total);
   const [filters, setFilters] = useState<Filters>(initialFilters);
