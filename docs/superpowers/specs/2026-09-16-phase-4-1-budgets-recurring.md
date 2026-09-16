@@ -68,7 +68,6 @@ Variance is `budget + carried - actual`, positive when under budget.
 > opt-out, confirm and accept-price are removed, and "not a subscription" is the owner's one
 > correction. See the [subscriptions specification](2026-09-16-phase-4-1-subscriptions.md).
 
-
 Recurring discovery reads the ledger and proposes; it writes nothing on its own and it does not
 touch the classification cascade. `ingest/classify.py` keeps no `recurring_series` step: a step that
 cannot produce a confident answer is worse than an absent one, and its absence is asserted by a

@@ -75,12 +75,12 @@ confirm and accept-price sections superseded); progress.
 - **V57 — enum.** `ALTER TYPE recurring_cadence ADD VALUE 'semiannual'` and
   `ADD VALUE 'custom'`, both here; nothing in V57 references either value (Postgres refuses a value
   used in the transaction that added it), so V58's `custom` CHECK is safe.
-- **V57 — series columns.** `recurring_series` gains `is_subscription BOOLEAN NOT NULL DEFAULT
-
-                   false`, `subscription_set_by_owner BOOLEAN NOT NULL DEFAULT false`, `detection_method TEXT NOT
-  NULL DEFAULT 'detected'` checked to `detected` or `owner`, `named_by_owner BOOLEAN NOT NULL DEFAULT
-  false`, and `native_amount NUMERIC(20,4)` with `native_currency CHAR(3) REFERENCES
-  currency(code)` (both null or both set, amount positive).
+- **V57 — series columns.** `recurring_series` gains
+  `is_subscription BOOLEAN NOT NULL DEFAULT false`,
+  `subscription_set_by_owner BOOLEAN NOT NULL DEFAULT false`,
+  `detection_method TEXT NOT NULL DEFAULT 'detected'` checked to `detected` or `owner`,
+  `named_by_owner BOOLEAN NOT NULL DEFAULT false`, and `native_amount NUMERIC(20,4)` with
+  `native_currency CHAR(3) REFERENCES currency(code)` (both null or both set, amount positive).
 - **V57 — member uniqueness.** Before adding `uq_recurring_series_member_transaction UNIQUE
   (household_id, transaction_id)`, delete duplicate member rows, keeping for each transaction the row
   on the newest series (open before ended, then latest `created_at`, then id). Members are derived
