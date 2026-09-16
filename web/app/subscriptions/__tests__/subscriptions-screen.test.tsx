@@ -114,6 +114,7 @@ describe("subscriptions screen", () => {
     expect(screen.getAllByText(/\$15\.0000/).length).toBeGreaterThan(0);
     const annualCard = screen.getByText("Annual spend").parentElement!;
     expect(within(annualCard).getByText("$180.0000")).toBeTruthy();
+    expect(screen.getByText(/\$15\.0000 a month · \$180\.0000 a year/)).toBeTruthy();
 
     expect(request.mock.calls[0][0]).toBe("/recurring/refresh");
     const [, refreshInit] = request.mock.calls[0] as unknown as [string, RequestInit];
@@ -132,7 +133,11 @@ describe("subscriptions screen", () => {
       if (path === "/recurring/summary") return Promise.resolve(summary);
       if (path === "/recurring/by-account") return Promise.resolve(emptyByAccount);
       if (path === "/recurring") return Promise.resolve<RecurringResponse>({ series });
-      if (path === "/recurring/series-1") return Promise.resolve(aSeries());
+      if (path === "/recurring/series-1") {
+        // The server now reports it as an ordinary recurring payment, still current.
+        series[0] = aSeries({ isSubscription: false });
+        return Promise.resolve(series[0]);
+      }
       throw new Error(`unexpected path ${path}`);
     });
 
@@ -150,6 +155,9 @@ describe("subscriptions screen", () => {
         }),
       ),
     );
+    expect(await screen.findByText(/No current subscription has been found yet/)).toBeTruthy();
+    expect(screen.getByText(/No past subscription is recorded/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Not a subscription" })).toBeNull();
   });
 
   it("asks before cancelling, and moves the row to Past on confirmation", async () => {

@@ -187,8 +187,8 @@ export function TransactionsScreen({
   });
 
   // "Add as subscription" (Task 7): one row's inline draft at a time, mirroring the rename/cadence
-  // forms other screens already use. `subscribeKey` is one idempotency key per draft — reused on
-  // retry, replaced only after a draft is posted successfully.
+  // forms other screens already use. `subscribeKey` is one idempotency key per draft: minted when
+  // a draft opens and reused on every retry of that draft.
   const [subscribingId, setSubscribingId] = useState<string>();
   const [subscribeForm, setSubscribeForm] = useState({
     cadence: "monthly",
@@ -348,6 +348,7 @@ export function TransactionsScreen({
 
   function startSubscribe(row: TransactionRow) {
     setSubscribingId(row.id);
+    setSubscribeKey(crypto.randomUUID());
     setSubscribeForm({
       cadence: "monthly",
       customIntervalDays: null,
@@ -373,7 +374,6 @@ export function TransactionsScreen({
         }),
       });
       setSubscribingId(undefined);
-      setSubscribeKey(crypto.randomUUID());
       await reload(applied, 0, false);
       onChanged();
     } catch (error) {

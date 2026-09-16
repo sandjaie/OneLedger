@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
 import { ApiError, errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
+import { perCadence } from "@/app/subscriptions/subscriptions-screen";
 import type {
   CurrencyRow,
   PaymentChannelRow,
@@ -276,9 +277,10 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
               <dt>Amount</dt>
               <dd>
                 {detail.nativeAmount !== null && detail.nativeCurrency !== null
-                  ? `${moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} per ${(
-                      CADENCE_TEXT[detail.cadence] ?? detail.cadence
-                    ).toLowerCase()}`
+                  ? `${moneyText(detail.nativeAmount, detail.nativeCurrency, currencies)} ${perCadence(
+                      detail.cadence,
+                      detail.customIntervalDays,
+                    )}`
                   : "Amount appears after the next refresh"}
               </dd>
             </div>

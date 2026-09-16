@@ -22,6 +22,20 @@ type Props = {
 
 type State = "loading" | "ready" | "error";
 
+const PER_CADENCE_TEXT: Record<string, string> = {
+  weekly: "a week",
+  monthly: "a month",
+  quarterly: "a quarter",
+  semiannual: "every six months",
+  annual: "a year",
+};
+
+/** "a month", "every 45 days" — the words after an amount, never "per monthly". */
+export function perCadence(cadence: string, customIntervalDays: number | null): string {
+  if (cadence === "custom" && customIntervalDays !== null) return `every ${customIntervalDays} days`;
+  return PER_CADENCE_TEXT[cadence] ?? (CADENCE_TEXT[cadence] ?? cadence).toLowerCase();
+}
+
 export function SubscriptionsScreen({ currencies, request }: Props) {
   const [series, setSeries] = useState<Array<RecurringSeriesRow>>();
   const [summary, setSummary] = useState<RecurringSummary>();
@@ -360,9 +374,10 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
                   </div>
                   <span>
                     {row.nativeAmount !== null && row.nativeCurrency !== null
-                      ? `${moneyText(row.nativeAmount, row.nativeCurrency, currencies)} per ${(
-                          CADENCE_TEXT[row.cadence] ?? row.cadence
-                        ).toLowerCase()}`
+                      ? `${moneyText(row.nativeAmount, row.nativeCurrency, currencies)} ${perCadence(
+                          row.cadence,
+                          row.customIntervalDays,
+                        )}`
                       : "Amount appears after the next refresh"}
                     {row.annualAmount !== null && row.nativeCurrency !== null && (
                       <> · {moneyText(row.annualAmount, row.nativeCurrency, currencies)} a year</>

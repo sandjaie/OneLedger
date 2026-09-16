@@ -815,4 +815,43 @@ describe("adding a spending charge as a subscription", () => {
     const retryBody = JSON.parse(String(retryInit.body));
     expect(retryBody.idempotencyKey).toBe(firstBody.idempotencyKey);
   });
+
+  it("mints a new idempotency key for each draft, so a draft on another charge never reuses one", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "this transaction already belongs to a recurring series"))
+      .mockRejectedValueOnce(new ApiError(409, "this transaction already belongs to a recurring series"));
+    renderScreen(
+      [
+        transaction({ id: "txn-a", descriptionRaw: "CHARGE A" }),
+        transaction({ id: "txn-b", descriptionRaw: "CHARGE B" }),
+      ],
+      2,
+      request as unknown as typeof apiFetch,
+    );
+
+    const openers = screen.getAllByRole("button", { name: "Add as subscription" });
+    fireEvent.click(openers[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Add as subscription" })[0]);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    await screen.findByText("this transaction already belongs to a recurring series");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    // The second charge's opener, then its own draft's submit.
+    const secondOpener = screen
+      .getAllByRole("button", { name: "Add as subscription" })
+      .find((button) => button.closest("tr")?.textContent?.includes("CHARGE B"))!;
+    fireEvent.click(secondOpener);
+    const submit = screen
+      .getAllByRole("button", { name: "Add as subscription" })
+      .find((button) => button.classList.contains("primary-action"))!;
+    fireEvent.click(submit);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+
+    const first = JSON.parse(String((request.mock.calls[0] as [string, RequestInit])[1].body));
+    const second = JSON.parse(String((request.mock.calls[1] as [string, RequestInit])[1].body));
+    expect(first.transactionId).toBe("txn-a");
+    expect(second.transactionId).toBe("txn-b");
+    expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
+  });
 });

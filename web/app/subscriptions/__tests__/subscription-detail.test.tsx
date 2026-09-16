@@ -131,7 +131,7 @@ describe("subscription detail", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Synthetic streaming service" })).toBeTruthy();
-    expect(screen.getByText("$15.0000 per monthly")).toBeTruthy();
+    expect(screen.getByText("$15.0000 a month")).toBeTruthy();
     expect(screen.getByText("Streaming")).toBeTruthy();
     expect(screen.getByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
     expect(screen.getByText("2026-01-03")).toBeTruthy(); // started
