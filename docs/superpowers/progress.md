@@ -51,7 +51,7 @@ Updated: 16 September 2026.
 | 4.1 Task 5 — subscription billing periods and lifecycle | **Delivered** — [PR #239](https://github.com/sandjaie/OneLedger/pull/239) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
 | 4.1 Task 6 — payment channels and subscription figures | **Delivered** — [PR #240](https://github.com/sandjaie/OneLedger/pull/240) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
 | 4.1 Task 7 — Subscriptions and detail screens | **Delivered** — [PR #241](https://github.com/sandjaie/OneLedger/pull/241) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
-| 4.2 — salary analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.2 — salary analysis | **Planned** — Task 1 in flight | [Phase 4.2 specification](specs/2026-09-16-phase-4-2-salary-analysis.md) · [Phase 4.2 plan](plans/2026-09-16-phase-4-2-salary-analysis.md) |
 | 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
