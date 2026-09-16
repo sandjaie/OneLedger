@@ -272,15 +272,28 @@ def _bucket_actual(
     return Decimal(row[0])
 
 
-def _month_category_ids(cur: psycopg.Cursor[Any], household_id: UUID, month: date) -> list[UUID]:
-    """Every category with its own line in `month` — a bucket line's actual excludes them
-    (spec), and each historical month in a rollover chain computes this set for itself."""
+def _month_category_ids(
+    cur: psycopg.Cursor[Any], household_id: UUID, month: date
+) -> list[tuple[UUID, str | None]]:
+    """Every category with its own line in `month`, paired with its effective bucket — a bucket
+    line's actual excludes the ones in its own bucket (spec), and each historical month in a
+    rollover chain computes this set for itself. The bucket comes back with the id so a `need`
+    line never reports a `want` category among the ones it left out."""
     cur.execute(
-        """SELECT category_id FROM budget_line
-            WHERE household_id = %s AND period_month = %s AND category_id IS NOT NULL""",
+        f"""SELECT t.category_id, COALESCE(o.bucket, c.bucket)::text
+              FROM budget_line t
+              {EFFECTIVE_CATEGORY}
+             WHERE t.household_id = %s AND t.period_month = %s AND t.category_id IS NOT NULL""",
         (household_id, month),
     )
-    return [UUID(str(row[0])) for row in cur.fetchall()]
+    return [(UUID(str(row[0])), None if row[1] is None else str(row[1])) for row in cur.fetchall()]
+
+
+def _excluded_for_bucket(budgeted: list[tuple[UUID, str | None]], bucket: str | None) -> list[UUID]:
+    """Only a category that actually contributes to this bucket is excluded from it, and only
+    those are reported: the actual is unchanged either way, but the sentence the screen prints
+    would otherwise name categories from a different bucket."""
+    return [category_id for category_id, own in budgeted if own == bucket]
 
 
 def _line_actual(
@@ -350,7 +363,9 @@ def _carry(
             break
         prev_amount, prev_rollover = found
         excluded = (
-            [] if category_id is not None else _month_category_ids(cur, household_id, prev_month)
+            []
+            if category_id is not None
+            else _excluded_for_bucket(_month_category_ids(cur, household_id, prev_month), bucket)
         )
         prev_actual = _line_actual(cur, household_id, prev_month, category_id, bucket, excluded)
         chain.append((prev_amount, prev_actual))
@@ -372,7 +387,7 @@ def _budget_line_row(
     household_id: UUID,
     line_id: UUID,
     month: date,
-    month_excluded_category_ids: list[UUID],
+    month_budgeted_categories: list[tuple[UUID, str | None]],
 ) -> BudgetLineRow:
     cur.execute(
         """SELECT bl.category_id, c.name, bl.bucket::text, bl.amount_base, bl.currency,
@@ -388,7 +403,9 @@ def _budget_line_row(
     category_id = None if raw_category_id is None else UUID(str(raw_category_id))
     amount_base = Decimal(raw_amount)
 
-    excluded = month_excluded_category_ids if category_id is None else []
+    excluded = (
+        [] if category_id is not None else _excluded_for_bucket(month_budgeted_categories, bucket)
+    )
     actual = _line_actual(cur, household_id, month, category_id, bucket, excluded)
     carried, carry_months, carry_reason = _carry(
         cur, household_id, month, category_id, bucket, rollover_enabled

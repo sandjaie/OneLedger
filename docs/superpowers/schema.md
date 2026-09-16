@@ -3420,7 +3420,7 @@ CREATE TABLE recurring_series (
 
 Phase 1.7 Task 1 replaced the payslip shapes originally planned here with V42's exact,
 reconciling design — see that section. Phase 4.1 Task 2 replaced the `budget_period`/`budget_line`
-shapes originally planned here with V55's exact, reconciling design — see `V55` below.
+shapes originally planned here with V55's exact, reconciling design — see that section.
 
 ---
 

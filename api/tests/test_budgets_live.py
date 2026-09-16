@@ -266,6 +266,22 @@ def test_bucket_line_excludes_a_category_lined_child(live: Owner) -> None:
     assert dining_row["actualBase"] == "30.0000"
 
 
+def test_a_bucket_line_ignores_a_category_lined_in_another_bucket(live: Owner) -> None:
+    """A `need` line names only the `need` categories it left out: a `want` category never
+    contributed to it, so reporting it would describe an exclusion that did not happen."""
+    dining = a_category(live, "Synthetic budgets other-bucket dining", "want")
+    groceries = a_category(live, "Synthetic budgets other-bucket groceries", "need")
+    month = date(2026, 6, 1)
+    assert create_line(uuid4(), month, category_id=dining, amount="50.0000").status_code == 201
+    assert create_line(uuid4(), month, bucket="need", amount="200.0000").status_code == 201
+    a_spend(live, live.account_id, "-30", date(2026, 6, 5), "expense", category_id=dining)
+    a_spend(live, live.account_id, "-40", date(2026, 6, 6), "expense", category_id=groceries)
+
+    need_row = line_for(the_budgets(month), bucket="need")
+    assert need_row["excludedCategoryIds"] == []
+    assert need_row["actualBase"] == "40.0000"
+
+
 def test_replay_200_and_conflict_409(live: Owner) -> None:
     groceries = a_category(live, "Synthetic budgets replay", "need")
     month = date(2026, 3, 1)
