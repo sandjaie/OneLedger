@@ -14,6 +14,7 @@ from .routes import (
     accounts,
     actions,
     auth,
+    budgets,
     card_cycles,
     categories,
     classification_decisions,
@@ -219,6 +220,7 @@ app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)
 app.include_router(spending.router)
+app.include_router(budgets.router)
 app.include_router(valuations.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)

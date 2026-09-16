@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SpendingScreen } from "@/app/spending/spending-screen";
 import { type apiFetch } from "@/lib/api/client";
-import type { CategoryRow, CurrencyRow, HouseholdCurrency, SpendingResponse } from "@/types/api";
+import type {
+  BudgetsResponse,
+  CategoryRow,
+  CurrencyRow,
+  HouseholdCurrency,
+  SpendingResponse,
+} from "@/types/api";
 
 type Request = typeof apiFetch;
 
@@ -64,6 +70,22 @@ const spending: SpendingResponse = {
   secondaryCurrency: "USD",
 };
 
+// The budget panel mounted at the bottom of this screen (Phase 4.1 Task 2) fetches its own data;
+// these tests exercise only the spending breakdown above it, so it is always empty here.
+const emptyBudgets: BudgetsResponse = {
+  lines: [],
+  totals: {
+    amountBase: "0.0000",
+    actualBase: "0.0000",
+    carriedBase: "0.0000",
+    availableBase: "0.0000",
+    varianceBase: "0.0000",
+  },
+  from: "2026-03-01",
+  to: "2026-03-31",
+  month: "2026-03-01",
+};
+
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
 }
@@ -77,6 +99,7 @@ describe("spending screen", () => {
   it("renders the bucket and category breakdown from server strings", async () => {
     const request = requestFrom((path) => {
       if (path.startsWith("/spending?")) return spending;
+      if (path.startsWith("/budgets?")) return emptyBudgets;
       throw new Error(`unexpected path ${path}`);
     });
 
@@ -94,7 +117,9 @@ describe("spending screen", () => {
   });
 
   it("carries the category and dates on the drill-through link", async () => {
-    const request = requestFrom((path) => (path.startsWith("/spending?") ? spending : {}));
+    const request = requestFrom((path) =>
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
+    );
 
     render(
       <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
@@ -115,7 +140,7 @@ describe("spending screen", () => {
     const calls: Array<string> = [];
     const request = requestFrom((path) => {
       calls.push(path);
-      return path.startsWith("/spending?") ? spending : {};
+      return path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {};
     });
 
     render(
@@ -132,7 +157,9 @@ describe("spending screen", () => {
   });
 
   it("points the download link at the export path for the same range", async () => {
-    const request = requestFrom((path) => (path.startsWith("/spending?") ? spending : {}));
+    const request = requestFrom((path) =>
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
+    );
 
     render(
       <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,

@@ -1195,6 +1195,205 @@ export type BucketSpending = {
 };
 
 /**
+ * BudgetCopyBody
+ */
+export type BudgetCopyBody = {
+    /**
+     * Frommonth
+     */
+    fromMonth: string;
+    /**
+     * Tomonth
+     */
+    toMonth: string;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+};
+
+/**
+ * BudgetCopyResponse
+ */
+export type BudgetCopyResponse = {
+    /**
+     * Created
+     */
+    created: Array<BudgetLineRow>;
+    /**
+     * Skippedcount
+     */
+    skippedCount: number;
+};
+
+/**
+ * BudgetLineCreate
+ */
+export type BudgetLineCreate = {
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    /**
+     * Periodmonth
+     */
+    periodMonth: string;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
+    /**
+     * Bucket
+     */
+    bucket?: 'need' | 'want' | 'investment' | 'debt_service' | 'income' | 'ignore' | null;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Rolloverenabled
+     */
+    rolloverEnabled?: boolean;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * BudgetLineRow
+ */
+export type BudgetLineRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Bucket
+     */
+    bucket: string | null;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Rolloverenabled
+     */
+    rolloverEnabled: boolean;
+    /**
+     * Note
+     */
+    note: string | null;
+    /**
+     * Actualbase
+     */
+    actualBase: string;
+    /**
+     * Carriedbase
+     */
+    carriedBase: string;
+    /**
+     * Availablebase
+     */
+    availableBase: string;
+    /**
+     * Variancebase
+     */
+    varianceBase: string;
+    /**
+     * Carrymonths
+     */
+    carryMonths: number;
+    /**
+     * Carrystoppedreason
+     */
+    carryStoppedReason: string;
+    /**
+     * Excludedcategoryids
+     */
+    excludedCategoryIds: Array<string>;
+};
+
+/**
+ * BudgetLineUpdate
+ */
+export type BudgetLineUpdate = {
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Rolloverenabled
+     */
+    rolloverEnabled: boolean;
+    /**
+     * Note
+     */
+    note?: string | null;
+};
+
+/**
+ * BudgetTotals
+ */
+export type BudgetTotals = {
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Actualbase
+     */
+    actualBase: string;
+    /**
+     * Carriedbase
+     */
+    carriedBase: string;
+    /**
+     * Availablebase
+     */
+    availableBase: string;
+    /**
+     * Variancebase
+     */
+    varianceBase: string;
+};
+
+/**
+ * BudgetsResponse
+ */
+export type BudgetsResponse = {
+    /**
+     * Lines
+     */
+    lines: Array<BudgetLineRow>;
+    totals: BudgetTotals;
+    /**
+     * From
+     */
+    from: string;
+    /**
+     * To
+     */
+    to: string;
+    /**
+     * Month
+     */
+    month: string;
+};
+
+/**
  * CancelResult
  *
  * What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
@@ -13648,6 +13847,146 @@ export type ExportSpendingCsvSpendingExportCsvGetResponses = {
      */
     200: unknown;
 };
+
+export type ReadBudgetsBudgetsGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Month
+         */
+        month: string;
+    };
+    url: '/budgets';
+};
+
+export type ReadBudgetsBudgetsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadBudgetsBudgetsGetError = ReadBudgetsBudgetsGetErrors[keyof ReadBudgetsBudgetsGetErrors];
+
+export type ReadBudgetsBudgetsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BudgetsResponse;
+};
+
+export type ReadBudgetsBudgetsGetResponse = ReadBudgetsBudgetsGetResponses[keyof ReadBudgetsBudgetsGetResponses];
+
+export type CreateBudgetLineBudgetsPostData = {
+    body: BudgetLineCreate;
+    path?: never;
+    query?: never;
+    url: '/budgets';
+};
+
+export type CreateBudgetLineBudgetsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateBudgetLineBudgetsPostError = CreateBudgetLineBudgetsPostErrors[keyof CreateBudgetLineBudgetsPostErrors];
+
+export type CreateBudgetLineBudgetsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BudgetLineRow;
+};
+
+export type CreateBudgetLineBudgetsPostResponse = CreateBudgetLineBudgetsPostResponses[keyof CreateBudgetLineBudgetsPostResponses];
+
+export type DeleteBudgetLineBudgetsLineIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Lineid
+         */
+        lineId: string;
+    };
+    query?: never;
+    url: '/budgets/{lineId}';
+};
+
+export type DeleteBudgetLineBudgetsLineIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteBudgetLineBudgetsLineIdDeleteError = DeleteBudgetLineBudgetsLineIdDeleteErrors[keyof DeleteBudgetLineBudgetsLineIdDeleteErrors];
+
+export type DeleteBudgetLineBudgetsLineIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteBudgetLineBudgetsLineIdDeleteResponse = DeleteBudgetLineBudgetsLineIdDeleteResponses[keyof DeleteBudgetLineBudgetsLineIdDeleteResponses];
+
+export type UpdateBudgetLineBudgetsLineIdPatchData = {
+    body: BudgetLineUpdate;
+    path: {
+        /**
+         * Lineid
+         */
+        lineId: string;
+    };
+    query?: never;
+    url: '/budgets/{lineId}';
+};
+
+export type UpdateBudgetLineBudgetsLineIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateBudgetLineBudgetsLineIdPatchError = UpdateBudgetLineBudgetsLineIdPatchErrors[keyof UpdateBudgetLineBudgetsLineIdPatchErrors];
+
+export type UpdateBudgetLineBudgetsLineIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: BudgetLineRow;
+};
+
+export type UpdateBudgetLineBudgetsLineIdPatchResponse = UpdateBudgetLineBudgetsLineIdPatchResponses[keyof UpdateBudgetLineBudgetsLineIdPatchResponses];
+
+export type CopyBudgetsBudgetsCopyPostData = {
+    body: BudgetCopyBody;
+    path?: never;
+    query?: never;
+    url: '/budgets/copy';
+};
+
+export type CopyBudgetsBudgetsCopyPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CopyBudgetsBudgetsCopyPostError = CopyBudgetsBudgetsCopyPostErrors[keyof CopyBudgetsBudgetsCopyPostErrors];
+
+export type CopyBudgetsBudgetsCopyPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: BudgetCopyResponse;
+};
+
+export type CopyBudgetsBudgetsCopyPostResponse = CopyBudgetsBudgetsCopyPostResponses[keyof CopyBudgetsBudgetsCopyPostResponses];
 
 export type ListValuationsAccountsAccountIdValuationsGetData = {
     body?: never;

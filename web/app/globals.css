@@ -1761,6 +1761,10 @@ body { background: #eef2f0; }
 .spending-table th, .spending-table td { border-bottom: 1px solid var(--rule); padding: 6px 8px; text-align: left; }
 .spending-table th[scope="row"] { font-weight: 500; }
 
+/* Budget panel (Phase 4.1 Task 2) — reuses .spending-table for the line listing; the only new
+   rule is the variance sign, matching .transaction-amount.positive's convention. */
+.budget-variance.positive { color: var(--green); }
+
 /* Plans (commitments, needs attention, forecast, goals, emergency reserve, monthly review,
    register) — one house style for every list added across Phase 3: a bare `<ul>` with a top
    rule between rows, a wrapping row of `.text-action` controls, and `.inline-alert`'s warm
@@ -1834,14 +1838,17 @@ body { background: #eef2f0; }
 .plans-dismiss-form,
 .plans-reserve-form,
 .needs-attention-inline-form,
-.document-actions {
+.document-actions,
+.budget-line-form,
+.budget-panel-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-top: 4px;
 }
-.plans-reserve-form { display: grid; gap: 10px; }
+.plans-reserve-form,
+.budget-line-form { display: grid; gap: 10px; }
 .needs-attention-inline-form input {
   min-width: 140px;
   padding: 8px 10px;
