@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
+import { BudgetPanel } from "@/app/spending/budget-panel";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
@@ -16,8 +17,7 @@ import type {
 } from "@/types/api";
 
 type Props = {
-  // Not read directly by this screen (Task 4.1 Task 1) — Workspace loads it for this section
-  // because the budget panel joining this screen in Task 2 needs the same taxonomy.
+  // Passed through to the budget panel below, which shares this screen's category taxonomy.
   categories: Array<CategoryRow>;
   currencies: Array<CurrencyRow>;
   currency: HouseholdCurrency;
@@ -68,7 +68,7 @@ function transactionsHref(categoryId: string | null, from: string, to: string) {
   return `/transactions?${parameters.toString()}`;
 }
 
-export function SpendingScreen({ currencies, currency, request }: Props) {
+export function SpendingScreen({ categories, currencies, currency, request }: Props) {
   const [mode, setMode] = useState<RangeMode>("month");
   const [month, setMonth] = useState(currentMonthValue);
   const [customFrom, setCustomFrom] = useState("");
@@ -279,6 +279,14 @@ export function SpendingScreen({ currencies, currency, request }: Props) {
               </table>
             </>
           )}
+
+          <BudgetPanel
+            baseCurrency={data.baseCurrency}
+            categories={categories}
+            currencies={currencies}
+            month={`${range.from.slice(0, 7)}-01`}
+            request={request}
+          />
         </>
       )}
     </section>
