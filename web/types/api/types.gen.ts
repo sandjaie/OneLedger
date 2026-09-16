@@ -3119,6 +3119,66 @@ export type DraftResponse = {
 };
 
 /**
+ * EarningLineOut
+ */
+export type EarningLineOut = {
+    /**
+     * Lineno
+     */
+    lineNo: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Component
+     */
+    component: 'fixed' | 'variable' | 'reimbursement';
+    /**
+     * Source
+     */
+    source: 'rule' | 'inferred';
+};
+
+/**
+ * EarningRuleIn
+ */
+export type EarningRuleIn = {
+    /**
+     * Component
+     */
+    component: 'fixed' | 'variable' | 'reimbursement';
+};
+
+/**
+ * EarningRuleRow
+ */
+export type EarningRuleRow = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Component
+     */
+    component: 'fixed' | 'variable' | 'reimbursement';
+};
+
+/**
+ * EarningRulesResponse
+ */
+export type EarningRulesResponse = {
+    /**
+     * Rules
+     */
+    rules: Array<EarningRuleRow>;
+};
+
+/**
  * EligibleAccountIn
  */
 export type EligibleAccountIn = {
@@ -8689,6 +8749,274 @@ export type RunRow = {
      * Knowledgedisplayname
      */
     knowledgeDisplayName: string | null;
+};
+
+/**
+ * SalaryAnalysisResponse
+ */
+export type SalaryAnalysisResponse = {
+    /**
+     * Currencies
+     */
+    currencies: Array<SalaryCurrencyOut>;
+    /**
+     * Salarycreditswithoutpayslip
+     */
+    salaryCreditsWithoutPayslip: Array<SalaryCreditOut>;
+};
+
+/**
+ * SalaryCreditOut
+ */
+export type SalaryCreditOut = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Bookeddate
+     */
+    bookedDate: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+};
+
+/**
+ * SalaryCurrencyOut
+ */
+export type SalaryCurrencyOut = {
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Years
+     */
+    years: Array<SalaryYearOut>;
+    /**
+     * Payslips
+     */
+    payslips: Array<SalaryPayslipOut>;
+    /**
+     * Gaps
+     */
+    gaps: Array<string>;
+    /**
+     * Increments
+     */
+    increments: Array<SalaryIncrementOut>;
+    /**
+     * Variablepay
+     */
+    variablePay: Array<SalaryVariablePayOut>;
+    /**
+     * Labels
+     */
+    labels: Array<SalaryLabelOut>;
+};
+
+/**
+ * SalaryIncrementOut
+ */
+export type SalaryIncrementOut = {
+    /**
+     * Effectivemonth
+     */
+    effectiveMonth: string;
+    /**
+     * Previousfixed
+     */
+    previousFixed: string;
+    /**
+     * Newfixed
+     */
+    newFixed: string;
+    /**
+     * Change
+     */
+    change: string;
+    /**
+     * Changepercent
+     */
+    changePercent: string | null;
+    /**
+     * Confirmed
+     */
+    confirmed: boolean;
+    /**
+     * Acrossgap
+     */
+    acrossGap: boolean;
+};
+
+/**
+ * SalaryLabelOut
+ */
+export type SalaryLabelOut = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Component
+     */
+    component: 'fixed' | 'variable' | 'reimbursement';
+    /**
+     * Source
+     */
+    source: 'rule' | 'inferred';
+    /**
+     * Monthcount
+     */
+    monthCount: number;
+    /**
+     * Firstmonth
+     */
+    firstMonth: string;
+    /**
+     * Lastmonth
+     */
+    lastMonth: string;
+    /**
+     * Latestamount
+     */
+    latestAmount: string;
+};
+
+/**
+ * SalaryPayslipOut
+ */
+export type SalaryPayslipOut = {
+    /**
+     * Payslipid
+     */
+    payslipId: string;
+    /**
+     * Paymonth
+     */
+    payMonth: string;
+    /**
+     * Compensation
+     */
+    compensation: string;
+    /**
+     * Fixed
+     */
+    fixed: string;
+    /**
+     * Variable
+     */
+    variable: string;
+    /**
+     * Reimbursement
+     */
+    reimbursement: string;
+    /**
+     * Deductions
+     */
+    deductions: string;
+    /**
+     * Netpay
+     */
+    netPay: string;
+    /**
+     * Cashreceived
+     */
+    cashReceived: string | null;
+    /**
+     * Receiptstatus
+     */
+    receiptStatus: 'received' | 'unlinked' | 'ineligible';
+    /**
+     * Lines
+     */
+    lines: Array<EarningLineOut>;
+};
+
+/**
+ * SalaryVariablePayOut
+ */
+export type SalaryVariablePayOut = {
+    /**
+     * Payslipid
+     */
+    payslipId: string;
+    /**
+     * Paymonth
+     */
+    payMonth: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Amount
+     */
+    amount: string;
+};
+
+/**
+ * SalaryYearOut
+ */
+export type SalaryYearOut = {
+    /**
+     * Year
+     */
+    year: number;
+    /**
+     * Compensation
+     */
+    compensation: string;
+    /**
+     * Fixed
+     */
+    fixed: string;
+    /**
+     * Variable
+     */
+    variable: string;
+    /**
+     * Variableshare
+     */
+    variableShare: string | null;
+    /**
+     * Reimbursement
+     */
+    reimbursement: string;
+    /**
+     * Deductions
+     */
+    deductions: string;
+    /**
+     * Netpay
+     */
+    netPay: string;
+    /**
+     * Cashreceived
+     */
+    cashReceived: string;
+    /**
+     * Payslipmonths
+     */
+    payslipMonths: number;
+    /**
+     * Gapmonths
+     */
+    gapMonths: number;
+    /**
+     * Receivedmonths
+     */
+    receivedMonths: number;
 };
 
 /**
@@ -14925,6 +15253,116 @@ export type RefreshRecurringRecurringRefreshPostResponses = {
 };
 
 export type RefreshRecurringRecurringRefreshPostResponse = RefreshRecurringRecurringRefreshPostResponses[keyof RefreshRecurringRecurringRefreshPostResponses];
+
+export type ReadSalaryAnalysisSalaryAnalysisGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/salary/analysis';
+};
+
+export type ReadSalaryAnalysisSalaryAnalysisGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadSalaryAnalysisSalaryAnalysisGetError = ReadSalaryAnalysisSalaryAnalysisGetErrors[keyof ReadSalaryAnalysisSalaryAnalysisGetErrors];
+
+export type ReadSalaryAnalysisSalaryAnalysisGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SalaryAnalysisResponse;
+};
+
+export type ReadSalaryAnalysisSalaryAnalysisGetResponse = ReadSalaryAnalysisSalaryAnalysisGetResponses[keyof ReadSalaryAnalysisSalaryAnalysisGetResponses];
+
+export type ListEarningRulesSalaryEarningRulesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/salary/earning-rules';
+};
+
+export type ListEarningRulesSalaryEarningRulesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEarningRulesSalaryEarningRulesGetError = ListEarningRulesSalaryEarningRulesGetErrors[keyof ListEarningRulesSalaryEarningRulesGetErrors];
+
+export type ListEarningRulesSalaryEarningRulesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EarningRulesResponse;
+};
+
+export type ListEarningRulesSalaryEarningRulesGetResponse = ListEarningRulesSalaryEarningRulesGetResponses[keyof ListEarningRulesSalaryEarningRulesGetResponses];
+
+export type DeleteEarningRuleSalaryEarningRulesLabelDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Label
+         */
+        label: string;
+    };
+    query?: never;
+    url: '/salary/earning-rules/{label}';
+};
+
+export type DeleteEarningRuleSalaryEarningRulesLabelDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteEarningRuleSalaryEarningRulesLabelDeleteError = DeleteEarningRuleSalaryEarningRulesLabelDeleteErrors[keyof DeleteEarningRuleSalaryEarningRulesLabelDeleteErrors];
+
+export type DeleteEarningRuleSalaryEarningRulesLabelDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteEarningRuleSalaryEarningRulesLabelDeleteResponse = DeleteEarningRuleSalaryEarningRulesLabelDeleteResponses[keyof DeleteEarningRuleSalaryEarningRulesLabelDeleteResponses];
+
+export type SaveEarningRuleSalaryEarningRulesLabelPutData = {
+    body: EarningRuleIn;
+    path: {
+        /**
+         * Label
+         */
+        label: string;
+    };
+    query?: never;
+    url: '/salary/earning-rules/{label}';
+};
+
+export type SaveEarningRuleSalaryEarningRulesLabelPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveEarningRuleSalaryEarningRulesLabelPutError = SaveEarningRuleSalaryEarningRulesLabelPutErrors[keyof SaveEarningRuleSalaryEarningRulesLabelPutErrors];
+
+export type SaveEarningRuleSalaryEarningRulesLabelPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: EarningRuleRow;
+};
+
+export type SaveEarningRuleSalaryEarningRulesLabelPutResponse = SaveEarningRuleSalaryEarningRulesLabelPutResponses[keyof SaveEarningRuleSalaryEarningRulesLabelPutResponses];
 
 export type ListValuationsAccountsAccountIdValuationsGetData = {
     body?: never;

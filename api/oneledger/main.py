@@ -47,6 +47,7 @@ from .routes import (
     recurring,
     register,
     rules,
+    salary,
     spending,
     transactions,
     transfers,
@@ -223,6 +224,7 @@ app.include_router(portfolio.router)
 app.include_router(spending.router)
 app.include_router(budgets.router)
 app.include_router(recurring.router)
+app.include_router(salary.router)
 app.include_router(valuations.router)
 app.include_router(ingest.router)
 app.include_router(doctor.router)
