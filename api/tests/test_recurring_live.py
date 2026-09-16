@@ -321,6 +321,44 @@ def test_two_overlapping_services_become_two_series_and_extend_the_nearest_one(
     assert sorted(row["nativeAmount"] for row in after) == ["11.0000", "50.0000"]
 
 
+def test_a_charge_in_band_of_two_current_series_extends_the_nearest_not_the_latest(
+    live: Owner,
+) -> None:
+    """Two services on one descriptor, 24% apart: separate clusters, yet the cheaper one's charge
+    also sits within 20% of the dearer one's amount. It must join the nearest, not whichever
+    series happened to charge last."""
+    description = "Synthetic recurring near amounts"
+    for offset in (120, 90, 60, 30):
+        a_spend(
+            live,
+            live.account_id,
+            "-10",
+            TODAY - timedelta(days=offset),
+            "expense",
+            description=description,
+        )
+        a_spend(
+            live,
+            live.account_id,
+            "-12.4",
+            TODAY - timedelta(days=offset - 10),
+            "expense",
+            description=description,
+        )
+    refresh()
+    both = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert sorted(row["nativeAmount"] for row in both) == ["10.0000", "12.4000"]
+
+    a_spend(live, live.account_id, "-10", LATER, "expense", description=description)
+    refresh()
+    after = {
+        row["nativeAmount"]: row["lastSeenOn"]
+        for row in the_recurring()["series"]
+        if row["label"] == description
+    }
+    assert after == {"10.0000": str(LATER), "12.4000": str(TODAY - timedelta(days=20))}
+
+
 def test_a_price_change_over_20_percent_still_extends_the_single_series(live: Owner) -> None:
     description = "Synthetic recurring big price change"
     a_monthly_group(live, description=description, amount="-20")

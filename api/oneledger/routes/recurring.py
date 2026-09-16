@@ -14,13 +14,13 @@ the household lock first, then applies three rules in order:
     cadences from its anchor has that period closed `lapsed`; and, only where
     `subscription_set_by_owner` is false, `is_subscription` is recomputed.
   * **Extend** — a reportable charge on an identity and currency not yet in any series joins the
-    series its amount is nearest within 20%, preferring a series whose latest period is open, then
-    the later `last_seen_on`, then `id`; failing that, a charge outside every band may join the one
-    *current* series on that identity and currency (or the only series at all, when none is
-    current) as a price change, gated by Task 4's own timing and dismissal rules. Joining a series
-    also advances its billing period: extends the open one, lapses and reopens after a long gap,
-    restores a lapsed period a late charge actually paid on time, or opens a fresh one after a
-    cancellation.
+    series its amount is within 20% of, preferring a series whose latest period is open, then the
+    nearest amount, then the later `last_seen_on`, then `id`; failing that, a charge outside every
+    band may join the one *current* series on that identity and currency (or the only series at
+    all, when none is current) as a price change, gated by Task 4's own timing and dismissal
+    rules. Joining a series also advances its billing period: extends the open one, lapses and
+    reopens after a long gap, restores a lapsed period a late charge actually paid on time, or
+    opens a fresh one after a cancellation.
   * **Create** — `oneledger.recurring.detect_candidates` runs over charges still unassigned after
     Extend, within the 26-month lookback window. Each resulting group becomes a series, with one
     open billing period starting at its first charge, unless a dismissal on its identity refuses it.
@@ -319,10 +319,13 @@ class _Period:
 
 
 def _latest_period(cur: psycopg.Cursor[Any], household_id: UUID, series_id: UUID) -> _Period | None:
+    # The open period first: a period opened and closed on one day shares its started_on with a
+    # period resumed that same day, and random ids must never decide which one is "latest". Every
+    # period query in this module uses this same order.
     cur.execute(
         """SELECT id, started_on, ended_on, end_reason FROM recurring_series_period
             WHERE household_id = %s AND series_id = %s
-            ORDER BY started_on DESC, id DESC LIMIT 1""",
+            ORDER BY ended_on IS NULL DESC, started_on DESC, created_at DESC, id DESC LIMIT 1""",
         (household_id, series_id),
     )
     row = cur.fetchone()
@@ -394,7 +397,7 @@ def _load_series_row(
     cur.execute(
         """SELECT started_on, ended_on, end_reason FROM recurring_series_period
             WHERE household_id = %s AND series_id = %s
-            ORDER BY started_on DESC, id DESC""",
+            ORDER BY ended_on IS NULL DESC, started_on DESC, created_at DESC, id DESC""",
         (household_id, series_id),
     )
     periods = cur.fetchall()
@@ -561,7 +564,7 @@ def _load_extend_targets(
              LEFT JOIN LATERAL (
                SELECT id, started_on, ended_on, end_reason FROM recurring_series_period
                 WHERE household_id = s.household_id AND series_id = s.id
-                ORDER BY started_on DESC, id DESC LIMIT 1
+                ORDER BY ended_on IS NULL DESC, started_on DESC, created_at DESC, id DESC LIMIT 1
              ) p ON true
             WHERE s.household_id = %s AND s.ended_on IS NULL""",
         (household_id,),
@@ -617,7 +620,10 @@ def _join_period(
         # Open: a real gap of more than two cadences lapses it (paid through the date its last
         # charge covered) and opens a fresh period at `d`; otherwise the charge joins, pulling the
         # period's start back if it is dated earlier than what was known.
-        if target.lifecycle != "paused" and d > target.last_seen_on + timedelta(days=2 * interval):
+        # Measured from the anchor, as Sync's lapse is: the first charge after a resume long past
+        # the last one joins the resumed period instead of lapsing it at once.
+        anchor = max(target.last_seen_on, target.period_started_on)
+        if target.lifecycle != "paused" and d > anchor + timedelta(days=2 * interval):
             lapse_on = max(target.period_started_on, target.last_seen_on + timedelta(days=interval))
             cur.execute(
                 """UPDATE recurring_series_period SET ended_on = %s, end_reason = 'lapsed'
@@ -682,16 +688,27 @@ def _extend_target(
     identity: Identity,
 ) -> _ExtendTarget | None:
     """Picks the series `row` should join, or `None` when it joins none. Within 20% of a
-    candidate's own amount: prefer a series whose latest period is open, then the later
-    `last_seen_on`, then `id` (Task 5). Outside every band: a large price change may join the one
-    *current* series on the identity when exactly one exists, else the only series at all — Task
-    4's own timing and dismissal rules, unchanged, are what refuse rejoining a long-dormant series
-    at a different price (Task 5 "do not loosen the timing rule")."""
+    candidate's own amount: prefer a series whose latest period is open, then the nearest amount
+    (Task 4), then the later `last_seen_on`, then `id` (Task 5). Outside every band: a large price
+    change may join the one *current* series on the identity when exactly one exists, else the
+    only series at all — Task 4's own timing and dismissal rules, unchanged, are what refuse
+    rejoining a long-dormant series at a different price (Task 5 "do not loosen the timing
+    rule")."""
     within_band = [
         t for t in group if abs(row.amount - t.native_amount) <= _MATCH_BAND * t.native_amount
     ]
     if within_band:
-        return max(within_band, key=lambda t: (t.is_open, t.last_seen_on, t.series_id))
+        # Nearest amount after "open": two current services on one descriptor can sit within 20%
+        # of each other's amount, and the later last_seen_on must not steal the other's charge.
+        return max(
+            within_band,
+            key=lambda t: (
+                t.is_open,
+                -abs(row.amount - t.native_amount),
+                t.last_seen_on,
+                t.series_id,
+            ),
+        )
 
     current = [t for t in group if t.is_open]
     if len(current) == 1:
@@ -859,7 +876,7 @@ def _sync(cur: psycopg.Cursor[Any], household_id: UUID) -> None:
              LEFT JOIN LATERAL (
                SELECT id, started_on, ended_on FROM recurring_series_period
                 WHERE household_id = s.household_id AND series_id = s.id
-                ORDER BY started_on DESC, id DESC LIMIT 1
+                ORDER BY ended_on IS NULL DESC, started_on DESC, created_at DESC, id DESC LIMIT 1
              ) p ON true
             WHERE s.household_id = %s AND s.ended_on IS NULL""",
         (household_id,),
@@ -1166,14 +1183,13 @@ def create_from_transaction(
 
             # v_transaction_posting, not the base table (scripts/check-identifiers.py I3): this
             # existence/ownership check must still see a row the reportable view drops by design
-            # (income, a refund, a transfer leg), so the household comparison below can tell
-            # "another household's" (404) apart from "ours but not a reportable charge" (422).
+            # (income, a refund, a transfer leg), so "unknown or another household's" (404)
+            # stays apart from "ours but not a reportable charge" (422).
             cur.execute(
-                "SELECT household_id FROM v_transaction_posting WHERE id = %s",
-                (body.transactionId,),
+                "SELECT 1 FROM v_transaction_posting WHERE household_id = %s AND id = %s",
+                (owner.household_id, body.transactionId),
             )
-            owner_row = cur.fetchone()
-            if owner_row is None or UUID(str(owner_row[0])) != owner.household_id:
+            if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="transaction not found")
 
             cur.execute(

@@ -226,6 +226,45 @@ def test_resume_then_refresh_keeps_the_period_open_and_measures_from_the_resume(
     assert after["status"] == "active"
 
 
+def test_the_first_charge_after_a_resume_joins_the_resumed_period(live: Owner) -> None:  # noqa: F811
+    """Extend's lapse measures from the anchor, as Sync's does: a resume long after the last
+    charge must not be lapsed at once by the first charge that follows it."""
+    description = "Synthetic subscription charged after resume"
+    a_monthly_group(
+        live, description=description, amount="-16", dates=[_ago(150), _ago(120), _ago(90)]
+    )
+    refresh()
+    row = _first(the_recurring(), description)
+    cancel_series(row["id"])
+    resume_series(row["id"], resumedOn=str(_ago(10)))
+
+    a_spend(live, live.account_id, "-16", TODAY, "expense", description=description)
+    refresh()
+    after = _first(the_recurring(), description, series_id=row["id"])
+    assert after["periodCount"] == 2
+    assert after["currentPeriodStartedOn"] == str(_ago(10))
+    assert after["lastSeenOn"] == str(TODAY)
+
+
+def test_cancel_and_resume_on_the_same_day_leaves_the_resumed_period_latest(
+    live: Owner,  # noqa: F811
+) -> None:
+    """A period opened and closed on one day shares its start with the period resumed that day;
+    the open one must always read as the latest, never by the order of random ids."""
+    description = "Synthetic subscription same-day resume"
+    a_monthly_group(
+        live, description=description, amount="-23", dates=[_ago(150), _ago(120), _ago(90)]
+    )
+    refresh()
+    series_id = _first(the_recurring(), description)["id"]
+    cancel_series(series_id)
+    for _ in range(6):
+        resume_series(series_id)
+        assert _by_id(the_recurring(), series_id)["isCurrent"] is True
+        cancel_series(series_id)
+        assert _by_id(the_recurring(), series_id)["isCurrent"] is False
+
+
 def test_resume_refuses_an_open_period_and_cancel_refuses_a_future_or_too_early_date(
     live: Owner,  # noqa: F811
 ) -> None:
