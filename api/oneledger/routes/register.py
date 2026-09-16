@@ -8,12 +8,11 @@ own `register_kind_shape` CHECK is the backstop.
 Task 2 adds the two document-link routes and `RegisterRow.documents[]`/`plannedCommitment` — a
 record's documents are `register_document` rows joined to `document` (only an upload-type
 document may be linked, spec "Document upload (Task 2)"), and its planned commitment reuses
-`plans._commitment_progress`, the same helper `GET /commitments` and the action list already share,
-so there is no second remaining-amount computation."""
+`commitments.commitment_progress`, the same helper `GET /commitments` and the action list already
+share, so there is no second remaining-amount computation."""
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -24,12 +23,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect, first_line
-from ..money import _out
+from ..commitments import CommitmentStatus, commitment_progress
+from ..db import IDEMPOTENCY_REUSED, connect, first_line
+from ..money import _decimal_eq, _out
 from ..register_records import review_due
+from ..text import normalize_bounded
 from .documents import _UPLOAD_TYPES
 from .goals import _positive_money
-from .plans import Cadence, CommitmentStatus, _commitment_progress
+from .plans import Cadence
 
 router = APIRouter(tags=["register"])
 
@@ -69,13 +70,6 @@ _KIND_REQUIRED: dict[str, frozenset[str]] = {
 _ALL_KIND_FIELDS = frozenset().union(*_KIND_FIELDS.values())
 
 
-def _normalize(value: str, field: str, limit: int) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= limit:
-        raise ValueError(f"{field} must be 1-{limit} characters")
-    return collapsed
-
-
 class _RegisterFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -93,13 +87,13 @@ class _RegisterFields(BaseModel):
 
     @model_validator(mode="after")
     def _normalize_fields(self) -> _RegisterFields:
-        self.title = _normalize(self.title, "title", 120)
+        self.title = normalize_bounded(self.title, "title", 120)
         if self.counterparty is not None:
-            self.counterparty = _normalize(self.counterparty, "counterparty", 120)
+            self.counterparty = normalize_bounded(self.counterparty, "counterparty", 120)
         if self.covered is not None:
-            self.covered = _normalize(self.covered, "covered", 120)
+            self.covered = normalize_bounded(self.covered, "covered", 120)
         if self.instruction is not None:
-            self.instruction = _normalize(self.instruction, "instruction", 200)
+            self.instruction = normalize_bounded(self.instruction, "instruction", 200)
         if self.amount is not None:
             self.amount = _positive_money(self.amount)
         if self.premiumAmount is not None:
@@ -196,9 +190,7 @@ class RegisterResponse(BaseModel):
 def _translate_register_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint == "uq_register_idempotency":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "fk_register_account_scope":
         return HTTPException(status_code=404, detail="account not found")
     if constraint == "register_texts_are_bounded":
@@ -316,7 +308,7 @@ def _register_row(
             commitment_next_due,
             commitment_archived_at,
         ) = commitment_found
-        progress = _commitment_progress(
+        progress = commitment_progress(
             cur,
             household_id,
             as_of,
@@ -367,12 +359,6 @@ def _register_row(
         documents=documents,
         plannedCommitment=planned_commitment,
     )
-
-
-def _decimal_eq(stored: Decimal | None, value: str | None) -> bool:
-    if (stored is None) != (value is None):
-        return False
-    return stored is None or Decimal(stored) == Decimal(value)  # type: ignore[arg-type]
 
 
 @router.get("/register", response_model=RegisterResponse)
@@ -453,9 +439,7 @@ def create_register(
                 if matches:
                     response.status_code = status.HTTP_200_OK
                     return _register_row(cur, owner.household_id, UUID(str(eid)), date.today())
-                raise HTTPException(
-                    status_code=409, detail="idempotency key reused with a different request"
-                )
+                raise HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
 
             _validate_account(cur, owner.household_id, body.kind, body.accountId)
             cur.execute(

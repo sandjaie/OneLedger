@@ -9,7 +9,6 @@ posts nothing, changes no balance, and reads through the same valuation-period s
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -20,7 +19,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect
+from ..commitments import Certainty, CommitmentStatus, commitment_progress
+from ..db import IDEMPOTENCY_REUSED, connect
 from ..forecast import (
     aggregate_currency,
     is_occurrence,
@@ -31,15 +31,15 @@ from ..forecast import (
     select_funding_accounts,
 )
 from ..money import _money
+from ..text import normalize_bounded
+from .actions import action_list
 from .coverage import coverage_rows
 from .dashboard import VALUATION_PERIOD_FOR_ACCOUNT
 
 router = APIRouter(tags=["plans"])
 
 Cadence = Literal["once", "monthly", "annual"]
-Certainty = Literal["confirmed", "estimated"]
 CommitmentSource = Literal["owner", "card_statement", "register_record"]
-CommitmentStatus = Literal["upcoming", "due", "overdue", "finished", "cancelled"]
 ExcludedAccountReason = Literal["not_ledger_valued", "no_balance_date", "balance_after_as_of"]
 ExcludedCommitmentReason = Literal[
     "account_closed", "account_excluded", "currency_mismatch", "card_settlement_not_projected"
@@ -51,16 +51,9 @@ _STALE_BALANCE_AGE_DAYS = 35
 # Phase 3.2 spec rule 2: an unapplied occurrence list is capped per commitment.
 _UNAPPLIED_OCCURRENCE_CAP = 12
 
-# The open occurrence is "due" through this many days past `asOf` (Phase 3.1 spec "A commitment's
-# lifecycle"); shared by the commitments list, the forecast and, in Task 2, the action list.
-DUE_WINDOW_DAYS = 7
-
 
 def _normalize_label(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 80:
-        raise ValueError("label must be 1-80 characters")
-    return collapsed
+    return normalize_bounded(value, "label", 80)
 
 
 def _signed_nonzero(value: str) -> str:
@@ -266,9 +259,7 @@ class ForecastResponse(BaseModel):
 def _translate_database_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint == "uq_commitment_idempotency":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "commitment_amount_is_nonzero":
         return HTTPException(status_code=422, detail="commitment amount must not be zero")
     if constraint == "commitment_end_date_agrees":
@@ -535,64 +526,6 @@ def _resolved_next_due_date(
     return default
 
 
-def _commitment_progress(
-    cur: psycopg.Cursor[Any],
-    household_id: UUID,
-    as_of: date,
-    commitments: list[tuple[UUID, datetime | None, date | None, Decimal]],
-) -> dict[UUID, tuple[CommitmentStatus, bool, str, str | None]]:
-    """One query over `commitment_resolution` joined to `transaction`: for each commitment (given
-    as its id, `archived_at`, `next_due_date` and `amount`) its lifecycle status (spec "A
-    commitment's lifecycle"), whether a payment is recorded against its open occurrence, the sum
-    paid toward it and what remains. Reused by the commitments list, the resolutions router
-    (after a write) and, in Task 2, the action list."""
-    open_ids = [cid for cid, _, next_due, _ in commitments if next_due is not None]
-    open_dates = [next_due for _, _, next_due, _ in commitments if next_due is not None]
-    paid_by_commitment: dict[UUID, Decimal] = {}
-    if open_ids:
-        cur.execute(
-            """SELECT r.commitment_id, sum(t.amount)
-                 FROM commitment_resolution r
-                 JOIN v_transaction_posting t
-                   ON t.household_id = r.household_id AND t.id = r.transaction_id
-                 JOIN unnest(%s::uuid[], %s::date[]) AS open_next(commitment_id, next_due_date)
-                   ON open_next.commitment_id = r.commitment_id
-                  AND open_next.next_due_date = r.due_date
-                WHERE r.household_id = %s AND r.kind = 'payment'
-                GROUP BY r.commitment_id""",
-            (open_ids, open_dates, household_id),
-        )
-        for commitment_id, total in cur.fetchall():
-            paid_by_commitment[UUID(str(commitment_id))] = Decimal(total)
-
-    result: dict[UUID, tuple[CommitmentStatus, bool, str, str | None]] = {}
-    for commitment_id, archived_at, next_due, amount in commitments:
-        status: CommitmentStatus
-        if archived_at is not None:
-            status = "cancelled"
-        elif next_due is None:
-            status = "finished"
-        elif next_due < as_of:
-            status = "overdue"
-        elif next_due <= as_of + timedelta(days=DUE_WINDOW_DAYS):
-            status = "due"
-        else:
-            status = "upcoming"
-
-        if next_due is None:
-            paid_toward_next = Decimal("0.0000")
-            partly_paid = False
-            remaining_next: str | None = None
-        else:
-            paid_toward_next = paid_by_commitment.get(commitment_id, Decimal("0.0000"))
-            partly_paid = commitment_id in paid_by_commitment
-            remaining_next = (
-                str(amount - paid_toward_next) if abs(paid_toward_next) < abs(amount) else "0.0000"
-            )
-        result[commitment_id] = (status, partly_paid, str(paid_toward_next), remaining_next)
-    return result
-
-
 # Column order shared by every commitment read; _commitment_row() maps one result tuple. The
 # card-statement and register-record sources are each read through a left join — most
 # commitments have neither.
@@ -665,7 +598,7 @@ def _row(
     )
     row = cur.fetchone()
     assert row is not None
-    progress = _commitment_progress(
+    progress = commitment_progress(
         cur, household_id, as_of or date.today(), [(row[0], row[9], row[13], Decimal(row[4]))]
     )
     return _commitment_row(row, progress[UUID(str(row[0]))])
@@ -688,7 +621,7 @@ def list_commitments(
             (owner.household_id,),
         )
         raw = cur.fetchall()
-        progress = _commitment_progress(
+        progress = commitment_progress(
             cur, owner.household_id, as_of, [(r[0], r[9], r[13], Decimal(r[4])) for r in raw]
         )
         rows = [_commitment_row(r, progress[UUID(str(r[0]))]) for r in raw]
@@ -742,9 +675,7 @@ def create_commitment(
                 ):
                     response.status_code = status.HTTP_200_OK
                     return _row(cur, owner.household_id, UUID(str(eid)))
-                raise HTTPException(
-                    status_code=409, detail="idempotency key reused with a different request"
-                )
+                raise HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
             if body.sourceCardStatementId is not None:
                 card_account_id, card_currency, statement_balance = _card_statement_facts(
                     cur, owner.household_id, body.sourceCardStatementId
@@ -1108,7 +1039,7 @@ def read_forecast(
         commitment_rows = cur.fetchall()
         remaining_by_commitment = {
             commitment_id: remaining
-            for commitment_id, (_status, _partly, _paid, remaining) in _commitment_progress(
+            for commitment_id, (_status, _partly, _paid, remaining) in commitment_progress(
                 cur,
                 owner.household_id,
                 as_of,
@@ -1418,11 +1349,7 @@ def read_forecast(
             )
 
         # Rule 8: every card statement meeting the Phase 3.1 unplanned-due rule, marks ignored,
-        # due within the forecast window. Imported locally: routes/actions.py imports this
-        # module's own DUE_WINDOW_DAYS/Certainty/_commitment_progress at module load, so a
-        # top-level import here would cycle.
-        from .actions import action_list
-
+        # due within the forecast window.
         unplanned_card_dues: list[UnplannedCardDue] = []
         for item in action_list(cur, owner.household_id, as_of, apply_marks=False):
             if item.kind != "card_due" or item.dueDate is None or item.dueDate > through:

@@ -21,6 +21,7 @@ from ..investments.portfolio import (
 )
 from ..investments.positions import AcquisitionPosition, PortfolioPositions, read_positions
 from ..investments.returns import holding_flows, xirr
+from ..resources import household_currencies
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
@@ -37,16 +38,6 @@ def _with_xirr(
     return position.model_copy(update={"xirrPercent": percent, "xirrReason": result.reason})
 
 
-def _household_currencies(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        "SELECT base_currency, secondary_currency FROM household WHERE id = %s",
-        (household_id,),
-    )
-    row = cur.fetchone()
-    assert row is not None
-    return str(row[0]).strip(), str(row[1]).strip()
-
-
 @router.get("/positions", response_model=PortfolioPositions)
 def portfolio_positions(
     owner: Annotated[OwnerSession, Depends(require_owner)],
@@ -56,7 +47,7 @@ def portfolio_positions(
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
         scope_to_owner(conn, owner.user_id)
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         positions = read_positions(
             cur, owner.household_id, base, secondary, as_of, include_closed=includeClosed
         )
@@ -74,7 +65,7 @@ def portfolio_summary(
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
         scope_to_owner(conn, owner.user_id)
-        base, secondary = _household_currencies(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         return read_summary(cur, owner.household_id, base, secondary, as_of)
 
 

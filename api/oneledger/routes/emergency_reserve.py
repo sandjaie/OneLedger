@@ -4,12 +4,11 @@ path, plain household-scoped RLS as defence in depth. `emergency.py` holds the p
 coverage Decimal math; `resources.py` holds the account value, reservation and spending reads
 shared with `routes/actions.py`'s reserve action item, so this module supplies only the display
 joins (account names, upcoming commitments, per-currency rates) and reuses `routes/goals.py`'s
-reservation row and `routes/plans.py`'s commitment progress rather than duplicating either."""
+reservation row and `commitments.py`'s commitment progress rather than duplicating either."""
 
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -20,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
+from ..commitments import commitment_progress
 from ..coverage import months_from_anchor
 from ..db import connect
 from ..emergency import Baseline, coverage
@@ -35,9 +35,9 @@ from ..resources import (
     household_reservations,
     read_emergency_reserve_settings,
 )
+from ..text import normalize_bounded
 from .coverage import coverage_rows
 from .goals import ReservationRow, _positive_money, _reservation_row
-from .plans import _commitment_progress
 
 router = APIRouter(tags=["emergency-reserve"])
 
@@ -47,10 +47,7 @@ _UPCOMING_WINDOW_DAYS = 30
 
 
 def _normalize_note(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 200:
-        raise ValueError("restriction note must be 1-200 characters")
-    return collapsed
+    return normalize_bounded(value, "restriction note", 200)
 
 
 class EmergencyReserveIn(BaseModel):
@@ -196,7 +193,7 @@ def _upcoming_commitments(
         (household_id, account_ids, as_of + timedelta(days=_UPCOMING_WINDOW_DAYS)),
     )
     rows = cur.fetchall()
-    progress = _commitment_progress(
+    progress = commitment_progress(
         cur, household_id, as_of, [(r[0], r[5], r[4], Decimal(r[3])) for r in rows]
     )
     by_account: dict[UUID, list[UpcomingCommitmentRow]] = {}

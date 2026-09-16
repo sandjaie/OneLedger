@@ -27,6 +27,7 @@ from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..investments.positions import current_rate_pair
 from ..money import _out
+from ..resources import household_currencies
 from ..wealth_history import RefreshCounts, refresh, stored_month_ends
 
 router = APIRouter(tags=["wealth-history"])
@@ -99,19 +100,10 @@ def _chart_ratios(complete_totals: dict[date, Decimal]) -> dict[date, str]:
     }
 
 
-def _household_pair(cur: psycopg.Cursor[Any], household_id: UUID) -> tuple[str, str]:
-    cur.execute(
-        "SELECT base_currency, secondary_currency FROM household WHERE id = %s", (household_id,)
-    )
-    row = cur.fetchone()
-    assert row is not None
-    return str(row[0]).strip(), str(row[1]).strip()
-
-
 @router.post("/wealth-history/refresh")
 def post_refresh(owner: Annotated[OwnerSession, Depends(require_owner)]) -> RefreshCounts:
     with connect() as conn, conn.cursor() as cur:
-        base, secondary = _household_pair(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         return refresh(cur, owner.household_id, base, secondary, date.today())
 
 
@@ -159,7 +151,7 @@ def read_wealth_history(
 ) -> WealthHistoryResponse:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
-        base, secondary = _household_pair(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(_REFRESH_STATE, (owner.household_id,))
         state = cur.fetchone()
         if state is None:
@@ -229,7 +221,7 @@ def read_month_positions(
 ) -> MonthPositionsResponse:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
-        base, secondary = _household_pair(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
         cur.execute(_POSITIONS_FOR_MONTH, (owner.household_id, monthEnd))
         positions = [
             MonthEndPosition(
@@ -496,7 +488,7 @@ def read_month_attribution(
     t0 = date(t1.year, t1.month, 1) - timedelta(days=1)
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET TRANSACTION READ ONLY")
-        base, secondary = _household_pair(cur, owner.household_id)
+        base, secondary = household_currencies(cur, owner.household_id)
 
         cur.execute(_REFRESH_STATE, (owner.household_id,))
         state = cur.fetchone()
