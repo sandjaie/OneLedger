@@ -146,8 +146,44 @@ describe("emergency reserve", () => {
     render(<EmergencyReserve accounts={[account]} currencies={currencies} request={request} />);
 
     expect(await screen.findByText(/Baseline not enough information/)).toBeTruthy();
-    expect(screen.getByText(/Coverage unavailable/)).toBeTruthy();
+    expect(screen.getByText(/Coverage: not enough information/)).toBeTruthy();
     expect(screen.getByText(/spending is not yet known well enough/)).toBeTruthy();
+  });
+
+  it("distinguishes an unavailable coverage from not enough information", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/emergency-reserve") {
+        return response({
+          coverageStatus: "unavailable",
+          reasons: ["missing_rate"],
+          eligibleBase: null,
+          coverageMonths: null,
+          targetBase: null,
+          gapBase: null,
+          reservedMonths: null,
+        });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<EmergencyReserve accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(await screen.findByText(/Coverage unavailable/)).toBeTruthy();
+    expect(screen.queryByText(/not enough information/)).toBeNull();
+  });
+
+  it("shows a sentence for an eligible account's reason code, not the raw code", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/emergency-reserve") {
+        return response({
+          accounts: [{ ...eligibleAccount, value: null, valueDate: null, reason: "mixed_currency" }],
+        });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<EmergencyReserve accounts={[account]} currencies={currencies} request={request} />);
+
+    expect(await screen.findByText(/this account holds a position in another currency/)).toBeTruthy();
+    expect(screen.queryByText(/mixed_currency/)).toBeNull();
   });
 
   it("shows the error state and lets the owner try again", async () => {

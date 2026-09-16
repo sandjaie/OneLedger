@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
+import { accountValueReasonText } from "@/lib/plans/account-value-reasons";
 import type {
   AccountRow,
   CurrencyRow,
@@ -15,7 +16,16 @@ import type {
 type Props = {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
+  // A goal's currency is the household base or secondary currency only (spec 3.3 "Goal
+  // progress"), so the picker offers just these two rather than the whole catalogue.
+  householdCurrencies: { base: string; secondary: string };
   request: typeof apiFetch;
+};
+
+const VALUATION_MODE_TEXT: Record<string, string> = {
+  ledger_balance: "ledger balance",
+  holdings: "holdings",
+  snapshot: "snapshot",
 };
 
 type GoalFormState = {
@@ -51,11 +61,11 @@ function reasonText(reasons: Array<string>): string {
   return reasons.map((reason) => PROGRESS_REASON_TEXT[reason] ?? reason).join("; ");
 }
 
-function emptyGoalForm(currencies: Array<CurrencyRow>): GoalFormState {
+function emptyGoalForm(base: string): GoalFormState {
   return {
     name: "",
     targetAmount: "",
-    targetCurrency: currencies[0]?.code ?? "",
+    targetCurrency: base,
     targetDate: "",
     priority: 3,
     plannedMonthly: "",
@@ -73,7 +83,11 @@ function goalFormFrom(goal: GoalRow): GoalFormState {
   };
 }
 
-export function Goals({ accounts, currencies, request }: Props) {
+export function Goals({ accounts, currencies, householdCurrencies, request }: Props) {
+  const goalCurrencies = currencies.filter(
+    (currency) =>
+      currency.code === householdCurrencies.base || currency.code === householdCurrencies.secondary,
+  );
   const activeAssetAccounts = accounts.filter(
     (account) => account.isActive && account.accountClass === "asset",
   );
@@ -81,7 +95,7 @@ export function Goals({ accounts, currencies, request }: Props) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
   const [editing, setEditing] = useState<GoalRow>();
-  const [form, setForm] = useState<GoalFormState>(() => emptyGoalForm(currencies));
+  const [form, setForm] = useState<GoalFormState>(() => emptyGoalForm(householdCurrencies.base));
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -130,7 +144,7 @@ export function Goals({ accounts, currencies, request }: Props) {
 
   function cancelEdit() {
     setEditing(undefined);
-    setForm(emptyGoalForm(currencies));
+    setForm(emptyGoalForm(householdCurrencies.base));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
   }
@@ -164,7 +178,7 @@ export function Goals({ accounts, currencies, request }: Props) {
         setFeedback("Goal added.");
       }
       setEditing(undefined);
-      setForm(emptyGoalForm(currencies));
+      setForm(emptyGoalForm(householdCurrencies.base));
       setIdempotencyKey(crypto.randomUUID());
       refetch();
     } catch (error) {
@@ -175,10 +189,11 @@ export function Goals({ accounts, currencies, request }: Props) {
   }
 
   async function closeGoal(goal: GoalRow, outcome: "achieved" | "abandoned") {
-    if (
-      outcome === "abandoned" &&
-      !window.confirm(`Abandon "${goal.name}"? Its reservations will be released.`)
-    ) {
+    const question =
+      outcome === "achieved"
+        ? `Mark "${goal.name}" achieved? Its reservations will be released.`
+        : `Abandon "${goal.name}"? Its reservations will be released.`;
+    if (!window.confirm(question)) {
       return;
     }
     setBusy(true);
@@ -394,7 +409,7 @@ export function Goals({ accounts, currencies, request }: Props) {
                           Value{" "}
                           {reservingAccount.value
                             ? moneyText(reservingAccount.value, reservingAccount.currency, currencies)
-                            : `unavailable (${reservingAccount.reason})`}
+                            : `unavailable (${accountValueReasonText(reservingAccount.reason ?? "")})`}
                           {" · Reserved "}
                           {reservingAccount.reserved
                             ? moneyText(reservingAccount.reserved, reservingAccount.currency, currencies)
@@ -470,7 +485,7 @@ export function Goals({ accounts, currencies, request }: Props) {
               onChange={(e) => changeForm("targetCurrency", e.target.value)}
               value={form.targetCurrency}
             >
-              {currencies.map((currency) => (
+              {goalCurrencies.map((currency) => (
                 <option key={currency.code} value={currency.code}>{currency.code}</option>
               ))}
             </select>
@@ -517,28 +532,37 @@ export function Goals({ accounts, currencies, request }: Props) {
           <h3>Resources</h3>
           {data.accounts.length === 0 && <p>No reservable accounts.</p>}
           {data.accounts.length > 0 && (
-            <table className="plans-resources-table">
-              <thead>
-                <tr><th>Account</th><th>Value</th><th>Reserved</th><th>Unreserved</th></tr>
-              </thead>
-              <tbody>
-                {data.accounts.map((row) => (
-                  <tr key={row.accountId}>
-                    <td>{row.accountName}</td>
-                    <td>
-                      {row.value
-                        ? moneyText(row.value, row.currency, currencies)
-                        : `Unavailable (${row.reason})`}
-                    </td>
-                    <td>{row.reserved ? moneyText(row.reserved, row.currency, currencies) : "—"}</td>
-                    <td>
-                      {row.unreserved ? moneyText(row.unreserved, row.currency, currencies) : "—"}
-                      {row.overReserved && " · Over-reserved"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              <table className="plans-resources-table">
+                <thead>
+                  <tr><th>Account</th><th>Valuation</th><th>Value</th><th>Reserved</th><th>Unreserved</th></tr>
+                </thead>
+                <tbody>
+                  {data.accounts.map((row) => (
+                    <tr key={row.accountId}>
+                      <td>{row.accountName}</td>
+                      <td>{VALUATION_MODE_TEXT[row.valuationMode] ?? row.valuationMode}</td>
+                      <td>
+                        {row.value
+                          ? moneyText(row.value, row.currency, currencies)
+                          : `Unavailable (${accountValueReasonText(row.reason ?? "")})`}
+                      </td>
+                      <td>{row.reserved ? moneyText(row.reserved, row.currency, currencies) : "—"}</td>
+                      <td>
+                        {row.unreserved ? moneyText(row.unreserved, row.currency, currencies) : "—"}
+                        {row.overReserved && " · Over-reserved"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p>
+                <small>
+                  A snapshot account&rsquo;s change is treated as valuation movement, not a
+                  contribution.
+                </small>
+              </p>
+            </>
           )}
         </>
       )}
