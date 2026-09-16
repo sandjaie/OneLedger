@@ -19,6 +19,8 @@ function aSeries(overrides: Partial<RecurringSeriesRow> = {}): RecurringSeriesRo
     label: "Synthetic streaming service",
     identity: { merchantId: null, matchKey: "synthetic streaming service" },
     cadence: "monthly",
+    customIntervalDays: null,
+    lifecycle: "active",
     categoryId: null,
     categoryName: null,
     isSubscription: true,
@@ -29,6 +31,13 @@ function aSeries(overrides: Partial<RecurringSeriesRow> = {}): RecurringSeriesRo
     priceChangedFrom: null,
     priceChangedOn: null,
     lastSeenOn: "2026-08-01",
+    isCurrent: true,
+    currentPeriodStartedOn: "2026-06-01",
+    lastPeriodEndedOn: null,
+    lastEndReason: null,
+    periodCount: 1,
+    resumed: false,
+    nextExpectedOn: "2026-09-01",
     status: "active",
     ...overrides,
   };
@@ -115,6 +124,79 @@ describe("recurring screen", () => {
         expect.objectContaining({ method: "POST" }),
       ),
     );
+  });
+
+  it("asks before cancelling, and only posts cancel on confirmation", async () => {
+    const response: RecurringResponse = { series: [aSeries()] };
+    const request = vi.fn((path: string) => {
+      if (path === "/recurring/refresh") return Promise.resolve({});
+      if (path === "/recurring") return Promise.resolve(response);
+      if (path === "/recurring/series-1/cancel") return Promise.resolve(aSeries());
+      throw new Error(`unexpected path ${path}`);
+    });
+    const confirm = vi.spyOn(window, "confirm");
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    await screen.findByText(/Synthetic streaming service/);
+
+    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(request).not.toHaveBeenCalledWith("/recurring/series-1/cancel", expect.anything());
+
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/recurring/series-1/cancel",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
+      ),
+    );
+  });
+
+  it("posts resume for a past subscription", async () => {
+    const past = aSeries({
+      isCurrent: false,
+      status: "ended",
+      lastPeriodEndedOn: "2026-08-15",
+      lastEndReason: "cancelled",
+    });
+    const response: RecurringResponse = { series: [past] };
+    const request = vi.fn((path: string) => {
+      if (path === "/recurring/refresh") return Promise.resolve({});
+      if (path === "/recurring") return Promise.resolve(response);
+      if (path === "/recurring/series-1/resume") return Promise.resolve(aSeries());
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    await screen.findByText(/Synthetic streaming service/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "/recurring/series-1/resume",
+        expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
+      ),
+    );
+  });
+
+  it("shows an ended row's date and reason", async () => {
+    const past = aSeries({
+      isCurrent: false,
+      status: "ended",
+      lastPeriodEndedOn: "2026-08-15",
+      lastEndReason: "lapsed",
+    });
+    const response: RecurringResponse = { series: [past] };
+    const request = vi.fn((path: string) => {
+      if (path === "/recurring/refresh") return Promise.resolve({});
+      if (path === "/recurring") return Promise.resolve(response);
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    expect(await screen.findByText(/ended 2026-08-15/)).toBeTruthy();
+    expect(screen.getByText(/stopped charging/)).toBeTruthy();
   });
 
   it("shows nothing found instead of an empty table", async () => {

@@ -1394,6 +1394,16 @@ export type BudgetsResponse = {
 };
 
 /**
+ * CancelBody
+ */
+export type CancelBody = {
+    /**
+     * Cancelledon
+     */
+    cancelledOn?: string | null;
+};
+
+/**
  * CancelResult
  *
  * What cancelling did. `rowsDiscarded` is stated because the deletion is the point.
@@ -3526,6 +3536,36 @@ export type ForecastResponse = {
      * Unplannedcarddues
      */
     unplannedCardDues: Array<UnplannedCardDue>;
+};
+
+/**
+ * FromTransactionBody
+ */
+export type FromTransactionBody = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Cadence
+     */
+    cadence: 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom';
+    /**
+     * Customintervaldays
+     */
+    customIntervalDays?: number | null;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Issubscription
+     */
+    isSubscription?: boolean;
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
 };
 
 /**
@@ -6027,6 +6067,22 @@ export type PatchBody = {
      * Label
      */
     label?: string | null;
+    /**
+     * Lifecycle
+     */
+    lifecycle?: 'active' | 'trial' | 'paused' | null;
+    /**
+     * Cadence
+     */
+    cadence?: 'weekly' | 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom' | null;
+    /**
+     * Customintervaldays
+     */
+    customIntervalDays?: number | null;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
 };
 
 /**
@@ -6843,6 +6899,14 @@ export type RecurringSeriesRow = {
      */
     cadence: string;
     /**
+     * Customintervaldays
+     */
+    customIntervalDays: number | null;
+    /**
+     * Lifecycle
+     */
+    lifecycle: 'active' | 'trial' | 'paused';
+    /**
      * Categoryid
      */
     categoryId: string | null;
@@ -6883,9 +6947,37 @@ export type RecurringSeriesRow = {
      */
     lastSeenOn: string;
     /**
+     * Iscurrent
+     */
+    isCurrent: boolean;
+    /**
+     * Currentperiodstartedon
+     */
+    currentPeriodStartedOn: string | null;
+    /**
+     * Lastperiodendedon
+     */
+    lastPeriodEndedOn: string | null;
+    /**
+     * Lastendreason
+     */
+    lastEndReason: 'cancelled' | 'lapsed' | null;
+    /**
+     * Periodcount
+     */
+    periodCount: number;
+    /**
+     * Resumed
+     */
+    resumed: boolean;
+    /**
+     * Nextexpectedon
+     */
+    nextExpectedOn: string | null;
+    /**
      * Status
      */
-    status: 'active' | 'overdue';
+    status: 'active' | 'overdue' | 'ended';
 };
 
 /**
@@ -7425,6 +7517,16 @@ export type ResultItem = {
      * Reason
      */
     reason: string;
+};
+
+/**
+ * ResumeBody
+ */
+export type ResumeBody = {
+    /**
+     * Resumedon
+     */
+    resumedOn?: string | null;
 };
 
 /**
@@ -14161,6 +14263,91 @@ export type PatchRecurringRecurringSeriesIdPatchResponses = {
 };
 
 export type PatchRecurringRecurringSeriesIdPatchResponse = PatchRecurringRecurringSeriesIdPatchResponses[keyof PatchRecurringRecurringSeriesIdPatchResponses];
+
+export type CancelRecurringRecurringSeriesIdCancelPostData = {
+    body: CancelBody;
+    path: {
+        /**
+         * Seriesid
+         */
+        seriesId: string;
+    };
+    query?: never;
+    url: '/recurring/{seriesId}/cancel';
+};
+
+export type CancelRecurringRecurringSeriesIdCancelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CancelRecurringRecurringSeriesIdCancelPostError = CancelRecurringRecurringSeriesIdCancelPostErrors[keyof CancelRecurringRecurringSeriesIdCancelPostErrors];
+
+export type CancelRecurringRecurringSeriesIdCancelPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringSeriesRow;
+};
+
+export type CancelRecurringRecurringSeriesIdCancelPostResponse = CancelRecurringRecurringSeriesIdCancelPostResponses[keyof CancelRecurringRecurringSeriesIdCancelPostResponses];
+
+export type ResumeRecurringRecurringSeriesIdResumePostData = {
+    body: ResumeBody;
+    path: {
+        /**
+         * Seriesid
+         */
+        seriesId: string;
+    };
+    query?: never;
+    url: '/recurring/{seriesId}/resume';
+};
+
+export type ResumeRecurringRecurringSeriesIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeRecurringRecurringSeriesIdResumePostError = ResumeRecurringRecurringSeriesIdResumePostErrors[keyof ResumeRecurringRecurringSeriesIdResumePostErrors];
+
+export type ResumeRecurringRecurringSeriesIdResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringSeriesRow;
+};
+
+export type ResumeRecurringRecurringSeriesIdResumePostResponse = ResumeRecurringRecurringSeriesIdResumePostResponses[keyof ResumeRecurringRecurringSeriesIdResumePostResponses];
+
+export type CreateFromTransactionRecurringFromTransactionPostData = {
+    body: FromTransactionBody;
+    path?: never;
+    query?: never;
+    url: '/recurring/from-transaction';
+};
+
+export type CreateFromTransactionRecurringFromTransactionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateFromTransactionRecurringFromTransactionPostError = CreateFromTransactionRecurringFromTransactionPostErrors[keyof CreateFromTransactionRecurringFromTransactionPostErrors];
+
+export type CreateFromTransactionRecurringFromTransactionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringSeriesRow;
+};
+
+export type CreateFromTransactionRecurringFromTransactionPostResponse = CreateFromTransactionRecurringFromTransactionPostResponses[keyof CreateFromTransactionRecurringFromTransactionPostResponses];
 
 export type RemoveRecurringRecurringSeriesIdRemovePostData = {
     body?: never;
