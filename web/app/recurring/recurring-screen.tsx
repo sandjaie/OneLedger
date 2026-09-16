@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -13,7 +14,9 @@ type Props = {
 
 type State = "loading" | "ready" | "error";
 
-const CADENCE_TEXT: Record<string, string> = {
+// Exported so the Subscriptions screen, its detail page and the Transactions "Add as
+// subscription" form show the same cadence/status/end-reason words rather than a second copy.
+export const CADENCE_TEXT: Record<string, string> = {
   weekly: "Weekly",
   monthly: "Monthly",
   quarterly: "Quarterly",
@@ -22,13 +25,13 @@ const CADENCE_TEXT: Record<string, string> = {
   custom: "Custom",
 };
 
-const STATUS_TEXT: Record<string, string> = {
+export const STATUS_TEXT: Record<string, string> = {
   active: "Active",
   overdue: "Overdue",
   ended: "Ended",
 };
 
-const END_REASON_TEXT: Record<string, string> = {
+export const END_REASON_TEXT: Record<string, string> = {
   cancelled: "cancelled",
   lapsed: "stopped charging",
 };
@@ -216,6 +219,11 @@ export function RecurringScreen({ currencies, request }: Props) {
     }
   }
 
+  // Subscriptions have their own screen (Task 7 contract "Recurring keeps listing recurring
+  // payments that are not subscriptions"); flipping the flag moves a row there without this
+  // list re-numbering anything else on the page.
+  const shown = series?.filter((row) => !row.isSubscription) ?? [];
+
   function startCadence(row: RecurringSeriesRow) {
     setCadenceEditingId(row.id);
     setCadenceValue(row.cadence);
@@ -250,7 +258,8 @@ export function RecurringScreen({ currencies, request }: Props) {
       <h1 className="workspace-title" id="recurring-title">Recurring payments</h1>
       <p className="lede">
         Found automatically from the ledger — nothing here needs confirming. A payment is shown as
-        a subscription or not; the one correction is that flip. Remove takes a payment off this
+        a subscription or not; the one correction is that flip, which moves a row to the{" "}
+        <Link href="/subscriptions">Subscriptions</Link> screen. Remove takes a payment off this
         list entirely and it will not return on its own.
       </p>
 
@@ -273,10 +282,12 @@ export function RecurringScreen({ currencies, request }: Props) {
           {cancelProblem && <p className="inline-alert" role="alert">{cancelProblem}</p>}
           {resumeProblem && <p className="inline-alert" role="alert">{resumeProblem}</p>}
 
-          {series.length === 0 && <p>No recurring payment has been found yet.</p>}
-          {series.length > 0 && (
+          {shown.length === 0 && (
+            <p>No recurring payment other than a subscription has been found yet.</p>
+          )}
+          {shown.length > 0 && (
             <ul className="recurring-confirmed-list">
-              {series.map((row) => (
+              {shown.map((row) => (
                 <li key={row.id}>
                   <span>
                     {row.label}
@@ -313,6 +324,18 @@ export function RecurringScreen({ currencies, request }: Props) {
                       </>
                     )}
                   </span>
+                  {(row.payingAccountName || row.paymentChannelName) && (
+                    <span>
+                      {row.payingAccountName && (
+                        <>
+                          Paying account: {row.payingAccountName}
+                          {row.payingAccountMasked ? ` (${row.payingAccountMasked})` : ""}
+                        </>
+                      )}
+                      {row.payingAccountName && row.paymentChannelName ? " · " : ""}
+                      {row.paymentChannelName && <>Channel: {row.paymentChannelName}</>}
+                    </span>
+                  )}
 
                   <div className="plans-settlement-actions">
                     <button

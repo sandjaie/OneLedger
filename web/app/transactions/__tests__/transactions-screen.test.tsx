@@ -762,3 +762,57 @@ describe("transfers on the transactions screen", () => {
     await waitFor(() => expect(legs()).toHaveLength(0));
   });
 });
+
+describe("adding a spending charge as a subscription", () => {
+  it("offers the action only on a spending charge, not income, a transfer leg or a split parent", () => {
+    renderScreen(
+      [
+        transaction({ id: "txn-charge", descriptionRaw: "CHARGE" }),
+        transaction({ id: "txn-income", descriptionRaw: "SALARY", amount: "5000.0000", txnType: "income" }),
+        transaction({ id: "txn-leg", descriptionRaw: "TRANSFER LEG", transferId: "tr-1" }),
+        transaction({ id: "txn-split", descriptionRaw: "SPLIT PARENT", isSplitParent: true }),
+      ],
+      4,
+    );
+    expect(screen.getByRole("button", { name: "Add as subscription" })).toBeDefined();
+    expect(screen.getAllByRole("button", { name: "Add as subscription" })).toHaveLength(1);
+  });
+
+  it("posts the exact body with one idempotency key, and reuses it on retry", async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(new ApiError(409, "this transaction already belongs to a recurring series"))
+      .mockResolvedValueOnce(transaction({}))
+      // The successful retry reloads the ledger page (`reload`), a second request beyond the
+      // from-transaction post itself.
+      .mockResolvedValueOnce({ transactions: [transaction({})], total: 1 });
+    renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+
+    // Opening the draft hides the opener (`subscribingId !== row.id`), so exactly one button
+    // named "Add as subscription" exists at a time — the opener, then the form's own submit.
+    fireEvent.click(screen.getByRole("button", { name: "Add as subscription" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Synthetic streaming" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add as subscription" }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    const [url, init] = request.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/recurring/from-transaction");
+    const firstBody = JSON.parse(String(init.body));
+    expect(firstBody).toEqual({
+      transactionId: "txn-1",
+      cadence: "monthly",
+      customIntervalDays: null,
+      label: "Synthetic streaming",
+      isSubscription: true,
+      idempotencyKey: firstBody.idempotencyKey,
+    });
+    expect(await screen.findByText("this transaction already belongs to a recurring series")).toBeTruthy();
+
+    // The failed draft stays open with the same key — retry is the same click, same button.
+    fireEvent.click(screen.getByRole("button", { name: "Add as subscription" }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    const [, retryInit] = request.mock.calls[1] as [string, RequestInit];
+    const retryBody = JSON.parse(String(retryInit.body));
+    expect(retryBody.idempotencyKey).toBe(firstBody.idempotencyKey);
+  });
+});

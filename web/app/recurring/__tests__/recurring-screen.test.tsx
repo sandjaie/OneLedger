@@ -23,7 +23,10 @@ function aSeries(overrides: Partial<RecurringSeriesRow> = {}): RecurringSeriesRo
     lifecycle: "active",
     categoryId: null,
     categoryName: null,
-    isSubscription: true,
+    // The Recurring screen now lists only payments that are not subscriptions (Task 7): a
+    // subscription has its own screen, so the default fixture here matches what this screen
+    // actually shows.
+    isSubscription: false,
     detectionMethod: "detected",
     needsName: false,
     nativeAmount: "15.0000",
@@ -84,25 +87,61 @@ describe("recurring screen", () => {
   });
 
   it("flips the subscription flag by posting isSubscription", async () => {
-    const response: RecurringResponse = { series: [aSeries({ isSubscription: true })] };
+    const response: RecurringResponse = { series: [aSeries({ isSubscription: false })] };
     const request = vi.fn((path: string) => {
       if (path === "/recurring/refresh") return Promise.resolve({});
       if (path === "/recurring") return Promise.resolve(response);
-      if (path === "/recurring/series-1") return Promise.resolve(aSeries({ isSubscription: false }));
+      if (path === "/recurring/series-1") return Promise.resolve(aSeries({ isSubscription: true }));
       throw new Error(`unexpected path ${path}`);
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
     await screen.findByText(/Synthetic streaming service/);
 
-    fireEvent.click(screen.getByRole("button", { name: "Not a subscription" }));
+    fireEvent.click(screen.getByRole("button", { name: "A subscription" }));
 
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         "/recurring/series-1",
-        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ isSubscription: false }) }),
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ isSubscription: true }) }),
       ),
     );
+  });
+
+  it("never lists a row already flagged a subscription — it has moved to Subscriptions", async () => {
+    const response: RecurringResponse = { series: [aSeries({ isSubscription: true })] };
+    const request = vi.fn((path: string) => {
+      if (path === "/recurring/refresh") return Promise.resolve({});
+      if (path === "/recurring") return Promise.resolve(response);
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    expect(
+      await screen.findByText(/no recurring payment other than a subscription has been found yet/i),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Synthetic streaming service/)).toBeNull();
+  });
+
+  it("shows the paying account and channel when the series carries them", async () => {
+    const response: RecurringResponse = {
+      series: [
+        aSeries({
+          payingAccountName: "Everyday card",
+          payingAccountMasked: "•••• 4242",
+          paymentChannelName: "App store",
+        }),
+      ],
+    };
+    const request = vi.fn((path: string) => {
+      if (path === "/recurring/refresh") return Promise.resolve({});
+      if (path === "/recurring") return Promise.resolve(response);
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    expect(await screen.findByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
+    expect(screen.getByText(/Channel: App store/)).toBeTruthy();
   });
 
   it("asks before removing, and only posts remove on confirmation", async () => {
@@ -216,6 +255,8 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    expect(await screen.findByText(/no recurring payment has been found yet/i)).toBeTruthy();
+    expect(
+      await screen.findByText(/no recurring payment other than a subscription has been found yet/i),
+    ).toBeTruthy();
   });
 });

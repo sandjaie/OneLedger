@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 
-import { type apiFetch } from "@/lib/api/client";
+import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { ClassifyPrompt } from "@/app/transactions/classify-prompt";
+import { CADENCE_TEXT } from "@/app/recurring/recurring-screen";
 import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
 import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
@@ -59,6 +60,16 @@ const ALL_TYPES = [
 ] as const;
 
 const PAGE = 50;
+
+// The engine's own eligibility check (`v_transaction_reportable`, `txn_type <> 'income' AND
+// amount_base < 0`) run client-side. The row carries no series-membership field, so this offers
+// the action on every eligible charge and lets a 409 from `/recurring/from-transaction` say when
+// one is already in a series — never a second source of truth about series membership.
+function isSpendingCharge(row: TransactionRow): boolean {
+  return (
+    row.amount.startsWith("-") && row.txnType !== "income" && !row.transferId && !row.isSplitParent
+  );
+}
 
 type Filters = {
   accountId: string;
@@ -174,6 +185,19 @@ export function TransactionsScreen({
     categoryId: "",
     notes: "",
   });
+
+  // "Add as subscription" (Task 7): one row's inline draft at a time, mirroring the rename/cadence
+  // forms other screens already use. `subscribeKey` is one idempotency key per draft — reused on
+  // retry, replaced only after a draft is posted successfully.
+  const [subscribingId, setSubscribingId] = useState<string>();
+  const [subscribeForm, setSubscribeForm] = useState({
+    cadence: "monthly",
+    customIntervalDays: null as number | null,
+    label: "",
+  });
+  const [subscribeKey, setSubscribeKey] = useState(() => crypto.randomUUID());
+  const [subscribeBusy, setSubscribeBusy] = useState(false);
+  const [subscribeProblem, setSubscribeProblem] = useState<string>();
 
   const categoryName = new Map(categories.map((row) => [row.id, row.name]));
   // A child option names its parent too — "Insurance → Health" and "Health" are different
@@ -319,6 +343,43 @@ export function TransactionsScreen({
       );
     } finally {
       setBusy(false);
+    }
+  }
+
+  function startSubscribe(row: TransactionRow) {
+    setSubscribingId(row.id);
+    setSubscribeForm({
+      cadence: "monthly",
+      customIntervalDays: null,
+      label: row.descriptionClean ?? row.descriptionRaw,
+    });
+    setSubscribeProblem(undefined);
+  }
+
+  async function submitSubscribe(row: TransactionRow) {
+    setSubscribeBusy(true);
+    setSubscribeProblem(undefined);
+    try {
+      await request("/recurring/from-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionId: row.id,
+          cadence: subscribeForm.cadence,
+          customIntervalDays: subscribeForm.cadence === "custom" ? subscribeForm.customIntervalDays : null,
+          label: subscribeForm.label,
+          isSubscription: true,
+          idempotencyKey: subscribeKey,
+        }),
+      });
+      setSubscribingId(undefined);
+      setSubscribeKey(crypto.randomUUID());
+      await reload(applied, 0, false);
+      onChanged();
+    } catch (error) {
+      setSubscribeProblem(errorText(error, "This could not be added as a subscription."));
+    } finally {
+      setSubscribeBusy(false);
     }
   }
 
@@ -696,6 +757,16 @@ export function TransactionsScreen({
                       Link as transfer
                     </button>
                   )}
+                  {isSpendingCharge(row) && subscribingId !== row.id && (
+                    <button
+                      className="text-action"
+                      disabled={busy}
+                      onClick={() => startSubscribe(row)}
+                      type="button"
+                    >
+                      Add as subscription
+                    </button>
+                  )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
                   {row.sourceDocumentId && (
@@ -720,6 +791,73 @@ export function TransactionsScreen({
                       placeholder="Add a note"
                     />
                   </label>
+                  {subscribingId === row.id && (
+                    <div className="recurring-dismiss-form">
+                      <label className="text-field">
+                        <span>Name</span>
+                        <input
+                          onChange={(event) =>
+                            setSubscribeForm({ ...subscribeForm, label: event.target.value })
+                          }
+                          value={subscribeForm.label}
+                        />
+                      </label>
+                      <label className="select-field">
+                        <span>Cadence</span>
+                        <select
+                          onChange={(event) =>
+                            setSubscribeForm({ ...subscribeForm, cadence: event.target.value })
+                          }
+                          value={subscribeForm.cadence}
+                        >
+                          {Object.entries(CADENCE_TEXT).map(([value, text]) => (
+                            <option key={value} value={value}>{text}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {subscribeForm.cadence === "custom" && (
+                        <label className="text-field">
+                          <span>Days between charges</span>
+                          <input
+                            max={730}
+                            min={7}
+                            onChange={(event) =>
+                              setSubscribeForm({
+                                ...subscribeForm,
+                                customIntervalDays: event.target.valueAsNumber,
+                              })
+                            }
+                            type="number"
+                            value={subscribeForm.customIntervalDays ?? ""}
+                          />
+                        </label>
+                      )}
+                      {subscribeProblem && (
+                        <p className="inline-alert" role="alert">{subscribeProblem}</p>
+                      )}
+                      <button
+                        className="primary-action"
+                        disabled={
+                          subscribeBusy ||
+                          !subscribeForm.label.trim() ||
+                          (subscribeForm.cadence === "custom" &&
+                            (subscribeForm.customIntervalDays === null ||
+                              Number.isNaN(subscribeForm.customIntervalDays)))
+                        }
+                        onClick={() => void submitSubscribe(row)}
+                        type="button"
+                      >
+                        {subscribeBusy ? "Saving…" : "Add as subscription"}
+                      </button>
+                      <button
+                        className="text-action"
+                        onClick={() => setSubscribingId(undefined)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </td>
                 <td className="transaction-category">
                   <label className="select-field">
