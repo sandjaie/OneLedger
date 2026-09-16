@@ -89,8 +89,10 @@ open period and a later charge opens a new one on the **same** subscription, so 
   and **resume** it (opening a period).
 - A subscription that simply stops charging **lapses** on its own: once no charge has arrived for
   two cadences, its period closes on the date its last charge paid through. The owner does not need
-  to record a cancellation for "current" to be right, and a later charge reopens it — closing a
-  period is never destructive.
+  to record a cancellation for "current" to be right, and closing a period is never destructive.
+- Statements arrive late, so a lapse is provisional: a charge imported afterwards that was in fact
+  on time restores the same period, and only a charge after a real gap opens a new one. A
+  subscription is never shown as resumed just because its statement was imported late.
 - A paused subscription never lapses.
 - Removing a recurring payment as "not recurring at all" is the one final action; it is the only
   thing that ends a series itself.
