@@ -19,11 +19,18 @@ const CADENCE_TEXT: Record<string, string> = {
   quarterly: "Quarterly",
   semiannual: "Semiannual",
   annual: "Annual",
+  custom: "Custom",
 };
 
 const STATUS_TEXT: Record<string, string> = {
   active: "Active",
   overdue: "Overdue",
+  ended: "Ended",
+};
+
+const END_REASON_TEXT: Record<string, string> = {
+  cancelled: "cancelled",
+  lapsed: "stopped charging",
 };
 
 export function RecurringScreen({ currencies, request }: Props) {
@@ -41,6 +48,24 @@ export function RecurringScreen({ currencies, request }: Props) {
 
   const [removeBusy, setRemoveBusy] = useState<string>();
   const [removeProblem, setRemoveProblem] = useState<string>();
+
+  const [statusBusy, setStatusBusy] = useState<string>();
+  const [statusProblem, setStatusProblem] = useState<string>();
+
+  const [cancelBusy, setCancelBusy] = useState<string>();
+  const [cancelProblem, setCancelProblem] = useState<string>();
+
+  const [resumeBusy, setResumeBusy] = useState<string>();
+  const [resumeProblem, setResumeProblem] = useState<string>();
+
+  const [cadenceEditingId, setCadenceEditingId] = useState<string>();
+  const [cadenceValue, setCadenceValue] = useState("monthly");
+  // A plain day count, not money — held as a number read straight from the input's own
+  // `valueAsNumber`, never `Number()`/`parseInt()` (banned in this codebase for the same reason
+  // money never goes through them: a string on the wire stays a string until it doesn't need to).
+  const [customIntervalValue, setCustomIntervalValue] = useState<number | null>(null);
+  const [cadenceBusy, setCadenceBusy] = useState(false);
+  const [cadenceProblem, setCadenceProblem] = useState<string>();
 
   // Refresh runs exactly once, when the screen opens — never on every reload after a local
   // action, and never in a loop. `request` is Workspace's own stable `useCallback`, so this
@@ -137,6 +162,88 @@ export function RecurringScreen({ currencies, request }: Props) {
     }
   }
 
+  async function setStatus(row: RecurringSeriesRow, lifecycle: string) {
+    setStatusBusy(row.id);
+    setStatusProblem(undefined);
+    try {
+      await request(`/recurring/${row.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lifecycle }),
+      });
+      await reload();
+    } catch (error) {
+      setStatusProblem(errorText(error, "This status could not be saved."));
+    } finally {
+      setStatusBusy(undefined);
+    }
+  }
+
+  async function cancel(row: RecurringSeriesRow) {
+    if (!window.confirm(`Cancel ${row.label}? This closes its current billing period.`)) {
+      return;
+    }
+    setCancelBusy(row.id);
+    setCancelProblem(undefined);
+    try {
+      await request(`/recurring/${row.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await reload();
+    } catch (error) {
+      setCancelProblem(errorText(error, "This could not be cancelled."));
+    } finally {
+      setCancelBusy(undefined);
+    }
+  }
+
+  async function resume(row: RecurringSeriesRow) {
+    setResumeBusy(row.id);
+    setResumeProblem(undefined);
+    try {
+      await request(`/recurring/${row.id}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      await reload();
+    } catch (error) {
+      setResumeProblem(errorText(error, "This could not be resumed."));
+    } finally {
+      setResumeBusy(undefined);
+    }
+  }
+
+  function startCadence(row: RecurringSeriesRow) {
+    setCadenceEditingId(row.id);
+    setCadenceValue(row.cadence);
+    setCustomIntervalValue(row.customIntervalDays);
+    setCadenceProblem(undefined);
+  }
+
+  async function submitCadence(seriesId: string) {
+    setCadenceBusy(true);
+    setCadenceProblem(undefined);
+    try {
+      await request(`/recurring/${seriesId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cadence: cadenceValue,
+          customIntervalDays: cadenceValue === "custom" ? customIntervalValue : null,
+        }),
+      });
+      setCadenceEditingId(undefined);
+      await reload();
+    } catch (error) {
+      setCadenceProblem(errorText(error, "This cadence could not be saved."));
+    } finally {
+      setCadenceBusy(false);
+    }
+  }
+
   return (
     <section className="workspace-content" aria-labelledby="recurring-title">
       <p className="eyebrow">Recurring</p>
@@ -162,6 +269,9 @@ export function RecurringScreen({ currencies, request }: Props) {
           {problem && <p className="inline-alert" role="alert">{problem}</p>}
           {flipProblem && <p className="inline-alert" role="alert">{flipProblem}</p>}
           {removeProblem && <p className="inline-alert" role="alert">{removeProblem}</p>}
+          {statusProblem && <p className="inline-alert" role="alert">{statusProblem}</p>}
+          {cancelProblem && <p className="inline-alert" role="alert">{cancelProblem}</p>}
+          {resumeProblem && <p className="inline-alert" role="alert">{resumeProblem}</p>}
 
           {series.length === 0 && <p>No recurring payment has been found yet.</p>}
           {series.length > 0 && (
@@ -177,6 +287,7 @@ export function RecurringScreen({ currencies, request }: Props) {
                   <div className="plans-badges">
                     <span className="plans-badge">{STATUS_TEXT[row.status] ?? row.status}</span>
                     {row.isSubscription && <span className="plans-badge">Subscription</span>}
+                    {row.resumed && <span className="plans-badge">Resumed</span>}
                   </div>
                   <span>
                     {row.nativeAmount !== null && row.nativeCurrency !== null
@@ -194,6 +305,13 @@ export function RecurringScreen({ currencies, request }: Props) {
                           {row.priceChangedOn}
                         </>
                       )}
+                    {!row.isCurrent && row.lastPeriodEndedOn && (
+                      <>
+                        {" "}· ended {row.lastPeriodEndedOn}
+                        {row.lastEndReason &&
+                          ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})`}
+                      </>
+                    )}
                   </span>
 
                   <div className="plans-settlement-actions">
@@ -214,6 +332,40 @@ export function RecurringScreen({ currencies, request }: Props) {
                         Rename
                       </button>
                     )}
+                    <select
+                      aria-label="Status"
+                      disabled={statusBusy === row.id}
+                      onChange={(e) => void setStatus(row, e.target.value)}
+                      value={row.lifecycle}
+                    >
+                      <option value="active">Active</option>
+                      <option value="trial">Trial</option>
+                      <option value="paused">Paused</option>
+                    </select>
+                    {cadenceEditingId !== row.id && (
+                      <button className="text-action" onClick={() => startCadence(row)} type="button">
+                        Cadence
+                      </button>
+                    )}
+                    {row.isCurrent ? (
+                      <button
+                        className="text-action"
+                        disabled={cancelBusy === row.id}
+                        onClick={() => void cancel(row)}
+                        type="button"
+                      >
+                        {cancelBusy === row.id ? "Cancelling…" : "Cancel"}
+                      </button>
+                    ) : (
+                      <button
+                        className="text-action"
+                        disabled={resumeBusy === row.id}
+                        onClick={() => void resume(row)}
+                        type="button"
+                      >
+                        {resumeBusy === row.id ? "Resuming…" : "Resume"}
+                      </button>
+                    )}
                     <button
                       className="text-action"
                       disabled={removeBusy === row.id}
@@ -223,6 +375,57 @@ export function RecurringScreen({ currencies, request }: Props) {
                       {removeBusy === row.id ? "Removing…" : "Remove"}
                     </button>
                   </div>
+
+                  {cadenceEditingId === row.id && (
+                    <div className="recurring-dismiss-form">
+                      <label className="text-field">
+                        <span>Cadence</span>
+                        <select
+                          onChange={(e) => setCadenceValue(e.target.value)}
+                          value={cadenceValue}
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="semiannual">Semiannual</option>
+                          <option value="annual">Annual</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                      </label>
+                      {cadenceValue === "custom" && (
+                        <label className="text-field">
+                          <span>Days between charges</span>
+                          <input
+                            max={730}
+                            min={7}
+                            onChange={(e) => setCustomIntervalValue(e.target.valueAsNumber)}
+                            type="number"
+                            value={customIntervalValue ?? ""}
+                          />
+                        </label>
+                      )}
+                      {cadenceProblem && <p className="inline-alert" role="alert">{cadenceProblem}</p>}
+                      <button
+                        className="primary-action"
+                        disabled={
+                          cadenceBusy ||
+                          (cadenceValue === "custom" &&
+                            (customIntervalValue === null || Number.isNaN(customIntervalValue)))
+                        }
+                        onClick={() => void submitCadence(row.id)}
+                        type="button"
+                      >
+                        {cadenceBusy ? "Saving…" : "Save cadence"}
+                      </button>
+                      <button
+                        className="text-action"
+                        onClick={() => setCadenceEditingId(undefined)}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
 
                   {renamingId === row.id && (
                     <div className="recurring-dismiss-form">

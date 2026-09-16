@@ -24,7 +24,7 @@ import re
 import statistics
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from .money import CENT
@@ -345,13 +345,39 @@ def detect_candidates(rows: list[SpendRow]) -> list[Candidate]:
     return candidates
 
 
-def next_expected_on(last_seen_on: date, cadence: str) -> date:
-    return last_seen_on + timedelta(days=CADENCE_DAYS[cadence])
+def interval_days_for(cadence: str, custom_interval_days: int | None) -> int:
+    """The interval in days a series' cadence stands for — `CADENCE_DAYS[cadence]`, or
+    `custom_interval_days` for a `custom` series (Phase 4.1 Task 5, global execution contract
+    "Interval"). `custom_interval_days` is guaranteed non-null for a `custom` series by
+    `recurring_series_custom_interval_shape` (V58)."""
+    if cadence == "custom":
+        assert custom_interval_days is not None
+        return custom_interval_days
+    return CADENCE_DAYS[cadence]
 
 
-def is_overdue(last_seen_on: date, cadence: str, *, today: date) -> bool:
-    """More than half a cadence past the next expected date (spec). `cadence` is always a
-    detected one here (Task 1 never creates a `custom` series — Task 2's `CADENCE_DAYS['custom']`
-    gap is `routes/recurring.py`'s own job there, reading `custom_interval_days`)."""
-    days_late = (today - next_expected_on(last_seen_on, cadence)).days
-    return days_late > CADENCE_DAYS[cadence] // 2
+def next_expected_on(anchor: date, interval_days: int) -> date:
+    return anchor + timedelta(days=interval_days)
+
+
+def is_overdue(anchor: date, interval_days: int, *, today: date) -> bool:
+    """More than half a cadence past the next expected date (spec). Every caller passes the
+    interval and the anchor itself (Task 5, global execution contract) instead of a `cadence` this
+    function would otherwise have to look up on its own."""
+    days_late = (today - next_expected_on(anchor, interval_days)).days
+    return days_late > interval_days // 2
+
+
+def price_change_window(cadence: str, custom_interval_days: int | None) -> tuple[int, int] | None:
+    """A `custom` series' own price-change window, `(floor(0.85 x I), ceil(1.15 x I))` from its
+    `custom_interval_days` (Task 5) — `CADENCE_WINDOWS` carries no `custom` entry, since detection
+    never proposes one. `None` only for a `custom` series not yet given an interval, which Extend's
+    caller treats as "no window", refusing the join rather than guessing one."""
+    if cadence != "custom":
+        return CADENCE_WINDOWS.get(cadence)
+    if custom_interval_days is None:
+        return None
+    interval = Decimal(custom_interval_days)
+    low = int((interval * Decimal("0.85")).to_integral_value(rounding=ROUND_FLOOR))
+    high = int((interval * Decimal("1.15")).to_integral_value(rounding=ROUND_CEILING))
+    return (low, high)

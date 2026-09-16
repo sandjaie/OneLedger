@@ -3476,6 +3476,101 @@ transaction.
 
 ---
 
+## `V58` (applied)
+
+### Subscription billing periods
+
+Phase 4.1 Task 5 (spec "A subscription has billing periods"). A subscription is one record for
+its whole life, made of billing periods: cancelling closes the open period and a later charge
+opens a new one on the *same* series, so the owner's name and subscription flag carry across by
+construction. `recurring_series.ended_on` now means only "removed as not recurring" (V56's final
+`POST /recurring/{id}/remove` action); cancelling and lapsing are the state of a billing period,
+never of the series.
+
+```sql
+CREATE TABLE recurring_series_period (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL,
+  series_id    UUID NOT NULL,
+  started_on   DATE NOT NULL,
+  ended_on     DATE,
+  end_reason   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_recurring_series_period_household_id UNIQUE (household_id, id),
+  CONSTRAINT fk_recurring_series_period_series FOREIGN KEY (household_id, series_id)
+    REFERENCES recurring_series (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT recurring_series_period_end_reason_is_known CHECK (
+    end_reason IS NULL OR end_reason IN ('cancelled', 'lapsed')),
+  CONSTRAINT recurring_series_period_end_shape CHECK ((ended_on IS NULL) = (end_reason IS NULL)),
+  CONSTRAINT recurring_series_period_dates_are_ordered CHECK (
+    ended_on IS NULL OR ended_on >= started_on)
+);
+
+CREATE UNIQUE INDEX uq_recurring_series_period_open ON recurring_series_period (household_id, series_id)
+  WHERE ended_on IS NULL;
+
+ALTER TABLE recurring_series
+  ADD COLUMN lifecycle             TEXT NOT NULL DEFAULT 'active',
+  ADD COLUMN custom_interval_days  SMALLINT,
+  ADD CONSTRAINT recurring_series_lifecycle_is_known CHECK (
+    lifecycle IN ('active', 'trial', 'paused')),
+  ADD CONSTRAINT recurring_series_custom_interval_is_bounded CHECK (
+    custom_interval_days IS NULL OR custom_interval_days BETWEEN 7 AND 730),
+  ADD CONSTRAINT recurring_series_custom_interval_shape CHECK (
+    (cadence = 'custom') = (custom_interval_days IS NOT NULL));
+```
+
+`recurring_series_period` carries RLS `household_isolation` in the same shape V53 uses, and no
+table `GRANT` — the default privilege V1 already grants, the same pattern every household table
+here follows. At most one open period per series (`uq_recurring_series_period_open`): a
+subscription is current when its latest period is open, past otherwise.
+
+`lifecycle` (`active`/`trial`/`paused`) and `custom_interval_days` (7–730 days, set if and only if
+`cadence = 'custom'`) are the owner's own settings; V57 added and committed `custom` in its own
+migration by design (Postgres refuses a value used in the same transaction that adds it), so this
+migration is free to use it.
+
+**Backfill.** Every still-open series (`ended_on IS NULL`) gets one open period starting at its own
+`first_seen_on` — it was always current. Every series ended with a reason other than
+`'not_recurring'` — V56's own former free-text `/end`, the only way a series could end before V57
+replaced it with the dedicated `/remove` action — was in truth a cancellation of one billing
+period, not the series' own removal: it gets one period spanning its whole recorded life, closed
+`'cancelled'`, and the series itself is reopened (`ended_on`/`ended_reason` cleared) so it reads as
+a past, not a removed, subscription. `trg_preserve_ended_recurring_series` (V56) refuses any UPDATE
+to an already-ended row, so it is disabled for that one statement and re-enabled immediately after.
+A series removed as `'not_recurring'` is untouched by both statements and gets no period at all —
+V58's own meaning for `ended_on` from here on.
+
+**Cadence arithmetic** (`api/oneledger/recurring.py`). `next_expected_on`/`is_overdue` now take the
+interval in days and an anchor instead of looking `cadence` up themselves (every caller passes
+both); `interval_days_for` resolves the interval (`CADENCE_DAYS[cadence]`, or
+`custom_interval_days` for `custom`); `price_change_window` gives a `custom` series its own
+price-change window, `(floor(0.85 x I), ceil(1.15 x I))`, where Task 4's `CADENCE_WINDOWS` carries
+no `custom` entry (detection never proposes one). The global execution contract's **anchor** is
+`max(last_seen_on, the open period's own started_on)`, so a subscription resumed long after its
+last charge is not lapsed or overdue at once.
+
+**Refresh** (`routes/recurring.py`) keeps Sync, Extend, Create, Sync, still idempotent. Create also
+opens one period for each new series. Extend now tracks each series' latest billing period in
+memory through the pass (the same way it already tracked `native_amount`/`last_seen_on`) and
+advances it as a charge joins: an open period lapses and reopens after a gap of more than two
+cadences (paid through `max(started_on, last_seen_on + I)`), or is pulled back to an earlier
+charge's own date; a lapsed period is restored in place by a charge that arrived late but was in
+fact on time (within two cadences of the old `last_seen_on`), otherwise a fresh period opens; a
+cancelled period stays cancelled for a charge still within it (a backfilled import) and opens a
+fresh period only for one dated after it. Sync's own **Lapse** step, run both before and after
+Extend each call, closes a stale open period (not `paused`, more than two cadences past its
+anchor) the same way. `GET /recurring` rows gain `lifecycle`, `customIntervalDays`, `isCurrent`,
+`currentPeriodStartedOn`, `lastPeriodEndedOn`/`lastEndReason`, `periodCount`, `resumed` and
+`nextExpectedOn`; `status` becomes `active`/`overdue`/`ended`. `PATCH` also accepts `lifecycle`,
+`cadence` with `customIntervalDays`, and `categoryId` (through
+`routes/transactions.py::_assert_category_allowed`). New routes `POST /recurring/{id}/cancel` and
+`.../resume` close and open a billing period on the same series; `POST /recurring/from-transaction`
+adds a single charge as a subscription with its own cadence and one open period, idempotent on a
+client-supplied key. `docs/design/api-contracts.html` §2 has the exact route contracts.
+
+---
+
 ## `0013`
 
 ### Loans

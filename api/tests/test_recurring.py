@@ -13,6 +13,10 @@ from oneledger.recurring import (
     SpendRow,
     amounts_are_stable,
     detect_candidates,
+    interval_days_for,
+    is_overdue,
+    next_expected_on,
+    price_change_window,
 )
 from oneledger.routes.recurring import _LOOKBACK_MONTHS, _months_back
 
@@ -187,6 +191,31 @@ def test_a_second_pass_over_members_and_leftover_one_offs_proposes_nothing() -> 
 
     members = [replace(row, in_series=True) for row in monthly]
     assert detect_candidates(members + one_offs) == []
+
+
+def test_interval_days_for_a_standard_cadence_ignores_custom_interval_days() -> None:
+    assert interval_days_for("monthly", None) == 30
+    assert interval_days_for("weekly", 45) == 7  # a stray custom_interval_days is never read
+
+
+def test_interval_days_for_custom_reads_its_own_interval() -> None:
+    assert interval_days_for("custom", 45) == 45
+
+
+def test_next_expected_on_and_is_overdue_from_a_custom_interval_and_anchor() -> None:
+    anchor = date(2026, 1, 1)
+    interval = interval_days_for("custom", 45)
+    assert next_expected_on(anchor, interval) == date(2026, 2, 15)
+    # More than half the interval (22 days) past next-expected is overdue; not before.
+    assert not is_overdue(anchor, interval, today=date(2026, 2, 15) + timedelta(days=22))
+    assert is_overdue(anchor, interval, today=date(2026, 2, 15) + timedelta(days=23))
+
+
+def test_custom_price_change_window_is_85_to_115_percent_rounded_out() -> None:
+    # 45 x 0.85 = 38.25 -> floor 38; 45 x 1.15 = 51.75 -> ceil 52.
+    assert price_change_window("custom", 45) == (38, 52)
+    assert price_change_window("custom", None) is None
+    assert price_change_window("monthly", None) == CADENCE_WINDOWS["monthly"]
 
 
 def test_new_charges_after_a_removed_series_stand_as_their_own_group() -> None:

@@ -140,7 +140,9 @@ BEGIN
 
   UPDATE recurring_series SET native_amount = 10, native_currency = f.base WHERE id = series_id;
   UPDATE recurring_series SET cadence = 'semiannual' WHERE id = series_id;
-  UPDATE recurring_series SET cadence = 'custom' WHERE id = series_id;
+  -- V58's recurring_series_custom_interval_shape requires custom_interval_days alongside a
+  -- 'custom' cadence; set both together rather than widen this file's own scope beyond V57.
+  UPDATE recurring_series SET cadence = 'custom', custom_interval_days = 45 WHERE id = series_id;
 
   RAISE NOTICE 'PASS 0054 new columns and shapes';
 END $$;
