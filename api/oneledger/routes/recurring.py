@@ -319,10 +319,16 @@ def _category_name(cur: psycopg.Cursor[Any], category_id: UUID | None) -> str | 
     return None if row is None else str(row[0])
 
 
-def _payment_channel_name(cur: psycopg.Cursor[Any], payment_channel_id: UUID | None) -> str | None:
+def _payment_channel_name(
+    cur: psycopg.Cursor[Any], household_id: UUID, payment_channel_id: UUID | None
+) -> str | None:
     if payment_channel_id is None:
         return None
-    cur.execute("SELECT name FROM payment_channel WHERE id = %s", (payment_channel_id,))
+    cur.execute(
+        """SELECT name FROM payment_channel
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (payment_channel_id, household_id),
+    )
     row = cur.fetchone()
     return None if row is None else str(row[0])
 
@@ -619,7 +625,7 @@ def _load_series_row(
         nextExpectedOn=next_expected,
         status=status_value,
         paymentChannelId=None if payment_channel_id is None else UUID(str(payment_channel_id)),
-        paymentChannelName=_payment_channel_name(cur, payment_channel_id),
+        paymentChannelName=_payment_channel_name(cur, household_id, payment_channel_id),
         payingAccountId=paying_account[0] if paying_account else None,
         payingAccountName=paying_account[1] if paying_account else None,
         payingAccountMasked=paying_account[2] if paying_account else None,

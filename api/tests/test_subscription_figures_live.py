@@ -291,6 +291,44 @@ def test_summary_totals_equal_the_sum_of_row_figures_and_exclude_paused_ended_an
     assert summary["annualBase"] == active_row["annualAmountBase"]
 
 
+def test_summary_and_by_account_add_rounded_row_figures_and_include_trial(
+    live: Owner,  # noqa: F811
+) -> None:
+    """Two custom 45-day series of 10: each row's monthly figure is 6.7593, so the totals must be
+    13.5186 — a fresh round of the unrounded sum would be 13.5185. One is a trial, which still
+    counts as current."""
+    ids = []
+    for label, lifecycle in (
+        ("Synthetic rounded sum active", "active"),
+        ("Synthetic rounded sum trial", "trial"),
+    ):
+        series_id = _raw_series(
+            live,
+            label=label,
+            first_seen_on=TODAY,
+            last_seen_on=TODAY,
+            cadence="custom",
+            custom_interval_days=45,
+        )
+        _raw_period(live, series_id, TODAY)
+        txn_id = a_spend(live, live.account_id, "-10", TODAY, "expense", description=label)
+        _raw_member(live, series_id, txn_id, TODAY, "10")
+        patch_series(str(series_id), lifecycle=lifecycle)
+        ids.append(str(series_id))
+
+    rows = [_by_id(the_recurring(), series_id) for series_id in ids]
+    assert [r["monthlyAmountBase"] for r in rows] == ["6.7593", "6.7593"]
+    summary = client().get("/recurring/summary", headers=ORIGIN).json()
+    assert summary["currentCount"] == 2
+    assert summary["monthlyBase"] == "13.5186"
+    assert summary["annualBase"] == str(sum(Decimal(r["annualAmountBase"]) for r in rows))
+
+    accounts = client().get("/recurring/by-account", headers=ORIGIN).json()["accounts"]
+    assert len(accounts) == 1
+    assert accounts[0]["count"] == 2
+    assert accounts[0]["monthlyBase"] == "13.5186"
+
+
 def test_renewal_window_boundaries_in_summary_and_upcoming(live: Owner) -> None:  # noqa: F811
     at_today = _raw_series(
         live,
@@ -588,6 +626,16 @@ def test_patch_refuses_another_households_payment_channel(live: Owner) -> None: 
 
     accepted = patch_series(series_id, paymentChannelId=str(seed_channel))
     assert accepted["paymentChannelId"] == str(seed_channel)
+    assert accepted["paymentChannelName"] is not None
+
+    # A foreign reference written behind the route's back never leaks the other household's name.
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE recurring_series SET payment_channel_id = %s WHERE id = %s",
+            (foreign_channel, series_id),
+        )
+    live.conn.commit()
+    assert _by_id(the_recurring(), series_id)["paymentChannelName"] is None
 
 
 def test_payment_channels_lists_seed_and_own_active_channels(live: Owner) -> None:  # noqa: F811
