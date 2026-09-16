@@ -10,6 +10,7 @@ import type {
   CategoryRow,
   CurrencyRow,
   HouseholdCurrency,
+  RecurringResponse,
   SpendingResponse,
 } from "@/types/api";
 
@@ -86,6 +87,10 @@ const emptyBudgets: BudgetsResponse = {
   month: "2026-03-01",
 };
 
+// The recurring panel mounted below the budget panel (Phase 4.1 Task 3) fetches its own data
+// too; these tests exercise only the spending breakdown above it, so it is always empty here.
+const emptyRecurring: RecurringResponse = { confirmed: [], candidates: [] };
+
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
 }
@@ -100,6 +105,7 @@ describe("spending screen", () => {
     const request = requestFrom((path) => {
       if (path.startsWith("/spending?")) return spending;
       if (path.startsWith("/budgets?")) return emptyBudgets;
+      if (path === "/recurring") return emptyRecurring;
       throw new Error(`unexpected path ${path}`);
     });
 
@@ -118,7 +124,7 @@ describe("spending screen", () => {
 
   it("carries the category and dates on the drill-through link", async () => {
     const request = requestFrom((path) =>
-      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {},
     );
 
     render(
@@ -140,7 +146,7 @@ describe("spending screen", () => {
     const calls: Array<string> = [];
     const request = requestFrom((path) => {
       calls.push(path);
-      return path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {};
+      return path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {};
     });
 
     render(
@@ -158,7 +164,7 @@ describe("spending screen", () => {
 
   it("points the download link at the export path for the same range", async () => {
     const request = requestFrom((path) =>
-      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {},
     );
 
     render(

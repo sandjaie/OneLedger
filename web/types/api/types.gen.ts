@@ -5,6 +5,16 @@ export type ClientOptions = {
 };
 
 /**
+ * AcceptPriceBody
+ */
+export type AcceptPriceBody = {
+    /**
+     * Expectedamountbase
+     */
+    expectedAmountBase: string;
+};
+
+/**
  * AccountCreate
  */
 export type AccountCreate = {
@@ -1437,6 +1447,53 @@ export type Candidate = {
 };
 
 /**
+ * CandidateRow
+ */
+export type CandidateRow = {
+    identity: IdentityOut;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Cadence
+     */
+    cadence: string;
+    /**
+     * Occurrences
+     */
+    occurrences: number;
+    /**
+     * Firstseenon
+     */
+    firstSeenOn: string;
+    /**
+     * Lastseenon
+     */
+    lastSeenOn: string;
+    /**
+     * Lastamountbase
+     */
+    lastAmountBase: string;
+    /**
+     * Typicalamountbase
+     */
+    typicalAmountBase: string;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Transactionids
+     */
+    transactionIds: Array<string>;
+};
+
+/**
  * CandidatesResponse
  */
 export type CandidatesResponse = {
@@ -2375,6 +2432,33 @@ export type CommittedGroupResponse = {
 };
 
 /**
+ * ConfirmBody
+ */
+export type ConfirmBody = {
+    /**
+     * Idempotencykey
+     */
+    idempotencyKey: string;
+    identity: IdentityIn;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Cadence
+     */
+    cadence: 'weekly' | 'monthly' | 'quarterly' | 'annual';
+    /**
+     * Expectedamountbase
+     */
+    expectedAmountBase: string;
+    /**
+     * Categoryid
+     */
+    categoryId?: string | null;
+};
+
+/**
  * ConfirmedFundingAllocation
  */
 export type ConfirmedFundingAllocation = {
@@ -2420,6 +2504,61 @@ export type ConfirmedLotAllocation = {
      * Allocatedunits
      */
     allocatedUnits: string;
+};
+
+/**
+ * ConfirmedSeriesRow
+ */
+export type ConfirmedSeriesRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    identity: IdentityOut;
+    /**
+     * Cadence
+     */
+    cadence: string;
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Status
+     */
+    status: 'active' | 'price_changed' | 'overdue';
+    /**
+     * Expectedamountbase
+     */
+    expectedAmountBase: string;
+    /**
+     * Lastamountbase
+     */
+    lastAmountBase: string;
+    /**
+     * Lastseenon
+     */
+    lastSeenOn: string;
+    /**
+     * Nextexpectedon
+     */
+    nextExpectedOn: string;
+    /**
+     * Membercount
+     */
+    memberCount: number;
+    /**
+     * Currency
+     */
+    currency: string;
 };
 
 /**
@@ -2841,6 +2980,13 @@ export type DisagreementSample = {
 };
 
 /**
+ * DismissBody
+ */
+export type DismissBody = {
+    identity: IdentityIn;
+};
+
+/**
  * DoctorReport
  */
 export type DoctorReport = {
@@ -3220,6 +3366,16 @@ export type EmergencyReserveSettings = {
      * Manualmonthlybase
      */
     manualMonthlyBase: string | null;
+};
+
+/**
+ * EndBody
+ */
+export type EndBody = {
+    /**
+     * Endedreason
+     */
+    endedReason: string;
 };
 
 /**
@@ -4344,6 +4500,34 @@ export type IdentityBackfillPreviewRequest = {
      * Password
      */
     password?: string | null;
+};
+
+/**
+ * IdentityIn
+ */
+export type IdentityIn = {
+    /**
+     * Merchantid
+     */
+    merchantId?: string | null;
+    /**
+     * Matchkey
+     */
+    matchKey?: string | null;
+};
+
+/**
+ * IdentityOut
+ */
+export type IdentityOut = {
+    /**
+     * Merchantid
+     */
+    merchantId: string | null;
+    /**
+     * Matchkey
+     */
+    matchKey: string | null;
 };
 
 /**
@@ -6767,6 +6951,34 @@ export type Reconciliation = {
      * Message
      */
     message: string;
+};
+
+/**
+ * RecurringRefreshCounts
+ */
+export type RecurringRefreshCounts = {
+    /**
+     * Seriestouched
+     */
+    seriesTouched: number;
+    /**
+     * Membersadded
+     */
+    membersAdded: number;
+};
+
+/**
+ * RecurringResponse
+ */
+export type RecurringResponse = {
+    /**
+     * Confirmed
+     */
+    confirmed: Array<ConfirmedSeriesRow>;
+    /**
+     * Candidates
+     */
+    candidates: Array<CandidateRow>;
 };
 
 /**
@@ -13987,6 +14199,170 @@ export type CopyBudgetsBudgetsCopyPostResponses = {
 };
 
 export type CopyBudgetsBudgetsCopyPostResponse = CopyBudgetsBudgetsCopyPostResponses[keyof CopyBudgetsBudgetsCopyPostResponses];
+
+export type ReadRecurringRecurringGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/recurring';
+};
+
+export type ReadRecurringRecurringGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadRecurringRecurringGetError = ReadRecurringRecurringGetErrors[keyof ReadRecurringRecurringGetErrors];
+
+export type ReadRecurringRecurringGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringResponse;
+};
+
+export type ReadRecurringRecurringGetResponse = ReadRecurringRecurringGetResponses[keyof ReadRecurringRecurringGetResponses];
+
+export type ConfirmRecurringRecurringConfirmPostData = {
+    body: ConfirmBody;
+    path?: never;
+    query?: never;
+    url: '/recurring/confirm';
+};
+
+export type ConfirmRecurringRecurringConfirmPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmRecurringRecurringConfirmPostError = ConfirmRecurringRecurringConfirmPostErrors[keyof ConfirmRecurringRecurringConfirmPostErrors];
+
+export type ConfirmRecurringRecurringConfirmPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmedSeriesRow;
+};
+
+export type ConfirmRecurringRecurringConfirmPostResponse = ConfirmRecurringRecurringConfirmPostResponses[keyof ConfirmRecurringRecurringConfirmPostResponses];
+
+export type DismissRecurringRecurringDismissPostData = {
+    body: DismissBody;
+    path?: never;
+    query?: never;
+    url: '/recurring/dismiss';
+};
+
+export type DismissRecurringRecurringDismissPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DismissRecurringRecurringDismissPostError = DismissRecurringRecurringDismissPostErrors[keyof DismissRecurringRecurringDismissPostErrors];
+
+export type DismissRecurringRecurringDismissPostResponses = {
+    /**
+     * Response Dismiss Recurring Recurring Dismiss Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: boolean;
+    };
+};
+
+export type DismissRecurringRecurringDismissPostResponse = DismissRecurringRecurringDismissPostResponses[keyof DismissRecurringRecurringDismissPostResponses];
+
+export type AcceptPriceRecurringSeriesIdAcceptPricePostData = {
+    body: AcceptPriceBody;
+    path: {
+        /**
+         * Seriesid
+         */
+        seriesId: string;
+    };
+    query?: never;
+    url: '/recurring/{seriesId}/accept-price';
+};
+
+export type AcceptPriceRecurringSeriesIdAcceptPricePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AcceptPriceRecurringSeriesIdAcceptPricePostError = AcceptPriceRecurringSeriesIdAcceptPricePostErrors[keyof AcceptPriceRecurringSeriesIdAcceptPricePostErrors];
+
+export type AcceptPriceRecurringSeriesIdAcceptPricePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmedSeriesRow;
+};
+
+export type AcceptPriceRecurringSeriesIdAcceptPricePostResponse = AcceptPriceRecurringSeriesIdAcceptPricePostResponses[keyof AcceptPriceRecurringSeriesIdAcceptPricePostResponses];
+
+export type EndRecurringRecurringSeriesIdEndPostData = {
+    body: EndBody;
+    path: {
+        /**
+         * Seriesid
+         */
+        seriesId: string;
+    };
+    query?: never;
+    url: '/recurring/{seriesId}/end';
+};
+
+export type EndRecurringRecurringSeriesIdEndPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EndRecurringRecurringSeriesIdEndPostError = EndRecurringRecurringSeriesIdEndPostErrors[keyof EndRecurringRecurringSeriesIdEndPostErrors];
+
+export type EndRecurringRecurringSeriesIdEndPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ConfirmedSeriesRow;
+};
+
+export type EndRecurringRecurringSeriesIdEndPostResponse = EndRecurringRecurringSeriesIdEndPostResponses[keyof EndRecurringRecurringSeriesIdEndPostResponses];
+
+export type RefreshRecurringRecurringRefreshPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/recurring/refresh';
+};
+
+export type RefreshRecurringRecurringRefreshPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RefreshRecurringRecurringRefreshPostError = RefreshRecurringRecurringRefreshPostErrors[keyof RefreshRecurringRecurringRefreshPostErrors];
+
+export type RefreshRecurringRecurringRefreshPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringRefreshCounts;
+};
+
+export type RefreshRecurringRecurringRefreshPostResponse = RefreshRecurringRecurringRefreshPostResponses[keyof RefreshRecurringRecurringRefreshPostResponses];
 
 export type ListValuationsAccountsAccountIdValuationsGetData = {
     body?: never;

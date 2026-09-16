@@ -103,6 +103,7 @@ def a_spend(
     to_base: str = "1",
     to_secondary: str = "0.25",
     household: UUID | None = None,
+    merchant_id: UUID | None = None,
 ) -> UUID:
     """One committed reportable row, frozen at the rates given — a route may only read this."""
     value = Decimal(amount)
@@ -113,10 +114,10 @@ def a_spend(
             """INSERT INTO transaction (household_id, account_id, booked_date, description_raw,
                                         amount, currency, fx_rate_date, fx_rate_to_base,
                                         fx_rate_to_secondary, amount_base, amount_secondary,
-                                        txn_type, category_id, source, dedupe_hash)
+                                        txn_type, category_id, merchant_id, source, dedupe_hash)
                VALUES (%s, %s, %s, %s, %s,
                        (SELECT currency FROM account WHERE id = %s), %s, %s, %s, %s, %s, %s, %s,
-                       'manual', %s)
+                       %s, 'manual', %s)
                RETURNING id""",
             (
                 household or live.household_id,
@@ -132,6 +133,7 @@ def a_spend(
                 (value * secondary).quantize(FOUR_DP, ROUND_HALF_UP),
                 txn_type,
                 category_id,
+                merchant_id,
                 uuid4().hex + uuid4().hex,
             ),
         )
