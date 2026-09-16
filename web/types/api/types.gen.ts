@@ -1394,6 +1394,46 @@ export type BudgetsResponse = {
 };
 
 /**
+ * ByAccountResponse
+ */
+export type ByAccountResponse = {
+    /**
+     * Accounts
+     */
+    accounts: Array<ByAccountRow>;
+};
+
+/**
+ * ByAccountRow
+ */
+export type ByAccountRow = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Accountmasked
+     */
+    accountMasked: string | null;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Labels
+     */
+    labels: Array<string>;
+    /**
+     * Monthlybase
+     */
+    monthlyBase: string;
+};
+
+/**
  * CancelBody
  */
 export type CancelBody = {
@@ -1850,6 +1890,40 @@ export type CategoryUpdate = {
      * Isactive
      */
     isActive: boolean;
+};
+
+/**
+ * ChargeOut
+ */
+export type ChargeOut = {
+    /**
+     * Transactionid
+     */
+    transactionId: string;
+    /**
+     * Observedon
+     */
+    observedOn: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+    /**
+     * Amountbase
+     */
+    amountBase: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Periodid
+     */
+    periodId: string;
 };
 
 /**
@@ -6083,6 +6157,10 @@ export type PatchBody = {
      * Categoryid
      */
     categoryId?: string | null;
+    /**
+     * Paymentchannelid
+     */
+    paymentChannelId?: string | null;
 };
 
 /**
@@ -6123,6 +6201,34 @@ export type PaymentCandidatesResponse = {
      * Candidates
      */
     candidates: Array<PaymentCandidate>;
+};
+
+/**
+ * PaymentChannelRow
+ */
+export type PaymentChannelRow = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Sortorder
+     */
+    sortOrder: number;
+};
+
+/**
+ * PaymentChannelsResponse
+ */
+export type PaymentChannelsResponse = {
+    /**
+     * Channels
+     */
+    channels: Array<PaymentChannelRow>;
 };
 
 /**
@@ -6689,6 +6795,24 @@ export type PreviousMonthReview = {
 };
 
 /**
+ * PriceHistoryEntry
+ */
+export type PriceHistoryEntry = {
+    /**
+     * Observedon
+     */
+    observedOn: string;
+    /**
+     * Amount
+     */
+    amount: string;
+    /**
+     * Currency
+     */
+    currency: string;
+};
+
+/**
  * PriceStatus
  */
 export type PriceStatus = {
@@ -6854,6 +6978,36 @@ export type Reconciliation = {
 };
 
 /**
+ * RecurringPeriodOut
+ */
+export type RecurringPeriodOut = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Startedon
+     */
+    startedOn: string;
+    /**
+     * Endedon
+     */
+    endedOn: string | null;
+    /**
+     * Endreason
+     */
+    endReason: 'cancelled' | 'lapsed' | null;
+    /**
+     * Chargecount
+     */
+    chargeCount: number;
+    /**
+     * Spentbase
+     */
+    spentBase: string;
+};
+
+/**
  * RecurringRefreshCounts
  */
 export type RecurringRefreshCounts = {
@@ -6879,6 +7033,165 @@ export type RecurringResponse = {
      * Series
      */
     series: Array<RecurringSeriesRow>;
+};
+
+/**
+ * RecurringSeriesDetail
+ */
+export type RecurringSeriesDetail = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Label
+     */
+    label: string;
+    identity: IdentityOut;
+    /**
+     * Cadence
+     */
+    cadence: string;
+    /**
+     * Customintervaldays
+     */
+    customIntervalDays: number | null;
+    /**
+     * Lifecycle
+     */
+    lifecycle: 'active' | 'trial' | 'paused';
+    /**
+     * Categoryid
+     */
+    categoryId: string | null;
+    /**
+     * Categoryname
+     */
+    categoryName: string | null;
+    /**
+     * Issubscription
+     */
+    isSubscription: boolean;
+    /**
+     * Detectionmethod
+     */
+    detectionMethod: 'detected' | 'owner';
+    /**
+     * Needsname
+     */
+    needsName: boolean;
+    /**
+     * Nativeamount
+     */
+    nativeAmount: string | null;
+    /**
+     * Nativecurrency
+     */
+    nativeCurrency: string | null;
+    /**
+     * Pricechangedfrom
+     */
+    priceChangedFrom: string | null;
+    /**
+     * Pricechangedon
+     */
+    priceChangedOn: string | null;
+    /**
+     * Lastseenon
+     */
+    lastSeenOn: string;
+    /**
+     * Iscurrent
+     */
+    isCurrent: boolean;
+    /**
+     * Currentperiodstartedon
+     */
+    currentPeriodStartedOn: string | null;
+    /**
+     * Lastperiodendedon
+     */
+    lastPeriodEndedOn: string | null;
+    /**
+     * Lastendreason
+     */
+    lastEndReason: 'cancelled' | 'lapsed' | null;
+    /**
+     * Periodcount
+     */
+    periodCount: number;
+    /**
+     * Resumed
+     */
+    resumed: boolean;
+    /**
+     * Nextexpectedon
+     */
+    nextExpectedOn: string | null;
+    /**
+     * Status
+     */
+    status: 'active' | 'overdue' | 'ended';
+    /**
+     * Paymentchannelid
+     */
+    paymentChannelId: string | null;
+    /**
+     * Paymentchannelname
+     */
+    paymentChannelName: string | null;
+    /**
+     * Payingaccountid
+     */
+    payingAccountId: string | null;
+    /**
+     * Payingaccountname
+     */
+    payingAccountName: string | null;
+    /**
+     * Payingaccountmasked
+     */
+    payingAccountMasked: string | null;
+    /**
+     * Annualamount
+     */
+    annualAmount: string | null;
+    /**
+     * Monthlyamount
+     */
+    monthlyAmount: string | null;
+    /**
+     * Annualamountbase
+     */
+    annualAmountBase: string | null;
+    /**
+     * Monthlyamountbase
+     */
+    monthlyAmountBase: string | null;
+    /**
+     * Firstseenon
+     */
+    firstSeenOn: string;
+    /**
+     * Spentsofarbase
+     */
+    spentSoFarBase: string;
+    /**
+     * Last12Monthsbase
+     */
+    last12MonthsBase: string;
+    /**
+     * Periods
+     */
+    periods: Array<RecurringPeriodOut>;
+    /**
+     * Pricehistory
+     */
+    priceHistory: Array<PriceHistoryEntry>;
+    /**
+     * Charges
+     */
+    charges: Array<ChargeOut>;
 };
 
 /**
@@ -6978,6 +7291,76 @@ export type RecurringSeriesRow = {
      * Status
      */
     status: 'active' | 'overdue' | 'ended';
+    /**
+     * Paymentchannelid
+     */
+    paymentChannelId: string | null;
+    /**
+     * Paymentchannelname
+     */
+    paymentChannelName: string | null;
+    /**
+     * Payingaccountid
+     */
+    payingAccountId: string | null;
+    /**
+     * Payingaccountname
+     */
+    payingAccountName: string | null;
+    /**
+     * Payingaccountmasked
+     */
+    payingAccountMasked: string | null;
+    /**
+     * Annualamount
+     */
+    annualAmount: string | null;
+    /**
+     * Monthlyamount
+     */
+    monthlyAmount: string | null;
+    /**
+     * Annualamountbase
+     */
+    annualAmountBase: string | null;
+    /**
+     * Monthlyamountbase
+     */
+    monthlyAmountBase: string | null;
+};
+
+/**
+ * RecurringSummary
+ */
+export type RecurringSummary = {
+    /**
+     * Monthlybase
+     */
+    monthlyBase: string;
+    /**
+     * Annualbase
+     */
+    annualBase: string;
+    /**
+     * Currentcount
+     */
+    currentCount: number;
+    /**
+     * Renewingin30Days
+     */
+    renewingIn30Days: number;
+    /**
+     * Pricechangesin90Days
+     */
+    priceChangesIn90Days: number;
+    /**
+     * Basecurrency
+     */
+    baseCurrency: string;
+    /**
+     * Upcoming
+     */
+    upcoming: Array<UpcomingRow>;
 };
 
 /**
@@ -9509,6 +9892,36 @@ export type UpcomingCommitmentRow = {
      * Remainingnext
      */
     remainingNext: string | null;
+};
+
+/**
+ * UpcomingRow
+ */
+export type UpcomingRow = {
+    /**
+     * Seriesid
+     */
+    seriesId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Nextexpectedon
+     */
+    nextExpectedOn: string;
+    /**
+     * Nativeamount
+     */
+    nativeAmount: string | null;
+    /**
+     * Nativecurrency
+     */
+    nativeCurrency: string | null;
+    /**
+     * Payingaccountname
+     */
+    payingAccountName: string | null;
 };
 
 /**
@@ -14234,6 +14647,86 @@ export type ReadRecurringRecurringGetResponses = {
 
 export type ReadRecurringRecurringGetResponse = ReadRecurringRecurringGetResponses[keyof ReadRecurringRecurringGetResponses];
 
+export type ReadRecurringSummaryRecurringSummaryGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/recurring/summary';
+};
+
+export type ReadRecurringSummaryRecurringSummaryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadRecurringSummaryRecurringSummaryGetError = ReadRecurringSummaryRecurringSummaryGetErrors[keyof ReadRecurringSummaryRecurringSummaryGetErrors];
+
+export type ReadRecurringSummaryRecurringSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringSummary;
+};
+
+export type ReadRecurringSummaryRecurringSummaryGetResponse = ReadRecurringSummaryRecurringSummaryGetResponses[keyof ReadRecurringSummaryRecurringSummaryGetResponses];
+
+export type ReadRecurringByAccountRecurringByAccountGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/recurring/by-account';
+};
+
+export type ReadRecurringByAccountRecurringByAccountGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadRecurringByAccountRecurringByAccountGetError = ReadRecurringByAccountRecurringByAccountGetErrors[keyof ReadRecurringByAccountRecurringByAccountGetErrors];
+
+export type ReadRecurringByAccountRecurringByAccountGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ByAccountResponse;
+};
+
+export type ReadRecurringByAccountRecurringByAccountGetResponse = ReadRecurringByAccountRecurringByAccountGetResponses[keyof ReadRecurringByAccountRecurringByAccountGetResponses];
+
+export type ReadRecurringDetailRecurringSeriesIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Seriesid
+         */
+        seriesId: string;
+    };
+    query?: never;
+    url: '/recurring/{seriesId}';
+};
+
+export type ReadRecurringDetailRecurringSeriesIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadRecurringDetailRecurringSeriesIdGetError = ReadRecurringDetailRecurringSeriesIdGetErrors[keyof ReadRecurringDetailRecurringSeriesIdGetErrors];
+
+export type ReadRecurringDetailRecurringSeriesIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecurringSeriesDetail;
+};
+
+export type ReadRecurringDetailRecurringSeriesIdGetResponse = ReadRecurringDetailRecurringSeriesIdGetResponses[keyof ReadRecurringDetailRecurringSeriesIdGetResponses];
+
 export type PatchRecurringRecurringSeriesIdPatchData = {
     body: PatchBody;
     path: {
@@ -14263,6 +14756,31 @@ export type PatchRecurringRecurringSeriesIdPatchResponses = {
 };
 
 export type PatchRecurringRecurringSeriesIdPatchResponse = PatchRecurringRecurringSeriesIdPatchResponses[keyof PatchRecurringRecurringSeriesIdPatchResponses];
+
+export type ReadPaymentChannelsPaymentChannelsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/payment-channels';
+};
+
+export type ReadPaymentChannelsPaymentChannelsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReadPaymentChannelsPaymentChannelsGetError = ReadPaymentChannelsPaymentChannelsGetErrors[keyof ReadPaymentChannelsPaymentChannelsGetErrors];
+
+export type ReadPaymentChannelsPaymentChannelsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PaymentChannelsResponse;
+};
+
+export type ReadPaymentChannelsPaymentChannelsGetResponse = ReadPaymentChannelsPaymentChannelsGetResponses[keyof ReadPaymentChannelsPaymentChannelsGetResponses];
 
 export type CancelRecurringRecurringSeriesIdCancelPostData = {
     body: CancelBody;

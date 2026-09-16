@@ -39,6 +39,15 @@ function aSeries(overrides: Partial<RecurringSeriesRow> = {}): RecurringSeriesRo
     resumed: false,
     nextExpectedOn: "2026-09-01",
     status: "active",
+    paymentChannelId: null,
+    paymentChannelName: null,
+    payingAccountId: null,
+    payingAccountName: null,
+    payingAccountMasked: null,
+    annualAmount: "180.0000",
+    monthlyAmount: "15.0000",
+    annualAmountBase: "180.0000",
+    monthlyAmountBase: "15.0000",
     ...overrides,
   };
 }
