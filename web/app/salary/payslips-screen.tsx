@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
+import { SalaryAnalysis } from "@/app/salary/salary-analysis";
 import type {
   CategoryRow,
   CurrencyRow,
@@ -417,6 +418,8 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         <h1 className="workspace-title" id="salary-title">Salary</h1>
         <p>Payslips reconcile exactly or are refused; a correction supersedes rather than edits.</p>
       </header>
+
+      <SalaryAnalysis currencies={currencies} refreshKey={attempt} request={request} />
 
       <section aria-labelledby="salary-list-title">
         <h2 id="salary-list-title">Payslips</h2>
