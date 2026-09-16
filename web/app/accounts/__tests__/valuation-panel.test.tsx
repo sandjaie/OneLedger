@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ValuationPanel } from "@/app/accounts/valuation-panel";
@@ -152,7 +152,8 @@ describe("ValuationPanel", () => {
     expect(await screen.findByText(/Recorded/)).toBeTruthy();
     expect(onChanged).toHaveBeenCalledTimes(1);
     expect(posts).toBe(2);
-    expect(loads).toBe(2);
+    // The reload is requested from a passive effect after the recorded result renders.
+    await waitFor(() => expect(loads).toBe(2));
   });
 
   it("discards the preview when any field is edited after review", async () => {

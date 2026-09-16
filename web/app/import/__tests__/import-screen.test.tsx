@@ -316,8 +316,10 @@ describe("per-file outcomes", () => {
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
     const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
+    // A file's item renders when it is chosen, before its check resolves; files are checked in
+    // order, so april's verdict is the proof that both checks have rendered.
+    expect(await within(april).findByText("no layout matched this statement")).toBeTruthy();
     expect(within(march).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
-    expect(within(april).getByText("no layout matched this statement")).toBeTruthy();
     expect(request).toHaveBeenCalledTimes(2);
   });
 
@@ -340,7 +342,7 @@ describe("per-file outcomes", () => {
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
 
     expect(
-      within(march).getByText(/the statement does not add up: declared 1490.0000/),
+      await within(march).findByText(/the statement does not add up: declared 1490.0000/),
     ).toBeTruthy();
     expect(within(march).queryByRole("button", { name: /stage/i })).toBeNull();
   });
@@ -355,7 +357,7 @@ describe("per-file outcomes", () => {
 
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
 
-    expect(within(locked).getByText(/password-protected/)).toBeTruthy();
+    expect(await within(locked).findByText(/password-protected/)).toBeTruthy();
     expect(within(locked).queryByLabelText(/password/i)).toBeNull();
     expect(within(locked).queryByRole("button", { name: /stage/i })).toBeNull();
   });
@@ -371,7 +373,8 @@ describe("per-file outcomes", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const c = await screen.findByRole("listitem", { name: /c\.pdf/ });
-    expect(within(c).getByText(/7 rows/, { selector: "dd" })).toBeTruthy();
+    // c is checked last: its rendered result proves a's and b's have rendered too.
+    expect(await within(c).findByText(/7 rows/, { selector: "dd" })).toBeTruthy();
     const a = screen.getByRole("listitem", { name: /a\.pdf/ });
     expect(within(a).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
     const b = screen.getByRole("listitem", { name: /b\.pdf/ });
@@ -397,6 +400,8 @@ describe("an encrypted statement", () => {
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
     const open = await screen.findByRole("listitem", { name: /open\.pdf/ });
 
+    // open.pdf is checked second; until its result renders, "no password field" proves nothing.
+    await within(open).findByText(/2 rows/, { selector: "dd" });
     expect(within(locked).getByLabelText(/password/i)).toBeTruthy();
     expect(within(open).queryByLabelText(/password/i)).toBeNull();
   });
@@ -412,7 +417,7 @@ describe("an encrypted statement", () => {
     choose([pdf("locked.pdf"), pdf("open.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
-    fireEvent.change(within(locked).getByLabelText(/password/i), {
+    fireEvent.change(await within(locked).findByLabelText(/password/i), {
       target: { value: "let-me-in" },
     });
 
@@ -435,7 +440,7 @@ describe("an encrypted statement", () => {
     choose([pdf("open.pdf"), pdf("locked.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
-    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "wrong" } });
+    fireEvent.change(await within(locked).findByLabelText(/password/i), { target: { value: "wrong" } });
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
@@ -454,7 +459,7 @@ describe("an encrypted statement", () => {
     choose([pdf("locked.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
-    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "s3cret" } });
+    fireEvent.change(await within(locked).findByLabelText(/password/i), { target: { value: "s3cret" } });
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     await within(locked).findByRole("button", { name: /stage/i });
     fireEvent.click(within(locked).getByRole("button", { name: /stage/i }));
@@ -481,7 +486,7 @@ describe("an encrypted statement", () => {
     choose([pdf("locked.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const locked = await screen.findByRole("listitem", { name: /locked\.pdf/ });
-    fireEvent.change(within(locked).getByLabelText(/password/i), { target: { value: "s3cret" } });
+    fireEvent.change(await within(locked).findByLabelText(/password/i), { target: { value: "s3cret" } });
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     await within(locked).findByRole("button", { name: /stage/i });
 
@@ -505,7 +510,7 @@ describe("staging", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    fireEvent.click(await within(march).findByRole("button", { name: /stage/i }));
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
     const [, init] = request.mock.calls[1];
@@ -530,12 +535,14 @@ describe("staging", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    fireEvent.click(await within(march).findByRole("button", { name: /stage/i }));
 
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    // The mock being called is not the response being rendered: wait for the outcome itself, and
+    // only then assert what must be absent from it.
+    expect(await within(march).findByText(/was not staged/i)).toBeTruthy();
     expect(within(march).queryByText(/staged for review/i)).toBeNull();
     expect(within(march).queryByRole("link", { name: /review/i })).toBeNull();
-    expect(within(march).getByText(/was not staged/i)).toBeTruthy();
   });
 
   it("offers no Stage on a statement whose rows did not all normalize", async () => {
@@ -552,7 +559,7 @@ describe("staging", () => {
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
 
-    expect(within(march).getByText(/no date in the date column/)).toBeTruthy();
+    expect(await within(march).findByText(/no date in the date column/)).toBeTruthy();
     expect(within(march).queryByRole("button", { name: /stage/i })).toBeNull();
   });
 
@@ -573,7 +580,7 @@ describe("staging", () => {
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
     const april = await screen.findByRole("listitem", { name: /april\.pdf/ });
     await within(april).findByText(/could not be checked/i);
-    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    fireEvent.click(await within(march).findByRole("button", { name: /stage/i }));
     await within(march).findByRole("link", { name: /review/i });
 
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
@@ -595,7 +602,7 @@ describe("staging", () => {
     choose([pdf("march.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    fireEvent.click(await within(march).findByRole("button", { name: /stage/i }));
     await within(march).findByRole("link", { name: /review/i });
 
     expect(
@@ -612,7 +619,7 @@ describe("staging", () => {
     choose([pdf("march.pdf")]);
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    fireEvent.click(within(march).getByRole("button", { name: /stage/i }));
+    fireEvent.click(await within(march).findByRole("button", { name: /stage/i }));
 
     expect(
       await within(march).findByText("this statement was imported on 2026-03-05"),
@@ -702,10 +709,13 @@ describe("an account proposed by a statement", () => {
     const later = await screen.findByRole("listitem", { name: /later\.pdf/ });
     const earlier = await screen.findByRole("listitem", { name: /earlier\.pdf/ });
 
+    // The proposal renders only once every check has finished, so wait for it before asserting
+    // that the other file offers none.
+    const createEarlier = await within(earlier).findByRole("button", {
+      name: "Create account and continue",
+    });
     expect(within(later).queryByRole("button", { name: "Create account and continue" })).toBeNull();
-    fireEvent.click(
-      await within(earlier).findByRole("button", { name: "Create account and continue" }),
-    );
+    fireEvent.click(createEarlier);
 
     await within(later).findByRole("button", { name: "Stage batch" });
     await within(earlier).findByRole("button", { name: "Stage batch" });
@@ -1010,7 +1020,7 @@ describe("mapping an unseen statement layout", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const item = await screen.findByRole("listitem", { name: /unmapped\.pdf/ });
-    expect(within(item).getByText(/no layouts are saved yet/)).toBeTruthy();
+    expect(await within(item).findByText(/no layouts are saved yet/)).toBeTruthy();
 
     fireEvent.click(await within(item).findByRole("button", { name: /map this layout/i }));
     const nameField = await within(item).findByLabelText<HTMLInputElement>("Name (required)");
@@ -1080,9 +1090,10 @@ describe("remapping a layout that cannot stage", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const item = await screen.findByRole("listitem", { name: /cannot-stage\.pdf/ });
+    const remap = await within(item).findByRole("button", { name: /remap this layout/i });
     expect(within(item).queryByRole("button", { name: /stage batch/i })).toBeNull();
 
-    fireEvent.click(await within(item).findByRole("button", { name: /remap this layout/i }));
+    fireEvent.click(remap);
     const nameField = await within(item).findByLabelText<HTMLInputElement>("Name (required)");
     expect(nameField.disabled).toBe(true);
     expect(nameField.value).toBe(savedLayoutProfile().name);
@@ -1147,7 +1158,7 @@ describe("what the summary says", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    expect(within(march).getByText("Matched automatically")).toBeTruthy();
+    expect(await within(march).findByText("Matched automatically")).toBeTruthy();
     expect(within(march).getByText(
       "Synthetic Institution · Synthetic Card · ****1234",
     )).toBeTruthy();
@@ -1162,7 +1173,7 @@ describe("what the summary says", () => {
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
 
     // formatMoney over the string the API sent — never arithmetic on it.
-    expect(within(march).getByText(/A 1,490\.00/, { selector: "dd" })).toBeTruthy();
+    expect(await within(march).findByText(/A 1,490\.00/, { selector: "dd" })).toBeTruthy();
     expect(
       within(march).getByText(/2026-03-01 to 2026-03-31/, { selector: "dd" }),
     ).toBeTruthy();
@@ -1183,7 +1194,7 @@ describe("what the summary says", () => {
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
 
-    expect(within(march).getByText("I 59,82,530.00", { selector: "dd" })).toBeTruthy();
+    expect(await within(march).findByText("I 59,82,530.00", { selector: "dd" })).toBeTruthy();
   });
 
   it("says a period was derived when the parse says so, and stays silent when it was not", async () => {
@@ -1197,6 +1208,8 @@ describe("what the summary says", () => {
 
     const derived = await screen.findByRole("listitem", { name: /derived\.pdf/ });
     const stated = await screen.findByRole("listitem", { name: /stated\.pdf/ });
+    // stated.pdf is checked second; its result must render before its silence means anything.
+    await within(stated).findByText(/2 rows/, { selector: "dd" });
     expect(within(derived).getByText(/derived from the rows/i)).toBeTruthy();
     expect(within(stated).queryByText(/derived from the rows/i)).toBeNull();
   });
@@ -1214,7 +1227,7 @@ describe("what the summary says", () => {
     fireEvent.click(screen.getByRole("button", { name: /check statements/i }));
 
     const march = await screen.findByRole("listitem", { name: /march\.pdf/ });
-    expect(within(march).getByText(/page 2, row 14/i)).toBeTruthy();
+    expect(await within(march).findByText(/page 2, row 14/i)).toBeTruthy();
     expect(within(march).getByText(/no amount in the amount column/)).toBeTruthy();
   });
 });

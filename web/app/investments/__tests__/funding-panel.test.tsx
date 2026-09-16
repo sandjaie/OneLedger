@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FundingPanel } from "@/app/investments/funding-panel";
@@ -261,7 +261,9 @@ describe("investment funding", () => {
     expect(within(review).getByText("Server accepted every selected cash leaf as fully allocated.")).toBeTruthy();
     expect(within(review).getAllByText("XAA 30.0000", { exact: false }).length).toBeGreaterThan(0);
     expect(within(review).getByText("XAA 11.0000", { exact: false })).toBeTruthy();
-    expect(document.activeElement).toBe(within(review).getByRole("button", { name: "Confirm funding" }));
+    // Focus moves to the confirm button in a passive effect after the proposal response renders.
+    const confirmFunding = within(review).getByRole("button", { name: "Confirm funding" });
+    await waitFor(() => expect(document.activeElement).toBe(confirmFunding));
     expect(request).not.toHaveBeenCalledWith("/investment-funding/confirmations", expect.anything());
 
     const post = request.mock.calls.find(([path]) => path === "/investment-funding/proposals");
@@ -358,7 +360,8 @@ describe("investment funding", () => {
     expect(request.mock.calls.filter(([path]) => path === "/investment-funding/confirmations")).toHaveLength(1);
 
     const reload = screen.getByRole("button", { name: "Reload cash evidence" });
-    expect(document.activeElement).toBe(reload);
+    // An unverified outcome moves focus to reload in a passive effect after the failed request.
+    await waitFor(() => expect(document.activeElement).toBe(reload));
     fireEvent.click(reload);
     await screen.findByRole("group", { name: "Funding allocation 1" });
     expect(request.mock.calls.filter(([path]) => path.startsWith("/transactions?"))).toHaveLength(2);
@@ -554,7 +557,10 @@ describe("investment funding", () => {
     expect(result.textContent).toContain("2 funding allocations removed. Cash entry restored to fee.");
     expect(screen.getByRole("article", { name: "Confirmed funding for Synthetic investment debit" })).toBeTruthy();
     expect(screen.queryByRole("article", { name: "Confirmed funding for Synthetic second debit" })).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Purchase funding" }));
+    // Focus moves in a passive effect after the removal's promise resolves outside `act`, so it can
+    // land after the status is already in the DOM; wait for the focus itself.
+    const heading = screen.getByRole("heading", { name: "Purchase funding" });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
   });
 
   it("treats a non-conflict unlink failure as an unverified outcome and requires a reload", async () => {
@@ -592,7 +598,8 @@ describe("investment funding", () => {
     expect(screen.queryByRole("button", { name: "Remove funding link" })).toBeNull();
     expect(request.mock.calls.filter(([path]) => path.includes("cash-transactions"))).toHaveLength(1);
     const reload = screen.getByRole("button", { name: "Reload cash evidence" });
-    expect(document.activeElement).toBe(reload);
+    // An unverified outcome moves focus to reload in a passive effect after the failed request.
+    await waitFor(() => expect(document.activeElement).toBe(reload));
     fireEvent.click(reload);
     await screen.findByRole("group", { name: "Funding allocation 1" });
   });
