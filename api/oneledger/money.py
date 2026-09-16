@@ -7,8 +7,9 @@ pipeline freeze identically because they run this code, not because two copies a
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 import psycopg
@@ -19,6 +20,26 @@ MONEY = re.compile(r"-?\d{1,16}(\.\d{1,4})?")
 
 CENT = Decimal("0.0001")  # amounts store at 4 dp
 RATE = Decimal("0.0000000001")  # rates store at 10 dp
+_ZERO = Decimal("0.0000")
+_RATIO_PLACES = Decimal("0.0001")
+
+
+def chart_ratios[K](totals: Mapping[K, Decimal]) -> dict[K, str]:
+    """Each key's total divided by the largest absolute total in the mapping, `Decimal` at 4
+    places half-even — never half-up, which would nudge a value exactly between two bars a fixed
+    direction on every chart. `"0.0000"` for every key when the largest magnitude is zero, so an
+    all-zero chart draws flat bars instead of a division by zero. Moved here from
+    `routes/wealth_history.py::_chart_ratios` (Phase 4.1 Task 1), which was keyed by `date` alone
+    and could not serve `routes/spending.py`'s `UUID | None` and `str | None` keys; wealth
+    history's own values are unchanged by the move."""
+    max_abs = max((abs(total) for total in totals.values()), default=_ZERO)
+    if max_abs == 0:
+        return {key: "0.0000" for key in totals}
+    return {
+        # `+ _ZERO` turns a rounded negative zero into "0.0000".
+        key: str((total / max_abs).quantize(_RATIO_PLACES, rounding=ROUND_HALF_EVEN) + _ZERO)
+        for key, total in totals.items()
+    }
 
 
 def _money(value: str | None) -> str | None:
