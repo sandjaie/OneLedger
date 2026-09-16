@@ -10,7 +10,6 @@ import type {
   CategoryRow,
   CurrencyRow,
   HouseholdCurrency,
-  RecurringResponse,
   SpendingResponse,
 } from "@/types/api";
 
@@ -87,10 +86,6 @@ const emptyBudgets: BudgetsResponse = {
   month: "2026-03-01",
 };
 
-// The recurring panel mounted below the budget panel (Phase 4.1 Task 3) fetches its own data
-// too; these tests exercise only the spending breakdown above it, so it is always empty here.
-const emptyRecurring: RecurringResponse = { confirmed: [], candidates: [] };
-
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
 }
@@ -105,7 +100,6 @@ describe("spending screen", () => {
     const request = requestFrom((path) => {
       if (path.startsWith("/spending?")) return spending;
       if (path.startsWith("/budgets?")) return emptyBudgets;
-      if (path === "/recurring") return emptyRecurring;
       throw new Error(`unexpected path ${path}`);
     });
 
@@ -124,7 +118,7 @@ describe("spending screen", () => {
 
   it("carries the category and dates on the drill-through link", async () => {
     const request = requestFrom((path) =>
-      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {},
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
     );
 
     render(
@@ -146,7 +140,7 @@ describe("spending screen", () => {
     const calls: Array<string> = [];
     const request = requestFrom((path) => {
       calls.push(path);
-      return path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {};
+      return path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {};
     });
 
     render(
@@ -164,7 +158,7 @@ describe("spending screen", () => {
 
   it("points the download link at the export path for the same range", async () => {
     const request = requestFrom((path) =>
-      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : path === "/recurring" ? emptyRecurring : {},
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
     );
 
     render(
@@ -175,5 +169,18 @@ describe("spending screen", () => {
     const download = screen.getByText("Download CSV");
     expect(download.getAttribute("href")).toContain("/spending/export.csv?from=");
     expect(download.getAttribute("href")).toContain("&to=");
+  });
+
+  it("links to the Recurring screen", async () => {
+    const request = requestFrom((path) =>
+      path.startsWith("/spending?") ? spending : path.startsWith("/budgets?") ? emptyBudgets : {},
+    );
+
+    render(
+      <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Synthetic groceries").length).toBeGreaterThan(0));
+    expect(screen.getByRole("link", { name: "Recurring" }).getAttribute("href")).toBe("/recurring");
   });
 });

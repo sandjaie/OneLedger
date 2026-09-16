@@ -4,7 +4,6 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { BudgetPanel } from "@/app/spending/budget-panel";
-import { RecurringPanel } from "@/app/spending/recurring-panel";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
@@ -289,12 +288,10 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
             request={request}
           />
 
-          <RecurringPanel
-            baseCurrency={data.baseCurrency}
-            categories={categories}
-            currencies={currencies}
-            request={request}
-          />
+          <p className="lede">
+            Recurring payments and subscriptions found in this range now live on their own{" "}
+            <Link href="/recurring">Recurring</Link> screen.
+          </p>
         </>
       )}
     </section>

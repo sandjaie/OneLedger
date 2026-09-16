@@ -488,21 +488,40 @@ describe("a duplicate row", () => {
 });
 
 describe("committing", () => {
-  it("commits and reports what reached the ledger", async () => {
+  it("commits, refreshes recurring discovery and reports what reached the ledger", async () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(batch({ groups: [group("accepted", [row({ status: "accepted" })])] }))
       .mockResolvedValueOnce({ batchId: "batch-1", rowsImported: 1, status: "completed" })
+      .mockResolvedValueOnce({ seriesCreated: 0, seriesTouched: 0, membersAdded: 0 })
       .mockResolvedValueOnce(batch({ status: "completed", groups: [] }));
     renderScreen(request);
     await screen.findByRole("listitem", { name: /row 1/i });
 
     fireEvent.click(screen.getByRole("button", { name: /import 1 row/i }));
 
-    await waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(4));
     expect(request.mock.calls[1][0]).toBe("/import/batch-1/commit");
     expect(request.mock.calls[1][1].method).toBe("POST");
+    expect(request.mock.calls[2][0]).toBe("/recurring/refresh");
+    expect(request.mock.calls[2][1].method).toBe("POST");
     expect(await screen.findByText(/1 row imported/i)).toBeTruthy();
+  });
+
+  it("does not surface a recurring-refresh failure as a commit failure", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(batch({ groups: [group("accepted", [row({ status: "accepted" })])] }))
+      .mockResolvedValueOnce({ batchId: "batch-1", rowsImported: 1, status: "completed" })
+      .mockRejectedValueOnce(new ApiError(503, "recurring discovery is unavailable"))
+      .mockResolvedValueOnce(batch({ status: "completed", groups: [] }));
+    renderScreen(request);
+    await screen.findByRole("listitem", { name: /row 1/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /import 1 row/i }));
+
+    expect(await screen.findByText(/1 row imported/i)).toBeTruthy();
+    expect(screen.queryByText("recurring discovery is unavailable")).toBeNull();
   });
 
   it("offers no commit while nothing is accepted", async () => {

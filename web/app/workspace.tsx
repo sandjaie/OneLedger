@@ -20,6 +20,7 @@ import { PortfolioScreen } from "@/app/investments/portfolio-screen";
 import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
 import { PlansScreen } from "@/app/plans/plans-screen";
+import { RecurringScreen } from "@/app/recurring/recurring-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { SpendingScreen } from "@/app/spending/spending-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
@@ -41,7 +42,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -91,6 +92,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
   if (window.location.pathname === "/spending") return "spending";
+  if (window.location.pathname === "/recurring") return "recurring";
   if (window.location.pathname === "/documents") return "documents";
   if (window.location.pathname.startsWith("/investments/import")) return "investments-import";
   if (window.location.pathname === "/investments/entry") return "investments-entry";
@@ -230,6 +232,11 @@ export function Workspace({
           if (!current) return;
           setCurrencies(catalogue);
           setCategories(taxonomy);
+        }
+        if (activeSection === "recurring") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
         }
         if (activeSection === "documents") {
           const page = await request<DocumentsResponse>("/documents?limit=50&offset=0");
@@ -470,6 +477,7 @@ export function Workspace({
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
             <Link aria-current={activeSection === "spending" ? "page" : undefined} href="/spending">Spending</Link>
+            <Link aria-current={activeSection === "recurring" ? "page" : undefined} href="/recurring">Recurring</Link>
             <Link aria-current={activeSection === "documents" ? "page" : undefined} href="/documents">Documents</Link>
             <Link
               aria-current={
@@ -554,6 +562,13 @@ export function Workspace({
               categories={categories}
               currencies={currencies}
               currency={currency}
+              request={wrappedRequest}
+            />
+          )}
+
+          {activeSection === "recurring" && currencies && (
+            <RecurringScreen
+              currencies={currencies}
               request={wrappedRequest}
             />
           )}
