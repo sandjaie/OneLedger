@@ -143,7 +143,9 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
   return (
     <div className="plans-settlement-panel" aria-label={`Settle ${commitment.label}`}>
       <div className="plans-settlement-head">
-        <h3>Settle {commitment.label}</h3>
+        {/* tabIndex so PlansScreen can focus this heading after scrolling the panel into view
+            (spec: Settle can be opened from three sections above this one). */}
+        <h3 tabIndex={-1}>Settle {commitment.label}</h3>
         <button className="text-action" onClick={onClose} type="button">Close</button>
       </div>
 

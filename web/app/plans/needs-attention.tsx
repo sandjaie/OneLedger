@@ -284,10 +284,16 @@ export function NeedsAttention({
       <div className="needs-attention-controls">
         {item.kind === "commitment" && item.commitmentId && (
           <>
-            <button className="text-action" onClick={() => onSettle(item.commitmentId as string)} type="button">
+            <button
+              aria-label={`Settle ${item.title}`}
+              className="text-action"
+              onClick={() => onSettle(item.commitmentId as string)}
+              type="button"
+            >
               Settle
             </button>
             <button
+              aria-label={`Mark done ${item.title}`}
               className="text-action"
               disabled={busy}
               onClick={() => markDone(item)}
@@ -297,6 +303,7 @@ export function NeedsAttention({
         )}
         {item.kind === "card_due" && (
           <button
+            aria-label={`Plan payment ${item.title}`}
             className="text-action"
             onClick={() => onPlanCardPayment(item)}
             type="button"
@@ -304,6 +311,7 @@ export function NeedsAttention({
         )}
         {item.kind === "follow_up" && (
           <button
+            aria-label={`Complete ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => completeFollowUp(item)}
@@ -312,6 +320,7 @@ export function NeedsAttention({
         )}
         {item.kind === "record" && item.reason === "review_due" && (
           <button
+            aria-label={`Mark reviewed ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => markRecordReviewed(item)}
@@ -320,6 +329,7 @@ export function NeedsAttention({
         )}
         {item.kind === "record" && item.reason === "deadline_due" && (
           <button
+            aria-label={`Complete ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => completeRecordDeadline(item)}
@@ -328,6 +338,7 @@ export function NeedsAttention({
         )}
         {item.kind === "record" && item.reason === "renewal_due" && formOpen !== "renew" && (
           <button
+            aria-label={`Renewed ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "renew" }); setDraftText(""); }}
@@ -336,6 +347,7 @@ export function NeedsAttention({
         )}
         {formOpen !== "reason" && item.kind !== "goal" && item.kind !== "reserve" && item.kind !== "record" && (
           <button
+            aria-label={`Dismiss ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "reason" }); setDraftText(""); }}
@@ -344,6 +356,7 @@ export function NeedsAttention({
         )}
         {formOpen !== "snooze" && (
           <button
+            aria-label={`Snooze ${item.title}`}
             className="text-action"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "snooze" }); setDraftText(""); }}

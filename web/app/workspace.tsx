@@ -565,10 +565,11 @@ export function Workspace({
             />
           )}
 
-          {activeSection === "plans" && inventory && currencies && (
+          {activeSection === "plans" && inventory && currencies && household && (
             <PlansScreen
               accounts={inventory.accounts}
               currencies={currencies}
+              householdCurrencies={{ base: household.baseCurrency, secondary: household.secondaryCurrency }}
               request={wrappedRequest}
             />
           )}

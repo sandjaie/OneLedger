@@ -14,6 +14,9 @@ type Props = {
 };
 
 export function MonthlyReview({ accounts, currencies, request }: Props) {
+  // The month input's own upper bound — the server already refuses a future month (422), this
+  // just keeps the owner from picking one.
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [review, setReview] = useState<MonthlyReviewResponse>();
   // Undefined until the owner picks a month explicitly — the server names its own default
@@ -24,6 +27,9 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
   const month = monthOverride ?? review?.month.slice(0, 7);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
+  // The server's own sentence for a load failure (a future month is 422) — kept apart from
+  // `problem`, which is only for a write (Mark complete / Reopen) failure.
+  const [loadProblem, setLoadProblem] = useState<string>();
   const [newTitle, setNewTitle] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newAccountId, setNewAccountId] = useState("");
@@ -40,8 +46,10 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
         setReview(result);
         setState("ready");
       })
-      .catch(() => {
-        if (current) setState("error");
+      .catch((error: unknown) => {
+        if (!current) return;
+        setLoadProblem(errorText(error, "The monthly review could not be loaded."));
+        setState("error");
       });
     return () => {
       current = false;
@@ -118,6 +126,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       <label className="month-field">
         <span>Month</span>
         <input
+          max={currentMonth}
           onChange={(e) => setMonthOverride(e.target.value)}
           type="month"
           value={month ?? ""}
@@ -127,7 +136,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       {state === "loading" && <p role="status">Loading the monthly review…</p>}
       {state === "error" && (
         <div role="alert">
-          <p>The monthly review could not be loaded.</p>
+          <p>{loadProblem}</p>
           <button className="text-action" onClick={refetch} type="button">Try again</button>
         </div>
       )}
@@ -224,7 +233,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
 
           {review.completedAt ? (
             <p>
-              Review complete since {review.completedAt} · {review.steps.actions.open} action
+              Review complete since {review.completedAt.slice(0, 10)} · {review.steps.actions.open} action
               {review.steps.actions.open === 1 ? "" : "s"} remaining.{" "}
               <button className="text-action" disabled={busy} onClick={() => void reopen()} type="button">
                 Reopen review

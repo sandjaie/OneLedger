@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
+import { accountValueReasonText } from "@/lib/plans/account-value-reasons";
 import type {
   AccountRow,
   CurrencyRow,
@@ -398,7 +399,9 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
           <h3>Coverage</h3>
           {data.coverageStatus !== "available" ? (
             <p>
-              Coverage unavailable
+              {data.coverageStatus === "not_enough_information"
+                ? "Coverage: not enough information"
+                : "Coverage unavailable"}
               {data.reasons.length > 0 && <> — {reasonText(data.reasons)}</>}
             </p>
           ) : (
@@ -445,7 +448,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                 {row.accountName} ·{" "}
                 {row.value
                   ? moneyText(row.value, row.currency, currencies)
-                  : `Unavailable (${row.reason})`}
+                  : `Unavailable (${accountValueReasonText(row.reason ?? "")})`}
                 {" · Reserved for goals "}
                 {moneyText(row.goalReserved, row.currency, currencies)}
                 {" · Reserved for emergencies "}

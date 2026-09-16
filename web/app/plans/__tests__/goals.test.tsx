@@ -11,7 +11,13 @@ type Request = typeof apiFetch;
 
 const currencies: Array<CurrencyRow> = [
   { code: "XAA", name: "Synthetic Currency", symbol: "A", decimals: 2, numberFormat: "international" },
+  { code: "XBB", name: "Synthetic Secondary Currency", symbol: "B", decimals: 2, numberFormat: "international" },
+  { code: "XCC", name: "Synthetic Other Currency", symbol: "C", decimals: 2, numberFormat: "international" },
 ];
+
+// The household's reporting pair (spec 3.3 "Goal progress": a goal's currency is the household
+// base or secondary currency only) — XCC above is neither, to prove the picker excludes it.
+const householdCurrencies = { base: "XAA", secondary: "XBB" };
 
 const account: AccountRow = {
   id: "00000000-0000-4000-8000-0000000000a1",
@@ -105,7 +111,7 @@ describe("goals", () => {
       if (path === "/goals?includeClosed=true") return response();
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(screen.getByText("Loading goals…")).toBeTruthy();
 
@@ -119,7 +125,7 @@ describe("goals", () => {
     const request = requestFrom(() => {
       throw new ApiError(500, "boom");
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     expect(await screen.findByText("Goals could not be loaded.")).toBeTruthy();
   });
 
@@ -139,7 +145,7 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     expect(await screen.findByText(/Progress unavailable — a value or exchange rate is unavailable/)).toBeTruthy();
   });
 
@@ -150,7 +156,7 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     expect(
       await screen.findByText(/this account is reserved for more than it is currently worth/),
     ).toBeTruthy();
@@ -174,7 +180,7 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     await screen.findByText("No goals are recorded yet.");
 
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Synthetic new goal" } });
@@ -196,7 +202,7 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Synthetic renamed fund" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -218,7 +224,7 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: "Reserve" }));
     fireEvent.change(screen.getByLabelText(/Amount/), { target: { value: "1000.0000" } });
     const reserveButtons = screen.getAllByRole("button", { name: "Reserve" });
@@ -247,7 +253,7 @@ describe("goals", () => {
       if (path === "/reservations/res-1/release" && init?.method === "POST") return { id: "res-1" };
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: "Release" }));
 
     await waitFor(() =>
@@ -259,7 +265,8 @@ describe("goals", () => {
     );
   });
 
-  it("closes a goal as achieved", async () => {
+  it("confirms before marking a goal achieved, and releases on confirmation", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const request = requestFrom((path, init) => {
       if (path === "/goals?includeClosed=true") return response();
       if (path === `/goals/${goal().id}/close` && init?.method === "POST") {
@@ -268,9 +275,10 @@ describe("goals", () => {
       }
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: "Mark achieved" }));
 
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/reservations will be released/));
     await waitFor(() =>
       expect(
         (request as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[0] === `/goals/${goal().id}/close`),
@@ -278,14 +286,87 @@ describe("goals", () => {
     );
   });
 
+  it("does not close a goal when the achieved confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const request = requestFrom((path) => {
+      if (path === "/goals?includeClosed=true") return response();
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mark achieved" }));
+
+    expect(
+      (request as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[0] === `/goals/${goal().id}/close`),
+    ).toBe(false);
+  });
+
+  it("confirms before abandoning a goal, and releases on confirmation", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const request = requestFrom((path, init) => {
+      if (path === "/goals?includeClosed=true") return response();
+      if (path === `/goals/${goal().id}/close` && init?.method === "POST") {
+        expect(JSON.parse(init.body as string)).toEqual({ state: "abandoned" });
+        return goal({ state: "abandoned", closedAt: "2026-01-20T00:00:00Z" });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Abandon" }));
+
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/reservations will be released/));
+    await waitFor(() =>
+      expect(
+        (request as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[0] === `/goals/${goal().id}/close`),
+      ).toBe(true),
+    );
+  });
+
+  it("offers only the household's base and secondary currency for a new goal", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/goals?includeClosed=true") return response({ goals: [] });
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+    await screen.findByText("No goals are recorded yet.");
+
+    const picker = screen.getByLabelText("Currency") as HTMLSelectElement;
+    expect(Array.from(picker.options).map((option) => option.value)).toEqual(["XAA", "XBB"]);
+  });
+
   it("lists resources with value, reserved and unreserved", async () => {
     const request = requestFrom((path) => {
       if (path === "/goals?includeClosed=true") return response();
       throw new ApiError(500, `unexpected ${path}`);
     });
-    render(<Goals accounts={[account]} currencies={currencies} request={request} />);
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     await screen.findByText("Resources");
     expect(screen.getByText("A 10,000.00")).toBeTruthy();
     expect(screen.getByText("A 4,000.00")).toBeTruthy();
+  });
+
+  it("shows a resource's valuation mode and the snapshot assumption", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/goals?includeClosed=true") {
+        return response({ accounts: [{ ...resourceAccount, valuationMode: "snapshot" }] });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+    expect(await screen.findByText("snapshot")).toBeTruthy();
+    expect(screen.getByText(/treated as valuation movement/)).toBeTruthy();
+  });
+
+  it("shows a sentence for an unavailable resource's reason code, not the raw code", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/goals?includeClosed=true") {
+        return response({
+          accounts: [{ ...resourceAccount, value: null, valueDate: null, reason: "missing_price" }],
+        });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<Goals accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+    expect(await screen.findByText(/a price is missing for one of this account's holdings/)).toBeTruthy();
+    expect(screen.queryByText(/missing_price/)).toBeNull();
   });
 });

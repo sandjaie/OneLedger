@@ -106,12 +106,23 @@ describe("monthly review", () => {
     expect(screen.getByRole("button", { name: "Mark review complete" })).toBeTruthy();
   });
 
-  it("shows the error state and lets the owner try again", async () => {
+  it("shows the server's own sentence for a load failure, and lets the owner try again", async () => {
     const request = requestFrom(() => {
-      throw new ApiError(500, "boom");
+      throw new ApiError(422, "this month is in the future");
     });
     render(<MonthlyReview accounts={[account]} currencies={currencies} request={request} />);
-    expect(await screen.findByText("The monthly review could not be loaded.")).toBeTruthy();
+    expect(await screen.findByText("this month is in the future")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("caps the month picker at the current month", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/monthly-review") return review();
+      throw new ApiError(500, "unexpected");
+    });
+    render(<MonthlyReview accounts={[account]} currencies={currencies} request={request} />);
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    expect(await screen.findByLabelText("Month")).toHaveProperty("max", currentMonth);
   });
 
   it("says the position is not yet refreshed, linking to Wealth", async () => {
@@ -154,7 +165,9 @@ describe("monthly review", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Mark review complete" }));
 
-    expect(await screen.findByText(/Review complete since 2026-03-01T09:00:00Z/)).toBeTruthy();
+    // The date only, not the raw ISO timestamp (documents-screen.tsx's own convention).
+    expect(await screen.findByText(/Review complete since 2026-03-01(?!T)/)).toBeTruthy();
+    expect(screen.queryByText(/09:00:00Z/)).toBeNull();
     expect(screen.getByText(/2 actions remaining/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Reopen review" })).toBeTruthy();
   });

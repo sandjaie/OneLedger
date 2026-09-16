@@ -445,8 +445,9 @@ describe("overview screen", () => {
       previousMonthReview: { month: "2026-02-01", completedAt: "2026-03-02T10:00:00Z" },
     });
     await screen.findByRole("heading", { name: "Overview", level: 1 });
+    // The date only, not the raw ISO timestamp (documents-screen.tsx's own convention).
     const reviewLink = screen.getByRole("link", {
-      name: "Last month's review is complete (2026-03-02T10:00:00Z)",
+      name: "Last month's review is complete (2026-03-02)",
     });
     expect(reviewLink).toHaveProperty("hash", "#review");
   });

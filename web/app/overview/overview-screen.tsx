@@ -321,7 +321,7 @@ export function OverviewScreen({ household, currency, currencies, request, child
             <p>
               <Link href="/plans#review">
                 {actions.previousMonthReview.completedAt
-                  ? `Last month's review is complete (${actions.previousMonthReview.completedAt})`
+                  ? `Last month's review is complete (${actions.previousMonthReview.completedAt.slice(0, 10)})`
                   : "Last month's review is not yet complete"}
               </Link>
             </p>
