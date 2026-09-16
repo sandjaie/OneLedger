@@ -1775,7 +1775,8 @@ body { background: #eef2f0; }
 .plans-register-list,
 .plans-goal-list,
 .plans-account-list,
-.plans-currency-list {
+.plans-currency-list,
+.recurring-confirmed-list {
   display: grid;
   gap: 4px;
   margin: 12px 0;
@@ -1786,6 +1787,7 @@ body { background: #eef2f0; }
 .needs-attention-list > li,
 .plans-register-list > li,
 .plans-goal-list > li,
+.recurring-confirmed-list > li,
 .plans-account-list > li,
 .plans-currency-list > li {
   display: grid;
@@ -1840,7 +1842,10 @@ body { background: #eef2f0; }
 .needs-attention-inline-form,
 .document-actions,
 .budget-line-form,
-.budget-panel-actions {
+.budget-panel-actions,
+.recurring-confirm-form,
+.recurring-dismiss-form,
+.recurring-panel-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -1848,7 +1853,8 @@ body { background: #eef2f0; }
   margin-top: 4px;
 }
 .plans-reserve-form,
-.budget-line-form { display: grid; gap: 10px; }
+.budget-line-form,
+.recurring-confirm-form { display: grid; gap: 10px; }
 .needs-attention-inline-form input {
   min-width: 140px;
   padding: 8px 10px;

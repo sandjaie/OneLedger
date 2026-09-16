@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type CSSProperties, useEffect, useState } from "react";
 
 import { BudgetPanel } from "@/app/spending/budget-panel";
+import { RecurringPanel } from "@/app/spending/recurring-panel";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
@@ -285,6 +286,13 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
             categories={categories}
             currencies={currencies}
             month={`${range.from.slice(0, 7)}-01`}
+            request={request}
+          />
+
+          <RecurringPanel
+            baseCurrency={data.baseCurrency}
+            categories={categories}
+            currencies={currencies}
             request={request}
           />
         </>
