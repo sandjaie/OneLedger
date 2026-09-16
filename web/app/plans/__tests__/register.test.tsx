@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitForElementToBeRemoved } from "@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Register } from "@/app/plans/register";
-import { ApiError, type apiFetch } from "@/lib/api/client";
+import { ApiError, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import type { AccountRow, CurrencyRow, RegisterResponse, RegisterRow } from "@/types/api";
 
 type Request = typeof apiFetch;
@@ -282,6 +282,21 @@ describe("register", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
   });
 
+  it("does not demand review for an archived record", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/register?includeArchived=true") {
+        return response({
+          records: [record({ archivedAt: "2026-06-01T00:00:00Z", reviewDue: true })],
+        });
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    renderRegister({ accounts: [account()], request });
+
+    await screen.findByText(/Synthetic policy/);
+    expect(screen.queryByText(/Review due/)).toBeNull();
+  });
+
   it("offers Plan premium for a policy with no planned commitment, and hides it once planned", async () => {
     const onPlanFromRecord = vi.fn();
     const request = requestFrom((path) => {
@@ -389,6 +404,9 @@ describe("register", () => {
       if (path === "/register?includeArchived=true") return response({ records: [record({ documents })] });
       if (path === "/documents" && init?.method === "POST") {
         expect(init.body).toBeInstanceOf(FormData);
+        // The upload can be up to 20 MB, so it uses the same long timeout as other slow writes
+        // rather than the 10-second default (web/lib/api/client.ts).
+        expect((init as RequestInit & { timeoutMs?: number }).timeoutMs).toBe(LONG_REQUEST_TIMEOUT_MS);
         return {
           id: "doc-9",
           documentType: "receipt",
@@ -422,6 +440,9 @@ describe("register", () => {
 
     await screen.findByText(/Synthetic policy/);
     fireEvent.click(screen.getByRole("button", { name: "Attach document" }));
+    // The type picker shows a label, not the raw document_type enum value.
+    expect(screen.getByRole("option", { name: "Receipt" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: "receipt" })).toBeNull();
     // Two "Title" fields exist once the attach panel is open: the upload sub-form's own (first
     // in document order, inside this record's <li>) and the "Add a record" form's below it.
     fireEvent.change(screen.getAllByLabelText("Title")[0], { target: { value: "Synthetic receipt" } });

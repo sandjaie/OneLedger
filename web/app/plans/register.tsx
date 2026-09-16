@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { type apiFetch, errorText } from "@/lib/api/client";
+import { type apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -40,6 +40,15 @@ const UPLOAD_TYPES = [
   "receipt",
   "other",
 ] as const;
+
+const UPLOAD_TYPE_LABELS: Record<(typeof UPLOAD_TYPES)[number], string> = {
+  tax_document: "Tax document",
+  insurance_policy: "Insurance policy",
+  property_document: "Property document",
+  fd_certificate: "Fixed deposit certificate",
+  receipt: "Receipt",
+  other: "Other",
+};
 
 type RegisterKind = RegisterRow["kind"];
 type PremiumCadence = "monthly" | "annual";
@@ -212,7 +221,7 @@ function recordSummary(record: RegisterRow, currencies: Array<CurrencyRow>): str
   if (record.kind === "nominee") parts.push(record.nomineeRecorded ? "Nominee recorded" : "No nominee recorded");
   if (record.completedAt) parts.push("Completed");
   if (record.lastReviewedOn) parts.push(`Reviewed ${record.lastReviewedOn}`);
-  if (record.reviewDue) parts.push("Review due");
+  if (record.reviewDue && !record.archivedAt) parts.push("Review due");
   if (record.archivedAt) parts.push("Archived");
   return parts.join(" · ");
 }
@@ -437,7 +446,11 @@ export function Register({
       form.append("file", uploadFile);
       form.append("documentType", uploadType);
       form.append("title", uploadTitle);
-      const uploaded = await request<DocumentRow>("/documents", { method: "POST", body: form });
+      const uploaded = await request<DocumentRow>("/documents", {
+        method: "POST",
+        body: form,
+        timeoutMs: LONG_REQUEST_TIMEOUT_MS,
+      });
       await request(`/register/${record.id}/documents/${uploaded.id}`, { method: "PUT" });
       setAttachingId(undefined);
       setLibrary(undefined);
@@ -596,7 +609,7 @@ export function Register({
                               value={uploadType}
                             >
                               {UPLOAD_TYPES.map((type) => (
-                                <option key={type} value={type}>{type}</option>
+                                <option key={type} value={type}>{UPLOAD_TYPE_LABELS[type]}</option>
                               ))}
                             </select>
                           </label>
