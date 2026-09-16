@@ -79,7 +79,9 @@ irregular group is simply not proposed.
 Confirming a candidate writes a `recurring_series` row and records its member transactions in a
 join table. The ledger rows themselves are not rewritten — `transaction` is immutable after
 posting, and `transaction.recurring_series_id` stays the unused column it has always been.
-Dismissing a candidate records the dismissal so it does not return.
+Dismissing a candidate records the dismissal so it does not return. Later occurrences join a series
+through an explicit refresh, never through a read: a GET in this codebase reads what the last
+refresh stored, and this phase keeps that promise.
 
 For a confirmed series:
 
@@ -129,5 +131,7 @@ candidate needs; investment or salary analysis (Phases 4.2 and 4.3).
 ## Documents to reconcile
 
 `docs/design/api-contracts.html` (spending, budgets, recurring routes), `docs/superpowers/schema.md`
-(new tables), `docs/superpowers/progress.md`, `docs/superpowers/project-register.md` (the three
-existing effective-category merges).
+(§0017 and §0018 carry superseded budget and recurring shapes and mandate a foreign key on
+`transaction.recurring_series_id` that this phase deliberately does not add),
+`docs/superpowers/progress.md`, `docs/superpowers/project-register.md` (the three existing
+effective-category merges).

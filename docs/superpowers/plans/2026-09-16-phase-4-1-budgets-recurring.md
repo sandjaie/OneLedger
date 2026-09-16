@@ -27,6 +27,13 @@ migrations (V55, V56), no new dependency. This group is planned together and rev
 - New tables follow V53's shape: composite `(household_id, id)` uniqueness, tenant-scoped composite
   FKs with `ON DELETE RESTRICT`, bounded text and amount CHECKs, RLS `FOR ALL TO authenticated`, no
   table GRANT, and a `db/tests/00NN_*.sql` companion numbered migration minus three.
+- `category` and `merchant` are the exception: both are shared seed tables whose `household_id` is
+  nullable and which carry no `UNIQUE (household_id, id)`, so a composite FK to them is impossible
+  and a seed category could never be referenced. Reference them as plain `REFERENCES category(id)` /
+  `REFERENCES merchant(id)`, exactly as V10, V19 and V44 do, and enforce the tenant boundary in the
+  route with `routes/transactions.py::_assert_category_allowed`.
+- A GET never writes and never recomputes, as `routes/wealth_history.py` states; every new GET opens
+  with `SET TRANSACTION READ ONLY`. Work that must write is its own POST.
 - Tests cover major behaviour: money, authorization, household isolation, database writes, and one
   web test per new flow.
 - After affected tests: one `/oneledger-code-review`, one repair, confirmation for money, auth or
@@ -36,9 +43,12 @@ migrations (V55, V56), no new dependency. This group is planned together and rev
 
 | # | Outcome | Branch | Prod | Test | Depends |
 | -: | --- | --- | ---: | ---: | --- |
-| 1 | spending by category and bucket, chart, drill-through, CSV | `feature/p4-1-spending-analysis` | 650 | 450 | Phase 3.4 |
-| 2 | budget lines, rollover, variance | `feature/p4-1-budgets` | 750 | 550 | 1 |
-| 3 | recurring discovery, price change, inactive candidates | `feature/p4-1-recurring-discovery` | 850 | 600 | 2 |
+| 1 | spending by category and bucket, chart, drill-through, CSV | `feature/p4-1-spending-analysis` | 750 | 550 | Phase 3.4 |
+| 2 | budget lines, rollover, variance | `feature/p4-1-budgets` | 1150 | 900 | 1 |
+| 3 | recurring discovery, price change, inactive candidates | `feature/p4-1-recurring-discovery` | 1250 | 1050 | 2 |
+
+Tasks 2 and 3 sit close to the 1,500 production budget with no slack. If Task 3 overruns, split
+`recurring_dismissal` and `POST /recurring/dismiss` into a fourth branch rather than widening it.
 
 ## Task 1 — spending by category and bucket
 
@@ -49,14 +59,18 @@ migrations (V55, V56), no new dependency. This group is planned together and rev
 `api/tests/test_spending_live.py`, `web/app/spending/page.tsx`,
 `web/app/spending/spending-screen.tsx` and `web/app/spending/__tests__/spending-screen.test.tsx`;
 update `api/oneledger/main.py`, `web/app/workspace.tsx`, `web/app/globals.css`,
-`web/lib/api/client.ts`, `web/app/transactions/transactions-screen.tsx` (prefilled filters);
+`web/app/transactions/transactions-screen.tsx` (prefilled filters), `api/oneledger/money.py` and
+`api/oneledger/routes/wealth_history.py` (the `chart_ratios` move) and
+`api/tests/test_wealth_history_live.py`;
 generated types; `docs/design/api-contracts.html`; `docs/superpowers/project-register.md`; progress.
 **Contract:**
 
 - `api/oneledger/categories_sql.py` holds one exported fragment, `EFFECTIVE_CATEGORY`, giving a
   category's id, name, parent id, effective bucket (`COALESCE(o.bucket, c.bucket)`) and effective
-  active flag, parameterised by household. New reads use it; the three existing copies stay as they
-  are and get a project-register row.
+  active flag. It joins the override on the reading row's own `household_id` column, as
+  `resources.py::_SPENDING` does, taking no positional parameter of its own, so callers cannot
+  mis-order parameters. New reads use it; the three existing copies stay as they are and get a
+  project-register row.
 - `GET /spending?from=&to=&currency=` returns, for the closed date range (`from` and `to` inclusive,
   `to` not in the future, range at most 400 days, `from <= to`, else 422):
   - `byCategory`: one row per category with spending in range — `categoryId`, `categoryName`,
@@ -69,20 +83,26 @@ generated types; `docs/design/api-contracts.html`; `docs/superpowers/project-reg
   - `totalBase`, `totalSecondary`, `previousTotalBase`, `from`, `to`, `baseCurrency`,
     `secondaryCurrency`.
   - `chartRatio` is that row's amount divided by the largest absolute amount in its own list, as a
-    `Decimal` string quantized to 4 places half-even, `"0.0000"` when that largest is zero, exactly
-    as `wealth_history._chart_ratios` does; reuse that helper by importing it or move it to
-    `api/oneledger/money.py` and have both call it.
+    `Decimal` string quantized to 4 places half-even, `"0.0000"` when that largest is zero. The
+    existing `wealth_history._chart_ratios` is keyed by `date` and cannot be imported for
+    `UUID | None` and `str | None` keys, so this task moves it: `api/oneledger/money.py` gains
+    `chart_ratios(totals: Mapping[K, Decimal]) -> dict[K, str]` over a `TypeVar`, with `_ZERO` and
+    `_RATIO_PLACES` moving with it, and `routes/wealth_history.py` plus
+    `api/tests/test_wealth_history_live.py` are updated to call it.
   - Rows are ordered by `amountBase` descending, then category name.
-- `GET /spending/export.csv?from=&to=` streams `text/csv` with
-  `Content-Disposition: attachment; filename="spending-<from>-<to>.csv"`, header row
+- `GET /spending/export.csv?from=&to=` returns `text/csv` through a plain `Response`, with the
+  header set `routes/documents.py` already uses for a file body (`Content-Disposition: attachment;
+  filename="spending-<from>-<to>.csv"`, `Cache-Control: no-store`, `Pragma: no-cache`,
+  `X-Content-Type-Options: nosniff`), header row
   `booked_date,account,description,category,bucket,amount,currency,amount_base`, one line per
   reportable spending row in range, ordered by date then id, capped at 10,000 rows; when the cap is
   reached the last line is a `# truncated at 10000 rows` comment. `description` is
   `description_clean` falling back to `description_raw`; values are RFC 4180 quoted. Household
   filtered; the same range validation as above.
-- `web/lib/api/client.ts` gains `apiDownload(path, filename)`: same credentials, base URL and
-  401/403 handling as `apiFetch`, returning the body as a `Blob` and saving it through an object URL.
-  No money parsing.
+- The browser downloads it the way `transactions-screen.tsx` already downloads a document: a plain
+  `<a href={apiUrl("/spending/export.csv?…")} download>`. No new client helper, no `Blob`, no money
+  parsing; CORS exposes no `Content-Disposition`, so a fetch-based helper would not learn the
+  filename anyway.
 - New **Spending** section: nav item after Transactions at `/spending`, the section union, the
   `sectionFromPath()` line, the render guard and `web/app/spending/page.tsx`. Workspace fetches
   `/categories` for it and passes `categories`, `currencies`, `currency` and `request`.
@@ -100,8 +120,9 @@ generated types; `docs/design/api-contracts.html`; `docs/superpowers/project-reg
 uncategorised row reported separately; an overridden bucket resolving to the override; transfers and
 investment legs absent; previous-period amounts; chart ratios exact; range refusals; foreign
 household empty; member refusal; CSV header, one exact row, quoting of a description containing a
-comma, and the row cap. Web — breakdown and chart render from server strings, drill-through link
-carries the category and dates, download calls the export path.
+comma, and the row cap; the moved `chart_ratios` keeps wealth history's own values. Web —
+breakdown and chart render from server strings, drill-through link carries the category and dates,
+the download link points at the export path.
 **Commands:** `eval "$(scripts/test-db.sh up)"`;
 `(cd api && uv run pytest -q tests/test_spending_live.py tests/test_dashboard_live.py)` plus
 `uv run ruff check . && uv run ruff format --check . && uv run mypy .`;
@@ -122,15 +143,19 @@ exportable from the application's navigation.
 `docs/superpowers/schema.md`; progress.
 **Contract:**
 
+- `docs/superpowers/schema.md` §0017 carries an earlier reference shape (`budget_period` with
+  `budget_line.budget_period_id`). This task replaces it with V55's exact design and says so in the
+  section, the way the payslip note already reconciles its own superseded shape.
 - V55 adds `budget_line`: `id`, `household_id`, `idempotency_key`, `period_month DATE` (the first of
   the month, enforced), exactly one of `category_id` or `bucket` (`budget_line_scope_shape`),
   `amount_base NUMERIC(20,4)` positive, `currency CHAR(3)` referencing `currency(code)`,
   `rollover_enabled BOOLEAN NOT NULL DEFAULT false`, `note` bounded to 200 characters, timestamps,
   `uq_budget_line_household_id UNIQUE (household_id, id)`,
-  `uq_budget_line_idempotency UNIQUE (household_id, idempotency_key)`, a tenant-scoped composite FK
-  to `category`, and two partial unique indexes so one household has at most one line per month per
-  category and per bucket. RLS `household_isolation` as V53 does. No trigger is needed: a budget
-  line is editable and deletable.
+  `uq_budget_line_idempotency UNIQUE (household_id, idempotency_key)`, a plain
+  `REFERENCES category(id)` (see the global contract), and two partial unique indexes so one
+  household has at most one line per month per category and per bucket. The route checks the
+  category belongs to this household or is a seed row with `_assert_category_allowed`. RLS
+  `household_isolation` as V53 does. No trigger is needed: a budget line is editable and deletable.
 - `GET /budgets?month=YYYY-MM-01` returns each line with its scope, `amountBase`, `rolloverEnabled`,
   `note`, and the computed `actualBase`, `carriedBase`, `availableBase` (`amountBase + carriedBase`)
   and `varianceBase` (`availableBase - actualBase`), plus `totals` over all lines and the month's
@@ -141,13 +166,16 @@ exportable from the application's navigation.
   - `carriedBase` is 0 when `rolloverEnabled` is false. Otherwise it is the previous month's
     `availableBase - actualBase` for the same scope, recursing while the previous month's line also
     has rollover enabled, at most 12 months back; the row reports `carryMonths` and
-    `carryStoppedReason` (`"no_prior_line"`, `"rollover_off"` or `"bound_reached"`).
+    `carryStoppedReason` (`"no_prior_line"`, `"rollover_off"` or `"bound_reached"`). Every month in
+    the chain computes its own actual with **that** month's separately budgeted category set, never
+    the requested month's.
   - All amounts are `Decimal` on the server and strings on the wire.
 - `POST /budgets` creates a line (`idempotencyKey`, `periodMonth`, one of `categoryId` or `bucket`,
   `amountBase` matching the money pattern, `rolloverEnabled`, optional `note`); an identical replay
   returns 200 with the stored row, a different body for the same key returns 409, a duplicate scope
   in the month returns 409, an unknown or inactive category returns 422, a foreign category 404.
-- `PUT /budgets/{lineId}` updates amount, rollover and note only — never the scope or month;
+- `PATCH /budgets/{lineId}` updates amount, rollover and note only — never the scope or month
+  (`main.py` allows GET, POST, PATCH and DELETE only, so PUT never reaches the route);
   `DELETE /budgets/{lineId}` removes the line (204). Both are household filtered, 404 when foreign.
 - `POST /budgets/copy` takes `fromMonth` and `toMonth` and one idempotency key, copying every line
   whose scope has no line in `toMonth`, returning the created rows and a count of skipped scopes.
@@ -157,11 +185,11 @@ exportable from the application's navigation.
   bucket line's actual excludes separately budgeted categories, and that budgets post nothing.
 
 **Tests:** db — the scope shape, both partial unique indexes, and the period-month constraint.
-Live — variance without rollover; carry across two months; carry stopping at a month with
-rollover off and at the 12-month bound; a bucket line excluding a category-lined child; replay 200
-and conflict 409; duplicate scope 409; inactive and foreign category refusals; update refusing a
-scope change; copy skipping existing scopes; member and foreign-household refusals. Web — set a
-line and see variance, toggle rollover, copy last month.
+Live — variance without rollover; carry across two months, each month using its own excluded
+category set; carry stopping at a month with rollover off and at the 12-month bound; a bucket line
+excluding a category-lined child; replay 200 and conflict 409; duplicate scope 409; inactive and
+foreign category refusals; update refusing a scope change; copy skipping existing scopes; member
+and foreign-household refusals. Web — set a line and see variance, toggle rollover, copy last month.
 **Commands:** `eval "$(scripts/test-db.sh up)"`; the db test as `scripts/verify.sh` runs it;
 `(cd api && uv run pytest -q tests/test_budgets_live.py tests/test_spending_live.py)` plus
 `uv run ruff check . && uv run ruff format --check . && uv run mypy .`;
@@ -186,10 +214,12 @@ types; API contracts; `docs/superpowers/schema.md`; progress.
   - `recurring_series`: `id`, `household_id`, `idempotency_key`, `label` (bounded 1–120, trimmed),
     `merchant_id` nullable with a tenant-scoped FK, `match_key TEXT` (the normalized description used
     when there is no merchant), `cadence` (`weekly`, `monthly`, `quarterly`, `annual`),
-    `expected_amount_base NUMERIC(20,4)` positive, `currency`, `category_id` nullable tenant-scoped
-    FK, `first_seen_on`, `last_seen_on`, `ended_on` nullable, `ended_reason` bounded, timestamps,
+    `expected_amount_base NUMERIC(20,4)` positive, `currency`, `category_id` nullable with a plain
+    `REFERENCES category(id)`, `first_seen_on`, `last_seen_on`, `ended_on` nullable, `ended_reason`
+    bounded, timestamps,
     `uq_recurring_series_household_id`, `uq_recurring_series_idempotency`, a
-    `recurring_series_identity_shape` CHECK requiring exactly one of `merchant_id` or `match_key`,
+    `recurring_series_identity_shape` CHECK requiring exactly one of `merchant_id` (a plain
+    `REFERENCES merchant(id)`) or `match_key`,
     and one partial unique index so a household has at most one open series per identity.
   - `recurring_series_member`: `household_id`, `series_id`, `transaction_id`, `observed_on`,
     `amount_base`, primary key `(household_id, series_id, transaction_id)`, tenant-scoped composite
@@ -198,11 +228,19 @@ types; API contracts; `docs/superpowers/schema.md`; progress.
   - `recurring_dismissal`: `household_id`, identity columns as above, `dismissed_at`, with a unique
     index on the identity, so a dismissed candidate does not return.
   - RLS `household_isolation` on all three, and `preserve_ended_recurring_series()` refusing any
-    update to a series that already has `ended_on`, raising with `ERRCODE = '23514'` and the
-    constraint name so the route maps it to 422.
+    update to a series that already has `ended_on`. It raises a bare `ERRCODE = '23514'` with a
+    distinctive first line, as V51's and V53's own preserve triggers do, since `routes/goals.py` and
+    `routes/register.py` map by matching that first line.
+  - `docs/superpowers/schema.md` §0017 and §0018 carry an earlier reference shape for
+    `recurring_series` and mandate `fk_txn_recurring` on `transaction.recurring_series_id`. This task
+    replaces both with V56's exact design and records that `transaction.recurring_series_id` stays an
+    unconstrained, unwritten column because a posted ledger row is immutable.
 - `api/oneledger/recurring.py` holds the detection, pure over rows the route reads:
   - group reportable spending rows (`txn_type <> 'income'`) in the last 18 months by identity —
-    `merchant_id` when present, otherwise `lower(btrim(description_clean))` collapsed on whitespace;
+    `merchant_id` when present, otherwise
+    `lower(regexp_replace(btrim(coalesce(description_clean, description_raw)), '\s+', ' ', 'g'))`,
+    since `description_clean` is nullable and every manually posted row leaves it null;
+    `match_key` is `NOT NULL` under that same expression;
   - a group is a candidate when it has at least 3 occurrences and the median gap fits one cadence
     within tolerance (weekly 5–9 days, monthly 26–35, quarterly 82–98, annual 350–380) with at least
     two thirds of gaps inside that window;
@@ -224,11 +262,14 @@ types; API contracts; `docs/superpowers/schema.md`; progress.
 - `POST /recurring/dismiss` records a dismissal for an identity (idempotent, 200 on replay).
 - `POST /recurring/{seriesId}/accept-price` sets `expected_amount_base` to the latest member
   amount, taking the `expectedAmountBase` the owner saw so a changed observation refuses with 409.
-- `POST /recurring/{seriesId}/end` sets `ended_on` and a bounded `ended_reason`; an already ended
-  series returns 409 through the trigger's 422 mapping, whichever the route reaches first.
-- Members are refreshed when a series is read: a reportable row matching the identity, dated after
-  `last_seen_on` and before any `ended_on`, is inserted as a member. This is the only write a read
-  performs, it is idempotent, and it is stated in the route docstring.
+- `POST /recurring/{seriesId}/end` sets `ended_on` and a bounded `ended_reason`. The route reads
+  `ended_on` first and returns 409 when the series has already ended; the trigger is defence in depth
+  and maps to 422 only if it is ever reached.
+- `POST /recurring/refresh` adds members: every reportable row matching an open series' identity,
+  dated after its `last_seen_on` and before any `ended_on`, becomes a member and moves
+  `last_seen_on`. It is idempotent and returns the counts of series and members touched. `GET` never
+  writes — it opens `SET TRANSACTION READ ONLY`, exactly as wealth history does with its own
+  refresh. The Recurring panel offers **Refresh** and runs it after a confirmation.
 - The Spending screen gains a **Recurring** panel: confirmed series with status and next expected
   date, a price-change row offering **Accept new amount** with both figures, an overdue row offering
   **End series**, and candidates with **Confirm** (label, cadence, expected amount and category
@@ -237,9 +278,10 @@ types; API contracts; `docs/superpowers/schema.md`; progress.
 **Tests:** db — identity shape, the open-series partial unique index, the ended-series refusal. Live
 — a regular monthly group proposed with its cadence and median amount; an irregular group not
 proposed; a two-occurrence group not proposed; confirmation writing the series and members; replay
-200 and conflict 409; dismissal suppressing a candidate; a later matching row joining the series on
-read; a price change reported and accepted, with a stale expected amount refused; an overdue series
-reported and ended; member and foreign-household refusals. Web — confirm, dismiss, accept price, end.
+200 and conflict 409; dismissal suppressing a candidate; a later matching row joining the series
+through `POST /recurring/refresh` while `GET` leaves it untouched; a price change reported and
+accepted, with a stale expected amount refused; an overdue series reported and ended; member and
+foreign-household refusals. Web — confirm, dismiss, accept price, end.
 **Commands:** `eval "$(scripts/test-db.sh up)"`; the db test as `scripts/verify.sh` runs it;
 `(cd api && uv run pytest -q tests/test_recurring_live.py tests/test_ingest_classify.py)` plus
 `uv run ruff check . && uv run ruff format --check . && uv run mypy .`;
