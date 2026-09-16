@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -106,8 +106,15 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
   const [settlingId, setSettlingId] = useState<string>();
   // Settle can be started from Needs attention, the Register or the Forecast — sections above
   // this one's own <SettlementPanel> (spec: seven sections, Commitments last) — so opening it
-  // there leaves nothing visibly different unless the panel is brought into view itself.
-  const settlementPanelRef = useRef<HTMLDivElement>(null);
+  // there leaves nothing visibly different unless the panel is brought into view itself. A
+  // callback ref, not an effect on settlingId: the panel only exists once the commitment it
+  // belongs to has loaded, which can be after the click.
+  const settlementPanelRef = useCallback((panel: HTMLDivElement | null) => {
+    if (!panel) return;
+    // jsdom (the test environment) does not implement scrollIntoView.
+    panel.scrollIntoView?.({ block: "center" });
+    panel.querySelector("h3")?.focus();
+  }, []);
   // Set only while planning a card statement's payment (Plan payment); cleared on cancel, on any
   // other edit start, and after a successful submit. Limits the account picker to active asset
   // accounts in the statement's currency and is sent as the create body's sourceCardStatementId.
@@ -138,15 +145,6 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
       current = false;
     };
   }, [attempt, request]);
-
-  useEffect(() => {
-    if (!settlingId) return;
-    const panel = settlementPanelRef.current;
-    if (!panel) return;
-    // jsdom (the test environment) does not implement scrollIntoView.
-    panel.scrollIntoView?.({ block: "center" });
-    panel.querySelector("h3")?.focus();
-  }, [settlingId]);
 
   function changeForm<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));

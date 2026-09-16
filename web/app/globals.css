@@ -223,7 +223,8 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .fx-result div { min-width: 0; }
 .fx-result dt { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; }
 .fx-result dd { margin: 3px 0 0; overflow-wrap: anywhere; }
-.inline-alert { padding: 14px 16px; border-left: 4px solid #a65318; background: #fff4e9; line-height: 1.5; }
+.inline-alert,
+.plans-shortfall { padding: 14px 16px; border-left: 4px solid #a65318; background: #fff4e9; line-height: 1.5; }
 /* Import — one row per chosen file, each carrying its own outcome. The list is the screen:
    a file's verdict, its counts and its action all sit inside its own item, so a failure reads
    as that file's failure rather than as the page's. */
@@ -1823,7 +1824,7 @@ body { background: #eef2f0; }
 
 /* Overdue (spec 3.1 "overdue highlighted"): colour is never the only signal — the reason text
    already says "Overdue" — so this is a plain left accent, not a background. */
-.needs-attention-overdue { padding-left: 12px; border-left: 3px solid var(--danger); }
+.needs-attention-list > li.needs-attention-overdue { padding-left: 12px; border-left: 3px solid var(--danger); }
 
 .plans-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
 .plans-badge {
@@ -1837,13 +1838,9 @@ body { background: #eef2f0; }
   white-space: nowrap;
 }
 
-.plans-shortfall {
-  margin-top: 10px;
-  padding: 14px 16px;
-  border-left: 4px solid #a65318;
-  background: #fff4e9;
-  line-height: 1.5;
-}
+/* Spec 3.2's shortfall callout: .inline-alert's ground (declared with it above), set off
+   from the account row it belongs to. */
+.plans-shortfall { margin-top: 10px; }
 .plans-settlement-panel,
 .plans-reserve-account {
   margin-top: 10px;
@@ -1880,12 +1877,17 @@ body { background: #eef2f0; }
   list-style: none;
   font-size: 0.78rem;
 }
+/* Every section the nav above points at, so an anchor jump does not land flush against the
+   viewport edge. */
+.plans-screen > section[id] { scroll-margin-top: 18px; }
+.plans-register-planned { margin: 6px 0 0; color: var(--muted); font-size: 0.85rem; }
 .month-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
 .month-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
 
 /* documents-screen.tsx:136,249 — pre-existing classes with no rule until now. */
 .documents-screen { width: 100%; max-width: 1180px; }
 .document-actions { margin-top: 0; }
+.document-actions > .description-repair { flex-basis: 100%; }
 
 @media (max-width: 760px) {
   .plans-resources-table { display: block; overflow-x: auto; }
