@@ -483,6 +483,11 @@ def _extend(
             members_added += 1
             extended.add(row.transaction_id)
             touched.add(target[0])
+            # The series now stands at this charge. Rows arrive in date order, so the next charge
+            # is measured from here: without this, only the first of several new-price charges in
+            # one import joined, and the rest failed the timing rule against the old last date.
+            position = group.index(target)
+            group[position] = (target[0], row.amount, row.booked_date, target[3])
     return members_added, extended, touched
 
 

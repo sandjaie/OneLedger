@@ -325,6 +325,31 @@ def test_a_price_change_over_20_percent_still_extends_the_single_series(live: Ow
     assert after["nativeAmount"] == "35.0000"
 
 
+def test_several_new_price_charges_in_one_import_all_extend_the_series(live: Owner) -> None:
+    """Each joined charge moves the series forward, so the second and third new-price charges are
+    measured from the one before them, not from the old last date."""
+    description = "Synthetic recurring price change batch"
+    a_monthly_group(live, description=description, amount="-20")
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-35",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
+    refresh()
+    rows = [r for r in the_recurring()["series"] if r["label"] == description]
+    assert [r["id"] for r in rows] == [row["id"]]
+    assert rows[0]["nativeAmount"] == "35.0000"
+    assert refresh() == {"seriesCreated": 0, "seriesTouched": 0, "membersAdded": 0}
+
+
 def test_a_cancelled_then_resumed_payment_is_detected_again_from_new_charges_only(
     live: Owner,
 ) -> None:
