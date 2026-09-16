@@ -8,6 +8,20 @@ BEGIN
     'payslip_earning_rule must exist';
   ASSERT (SELECT relrowsecurity FROM pg_class WHERE oid = 'payslip_earning_rule'::regclass),
     'payslip_earning_rule must have row level security enabled';
+  ASSERT (SELECT string_agg(column_name || ':' || data_type || ':' || is_nullable, ',' ORDER BY
+                            ordinal_position)
+            FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'payslip_earning_rule')
+       = 'household_id:uuid:NO,label:text:NO,component:text:NO,'
+         'created_at:timestamp with time zone:NO,updated_at:timestamp with time zone:NO',
+    'payslip_earning_rule columns must match the V60 contract';
+  ASSERT (SELECT array_agg(a.attname::TEXT ORDER BY k.ord)
+            FROM pg_constraint c
+            CROSS JOIN LATERAL unnest(c.conkey) WITH ORDINALITY k(attnum, ord)
+            JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+           WHERE c.conrelid = 'payslip_earning_rule'::regclass AND c.contype = 'p')
+       = ARRAY['household_id', 'label'],
+    'the primary key must be (household_id, label)';
   RAISE NOTICE 'PASS 0057 structure';
 END $$;
 
@@ -55,7 +69,27 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
   INSERT INTO payslip_earning_rule (household_id, label, component) VALUES (f.h1, 'Basic', 'fixed');
-  RAISE NOTICE 'PASS 0057 component check';
+  -- The label carries payslip_line.label's bound: 1..80 characters, already trimmed.
+  BEGIN
+    INSERT INTO payslip_earning_rule (household_id, label, component) VALUES (f.h1, '', 'fixed');
+    RAISE EXCEPTION 'an empty label must have been refused';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO payslip_earning_rule (household_id, label, component)
+    VALUES (f.h1, ' Padded ', 'fixed');
+    RAISE EXCEPTION 'an untrimmed label must have been refused';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO payslip_earning_rule (household_id, label, component)
+    VALUES (f.h1, repeat('x', 81), 'fixed');
+    RAISE EXCEPTION 'an 81-character label must have been refused';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  INSERT INTO payslip_earning_rule (household_id, label, component)
+  VALUES (f.h1, repeat('x', 80), 'variable');
+  RAISE NOTICE 'PASS 0057 component and label checks';
 END $$;
 ROLLBACK;
 
@@ -98,6 +132,12 @@ BEGIN
   ASSERT (SELECT count(*) FROM payslip_earning_rule) = 1, 'owner sees only its own household rule';
   ASSERT (SELECT component FROM payslip_earning_rule WHERE household_id = f.h1) = 'fixed',
     'owner reads its own rule row';
+  BEGIN
+    INSERT INTO payslip_earning_rule (household_id, label, component)
+    VALUES (f.h2, 'Planted', 'fixed');
+    RAISE EXCEPTION 'an owner must not write a rule into another household';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   RESET ROLE;
 
   PERFORM set_config('app.user_id', f.m1::TEXT, true);

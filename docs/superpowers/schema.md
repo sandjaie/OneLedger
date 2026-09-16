@@ -3650,7 +3650,9 @@ CREATE TABLE payslip_earning_rule (
   component    TEXT NOT NULL CHECK (component IN ('fixed', 'variable', 'reimbursement')),
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (household_id, label)
+  PRIMARY KEY (household_id, label),
+  CONSTRAINT payslip_earning_rule_label_is_bounded CHECK (
+    char_length(label) BETWEEN 1 AND 80 AND label = btrim(label))
 );
 ```
 

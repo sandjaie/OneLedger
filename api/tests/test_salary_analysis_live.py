@@ -328,12 +328,16 @@ def test_salary_credits_without_payslip_excludes_linked_and_v44_income_leg(
     unmatched = _income(live, amount="4500.0000", on=date(2026, 1, 5), category_id=salary_category)
 
     linked_payslip = _create_payslip(live, payMonth="2026-02")
-    linked_credit = _income(live, amount="4000.0000", on=date(2026, 2, 1))
-    client().put(
+    # Categorised Salary, so only the payslip link can exclude it.
+    linked_credit = _income(
+        live, amount="4000.0000", on=date(2026, 2, 1), category_id=salary_category
+    )
+    linked = client().put(
         f"/payslips/{linked_payslip['id']}/deposit",
         json={"transactionId": str(linked_credit)},
         headers=ORIGIN,
     )
+    assert linked.status_code == 200, linked.json()
 
     _seed_fx_rate(live, date(2026, 3, 15))
     deduction_payslip = _create_payslip(
@@ -346,7 +350,9 @@ def test_salary_credits_without_payslip_excludes_linked_and_v44_income_leg(
         ],
         totalDeductions="1000.0000",
     )
-    deduction_credit = _income(live, amount="4000.0000", on=date(2026, 3, 15))
+    deduction_credit = _income(
+        live, amount="4000.0000", on=date(2026, 3, 15), category_id=salary_category
+    )
     client().put(
         f"/payslips/{deduction_payslip['id']}/deposit",
         json={"transactionId": str(deduction_credit)},
@@ -364,6 +370,11 @@ def test_salary_credits_without_payslip_excludes_linked_and_v44_income_leg(
     credits = analysis["salaryCreditsWithoutPayslip"]
     ids = {c["transactionId"] for c in credits}
     assert str(unmatched) in ids
+    listed = next(c for c in credits if c["transactionId"] == str(unmatched))
+    assert listed["amount"] == "4500.0000"
+    assert listed["bookedDate"] == "2026-01-05"
+    assert listed["currency"] == live.currency
+    assert listed["accountName"] == "Synthetic salary account"
     assert str(linked_credit) not in ids
     assert str(deduction_credit) not in ids
     # The V44 deduction pair's income leg (categorised Salary, booked on the same account/date
@@ -412,6 +423,13 @@ def test_earning_rule_put_replay_delete_404_and_label_normalization(live: Salary
     assert slashed.json()["label"] == "Tax/NI"
     assert client().delete("/salary/earning-rules/Tax%2FNI", headers=ORIGIN).status_code == 204
 
+    padded = client().put(
+        "/salary/earning-rules/%20Overtime%20", json={"component": "variable"}, headers=ORIGIN
+    )
+    assert padded.status_code == 200
+    assert padded.json()["label"] == "Overtime"
+    assert client().delete("/salary/earning-rules/Overtime", headers=ORIGIN).status_code == 204
+
     too_long = "x" * 81
     invalid = client().put(
         f"/salary/earning-rules/{too_long}", json={"component": "fixed"}, headers=ORIGIN
@@ -458,12 +476,21 @@ def test_other_household_data_is_invisible(live: SalaryFixture) -> None:
         on=date(2026, 1, 5),
         account_id=live.other_account_id,
         household_id=live.other_owner.household_id,
+        category_id=_category_id(live, "salary"),
     )
 
     analysis = _analysis()
     assert analysis["currencies"] == []
     assert analysis["salaryCreditsWithoutPayslip"] == []
     assert client().get("/salary/earning-rules", headers=ORIGIN).json()["rules"] == []
+
+    # The owner's own "Basic" in one month infers variable; the other household's "Basic" rule
+    # (fixed) must not reach it.
+    _create_payslip(live, payMonth="2026-01")
+    own = _currency_block(_analysis(), live.currency)
+    assert len(own["payslips"]) == 1
+    basic = next(label for label in own["labels"] if label["label"] == "Basic")
+    assert (basic["component"], basic["source"]) == ("variable", "inferred")
 
 
 def test_get_routes_write_nothing(live: SalaryFixture) -> None:

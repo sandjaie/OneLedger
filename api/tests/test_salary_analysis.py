@@ -262,6 +262,78 @@ def test_bonus_payslip_same_month_adds_no_month_no_increment_no_inference_count(
     assert by_year[2026].payslip_months == 3  # January, February, March — not four
 
 
+def test_bonus_payslip_same_month_counts_one_inference_month() -> None:
+    # "Allowance" is on three payslips but only two payslip months: variable (below 3 months).
+    # Counting payslips instead would make it 3 present over a 2-month span, i.e. fixed.
+    payslips = [
+        _payslip("2026-01", [("Basic", "3000.0000"), ("Allowance", "100.0000")]),
+        _payslip("2026-02", [("Basic", "3000.0000"), ("Allowance", "100.0000")]),
+        _payslip("2026-02", [("Allowance", "100.0000")]),
+    ]
+    currency = _currency(payslips)
+    allowance = next(label for label in currency.labels if label.label == "Allowance")
+    assert allowance.month_count == 2
+    assert (allowance.component, allowance.source) == ("variable", "inferred")
+
+
+def test_bonus_payslip_with_fixed_lines_sums_into_its_month_for_increments() -> None:
+    # March's two payslips together keep fixed pay at 3000; judged per payslip, either one alone
+    # (2000 or 1000) would read as a change.
+    payslips = [
+        _payslip("2026-01", [("Basic", "3000.0000")]),
+        _payslip("2026-02", [("Basic", "3000.0000")]),
+        _payslip("2026-03", [("Basic", "2000.0000")]),
+        _payslip("2026-03", [("Basic", "1000.0000")]),
+    ]
+    currency = _currency(payslips, rules={"Basic": "fixed"})
+    assert currency.increments == ()
+
+
+def test_yearly_totals_split_by_calendar_year_and_reconcile() -> None:
+    payslips = [
+        _payslip(
+            "2025-12",
+            [("Basic", "3000.0000"), ("Refund", "50.0000")],
+            deductions="500.0000",
+            receipt_status="received",
+            cash_received="2550.0000",
+        ),
+        _payslip(
+            "2026-01",
+            [("Basic", "3000.0000"), ("Bonus", "1000.0000")],
+            deductions="800.0000",
+            receipt_status="received",
+            cash_received="3200.0000",
+        ),
+        _payslip("2026-02", [("Basic", "3000.0000")], deductions="500.0000"),
+    ]
+    rules: dict[str, Component] = {"Basic": "fixed", "Bonus": "variable", "Refund": "reimbursement"}
+    currency = _currency(payslips, rules=rules)
+    assert [y.year for y in currency.years] == [2026, 2025]  # newest first
+    y2026, y2025 = currency.years
+    assert (y2025.compensation, y2025.reimbursement, y2025.deductions, y2025.net_pay) == (
+        Decimal("3000.0000"),
+        Decimal("50.0000"),
+        Decimal("500.0000"),
+        Decimal("2550.0000"),
+    )
+    assert (y2025.cash_received, y2025.payslip_months, y2025.received_months) == (
+        Decimal("2550.0000"),
+        1,
+        1,
+    )
+    assert y2025.variable_share == Decimal("0.00")
+    assert (y2026.compensation, y2026.deductions, y2026.net_pay, y2026.cash_received) == (
+        Decimal("7000.0000"),
+        Decimal("1300.0000"),
+        Decimal("5700.0000"),
+        Decimal("3200.0000"),
+    )
+    assert (y2026.payslip_months, y2026.received_months) == (2, 1)
+    for year in currency.years:
+        assert year.compensation + year.reimbursement - year.deductions == year.net_pay
+
+
 def test_zero_previous_fixed_pay_gives_a_null_change_percent() -> None:
     payslips = [
         _payslip("2026-01", [("Bonus", "1000.0000")]),  # no fixed pay this month at all
