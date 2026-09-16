@@ -6,16 +6,16 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 15 September 2026.
+Updated: 16 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 2.4 — data quality and recovery** | [master plan](../product/master-implementation-plan.html#phase-2-delivery) |
-| Outcome state | **Phase 2 implementation complete** — Phases 2.1–2.4 planned and reviewed together on 14 Sep 2026, all delivered; owner acceptance open on each | [Phase 2.4 plan](plans/2026-09-14-phase-2-4-data-quality-recovery.md) |
-| Next product action | Phase 3.4 Task 2 — documents and commitments planned from records | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md#task-2--documents-and-commitments-planned-from-records) |
-| Current implementation task | Phases 3.1–3.3 delivered via PRs #222–#227; Phase 3.4 Task 2 on `feature/p3-4-register-commitments`; after Phase 3.4, a Phase 3 UI audit and fix branch and the Phase 3.x hygiene pass (owner decision, 16 Sep 2026) | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
+| Current outcome | **Phase 3.4 — protection and administration** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
+| Outcome state | **Phases 3.1–3.4 implementation complete** via PRs #222–#229, owner acceptance open on each; the Phase 3 UI audit delivered via PR #230 | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
+| Next product action | Phase 4.1 — budgets and recurring discovery (planned, not started) | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Current implementation task | Phases 3.1–3.4 delivered via PRs #222–#229, Phase 3 UI audit via PR #230, and the Phase 3.x hygiene pass on `chore/phase-3-hygiene`; Phase 4.1 not yet started | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 
 ## Canonical phase status
 
@@ -41,7 +41,7 @@ Updated: 15 September 2026.
 | 3.1 — commitments and actions | **Implementation complete; owner acceptance open** — PRs #222–#223 | [Phase 3.1 specification](specs/2026-09-15-phase-3-1-commitments-actions.md) · [Phase 3.1 plan](plans/2026-09-15-phase-3-1-commitments-actions.md) |
 | 3.2 — cash forecast and monthly review | **Implementation complete; owner acceptance open** — PRs #224–#225 | [Phase 3.2 specification](specs/2026-09-15-phase-3-2-cash-forecast-review.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
 | 3.3 — goals and emergency reserve | **Implementation complete; owner acceptance open** — PRs #226–#227 | [Phase 3.3 specification](specs/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) |
-| 3.4 — protection and administration | **In progress** — Task 2 of 2 | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
+| 3.4 — protection and administration | **Implementation complete; owner acceptance open** — PRs #228–#229 | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
 | 4.1 — budgets and recurring discovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.2 — salary analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
@@ -62,7 +62,7 @@ requires a separate owner request.
 
 ## Active delivery gates
 
-Completed task rows are not kept here; each delivered task is its merged PR (#165–#207), and
+Completed task rows are not kept here; each delivered task is its merged PR (#165–#230), and
 the pre-structure narrative lives in the [12 September delivery history](reports/2026-09-12-progress-history.md).
 
 | Gate | State | Evidence or completion path |
