@@ -1,16 +1,16 @@
-"""Phase 4.1 Task 3: `GET/POST /recurring` and its sub-routes (spec "Discovery proposes, the
-owner decides").
+"""Phase 4.1 Task 1: `GET/PATCH /recurring`, `POST /recurring/refresh`, `.../remove` and
+`.../dismiss` (spec "Recurring payments are simply just not a subscription").
 
-Discovery writes nothing until a candidate is confirmed: every candidate scenario below reads
-`GET /recurring` after writing straight to the ledger, and only the confirm/dismiss/refresh
-scenarios write through a route. Skipped when no database is reachable. Every name, label and
-amount is invented.
+Discovery is opt-out: `POST /recurring/refresh` is the only writer, and the owner never confirms
+anything — every scenario below reads `GET /recurring` after writing straight to the ledger, then
+calls refresh. Skipped when no database is reachable. Every name, label and amount is invented.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -23,7 +23,7 @@ from oneledger.main import app
 
 from .live_database import clear_synthetic_account_valuation_periods
 from .test_ingest_route_live import ORIGIN, _clean, _connect
-from .test_spending_live import _another_household, a_category, a_spend
+from .test_spending_live import _another_household, a_spend
 from .test_transfer_writes_live import Owner
 from .test_transfers_live import client
 
@@ -75,6 +75,54 @@ def a_merchant(live: Owner, name: str, *, household: UUID | None = None) -> UUID
     return UUID(str(found))
 
 
+def _seed_category(live: Owner, slug: str) -> UUID:
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT id FROM category WHERE slug = %s AND household_id IS NULL", (slug,))
+        found = cur.fetchone()[0]  # type: ignore[index]
+    return UUID(str(found))
+
+
+def _foreign_spend(
+    live: Owner,
+    native_amount: str,
+    native_currency: str,
+    posted_amount: str,
+    on: date,
+    description: str,
+) -> UUID:
+    """A charge whose statement recorded a foreign original pair distinct from the account's own
+    posted currency — `a_spend` (test_spending_live.py) carries no such pair, so this stays local
+    to this file rather than widening a shared helper other suites also use."""
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction (household_id, account_id, booked_date, description_raw,
+                   amount, currency, original_amount, original_currency, fx_rate_date,
+                   fx_rate_to_base, fx_rate_to_secondary, amount_base, amount_secondary, txn_type,
+                   source, dedupe_hash)
+               VALUES (%s, %s, %s, %s, %s,
+                       (SELECT currency FROM account WHERE id = %s), %s, %s, %s, 1, 0.25, %s, %s,
+                       'expense', 'manual', %s)
+               RETURNING id""",
+            (
+                live.household_id,
+                live.account_id,
+                on,
+                description,
+                posted_amount,
+                live.account_id,
+                native_amount,
+                native_currency,
+                on,
+                posted_amount,
+                (Decimal(posted_amount) * Decimal("0.25")).quantize(Decimal("0.0001")),
+                uuid4().hex + uuid4().hex,
+            ),
+        )
+        found = cur.fetchone()[0]  # type: ignore[index]
+    live.conn.commit()
+    return UUID(str(found))
+
+
 def the_recurring() -> dict[str, Any]:
     response = client().get("/recurring", headers=ORIGIN)
     assert response.status_code == 200, response.text
@@ -82,59 +130,38 @@ def the_recurring() -> dict[str, Any]:
     return body
 
 
-def candidate_for(
-    body: dict[str, Any], *, merchant_id: UUID | None = None, match_key: str | None = None
-) -> dict[str, Any] | None:
-    key = None if merchant_id is None else str(merchant_id)
-    return next(
-        (
-            row
-            for row in body["candidates"]
-            if row["identity"]["merchantId"] == key and row["identity"]["matchKey"] == match_key
-        ),
-        None,
-    )
+def refresh() -> dict[str, Any]:
+    response = client().post("/recurring/refresh", headers=ORIGIN)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
 
 
-def confirm(
-    idempotency_key: UUID,
-    *,
-    merchant_id: UUID | None = None,
-    match_key: str | None = None,
-    label: str = "Synthetic recurring confirm",
-    cadence: str = "monthly",
-    amount: str = "50.0000",
-    category_id: UUID | None = None,
-) -> httpx.Response:
-    response: httpx.Response = client().post(
-        "/recurring/confirm",
-        json={
-            "idempotencyKey": str(idempotency_key),
-            "identity": {
-                "merchantId": None if merchant_id is None else str(merchant_id),
-                "matchKey": match_key,
-            },
-            "label": label,
-            "cadence": cadence,
-            "expectedAmountBase": amount,
-            "categoryId": None if category_id is None else str(category_id),
-        },
-        headers=ORIGIN,
-    )
+def patch_series(series_id: str, **fields: bool | str) -> dict[str, Any]:
+    response = client().patch(f"/recurring/{series_id}", json=fields, headers=ORIGIN)
+    assert response.status_code == 200, response.text
+    body: dict[str, Any] = response.json()
+    return body
+
+
+def remove_series(series_id: str) -> httpx.Response:
+    response: httpx.Response = client().post(f"/recurring/{series_id}/remove", headers=ORIGIN)
     return response
+
+
+def _row_for(body: dict[str, Any], label: str) -> dict[str, Any] | None:
+    return next((row for row in body["series"] if row["label"] == label), None)
 
 
 # Every date below is relative to `TODAY` rather than a fixed calendar date: `status` depends on
 # how far `last_seen_on` sits from the moment the test actually runs (`recurring.is_overdue`), so
 # a fixed date would drift into "overdue" as the calendar moves past it.
 TODAY = date.today()
-# Ends 30 days before TODAY, leaving room for a still-not-future "later" row in the refresh and
-# price-change scenarios below.
+# Ends 30 days before TODAY, leaving room for a still-not-future "later" row in extend scenarios.
 MONTHLY = [TODAY - timedelta(days=d) for d in (120, 90, 60, 30)]
 LATER = TODAY
-# The fixture's own account (`test_ingest_route_live.Fixture`) opens on 2026-01-01 and refuses
-# any earlier booked_date, so the "overdue" scenario starts there rather than further back —
-# `is_overdue` only needs its own gap from "now" to exceed half a cadence, not real history.
+# The fixture's own account (`test_ingest_route_live.Fixture`) opens on 2026-01-01 and refuses any
+# earlier booked_date, so the "overdue" scenario starts there rather than further back.
 _ACCOUNT_ANCHOR = date(2026, 1, 1)
 OLD_MONTHLY = [_ACCOUNT_ANCHOR + timedelta(days=d) for d in (0, 30, 60, 90)]
 
@@ -166,286 +193,346 @@ def a_monthly_group(
 # ---------------------------------------------------------------------------------------
 
 
-def test_regular_monthly_group_is_proposed_with_cadence_and_median_amount(live: Owner) -> None:
-    merchant = a_merchant(live, "Synthetic recurring gym")
-    a_monthly_group(live, merchant_id=merchant, amount="-50")
-
-    body = the_recurring()
-    row = candidate_for(body, merchant_id=merchant)
-    assert row is not None
-    assert row["cadence"] == "monthly"
-    assert row["occurrences"] == 4
-    assert row["typicalAmountBase"] == "50.0000"
-    assert row["lastAmountBase"] == "50.0000"
-    assert row["firstSeenOn"] == str(MONTHLY[0])
-    assert row["lastSeenOn"] == str(MONTHLY[-1])
-
-
-def test_irregular_group_is_not_proposed(live: Owner) -> None:
-    merchant = a_merchant(live, "Synthetic recurring irregular")
-    # Gaps of 5, 50 and 200 days: the median (50) fits no cadence window at all, so nothing about
-    # the two-thirds rule even comes into play — this group is irregular on its own median.
-    irregular = [date(2026, 1, 1), date(2026, 1, 6), date(2026, 2, 25), date(2026, 9, 12)]
-    a_monthly_group(live, merchant_id=merchant, dates=irregular)
-
-    body = the_recurring()
-    assert candidate_for(body, merchant_id=merchant) is None
-
-
-def test_two_occurrence_group_is_not_proposed(live: Owner) -> None:
-    merchant = a_merchant(live, "Synthetic recurring too-few")
-    a_monthly_group(live, merchant_id=merchant, dates=MONTHLY[:2])
-
-    body = the_recurring()
-    assert candidate_for(body, merchant_id=merchant) is None
-
-
-def test_confirmation_writes_series_and_members(live: Owner) -> None:
-    description = "Synthetic recurring gym membership"
-    txn_ids = a_monthly_group(live, description=description, amount="-50")
-
-    body = the_recurring()
-    match_key = description.lower()
-    row = candidate_for(body, match_key=match_key)
-    assert row is not None
-    assert sorted(row["transactionIds"]) == sorted(str(i) for i in txn_ids)
-
-    response = confirm(
-        uuid4(), match_key=match_key, cadence=row["cadence"], amount=row["typicalAmountBase"]
+def test_refresh_creates_a_subscription_from_streaming_and_not_from_utilities(live: Owner) -> None:
+    streaming = _seed_category(live, "entertainment-streaming")
+    utilities = _seed_category(live, "utilities")
+    a_monthly_group(
+        live, description="Synthetic recurring streaming", amount="-15", category_id=streaming
     )
-    assert response.status_code == 201, response.text
-    created = response.json()
-    assert created["memberCount"] == 4
-    assert created["status"] == "active"
+    a_monthly_group(
+        live, description="Synthetic recurring utility", amount="-60", category_id=utilities
+    )
 
+    result = refresh()
+    assert result["seriesCreated"] == 2
+
+    body = the_recurring()
+    streaming_row = _row_for(body, "Synthetic recurring streaming")
+    utility_row = _row_for(body, "Synthetic recurring utility")
+    assert streaming_row is not None and streaming_row["isSubscription"] is True
+    assert utility_row is not None and utility_row["isSubscription"] is False
+
+
+def test_an_uncategorised_stable_group_is_a_subscription_and_a_varying_one_is_not(
+    live: Owner,
+) -> None:
+    a_monthly_group(live, description="Synthetic recurring stable", amount="-12")
+    for on, amount in zip(MONTHLY, ["-100", "-100", "-100", "-112"], strict=True):
+        a_spend(
+            live, live.account_id, amount, on, "expense", description="Synthetic recurring varying"
+        )
+
+    refresh()
+    body = the_recurring()
+    stable_row = _row_for(body, "Synthetic recurring stable")
+    varying_row = _row_for(body, "Synthetic recurring varying")
+    assert stable_row is not None and stable_row["isSubscription"] is True
+    assert varying_row is not None and varying_row["isSubscription"] is False
+
+
+def test_a_second_refresh_changes_nothing(live: Owner) -> None:
+    a_monthly_group(live, description="Synthetic recurring idempotent", amount="-25")
+    first = refresh()
+    assert first["seriesCreated"] == 1
+    second = refresh()
+    assert second == {"seriesCreated": 0, "seriesTouched": 0, "membersAdded": 0}
+
+
+def test_get_recurring_changes_nothing(live: Owner) -> None:
+    a_monthly_group(live, description="Synthetic recurring get-only", amount="-25")
+    assert the_recurring()["series"] == []
     with live.conn.cursor() as cur:
         cur.execute(
-            """SELECT count(*) FROM recurring_series_member
-                WHERE household_id = %s AND series_id = %s""",
-            (live.household_id, created["id"]),
+            "SELECT count(*) FROM recurring_series WHERE household_id = %s", (live.household_id,)
         )
-        assert cur.fetchone()[0] == 4  # type: ignore[index]
-
-    # A confirmed identity is no longer offered as a candidate.
-    after = the_recurring()
-    assert candidate_for(after, match_key=match_key) is None
-    assert any(c["id"] == created["id"] for c in after["confirmed"])
+        assert cur.fetchone()[0] == 0  # type: ignore[index]
 
 
-def test_replay_200_and_conflict_409(live: Owner) -> None:
-    description = "Synthetic recurring replay"
-    a_monthly_group(live, description=description, amount="-40")
-    match_key = description.lower()
-    key = uuid4()
-
-    first = confirm(key, match_key=match_key, amount="40.0000")
-    assert first.status_code == 201, first.text
-    series_id = first.json()["id"]
-
-    replay = confirm(key, match_key=match_key, amount="40.0000")
-    assert replay.status_code == 200, replay.text
-    assert replay.json()["id"] == series_id
-
-    conflict = confirm(key, match_key=match_key, amount="41.0000")
-    assert conflict.status_code == 409, conflict.text
-
-
-def test_already_confirmed_identity_is_refused(live: Owner) -> None:
-    description = "Synthetic recurring double confirm"
-    a_monthly_group(live, description=description, amount="-40")
-    match_key = description.lower()
-    assert confirm(uuid4(), match_key=match_key, amount="40.0000").status_code == 201
-    second = confirm(uuid4(), match_key=match_key, amount="45.0000")
-    assert second.status_code == 409, second.text
-
-
-def test_dismissal_suppresses_a_candidate(live: Owner) -> None:
-    merchant = a_merchant(live, "Synthetic recurring dismiss")
-    a_monthly_group(live, merchant_id=merchant)
-    assert candidate_for(the_recurring(), merchant_id=merchant) is not None
-
-    response = client().post(
-        "/recurring/dismiss", json={"identity": {"merchantId": str(merchant)}}, headers=ORIGIN
-    )
-    assert response.status_code == 200, response.text
-    assert candidate_for(the_recurring(), merchant_id=merchant) is None
-
-    # Idempotent replay.
-    replay = client().post(
-        "/recurring/dismiss", json={"identity": {"merchantId": str(merchant)}}, headers=ORIGIN
-    )
-    assert replay.status_code == 200, replay.text
-
-
-def test_refresh_adds_a_later_row_while_get_leaves_it_untouched(live: Owner) -> None:
-    description = "Synthetic recurring refresh"
+def test_an_owner_flip_and_a_rename_survive_refresh(live: Owner) -> None:
+    description = "Synthetic recurring flip"
     a_monthly_group(live, description=description, amount="-30")
-    match_key = description.lower()
-    created = confirm(uuid4(), match_key=match_key, amount="30.0000").json()
-    series_id = created["id"]
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    series_id = row["id"]
+    assert row["isSubscription"] is True
+
+    patched = patch_series(series_id, isSubscription=False, label="Owner renamed subscription")
+    assert patched["isSubscription"] is False
+    assert patched["label"] == "Owner renamed subscription"
 
     a_spend(live, live.account_id, "-30", LATER, "expense", description=description)
-
-    # GET never writes: the new row is not yet a member.
-    unchanged = the_recurring()
-    unchanged_row = next(c for c in unchanged["confirmed"] if c["id"] == series_id)
-    assert unchanged_row["memberCount"] == 4
-    assert unchanged_row["lastSeenOn"] == str(MONTHLY[-1])
-
-    refreshed = client().post("/recurring/refresh", headers=ORIGIN)
-    assert refreshed.status_code == 200, refreshed.text
-    assert refreshed.json() == {"seriesTouched": 1, "membersAdded": 1}
-
-    after = the_recurring()
-    after_row = next(c for c in after["confirmed"] if c["id"] == series_id)
-    assert after_row["memberCount"] == 5
-    assert after_row["lastSeenOn"] == str(LATER)
-
-    # A second refresh with nothing new touches no series.
-    again = client().post("/recurring/refresh", headers=ORIGIN)
-    assert again.json() == {"seriesTouched": 0, "membersAdded": 0}
+    refresh()
+    after = next(r for r in the_recurring()["series"] if r["id"] == series_id)
+    assert after["isSubscription"] is False
+    assert after["label"] == "Owner renamed subscription"
 
 
-def test_price_change_reported_and_accepted_with_stale_refusal(live: Owner) -> None:
-    description = "Synthetic recurring price change"
-    a_monthly_group(live, description=description, amount="-20")
-    match_key = description.lower()
-    created = confirm(uuid4(), match_key=match_key, amount="20.0000").json()
-    series_id = created["id"]
+def test_a_removed_payment_is_never_recreated(live: Owner) -> None:
+    description = "Synthetic recurring removed"
+    a_monthly_group(live, description=description, amount="-45")
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    removed = remove_series(row["id"])
+    assert removed.status_code == 200, removed.text
+    assert _row_for(the_recurring(), description) is None
 
-    a_spend(live, live.account_id, "-25", LATER, "expense", description=description)
-    client().post("/recurring/refresh", headers=ORIGIN)
+    # Fresh charges on the same identity and amount, well after removal — the anchored dismissal
+    # blocks Create regardless of how "aged out" the original evidence now is.
+    for on in (LATER + timedelta(days=d) for d in (30, 60, 90)):
+        a_spend(live, live.account_id, "-45", on, "expense", description=description)
+    refresh()
+    assert _row_for(the_recurring(), description) is None
 
-    changed = the_recurring()
-    changed_row = next(c for c in changed["confirmed"] if c["id"] == series_id)
-    assert changed_row["status"] == "price_changed"
-    assert changed_row["lastAmountBase"] == "25.0000"
-    assert changed_row["expectedAmountBase"] == "20.0000"
-
-    stale = client().post(
-        f"/recurring/{series_id}/accept-price",
-        json={"expectedAmountBase": "19.0000"},
-        headers=ORIGIN,
-    )
-    assert stale.status_code == 409, stale.text
-
-    accepted = client().post(
-        f"/recurring/{series_id}/accept-price",
-        json={"expectedAmountBase": "20.0000"},
-        headers=ORIGIN,
-    )
-    assert accepted.status_code == 200, accepted.text
-    assert accepted.json()["expectedAmountBase"] == "25.0000"
-    assert accepted.json()["status"] == "active"
-
-
-def test_overdue_series_reported_and_ended(live: Owner) -> None:
-    description = "Synthetic recurring overdue"
-    a_monthly_group(live, description=description, amount="-15", dates=OLD_MONTHLY)
-    match_key = description.lower()
-    created = confirm(uuid4(), match_key=match_key, amount="15.0000").json()
-    series_id = created["id"]
-
-    overdue = the_recurring()
-    row = next(c for c in overdue["confirmed"] if c["id"] == series_id)
-    assert row["status"] == "overdue"
-
-    ended = client().post(
-        f"/recurring/{series_id}/end",
-        json={"endedReason": "synthetic: cancelled the membership"},
-        headers=ORIGIN,
-    )
-    assert ended.status_code == 200, ended.text
-
-    after = the_recurring()
-    assert not any(c["id"] == series_id for c in after["confirmed"])
-
-    # Ending an already-ended series is refused.
-    again = client().post(
-        f"/recurring/{series_id}/end",
-        json={"endedReason": "synthetic: already cancelled"},
-        headers=ORIGIN,
-    )
+    again = remove_series(row["id"])
     assert again.status_code == 409, again.text
 
 
-def test_foreign_and_unknown_category_are_refused(live: Owner) -> None:
-    description = "Synthetic recurring category"
-    a_monthly_group(live, description=description, amount="-10")
-    match_key = description.lower()
+def test_two_overlapping_services_become_two_series_and_extend_the_nearest_one(
+    live: Owner,
+) -> None:
+    description = "Synthetic recurring overlap"
+    base = MONTHLY[0]
+    dates = [base + timedelta(days=15 * i) for i in range(8)]
+    amounts = ["-10", "-50", "-10", "-50", "-10", "-50", "-10", "-50"]
+    for on, amount in zip(dates, amounts, strict=True):
+        a_spend(live, live.account_id, amount, on, "expense", description=description)
 
-    theirs, _account = _another_household(live)
-    foreign = a_category(live, "Synthetic recurring foreign category", "need", household=theirs)
-    refused = confirm(uuid4(), match_key=match_key, amount="10.0000", category_id=foreign)
-    assert refused.status_code == 404, refused.text
+    refresh()
+    both = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert len(both) == 2
+    assert sorted(row["nativeAmount"] for row in both) == ["10.0000", "50.0000"]
 
-    unknown = confirm(uuid4(), match_key=match_key, amount="10.0000", category_id=uuid4())
-    assert unknown.status_code == 422, unknown.text
-
-
-def test_foreign_and_unknown_merchant_are_refused(live: Owner) -> None:
-    """V56 keeps a plain `REFERENCES merchant(id)` because `merchant` is a shared seed table with
-    no `UNIQUE (household_id, id)`, so the tenant boundary is the route's own check. Without this
-    test that check could be deleted with every suite still green."""
-    theirs, _account = _another_household(live)
-    foreign = a_merchant(live, "Synthetic recurring foreign merchant", household=theirs)
-    a_monthly_group(live, description="Synthetic recurring merchant boundary", amount="-10")
-
-    refused = confirm(uuid4(), merchant_id=foreign, amount="10.0000")
-    assert refused.status_code == 404, refused.text
-
-    unknown = confirm(uuid4(), merchant_id=uuid4(), amount="10.0000")
-    assert unknown.status_code == 422, unknown.text
-
-    dismissed = client().post(
-        "/recurring/dismiss",
-        json={"identity": {"merchantId": str(foreign)}},
-        headers=ORIGIN,
-    )
-    assert dismissed.status_code == 404, dismissed.text
+    later_on = dates[-1] + timedelta(days=15)
+    a_spend(live, live.account_id, "-11", later_on, "expense", description=description)
+    refresh()
+    after = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert sorted(row["nativeAmount"] for row in after) == ["11.0000", "50.0000"]
 
 
-def test_a_description_with_a_non_breaking_space_still_grows_its_series(live: Owner) -> None:
-    """Identity is computed once, in Python. An earlier SQL twin trimmed spaces only and matched
-    ASCII whitespace, so a description holding a non-breaking space stored a key that refresh
-    could never match again and the series silently stopped growing."""
-    description = "Synthetic\u00a0recurring nbsp"
-    a_monthly_group(live, description=description, amount="-15")
-    listed = the_recurring()["candidates"]
-    proposed = next(c for c in listed if "nbsp" in c["label"])
-    match_key = proposed["identity"]["matchKey"]
-    created = confirm(uuid4(), match_key=match_key, amount="15.0000").json()
-
-    a_spend(live, live.account_id, "-15", LATER, "expense", description=description)
-    refreshed = client().post("/recurring/refresh", headers=ORIGIN)
-    assert refreshed.json() == {"seriesTouched": 1, "membersAdded": 1}
-
-    row = next(c for c in the_recurring()["confirmed"] if c["id"] == created["id"])
-    assert row["lastSeenOn"] == str(LATER)
-
-
-def test_a_refund_never_joins_a_series(live: Owner) -> None:
-    """A refund on the same counterparty is stored positive and is not an occurrence of the
-    charge: counting it would report a negative `lastAmountBase` as a price change and then
-    refuse its own accept-price against the positive-amount CHECK."""
-    description = "Synthetic recurring refunded"
+def test_a_price_change_over_20_percent_still_extends_the_single_series(live: Owner) -> None:
+    description = "Synthetic recurring big price change"
     a_monthly_group(live, description=description, amount="-20")
-    created = confirm(uuid4(), match_key=description.lower(), amount="20.0000").json()
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    series_id = row["id"]
 
-    a_spend(live, live.account_id, "12", LATER, "refund", description=description)
-    refreshed = client().post("/recurring/refresh", headers=ORIGIN)
-    assert refreshed.json() == {"seriesTouched": 0, "membersAdded": 0}
-
-    row = next(c for c in the_recurring()["confirmed"] if c["id"] == created["id"])
-    assert row["lastAmountBase"] == "20.0000"
+    a_spend(live, live.account_id, "-35", LATER, "expense", description=description)
+    refresh()
+    after = next(r for r in the_recurring()["series"] if r["id"] == series_id)
+    assert after["nativeAmount"] == "35.0000"
 
 
-def test_foreign_household_refusals(live: Owner) -> None:
+def test_several_new_price_charges_in_one_import_all_extend_the_series(live: Owner) -> None:
+    """Each joined charge moves the series forward, so the second and third new-price charges are
+    measured from the one before them, not from the old last date."""
+    description = "Synthetic recurring price change batch"
+    a_monthly_group(live, description=description, amount="-20")
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-35",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
+    refresh()
+    rows = [r for r in the_recurring()["series"] if r["label"] == description]
+    assert [r["id"] for r in rows] == [row["id"]]
+    assert rows[0]["nativeAmount"] == "35.0000"
+    assert refresh() == {"seriesCreated": 0, "seriesTouched": 0, "membersAdded": 0}
+
+
+def test_a_cancelled_then_resumed_payment_is_detected_again_from_new_charges_only(
+    live: Owner,
+) -> None:
+    description = "Synthetic recurring resumed"
+    a_monthly_group(live, description=description, amount="-18")
+    refresh()
+    first_row = _row_for(the_recurring(), description)
+    assert first_row is not None
+    remove_series(first_row["id"])
+
+    for on in (LATER + timedelta(days=d) for d in (30, 60, 90)):
+        a_spend(live, live.account_id, "-40", on, "expense", description=description)
+    refresh()
+    rows = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert len(rows) == 1
+    assert rows[0]["id"] != first_row["id"]
+    assert rows[0]["nativeAmount"] == "40.0000"
+
+
+def test_a_series_created_before_v57_gets_its_flag_and_amounts_on_refresh(live: Owner) -> None:
+    streaming = _seed_category(live, "entertainment-streaming")
+    description = "Synthetic recurring legacy"
+    txn_ids = a_monthly_group(live, description=description, amount="-9", category_id=streaming)
+    with live.conn.cursor() as cur:
+        cur.execute("SELECT base_currency FROM household WHERE id = %s", (live.household_id,))
+        base = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO recurring_series (household_id, idempotency_key, label, match_key,
+                   cadence, expected_amount_base, currency, category_id, first_seen_on,
+                   last_seen_on)
+               VALUES (%s, %s, %s, %s, 'monthly', 9, %s, %s, %s, %s) RETURNING id""",
+            (
+                live.household_id,
+                uuid4(),
+                description,
+                description.lower(),
+                base,
+                streaming,
+                MONTHLY[0],
+                MONTHLY[-1],
+            ),
+        )
+        series_id = cur.fetchone()[0]  # type: ignore[index]
+        for txn_id, on in zip(txn_ids, MONTHLY, strict=True):
+            cur.execute(
+                """INSERT INTO recurring_series_member (household_id, series_id, transaction_id,
+                       observed_on, amount_base)
+                   VALUES (%s, %s, %s, %s, 9)""",
+                (live.household_id, series_id, txn_id, on),
+            )
+    live.conn.commit()
+
+    # Review OL-003: later charges arriving before the first refresh must extend this series, not
+    # form a second one while its native amount is still null.
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-9",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+            category_id=streaming,
+        )
+
+    refresh()
+    rows = [r for r in the_recurring()["series"] if r["label"] == description]
+    assert [r["id"] for r in rows] == [str(series_id)]
+    assert rows[0]["nativeAmount"] == "9.0000"
+    assert rows[0]["isSubscription"] is True
+
+
+def test_a_charge_in_a_foreign_currency_keeps_its_original_pair(live: Owner) -> None:
+    description = "Synthetic recurring foreign currency"
+    for on in MONTHLY:
+        _foreign_spend(live, "-18.5000", "EUR", "-20.0000", on, description)
+
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    assert row["nativeAmount"] == "18.5000"
+    assert row["nativeCurrency"] == "EUR"
+
+
+def test_overdue_status(live: Owner) -> None:
+    description = "Synthetic recurring overdue"
+    a_monthly_group(live, description=description, amount="-15", dates=OLD_MONTHLY)
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    assert row["status"] == "overdue"
+
+
+def test_a_second_refresh_ignores_one_offs_that_overlapped_a_subscription(live: Owner) -> None:
+    """Review OL-001. The first refresh turns the monthly charges into members. A second refresh
+    that only saw the leftover one-off purchases would find they no longer overlap anything, merge
+    them, and propose a false monthly payment; detection must cluster the members too."""
+    description = "Synthetic recurring with one-offs"
+    a_monthly_group(live, description=description, amount="-10")
+    for days, amount in ((15, "-50"), (45, "-100"), (75, "-200")):
+        a_spend(
+            live,
+            live.account_id,
+            amount,
+            MONTHLY[0] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
+
+    first = refresh()
+    assert first["seriesCreated"] == 1
+    assert refresh() == {"seriesCreated": 0, "seriesTouched": 0, "membersAdded": 0}
+    rows = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert [row["nativeAmount"] for row in rows] == ["10.0000"]
+
+
+def test_a_removed_sibling_never_joins_the_remaining_series(live: Owner) -> None:
+    """Review OL-002. With one of two services on a descriptor removed, the other is the only
+    series left; the removed one's later charges must not join it as a large price change."""
+    description = "Synthetic recurring removed sibling"
+    base = MONTHLY[0]
+    dates = [base + timedelta(days=15 * i) for i in range(8)]
+    amounts = ["-10", "-50", "-10", "-50", "-10", "-50", "-10", "-50"]
+    for on, amount in zip(dates, amounts, strict=True):
+        a_spend(live, live.account_id, amount, on, "expense", description=description)
+    refresh()
+    both = {
+        row["nativeAmount"]: row for row in the_recurring()["series"] if row["label"] == description
+    }
+    assert remove_series(both["50.0000"]["id"]).status_code == 200
+
+    a_spend(
+        live,
+        live.account_id,
+        "-50",
+        dates[-2] + timedelta(days=30),
+        "expense",
+        description=description,
+    )
+    refresh()
+    remaining = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert [row["nativeAmount"] for row in remaining] == ["10.0000"]
+
+
+def test_a_new_service_beside_a_single_series_becomes_its_own_series(live: Owner) -> None:
+    """Review OL-002. A second service starting on a descriptor that has one series is charged days
+    after the existing one, not a cycle later, so it is never read as that series' price change —
+    including the newest charge of the batch, which no later old-price charge follows."""
+    description = "Synthetic recurring second service"
+    a_monthly_group(live, description=description, amount="-10")
+    refresh()
+    single = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert len(single) == 1
+
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-10",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
+        a_spend(
+            live,
+            live.account_id,
+            "-50",
+            MONTHLY[-1] + timedelta(days=days + 3),
+            "expense",
+            description=description,
+        )
+    refresh()
+    rows = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert sorted(row["nativeAmount"] for row in rows) == ["10.0000", "50.0000"]
+
+
+def test_foreign_household_refusals_on_patch_and_remove(live: Owner) -> None:
     description = "Synthetic recurring foreign household"
     a_monthly_group(live, description=description, amount="-10")
-    match_key = description.lower()
-    created = confirm(uuid4(), match_key=match_key, amount="10.0000").json()
-    series_id = created["id"]
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    series_id = row["id"]
 
     theirs, _account = _another_household(live)
     app.dependency_overrides[auth.require_owner] = lambda: auth.OwnerSession(
@@ -455,48 +542,39 @@ def test_foreign_household_refusals(live: Owner) -> None:
         email="other-recurring-owner@example.invalid",
     )
     try:
-        assert the_recurring()["confirmed"] == []
-        assert (
-            client()
-            .post(
-                f"/recurring/{series_id}/end",
-                json={"endedReason": "synthetic: not mine"},
-                headers=ORIGIN,
-            )
-            .status_code
-            == 404
+        assert the_recurring()["series"] == []
+        patched = client().patch(
+            f"/recurring/{series_id}", json={"isSubscription": False}, headers=ORIGIN
         )
-        assert (
-            client()
-            .post(
-                f"/recurring/{series_id}/accept-price",
-                json={"expectedAmountBase": "10.0000"},
-                headers=ORIGIN,
-            )
-            .status_code
-            == 404
-        )
+        assert patched.status_code == 404, patched.text
+        removed = remove_series(series_id)
+        assert removed.status_code == 404, removed.text
     finally:
         app.dependency_overrides[auth.require_owner] = live.owner
+
+
+def test_an_ended_series_refuses_patch(live: Owner) -> None:
+    description = "Synthetic recurring ended patch"
+    a_monthly_group(live, description=description, amount="-10")
+    refresh()
+    row = _row_for(the_recurring(), description)
+    assert row is not None
+    series_id = row["id"]
+    assert remove_series(series_id).status_code == 200
+
+    refused = client().patch(
+        f"/recurring/{series_id}", json={"isSubscription": True}, headers=ORIGIN
+    )
+    assert refused.status_code == 409, refused.text
 
 
 def test_routes_require_owner_session() -> None:
     app.dependency_overrides.clear()
     assert client().get("/recurring", headers=ORIGIN).status_code == 401
+    assert client().post("/recurring/refresh", headers=ORIGIN).status_code == 401
     assert (
         client()
-        .post(
-            "/recurring/confirm",
-            json={
-                "idempotencyKey": str(uuid4()),
-                "identity": {"matchKey": "synthetic"},
-                "label": "synthetic",
-                "cadence": "monthly",
-                "expectedAmountBase": "10.0000",
-                "categoryId": None,
-            },
-            headers=ORIGIN,
-        )
+        .patch(f"/recurring/{uuid4()}", json={"isSubscription": True}, headers=ORIGIN)
         .status_code
         == 401
     )

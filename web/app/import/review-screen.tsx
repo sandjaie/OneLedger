@@ -195,6 +195,9 @@ export function ReviewScreen({
         timeoutMs: LONG_REQUEST_TIMEOUT_MS,
       });
       setImported(result.rowsImported);
+      // The commit has already completed; a recurring-discovery hiccup is never a commit
+      // failure, so its own failure is swallowed rather than surfaced here.
+      request("/recurring/refresh", { method: "POST" }).catch(() => undefined);
       reload();
     } catch (error) {
       // V14's own sentence, written for the owner: which account failed to reconcile and by
