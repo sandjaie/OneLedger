@@ -177,7 +177,7 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Settle ${commitmentItem.title}` }));
     expect(onSettle).toHaveBeenCalledWith(commitmentItem.commitmentId);
   });
 
@@ -207,7 +207,7 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Mark done" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Mark done ${commitmentItem.title}` }));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0]).toMatchObject({ dueDate: "2026-02-01", kind: "completed" });
     expect(onCommitmentResolved).toHaveBeenCalled();
@@ -235,7 +235,7 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Dismiss" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Dismiss ${commitmentItem.title}` }));
     fireEvent.change(screen.getByLabelText(`Reason to dismiss ${commitmentItem.title}`), {
       target: { value: "no longer owed" },
     });
@@ -269,7 +269,7 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Snooze" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Snooze ${commitmentItem.title}` }));
     fireEvent.change(screen.getByLabelText(`Snooze ${commitmentItem.title} until`), {
       target: { value: "2026-02-05" },
     });
@@ -295,9 +295,9 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    expect(await screen.findByRole("button", { name: "Plan payment" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Plan payment" }));
+    expect(await screen.findByRole("button", { name: `Plan payment ${cardItem.title}` })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: `Mark done ${cardItem.title}` })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: `Plan payment ${cardItem.title}` }));
     expect(onPlanCardPayment).toHaveBeenCalledWith(cardItem);
   });
 
@@ -327,7 +327,7 @@ describe("needs attention", () => {
         request={request}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Complete" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Complete ${followUpItem.title}` }));
     await waitFor(() => expect(actionsCall).toBe(2));
   });
 
