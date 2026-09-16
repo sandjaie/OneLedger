@@ -129,6 +129,21 @@ function dateFromLocation(param: string) {
   return value && DATE_PATTERN.test(value) ? value : undefined;
 }
 
+// The first page Workspace fetches must carry every deep-linked filter, or the ledger below the
+// filter form is not the set the form describes.
+function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefined) {
+  const parameters = new URLSearchParams({ limit: "50", offset: "0" });
+  const sourceDocumentId = sourceDocumentIdFromLocation();
+  if (sourceDocumentId) parameters.set("sourceDocumentId", sourceDocumentId);
+  const categoryId = categoryIdFromLocation(categories);
+  if (categoryId) parameters.set("categoryId", categoryId);
+  const dateFrom = dateFromLocation("dateFrom");
+  if (dateFrom) parameters.set("dateFrom", dateFrom);
+  const dateTo = dateFromLocation("dateTo");
+  if (dateTo) parameters.set("dateTo", dateTo);
+  return parameters.toString();
+}
+
 function fxStatusText(fx: FxState) {
   if (fx.status === "loading") return `Checking stored FX rates for ${fx.requestedDate}.`;
   if (fx.status === "empty") return `No FX rates are stored for ${fx.requestedDate}.`;
@@ -190,14 +205,14 @@ export function Workspace({
           setCategories(taxonomy);
         }
         if (activeSection === "transactions") {
-          const sourceDocumentId = sourceDocumentIdFromLocation();
-          const page = await request<TransactionsResponse>(
-            sourceDocumentId
-              ? `/transactions?limit=50&offset=0&sourceDocumentId=${encodeURIComponent(sourceDocumentId)}`
-              : "/transactions?limit=50&offset=0",
-          );
-          if (!current) return;
+          // The taxonomy is loaded first so a `categoryId` deep link can be checked against it
+          // before the page is fetched: the first page must already be the filtered set the
+          // filter form says is applied, exactly as `sourceDocumentId` has always behaved.
           const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
+          const page = await request<TransactionsResponse>(
+            `/transactions?${transactionsQueryFromLocation(taxonomy)}`,
+          );
           if (!current) return;
           const nextInventory = await request<AccountsResponse>("/accounts");
           if (!current) return;

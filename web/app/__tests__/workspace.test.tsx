@@ -671,12 +671,48 @@ describe("authenticated workspace", () => {
     window.history.replaceState(null, "", "/transactions?sourceDocumentId=doc-9");
     const ledger = { transactions: [], total: 0 };
     const inventory: AccountsResponse = { accounts: [], totals: [] };
-    const request = requestThat(household, ledger, [], inventory, catalogue);
+    // The taxonomy is fetched before the ledger page, so a deep-linked category can be checked
+    // against it before the page is asked for.
+    const request = requestThat(household, [], ledger, inventory, catalogue);
     render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "Transactions" });
     const paths = (request as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
     expect(paths).toContain("/transactions?limit=50&offset=0&sourceDocumentId=doc-9");
+  });
+
+  it("filters its first ledger page by a spending drill-through link", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/transactions?categoryId=cat-1&dateFrom=2026-03-01&dateTo=2026-03-31",
+    );
+    const ledger = { transactions: [], total: 0 };
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    const taxonomy = [
+      { id: "cat-1", parentId: null, name: "Synthetic groceries", slug: "synthetic-groceries",
+        kind: "expense", bucket: "need", sortOrder: 1, isSystem: true, isActive: true },
+    ];
+    const request = requestThat(household, taxonomy, ledger, inventory, catalogue);
+    render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Transactions" });
+    const paths = (request as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    expect(paths).toContain(
+      "/transactions?limit=50&offset=0&categoryId=cat-1&dateFrom=2026-03-01&dateTo=2026-03-31",
+    );
+  });
+
+  it("ignores a drill-through category that is not in the loaded taxonomy", async () => {
+    window.history.replaceState(null, "", "/transactions?categoryId=cat-missing&dateTo=nonsense");
+    const ledger = { transactions: [], total: 0 };
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    const request = requestThat(household, [], ledger, inventory, catalogue);
+    render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Transactions" });
+    const paths = (request as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    expect(paths).toContain("/transactions?limit=50&offset=0");
   });
 
   it("renders the review screen for the batch it was given", async () => {

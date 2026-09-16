@@ -247,6 +247,16 @@ _EXPORT_ROWS = f"""
 """
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_cell(value: str) -> str:
+    """A statement's own description is external text. A cell that starts with a formula prefix is
+    executed by Excel and Sheets when the owner opens the file, so it is prefixed with an
+    apostrophe, which those applications strip on display."""
+    return f"'{value}" if value.startswith(_FORMULA_PREFIXES) else value
+
+
 @router.get("/spending/export.csv")
 def export_spending_csv(
     owner: Annotated[OwnerSession, Depends(require_owner)],
@@ -273,6 +283,7 @@ def export_spending_csv(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
+
     writer.writerow(
         [
             "booked_date",
@@ -289,9 +300,9 @@ def export_spending_csv(
         writer.writerow(
             [
                 booked_date,
-                account,
-                description,
-                category or "",
+                _safe_cell(str(account)),
+                _safe_cell(str(description)),
+                _safe_cell(str(category or "")),
                 bucket or "",
                 amount,
                 str(currency).strip(),

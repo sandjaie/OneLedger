@@ -339,6 +339,14 @@ def _csv(from_: date = MARCH, to: date = date(2026, 3, 31)) -> str:
     return str(response.text)
 
 
+def test_the_range_is_reported_as_from_and_to_on_the_wire(live: Owner) -> None:
+    """The Spending screen builds its drill-through link from `from` and `to`; the model field is
+    `from_`, so the serialization alias is what keeps the link's dates real."""
+    body = the_spending()
+    assert body["from"] == "2026-03-01"
+    assert body["to"] == "2026-03-31"
+
+
 def test_csv_header_and_one_exact_row(live: Owner) -> None:
     category = a_category(live, "Synthetic spending fuel", "need")
     a_spend(
@@ -356,6 +364,22 @@ def test_csv_header_and_one_exact_row(live: Owner) -> None:
         f"2026-03-09,route test,Synthetic fuel stop,Synthetic spending fuel,need,-55.5000,"
         f"{live.base},-55.5000"
     )
+
+
+def test_csv_neutralises_a_description_that_would_run_as_a_formula(live: Owner) -> None:
+    """A statement's own description is external text: a leading `=` is executed by Excel and
+    Sheets when the owner opens the export, so it is written as text."""
+    a_spend(
+        live,
+        live.account_id,
+        "-12",
+        date(2026, 3, 9),
+        "expense",
+        description="=1+1 synthetic",
+    )
+    body = _csv()
+    assert "'=1+1 synthetic" in body
+    assert ",=1+1 synthetic" not in body
 
 
 def test_csv_quotes_a_description_containing_a_comma(live: Owner) -> None:

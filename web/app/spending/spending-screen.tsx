@@ -33,9 +33,14 @@ function currentMonthValue(): string {
   return new Date().toISOString().slice(0, 7);
 }
 
+const MONTH_PATTERN = /^\d{4}-\d{2}$/;
+
 /** The first and last calendar day of a `YYYY-MM` value, in UTC so no timezone shifts the
- * month boundary — `Date` arithmetic only, never `Number`/`parseInt` on the pieces. */
+ * month boundary — `Date` arithmetic only, never `Number`/`parseInt` on the pieces. A cleared or
+ * half-typed value returns an empty range instead of throwing: `type="month"` is a plain text box
+ * in Firefox and Safari, and Chrome lets the owner clear it. */
 function monthRange(month: string): { from: string; to: string } {
+  if (!MONTH_PATTERN.test(month)) return { from: "", to: "" };
   const first = new Date(`${month}-01T00:00:00Z`);
   const nextMonth = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 1));
   const lastDay = new Date(nextMonth.getTime() - DAY_MS);
@@ -47,6 +52,12 @@ function monthRange(month: string): { from: string; to: string } {
  * figure), so it is labelled with that currency rather than silently switching under the owner. */
 function amountFor(base: string, secondary: string, response: SpendingResponse, currency: HouseholdCurrency) {
   return currency.code === response.baseCurrency ? base : secondary;
+}
+
+/** A category whose in-range refunds exceed its spending has a negative ratio; the bar is drawn
+ * flat and the row is marked, rather than scaling below the track and overflowing it. */
+function barRatio(chartRatio: string) {
+  return chartRatio.startsWith("-") ? "0" : chartRatio;
 }
 
 function transactionsHref(categoryId: string | null, from: string, to: string) {
@@ -184,6 +195,11 @@ export function SpendingScreen({ currencies, currency, request }: Props) {
           </dl>
 
           <h2>By bucket</h2>
+          <p className="lede">
+            Buckets cover categorised spending only, so these rows can total less than the figure
+            above: uncategorised spending, and any category left without a bucket, are not counted
+            here.
+          </p>
           {data.byBucket.length === 0 && <p>No spending in this range.</p>}
           {data.byBucket.length > 0 && (
             <table className="spending-table">
@@ -221,10 +237,13 @@ export function SpendingScreen({ currencies, currency, request }: Props) {
                     <div className="spending-chart-track">
                       <div
                         className="spending-chart-bar"
-                        style={{ "--ratio": row.chartRatio } as CSSProperties}
+                        style={{ "--ratio": barRatio(row.chartRatio) } as CSSProperties}
                       />
                     </div>
-                    <span className="spending-chart-label">{row.categoryName}</span>
+                    <span className="spending-chart-label">
+                      {row.categoryName}
+                      {row.chartRatio.startsWith("-") && " (net refund)"}
+                    </span>
                   </div>
                 ))}
               </div>

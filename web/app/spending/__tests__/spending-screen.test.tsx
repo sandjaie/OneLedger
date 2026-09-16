@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SpendingScreen } from "@/app/spending/spending-screen";
@@ -109,6 +109,26 @@ describe("spending screen", () => {
     expect(link.getAttribute("href")).toBe(
       `/transactions?categoryId=${GROCERIES_ID}&dateFrom=2026-03-01&dateTo=2026-03-31`,
     );
+  });
+
+  it("prompts for a range instead of throwing when the month input is cleared", async () => {
+    const calls: Array<string> = [];
+    const request = requestFrom((path) => {
+      calls.push(path);
+      return path.startsWith("/spending?") ? spending : {};
+    });
+
+    render(
+      <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
+    );
+    await waitFor(() => expect(screen.getAllByText("Synthetic groceries").length).toBeGreaterThan(0));
+    const before = calls.length;
+
+    // `type="month"` is a plain text box in Firefox and Safari, and Chrome lets it be cleared.
+    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "" } });
+
+    expect(screen.getByText("Choose a from and to date.")).toBeTruthy();
+    expect(calls.length).toBe(before);
   });
 
   it("points the download link at the export path for the same range", async () => {
