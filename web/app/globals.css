@@ -1731,3 +1731,162 @@ body { background: #eef2f0; }
 }
 .wealth-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
 .coverage-dialog { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--surface); max-width: 420px; }
+
+/* Plans (commitments, needs attention, forecast, goals, emergency reserve, monthly review,
+   register) — one house style for every list added across Phase 3: a bare `<ul>` with a top
+   rule between rows, a wrapping row of `.text-action` controls, and `.inline-alert`'s warm
+   ground for anything that interrupts the owner. Reuses --rule, --muted, --blue and
+   .inline-alert's colours; nothing here is a new colour. */
+.plans-commitment-list,
+.needs-attention-list,
+.plans-register-list,
+.plans-goal-list,
+.plans-account-list,
+.plans-currency-list {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.plans-commitment-list > li,
+.needs-attention-list > li,
+.plans-register-list > li,
+.plans-goal-list > li,
+.plans-account-list > li,
+.plans-currency-list > li {
+  display: grid;
+  gap: 6px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+}
+.plans-points,
+.plans-occurrences,
+.plans-exclusions,
+.plans-unplanned-dues,
+.plans-candidate-list,
+.plans-history-list,
+.plans-register-documents {
+  display: grid;
+  gap: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.plans-points > li,
+.plans-occurrences > li,
+.plans-exclusions > li,
+.plans-unplanned-dues > li,
+.plans-candidate-list > li,
+.plans-history-list > li,
+.plans-register-documents > li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--rule);
+}
+.plans-review-steps { margin: 12px 0; padding: 0; list-style: none; }
+.plans-review-steps > li { padding: 9px 0; border-top: 1px solid var(--rule); }
+.plans-assumptions {
+  margin: 12px 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.needs-attention-controls,
+.plans-settlement-actions,
+.plans-candidate-confirm,
+.plans-dismiss-form,
+.plans-reserve-form,
+.needs-attention-inline-form,
+.document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+.plans-reserve-form { display: grid; gap: 10px; }
+.needs-attention-inline-form input {
+  min-width: 140px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+/* Overdue (spec 3.1 "overdue highlighted"): colour is never the only signal — the reason text
+   already says "Overdue" — so this is a plain left accent, not a background. */
+.needs-attention-overdue { padding-left: 12px; border-left: 3px solid var(--danger); }
+
+.plans-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.plans-badge {
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 99px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.plans-shortfall {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border-left: 4px solid #a65318;
+  background: #fff4e9;
+  line-height: 1.5;
+}
+.plans-settlement-panel,
+.plans-reserve-account {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--surface);
+}
+.plans-settlement-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; }
+
+/* Same treatment as .account-table (width: 100%; border-collapse: collapse), duplicated rather
+   than shared so a plans-only tweak never reaches the accounts screen. */
+.plans-resources-table { width: 100%; border-collapse: collapse; }
+.plans-resources-table th,
+.plans-resources-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  font-size: 0.85rem;
+}
+.plans-resources-table thead th {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plans-page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.78rem;
+}
+.month-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.month-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
+
+/* documents-screen.tsx:136,249 — pre-existing classes with no rule until now. */
+.documents-screen { width: 100%; max-width: 1180px; }
+.document-actions { margin-top: 0; }
+
+@media (max-width: 760px) {
+  .plans-resources-table { display: block; overflow-x: auto; }
+}
