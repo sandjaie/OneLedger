@@ -179,16 +179,21 @@ export function RecurringScreen({ currencies, request }: Props) {
                     {row.isSubscription && <span className="plans-badge">Subscription</span>}
                   </div>
                   <span>
-                    {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} · last seen{" "}
-                    {row.lastSeenOn}
-                    {row.priceChangedFrom && row.priceChangedOn && (
-                      <>
-                        {" "}· price changed from{" "}
-                        {moneyText(row.priceChangedFrom, row.nativeCurrency, currencies)} to{" "}
-                        {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} on{" "}
-                        {row.priceChangedOn}
-                      </>
-                    )}
+                    {row.nativeAmount !== null && row.nativeCurrency !== null
+                      ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
+                      : "Amount appears after the next refresh"}{" "}
+                    · last seen {row.lastSeenOn}
+                    {row.priceChangedFrom &&
+                      row.priceChangedOn &&
+                      row.nativeAmount !== null &&
+                      row.nativeCurrency !== null && (
+                        <>
+                          {" "}· price changed from{" "}
+                          {moneyText(row.priceChangedFrom, row.nativeCurrency, currencies)} to{" "}
+                          {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} on{" "}
+                          {row.priceChangedOn}
+                        </>
+                      )}
                   </span>
 
                   <div className="plans-settlement-actions">

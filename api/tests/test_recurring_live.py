@@ -377,10 +377,24 @@ def test_a_series_created_before_v57_gets_its_flag_and_amounts_on_refresh(live: 
             )
     live.conn.commit()
 
+    # Review OL-003: later charges arriving before the first refresh must extend this series, not
+    # form a second one while its native amount is still null.
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-9",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+            category_id=streaming,
+        )
+
     refresh()
-    after = next(r for r in the_recurring()["series"] if r["id"] == str(series_id))
-    assert after["nativeAmount"] == "9.0000"
-    assert after["isSubscription"] is True
+    rows = [r for r in the_recurring()["series"] if r["label"] == description]
+    assert [r["id"] for r in rows] == [str(series_id)]
+    assert rows[0]["nativeAmount"] == "9.0000"
+    assert rows[0]["isSubscription"] is True
 
 
 def test_a_charge_in_a_foreign_currency_keeps_its_original_pair(live: Owner) -> None:
@@ -404,27 +418,87 @@ def test_overdue_status(live: Owner) -> None:
     assert row["status"] == "overdue"
 
 
-def test_dismiss_blocks_future_creation_and_refuses_a_foreign_merchant(live: Owner) -> None:
-    merchant = a_merchant(live, "Synthetic recurring dismiss merchant")
-    dismissed = client().post(
-        "/recurring/dismiss", json={"identity": {"merchantId": str(merchant)}}, headers=ORIGIN
-    )
-    assert dismissed.status_code == 200, dismissed.text
+def test_a_second_refresh_ignores_one_offs_that_overlapped_a_subscription(live: Owner) -> None:
+    """Review OL-001. The first refresh turns the monthly charges into members. A second refresh
+    that only saw the leftover one-off purchases would find they no longer overlap anything, merge
+    them, and propose a false monthly payment; detection must cluster the members too."""
+    description = "Synthetic recurring with one-offs"
+    a_monthly_group(live, description=description, amount="-10")
+    for days, amount in ((15, "-50"), (45, "-100"), (75, "-200")):
+        a_spend(
+            live,
+            live.account_id,
+            amount,
+            MONTHLY[0] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
 
-    a_monthly_group(live, merchant_id=merchant, amount="-22")
+    first = refresh()
+    assert first["seriesCreated"] == 1
+    assert refresh() == {"seriesCreated": 0, "seriesTouched": 0, "membersAdded": 0}
+    rows = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert [row["nativeAmount"] for row in rows] == ["10.0000"]
+
+
+def test_a_removed_sibling_never_joins_the_remaining_series(live: Owner) -> None:
+    """Review OL-002. With one of two services on a descriptor removed, the other is the only
+    series left; the removed one's later charges must not join it as a large price change."""
+    description = "Synthetic recurring removed sibling"
+    base = MONTHLY[0]
+    dates = [base + timedelta(days=15 * i) for i in range(8)]
+    amounts = ["-10", "-50", "-10", "-50", "-10", "-50", "-10", "-50"]
+    for on, amount in zip(dates, amounts, strict=True):
+        a_spend(live, live.account_id, amount, on, "expense", description=description)
     refresh()
-    assert the_recurring()["series"] == []
+    both = {
+        row["nativeAmount"]: row for row in the_recurring()["series"] if row["label"] == description
+    }
+    assert remove_series(both["50.0000"]["id"]).status_code == 200
 
-    theirs, _account = _another_household(live)
-    foreign_merchant = a_merchant(
-        live, "Synthetic recurring foreign dismiss merchant", household=theirs
+    a_spend(
+        live,
+        live.account_id,
+        "-50",
+        dates[-2] + timedelta(days=30),
+        "expense",
+        description=description,
     )
-    refused = client().post(
-        "/recurring/dismiss",
-        json={"identity": {"merchantId": str(foreign_merchant)}},
-        headers=ORIGIN,
-    )
-    assert refused.status_code == 404, refused.text
+    refresh()
+    remaining = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert [row["nativeAmount"] for row in remaining] == ["10.0000"]
+
+
+def test_a_new_service_beside_a_single_series_becomes_its_own_series(live: Owner) -> None:
+    """Review OL-002. A second service starting on a descriptor that has one series is charged days
+    after the existing one, not a cycle later, so it is never read as that series' price change —
+    including the newest charge of the batch, which no later old-price charge follows."""
+    description = "Synthetic recurring second service"
+    a_monthly_group(live, description=description, amount="-10")
+    refresh()
+    single = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert len(single) == 1
+
+    for days in (30, 60, 90):
+        a_spend(
+            live,
+            live.account_id,
+            "-10",
+            MONTHLY[-1] + timedelta(days=days),
+            "expense",
+            description=description,
+        )
+        a_spend(
+            live,
+            live.account_id,
+            "-50",
+            MONTHLY[-1] + timedelta(days=days + 3),
+            "expense",
+            description=description,
+        )
+    refresh()
+    rows = [row for row in the_recurring()["series"] if row["label"] == description]
+    assert sorted(row["nativeAmount"] for row in rows) == ["10.0000", "50.0000"]
 
 
 def test_foreign_household_refusals_on_patch_and_remove(live: Owner) -> None:

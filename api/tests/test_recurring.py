@@ -163,3 +163,48 @@ def test_a_bill_varying_30_percent_is_still_detected_through_the_fallback() -> N
     assert proposed[0].occurrences == 4
     assert proposed[0].cadence == "monthly"
     assert not proposed[0].amounts_are_stable
+
+
+def test_a_second_pass_over_members_and_leftover_one_offs_proposes_nothing() -> None:
+    """Review OL-001, without a database. After a first pass the subscription's charges are members;
+    one-off purchases that overlapped them must not merge into a false group on the second pass."""
+    from dataclasses import replace
+
+    monthly = rows([30] * 11, ["10.0000"] * 12)
+    start = monthly[0].booked_date
+    one_offs = [
+        replace(
+            monthly[0],
+            transaction_id=uuid4(),
+            booked_date=start + timedelta(days=days),
+            amount=Decimal(amount),
+            amount_base=Decimal(amount),
+        )
+        for days, amount in ((41, "50.0000"), (69, "100.0000"), (100, "200.0000"))
+    ]
+    first = detect_candidates(monthly + one_offs)
+    assert [(c.cadence, len(c.transaction_ids)) for c in first] == [("monthly", 12)]
+
+    members = [replace(row, in_series=True) for row in monthly]
+    assert detect_candidates(members + one_offs) == []
+
+
+def test_new_charges_after_a_removed_series_stand_as_their_own_group() -> None:
+    """A run of new charges sequential to an existing series' members does not merge into it."""
+    from dataclasses import replace
+
+    old = [replace(row, in_series=True) for row in rows([30, 30, 30], ["18.0000"] * 4)]
+    later_start = old[-1].booked_date + timedelta(days=60)
+    new = [
+        replace(
+            old[0],
+            transaction_id=uuid4(),
+            in_series=False,
+            amount=Decimal("40.0000"),
+            amount_base=Decimal("40.0000"),
+            booked_date=later_start + timedelta(days=30 * i),
+        )
+        for i in range(3)
+    ]
+    proposed = detect_candidates(old + new)
+    assert [(c.cadence, len(c.transaction_ids)) for c in proposed] == [("monthly", 3)]

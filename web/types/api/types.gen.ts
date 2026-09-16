@@ -2841,13 +2841,6 @@ export type DisagreementSample = {
 };
 
 /**
- * DismissBody
- */
-export type DismissBody = {
-    identity: IdentityIn;
-};
-
-/**
  * DoctorReport
  */
 export type DoctorReport = {
@@ -4351,20 +4344,6 @@ export type IdentityBackfillPreviewRequest = {
      * Password
      */
     password?: string | null;
-};
-
-/**
- * IdentityIn
- */
-export type IdentityIn = {
-    /**
-     * Merchantid
-     */
-    merchantId?: string | null;
-    /**
-     * Matchkey
-     */
-    matchKey?: string | null;
 };
 
 /**
@@ -6886,11 +6865,11 @@ export type RecurringSeriesRow = {
     /**
      * Nativeamount
      */
-    nativeAmount: string;
+    nativeAmount: string | null;
     /**
      * Nativecurrency
      */
-    nativeCurrency: string;
+    nativeCurrency: string | null;
     /**
      * Pricechangedfrom
      */
@@ -14216,35 +14195,6 @@ export type RemoveRecurringRecurringSeriesIdRemovePostResponses = {
 };
 
 export type RemoveRecurringRecurringSeriesIdRemovePostResponse = RemoveRecurringRecurringSeriesIdRemovePostResponses[keyof RemoveRecurringRecurringSeriesIdRemovePostResponses];
-
-export type DismissRecurringRecurringDismissPostData = {
-    body: DismissBody;
-    path?: never;
-    query?: never;
-    url: '/recurring/dismiss';
-};
-
-export type DismissRecurringRecurringDismissPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DismissRecurringRecurringDismissPostError = DismissRecurringRecurringDismissPostErrors[keyof DismissRecurringRecurringDismissPostErrors];
-
-export type DismissRecurringRecurringDismissPostResponses = {
-    /**
-     * Response Dismiss Recurring Recurring Dismiss Post
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: boolean;
-    };
-};
-
-export type DismissRecurringRecurringDismissPostResponse = DismissRecurringRecurringDismissPostResponses[keyof DismissRecurringRecurringDismissPostResponses];
 
 export type RefreshRecurringRecurringRefreshPostData = {
     body?: never;

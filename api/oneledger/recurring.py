@@ -108,6 +108,10 @@ class SpendRow:
     description_clean: str | None
     description_raw: str
     category_id: UUID | None
+    # Already a member of some series. Such a charge still takes part in clustering, so the
+    # groups a second refresh forms are the groups the first one formed, but a group holding any
+    # such charge is never proposed again (idempotent refresh).
+    in_series: bool = False
 
 
 @dataclass(frozen=True)
@@ -224,6 +228,10 @@ class _Cluster:
     def median(self) -> Decimal:
         return _median_amount([row.amount for row in self.rows])
 
+    @property
+    def has_members(self) -> bool:
+        return any(row.in_series for row in self.rows)
+
 
 def _overlaps(a: _Cluster, b: _Cluster) -> bool:
     """Two date ranges share at least one day (spec: charged at the same time, so two concurrent
@@ -263,7 +271,15 @@ def _merge_sequential(clusters: list[_Cluster]) -> list[_Cluster]:
         if any(_overlaps(cluster, other) for other in clusters if other is not cluster):
             groups.append(cluster)
             continue
-        earlier = [group for group in groups if not _overlaps(cluster, group)]
+        # Only clusters of the same kind merge. A run of new charges sequential to a series'
+        # existing members is that series' price change, which is Extend's decision; when Extend
+        # did not take them (the series was removed, or the timing did not fit), they must stand as
+        # their own group rather than disappear into a group that is already a series.
+        earlier = [
+            group
+            for group in groups
+            if not _overlaps(cluster, group) and group.has_members == cluster.has_members
+        ]
         if not earlier:
             groups.append(cluster)
             continue
@@ -277,12 +293,23 @@ def _merge_sequential(clusters: list[_Cluster]) -> list[_Cluster]:
     return groups
 
 
+def _unassigned(rows: list[SpendRow]) -> bool:
+    return not any(row.in_series for row in rows)
+
+
 def detect_candidates(rows: list[SpendRow]) -> list[Candidate]:
     """Group `rows` by identity, then by currency, cluster and merge each currency's rows, and
     propose one candidate per resulting group that clears the occurrence and cadence bar.
     Fallback: when nothing on an identity, in any of its currencies, clears that bar, each
     currency's full row set is evaluated as one group instead, so a bill whose amount varies more
-    than 20% is still detected (spec)."""
+    than 20% is still detected (spec).
+
+    `rows` includes charges already in a series (`in_series`). They cluster like any other charge,
+    and a group that clears the bar counts as found even when it is already a series, so the
+    fallback does not fire on an identity that already has one. Only a group made entirely of
+    unassigned charges is proposed. Without this, a second refresh saw only the leftovers: one-off
+    purchases that had overlapped a subscription's cluster overlapped nothing once that cluster
+    became members, merged together, and were proposed as a false monthly payment."""
     by_identity: dict[Identity, list[SpendRow]] = {}
     for row in rows:
         identity = identity_for(row.merchant_id, row.description_clean, row.description_raw)
@@ -294,24 +321,26 @@ def detect_candidates(rows: list[SpendRow]) -> list[Candidate]:
         for row in identity_rows:
             by_currency.setdefault(row.currency, []).append(row)
 
-        found_by_currency: list[tuple[str, list[Candidate]]] = []
+        found_by_currency: list[tuple[str, list[tuple[list[SpendRow], Candidate]]]] = []
         for currency, currency_rows in by_currency.items():
             groups = _merge_sequential(_cluster_rows(currency_rows))
-            found = [
-                candidate
+            passed = [
+                (group.rows, candidate)
                 for group in groups
                 if (candidate := _candidate_from_group(identity, currency, group.rows)) is not None
             ]
-            found_by_currency.append((currency, found))
+            found_by_currency.append((currency, passed))
 
-        if any(found for _, found in found_by_currency):
-            for _, found in found_by_currency:
-                candidates.extend(found)
+        if any(passed for _, passed in found_by_currency):
+            for _, passed in found_by_currency:
+                candidates.extend(
+                    candidate for group_rows, candidate in passed if _unassigned(group_rows)
+                )
             continue
 
         for currency, currency_rows in by_currency.items():
             fallback = _candidate_from_group(identity, currency, currency_rows)
-            if fallback is not None:
+            if fallback is not None and _unassigned(currency_rows):
                 candidates.append(fallback)
     return candidates
 

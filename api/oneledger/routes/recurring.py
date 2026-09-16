@@ -26,16 +26,17 @@ idempotent: a second call with nothing new creates, extends and changes nothing.
 
 `merchant` and `category` are shared seed tables with no `UNIQUE (household_id, id)`, so
 `recurring_series.merchant_id`/`category_id` are plain `REFERENCES merchant(id)`/
-`REFERENCES category(id)` (V56's own ruling); `_check_recurring_merchant` still proves the
-tenant boundary for `POST /recurring/dismiss`'s own client-supplied identity. Every category a
-series carries now comes from the ledger's own classification, never a client body, so no
-category tenant check runs here (Task 2's `PATCH .../categoryId` adds one back).
+`REFERENCES category(id)` (V56's own ruling). Every merchant and category a series carries now
+comes from the ledger's own classification, never a client body, so no tenant check on either runs
+here (Task 2's `PATCH .../categoryId` adds a category one back). A dismissal is only ever written by
+`POST /recurring/{seriesId}/remove`, anchored on that series' own latest amount.
 
 Every GET opens `SET TRANSACTION READ ONLY` and writes nothing."""
 
 from __future__ import annotations
 
 import calendar
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -48,6 +49,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from ..auth import OwnerSession, require_owner
 from ..db import connect, first_line
 from ..recurring import (
+    CADENCE_WINDOWS,
     Candidate,
     Identity,
     SpendRow,
@@ -79,13 +81,6 @@ def _months_back(on: date, months: int) -> date:
     return date(year, month, day)
 
 
-class IdentityIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    merchantId: UUID | None = None
-    matchKey: str | None = None
-
-
 class IdentityOut(BaseModel):
     merchantId: UUID | None
     matchKey: str | None
@@ -93,12 +88,6 @@ class IdentityOut(BaseModel):
 
 def _out_identity(identity: Identity) -> IdentityOut:
     return IdentityOut(merchantId=identity.merchant_id, matchKey=identity.match_key)
-
-
-class DismissBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    identity: IdentityIn
 
 
 class PatchBody(BaseModel):
@@ -123,8 +112,9 @@ class RecurringSeriesRow(BaseModel):
     isSubscription: bool
     detectionMethod: Literal["detected", "owner"]
     needsName: bool
-    nativeAmount: str
-    nativeCurrency: str
+    # Null only for a series created before V57 that no refresh has synced yet.
+    nativeAmount: str | None
+    nativeCurrency: str | None
     priceChangedFrom: str | None
     priceChangedOn: date | None
     lastSeenOn: date
@@ -154,20 +144,6 @@ def _translate_recurring_error(exc: psycopg.Error) -> HTTPException:
             status_code=422, detail="recurring series violates its required field matrix"
         )
     raise exc
-
-
-def _check_recurring_merchant(
-    cur: psycopg.Cursor[Any], merchant_id: UUID | None, household_id: UUID
-) -> None:
-    if merchant_id is None:
-        return
-    cur.execute("SELECT household_id FROM merchant WHERE id = %s", (merchant_id,))
-    found = cur.fetchone()
-    if found is None:
-        raise HTTPException(status_code=422, detail="unknown merchant")
-    merchant_household = found[0]
-    if merchant_household is not None and UUID(str(merchant_household)) != household_id:
-        raise HTTPException(status_code=404, detail="merchant not found")
 
 
 def _category_name(cur: psycopg.Cursor[Any], category_id: UUID | None) -> str | None:
@@ -217,29 +193,29 @@ def _subscription_category_mapping(
     return None
 
 
-_UNASSIGNED_SPEND_ROWS = """
+_SPEND_ROWS = """
     SELECT t.id, t.booked_date, -t.amount_base,
            abs(coalesce(t.original_amount, t.amount)), coalesce(t.original_currency, t.currency),
            t.merchant_id, COALESCE(m.display_name, m.canonical_name), t.description_clean,
-           t.description_raw, t.category_id
+           t.description_raw, t.category_id,
+           -- Membership, not a filter: detection clusters every charge so a second refresh forms
+           -- the same groups as the first, and only Extend and Create act on unassigned ones.
+           EXISTS (SELECT 1 FROM recurring_series_member x
+                    WHERE x.household_id = t.household_id AND x.transaction_id = t.id)
       FROM v_transaction_reportable t
       LEFT JOIN merchant m ON m.id = t.merchant_id
      WHERE t.household_id = %s AND t.txn_type <> 'income' AND t.amount_base < 0
        -- A charge only: a refund on the same counterparty is stored positive and is never an
-       -- occurrence. NOT EXISTS against the V57 unique constraint is what "not yet in any
-       -- series" means everywhere in this module.
-       AND NOT EXISTS (
-             SELECT 1 FROM recurring_series_member x
-              WHERE x.household_id = t.household_id AND x.transaction_id = t.id)
+       -- occurrence.
      ORDER BY t.booked_date, t.id
 """
 
 
-def _unassigned_rows(cur: psycopg.Cursor[Any], household_id: UUID) -> list[SpendRow]:
-    """Every reportable charge not yet a member of any series — no date lower bound, so Extend can
-    still grow a dormant series from a much later charge; Create filters its own 26-month window
-    from this same set rather than re-querying."""
-    cur.execute(_UNASSIGNED_SPEND_ROWS, (household_id,))
+def _all_spend_rows(cur: psycopg.Cursor[Any], household_id: UUID) -> list[SpendRow]:
+    """Every reportable charge with its series membership — no date lower bound, so Extend can
+    still grow a dormant series from a much later charge; detection filters its own 26-month
+    window from this same set rather than re-querying."""
+    cur.execute(_SPEND_ROWS, (household_id,))
     return [
         SpendRow(
             transaction_id=UUID(str(row[0])),
@@ -252,6 +228,7 @@ def _unassigned_rows(cur: psycopg.Cursor[Any], household_id: UUID) -> list[Spend
             description_clean=row[7],
             description_raw=row[8],
             category_id=None if row[9] is None else UUID(str(row[9])),
+            in_series=bool(row[10]),
         )
         for row in cur.fetchall()
     ]
@@ -308,7 +285,6 @@ def _load_series_row(
     status: Literal["active", "overdue"] = (
         "overdue" if is_overdue(last_seen_on, cadence, today=date.today()) else "active"
     )
-    assert native_amount is not None and native_currency is not None
     return RecurringSeriesRow(
         id=series_id,
         label=str(label),
@@ -319,8 +295,8 @@ def _load_series_row(
         isSubscription=bool(is_subscription),
         detectionMethod=detection_method,
         needsName=needs_name,
-        nativeAmount=str(Decimal(native_amount)),
-        nativeCurrency=str(native_currency).strip(),
+        nativeAmount=None if native_amount is None else str(Decimal(native_amount)),
+        nativeCurrency=None if native_currency is None else str(native_currency).strip(),
         priceChangedFrom=price_changed_from,
         priceChangedOn=price_changed_on,
         lastSeenOn=last_seen_on,
@@ -360,16 +336,69 @@ def _insert_dismissal(
         )
 
 
+_Dismissal = tuple[Identity, Decimal | None, str | None]
+
+
+def _load_dismissals(cur: psycopg.Cursor[Any], household_id: UUID) -> list[_Dismissal]:
+    cur.execute(
+        """SELECT merchant_id, match_key, anchor_amount, anchor_currency
+             FROM recurring_dismissal WHERE household_id = %s""",
+        (household_id,),
+    )
+    return [
+        (
+            Identity(None if row[0] is None else UUID(str(row[0])), row[1]),
+            None if row[2] is None else Decimal(row[2]),
+            None if row[3] is None else str(row[3]).strip(),
+        )
+        for row in cur.fetchall()
+    ]
+
+
+def _dismissed(
+    dismissals: list[_Dismissal], identity: Identity, amount: Decimal, currency: str
+) -> bool:
+    """A null anchor dismisses the whole identity; a set anchor dismisses amounts within 20% of it
+    in the same currency — the anchor is the removed series' own latest amount."""
+    for dismissed_identity, anchor_amount, anchor_currency in dismissals:
+        if dismissed_identity != identity:
+            continue
+        if anchor_amount is None:
+            return True
+        if (
+            anchor_currency == currency
+            and abs(amount - anchor_amount) <= _MATCH_BAND * anchor_amount
+        ):
+            return True
+    return False
+
+
 def _extend(
     cur: psycopg.Cursor[Any], household_id: UUID, unassigned: list[SpendRow]
 ) -> tuple[int, set[UUID], set[UUID]]:
-    """Returns (members_added, extended_transaction_ids, touched_series_ids)."""
+    """Returns (members_added, extended_transaction_ids, touched_series_ids).
+
+    A charge within 20% of an open series' amount joins the nearest such series. A charge outside
+    every band joins the only open series on its identity and currency as a price change only when
+    all three hold:
+
+    - it lands where that series' next charge was due — the gap from the latest old-price charge
+      before it (the series' own last charge, or an unassigned charge in the old band) fits the
+      series' cadence window;
+    - the old price has stopped — no unassigned charge in the old band is dated on or after it;
+    - it is not within a dismissal's band.
+
+    Otherwise it stays unassigned. The timing condition is what keeps a service started beside an
+    existing one on a shared billing descriptor apart: its charges fall days, not a cycle, after
+    the old price's, including the newest charge of a batch, which no later old-price charge
+    follows. The dismissal condition keeps a removed payment's later charges out of its sibling."""
     cur.execute(
-        """SELECT id, merchant_id, match_key, native_amount, native_currency, last_seen_on
+        """SELECT id, merchant_id, match_key, native_amount, native_currency, last_seen_on,
+                  cadence::text
              FROM recurring_series WHERE household_id = %s AND ended_on IS NULL""",
         (household_id,),
     )
-    by_identity_currency: dict[tuple[Identity, str], list[tuple[UUID, Decimal, date]]] = {}
+    by_identity_currency: dict[tuple[Identity, str], list[tuple[UUID, Decimal, date, str]]] = {}
     for (
         series_id,
         merchant_id,
@@ -377,14 +406,24 @@ def _extend(
         native_amount,
         native_currency,
         last_seen_on,
+        cadence,
     ) in cur.fetchall():
         if native_amount is None or native_currency is None:
             continue
         identity = Identity(None if merchant_id is None else UUID(str(merchant_id)), match_key)
         key = (identity, str(native_currency).strip())
         by_identity_currency.setdefault(key, []).append(
-            (UUID(str(series_id)), Decimal(native_amount), last_seen_on)
+            (UUID(str(series_id)), Decimal(native_amount), last_seen_on, str(cadence))
         )
+
+    dismissals = _load_dismissals(cur, household_id)
+    by_key: dict[tuple[Identity, str], list[SpendRow]] = {}
+    for row in unassigned:
+        key = (
+            identity_for(row.merchant_id, row.description_clean, row.description_raw),
+            row.currency,
+        )
+        by_key.setdefault(key, []).append(row)
 
     members_added = 0
     extended: set[UUID] = set()
@@ -402,8 +441,35 @@ def _extend(
         ]
         if within_band:
             target = min(within_band, key=lambda entry: abs(row.amount - entry[1]))
-        elif len(group) == 1:
-            target = group[0]
+        elif len(group) == 1 and eligible:
+            only = group[0]
+            window = CADENCE_WINDOWS.get(only[3])
+            old_band = [
+                other
+                for other in by_key.get((identity, row.currency), [])
+                if other.transaction_id != row.transaction_id
+                and abs(other.amount - only[1]) <= _MATCH_BAND * only[1]
+            ]
+            old_price_continues = any(other.booked_date >= row.booked_date for other in old_band)
+            previous_old_charge = max(
+                [
+                    only[2],
+                    *(
+                        other.booked_date
+                        for other in old_band
+                        if other.booked_date < row.booked_date
+                    ),
+                ]
+            )
+            gap = (row.booked_date - previous_old_charge).days
+            lands_when_due = window is not None and window[0] <= gap <= window[1]
+            if (
+                not lands_when_due
+                or old_price_continues
+                or _dismissed(dismissals, identity, row.amount, row.currency)
+            ):
+                continue
+            target = only
         else:
             continue
         cur.execute(
@@ -427,37 +493,12 @@ def _create(
     candidates: list[Candidate],
 ) -> tuple[int, int]:
     """Returns (series_created, members_added)."""
-    cur.execute(
-        """SELECT merchant_id, match_key, anchor_amount, anchor_currency
-             FROM recurring_dismissal WHERE household_id = %s""",
-        (household_id,),
-    )
-    dismissals = [
-        (
-            Identity(None if row[0] is None else UUID(str(row[0])), row[1]),
-            None if row[2] is None else Decimal(row[2]),
-            None if row[3] is None else str(row[3]).strip(),
-        )
-        for row in cur.fetchall()
-    ]
+    dismissals = _load_dismissals(cur, household_id)
 
     series_created = 0
     members_added = 0
     for candidate in candidates:
-        blocked = False
-        for identity, anchor_amount, anchor_currency in dismissals:
-            if identity != candidate.identity:
-                continue
-            if anchor_amount is None:
-                blocked = True
-                break
-            if (
-                anchor_currency == candidate.currency
-                and abs(anchor_amount - candidate.typical_amount) <= _MATCH_BAND * anchor_amount
-            ):
-                blocked = True
-                break
-        if blocked:
+        if _dismissed(dismissals, candidate.identity, candidate.typical_amount, candidate.currency):
             continue
 
         latest_row = unassigned_by_id[candidate.transaction_ids[-1]]
@@ -631,6 +672,9 @@ def remove_recurring(
 ) -> dict[str, bool]:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
+        # A series created before V57 has no native amount until Sync fills it; removing it
+        # unsynced would anchor the dismissal on nothing and dismiss the whole identity.
+        _sync(cur, owner.household_id)
         cur.execute(
             """SELECT merchant_id, match_key, native_amount, native_currency, ended_on
                  FROM recurring_series WHERE household_id = %s AND id = %s FOR UPDATE""",
@@ -659,22 +703,6 @@ def remove_recurring(
     return {"removed": True}
 
 
-@router.post("/recurring/dismiss")
-def dismiss_recurring(
-    body: DismissBody, owner: Annotated[OwnerSession, Depends(require_owner)]
-) -> dict[str, bool]:
-    """A null-anchor dismissal on the whole identity — kept as a standalone primitive
-    (`POST /recurring/{id}/remove` is the owner-facing way to reach it, anchored on that series'
-    own amount) so an identity can still be suppressed outright."""
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
-        _check_recurring_merchant(cur, body.identity.merchantId, owner.household_id)
-        _insert_dismissal(
-            cur, owner.household_id, body.identity.merchantId, body.identity.matchKey, None, None
-        )
-    return {"dismissed": True}
-
-
 @router.post("/recurring/refresh", response_model=RecurringRefreshCounts)
 def refresh_recurring(
     owner: Annotated[OwnerSession, Depends(require_owner)],
@@ -683,17 +711,23 @@ def refresh_recurring(
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SELECT 1 FROM household WHERE id = %s FOR UPDATE", (owner.household_id,))
 
-        unassigned = _unassigned_rows(cur, owner.household_id)
+        # Sync first as well as last: a series created before V57 has no native amount until
+        # Sync fills it, and Extend skips such a series, so on the first refresh after the
+        # upgrade its later charges would otherwise form a duplicate series.
+        _sync(cur, owner.household_id)
+
+        rows = _all_spend_rows(cur, owner.household_id)
+        unassigned = [row for row in rows if not row.in_series]
         unassigned_by_id = {row.transaction_id: row for row in unassigned}
 
         extend_members, extended_ids, touched_series = _extend(cur, owner.household_id, unassigned)
 
-        remaining = [
-            row
-            for row in unassigned
-            if row.transaction_id not in extended_ids and row.booked_date >= since
+        window = [
+            replace(row, in_series=True) if row.transaction_id in extended_ids else row
+            for row in rows
+            if row.booked_date >= since
         ]
-        candidates = detect_candidates(remaining)
+        candidates = detect_candidates(window)
         series_created, create_members = _create(
             cur, owner.household_id, unassigned_by_id, candidates
         )
