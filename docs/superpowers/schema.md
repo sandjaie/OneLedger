@@ -3264,6 +3264,110 @@ recursion (spec "Budgets are owner assumptions, not postings", `api-contracts.ht
 
 ---
 
+## `V56` (applied)
+
+### Recurring series
+
+Phase 4.1 Task 3. Discovery reads the ledger and proposes; it writes nothing on its own (spec
+"Discovery proposes, the owner decides"). `merchant` and `category` are shared seed tables with
+no `UNIQUE (household_id, id)` (V9, V10, V19, V44 and V55 already reference them the same way),
+so `merchant_id` and `category_id` below are the plain `REFERENCES merchant(id)`/
+`REFERENCES category(id)` per the plan review's non-negotiable ruling — the plan originally
+drafted for this task had asked for a tenant-scoped foreign key on `merchant_id`, which a
+composite unique on `merchant` cannot support. `routes/recurring.py` enforces the tenant boundary
+itself, reusing `routes/transactions.py::_assert_category_allowed` for the category's
+active/tenant check. This replaces the `recurring_series` shape originally planned in `0017` —
+see that section.
+
+```sql
+CREATE TYPE recurring_cadence AS ENUM ('weekly', 'monthly', 'quarterly', 'annual');
+
+CREATE TABLE recurring_series (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id          UUID NOT NULL REFERENCES household(id),
+  idempotency_key       UUID NOT NULL,
+  label                 TEXT NOT NULL,
+  merchant_id           UUID REFERENCES merchant(id),
+  match_key             TEXT,
+  cadence               recurring_cadence NOT NULL,
+  expected_amount_base  NUMERIC(20,4) NOT NULL,
+  currency              CHAR(3) NOT NULL REFERENCES currency(code),
+  category_id           UUID REFERENCES category(id),
+  first_seen_on         DATE NOT NULL,
+  last_seen_on          DATE NOT NULL,
+  ended_on              DATE,
+  ended_reason          TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_recurring_series_household_id UNIQUE (household_id, id),
+  CONSTRAINT uq_recurring_series_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT recurring_series_identity_shape CHECK (num_nonnulls(merchant_id, match_key) = 1),
+  CONSTRAINT recurring_series_label_is_bounded CHECK (
+    char_length(label) BETWEEN 1 AND 120 AND label = btrim(label)),
+  CONSTRAINT recurring_series_amount_is_positive CHECK (expected_amount_base > 0),
+  CONSTRAINT recurring_series_ended_reason_is_bounded CHECK (
+    ended_reason IS NULL OR char_length(ended_reason) BETWEEN 1 AND 200),
+  CONSTRAINT recurring_series_ended_shape CHECK ((ended_on IS NULL) = (ended_reason IS NULL)),
+  CONSTRAINT recurring_series_dates_are_ordered CHECK (
+    last_seen_on >= first_seen_on AND (ended_on IS NULL OR ended_on >= last_seen_on))
+);
+
+CREATE UNIQUE INDEX uq_recurring_series_open_merchant ON recurring_series (household_id, merchant_id)
+  WHERE ended_on IS NULL AND merchant_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_recurring_series_open_match_key ON recurring_series (household_id, match_key)
+  WHERE ended_on IS NULL AND match_key IS NOT NULL;
+
+CREATE TABLE recurring_series_member (
+  household_id   UUID NOT NULL,
+  series_id      UUID NOT NULL,
+  transaction_id UUID NOT NULL,
+  observed_on    DATE NOT NULL,
+  amount_base    NUMERIC(20,4) NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, series_id, transaction_id),
+  CONSTRAINT fk_recurring_series_member_series FOREIGN KEY (household_id, series_id)
+    REFERENCES recurring_series (household_id, id) ON DELETE RESTRICT,
+  CONSTRAINT fk_recurring_series_member_transaction FOREIGN KEY (household_id, transaction_id)
+    REFERENCES transaction (household_id, id) ON DELETE RESTRICT
+);
+
+CREATE TABLE recurring_dismissal (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES household(id),
+  merchant_id  UUID REFERENCES merchant(id),
+  match_key    TEXT,
+  dismissed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT recurring_dismissal_identity_shape CHECK (num_nonnulls(merchant_id, match_key) = 1)
+);
+
+CREATE UNIQUE INDEX uq_recurring_dismissal_merchant
+  ON recurring_dismissal (household_id, merchant_id) WHERE merchant_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_recurring_dismissal_match_key
+  ON recurring_dismissal (household_id, match_key) WHERE match_key IS NOT NULL;
+```
+
+`household_isolation FOR ALL TO authenticated` on all three tables, no table GRANT.
+`preserve_ended_recurring_series()` (a `BEFORE UPDATE` trigger on `recurring_series`, the same
+shape as `preserve_closed_goal()` in V51 and `preserve_archived_register_record()` in V53) refuses
+any further `UPDATE` once `ended_on` is set, raising a bare `ERRCODE 23514` with a distinctive
+first line; `routes/recurring.py` maps that line to **422** — not the 409 `routes/goals.py` and
+`routes/register.py` map their own preserve triggers to — because the route itself already reads
+`ended_on` and returns 409 before ever reaching the trigger, so a trigger hit only means a race the
+route's own read did not see.
+
+`transaction.recurring_series_id` (V10) stays an unconstrained, unwritten column: a posted ledger
+row is immutable, so which series a transaction belongs to is recorded in
+`recurring_series_member`'s own tenant- and transaction-scoped composite foreign key, never in a
+rewrite of the transaction row it observes — see `0018`'s own note. `api/oneledger/recurring.py`
+holds the pure cadence detection (no database): a candidate needs at least 3 occurrences whose
+median gap fits one cadence window (weekly 5–9, monthly 26–35, quarterly 82–98, annual 350–380
+days) with at least two thirds of all gaps inside that same window; identity is `merchant_id` when
+present, otherwise `lower(regexp_replace(btrim(coalesce(description_clean, description_raw)),
+'\s+', ' ', 'g'))` — the same expression `recurring_series_identity_shape` requires be non-null
+whenever `merchant_id` is null.
+
+---
+
 ## `0013`
 
 ### Loans
@@ -3420,14 +3524,16 @@ CREATE TABLE recurring_series (
 
 Phase 1.7 Task 1 replaced the payslip shapes originally planned here with V42's exact,
 reconciling design — see that section. Phase 4.1 Task 2 replaced the `budget_period`/`budget_line`
-shapes originally planned here with V55's exact, reconciling design — see that section.
+shapes originally planned here with V55's exact, reconciling design — see that section. Phase 4.1
+Task 3 replaced the `recurring_series` shape originally planned here with V56's exact, reconciling
+design — see that section.
 
 ---
 
 ## `0018` — Deferred foreign keys
 
-`transaction` references `transfer`, `card_statement`, `loan`,
-`loan_schedule_entry` and `recurring_series`, every one of which is created after it — and
+`transaction` references `transfer`, `card_statement`, `loan` and
+`loan_schedule_entry`, every one of which is created after it — and
 `transfer` references `transaction` back. Those columns are therefore created as bare `UUID` in
 `0007` and constrained here, once every target exists.
 
@@ -3437,10 +3543,14 @@ ALTER TABLE transaction
   ADD CONSTRAINT fk_txn_card_stmt    FOREIGN KEY (card_statement_id) REFERENCES card_statement(id),
   ADD CONSTRAINT fk_txn_loan         FOREIGN KEY (loan_id)           REFERENCES loan(id),
   ADD CONSTRAINT fk_txn_loan_entry   FOREIGN KEY (loan_schedule_entry_id)
-                                     REFERENCES loan_schedule_entry(id),
-  ADD CONSTRAINT fk_txn_recurring    FOREIGN KEY (recurring_series_id)
-                                     REFERENCES recurring_series(id);
+                                     REFERENCES loan_schedule_entry(id);
 ```
 
 The former deferred investment-event reference was never populated and V33 removed its column;
-`investment_cash_allocation` is now the sole cash-to-investment link.
+`investment_cash_allocation` is now the sole cash-to-investment link. This plan originally also
+listed a deferred `fk_txn_recurring` on `transaction.recurring_series_id`; Phase 4.1 Task 3 (V56)
+deliberately does not add it — a posted ledger row is immutable, so recording which series a
+transaction belongs to is `recurring_series_member`'s own join (a household- and
+transaction-scoped composite FK, `ON DELETE RESTRICT`), never a rewrite of the transaction row
+that observes it. `transaction.recurring_series_id` (V10) stays the unconstrained, unwritten
+column it has always been.
