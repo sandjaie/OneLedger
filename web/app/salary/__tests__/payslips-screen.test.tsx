@@ -77,8 +77,12 @@ const payslip: PayslipRow = {
   deposit: null,
 };
 
+// An `async` wrapper, not `Promise.resolve(handler(...))`: a handler that throws to simulate a
+// refusal must become a rejected promise (as the real `apiFetch` — itself `async` — always does),
+// not a synchronous throw that only a `try`/`catch` around the call would catch. SalaryAnalysis's
+// initial load uses `.then()/.catch()` rather than `await`, which only a rejected promise reaches.
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
-  return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
+  return vi.fn(async (path: string, init?: RequestInit) => handler(path, init)) as Request;
 }
 
 afterEach(() => {
@@ -89,6 +93,7 @@ afterEach(() => {
 describe("salary screen", () => {
   it("lists a recorded payslip with its money formatted in its own currency", async () => {
     const request = requestFrom((path) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
       throw new ApiError(500, "unexpected");
@@ -104,6 +109,7 @@ describe("salary screen", () => {
     let firstKey: string | undefined;
     let calls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [], total: 0 } satisfies PayslipsResponse;
@@ -156,6 +162,7 @@ describe("salary screen", () => {
       ],
     };
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [], total: 0 } satisfies PayslipsResponse;
       if (path === "/payslips/import" && init?.method === "POST") return preview;
@@ -185,6 +192,7 @@ describe("salary screen", () => {
     };
     let linkCalls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips") return { payslips: [payslip], total: 1 } satisfies PayslipsResponse;
       if (path === `/payslips/${payslip.id}/deposit-candidates`) return { candidates: [candidate] };
@@ -223,6 +231,7 @@ describe("salary screen", () => {
     };
     let unlinkCalls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [unlinkCalls > 0 ? payslip : linked], total: 1 } satisfies PayslipsResponse;
@@ -246,6 +255,7 @@ describe("salary screen", () => {
     let deleteCalls = 0;
     let current = payslip;
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [current], total: 1 } satisfies PayslipsResponse;
@@ -293,6 +303,7 @@ describe("salary screen", () => {
     let putPath: string | undefined;
     let deleteCalls = 0;
     const request = requestFrom((path, init) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
       if (path === "/payslips") return { payslips: [], total: 0 } satisfies PayslipsResponse;
       if (path === "/payslips/deduction-rules") return { rules };
       if (path === "/payslips/deduction-rules/Pension%20%26%20NI" && init?.method === "PUT") {

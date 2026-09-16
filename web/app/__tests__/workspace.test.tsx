@@ -135,6 +135,12 @@ function outOfBand(path: string): Promise<unknown> | undefined {
       reservations: [],
     });
   }
+  // Salary analysis (Phase 4.2 Task 2) fetches alongside the payslip list and deduction rules on
+  // Salary; every test here is about the rest of the screen, so it sees no payslips and no
+  // credits without one.
+  if (path === "/salary/analysis") {
+    return Promise.resolve({ currencies: [], salaryCreditsWithoutPayslip: [] });
+  }
   return undefined;
 }
 
