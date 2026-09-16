@@ -1,7 +1,12 @@
--- V56: recurring series — the identity shape, the open-series partial unique indexes, and the
--- ended-series refusal. The plain `REFERENCES merchant(id)`/`REFERENCES category(id)` foreign
--- keys carry no tenant scope by design (see V56's own comment); the tenant boundary is
--- `routes/recurring.py`'s job and is proven in `api/tests/test_recurring_live.py`, not here.
+-- V56: recurring series — the identity shape and the ended-series refusal. The plain
+-- `REFERENCES merchant(id)`/`REFERENCES category(id)` foreign keys carry no tenant scope by
+-- design (see V56's own comment); the tenant boundary is `routes/recurring.py`'s job and is
+-- proven in `api/tests/test_recurring_live.py`, not here. V57 (Phase 4.1 Task 1) drops the
+-- open-series partial unique indexes this file originally asserted and tested — one identity may
+-- now carry several open series (spec "one descriptor, several subscriptions") — so the
+-- structural assertion and the uniqueness test below were updated in that same migration's
+-- branch rather than left asserting a rule V57 deliberately reversed; `db/tests/0054_recurring_
+-- opt_out.sql` covers what replaced it (`uq_recurring_series_member_transaction`).
 -- All names, identifiers and amounts in tests and fixtures are synthetic.
 \set ON_ERROR_STOP on
 
@@ -31,12 +36,6 @@ BEGIN
   ASSERT (SELECT count(*) FROM pg_constraint
            WHERE conname = 'recurring_series_identity_shape') = 1,
     'recurring_series_identity_shape must exist';
-  ASSERT (SELECT count(*) FROM pg_indexes
-           WHERE indexname = 'uq_recurring_series_open_merchant') = 1,
-    'uq_recurring_series_open_merchant must exist';
-  ASSERT (SELECT count(*) FROM pg_indexes
-           WHERE indexname = 'uq_recurring_series_open_match_key') = 1,
-    'uq_recurring_series_open_match_key must exist';
   ASSERT (SELECT count(*) FROM pg_constraint
            WHERE conname = 'fk_recurring_series_member_series') = 1,
     'fk_recurring_series_member_series must exist';
@@ -137,42 +136,41 @@ END $$;
 ROLLBACK;
 
 -- At most one open series per identity per household; ending one frees the identity.
+-- V57 (Phase 4.1 Task 1) drops the open-series partial unique indexes this block used to test:
+-- one identity may now carry several open series at once (spec "one descriptor, several
+-- subscriptions" — two amount clusters on one descriptor whose date ranges overlap are two
+-- concurrent subscriptions), so a second open series on the same merchant or match key is
+-- accepted rather than refused.
 BEGIN;
 DO $$
-DECLARE f RECORD; refusal TEXT; first_id UUID;
+DECLARE f RECORD; first_id UUID;
 BEGIN
   SELECT * INTO f FROM pg_temp.t0053_fixture();
 
   first_id := pg_temp.t0053_series(f.h1, f.merch1, NULL, 'monthly', 100, f.base);
-  BEGIN
-    PERFORM pg_temp.t0053_series(f.h1, f.merch1, NULL, 'monthly', 200, f.base);
-    RAISE EXCEPTION 'a second open series for the same merchant must be refused';
-  EXCEPTION WHEN unique_violation THEN
-    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
-    ASSERT refusal LIKE '%uq_recurring_series_open_merchant%', refusal;
-  END;
-
+  PERFORM pg_temp.t0053_series(f.h1, f.merch1, NULL, 'monthly', 200, f.base);
   PERFORM pg_temp.t0053_series(f.h1, NULL, 'synthetic market', 'monthly', 100, f.base);
-  BEGIN
-    PERFORM pg_temp.t0053_series(f.h1, NULL, 'synthetic market', 'monthly', 200, f.base);
-    RAISE EXCEPTION 'a second open series for the same match key must be refused';
-  EXCEPTION WHEN unique_violation THEN
-    GET STACKED DIAGNOSTICS refusal = MESSAGE_TEXT;
-    ASSERT refusal LIKE '%uq_recurring_series_open_match_key%', refusal;
-  END;
+  PERFORM pg_temp.t0053_series(f.h1, NULL, 'synthetic market', 'monthly', 200, f.base);
+  ASSERT (SELECT count(*) FROM recurring_series
+           WHERE household_id = f.h1 AND merchant_id = f.merch1) = 2,
+    'two open series on the same merchant must both exist';
+  ASSERT (SELECT count(*) FROM recurring_series
+           WHERE household_id = f.h1 AND match_key = 'synthetic market') = 2,
+    'two open series on the same match key must both exist';
 
   -- A second household may open the same identity freely.
   PERFORM pg_temp.t0053_series(f.h2, f.merch1, NULL, 'monthly', 100, f.base);
 
-  -- Ending the first series frees its identity for a fresh open series.
+  -- Ending a series frees nothing that was not already free, but still leaves the ended row
+  -- alongside the still-open ones.
   UPDATE recurring_series SET ended_on = '2026-04-01', ended_reason = 'synthetic: cancelled'
    WHERE id = first_id;
   PERFORM pg_temp.t0053_series(f.h1, f.merch1, NULL, 'monthly', 300, f.base);
   ASSERT (SELECT count(*) FROM recurring_series
-           WHERE household_id = f.h1 AND merchant_id = f.merch1) = 2,
-    'the ended row and the fresh open row must both exist';
+           WHERE household_id = f.h1 AND merchant_id = f.merch1) = 3,
+    'the ended row and both open rows must all exist';
 
-  RAISE NOTICE 'PASS 0053 open-series identity uniqueness';
+  RAISE NOTICE 'PASS 0053 several open series may share one identity';
 END $$;
 ROLLBACK;
 
