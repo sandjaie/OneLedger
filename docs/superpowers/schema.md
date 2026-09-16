@@ -3634,6 +3634,37 @@ back for an earlier charge (Task 5) still gets it right; a foreign or unknown se
 
 ---
 
+## `V60` (applied)
+
+### Payslip earning rules
+
+Phase 4.2 Task 1. An earning rule is the owner's fixed/variable/reimbursement choice for one
+label, following V44's `payslip_deduction_rule` convention exactly: a plain household-scoped
+table, no `SECURITY DEFINER` write path, written directly by `routes/salary.py` under the
+household lock.
+
+```sql
+CREATE TABLE payslip_earning_rule (
+  household_id UUID NOT NULL REFERENCES household(id),
+  label        TEXT NOT NULL,
+  component    TEXT NOT NULL CHECK (component IN ('fixed', 'variable', 'reimbursement')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, label),
+  CONSTRAINT payslip_earning_rule_label_is_bounded CHECK (
+    char_length(label) BETWEEN 1 AND 80 AND label = btrim(label))
+);
+```
+
+`household_isolation FOR ALL TO authenticated` as on every other household-scoped table. The rule
+always wins over `api/oneledger/salary_analysis.py`'s read-time inference; removing it returns the
+label to inference. `GET /salary/analysis` reads active payslips (no payslip supersedes them),
+their earning lines and these rules and hands them to the pure `analyze_salary`, which derives
+payslip months, gaps, increments, yearly sums and the label directory — no figure is computed or
+stored here. `docs/design/api-contracts.html` §2 has the exact route contracts.
+
+---
+
 ## `0013`
 
 ### Loans
