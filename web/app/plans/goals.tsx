@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
-import { accountValueReasonText } from "@/lib/plans/account-value-reasons";
+import { accountValueReasonText, reasonsText } from "@/lib/plans/account-value-reasons";
 import type {
   AccountRow,
   CurrencyRow,
@@ -58,7 +58,7 @@ const PROGRESS_REASON_TEXT: Record<string, string> = {
 };
 
 function reasonText(reasons: Array<string>): string {
-  return reasons.map((reason) => PROGRESS_REASON_TEXT[reason] ?? reason).join("; ");
+  return reasonsText(reasons, PROGRESS_REASON_TEXT);
 }
 
 function emptyGoalForm(base: string): GoalFormState {
@@ -125,10 +125,6 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
     };
   }, [attempt, request]);
 
-  function refetch() {
-    setAttempt((value) => value + 1);
-  }
-
   function changeForm<K extends keyof GoalFormState>(field: K, value: GoalFormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
     setProblem(undefined);
@@ -180,7 +176,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
       setEditing(undefined);
       setForm(emptyGoalForm(householdCurrencies.base));
       setIdempotencyKey(crypto.randomUUID());
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This goal could not be saved."));
     } finally {
@@ -204,7 +200,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ state: outcome }),
       });
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This goal could not be closed."));
     } finally {
@@ -238,7 +234,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
       });
       setReservingGoalId(undefined);
       setReserveKey(crypto.randomUUID());
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setReserveProblem(errorText(error, "This reservation could not be made."));
     } finally {
@@ -255,7 +251,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This reservation could not be released."));
     } finally {
@@ -279,7 +275,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
       {state === "error" && (
         <div role="alert">
           <p>Goals could not be loaded.</p>
-          <button className="text-action" onClick={refetch} type="button">Try again</button>
+          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
         </div>
       )}
 

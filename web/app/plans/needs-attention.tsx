@@ -84,10 +84,6 @@ export function NeedsAttention({
     };
   }, [attempt, refreshKey, request]);
 
-  function refetch() {
-    setAttempt((value) => value + 1);
-  }
-
   function closeForm() {
     setOpenForm(undefined);
     setDraftText("");
@@ -99,7 +95,7 @@ export function NeedsAttention({
     try {
       await action();
       closeForm();
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, fallback));
     } finally {
@@ -269,7 +265,7 @@ export function NeedsAttention({
       setNewDueDate("");
       setNewAccountId("");
       setFollowUpKey(crypto.randomUUID());
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setFollowUpProblem(errorText(error, "This follow-up could not be added."));
     } finally {
@@ -437,7 +433,7 @@ export function NeedsAttention({
     );
   }
 
-  const activeAssetAccounts = accounts.filter((account) => account.isActive);
+  const activeAccounts = accounts.filter((account) => account.isActive);
 
   return (
     <section aria-labelledby="actions-title" id="actions">
@@ -446,7 +442,7 @@ export function NeedsAttention({
       {state === "error" && (
         <div role="alert">
           <p>Needs attention could not be loaded.</p>
-          <button className="text-action" onClick={refetch} type="button">Try again</button>
+          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
         </div>
       )}
       {state === "ready" && actions && (
@@ -495,7 +491,7 @@ export function NeedsAttention({
             <span>Account (optional)</span>
             <select onChange={(e) => setNewAccountId(e.target.value)} value={newAccountId}>
               <option value="">None</option>
-              {activeAssetAccounts.map((account) => (
+              {activeAccounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
             </select>

@@ -10,3 +10,9 @@ const ACCOUNT_VALUE_REASON_TEXT: Record<string, string> = {
 export function accountValueReasonText(reason: string): string {
   return ACCOUNT_VALUE_REASON_TEXT[reason] ?? reason;
 }
+
+/** goals.tsx and emergency-reserve.tsx each fold a reason-code list into one sentence over their
+ * own lookup map (progress reasons, coverage reasons) — this is that shared fold. */
+export function reasonsText(reasons: Array<string>, textFor: Record<string, string>): string {
+  return reasons.map((reason) => textFor[reason] ?? reason).join("; ");
+}

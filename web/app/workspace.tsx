@@ -282,27 +282,11 @@ export function Workspace({
     retireFxRequest();
     try {
       await request<void>("/auth/logout", { method: "POST" });
-      setHousehold(undefined);
-      setCurrency(undefined);
-      setInventory(undefined);
-      setInstitutions(undefined);
-      setLedger(undefined);
-      setDocuments(undefined);
-      setCategories(undefined);
-      setState("leaving");
-      setDestination("/login");
+      leaveForAuth("/login");
     } catch (error) {
       const next = authDestination(error);
       if (next) {
-        setHousehold(undefined);
-        setCurrency(undefined);
-        setInventory(undefined);
-        setInstitutions(undefined);
-        setLedger(undefined);
-        setDocuments(undefined);
-        setCategories(undefined);
-        setState("leaving");
-        setDestination(next);
+        leaveForAuth(next);
       } else {
         setLogoutFailed(true);
       }
@@ -467,9 +451,8 @@ export function Workspace({
               currency={currency}
               household={household}
               request={wrappedRequest}
-            >
-              {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
-            </OverviewScreen>
+              logoutFailed={logoutFailed}
+            />
           )}
 
           {activeSection === "import" && inventory && currencies && (

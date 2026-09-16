@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { type Currency, formatOwed, formatPercent, moneyText } from "@/lib/money/format";
@@ -27,7 +27,8 @@ type Props = {
   // The catalogue formats a card in its own currency, which need not be one of the pair.
   currencies: Array<CurrencyRow>;
   request: typeof apiFetch;
-  children?: ReactNode;
+  // Workspace's one caller shows this when a sign-out request failed but left the session intact.
+  logoutFailed?: boolean;
 };
 
 /** Every status that leaves a total unavailable or stale — everything except a current price or
@@ -109,7 +110,7 @@ function yearToDate(year: YearToDate, base: boolean) {
       };
 }
 
-export function OverviewScreen({ household, currency, currencies, request, children }: Props) {
+export function OverviewScreen({ household, currency, currencies, request, logoutFailed }: Props) {
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   // The workspace hands a fresh wrapper each render; fetching on that would refetch on every
@@ -192,7 +193,9 @@ export function OverviewScreen({ household, currency, currencies, request, child
           <p className="overview-as-of">Position as of {state.dashboard.netWorth.asOf}</p>
         )}
       </div>
-      {children}
+      {logoutFailed && (
+        <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>
+      )}
       {state.status === "loading" && <p className="lede" role="status">Loading the household&apos;s figures…</p>}
       {state.status === "failed" && (
         <>

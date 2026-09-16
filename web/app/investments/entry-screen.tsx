@@ -24,7 +24,6 @@ import type {
 type Props = {
   accounts: Array<AccountRow>;
   request: typeof apiFetch;
-  createIdempotencyKey?: () => string;
 };
 
 type LookupMethod = "isin" | "ticker" | "name";
@@ -77,11 +76,7 @@ function coverageMessages(position: AcquisitionPosition) {
   return messages.length > 0 ? messages : ["Dated value available."];
 }
 
-export function InvestmentEntryScreen({
-  accounts,
-  request,
-  createIdempotencyKey = () => crypto.randomUUID(),
-}: Props) {
+export function InvestmentEntryScreen({ accounts, request }: Props) {
   const investmentAccounts = useMemo(
     () => accounts.filter((account) => account.isActive && INVESTMENT_ACCOUNT_TYPES.has(account.accountType)),
     [accounts],
@@ -212,7 +207,7 @@ export function InvestmentEntryScreen({
   function reviewPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!completeDraft) return;
-    if (mutationProgress === "none") setIdempotencyKey(createIdempotencyKey());
+    if (mutationProgress === "none") setIdempotencyKey(crypto.randomUUID());
     setProblem(false);
     setFeedback("");
     setConfirmation(true);
