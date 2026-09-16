@@ -71,11 +71,6 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
     };
   }, [refreshKey, retryAttempt, request]);
 
-  async function reload() {
-    const result = await request<SalaryAnalysisResponse>("/salary/analysis");
-    setData(result);
-  }
-
   async function saveRule(label: string, component: EarningComponent) {
     setRuleBusy(label);
     setRuleProblem(undefined);
@@ -85,7 +80,8 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ component }),
       });
-      await reload();
+      // The save succeeded; a failed reload shows the load error with its retry, not a save error.
+      setRetryAttempt((value) => value + 1);
     } catch (error) {
       setRuleProblem(errorText(error, "This component could not be saved."));
     } finally {
@@ -98,7 +94,7 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
     setRuleProblem(undefined);
     try {
       await request<void>(`/salary/earning-rules/${encodeURIComponent(label)}`, { method: "DELETE" });
-      await reload();
+      setRetryAttempt((value) => value + 1);
     } catch (error) {
       setRuleProblem(errorText(error, "This rule could not be removed."));
     } finally {
@@ -155,88 +151,92 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
 
               <section aria-labelledby="salary-years-title">
                 <p className="section-label" id="salary-years-title">Years</p>
-                <table className="spending-table">
-                  <caption className="visually-hidden">Salary by year</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Year</th>
-                      <th scope="col">Compensation</th>
-                      <th scope="col">Fixed</th>
-                      <th scope="col">Variable</th>
-                      <th scope="col">Variable share</th>
-                      <th scope="col">Reimbursement</th>
-                      <th scope="col">Deductions</th>
-                      <th scope="col">Net pay</th>
-                      <th scope="col">Cash received</th>
-                      <th scope="col">Payslip months</th>
-                      <th scope="col">Gap months</th>
-                      <th scope="col">Received months</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current.years.map((year) => (
-                      <tr key={year.year}>
-                        <th scope="row">{year.year}</th>
-                        <td>{moneyText(year.compensation, current.currency, currencies)}</td>
-                        <td>{moneyText(year.fixed, current.currency, currencies)}</td>
-                        <td>{moneyText(year.variable, current.currency, currencies)}</td>
-                        <td>{year.variableShare !== null ? formatPercent(year.variableShare) : "—"}</td>
-                        <td>{moneyText(year.reimbursement, current.currency, currencies)}</td>
-                        <td>{moneyText(year.deductions, current.currency, currencies)}</td>
-                        <td>{moneyText(year.netPay, current.currency, currencies)}</td>
-                        <td>{moneyText(year.cashReceived, current.currency, currencies)}</td>
-                        <td>{year.payslipMonths}</td>
-                        <td>{year.gapMonths}</td>
-                        <td>{year.receivedMonths}</td>
+                <div className="overview-scroll">
+                  <table className="spending-table">
+                    <caption className="visually-hidden">Salary by year</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Year</th>
+                        <th scope="col">Compensation</th>
+                        <th scope="col">Fixed</th>
+                        <th scope="col">Variable</th>
+                        <th scope="col">Variable share</th>
+                        <th scope="col">Reimbursement</th>
+                        <th scope="col">Deductions</th>
+                        <th scope="col">Net pay</th>
+                        <th scope="col">Cash received</th>
+                        <th scope="col">Payslip months</th>
+                        <th scope="col">Gap months</th>
+                        <th scope="col">Received months</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {current.years.map((year) => (
+                        <tr key={year.year}>
+                          <th scope="row">{year.year}</th>
+                          <td>{moneyText(year.compensation, current.currency, currencies)}</td>
+                          <td>{moneyText(year.fixed, current.currency, currencies)}</td>
+                          <td>{moneyText(year.variable, current.currency, currencies)}</td>
+                          <td>{year.variableShare !== null ? formatPercent(year.variableShare) : "—"}</td>
+                          <td>{moneyText(year.reimbursement, current.currency, currencies)}</td>
+                          <td>{moneyText(year.deductions, current.currency, currencies)}</td>
+                          <td>{moneyText(year.netPay, current.currency, currencies)}</td>
+                          <td>{moneyText(year.cashReceived, current.currency, currencies)}</td>
+                          <td>{year.payslipMonths}</td>
+                          <td>{year.gapMonths}</td>
+                          <td>{year.receivedMonths}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
 
               <section aria-labelledby="salary-months-title">
                 <p className="section-label" id="salary-months-title">Months</p>
-                <table className="spending-table">
-                  <caption className="visually-hidden">Salary by month</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Month</th>
-                      <th scope="col">Compensation</th>
-                      <th scope="col">Fixed</th>
-                      <th scope="col">Variable</th>
-                      <th scope="col">Reimbursement</th>
-                      <th scope="col">Deductions</th>
-                      <th scope="col">Net pay</th>
-                      <th scope="col">Cash received</th>
-                      <th scope="col">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthRows(current).map((row, index) => (
-                      <tr key={`${row.payMonth}-${index}`}>
-                        <th scope="row">{monthLabel(row.payMonth)}</th>
-                        {row.payslip ? (
-                          <>
-                            <td>{moneyText(row.payslip.compensation, current.currency, currencies)}</td>
-                            <td>{moneyText(row.payslip.fixed, current.currency, currencies)}</td>
-                            <td>{moneyText(row.payslip.variable, current.currency, currencies)}</td>
-                            <td>{moneyText(row.payslip.reimbursement, current.currency, currencies)}</td>
-                            <td>{moneyText(row.payslip.deductions, current.currency, currencies)}</td>
-                            <td>{moneyText(row.payslip.netPay, current.currency, currencies)}</td>
-                            <td>
-                              {row.payslip.cashReceived !== null
-                                ? moneyText(row.payslip.cashReceived, current.currency, currencies)
-                                : "—"}
-                            </td>
-                            <td>{RECEIPT_TEXT[row.payslip.receiptStatus] ?? row.payslip.receiptStatus}</td>
-                          </>
-                        ) : (
-                          <td colSpan={8}>No payslip</td>
-                        )}
+                <div className="overview-scroll">
+                  <table className="spending-table">
+                    <caption className="visually-hidden">Salary by month</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Month</th>
+                        <th scope="col">Compensation</th>
+                        <th scope="col">Fixed</th>
+                        <th scope="col">Variable</th>
+                        <th scope="col">Reimbursement</th>
+                        <th scope="col">Deductions</th>
+                        <th scope="col">Net pay</th>
+                        <th scope="col">Cash received</th>
+                        <th scope="col">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {monthRows(current).map((row, index) => (
+                        <tr key={`${row.payMonth}-${index}`}>
+                          <th scope="row">{monthLabel(row.payMonth)}</th>
+                          {row.payslip ? (
+                            <>
+                              <td>{moneyText(row.payslip.compensation, current.currency, currencies)}</td>
+                              <td>{moneyText(row.payslip.fixed, current.currency, currencies)}</td>
+                              <td>{moneyText(row.payslip.variable, current.currency, currencies)}</td>
+                              <td>{moneyText(row.payslip.reimbursement, current.currency, currencies)}</td>
+                              <td>{moneyText(row.payslip.deductions, current.currency, currencies)}</td>
+                              <td>{moneyText(row.payslip.netPay, current.currency, currencies)}</td>
+                              <td>
+                                {row.payslip.cashReceived !== null
+                                  ? moneyText(row.payslip.cashReceived, current.currency, currencies)
+                                  : "—"}
+                              </td>
+                              <td>{RECEIPT_TEXT[row.payslip.receiptStatus] ?? row.payslip.receiptStatus}</td>
+                            </>
+                          ) : (
+                            <td colSpan={8}>No payslip</td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
 
               <section aria-labelledby="salary-increments-title">
@@ -284,56 +284,58 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
 
               <section aria-labelledby="salary-labels-title">
                 <p className="section-label" id="salary-labels-title">Earning labels</p>
-                <table className="spending-table">
-                  <caption className="visually-hidden">Earning labels</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Label</th>
-                      <th scope="col">Component</th>
-                      <th scope="col">Months</th>
-                      <th scope="col">First month</th>
-                      <th scope="col">Last month</th>
-                      <th scope="col">Latest amount</th>
-                      <th scope="col">Rule</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {current.labels.map((label) => (
-                      <tr key={label.label}>
-                        <th scope="row">{label.label}</th>
-                        <td>
-                          <select
-                            aria-label={`Component for ${label.label}`}
-                            disabled={ruleBusy === label.label}
-                            onChange={(e) => void saveRule(label.label, e.target.value as EarningComponent)}
-                            value={label.component}
-                          >
-                            <option value="fixed">Fixed</option>
-                            <option value="variable">Variable</option>
-                            <option value="reimbursement">Reimbursement</option>
-                          </select>
-                          {label.source === "inferred" && <span className="plans-badge">Inferred</span>}
-                        </td>
-                        <td>{label.monthCount}</td>
-                        <td>{monthLabel(label.firstMonth)}</td>
-                        <td>{monthLabel(label.lastMonth)}</td>
-                        <td>{moneyText(label.latestAmount, current.currency, currencies)}</td>
-                        <td>
-                          {label.source === "rule" && (
-                            <button
-                              className="text-action"
-                              disabled={ruleBusy === label.label}
-                              onClick={() => void clearRule(label.label)}
-                              type="button"
-                            >
-                              Use inference
-                            </button>
-                          )}
-                        </td>
+                <div className="overview-scroll">
+                  <table className="spending-table">
+                    <caption className="visually-hidden">Earning labels</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Label</th>
+                        <th scope="col">Component</th>
+                        <th scope="col">Months</th>
+                        <th scope="col">First month</th>
+                        <th scope="col">Last month</th>
+                        <th scope="col">Latest amount</th>
+                        <th scope="col">Rule</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {current.labels.map((label) => (
+                        <tr key={label.label}>
+                          <th scope="row">{label.label}</th>
+                          <td>
+                            <select
+                              aria-label={`Component for ${label.label}`}
+                              disabled={ruleBusy === label.label}
+                              onChange={(e) => void saveRule(label.label, e.target.value as EarningComponent)}
+                              value={label.component}
+                            >
+                              <option value="fixed">Fixed</option>
+                              <option value="variable">Variable</option>
+                              <option value="reimbursement">Reimbursement</option>
+                            </select>
+                            {label.source === "inferred" && <span className="plans-badge">Inferred</span>}
+                          </td>
+                          <td>{label.monthCount}</td>
+                          <td>{monthLabel(label.firstMonth)}</td>
+                          <td>{monthLabel(label.lastMonth)}</td>
+                          <td>{moneyText(label.latestAmount, current.currency, currencies)}</td>
+                          <td>
+                            {label.source === "rule" && (
+                              <button
+                                className="text-action"
+                                disabled={ruleBusy === label.label}
+                                onClick={() => void clearRule(label.label)}
+                                type="button"
+                              >
+                                Use inference
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </section>
             </>
           )}

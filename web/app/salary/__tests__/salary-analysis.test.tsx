@@ -112,8 +112,10 @@ describe("salary analysis", () => {
     expect(screen.getByText("16.67%")).toBeTruthy();
     expect(screen.getAllByText("A 6,000.00").length).toBeGreaterThan(0);
     // Months: the gap row reads "No payslip" and its month is labelled from the pay month.
-    expect(screen.getByText("Feb 2026")).toBeTruthy();
-    expect(screen.getByText("No payslip")).toBeTruthy();
+    const monthsTable = screen.getByRole("table", { name: "Salary by month" });
+    const monthHeads = Array.from(monthsTable.querySelectorAll("tbody th")).map((cell) => cell.textContent);
+    expect(monthHeads).toEqual(["Mar 2026", "Feb 2026", "Jan 2026"]);
+    expect(monthsTable.querySelectorAll("tbody tr")[1]?.textContent).toContain("No payslip");
     expect(screen.getByText("Not linked")).toBeTruthy();
     // Increments: both markers on the one across-gap, unconfirmed change.
     expect(screen.getByText("Unconfirmed")).toBeTruthy();
@@ -159,8 +161,12 @@ describe("salary analysis", () => {
 
   it("PUTs a rule on a component change and reloads", async () => {
     let saved: unknown;
+    let loads = 0;
     const request = requestFrom((path, init) => {
-      if (path === "/salary/analysis") return analysis;
+      if (path === "/salary/analysis") {
+        loads += 1;
+        return analysis;
+      }
       if (path === "/salary/earning-rules/Basic" && init?.method === "PUT") {
         saved = JSON.parse(String(init.body));
         return { label: "Basic", component: "variable" };
@@ -173,12 +179,18 @@ describe("salary analysis", () => {
     fireEvent.change(select, { target: { value: "variable" } });
 
     await waitFor(() => expect(saved).toEqual({ component: "variable" }));
+    await waitFor(() => expect(loads).toBe(2));
   });
 
   it("DELETEs the rule when the owner chooses Use inference", async () => {
     let deleted = false;
+    let loads = 0;
     const request = requestFrom((path, init) => {
-      if (path === "/salary/analysis") return analysis;
+      if (path === "/salary/analysis") {
+        loads += 1;
+        if (loads > 1) throw new ApiError(500, "reload failed");
+        return analysis;
+      }
       if (path === "/salary/earning-rules/Bonus" && init?.method === "DELETE") {
         deleted = true;
         return undefined;
@@ -191,5 +203,23 @@ describe("salary analysis", () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(deleted).toBe(true));
+    // The removal reloads; a failed reload is a load error with retry, never "could not be removed".
+    await screen.findByText("Salary analysis could not be loaded.");
+    expect(loads).toBe(2);
+    expect(screen.queryByText("This rule could not be removed.")).toBeNull();
+  });
+
+  it("switches between currencies when there is more than one", async () => {
+    const second = { ...analysis.currencies[0]!, currency: "XBB", years: [], increments: [], variablePay: [], labels: [], gaps: [], payslips: [] };
+    const request = requestFrom((path) => {
+      if (path === "/salary/analysis") return { ...analysis, currencies: [...analysis.currencies, second] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+
+    await screen.findByText("16.67%");
+    fireEvent.click(screen.getByRole("button", { name: "XBB" }));
+    expect(screen.queryByText("16.67%")).toBeNull();
+    expect(screen.getByRole("button", { name: "XBB" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

@@ -108,8 +108,12 @@ describe("salary screen", () => {
   it("posts typed strings with one idempotency key, reused on a retry", async () => {
     let firstKey: string | undefined;
     let calls = 0;
+    let analysisLoads = 0;
     const request = requestFrom((path, init) => {
-      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
+      if (path === "/salary/analysis") {
+        analysisLoads += 1;
+        return { currencies: [], salaryCreditsWithoutPayslip: [] };
+      }
       if (path === "/payslips/deduction-rules") return { rules: [] };
       if (path === "/payslips" && (!init || init.method === undefined)) {
         return { payslips: [], total: 0 } satisfies PayslipsResponse;
@@ -140,8 +144,11 @@ describe("salary screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Record payslip" }));
     await waitFor(() => expect(screen.getByText("transient failure")).toBeTruthy());
 
+    expect(analysisLoads).toBe(1);
     fireEvent.click(screen.getByRole("button", { name: "Record payslip" }));
     await waitFor(() => expect(calls).toBe(2));
+    // A recorded payslip reloads the analysis too, not only the list.
+    await waitFor(() => expect(analysisLoads).toBe(2));
   });
 
   it("previews an import and only then offers to confirm it", async () => {
