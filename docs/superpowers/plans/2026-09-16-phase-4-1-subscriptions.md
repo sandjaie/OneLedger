@@ -2,6 +2,11 @@
 
 > Execute in the active checkout. Track completion only in `../progress.md`.
 
+**Numbering and status (16 September 2026).** This plan's Task 1 is **Phase 4.1 Task 4**,
+delivered via PR #236. Its Tasks 2 and 3 are superseded by the
+[subscription registry plan](2026-09-16-phase-4-1-subscription-registry.md), which adds billing
+periods at the owner's request and continues as Phase 4.1 Tasks 5, 6 and 7.
+
 **Goal:** Deliver the [subscriptions specification](../specs/2026-09-16-phase-4-1-subscriptions.md):
 recurring payments detected automatically, each a subscription or not, corrected by the owner's one
 "not a subscription" switch, and a Subscriptions screen with costs, renewals, history and the cards

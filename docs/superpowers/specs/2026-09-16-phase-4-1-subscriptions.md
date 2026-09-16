@@ -1,7 +1,9 @@
 # Phase 4.1 — subscriptions
 
 Owner direction of 16 September 2026, extending [roadmap Phase 4.1](../../product/roadmap.html).
-The [dated plan](../plans/2026-09-16-phase-4-1-subscriptions.md) declares the branches. This builds
+Phase 4.1 Task 4 was delivered from the
+[subscriptions plan](../plans/2026-09-16-phase-4-1-subscriptions.md); Tasks 5–7 follow the
+[subscription registry plan](../plans/2026-09-16-phase-4-1-subscription-registry.md). This builds
 on the recurring engine delivered by the
 [Phase 4.1 budgets and recurring specification](2026-09-16-phase-4-1-budgets-recurring.md); it adds
 no second recurrence system.
@@ -72,6 +74,32 @@ Later charges extend the open series whose amount is nearest; when only one seri
 extend it even after a large price change. Two services charging the same amount on the same days
 cannot be told apart from a statement; the owner renames them.
 
+## A subscription has billing periods
+
+Added 16 September 2026 at the owner's request: *"I might pay the subscription, cancel two months
+later, and start the same subscription again a week after. At any point I should see my current
+subscriptions, and each should have a dedicated page with its history."*
+
+A subscription is one record for its whole life, made of **billing periods**. Cancelling closes the
+open period and a later charge opens a new one on the **same** subscription, so the owner's name and
+"not a subscription" choice carry across by construction rather than being copied onto a new record.
+
+- A subscription is **current** when its latest period is open, and **past** otherwise.
+- The owner can **cancel** it (closing the period on a chosen date, never before its last charge)
+  and **resume** it (opening a period).
+- A subscription that simply stops charging **lapses** on its own: once no charge has arrived for
+  two cadences, its period closes on the date its last charge paid through. The owner does not need
+  to record a cancellation for "current" to be right, and closing a period is never destructive.
+- Statements arrive late, so a lapse is provisional: a charge imported afterwards that was in fact
+  on time restores the same period, and only a charge after a real gap opens a new one. A
+  subscription is never shown as resumed just because its statement was imported late.
+- A paused subscription never lapses.
+- Removing a recurring payment as "not recurring at all" is the one final action; it is the only
+  thing that ends a series itself.
+
+Its dedicated page shows every period it was active, what it cost in each and in total, its price
+history across periods, and its charges grouped by period.
+
 ## Original currency is kept
 
 A subscription keeps its own currency and amount — `₹1,499/year` stays rupees, `$20/month` stays
@@ -91,8 +119,8 @@ Detection cannot see some facts, so the owner sets them:
 - a **name** (a series created from `APPLE.COM/BILL` starts with that label and shows **Needs a
   name** until the owner renames it; the name persists because the series persists);
 - the **subscription flag**;
-- a **status** of active, trial, paused or cancelled — cancelled ends the series for good, and
-  paused and cancelled subscriptions leave the totals;
+- a **status** of active, trial or paused, and **cancel** or **resume** — cancellation closes the
+  current billing period, and paused, cancelled and lapsed subscriptions leave the totals;
 - a **custom cadence** in days, for an interval detection does not recognise;
 - a **payment channel** such as an app store, a wallet autopay or a direct card — a list stored as
   data and seeded, never a code enumeration, because institution names are never code identifiers
@@ -109,11 +137,12 @@ amounts and dates; the price history is the series' own charges, collapsed where
 move.
 
 A subscription whose next expected charge is overdue by more than half its cadence is shown as
-overdue. It is never ended automatically.
+overdue. After two cadences without a charge its current period lapses, as described above; the
+subscription itself is never removed automatically.
 
 ## Non-goals
 
-Reopening a cancelled series; recurring income, investment purchases and transfers (the engine
+Recurring income, investment purchases and transfers (the engine
 reads spending only, by design of `v_transaction_reportable`); rent, loan and insurance obligations
 the Phase 3.1 commitments and 3.4 register already model; a catalogue of known services to pick
 from for a billing descriptor (recorded in the project register); usage-based "unused subscription"
