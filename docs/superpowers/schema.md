@@ -3368,6 +3368,114 @@ whenever `merchant_id` is null.
 
 ---
 
+## `V57` (applied)
+
+### Recurring opt-out
+
+Phase 4.1 Task 1 (spec "Recurring payments are simply just not a subscription"). Discovery is now
+opt-out: `POST /recurring/refresh` creates series on its own, and the owner's one correction is
+the subscription flag. `recurring_cadence` gains `semiannual` and `custom` — both added and
+neither referenced anywhere else in this migration, since Postgres refuses a value used in the
+same transaction that adds it.
+
+```sql
+ALTER TYPE recurring_cadence ADD VALUE 'semiannual';
+ALTER TYPE recurring_cadence ADD VALUE 'custom';
+
+ALTER TABLE recurring_series
+  ADD COLUMN is_subscription           BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN subscription_set_by_owner BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN detection_method          TEXT NOT NULL DEFAULT 'detected',
+  ADD COLUMN named_by_owner            BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN native_amount             NUMERIC(20,4),
+  ADD COLUMN native_currency           CHAR(3) REFERENCES currency(code),
+  ADD CONSTRAINT recurring_series_detection_method_is_known CHECK (
+    detection_method IN ('detected', 'owner')),
+  ADD CONSTRAINT recurring_series_native_pair CHECK (
+    (native_amount IS NULL) = (native_currency IS NULL)),
+  ADD CONSTRAINT recurring_series_native_amount_is_positive CHECK (
+    native_amount IS NULL OR native_amount > 0);
+
+ALTER TABLE recurring_series_member
+  ADD CONSTRAINT uq_recurring_series_member_transaction UNIQUE (household_id, transaction_id);
+
+DROP INDEX uq_recurring_series_open_merchant;
+DROP INDEX uq_recurring_series_open_match_key;
+
+ALTER TABLE recurring_dismissal
+  ADD COLUMN anchor_amount   NUMERIC(20,4),
+  ADD COLUMN anchor_currency CHAR(3) REFERENCES currency(code),
+  ADD CONSTRAINT recurring_dismissal_anchor_pair CHECK (
+    (anchor_amount IS NULL) = (anchor_currency IS NULL));
+
+CREATE UNIQUE INDEX uq_recurring_dismissal_merchant
+  ON recurring_dismissal (household_id, merchant_id, anchor_amount, anchor_currency)
+  NULLS NOT DISTINCT WHERE merchant_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_recurring_dismissal_match_key
+  ON recurring_dismissal (household_id, match_key, anchor_amount, anchor_currency)
+  NULLS NOT DISTINCT WHERE match_key IS NOT NULL;
+
+CREATE TABLE recurring_subscription_category (
+  category_id     UUID PRIMARY KEY REFERENCES category(id),
+  is_subscription BOOLEAN NOT NULL
+);
+```
+
+Before adding `uq_recurring_series_member_transaction` — a charge belongs to at most one series,
+from here on — V57 deletes any existing duplicate member row, keeping for each transaction the row
+on the newest series (open before ended, then latest `created_at`, then `id`) and reporting the
+deleted count with `RAISE NOTICE`. Duplicates could exist because V56 let confirm → end → confirm
+re-insert the same charges into a fresh series once the identity's earlier one ended.
+
+`uq_recurring_series_open_merchant`/`uq_recurring_series_open_match_key` are dropped: one identity
+may now carry several open series at once (spec "one descriptor, several subscriptions" — two
+amount clusters on one descriptor whose date ranges overlap are two concurrent subscriptions).
+
+`recurring_dismissal`'s two unique indexes are recreated with the anchor pair and
+`NULLS NOT DISTINCT`, so a repeated null-anchor (whole-identity) dismissal is still refused exactly
+as before, while a *different* anchor on the same identity is its own, independent dismissal —
+removing one subscription on a shared descriptor no longer suppresses its siblings. `routes/
+recurring.py::_insert_dismissal`'s `ON CONFLICT` target matches these indexes exactly.
+
+`recurring_subscription_category` is a seed reference table (RLS `reference_read FOR SELECT TO
+authenticated USING (true)`, the same shape as `currency`'s own in V4 — no write policy, so only a
+migration can change it) mapping a seed category to the subscription flag's deterministic default:
+the Subscriptions tree and Streaming (`entertainment-streaming`) true; Housing, Utilities,
+Insurance, Debt service, Financial and Taxes false. Seeded by joining seed rows on `slug` scoped
+`household_id IS NULL` (V9's `category_system_slug` makes a seed slug unique only among seed rows),
+so a household's own category never collides with the lookup even if it reuses the same slug text.
+A child category with no row of its own falls back to its parent's row in
+`routes/recurring.py::_subscription_category_mapping`.
+
+`api/oneledger/recurring.py` adds deterministic amount clustering on top of its existing cadence
+detection: within one identity and currency, each charge joins the cluster whose current median is
+nearest and within 20%, walked in `booked_date` then `transaction_id` order for a result that does
+not depend on the caller's own row order; two clusters whose date ranges overlap stay apart
+(concurrent subscriptions), and a cluster that overlaps no other merges into the earlier,
+non-overlapping cluster whose last charge is latest, then whose amount is nearest (one series whose
+price changed). When nothing on an identity, in any of its currencies, clears the occurrence and
+cadence bar, the whole identity is evaluated per currency as one group instead, so a bill varying
+more than 20% is still detected. `SpendRow`/`Candidate` carry the charge's own original pair
+(`amount`/`currency`) alongside the existing base-currency `amount_base`, and a new
+`amounts_are_stable()` (every original amount within 5% of the median) feeds the subscription
+flag's default both at candidate time and when `routes/recurring.py`'s Sync step recomputes it for
+an existing series.
+
+`routes/recurring.py::refresh_recurring` is the only writer, taking the household lock first and
+running Extend (a charge not yet in any series joins the nearest open series on its own identity
+and currency within 20%, or the sole open one on a larger price change), Create (`detect_candidates`
+over what Extend left unassigned, within the 26-month lookback, skipping a group a dismissal
+covers) and Sync (every open series' `native_amount`/`native_currency`/`expected_amount_base`/
+`last_seen_on` move to its latest member; `is_subscription` is recomputed only while
+`subscription_set_by_owner` is false — this is also what gives a series created before V57 its flag
+and amounts on its first refresh since). `GET /recurring` reads only stored columns and opens
+`SET TRANSACTION READ ONLY`; `POST /recurring/confirm`, `.../accept-price` and `.../end` are
+removed, and `POST /recurring/{seriesId}/remove` replaces `.../end`, ending the series and
+recording a dismissal anchored on its own latest `native_amount`/`native_currency` in one
+transaction.
+
+---
+
 ## `0013`
 
 ### Loans
