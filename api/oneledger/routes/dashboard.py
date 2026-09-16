@@ -440,16 +440,15 @@ def read_dashboard(
     owner: Annotated[OwnerSession, Depends(require_owner)],
     asOf: Annotated[date | None, Query()] = None,
 ) -> DashboardResponse:
+    # Imported locally: `resources.py` imports this module's own VALUATION_PERIOD_FOR_ACCOUNT at
+    # module load, so a top-level import of `resources.household_currencies` here would cycle.
+    from ..resources import household_currencies
+
     as_of = asOf or date.today()
     with connect() as conn, conn.cursor() as cur:
         scope_to_owner(conn, owner.user_id)
-        cur.execute(
-            "SELECT base_currency, secondary_currency FROM household WHERE id = %s",
-            (owner.household_id,),
-        )
-        pair = cur.fetchone()
-        assert pair is not None
-        net_worth = _net_worth(cur, owner.household_id, str(pair[0]), str(pair[1]), as_of)
+        base, secondary = household_currencies(cur, owner.household_id)
+        net_worth = _net_worth(cur, owner.household_id, base, secondary, as_of)
         cur.execute(FLOWS, {"as_of": as_of, "household": owner.household_id})
         trend = [
             MonthFlows(

@@ -56,10 +56,6 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
     };
   }, [monthOverride, attempt, request]);
 
-  function refetch() {
-    setAttempt((value) => value + 1);
-  }
-
   async function markComplete() {
     if (!month) return;
     setBusy(true);
@@ -82,7 +78,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
     setProblem(undefined);
     try {
       await request(`/monthly-review/${month}/completion`, { method: "DELETE" });
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This review could not be reopened."));
     } finally {
@@ -110,7 +106,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       setNewAccountId("");
       setFollowUpKey(crypto.randomUUID());
       setFollowUpFeedback("Follow-up added.");
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setFollowUpFeedback(errorText(error, "This follow-up could not be added."));
     } finally {
@@ -137,7 +133,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       {state === "error" && (
         <div role="alert">
           <p>{loadProblem}</p>
-          <button className="text-action" onClick={refetch} type="button">Try again</button>
+          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
         </div>
       )}
       {state === "ready" && review && (

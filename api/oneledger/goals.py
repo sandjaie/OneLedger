@@ -5,9 +5,10 @@ read by `resources.py`, so this module is exhaustively unit-testable without a c
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 
+from .coverage import month_end
 from .money import translate
 
 _PERCENT = Decimal("0.01")
@@ -92,7 +93,7 @@ class GoalProgress:
 
 
 def _next_month_start(d: date) -> date:
-    return date(d.year + 1, 1, 1) if d.month == 12 else date(d.year, d.month + 1, 1)
+    return month_end(d) + timedelta(days=1)
 
 
 def months_remaining(as_of: date, target_date: date) -> int:

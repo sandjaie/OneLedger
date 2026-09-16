@@ -6,7 +6,6 @@ module orchestrates and `goals.py` holds the pure Decimal math, so this module s
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -17,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect, first_line
+from ..db import IDEMPOTENCY_REUSED, connect, first_line
 from ..goals import (
     ReservationProgress,
     ResourceTotals,
@@ -25,7 +24,7 @@ from ..goals import (
     reservation_progress,
     resource_totals,
 )
-from ..money import _money, _out, translate
+from ..money import _decimal_eq, _money, _out, translate
 from ..resources import (
     NativeValue,
     NativeValueReason,
@@ -39,6 +38,7 @@ from ..resources import (
     household_reservations,
     reservation_inflow,
 )
+from ..text import normalize_bounded
 
 router = APIRouter(tags=["goals"])
 
@@ -46,10 +46,7 @@ _GOAL_CURRENCY = "goal currency must be the household's base or secondary curren
 
 
 def _normalize_name(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 80:
-        raise ValueError("name must be 1-80 characters")
-    return collapsed
+    return normalize_bounded(value, "name", 80)
 
 
 def _positive_money(value: str) -> str:
@@ -141,10 +138,7 @@ class ReservationRelease(BaseModel):
     def _reason(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-        if not 1 <= len(collapsed) <= 200:
-            raise ValueError("reason must be 1-200 characters")
-        return collapsed
+        return normalize_bounded(value, "reason", 200)
 
 
 class ReservationRow(BaseModel):
@@ -213,9 +207,7 @@ class GoalsResponse(BaseModel):
 def _translate_goal_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint == "uq_goal_idempotency":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "goal_name_is_bounded":
         return HTTPException(status_code=422, detail="name must be 1-80 characters")
     if constraint == "goal_target_is_positive":
@@ -234,9 +226,7 @@ def _translate_goal_error(exc: psycopg.Error) -> HTTPException:
 def _translate_reservation_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint == "uq_reservation_idempotency":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "fk_reservation_goal_scope":
         return HTTPException(status_code=404, detail="goal not found")
     if constraint == "fk_reservation_account_scope":
@@ -599,17 +589,12 @@ def create_goal(
                     and str(ecurrency).strip() == body.targetCurrency
                     and edate == body.targetDate
                     and epriority == body.priority
-                    and (eplanned is None) == (body.plannedMonthly is None)
-                    and (
-                        eplanned is None or Decimal(eplanned) == Decimal(body.plannedMonthly)  # type: ignore[arg-type]
-                    )
+                    and _decimal_eq(eplanned, body.plannedMonthly)
                 )
                 if matches:
                     response.status_code = status.HTTP_200_OK
                     return _goal_row_today(cur, owner.household_id, UUID(str(eid)), base, secondary)
-                raise HTTPException(
-                    status_code=409, detail="idempotency key reused with a different request"
-                )
+                raise HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
 
             _assert_goal_currency(base, secondary, body.targetCurrency)
             cur.execute(
@@ -750,9 +735,7 @@ def create_reservation(
                     return _reservation_row(
                         cur, owner.household_id, UUID(str(eid)), date.today(), base, secondary
                     )
-                raise HTTPException(
-                    status_code=409, detail="idempotency key reused with a different request"
-                )
+                raise HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
 
             cur.execute(
                 "SELECT currency, is_active, account_class::text FROM account "

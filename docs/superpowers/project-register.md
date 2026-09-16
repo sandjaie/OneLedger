@@ -5,7 +5,7 @@ action. The [roadmap](../product/roadmap.html) owns approved product outcomes, t
 [master implementation plan](../product/master-implementation-plan.html) owns delivery order, and
 [progress](progress.md) owns live implementation state.
 
-Updated: 14 September 2026.
+Updated: 16 September 2026.
 
 ## How entries move
 
@@ -34,7 +34,7 @@ an inferred institution identity.
 | 14 Sep 2026 | Account- and asset-class XIRR; platform and currency allocation groupings | Phase 1.6 reports holding and portfolio XIRR, and allocation by asset class and account | Phase 4.3 planning |
 | 14 Sep 2026 | Resolve a blocked import group inside the import | Blocked groups stay uncommitted; the owner cancels or uses owner entry | When blocked groups recur in real monthly imports |
 | 14 Sep 2026 | Switch charges (exit load, stamp duty) | The event matrix records no switch charge, so such a switch fails closed | When real evidence contains one |
-| 14 Sep 2026 | Backdated unit events before a platform transfer | V40's order guard refuses them although holding-level transfers carry explicit units | Phase 2.2–2.4 planning |
+| 14 Sep 2026 | Backdated unit events before a platform transfer | V40's order guard refuses them although holding-level transfers carry explicit units | Phase 2.2–2.4 planning — elapsed 16 Sep 2026 (Phases 2.2–2.4 planned and delivered) without this review; awaits an owner decision |
 | 14 Sep 2026 | Persist the price-source check time | Refresh throttling lives in process memory, so a restart refetches once | If refetches become noticeable |
 | 14 Sep 2026 | Scanned payslips and payslip layouts other than the supported monthly pay advice | Phase 1.7 imports one content-selected text-PDF layout; other files are reported unsupported | When the owner receives a payslip in another layout |
 | 14 Sep 2026 | Withdraw a payslip entered in error without a replacement | Phase 1.7 corrections only supersede; an exact duplicate month is refused at entry | When a mistaken payslip must be removed |
@@ -44,7 +44,7 @@ an inferred institution identity.
 | 15 Sep 2026 | Same-date valuation snapshot correction | UI completion Task 2a's `POST /accounts/{accountId}/valuation-snapshots` is append-only (`preserve_valuation_snapshot`): a mistyped same-date valuation has no correction route and needs a migration to add one | When a real mistyped same-date valuation occurs, or Phase 4.3 planning |
 | 15 Sep 2026 | Per-holding links after an investment import | UI gaps Task 3a links each committed import group to the portfolio: `CommittedGroupOutcome` holds no holding id and one group can touch several holdings | When import follow-up (funding a just-imported purchase) becomes a frequent owner task |
 | 15 Sep 2026 | Record a switch or systematic transfer into a not-yet-held security, or a platform transfer into a new account, from the app | UI completion Task 2b's `investment-event-form.tsx` picks a switch/systematic-transfer's "in" security from securities the household already holds in the same account (via `/portfolio/positions`), and a platform-transfer's "in" account from the existing accounts list; neither offers the catalogue-resolve lookup `entry-screen.tsx` uses for a first acquisition, so the destination must already exist | When the owner needs to switch or transfer into an instrument or account not yet recorded |
-| 15 Sep 2026 | Planned remittances with funding and receipt dates, fees and an estimated rate (Finance OS F07) | Phase 3.2 models a cross-currency remittance as two ordinary commitments; a single record naming both legs, a fee and an estimated rate is not built | Phase 3.3 planning, or when a real remittance's two-commitment workaround proves confusing |
+| 15 Sep 2026 | Planned remittances with funding and receipt dates, fees and an estimated rate (Finance OS F07) | Phase 3.2 models a cross-currency remittance as two ordinary commitments; a single record naming both legs, a fee and an estimated rate is not built | Phase 3.3 planning — elapsed 16 Sep 2026 (Phase 3.3 planned and delivered) without this review; awaits an owner decision, or when a real remittance's two-commitment workaround proves confusing |
 | 15 Sep 2026 | Data-quality and review-queue items inside the action list (Finance OS F08) | Phase 3.2 Task 2's monthly review surfaces coverage gaps, transfer candidates and unclassified postings only inside the review itself, each linking to where it is resolved; they are not also gathered as their own `GET /actions` item kind the way a commitment or card due is | When the owner wants those items actionable from Needs attention between monthly reviews |
 
 ## Unapproved discoveries and improvement candidates

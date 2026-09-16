@@ -2731,7 +2731,7 @@ path, gated by the route rather than the database. Both trigger functions are re
 `PUBLIC`. `commitment_resolution` enables `household_isolation FOR ALL TO authenticated` as on
 every other household-scoped table.
 
-`routes/plans.py`'s `_commitment_progress()` computes each commitment's lifecycle `status`
+`commitments.py`'s `commitment_progress()` computes each commitment's lifecycle `status`
 (`archivedAt` set is `cancelled`; `next_due_date NULL` is `finished`; else `overdue` before
 `asOf`, `due` through `asOf + 7`, else `upcoming`), `paidTowardNext` (the sum of payment amounts
 against the open occurrence), `partlyPaid` and `remainingNext` (`amount − paidTowardNext` when
@@ -2823,8 +2823,8 @@ currency, cadence and sign rules on every update of an already card-sourced comm
 apply_marks)`, gathering:
 
 1. a `commitment.<id>.<nextDueDate>` item for each unarchived commitment with `next_due_date`
-   within `plans.DUE_WINDOW_DAYS` days or overdue, its `remaining` and `partlyPaid` from
-   `_commitment_progress()`;
+   within `commitments.DUE_WINDOW_DAYS` days or overdue, its `remaining` and `partlyPaid` from
+   `commitment_progress()`;
 2. a `card.<statementId>` item for the latest `card_statement` dated on or before `asOf` per
    active credit-card account, when that statement states an amount due, is not paid in full, is
    due within the window, has no unarchived commitment sourced from it and no dismissal mark;
@@ -3188,7 +3188,7 @@ proceeds`); a `claim` needs `once` and a positive amount, and refuses a complete
 `nominee` or `administration` record refuses with 422 `this record does not plan money`. A second
 open plan for the same record is 409 `money is already planned for this record`; an archived record
 is 409. `CommitmentRow.source` gains `register_record` with `sourceRegisterRecordId` and
-`sourceRegisterTitle`. `RegisterRow.plannedCommitment` reuses `plans._commitment_progress` — no
+`sourceRegisterTitle`. `RegisterRow.plannedCommitment` reuses `commitments.commitment_progress` — no
 second remaining-amount computation; a claim's outstanding amount is its `remainingNext` and what
 was received is `paidTowardNext`. `register_records.py`'s deposit maturity action item is omitted
 once an unarchived commitment is sourced from the record.

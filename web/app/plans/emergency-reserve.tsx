@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
-import { accountValueReasonText } from "@/lib/plans/account-value-reasons";
+import { accountValueReasonText, reasonsText } from "@/lib/plans/account-value-reasons";
 import type {
   AccountRow,
   CurrencyRow,
@@ -51,7 +51,7 @@ const COVERAGE_REASON_TEXT: Record<string, string> = {
 };
 
 function reasonText(reasons: Array<string>): string {
-  return reasons.map((reason) => COVERAGE_REASON_TEXT[reason] ?? reason).join("; ");
+  return reasonsText(reasons, COVERAGE_REASON_TEXT);
 }
 
 function settingsFormFrom(data: EmergencyReserveResponse): SettingsFormState {
@@ -120,10 +120,6 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, request]);
 
-  function refetch() {
-    setAttempt((value) => value + 1);
-  }
-
   function toggleBucket(bucket: Bucket) {
     setSettingsForm((current) => ({
       ...current,
@@ -156,7 +152,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
         }),
       });
       setEditingSettings(false);
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setSettingsProblem(errorText(error, "These settings could not be saved."));
     } finally {
@@ -192,7 +188,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
         }),
       });
       setAddingAccountId(undefined);
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setEligibilityProblem(errorText(error, "This account could not be marked eligible."));
     } finally {
@@ -204,7 +200,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
     setRowProblem(undefined);
     try {
       await request(`/emergency-reserve/accounts/${accountId}`, { method: "DELETE" });
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setRowProblem(errorText(error, "This account could not be removed."));
     }
@@ -236,7 +232,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
       });
       setReservingAccountId(undefined);
       setReserveKey(crypto.randomUUID());
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setReserveProblem(errorText(error, "This reservation could not be made."));
     } finally {
@@ -252,7 +248,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setRowProblem(errorText(error, "This reservation could not be released."));
     }
@@ -271,7 +267,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
       {state === "error" && (
         <div role="alert">
           <p>The emergency reserve could not be loaded.</p>
-          <button className="text-action" onClick={refetch} type="button">Try again</button>
+          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
         </div>
       )}
 

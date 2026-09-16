@@ -147,18 +147,8 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
   return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
 }
 
-function renderScreen(
-  request: Request,
-  accounts: Array<AccountRow> = [investmentAccount],
-  createIdempotencyKey = () => "00000000-0000-4000-8000-000000000080",
-) {
-  return render(
-    <InvestmentEntryScreen
-      accounts={accounts}
-      createIdempotencyKey={createIdempotencyKey}
-      request={request}
-    />,
-  );
+function renderScreen(request: Request, accounts: Array<AccountRow> = [investmentAccount]) {
+  return render(<InvestmentEntryScreen accounts={accounts} request={request} />);
 }
 
 function fillPurchase() {
@@ -393,7 +383,7 @@ describe("investment entry", () => {
       withheldTax: "0.0000",
       netAmount: "-25.7500",
       currency: "XAA",
-      idempotencyKey: "00000000-0000-4000-8000-000000000080",
+      idempotencyKey: expect.any(String),
     });
   });
 
@@ -512,7 +502,7 @@ describe("investment entry", () => {
     let priceAttempts = 0;
     let reads = 0;
     let releasePrice!: (value: unknown) => void;
-    const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
+    const randomUUID = vi.spyOn(crypto, "randomUUID");
     const request = requestFrom(async (path) => {
       if (path === "/portfolio/positions") return positions(reads++ === 0 ? [] : [position]);
       if (path === "/investment-catalogue/securities/resolve") {
@@ -523,7 +513,7 @@ describe("investment entry", () => {
       if (path.includes("manual-prices")) return new Promise((resolve) => { releasePrice = resolve; });
       throw new Error(`Unexpected synthetic route ${path}`);
     });
-    renderScreen(request, [investmentAccount], createKey);
+    renderScreen(request, [investmentAccount]);
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
@@ -549,7 +539,7 @@ describe("investment entry", () => {
     await screen.findByRole("article", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
-    expect(createKey).toHaveBeenCalledTimes(1);
+    expect(randomUUID).toHaveBeenCalledTimes(1);
     const priceBodies = vi.mocked(request).mock.calls.filter(([path]) => path.includes("manual-prices"));
     expect(JSON.parse(String(priceBodies[1][1]?.body)).price).toBe("9.100000");
   });
@@ -557,7 +547,7 @@ describe("investment entry", () => {
   it("reloads holdings after a committed purchase without resubmitting the acquisition", async () => {
     let reads = 0;
     let releaseHoldings!: (value: unknown) => void;
-    const createKey = vi.fn(() => "00000000-0000-4000-8000-000000000080");
+    const randomUUID = vi.spyOn(crypto, "randomUUID");
     const request = requestFrom(async (path) => {
       if (path === "/portfolio/positions") {
         reads += 1;
@@ -572,7 +562,7 @@ describe("investment entry", () => {
       if (path.includes("manual-prices")) return { status: "recorded" };
       throw new Error(`Unexpected synthetic route ${path}`);
     });
-    renderScreen(request, [investmentAccount], createKey);
+    renderScreen(request, [investmentAccount]);
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
@@ -597,7 +587,7 @@ describe("investment entry", () => {
     await screen.findByRole("article", { name: candidate.name });
 
     expect(vi.mocked(request).mock.calls.filter(([path]) => path === "/investment-events/acquisitions")).toHaveLength(1);
-    expect(createKey).toHaveBeenCalledTimes(1);
+    expect(randomUUID).toHaveBeenCalledTimes(1);
   });
 
   it("retries a generic initial holdings failure with exactly one new read", async () => {

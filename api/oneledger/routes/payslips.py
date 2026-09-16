@@ -6,7 +6,6 @@ never writes a transaction, balance or classification (spec "Failure behaviour a
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -17,12 +16,13 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..auth import OwnerSession, require_owner
-from ..db import connect, scope_to_owner
+from ..db import IDEMPOTENCY_REUSED, connect, scope_to_owner
 from ..ingest import storage
 from ..ingest.uploads import uploaded_pages
 from ..ingest.words import ExtractionError
 from ..money import _money
 from ..payslip_pdf import EXTRACTION_VERSION, PayslipMonthDraft, PayslipReason, extract_payslips
+from ..text import normalize_bounded
 from .layouts import _preview_redactor
 from .transactions import (
     _assert_category_allowed,
@@ -56,10 +56,7 @@ def _positive(value: str) -> str:
 
 
 def _normalize_label(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 80:
-        raise ValueError("label must be 1-80 characters")
-    return collapsed
+    return normalize_bounded(value, "label", 80)
 
 
 def _pay_month_str(value: date) -> str:
@@ -229,9 +226,7 @@ def _translate_database_error(exc: psycopg.Error) -> HTTPException:
     if exc.sqlstate == "P0002":
         return HTTPException(status_code=404, detail="payslip not found")
     if constraint == "payslip_idempotency_conflict":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "payslip_is_linked":
         return HTTPException(
             status_code=409, detail="a linked payslip must be unlinked before it can be corrected"

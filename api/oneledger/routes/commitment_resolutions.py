@@ -9,7 +9,6 @@ the resolution that closed it, so a recurring commitment only ever holds its nex
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -22,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..forecast import next_occurrence
+from ..text import normalize_bounded
 from .layouts import _preview_redactor
 from .plans import CommitmentRow, _row
 
@@ -77,10 +77,7 @@ _CANDIDATE_LIMIT = 20
 
 
 def _normalize_reason(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 200:
-        raise ValueError("reason must be 1-200 characters")
-    return collapsed
+    return normalize_bounded(value, "reason", 200)
 
 
 class ResolutionCreate(BaseModel):

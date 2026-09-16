@@ -21,10 +21,11 @@ from ..auth import OwnerSession, require_owner
 from ..coverage import month_end, months_from_anchor, previous_month
 from ..db import connect
 from ..money import _out
+from ..resources import household_currencies
 from .actions import action_list
 from .coverage import coverage_rows
 from .transfers import candidates_for_window
-from .wealth_history import _household_pair, month_totals
+from .wealth_history import month_totals
 
 router = APIRouter(tags=["monthly-review"])
 
@@ -130,9 +131,9 @@ def _classification_step(
 def _position_step(
     cur: psycopg.Cursor[Any], household_id: UUID, review_month: date
 ) -> PositionStep:
-    base, _secondary = _household_pair(cur, household_id)
+    base, _secondary = household_currencies(cur, household_id)
     this_end = month_end(review_month)
-    previous_start = (review_month - timedelta(days=1)).replace(day=1)
+    previous_start = previous_month(review_month)
     previous_end = month_end(previous_start)
     totals = month_totals(cur, household_id, [this_end, previous_end])
     total_base, _total_secondary, complete = totals.get(this_end, (None, None, False))

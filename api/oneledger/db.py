@@ -63,3 +63,8 @@ def first_line(exc: Exception) -> str:
     """A refusal's own sentence. Postgres appends DETAIL, CONTEXT and a query position on later
     lines, and those can carry the parameters that caused the failure."""
     return str(exc).splitlines()[0].strip()
+
+
+# The 409 an idempotency replay gets when its stored request doesn't match the one just
+# submitted — the same household-row-locking write convention every route module below follows.
+IDEMPOTENCY_REUSED = "idempotency key reused with a different request"

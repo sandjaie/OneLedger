@@ -1,19 +1,18 @@
 """Phase 3.1 Task 2: one Needs attention list gathering every item that asks the owner to act — a
-commitment occurrence due within `plans.DUE_WINDOW_DAYS` days or overdue, a card statement with an
-amount due and no planned payment, and owner-entered follow-ups. `action_list()` builds all three
-kinds from one household's data and is the single place Phase 3.2 will extend (spec "Card dues and
-actions (Task 2)"); every write here still locks the household row first, the same convention as
-`routes/plans.py` and `routes/commitment_resolutions.py`. A commitment item's own completion and
-dismissal are its occurrence's resolution (`POST /commitments/{id}/resolutions`, Task 1) — no route
-here writes `commitment_resolution`; a card item's are planning its payment (it becomes a
-commitment item) or a dismissal mark. `action_mark` is the one further lifecycle every kind
-shares: snooze (any kind) and dismiss (card only, the database's own `action_mark_dismissal_is_card`
-check)."""
+commitment occurrence due within `commitments.DUE_WINDOW_DAYS` days or overdue, a card statement
+with an amount due and no planned payment, and owner-entered follow-ups. `action_list()` builds
+all three kinds from one household's data and is the single place Phase 3.2 will extend (spec
+"Card dues and actions (Task 2)"); every write here still locks the household row first, the same
+convention as `routes/plans.py` and `routes/commitment_resolutions.py`. A commitment item's own
+completion and dismissal are its occurrence's resolution (`POST /commitments/{id}/resolutions`,
+Task 1) — no route here writes `commitment_resolution`; a card item's are planning its payment (it
+becomes a commitment item) or a dismissal mark. `action_mark` is the one further lifecycle every
+kind shares: snooze (any kind) and dismiss (card only, the database's own
+`action_mark_dismissal_is_card` check)."""
 
 from __future__ import annotations
 
 import re
-import unicodedata
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -24,8 +23,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from ..auth import OwnerSession, require_owner
+from ..commitments import DUE_WINDOW_DAYS, Certainty, commitment_progress
 from ..coverage import previous_month
-from ..db import connect
+from ..db import IDEMPOTENCY_REUSED, connect
 from ..emergency import coverage as emergency_coverage
 from ..register_records import register_action_items
 from ..resources import (
@@ -38,7 +38,7 @@ from ..resources import (
     household_reservations,
     read_emergency_reserve_settings,
 )
-from .plans import DUE_WINDOW_DAYS, Certainty, _commitment_progress
+from ..text import normalize_bounded
 
 router = APIRouter(tags=["actions"])
 
@@ -85,17 +85,11 @@ _ACTION_KEY_RE = re.compile(
 
 
 def _normalize_reason(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 200:
-        raise ValueError("reason must be 1-200 characters")
-    return collapsed
+    return normalize_bounded(value, "reason", 200)
 
 
 def _normalize_title(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 120:
-        raise ValueError("title must be 1-120 characters")
-    return collapsed
+    return normalize_bounded(value, "title", 120)
 
 
 class ActionRow(BaseModel):
@@ -264,7 +258,7 @@ def action_list(
 
     cur.execute(_COMMITMENT_ACTION_ITEMS, (household_id, as_of + timedelta(days=DUE_WINDOW_DAYS)))
     commitment_rows = cur.fetchall()
-    progress = _commitment_progress(
+    progress = commitment_progress(
         cur, household_id, as_of, [(r[0], None, r[6], Decimal(r[4])) for r in commitment_rows]
     )
     for row in commitment_rows:
@@ -529,9 +523,7 @@ def _followup(cur: psycopg.Cursor[Any], household_id: UUID, item_id: UUID) -> Fo
 def _translate_action_error(exc: psycopg.Error) -> HTTPException:
     constraint = exc.diag.constraint_name
     if constraint == "uq_action_item_idempotency":
-        return HTTPException(
-            status_code=409, detail="idempotency key reused with a different request"
-        )
+        return HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
     if constraint == "action_item_title_is_bounded":
         return HTTPException(status_code=422, detail="title must be 1-120 characters")
     if constraint == "fk_action_item_account_scope":
@@ -607,9 +599,7 @@ def create_follow_up(
                 ):
                     response.status_code = status.HTTP_200_OK
                     return _followup(cur, owner.household_id, UUID(str(eid)))
-                raise HTTPException(
-                    status_code=409, detail="idempotency key reused with a different request"
-                )
+                raise HTTPException(status_code=409, detail=IDEMPOTENCY_REUSED)
             if body.accountId is not None:
                 cur.execute(
                     "SELECT 1 FROM account WHERE household_id = %s AND id = %s",

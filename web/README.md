@@ -29,8 +29,8 @@ navigation to the API's `GET /auth/login`; `POST /auth/logout` must succeed befo
 cleared. A transient API or logout failure stays visible with a retry action.
 
 The workspace sections — overview, accounts, transactions, review, import, documents, investments,
-salary, plans, coverage and settings — each read their own API routes; money arrives as decimal
-strings and is only formatted in `lib/money/format.ts`, never computed.
+salary, plans, wealth, coverage and settings — each read their own API routes; money arrives as
+decimal strings and is only formatted in `lib/money/format.ts`, never computed.
 
 ## API Types
 

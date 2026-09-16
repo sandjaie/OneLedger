@@ -39,6 +39,7 @@ from ..ingest.classify import (
     validate_pattern,
 )
 from ..ingest.knowledge import load_knowledge
+from ..money import _out
 from .layouts import _preview_redactor
 from .transactions import _assert_category_allowed
 
@@ -162,10 +163,6 @@ COLUMNS = """id, name, priority, is_active,
              set_category_id, set_merchant_id, set_txn_type::text, set_payment_method::text,
              set_country, set_tags, set_is_transfer_candidate, set_counterparty_account_id,
              origin, times_applied, last_applied_at"""
-
-
-def _out(value: Decimal | None) -> str | None:
-    return None if value is None else str(value)
 
 
 def rule_row(values: tuple[Any, ...]) -> RuleRow:

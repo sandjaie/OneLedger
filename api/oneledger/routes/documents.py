@@ -20,7 +20,6 @@ already trusted its original to.
 
 from __future__ import annotations
 
-import unicodedata
 from datetime import date, datetime
 from typing import Annotated, Any
 from uuid import UUID
@@ -42,6 +41,7 @@ from pydantic import BaseModel
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..ingest import storage
+from ..text import normalize_bounded
 from .description_reparse import verified_original
 
 router = APIRouter(tags=["documents"])
@@ -330,10 +330,7 @@ def list_documents(
 
 
 def _normalize_title(value: str) -> str:
-    collapsed = " ".join(unicodedata.normalize("NFKC", value).split())
-    if not 1 <= len(collapsed) <= 120:
-        raise ValueError("title must be 1-120 characters")
-    return collapsed
+    return normalize_bounded(value, "title", 120)
 
 
 def _bounded_read(file: UploadFile) -> bytes:

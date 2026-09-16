@@ -6,8 +6,10 @@ without a connection, the same convention as `goals.py`."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import ROUND_HALF_EVEN, Decimal
+
+from .coverage import month_end, previous_month
 
 _BASE = Decimal("0.0001")
 _MONTHS = Decimal("0.01")
@@ -17,26 +19,18 @@ BaselineStatus = str  # "available" | "not_enough_information"
 CoverageStatus = str  # "available" | "not_enough_information" | "unavailable"
 
 
-def _month_start(d: date) -> date:
-    return date(d.year, d.month, 1)
-
-
 def _shift_months(month_start: date, delta: int) -> date:
     total = month_start.year * 12 + (month_start.month - 1) + delta
     year, month = divmod(total, 12)
     return date(year, month + 1, 1)
 
 
-def _month_end(month_start: date) -> date:
-    return _shift_months(month_start, 1) - timedelta(days=1)
-
-
 def reference_period(as_of: date, reference_months: int) -> tuple[date, date]:
     """The `reference_months` complete calendar months before `asOf`'s month (spec "Baseline"),
     as an inclusive [start, end] date range."""
-    this_month = _month_start(as_of)
+    this_month = as_of.replace(day=1)
     start = _shift_months(this_month, -reference_months)
-    end = _month_end(_shift_months(this_month, -1))
+    end = month_end(previous_month(as_of))
     return start, end
 
 

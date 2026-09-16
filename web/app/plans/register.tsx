@@ -287,10 +287,6 @@ export function Register({
     };
   }, [attempt, refreshKey, request]);
 
-  function refetch() {
-    setAttempt((value) => value + 1);
-  }
-
   function changeForm<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
     setProblem(undefined);
@@ -344,7 +340,7 @@ export function Register({
       setEditing(undefined);
       setForm(emptyForm(currencies));
       setIdempotencyKey(crypto.randomUUID());
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This record could not be saved."));
     } finally {
@@ -357,7 +353,7 @@ export function Register({
     setProblem(undefined);
     try {
       await action();
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, fallback));
     } finally {
@@ -454,7 +450,7 @@ export function Register({
       await request(`/register/${record.id}/documents/${uploaded.id}`, { method: "PUT" });
       setAttachingId(undefined);
       setLibrary(undefined);
-      refetch();
+      setAttempt((value) => value + 1);
     } catch (error) {
       setProblem(errorText(error, "This file could not be uploaded."));
     } finally {
@@ -478,7 +474,7 @@ export function Register({
       {state === "error" && (
         <div role="alert">
           <p>The register could not be loaded.</p>
-          <button className="text-action" onClick={refetch} type="button">Try again</button>
+          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
         </div>
       )}
 

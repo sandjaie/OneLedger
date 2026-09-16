@@ -33,6 +33,15 @@ def _out(value: Decimal | None) -> str | None:
     return None if value is None else str(value)
 
 
+def _decimal_eq(stored: Decimal | None, value: str | None) -> bool:
+    """True when a stored `Decimal` and a wire decimal string represent the same amount and
+    the same nullness — an idempotency replay's stored-vs-submitted comparison, shared by every
+    route that checks a nullable money field on retry."""
+    if (stored is None) != (value is None):
+        return False
+    return stored is None or Decimal(stored) == Decimal(value)  # type: ignore[arg-type]
+
+
 def _rate_leg(
     cur: psycopg.Cursor[Any], on: date, base: str, quote: str
 ) -> tuple[Decimal, bool, date]:
