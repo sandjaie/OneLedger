@@ -60,20 +60,25 @@ Recurring screen for a false detection, as the existing dismissal. It is not the
 `APPLE.COM/BILL` or a Google billing descriptor can carry several services. A series is therefore an
 identity plus an amount cluster, not an identity alone:
 
-- within one identity, charges whose original amounts sit within 20% of a cluster's median join it;
+- within one identity and currency, charges are taken in date order and join the cluster whose
+  current median is nearest and within 20%;
 - two clusters on one identity whose date ranges **overlap** are two subscriptions (both are being
   charged at the same time);
 - two clusters whose ranges do **not** overlap are one subscription whose price changed.
 
-A charge belongs to at most one series. Two services charging the same amount on the same days
-cannot be told apart from a statement; the owner separates or renames them.
+A charge belongs to at most one series. When no cluster on an identity is regular enough, the whole
+identity is evaluated as one group, as before, so a bill whose amount varies widely is still found.
+Later charges extend the open series whose amount is nearest; when only one series exists they
+extend it even after a large price change. Two services charging the same amount on the same days
+cannot be told apart from a statement; the owner renames them.
 
 ## Original currency is kept
 
 A subscription keeps its own currency and amount — `₹1,499/year` stays rupees, `$20/month` stays
-dollars — taken from the latest charge's original `amount` and `currency`. Every figure in the base
-currency comes from that charge's frozen `amount_base`, never from a fresh conversion, and totals say
-they are estimates built from the latest charges.
+dollars — taken from the latest charge's original pair (`original_amount`/`original_currency`
+when the statement recorded one, otherwise `amount`/`currency`), as a magnitude. Every figure in
+the base currency comes from that charge's frozen `amount_base`, never from a fresh conversion, and
+totals say they are estimates built from the latest charges.
 
 Annual and monthly equivalents are computed on the server in `Decimal`: the annual figure is the
 amount times its cadence's charges per year (52, 12, 4, 2, 1, or 365 divided by a custom interval),
@@ -86,8 +91,8 @@ Detection cannot see some facts, so the owner sets them:
 - a **name** (a series created from `APPLE.COM/BILL` starts with that label and shows **Needs a
   name** until the owner renames it; the name persists because the series persists);
 - the **subscription flag**;
-- a **status** of active, trial, paused or cancelled — cancelled ends the series, and paused and
-  cancelled subscriptions leave the totals;
+- a **status** of active, trial, paused or cancelled — cancelled ends the series for good, and
+  paused and cancelled subscriptions leave the totals;
 - a **custom cadence** in days, for an interval detection does not recognise;
 - a **payment channel** such as an app store, a wallet autopay or a direct card — a list stored as
   data and seeded, never a code enumeration, because institution names are never code identifiers
@@ -108,11 +113,11 @@ overdue. It is never ended automatically.
 
 ## Non-goals
 
-Recurring income, investment purchases and transfers (the engine reads spending only, by design of
-`v_transaction_reportable`); rent, loan and insurance obligations the Phase 3.1 commitments and 3.4
-register already model; a catalogue of known services to pick from for a billing descriptor
-(recorded in the project register); usage-based "unused subscription" detection; merging two series;
-a Reports screen.
+Reopening a cancelled series; recurring income, investment purchases and transfers (the engine
+reads spending only, by design of `v_transaction_reportable`); rent, loan and insurance obligations
+the Phase 3.1 commitments and 3.4 register already model; a catalogue of known services to pick
+from for a billing descriptor (recorded in the project register); usage-based "unused subscription"
+detection; merging two series; a Reports screen.
 
 ## Required test evidence
 
