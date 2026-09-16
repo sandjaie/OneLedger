@@ -14,8 +14,8 @@ Updated: 16 September 2026.
 | --- | --- | --- |
 | Current outcome | **Phase 4.3 — investment analysis** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | Outcome state | **Phase 4.1 implementation complete; owner acceptance open** — PRs #232–#236 and #239–#241. Phase 4.2 implementation complete via PRs #243–#244; owner acceptance open. Phases 3.1–3.4 implementation complete via PRs #222–#229 with owner acceptance open on each | [Phase 4.1 Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
-| Next product action | Plan Phase 4.3 — investment analysis; owner acceptance of Phases 4.1 and 4.2 on real statements and payslips | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| Current implementation task | None in flight | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Next product action | Implement Phase 4.3 Task 1 — investment analysis API; owner acceptance of Phases 4.1 and 4.2 on real statements and payslips | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Current implementation task | Phase 4.3 Task 1 next, after this plan merges | [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 
 ## Canonical phase status
 
@@ -54,7 +54,9 @@ Updated: 16 September 2026.
 | 4.2 — salary analysis | **Implementation complete; owner acceptance open** — PRs #243–#244 | [Phase 4.2 specification](specs/2026-09-16-phase-4-2-salary-analysis.md) · [Phase 4.2 plan](plans/2026-09-16-phase-4-2-salary-analysis.md) |
 | 4.2 Task 1 — earning rules and the salary analysis API | **Delivered** — [PR #243](https://github.com/sandjaie/OneLedger/pull/243) | [plan](plans/2026-09-16-phase-4-2-salary-analysis.md) |
 | 4.2 Task 2 — salary analysis on the Salary screen | **Delivered** — [PR #244](https://github.com/sandjaie/OneLedger/pull/244) | [plan](plans/2026-09-16-phase-4-2-salary-analysis.md) |
-| 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.3 — investment analysis | **Specified** — [PR #245](https://github.com/sandjaie/OneLedger/pull/245) | [Phase 4.3 specification](specs/2026-09-16-phase-4-3-investment-analysis.md) · [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
+| 4.3 Task 1 — investment analysis API | **Planned** | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
+| 4.3 Task 2 — investment analysis on the Investments screen | **Planned** | [plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
