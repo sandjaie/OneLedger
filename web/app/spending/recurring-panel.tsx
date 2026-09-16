@@ -110,6 +110,9 @@ export function RecurringPanel({ categories, currencies, baseCurrency, request }
     setConfirmingKey(identityKey(candidate.identity));
     setConfirmForm(formFor(candidate));
     setConfirmProblem(undefined);
+    // Each draft carries its own key: a confirm that reached the server but failed in the
+    // browser must not spend the next, different draft's key on a replay conflict.
+    setConfirmKey(crypto.randomUUID());
   }
 
   async function submitConfirm(candidate: CandidateRow) {

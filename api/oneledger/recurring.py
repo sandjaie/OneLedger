@@ -40,6 +40,8 @@ CADENCE_WINDOWS: dict[str, tuple[int, int]] = {
 CADENCE_DAYS: dict[str, int] = {"weekly": 7, "monthly": 30, "quarterly": 91, "annual": 365}
 
 _MIN_OCCURRENCES = 3
+# `recurring_series.label` is bounded at 120 characters by V56's own CHECK.
+_LABEL_LIMIT = 120
 _WHITESPACE = re.compile(r"\s+")
 
 
@@ -152,6 +154,9 @@ def detect_candidates(rows: list[SpendRow]) -> list[Candidate]:
             if identity.merchant_id is not None and latest.merchant_display_name
             else latest.description_raw
         )
+        # `recurring_series.label` is bounded at 120 characters, and a raw description can be far
+        # longer, so the proposal is trimmed to what the confirm form can actually post.
+        label = label[:_LABEL_LIMIT]
         candidates.append(
             Candidate(
                 identity=identity,

@@ -383,6 +383,63 @@ def test_foreign_and_unknown_category_are_refused(live: Owner) -> None:
     assert unknown.status_code == 422, unknown.text
 
 
+def test_foreign_and_unknown_merchant_are_refused(live: Owner) -> None:
+    """V56 keeps a plain `REFERENCES merchant(id)` because `merchant` is a shared seed table with
+    no `UNIQUE (household_id, id)`, so the tenant boundary is the route's own check. Without this
+    test that check could be deleted with every suite still green."""
+    theirs, _account = _another_household(live)
+    foreign = a_merchant(live, "Synthetic recurring foreign merchant", household=theirs)
+    a_monthly_group(live, description="Synthetic recurring merchant boundary", amount="-10")
+
+    refused = confirm(uuid4(), merchant_id=foreign, amount="10.0000")
+    assert refused.status_code == 404, refused.text
+
+    unknown = confirm(uuid4(), merchant_id=uuid4(), amount="10.0000")
+    assert unknown.status_code == 422, unknown.text
+
+    dismissed = client().post(
+        "/recurring/dismiss",
+        json={"identity": {"merchantId": str(foreign)}},
+        headers=ORIGIN,
+    )
+    assert dismissed.status_code == 404, dismissed.text
+
+
+def test_a_description_with_a_non_breaking_space_still_grows_its_series(live: Owner) -> None:
+    """Identity is computed once, in Python. An earlier SQL twin trimmed spaces only and matched
+    ASCII whitespace, so a description holding a non-breaking space stored a key that refresh
+    could never match again and the series silently stopped growing."""
+    description = "Synthetic\u00a0recurring nbsp"
+    a_monthly_group(live, description=description, amount="-15")
+    listed = the_recurring()["candidates"]
+    proposed = next(c for c in listed if "nbsp" in c["label"])
+    match_key = proposed["identity"]["matchKey"]
+    created = confirm(uuid4(), match_key=match_key, amount="15.0000").json()
+
+    a_spend(live, live.account_id, "-15", LATER, "expense", description=description)
+    refreshed = client().post("/recurring/refresh", headers=ORIGIN)
+    assert refreshed.json() == {"seriesTouched": 1, "membersAdded": 1}
+
+    row = next(c for c in the_recurring()["confirmed"] if c["id"] == created["id"])
+    assert row["lastSeenOn"] == str(LATER)
+
+
+def test_a_refund_never_joins_a_series(live: Owner) -> None:
+    """A refund on the same counterparty is stored positive and is not an occurrence of the
+    charge: counting it would report a negative `lastAmountBase` as a price change and then
+    refuse its own accept-price against the positive-amount CHECK."""
+    description = "Synthetic recurring refunded"
+    a_monthly_group(live, description=description, amount="-20")
+    created = confirm(uuid4(), match_key=description.lower(), amount="20.0000").json()
+
+    a_spend(live, live.account_id, "12", LATER, "refund", description=description)
+    refreshed = client().post("/recurring/refresh", headers=ORIGIN)
+    assert refreshed.json() == {"seriesTouched": 0, "membersAdded": 0}
+
+    row = next(c for c in the_recurring()["confirmed"] if c["id"] == created["id"])
+    assert row["lastAmountBase"] == "20.0000"
+
+
 def test_foreign_household_refusals(live: Owner) -> None:
     description = "Synthetic recurring foreign household"
     a_monthly_group(live, description=description, amount="-10")

@@ -61,15 +61,6 @@ Cadence = Literal["weekly", "monthly", "quarterly", "annual"]
 
 _LOOKBACK_MONTHS = 18
 
-# The identity SQL for a description-keyed group, matching `recurring.normalized_description`
-# exactly — `POST /recurring/refresh` matches over the whole ledger and cannot afford to load
-# every row into Python first, so it recomputes identity in SQL rather than reusing the pure
-# function; `GET /recurring` and `POST /recurring/confirm` both stay on the Python path.
-_MATCH_KEY_SQL = (
-    "lower(regexp_replace(btrim(coalesce(t.description_clean, t.description_raw)),"
-    " '\\s+', ' ', 'g'))"
-)
-
 
 def _months_back(on: date, months: int) -> date:
     total = on.year * 12 + (on.month - 1) - months
@@ -267,6 +258,9 @@ _SPEND_ROWS = """
       FROM v_transaction_reportable t
       LEFT JOIN merchant m ON m.id = t.merchant_id
      WHERE t.household_id = %s AND t.txn_type <> 'income' AND t.booked_date >= %s
+       -- A charge only: a refund on the same counterparty is stored positive and is not an
+       -- occurrence of the subscription, so it never becomes a candidate's or a series' member.
+       AND t.amount_base < 0
      ORDER BY t.booked_date
 """
 
@@ -620,20 +614,33 @@ def refresh_recurring(
                          FROM v_transaction_reportable t
                         WHERE t.household_id = %s AND t.txn_type <> 'income'
                           AND t.merchant_id = %s AND t.booked_date > %s
+                          AND t.amount_base < 0
                         ORDER BY t.booked_date""",
                     (owner.household_id, merchant_id, last_seen_on),
                 )
             else:
+                # Identity is computed once, in Python, by `recurring.identity_for` — the same
+                # function detection and confirm use. An earlier SQL twin of it drifted on
+                # non-space whitespace (`btrim` trims spaces only, and Postgres `[[:space:]]`
+                # is not Unicode), so a description holding a non-breaking space stored a key
+                # refresh could never match again and the series silently stopped growing.
+                # The scan is bounded by the series' own `last_seen_on`.
                 cur.execute(
-                    f"""SELECT t.id, t.booked_date, -t.amount_base
-                          FROM v_transaction_reportable t
-                         WHERE t.household_id = %s AND t.txn_type <> 'income'
-                           AND t.merchant_id IS NULL AND t.booked_date > %s
-                           AND {_MATCH_KEY_SQL} = %s
-                         ORDER BY t.booked_date""",
-                    (owner.household_id, last_seen_on, match_key),
+                    """SELECT t.id, t.booked_date, -t.amount_base, t.description_clean,
+                              t.description_raw
+                         FROM v_transaction_reportable t
+                        WHERE t.household_id = %s AND t.txn_type <> 'income'
+                          AND t.merchant_id IS NULL AND t.booked_date > %s
+                          AND t.amount_base < 0
+                        ORDER BY t.booked_date""",
+                    (owner.household_id, last_seen_on),
                 )
-            new_rows = cur.fetchall()
+            new_rows = [
+                row[:3]
+                for row in cur.fetchall()
+                if merchant_id is not None
+                or identity_for(None, row[3], row[4]).match_key == match_key
+            ]
             if not new_rows:
                 continue
             for transaction_id, booked_date, amount_base in new_rows:
