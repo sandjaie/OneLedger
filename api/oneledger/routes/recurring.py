@@ -5,7 +5,7 @@
 
 Discovery reads the ledger and proposes; it writes nothing on its own. `api/oneledger/recurring.py`
 holds the pure grouping and cadence detection this route reads from `v_transaction_reportable`
-over the last 18 months; only `POST /recurring/confirm` and `POST /recurring/refresh` write. A
+over the last 26 months; only `POST /recurring/confirm` and `POST /recurring/refresh` write. A
 candidate's or a confirmed series' identity is `merchant_id` when classification resolved one,
 otherwise the normalized description (`recurring.identity_for`) — the same rule everywhere, so a
 candidate, a confirmed series and a dismissal are always compared on the same terms.
@@ -59,7 +59,10 @@ router = APIRouter(tags=["recurring"])
 
 Cadence = Literal["weekly", "monthly", "quarterly", "annual"]
 
-_LOOKBACK_MONTHS = 18
+# Long enough for three yearly charges at the widest annual spacing (two gaps of up to 380 days
+# span 760 days, about 25 months). At 18 months a yearly subscription could never reach the three
+# occurrences a candidate needs, so it was never proposed at all.
+_LOOKBACK_MONTHS = 26
 
 
 def _months_back(on: date, months: int) -> date:
