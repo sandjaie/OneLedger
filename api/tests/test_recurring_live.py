@@ -39,7 +39,13 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Owner]:
     try:
         fixture = Owner(conn)
         with conn.cursor() as cur:
-            cur.execute("TRUNCATE recurring_series_member, recurring_series, recurring_dismissal")
+            # recurring_series_period (V58) also references recurring_series and must truncate
+            # in the same statement, the same rule this fixture's own teardown already follows
+            # for recurring_series_member.
+            cur.execute(
+                "TRUNCATE recurring_series_period, recurring_series_member, recurring_series, "
+                "recurring_dismissal"
+            )
         conn.commit()
         app.dependency_overrides[auth.require_owner] = fixture.owner
         yield fixture
@@ -50,7 +56,10 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Owner]:
             # Postgres refuses TRUNCATE on a table with an incoming FK unless the referencing
             # table is truncated in the very same statement — true even though `_clean`'s own
             # TRUNCATE ... transaction CASCADE already emptied recurring_series_member.
-            cur.execute("TRUNCATE recurring_series_member, recurring_series, recurring_dismissal")
+            cur.execute(
+                "TRUNCATE recurring_series_period, recurring_series_member, recurring_series, "
+                "recurring_dismissal"
+            )
             cur.execute("DELETE FROM merchant WHERE canonical_name LIKE 'Synthetic recurring%'")
             cur.execute("DELETE FROM category WHERE name LIKE 'Synthetic recurring%'")
             if fixture is not None:
@@ -160,10 +169,11 @@ TODAY = date.today()
 # Ends 30 days before TODAY, leaving room for a still-not-future "later" row in extend scenarios.
 MONTHLY = [TODAY - timedelta(days=d) for d in (120, 90, 60, 30)]
 LATER = TODAY
-# The fixture's own account (`test_ingest_route_live.Fixture`) opens on 2026-01-01 and refuses any
-# earlier booked_date, so the "overdue" scenario starts there rather than further back.
-_ACCOUNT_ANCHOR = date(2026, 1, 1)
-OLD_MONTHLY = [_ACCOUNT_ANCHOR + timedelta(days=d) for d in (0, 30, 60, 90)]
+# 50 days stale: more than half a monthly cadence (15 days) past next-expected, so "overdue", but
+# short of the two-cadence (60-day) lapse threshold Task 5 adds, so still current.
+OVERDUE_MONTHLY = [TODAY - timedelta(days=d) for d in (140, 110, 80, 50)]
+# Well past the two-cadence lapse threshold: no longer current, so "ended".
+LAPSED_MONTHLY = [TODAY - timedelta(days=d) for d in (210, 180, 150, 120)]
 
 
 def a_monthly_group(
@@ -436,11 +446,12 @@ def test_a_charge_in_a_foreign_currency_keeps_its_original_pair(live: Owner) -> 
 
 def test_overdue_status(live: Owner) -> None:
     description = "Synthetic recurring overdue"
-    a_monthly_group(live, description=description, amount="-15", dates=OLD_MONTHLY)
+    a_monthly_group(live, description=description, amount="-15", dates=OVERDUE_MONTHLY)
     refresh()
     row = _row_for(the_recurring(), description)
     assert row is not None
     assert row["status"] == "overdue"
+    assert row["isCurrent"] is True
 
 
 def test_a_second_refresh_ignores_one_offs_that_overlapped_a_subscription(live: Owner) -> None:
