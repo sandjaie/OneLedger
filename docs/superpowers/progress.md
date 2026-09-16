@@ -12,10 +12,10 @@ Updated: 16 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 4.1 — budgets and recurring discovery** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| Outcome state | **Phase 4.1 in progress** — Tasks 1–6 delivered via PRs #232–#236, #239 and #240; Task 7 planned. Phases 3.1–3.4 implementation complete via PRs #222–#229 with owner acceptance open on each | [Phase 4.1 Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
-| Next product action | Phase 4.1 Task 7 — Subscriptions and detail screens, on `feature/p4-1-t7-subscription-screens` | [Phase 4.1 Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md#phase-41-task-7--subscriptions-and-detail-screens) |
-| Current implementation task | None in flight. Phase 4.1 Task 7 is planned and reviewed, ready to dispatch | [Phase 4.1 Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
+| Current outcome | **Phase 4.2 — salary analysis** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Outcome state | **Phase 4.1 implementation complete; owner acceptance open** — PRs #232–#236 and #239–#241. Phase 4.2 planned. Phases 3.1–3.4 implementation complete via PRs #222–#229 with owner acceptance open on each | [Phase 4.1 Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
+| Next product action | Phase 4.2 Task 1 — earning rules and the salary analysis API, on `feature/p4-2-t1-salary-analysis-api`; owner acceptance of Phase 4.1 on real statements | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Current implementation task | None in flight | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 
 ## Canonical phase status
 
@@ -42,7 +42,7 @@ Updated: 16 September 2026.
 | 3.2 — cash forecast and monthly review | **Implementation complete; owner acceptance open** — PRs #224–#225 | [Phase 3.2 specification](specs/2026-09-15-phase-3-2-cash-forecast-review.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
 | 3.3 — goals and emergency reserve | **Implementation complete; owner acceptance open** — PRs #226–#227 | [Phase 3.3 specification](specs/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) |
 | 3.4 — protection and administration | **Implementation complete; owner acceptance open** — PRs #228–#229 | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
-| 4.1 — budgets and recurring discovery | **In progress** — Tasks 1–6 delivered via PRs #232–#236, #239 and #240; Task 7 next | [Phase 4.1 specification](specs/2026-09-16-phase-4-1-budgets-recurring.md) · [subscriptions specification](specs/2026-09-16-phase-4-1-subscriptions.md) · [Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
+| 4.1 — budgets and recurring discovery | **Implementation complete; owner acceptance open** — Tasks 1–7 delivered via PRs #232–#236 and #239–#241 | [Phase 4.1 specification](specs/2026-09-16-phase-4-1-budgets-recurring.md) · [subscriptions specification](specs/2026-09-16-phase-4-1-subscriptions.md) · [Tasks 5–7 plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
 | 4.1 Task 1 — spending by category and bucket | **Delivered** — [PR #232](https://github.com/sandjaie/OneLedger/pull/232) | [plan](plans/2026-09-16-phase-4-1-budgets-recurring.md) |
 | 4.1 Task 2 — budgets, rollover and variance | **Delivered** — [PR #233](https://github.com/sandjaie/OneLedger/pull/233) | [plan](plans/2026-09-16-phase-4-1-budgets-recurring.md) |
 | 4.1 Task 3 — recurring discovery | **Delivered** — [PR #234](https://github.com/sandjaie/OneLedger/pull/234) | [plan](plans/2026-09-16-phase-4-1-budgets-recurring.md) |
@@ -50,7 +50,7 @@ Updated: 16 September 2026.
 | 4.1 Task 4 — opt-out recurring discovery and the Recurring screen | **Delivered** — [PR #236](https://github.com/sandjaie/OneLedger/pull/236) | [plan](plans/2026-09-16-phase-4-1-subscriptions.md) |
 | 4.1 Task 5 — subscription billing periods and lifecycle | **Delivered** — [PR #239](https://github.com/sandjaie/OneLedger/pull/239) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
 | 4.1 Task 6 — payment channels and subscription figures | **Delivered** — [PR #240](https://github.com/sandjaie/OneLedger/pull/240) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
-| 4.1 Task 7 — Subscriptions and detail screens | **Planned** — next | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
+| 4.1 Task 7 — Subscriptions and detail screens | **Delivered** — [PR #241](https://github.com/sandjaie/OneLedger/pull/241) | [plan](plans/2026-09-16-phase-4-1-subscription-registry.md) |
 | 4.2 — salary analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
