@@ -3571,6 +3571,69 @@ client-supplied key. `docs/design/api-contracts.html` §2 has the exact route co
 
 ---
 
+## `V59` (applied)
+
+### Payment channels and subscription figures
+
+Phase 4.1 Task 6. `payment_channel` is a shared seed table shaped like `category`/`merchant`
+(nullable `household_id`, RLS policies copied from `category`'s): no institution, store or wallet
+name is ever a code identifier (ADR-0012), so the seed carries six generic channel kinds only.
+
+```sql
+CREATE TABLE payment_channel (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID REFERENCES household(id),      -- NULL = system seed
+  name         TEXT NOT NULL,
+  sort_order   SMALLINT NOT NULL DEFAULT 0,
+  is_active    BOOLEAN NOT NULL DEFAULT true,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT payment_channel_name_is_bounded CHECK (
+    char_length(name) BETWEEN 1 AND 60 AND name = btrim(name))
+);
+```
+
+Seed rows (`household_id` null): Direct card, App store, Wallet autopay, Bank autopay, Bank debit,
+Other. `recurring_series` gains `payment_channel_id UUID REFERENCES payment_channel(id)` — a plain
+`REFERENCES`, the category/merchant exception (no `UNIQUE (household_id, id)` on a shared seed
+table), the tenant boundary enforced in `routes/recurring.py` exactly as
+`_assert_category_allowed` enforces it for `category`.
+
+**Paying account** (`routes/recurring.py::_paying_account`). A series' paying account is its
+latest member's transaction `account_id`, read through `v_transaction_reportable`, with the
+account's name and one masked identifier: the newest active `account_identifier` row, ordered by
+kind (`card` before `bank_account` before `iban`), then `created_at`, then `id` — only
+`masked_value` is ever selected, never `full_value` or `normalized_value` (ADR-0021).
+
+**Equivalents** (`api/oneledger/recurring.py::equivalents`). Annual is `amount x charges_per_year`
+(52/12/4/2/1 per cadence, or `365 / custom_interval_days` for `custom`, computed without
+intermediate rounding), monthly is that same *unrounded* annual figure divided by 12; both
+`Decimal`, 4 places half-even, rounded once at the end. Given in the original currency from
+`native_amount` and in the base currency from `expected_amount_base`, both null exactly when
+`native_amount` is null (a series not yet synced).
+
+**`GET /recurring`** rows gain `paymentChannelId`/`paymentChannelName`,
+`payingAccountId`/`payingAccountName`/`payingAccountMasked`, and
+`annualAmount`/`monthlyAmount`/`annualAmountBase`/`monthlyAmountBase`. **`PATCH`** also accepts
+`paymentChannelId` (a seed or the household's own active row; another household's, unknown or
+inactive is 422, the same referenced-seed-table rule as `categoryId`).
+
+**New routes**, registered before `GET /recurring/{seriesId}` so FastAPI's path matching does not
+capture them as a series id: `GET /recurring/summary` (current subscriptions — a non-removed
+series whose latest period is open, `is_subscription` true, `lifecycle` not `paused` —
+`monthlyBase`/`annualBase` as the sum of the rows' own rounded figures, `currentCount`,
+`renewingIn30Days`, `priceChangesIn90Days`, `baseCurrency`, `upcoming`); `GET /recurring/by-account`
+(the same current subscriptions grouped by paying account); `GET /recurring/{seriesId}` (the row
+plus `firstSeenOn`, `spentSoFarBase`, `last12MonthsBase`, `periods`, `priceHistory` collapsed to
+one entry per change of amount or currency, and `charges` — every sum joins members to
+`v_transaction_reportable`, so a charge later excluded from reporting drops out; a charge's own
+`periodId` is the latest period with `started_on <= observed_on`, so a period whose start moved
+back for an earlier charge (Task 5) still gets it right; a foreign or unknown series is 404); and
+`GET /payment-channels` (active seed and the household's own rows, by `sort_order` then `name`).
+`docs/design/api-contracts.html` §2 has the exact route contracts.
+
+---
+
 ## `0013`
 
 ### Loans

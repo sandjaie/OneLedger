@@ -45,7 +45,7 @@ from __future__ import annotations
 import calendar
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -55,12 +55,14 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from ..auth import OwnerSession, require_owner
 from ..db import IDEMPOTENCY_REUSED, connect, first_line
+from ..money import CENT
 from ..recurring import (
     Candidate,
     Identity,
     SpendRow,
     amounts_are_stable,
     detect_candidates,
+    equivalents,
     identity_for,
     interval_days_for,
     is_overdue,
@@ -112,6 +114,7 @@ class PatchBody(BaseModel):
     cadence: Cadence | None = None
     customIntervalDays: int | None = None
     categoryId: UUID | None = None
+    paymentChannelId: UUID | None = None
 
     @field_validator("label")
     @classmethod
@@ -193,6 +196,16 @@ class RecurringSeriesRow(BaseModel):
     resumed: bool
     nextExpectedOn: date | None
     status: Literal["active", "overdue", "ended"]
+    paymentChannelId: UUID | None
+    paymentChannelName: str | None
+    payingAccountId: UUID | None
+    payingAccountName: str | None
+    payingAccountMasked: str | None
+    # Null exactly when nativeAmount is null (Task 6, global execution contract "Equivalents").
+    annualAmount: str | None
+    monthlyAmount: str | None
+    annualAmountBase: str | None
+    monthlyAmountBase: str | None
 
 
 class RecurringResponse(BaseModel):
@@ -203,6 +216,82 @@ class RecurringRefreshCounts(BaseModel):
     seriesCreated: int
     seriesTouched: int
     membersAdded: int
+
+
+class PaymentChannelRow(BaseModel):
+    id: UUID
+    name: str
+    sortOrder: int
+
+
+class PaymentChannelsResponse(BaseModel):
+    channels: list[PaymentChannelRow]
+
+
+class UpcomingRow(BaseModel):
+    seriesId: UUID
+    label: str
+    nextExpectedOn: date
+    nativeAmount: str | None
+    nativeCurrency: str | None
+    payingAccountName: str | None
+
+
+class RecurringSummary(BaseModel):
+    monthlyBase: str
+    annualBase: str
+    currentCount: int
+    renewingIn30Days: int
+    priceChangesIn90Days: int
+    baseCurrency: str
+    upcoming: list[UpcomingRow]
+
+
+class ByAccountRow(BaseModel):
+    accountId: UUID
+    accountName: str
+    accountMasked: str | None
+    count: int
+    labels: list[str]
+    monthlyBase: str
+
+
+class ByAccountResponse(BaseModel):
+    accounts: list[ByAccountRow]
+
+
+class RecurringPeriodOut(BaseModel):
+    id: UUID
+    startedOn: date
+    endedOn: date | None
+    endReason: Literal["cancelled", "lapsed"] | None
+    chargeCount: int
+    spentBase: str
+
+
+class PriceHistoryEntry(BaseModel):
+    observedOn: date
+    amount: str
+    currency: str
+
+
+class ChargeOut(BaseModel):
+    transactionId: UUID
+    observedOn: date
+    amount: str
+    currency: str
+    amountBase: str
+    accountName: str
+    periodId: UUID
+
+
+class RecurringSeriesDetail(RecurringSeriesRow):
+    firstSeenOn: date
+    spentSoFarBase: str
+    last12MonthsBase: str
+    periods: list[RecurringPeriodOut]
+    priceHistory: list[PriceHistoryEntry]
+    charges: list[ChargeOut]
 
 
 def _translate_recurring_error(exc: psycopg.Error) -> HTTPException:
@@ -228,6 +317,70 @@ def _category_name(cur: psycopg.Cursor[Any], category_id: UUID | None) -> str | 
     cur.execute("SELECT name FROM category WHERE id = %s", (category_id,))
     row = cur.fetchone()
     return None if row is None else str(row[0])
+
+
+def _payment_channel_name(
+    cur: psycopg.Cursor[Any], household_id: UUID, payment_channel_id: UUID | None
+) -> str | None:
+    if payment_channel_id is None:
+        return None
+    cur.execute(
+        """SELECT name FROM payment_channel
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s)""",
+        (payment_channel_id, household_id),
+    )
+    row = cur.fetchone()
+    return None if row is None else str(row[0])
+
+
+def _assert_payment_channel_allowed(
+    cur: psycopg.Cursor[Any], payment_channel_id: UUID | None, household_id: UUID
+) -> None:
+    """The same tenant-boundary shape `routes/transactions.py::_assert_category_allowed` takes for
+    a referenced seed-table row (global execution contract): a seed or the household's own row,
+    and active. `payment_channel` carries no override table, so `is_active` is read directly."""
+    if payment_channel_id is None:
+        return
+    cur.execute(
+        """SELECT 1 FROM payment_channel
+            WHERE id = %s AND (household_id IS NULL OR household_id = %s) AND is_active""",
+        (payment_channel_id, household_id),
+    )
+    if cur.fetchone() is None:
+        raise HTTPException(
+            status_code=422, detail="payment channel is not available to this household"
+        )
+
+
+# Kind priority for the one masked identifier a paying account shows (Task 6, global execution
+# contract "Paying account"): a card before a bank account before an IBAN, then the newest, then
+# id — never full_value or normalized_value (ADR-0021).
+_IDENTIFIER_KIND_ORDER = (
+    "CASE kind WHEN 'card' THEN 0 WHEN 'bank_account' THEN 1 WHEN 'iban' THEN 2 ELSE 3 END"
+)
+
+
+def _paying_account(
+    cur: psycopg.Cursor[Any], household_id: UUID, account_id: UUID | None
+) -> tuple[UUID, str, str | None] | None:
+    if account_id is None:
+        return None
+    cur.execute(
+        f"""SELECT a.id, a.name, ident.masked_value
+              FROM account a
+              LEFT JOIN LATERAL (
+                SELECT masked_value FROM account_identifier
+                 WHERE household_id = a.household_id AND account_id = a.id AND is_active
+                 ORDER BY {_IDENTIFIER_KIND_ORDER}, created_at DESC, id DESC
+                 LIMIT 1
+              ) ident ON true
+             WHERE a.household_id = %s AND a.id = %s""",
+        (household_id, account_id),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return UUID(str(row[0])), str(row[1]), row[2]
 
 
 def _native_pair(
@@ -353,7 +506,7 @@ def _load_series_row(
     cur.execute(
         """SELECT label, merchant_id, match_key, cadence::text, custom_interval_days, lifecycle,
                   category_id, is_subscription, detection_method, named_by_owner, native_amount,
-                  native_currency, last_seen_on
+                  native_currency, last_seen_on, payment_channel_id, expected_amount_base
              FROM recurring_series WHERE household_id = %s AND id = %s""",
         (household_id, series_id),
     )
@@ -373,10 +526,13 @@ def _load_series_row(
         native_amount,
         native_currency,
         last_seen_on,
+        payment_channel_id,
+        expected_amount_base,
     ) = row
 
     cur.execute(
-        """SELECT t.original_amount, t.original_currency, t.amount, t.currency, m.observed_on
+        """SELECT t.original_amount, t.original_currency, t.amount, t.currency, m.observed_on,
+                  t.account_id
              FROM recurring_series_member m
              JOIN v_transaction_reportable t
                ON t.household_id = m.household_id AND t.id = m.transaction_id
@@ -393,6 +549,22 @@ def _load_series_row(
         if previous_currency == latest_currency and previous_amount != latest_amount:
             price_changed_from = str(previous_amount)
             price_changed_on = members[0][4]
+    paying_account = (
+        _paying_account(cur, household_id, UUID(str(members[0][5])) if members[0][5] else None)
+        if members
+        else None
+    )
+
+    annual_amount: str | None = None
+    monthly_amount: str | None = None
+    annual_amount_base: str | None = None
+    monthly_amount_base: str | None = None
+    if native_amount is not None:
+        custom_days = None if custom_interval_days is None else int(custom_interval_days)
+        annual, monthly = equivalents(Decimal(native_amount), cadence, custom_days)
+        annual_amount, monthly_amount = str(annual), str(monthly)
+        annual_base, monthly_base = equivalents(Decimal(expected_amount_base), cadence, custom_days)
+        annual_amount_base, monthly_amount_base = str(annual_base), str(monthly_base)
 
     cur.execute(
         """SELECT started_on, ended_on, end_reason FROM recurring_series_period
@@ -452,6 +624,15 @@ def _load_series_row(
         resumed=resumed,
         nextExpectedOn=next_expected,
         status=status_value,
+        paymentChannelId=None if payment_channel_id is None else UUID(str(payment_channel_id)),
+        paymentChannelName=_payment_channel_name(cur, household_id, payment_channel_id),
+        payingAccountId=paying_account[0] if paying_account else None,
+        payingAccountName=paying_account[1] if paying_account else None,
+        payingAccountMasked=paying_account[2] if paying_account else None,
+        annualAmount=annual_amount,
+        monthlyAmount=monthly_amount,
+        annualAmountBase=annual_amount_base,
+        monthlyAmountBase=monthly_amount_base,
     )
 
 
@@ -978,6 +1159,245 @@ def read_recurring(owner: Annotated[OwnerSession, Depends(require_owner)]) -> Re
     return RecurringResponse(series=series)
 
 
+def _current_subscriptions(
+    cur: psycopg.Cursor[Any], household_id: UUID
+) -> list[RecurringSeriesRow]:
+    """Current subscriptions (global execution contract "current" and "Current"): a non-removed
+    series whose latest period is open, flagged a subscription, and not paused — the set
+    `GET /recurring/summary` and `.../by-account` both total."""
+    cur.execute(
+        """SELECT id FROM recurring_series
+            WHERE household_id = %s AND ended_on IS NULL ORDER BY label, id""",
+        (household_id,),
+    )
+    rows = [_load_series_row(cur, household_id, UUID(str(r[0]))) for r in cur.fetchall()]
+    return [r for r in rows if r.isCurrent and r.isSubscription and r.lifecycle != "paused"]
+
+
+@router.get("/recurring/summary", response_model=RecurringSummary)
+def read_recurring_summary(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> RecurringSummary:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute("SELECT base_currency FROM household WHERE id = %s", (owner.household_id,))
+        base_row = cur.fetchone()
+        assert base_row is not None
+        current = _current_subscriptions(cur, owner.household_id)
+
+        today = date.today()
+        window_end = today + timedelta(days=30)
+        price_change_since = today - timedelta(days=90)
+        monthly_total = sum(
+            (Decimal(r.monthlyAmountBase) for r in current if r.monthlyAmountBase is not None),
+            Decimal("0"),
+        )
+        annual_total = sum(
+            (Decimal(r.annualAmountBase) for r in current if r.annualAmountBase is not None),
+            Decimal("0"),
+        )
+        renewing: list[tuple[RecurringSeriesRow, date]] = []
+        price_changes = 0
+        for r in current:
+            if r.nextExpectedOn is not None and today <= r.nextExpectedOn <= window_end:
+                renewing.append((r, r.nextExpectedOn))
+            if r.priceChangedOn is not None and r.priceChangedOn >= price_change_since:
+                price_changes += 1
+        renewing.sort(key=lambda pair: (pair[1], pair[0].label))
+    return RecurringSummary(
+        monthlyBase=str(monthly_total.quantize(CENT, rounding=ROUND_HALF_EVEN)),
+        annualBase=str(annual_total.quantize(CENT, rounding=ROUND_HALF_EVEN)),
+        currentCount=len(current),
+        renewingIn30Days=len(renewing),
+        priceChangesIn90Days=price_changes,
+        baseCurrency=str(base_row[0]).strip(),
+        upcoming=[
+            UpcomingRow(
+                seriesId=r.id,
+                label=r.label,
+                nextExpectedOn=due_on,
+                nativeAmount=r.nativeAmount,
+                nativeCurrency=r.nativeCurrency,
+                payingAccountName=r.payingAccountName,
+            )
+            for r, due_on in renewing
+        ],
+    )
+
+
+@router.get("/recurring/by-account", response_model=ByAccountResponse)
+def read_recurring_by_account(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> ByAccountResponse:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        current = _current_subscriptions(cur, owner.household_id)
+        groups: dict[UUID, ByAccountRow] = {}
+        order: list[UUID] = []
+        for r in current:
+            if r.payingAccountId is None:
+                continue
+            account_id = r.payingAccountId
+            if account_id not in groups:
+                groups[account_id] = ByAccountRow(
+                    accountId=account_id,
+                    accountName=r.payingAccountName or "",
+                    accountMasked=r.payingAccountMasked,
+                    count=0,
+                    labels=[],
+                    monthlyBase="0.0000",
+                )
+                order.append(account_id)
+            group = groups[account_id]
+            group.count += 1
+            group.labels.append(r.label)
+            if r.monthlyAmountBase is not None:
+                group.monthlyBase = str(Decimal(group.monthlyBase) + Decimal(r.monthlyAmountBase))
+    return ByAccountResponse(accounts=[groups[account_id] for account_id in order])
+
+
+@router.get("/recurring/{seriesId}", response_model=RecurringSeriesDetail)
+def read_recurring_detail(
+    seriesId: UUID, owner: Annotated[OwnerSession, Depends(require_owner)]
+) -> RecurringSeriesDetail:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute(
+            "SELECT first_seen_on FROM recurring_series WHERE household_id = %s AND id = %s",
+            (owner.household_id, seriesId),
+        )
+        found = cur.fetchone()
+        if found is None:
+            raise HTTPException(status_code=404, detail="recurring series not found")
+        first_seen_on = found[0]
+
+        row = _load_series_row(cur, owner.household_id, seriesId)
+
+        cur.execute(
+            """SELECT id, started_on, ended_on, end_reason FROM recurring_series_period
+                WHERE household_id = %s AND series_id = %s
+                ORDER BY started_on, created_at, id""",
+            (owner.household_id, seriesId),
+        )
+        periods_raw = [(UUID(str(r[0])), r[1], r[2], r[3]) for r in cur.fetchall()]
+
+        cur.execute(
+            """SELECT m.transaction_id, m.observed_on, t.original_amount, t.original_currency,
+                      t.amount, t.currency, -t.amount_base, a.name
+                 FROM recurring_series_member m
+                 JOIN v_transaction_reportable t
+                   ON t.household_id = m.household_id AND t.id = m.transaction_id
+                 JOIN account a ON a.id = t.account_id AND a.household_id = t.household_id
+                WHERE m.household_id = %s AND m.series_id = %s
+                ORDER BY m.observed_on, m.transaction_id""",
+            (owner.household_id, seriesId),
+        )
+        members_raw = cur.fetchall()
+
+        def period_for(observed_on: date) -> UUID:
+            # The latest period whose own start is at or before this charge (global execution
+            # contract "Period of a charge"); periods_raw is ascending, so the last match wins.
+            # Every member's date is within some period's span by construction (Extend/Create), so
+            # the first period is a defensive fallback only, never actually reached.
+            candidate = periods_raw[0][0]
+            for period_id, started_on, _ended_on, _end_reason in periods_raw:
+                if started_on <= observed_on:
+                    candidate = period_id
+            return candidate
+
+        today = date.today()
+        since_12_months = _months_back(today, 12)
+        charges: list[ChargeOut] = []
+        spent_so_far = Decimal("0")
+        last_12_months = Decimal("0")
+        period_charge_count: dict[UUID, int] = {}
+        period_spent: dict[UUID, Decimal] = {}
+        price_history: list[PriceHistoryEntry] = []
+        last_price: tuple[Decimal, str] | None = None
+        for (
+            transaction_id,
+            observed_on,
+            original_amount,
+            original_currency,
+            amount,
+            currency,
+            amount_base,
+            account_name,
+        ) in members_raw:
+            native_amount, native_currency = _native_pair(
+                original_amount, original_currency, Decimal(amount), str(currency).strip()
+            )
+            amount_base_dec = Decimal(amount_base)
+            period_id = period_for(observed_on)
+
+            charges.append(
+                ChargeOut(
+                    transactionId=UUID(str(transaction_id)),
+                    observedOn=observed_on,
+                    amount=str(native_amount),
+                    currency=native_currency,
+                    amountBase=str(amount_base_dec),
+                    accountName=str(account_name),
+                    periodId=period_id,
+                )
+            )
+            spent_so_far += amount_base_dec
+            if observed_on > since_12_months:
+                last_12_months += amount_base_dec
+            period_charge_count[period_id] = period_charge_count.get(period_id, 0) + 1
+            period_spent[period_id] = period_spent.get(period_id, Decimal("0")) + amount_base_dec
+
+            price_point = (native_amount, native_currency)
+            if last_price is None or price_point != last_price:
+                price_history.append(
+                    PriceHistoryEntry(
+                        observedOn=observed_on, amount=str(native_amount), currency=native_currency
+                    )
+                )
+                last_price = price_point
+
+        periods = [
+            RecurringPeriodOut(
+                id=period_id,
+                startedOn=started_on,
+                endedOn=ended_on,
+                endReason=end_reason,
+                chargeCount=period_charge_count.get(period_id, 0),
+                spentBase=str(period_spent.get(period_id, Decimal("0"))),
+            )
+            for period_id, started_on, ended_on, end_reason in periods_raw
+        ]
+
+        return RecurringSeriesDetail(
+            **row.model_dump(),
+            firstSeenOn=first_seen_on,
+            spentSoFarBase=str(spent_so_far),
+            last12MonthsBase=str(last_12_months),
+            periods=periods,
+            priceHistory=price_history,
+            charges=charges,
+        )
+
+
+@router.get("/payment-channels", response_model=PaymentChannelsResponse)
+def read_payment_channels(
+    owner: Annotated[OwnerSession, Depends(require_owner)],
+) -> PaymentChannelsResponse:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SET TRANSACTION READ ONLY")
+        cur.execute(
+            """SELECT id, name, sort_order FROM payment_channel
+                WHERE is_active AND (household_id IS NULL OR household_id = %s)
+                ORDER BY sort_order, name""",
+            (owner.household_id,),
+        )
+        channels = [
+            PaymentChannelRow(id=UUID(str(r[0])), name=str(r[1]), sortOrder=int(r[2]))
+            for r in cur.fetchall()
+        ]
+    return PaymentChannelsResponse(channels=channels)
+
+
 @router.patch("/recurring/{seriesId}", response_model=RecurringSeriesRow)
 def patch_recurring(
     seriesId: UUID, body: PatchBody, owner: Annotated[OwnerSession, Depends(require_owner)]
@@ -1037,6 +1457,13 @@ def patch_recurring(
                     """UPDATE recurring_series SET category_id = %s, updated_at = now()
                         WHERE household_id = %s AND id = %s""",
                     (body.categoryId, owner.household_id, seriesId),
+                )
+            if body.paymentChannelId is not None:
+                _assert_payment_channel_allowed(cur, body.paymentChannelId, owner.household_id)
+                cur.execute(
+                    """UPDATE recurring_series SET payment_channel_id = %s, updated_at = now()
+                        WHERE household_id = %s AND id = %s""",
+                    (body.paymentChannelId, owner.household_id, seriesId),
                 )
             return _load_series_row(cur, owner.household_id, seriesId)
     except psycopg.Error as exc:

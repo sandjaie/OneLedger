@@ -24,7 +24,7 @@ import re
 import statistics
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from .money import CENT
@@ -366,6 +366,38 @@ def is_overdue(anchor: date, interval_days: int, *, today: date) -> bool:
     function would otherwise have to look up on its own."""
     days_late = (today - next_expected_on(anchor, interval_days)).days
     return days_late > interval_days // 2
+
+
+# Charges per year per cadence (Phase 4.1 Task 6, global execution contract "Equivalents");
+# 'custom' has no fixed entry — its own charges-per-year is 365 / custom_interval_days, computed
+# without intermediate rounding.
+_CADENCE_CHARGES_PER_YEAR: dict[str, int] = {
+    "weekly": 52,
+    "monthly": 12,
+    "quarterly": 4,
+    "semiannual": 2,
+    "annual": 1,
+}
+
+
+def equivalents(
+    amount: Decimal, cadence: str, custom_interval_days: int | None
+) -> tuple[Decimal, Decimal]:
+    """The annual and monthly equivalents of one charge of `amount` at this cadence (Task 6,
+    global execution contract "Equivalents"): annual is `amount x charges_per_year`, monthly is
+    that *same unrounded* annual figure divided by 12 — each quantized once, at the end, `Decimal`
+    at 4 places half-even. Rounding `charges_per_year` itself first (e.g. a custom 45-day interval,
+    365/45 truncated to 4 places before multiplying) would round twice and can disagree with this
+    result in the last digit."""
+    if cadence == "custom":
+        assert custom_interval_days is not None
+        charges_per_year = Decimal(365) / Decimal(custom_interval_days)
+    else:
+        charges_per_year = Decimal(_CADENCE_CHARGES_PER_YEAR[cadence])
+    annual_unrounded = amount * charges_per_year
+    annual = annual_unrounded.quantize(CENT, rounding=ROUND_HALF_EVEN)
+    monthly = (annual_unrounded / 12).quantize(CENT, rounding=ROUND_HALF_EVEN)
+    return annual, monthly
 
 
 def price_change_window(cadence: str, custom_interval_days: int | None) -> tuple[int, int] | None:
