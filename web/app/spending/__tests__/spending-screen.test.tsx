@@ -1,0 +1,126 @@
+// @vitest-environment jsdom
+
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { SpendingScreen } from "@/app/spending/spending-screen";
+import { type apiFetch } from "@/lib/api/client";
+import type { CategoryRow, CurrencyRow, HouseholdCurrency, SpendingResponse } from "@/types/api";
+
+type Request = typeof apiFetch;
+
+const CURRENCY: HouseholdCurrency = { code: "AED", symbol: "AED", decimals: 4, numberFormat: "international" };
+const CURRENCIES: Array<CurrencyRow> = [
+  { code: "AED", name: "UAE Dirham", symbol: "AED", decimals: 4, numberFormat: "international" },
+  { code: "USD", name: "US Dollar", symbol: "$", decimals: 4, numberFormat: "international" },
+];
+const CATEGORIES: Array<CategoryRow> = [];
+
+const GROCERIES_ID = "00000000-0000-4000-8000-0000000000c1";
+
+const spending: SpendingResponse = {
+  byCategory: [
+    {
+      categoryId: GROCERIES_ID,
+      categoryName: "Synthetic groceries",
+      parentCategoryId: null,
+      parentCategoryName: null,
+      bucket: "need",
+      amountBase: "100.0000",
+      amountSecondary: "25.0000",
+      transactionCount: 2,
+      previousAmountBase: "70.0000",
+      chartRatio: "1.0000",
+    },
+    {
+      categoryId: null,
+      categoryName: "Uncategorised",
+      parentCategoryId: null,
+      parentCategoryName: null,
+      bucket: null,
+      amountBase: "30.0000",
+      amountSecondary: "7.5000",
+      transactionCount: 1,
+      previousAmountBase: "0.0000",
+      chartRatio: "0.3000",
+    },
+  ],
+  byBucket: [
+    {
+      bucket: "need",
+      amountBase: "100.0000",
+      amountSecondary: "25.0000",
+      transactionCount: 2,
+      previousAmountBase: "70.0000",
+      chartRatio: "1.0000",
+    },
+  ],
+  totalBase: "130.0000",
+  totalSecondary: "32.5000",
+  previousTotalBase: "70.0000",
+  from: "2026-03-01",
+  to: "2026-03-31",
+  baseCurrency: "AED",
+  secondaryCurrency: "USD",
+};
+
+function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
+  return vi.fn((path: string, init?: RequestInit) => Promise.resolve(handler(path, init))) as Request;
+}
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+describe("spending screen", () => {
+  it("renders the bucket and category breakdown from server strings", async () => {
+    const request = requestFrom((path) => {
+      if (path.startsWith("/spending?")) return spending;
+      throw new Error(`unexpected path ${path}`);
+    });
+
+    render(
+      <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Synthetic groceries").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Uncategorised").length).toBeGreaterThan(0);
+    // The current-period figure and the previous-period figure are both the server's own
+    // strings — never a value the browser computed from them.
+    expect(screen.getAllByText("AED 100.0000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AED 70.0000").length).toBeGreaterThan(0);
+    screen.getByText("AED 130.0000");
+  });
+
+  it("carries the category and dates on the drill-through link", async () => {
+    const request = requestFrom((path) => (path.startsWith("/spending?") ? spending : {}));
+
+    render(
+      <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Synthetic groceries").length).toBeGreaterThan(0));
+    const heading = screen.getAllByText("Synthetic groceries").find((node) => node.tagName === "TH");
+    expect(heading).toBeDefined();
+    const row = (heading as HTMLElement).closest("tr");
+    expect(row).not.toBeNull();
+    const link = within(row as HTMLElement).getByRole("link");
+    expect(link.getAttribute("href")).toBe(
+      `/transactions?categoryId=${GROCERIES_ID}&dateFrom=2026-03-01&dateTo=2026-03-31`,
+    );
+  });
+
+  it("points the download link at the export path for the same range", async () => {
+    const request = requestFrom((path) => (path.startsWith("/spending?") ? spending : {}));
+
+    render(
+      <SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />,
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Synthetic groceries").length).toBeGreaterThan(0));
+    const download = screen.getByText("Download CSV");
+    expect(download.getAttribute("href")).toContain("/spending/export.csv?from=");
+    expect(download.getAttribute("href")).toContain("&to=");
+  });
+});

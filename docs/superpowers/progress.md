@@ -14,8 +14,8 @@ Updated: 16 September 2026.
 | --- | --- | --- |
 | Current outcome | **Phase 3.4 — protection and administration** | [master plan](../product/master-implementation-plan.html#phase-3-delivery) |
 | Outcome state | **Phases 3.1–3.4 implementation complete** via PRs #222–#229, owner acceptance open on each; the Phase 3 UI audit delivered via PR #230 | [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
-| Next product action | Phase 4.1 — budgets and recurring discovery (planned, not started) | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| Current implementation task | Phases 3.1–3.4 delivered via PRs #222–#229, Phase 3 UI audit via PR #230, and the Phase 3.x hygiene pass on `chore/phase-3-hygiene`; Phase 4.1 not yet started | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Next product action | Phase 4.1 — budgets and recurring discovery (Task 1 implemented on `feature/p4-1-spending-analysis`, not yet merged; Tasks 2–3 not started) | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| Current implementation task | Phases 3.1–3.4 delivered via PRs #222–#229, Phase 3 UI audit via PR #230, and the Phase 3.x hygiene pass on `chore/phase-3-hygiene`; Phase 4.1 Task 1 implemented on `feature/p4-1-spending-analysis`, awaiting review and merge | [Phase 4.1 plan](plans/2026-09-16-phase-4-1-budgets-recurring.md) |
 
 ## Canonical phase status
 
@@ -42,7 +42,8 @@ Updated: 16 September 2026.
 | 3.2 — cash forecast and monthly review | **Implementation complete; owner acceptance open** — PRs #224–#225 | [Phase 3.2 specification](specs/2026-09-15-phase-3-2-cash-forecast-review.md) · [Phase 3.2 plan](plans/2026-09-15-phase-3-2-cash-forecast-review.md) |
 | 3.3 — goals and emergency reserve | **Implementation complete; owner acceptance open** — PRs #226–#227 | [Phase 3.3 specification](specs/2026-09-16-phase-3-3-goals-emergency-reserve.md) · [Phase 3.3 plan](plans/2026-09-16-phase-3-3-goals-emergency-reserve.md) |
 | 3.4 — protection and administration | **Implementation complete; owner acceptance open** — PRs #228–#229 | [Phase 3.4 specification](specs/2026-09-16-phase-3-4-protection-administration.md) · [Phase 3.4 plan](plans/2026-09-16-phase-3-4-protection-administration.md) |
-| 4.1 — budgets and recurring discovery | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.1 — budgets and recurring discovery | **Planned**; Task 1 implemented, not yet merged | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.1 Task 1 — spending by category and bucket | **Implementation complete on `feature/p4-1-spending-analysis`; not yet reviewed or merged** | [Phase 4.1 plan](plans/2026-09-16-phase-4-1-budgets-recurring.md) |
 | 4.2 — salary analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.3 — investment analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |

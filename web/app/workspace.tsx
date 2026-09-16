@@ -21,6 +21,7 @@ import { ReviewScreen } from "@/app/import/review-screen";
 import { ClassificationReviewScreen } from "@/app/review/classification-review-screen";
 import { PlansScreen } from "@/app/plans/plans-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
+import { SpendingScreen } from "@/app/spending/spending-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { WealthScreen } from "@/app/wealth/wealth-screen";
 import { ApiError, apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
@@ -40,7 +41,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -89,6 +90,7 @@ function sectionFromPath() {
   if (window.location.pathname === "/settings") return "settings";
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
+  if (window.location.pathname === "/spending") return "spending";
   if (window.location.pathname === "/documents") return "documents";
   if (window.location.pathname.startsWith("/investments/import")) return "investments-import";
   if (window.location.pathname === "/investments/entry") return "investments-entry";
@@ -106,6 +108,25 @@ function sectionFromPath() {
 function sourceDocumentIdFromLocation() {
   if (typeof window === "undefined") return undefined;
   return new URLSearchParams(window.location.search).get("sourceDocumentId") ?? undefined;
+}
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// The Spending screen's own drill-through (`/transactions?categoryId=…&dateFrom=…&dateTo=…`),
+// the same query-string convention `sourceDocumentIdFromLocation` and the accounts screen's own
+// `valuation` deep link already use. A category id not in the loaded taxonomy, or a date that is
+// not a plain `YYYY-MM-DD` value, is silently ignored rather than handed to the filter form.
+function categoryIdFromLocation(categories: Array<CategoryRow> | undefined) {
+  if (typeof window === "undefined") return undefined;
+  const id = new URLSearchParams(window.location.search).get("categoryId");
+  if (!id || !categories) return undefined;
+  return categories.some((row) => row.id === id) ? id : undefined;
+}
+
+function dateFromLocation(param: string) {
+  if (typeof window === "undefined") return undefined;
+  const value = new URLSearchParams(window.location.search).get(param);
+  return value && DATE_PATTERN.test(value) ? value : undefined;
 }
 
 function fxStatusText(fx: FxState) {
@@ -186,6 +207,14 @@ export function Workspace({
           setCategories(taxonomy);
           setInventory(nextInventory);
           setCurrencies(catalogue);
+        }
+        if (activeSection === "spending") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          const taxonomy = await request<Array<CategoryRow>>("/categories");
+          if (!current) return;
+          setCurrencies(catalogue);
+          setCategories(taxonomy);
         }
         if (activeSection === "documents") {
           const page = await request<DocumentsResponse>("/documents?limit=50&offset=0");
@@ -425,6 +454,7 @@ export function Workspace({
               href="/import"
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
+            <Link aria-current={activeSection === "spending" ? "page" : undefined} href="/spending">Spending</Link>
             <Link aria-current={activeSection === "documents" ? "page" : undefined} href="/documents">Documents</Link>
             <Link
               aria-current={
@@ -494,10 +524,22 @@ export function Workspace({
               currency={currency}
               household={household}
               initialSourceDocumentId={sourceDocumentIdFromLocation()}
+              initialCategoryId={categoryIdFromLocation(categories)}
+              initialDateFrom={dateFromLocation("dateFrom")}
+              initialDateTo={dateFromLocation("dateTo")}
               onChanged={() => setAttempt((value) => value + 1)}
               request={wrappedRequest}
               total={ledger.total}
               transactions={ledger.transactions}
+            />
+          )}
+
+          {activeSection === "spending" && categories && currencies && currency && (
+            <SpendingScreen
+              categories={categories}
+              currencies={currencies}
+              currency={currency}
+              request={wrappedRequest}
             />
           )}
 
