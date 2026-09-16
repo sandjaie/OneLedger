@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from oneledger.recurring import SpendRow, detect_candidates
+from oneledger.recurring import CADENCE_WINDOWS, SpendRow, detect_candidates
+from oneledger.routes.recurring import _LOOKBACK_MONTHS, _months_back
 
 
 def rows(gaps: list[int], amounts: list[str] | None = None) -> list[SpendRow]:
@@ -55,3 +56,18 @@ def test_the_typical_amount_of_an_even_number_of_rows_averages_the_middle_two() 
     proposed = detect_candidates(rows([30, 30, 31], ["50.0000", "50.0000", "60.0000", "60.0000"]))
     assert len(proposed) == 1
     assert proposed[0].typical_amount_base == Decimal("55.0000")
+
+
+def test_three_yearly_charges_are_proposed_as_annual() -> None:
+    proposed = detect_candidates(rows([365, 366]))
+    assert len(proposed) == 1
+    assert proposed[0].cadence == "annual"
+
+
+def test_the_lookback_window_holds_three_yearly_charges() -> None:
+    """The route reads only this window. Three yearly charges at the widest annual spacing span two
+    gaps of the window's upper bound; at 18 months they never fit, so no yearly subscription was
+    ever proposed."""
+    today = date(2026, 9, 16)
+    widest_annual_gap = CADENCE_WINDOWS["annual"][1]
+    assert _months_back(today, _LOOKBACK_MONTHS) <= today - timedelta(days=2 * widest_annual_gap)
