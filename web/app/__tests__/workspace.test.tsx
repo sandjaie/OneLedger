@@ -828,6 +828,84 @@ describe("authenticated workspace", () => {
     expect(await screen.findByText("No account can be forecast yet.")).toBeTruthy();
   });
 
+  it("renders the subscriptions screen with the currency catalogue and marks the nav current", async () => {
+    const emptySummary = {
+      monthlyBase: "0.0000",
+      annualBase: "0.0000",
+      currentCount: 0,
+      renewingIn30Days: 0,
+      priceChangesIn90Days: 0,
+      baseCurrency: "XIN",
+      upcoming: [],
+    };
+    render(
+      <Workspace
+        section="subscriptions"
+        request={requestThat(household, catalogue, {}, { series: [] }, emptySummary, { accounts: [] })}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Subscriptions" })).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("heading", { name: "Subscriptions" })).toBeTruthy();
+    expect(await screen.findByText("No current subscription has been found yet.")).toBeTruthy();
+  });
+
+  it("renders the subscription detail route for a series id and marks Subscriptions current", async () => {
+    const detail = {
+      id: "series-1",
+      label: "Synthetic streaming service",
+      identity: { merchantId: null, matchKey: "synthetic streaming service" },
+      cadence: "monthly",
+      customIntervalDays: null,
+      lifecycle: "active",
+      categoryId: null,
+      categoryName: null,
+      isSubscription: true,
+      detectionMethod: "detected",
+      needsName: false,
+      nativeAmount: "15.0000",
+      nativeCurrency: "USD",
+      priceChangedFrom: null,
+      priceChangedOn: null,
+      lastSeenOn: "2026-08-01",
+      isCurrent: true,
+      currentPeriodStartedOn: "2026-06-01",
+      lastPeriodEndedOn: null,
+      lastEndReason: null,
+      periodCount: 1,
+      resumed: false,
+      nextExpectedOn: "2026-09-01",
+      status: "active",
+      paymentChannelId: null,
+      paymentChannelName: null,
+      payingAccountId: null,
+      payingAccountName: null,
+      payingAccountMasked: null,
+      annualAmount: "180.0000",
+      monthlyAmount: "15.0000",
+      annualAmountBase: "180.0000",
+      monthlyAmountBase: "15.0000",
+      firstSeenOn: "2026-06-01",
+      spentSoFarBase: "15.0000",
+      last12MonthsBase: "15.0000",
+      periods: [],
+      priceHistory: [],
+      charges: [],
+    };
+    render(
+      <Workspace
+        section="subscriptions-detail"
+        seriesId="series-1"
+        request={requestThat(household, catalogue, detail, { channels: [] })}
+        navigate={vi.fn()}
+      />,
+    );
+
+    expect((await screen.findByRole("link", { name: "Subscriptions" })).getAttribute("aria-current")).toBe("page");
+    expect(await screen.findByRole("heading", { name: "Synthetic streaming service" })).toBeTruthy();
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("clears Accounts when create returns %i", async (status, destination) => {

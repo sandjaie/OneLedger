@@ -23,6 +23,8 @@ import { PlansScreen } from "@/app/plans/plans-screen";
 import { RecurringScreen } from "@/app/recurring/recurring-screen";
 import { PayslipsScreen } from "@/app/salary/payslips-screen";
 import { SpendingScreen } from "@/app/spending/spending-screen";
+import { SubscriptionDetail } from "@/app/subscriptions/subscription-detail";
+import { SubscriptionsScreen } from "@/app/subscriptions/subscriptions-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { WealthScreen } from "@/app/wealth/wealth-screen";
 import { ApiError, apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
@@ -42,7 +44,7 @@ import type {
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 type Props = {
-  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
+  section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
   // is where an import ends up rather than a sibling destination.
   batchId?: string;
@@ -51,6 +53,8 @@ type Props = {
   importId?: string;
   // The holding shown at `/investments/{holdingId}`.
   holdingId?: string;
+  // The subscription shown at `/subscriptions/{seriesId}`.
+  seriesId?: string;
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
@@ -92,6 +96,8 @@ function sectionFromPath() {
   if (window.location.pathname === "/accounts") return "accounts";
   if (window.location.pathname === "/transactions") return "transactions";
   if (window.location.pathname === "/spending") return "spending";
+  if (window.location.pathname === "/subscriptions") return "subscriptions";
+  if (window.location.pathname.startsWith("/subscriptions/")) return "subscriptions-detail";
   if (window.location.pathname === "/recurring") return "recurring";
   if (window.location.pathname === "/documents") return "documents";
   if (window.location.pathname.startsWith("/investments/import")) return "investments-import";
@@ -160,6 +166,7 @@ export function Workspace({
   batchId,
   importId,
   holdingId,
+  seriesId,
   request = apiFetch,
   navigate = (path) => window.location.replace(path),
 }: Props = {}) {
@@ -232,6 +239,11 @@ export function Workspace({
           if (!current) return;
           setCurrencies(catalogue);
           setCategories(taxonomy);
+        }
+        if (activeSection === "subscriptions" || activeSection === "subscriptions-detail") {
+          const catalogue = await request<Array<CurrencyRow>>("/currencies");
+          if (!current) return;
+          setCurrencies(catalogue);
         }
         if (activeSection === "recurring") {
           const catalogue = await request<Array<CurrencyRow>>("/currencies");
@@ -477,6 +489,14 @@ export function Workspace({
             >Import</Link>
             <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
             <Link aria-current={activeSection === "spending" ? "page" : undefined} href="/spending">Spending</Link>
+            <Link
+              aria-current={
+                activeSection === "subscriptions" || activeSection === "subscriptions-detail"
+                  ? "page"
+                  : undefined
+              }
+              href="/subscriptions"
+            >Subscriptions</Link>
             <Link aria-current={activeSection === "recurring" ? "page" : undefined} href="/recurring">Recurring</Link>
             <Link aria-current={activeSection === "documents" ? "page" : undefined} href="/documents">Documents</Link>
             <Link
@@ -563,6 +583,22 @@ export function Workspace({
               currencies={currencies}
               currency={currency}
               request={wrappedRequest}
+            />
+          )}
+
+          {activeSection === "subscriptions" && currencies && (
+            <SubscriptionsScreen
+              currencies={currencies}
+              request={wrappedRequest}
+            />
+          )}
+
+          {activeSection === "subscriptions-detail" && seriesId && currencies && household && (
+            <SubscriptionDetail
+              baseCurrency={household.baseCurrency}
+              currencies={currencies}
+              request={wrappedRequest}
+              seriesId={seriesId}
             />
           )}
 
