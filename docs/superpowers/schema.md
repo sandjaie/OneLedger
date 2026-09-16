@@ -3211,6 +3211,59 @@ an upload type (422 otherwise; a foreign or unknown document is 404); both are i
 
 ---
 
+## `V55` (applied)
+
+### Budgets
+
+Phase 4.1 Task 2. A budget line is an owner assumption in the household base currency (spec
+"Budgets are owner assumptions, not postings"): it posts nothing, changes no transaction, and
+never becomes income or spending. `category` is a shared seed table with no
+`UNIQUE (household_id, id)` (V10, V19, V44 already reference it the same way), so
+`budget_line.category_id` is the plain `REFERENCES category(id)` below rather than a composite
+tenant-scoped foreign key, and `routes/budgets.py` enforces the tenant boundary itself, reusing
+`routes/transactions.py::_assert_category_allowed`. This replaces the `budget_period`/`budget_line`
+shapes originally planned in `0017` — see that section.
+
+```sql
+CREATE TABLE budget_line (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id      UUID NOT NULL REFERENCES household(id),
+  idempotency_key   UUID NOT NULL,
+  period_month      DATE NOT NULL,
+  category_id       UUID REFERENCES category(id),
+  bucket            category_bucket,
+  amount_base       NUMERIC(20,4) NOT NULL,
+  currency          CHAR(3) NOT NULL REFERENCES currency(code),
+  rollover_enabled  BOOLEAN NOT NULL DEFAULT false,
+  note              TEXT,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_budget_line_household_id UNIQUE (household_id, id),
+  CONSTRAINT uq_budget_line_idempotency UNIQUE (household_id, idempotency_key),
+  CONSTRAINT budget_line_scope_shape CHECK (num_nonnulls(category_id, bucket) = 1),
+  CONSTRAINT budget_line_period_month_is_first_day CHECK (
+    period_month = date_trunc('month', period_month)::date),
+  CONSTRAINT budget_line_amount_is_positive CHECK (amount_base > 0),
+  CONSTRAINT budget_line_note_is_bounded CHECK (
+    note IS NULL OR char_length(note) BETWEEN 1 AND 200)
+);
+
+CREATE UNIQUE INDEX uq_budget_line_month_category
+  ON budget_line (household_id, period_month, category_id) WHERE category_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_budget_line_month_bucket
+  ON budget_line (household_id, period_month, bucket) WHERE bucket IS NOT NULL;
+```
+
+`household_isolation FOR ALL TO authenticated` as on every other household-scoped table; no table
+GRANT, and no trigger — a budget line is editable and deletable, unlike a closed goal or an
+archived register record, since it carries no ledger side effect to protect. `currency` always
+carries the household's own base currency; the route sets it and the create body never accepts one.
+`GET /budgets` computes `actualBase`, `carriedBase`, `availableBase` and `varianceBase` on read —
+none of it is stored — and `routes/budgets.py`'s docstring records the rollover chain's exact
+recursion (spec "Budgets are owner assumptions, not postings", `api-contracts.html` §2).
+
+---
+
 ## `0013`
 
 ### Loans
@@ -3363,30 +3416,11 @@ CREATE TABLE recurring_series (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE budget_period (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id UUID NOT NULL REFERENCES household(id),
-  period_start DATE NOT NULL,
-  period_end   DATE NOT NULL,
-  currency     CHAR(3) NOT NULL,
-  UNIQUE (household_id, period_start, period_end)
-);
-
-CREATE TABLE budget_line (
-  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id     UUID NOT NULL REFERENCES household(id),
-  budget_period_id UUID NOT NULL REFERENCES budget_period(id) ON DELETE CASCADE,
-  category_id      UUID REFERENCES category(id),
-  bucket           category_bucket,
-  amount           NUMERIC(20,4) NOT NULL,
-  rollover         BOOLEAN NOT NULL DEFAULT false,
-  CONSTRAINT one_target CHECK (num_nonnulls(category_id, bucket) = 1)
-);
-
 ```
 
 Phase 1.7 Task 1 replaced the payslip shapes originally planned here with V42's exact,
-reconciling design — see that section.
+reconciling design — see that section. Phase 4.1 Task 2 replaced the `budget_period`/`budget_line`
+shapes originally planned here with V55's exact, reconciling design — see `V55` below.
 
 ---
 
