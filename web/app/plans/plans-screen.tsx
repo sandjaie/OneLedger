@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -34,6 +34,10 @@ type Props = {
   accounts: Array<AccountRow>;
   currencies: Array<CurrencyRow>;
   request: typeof apiFetch;
+  // The household's reporting pair (workspace.tsx's own `household.baseCurrency` /
+  // `secondaryCurrency`): a goal's currency is one of these two (spec 3.3 "Goal progress"), so
+  // Goals narrows its currency picker to them rather than the whole catalogue.
+  householdCurrencies: { base: string; secondary: string };
 };
 
 type FormState = {
@@ -86,7 +90,7 @@ function formFromCommitment(commitment: CommitmentRow): FormState {
   };
 }
 
-export function PlansScreen({ accounts, currencies, request }: Props) {
+export function PlansScreen({ accounts, currencies, request, householdCurrencies }: Props) {
   // A closed account cannot receive a new commitment (the route refuses it, 422), so the picker
   // and its default only ever offer an active one.
   const activeAccounts = accounts.filter((account) => account.isActive);
@@ -100,6 +104,10 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [settlingId, setSettlingId] = useState<string>();
+  // Settle can be started from Needs attention, the Register or the Forecast — sections above
+  // this one's own <SettlementPanel> (spec: seven sections, Commitments last) — so opening it
+  // there leaves nothing visibly different unless the panel is brought into view itself.
+  const settlementPanelRef = useRef<HTMLDivElement>(null);
   // Set only while planning a card statement's payment (Plan payment); cleared on cancel, on any
   // other edit start, and after a successful submit. Limits the account picker to active asset
   // accounts in the statement's currency and is sent as the create body's sourceCardStatementId.
@@ -116,7 +124,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
   useEffect(() => {
     let current = true;
-    request<CommitmentsResponse>("/commitments")
+    request<CommitmentsResponse>("/commitments?includeArchived=true")
       .then((result) => {
         if (!current) return;
         setCommitments(result.commitments);
@@ -130,6 +138,15 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
       current = false;
     };
   }, [attempt, request]);
+
+  useEffect(() => {
+    if (!settlingId) return;
+    const panel = settlementPanelRef.current;
+    if (!panel) return;
+    // jsdom (the test environment) does not implement scrollIntoView.
+    panel.scrollIntoView?.({ block: "center" });
+    panel.querySelector("h3")?.focus();
+  }, [settlingId]);
 
   function changeForm<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -362,6 +379,18 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         <p>Commitments drive a 30, 60 and 90-day forecast; the forecast itself posts nothing.</p>
       </header>
 
+      <nav aria-label="On this page">
+        <ul className="plans-page-nav">
+          <li><a href="#actions">Needs attention</a></li>
+          <li><a href="#review">Monthly review</a></li>
+          <li><a href="#goals">Goals</a></li>
+          <li><a href="#reserve">Emergency reserve</a></li>
+          <li><a href="#register">Register</a></li>
+          <li><a href="#forecast">Forecast</a></li>
+          <li><a href="#commitments">Commitments</a></li>
+        </ul>
+      </nav>
+
       <NeedsAttention
         accounts={accounts}
         currencies={currencies}
@@ -374,7 +403,12 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
       <MonthlyReview accounts={accounts} currencies={currencies} request={request} />
 
-      <Goals accounts={accounts} currencies={currencies} request={request} />
+      <Goals
+        accounts={accounts}
+        currencies={currencies}
+        householdCurrencies={householdCurrencies}
+        request={request}
+      />
 
       <EmergencyReserve accounts={accounts} currencies={currencies} request={request} />
 
@@ -396,7 +430,7 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
         request={request}
       />
 
-      <section aria-labelledby="plans-commitments-title">
+      <section aria-labelledby="plans-commitments-title" id="commitments">
         <h2 id="plans-commitments-title">Commitments</h2>
         {commitmentsFailed && (
           <div role="alert">
@@ -459,13 +493,15 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                     </>
                   )}
                   {settlingId === commitment.id && (
-                    <SettlementPanel
-                      commitment={commitment}
-                      currencies={currencies}
-                      request={request}
-                      onClose={() => setSettlingId(undefined)}
-                      onChanged={() => setAttempt((value) => value + 1)}
-                    />
+                    <div ref={settlementPanelRef}>
+                      <SettlementPanel
+                        commitment={commitment}
+                        currencies={currencies}
+                        request={request}
+                        onClose={() => setSettlingId(undefined)}
+                        onChanged={() => setAttempt((value) => value + 1)}
+                      />
+                    </div>
                   )}
                 </li>
               );
@@ -486,14 +522,21 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
                     ? "Expect reimbursement"
                     : "Add a commitment"}
         </h3>
-        <label className="select-field">
-          <span>Account</span>
-          <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
-            {formAccounts.map((account) => (
-              <option key={account.id} value={account.id}>{account.name}</option>
-            ))}
-          </select>
-        </label>
+        {(planningCard || planningRecord) && formAccounts.length === 0 ? (
+          <p className="inline-alert" role="alert">
+            No active account in {(planningCard ?? planningRecord)?.currency} can pay this; add
+            one first.
+          </p>
+        ) : (
+          <label className="select-field">
+            <span>Account</span>
+            <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
+              {formAccounts.map((account) => (
+                <option key={account.id} value={account.id}>{account.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="text-field"><span>Label</span><input onChange={(e) => changeForm("label", e.target.value)} value={form.label} /></label>
         <label className="text-field">
           <span>Amount{selectedAccount ? ` (${selectedAccount.currency})` : ""}</span>
@@ -528,9 +571,11 @@ export function PlansScreen({ accounts, currencies, request }: Props) {
 
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         {feedback && <p role="status">{feedback}</p>}
-        <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
-          {busy ? "Saving…" : editing ? "Save changes" : "Add commitment"}
-        </button>
+        {!((planningCard || planningRecord) && formAccounts.length === 0) && (
+          <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
+            {busy ? "Saving…" : editing ? "Save changes" : "Add commitment"}
+          </button>
+        )}
         {(editing || planningCard || planningRecord) && (
           <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
         )}

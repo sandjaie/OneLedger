@@ -13,6 +13,8 @@ const currencies: Array<CurrencyRow> = [
   { code: "XAA", name: "Synthetic Currency", symbol: "A", decimals: 2, numberFormat: "international" },
 ];
 
+const householdCurrencies = { base: "XAA", secondary: "XAA" };
+
 const account: AccountRow = {
   id: "00000000-0000-4000-8000-0000000000a1",
   name: "Synthetic salary account",
@@ -199,10 +201,10 @@ describe("plans screen", () => {
   it("renders the forecast, its assumptions and applied occurrences from server strings", async () => {
     const request = requestFrom((path) => {
       if (path === "/forecast") return forecastWithAccount;
-      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(await screen.findByText("Forecast as of 2026-03-01")).toBeTruthy();
     expect(screen.getByText(/Start A 10,000\.00 as of 2026-01-01/)).toBeTruthy();
@@ -222,10 +224,10 @@ describe("plans screen", () => {
     };
     const request = requestFrom((path) => {
       if (path === "/forecast") return withExclusions;
-      if (path === "/commitments") return { commitments: [] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [] } satisfies CommitmentsResponse;
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(await screen.findByText(/valued from holdings or a snapshot/)).toBeTruthy();
     expect(screen.getByText(/Its account is closed\./)).toBeTruthy();
@@ -235,14 +237,14 @@ describe("plans screen", () => {
     let commitmentsCall = 0;
     const request = requestFrom((path, init) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments" && (!init || init.method === undefined)) {
+      if (path === "/commitments?includeArchived=true" && (!init || init.method === undefined)) {
         commitmentsCall += 1;
         return { commitments: commitmentsCall === 1 ? [] : [commitment] } satisfies CommitmentsResponse;
       }
       if (path === "/commitments" && init?.method === "POST") return commitment;
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
     await screen.findByText("No commitments are recorded yet.");
 
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Synthetic salary" } });
@@ -307,14 +309,14 @@ describe("plans screen", () => {
         posted = JSON.parse(String(init.body)) as Record<string, unknown>;
         return commitment;
       }
-      if (path === "/commitments") return { commitments: [] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [] } satisfies CommitmentsResponse;
       throw new ApiError(500, "unexpected");
     }) as Request;
     render(
-      <PlansScreen accounts={[card, otherCurrency, inactive, account]} currencies={currencies} request={request} />,
+      <PlansScreen accounts={[card, otherCurrency, inactive, account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Plan payment" }));
+    fireEvent.click(await screen.findByRole("button", { name: `Plan payment ${cardItem.title}` }));
     expect(screen.getByRole("heading", { name: "Plan the card payment" })).toBeTruthy();
     const picker = screen.getByLabelText("Account") as HTMLSelectElement;
     expect(Array.from(picker.options).map((option) => option.textContent)).toEqual([account.name]);
@@ -396,13 +398,14 @@ describe("plans screen", () => {
         posted = JSON.parse(String(init.body)) as Record<string, unknown>;
         return commitment;
       }
-      if (path === "/commitments") return { commitments: [] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [] } satisfies CommitmentsResponse;
       throw new ApiError(500, `unexpected ${path}`);
     }) as Request;
     render(
       <PlansScreen
         accounts={[depositAccount, otherCurrency, card, account]}
         currencies={currencies}
+        householdCurrencies={householdCurrencies}
         request={request}
       />,
     );
@@ -435,10 +438,10 @@ describe("plans screen", () => {
   it("renders certainty, status, next due date and paid/remaining from server strings", async () => {
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(await screen.findByText(/Confirmed/)).toBeTruthy();
     expect(screen.getByText(/Upcoming/)).toBeTruthy();
@@ -451,10 +454,10 @@ describe("plans screen", () => {
     const partlyPaid: CommitmentRow = { ...commitment, partlyPaid: true, paidTowardNext: "2000.0000" };
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") return { commitments: [partlyPaid] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [partlyPaid] } satisfies CommitmentsResponse;
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(await screen.findByText(/Upcoming · Partly paid/)).toBeTruthy();
   });
@@ -462,14 +465,14 @@ describe("plans screen", () => {
   it("opens the settlement panel for a commitment with an open occurrence", async () => {
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
       if (path === `/commitments/${commitment.id}/payment-candidates`) {
         return { dueDate: commitment.nextDueDate, candidates: [] };
       }
       if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
     expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
@@ -496,14 +499,14 @@ describe("plans screen", () => {
     };
     const request = requestFrom((path) => {
       if (path === "/forecast") return withDues;
-      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
       if (path === `/commitments/${commitment.id}/payment-candidates`) {
         return { dueDate: commitment.nextDueDate, candidates: [] };
       }
       if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     const notProjected = (await screen.findByRole("heading", { name: "Not projected" })).parentElement as HTMLElement;
     fireEvent.click(within(notProjected).getByRole("button", { name: "Settle" }));
@@ -520,14 +523,14 @@ describe("plans screen", () => {
     let calls = 0;
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") {
+      if (path === "/commitments?includeArchived=true") {
         calls += 1;
         if (calls === 1) return Promise.reject(new ApiError(500, "boom"));
         return { commitments: [] } satisfies CommitmentsResponse;
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(await screen.findByText("The commitments could not be loaded.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -543,14 +546,14 @@ describe("plans screen", () => {
     };
     const request = requestFrom((path) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") return { commitments: [finished] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [finished] } satisfies CommitmentsResponse;
       if (path === `/commitments/${commitment.id}/payment-candidates`) {
         return { dueDate: null, candidates: [] };
       }
       if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     expect(screen.queryByRole("button", { name: "Settle" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "History" }));
@@ -561,18 +564,146 @@ describe("plans screen", () => {
     const bodies: Array<Record<string, unknown>> = [];
     const request = requestFrom((path, init) => {
       if (path === "/forecast") return emptyForecast;
-      if (path === "/commitments") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
       if (path === `/commitments/${commitment.id}` && init?.method === "PUT") {
         bodies.push(JSON.parse(String(init.body)));
         return commitment;
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<PlansScreen accounts={[account]} currencies={currencies} request={request} />);
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     fireEvent.click(await screen.findByRole("button", { name: /Save/ }));
     await waitFor(() => expect(bodies).toHaveLength(1));
     expect(bodies[0].nextDueDate).toBeNull();
+  });
+
+  it("fetches and lists an archived commitment", async () => {
+    const archived: CommitmentRow = { ...commitment, archivedAt: "2026-02-15T00:00:00Z" };
+    let requestedPath: string | undefined;
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments?includeArchived=true") {
+        requestedPath = path;
+        return { commitments: [archived] } satisfies CommitmentsResponse;
+      }
+      throw new ApiError(500, `unexpected ${path}`);
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+
+    expect(await screen.findByText(/Archived/)).toBeTruthy();
+    expect(requestedPath).toBe("/commitments?includeArchived=true");
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  });
+
+  it("names the required currency and hides the submit when no active account can pay a planned card payment", async () => {
+    const card: AccountRow = {
+      ...account,
+      id: "00000000-0000-4000-8000-0000000000cc",
+      name: "Synthetic card",
+      accountType: "credit_card",
+      accountClass: "liability",
+    };
+    const statementId = "00000000-0000-4000-8000-0000000000d3";
+    const cardItem = {
+      actionKey: `card.${statementId}`,
+      kind: "card_due",
+      reason: "card_payment_unplanned",
+      title: "Synthetic card",
+      dueDate: "2026-02-10",
+      overdue: false,
+      snoozedUntil: null,
+      accountId: card.id,
+      accountName: card.name,
+      amount: "400.0000",
+      remaining: "400.0000",
+      partlyPaid: false,
+      currency: "XAA",
+      certainty: null,
+      commitmentId: null,
+      cardStatementId: statementId,
+      actionItemId: null,
+    };
+    const request = vi.fn(async (path: string) => {
+      if (path === "/actions") return { ...emptyActions, items: [cardItem] };
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments?includeArchived=true") return { commitments: [] } satisfies CommitmentsResponse;
+      if (path === "/monthly-review") return emptyMonthlyReview;
+      if (path === "/goals?includeClosed=true") return emptyGoals;
+      if (path === "/emergency-reserve") return emptyEmergencyReserve;
+      if (path === "/register?includeArchived=true") return emptyRegister;
+      throw new ApiError(500, `unexpected ${path}`);
+    }) as Request;
+    // Only the card itself exists — no active asset account in its currency can pay it.
+    render(<PlansScreen accounts={[card]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: `Plan payment ${cardItem.title}` }));
+    expect(await screen.findByText("No active account in XAA can pay this; add one first.")).toBeTruthy();
+    expect(screen.queryByLabelText("Account")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add commitment" })).toBeNull();
+  });
+
+  it("scrolls to and focuses the settlement panel when Settle is opened from Needs attention", async () => {
+    const commitmentItem = {
+      actionKey: `commitment.${commitment.id}.${commitment.nextDueDate}`,
+      kind: "commitment",
+      reason: "commitment_due",
+      title: commitment.label,
+      dueDate: commitment.nextDueDate,
+      overdue: false,
+      snoozedUntil: null,
+      accountId: account.id,
+      accountName: account.name,
+      amount: commitment.amount,
+      remaining: commitment.remainingNext,
+      partlyPaid: false,
+      currency: "XAA",
+      certainty: "confirmed",
+      commitmentId: commitment.id,
+      cardStatementId: null,
+      actionItemId: null,
+    };
+    // Not requestFrom: that helper always answers /actions with an empty list, but this test
+    // needs a commitment item on it.
+    const request = vi.fn(async (path: string) => {
+      if (path === "/actions") return { ...emptyActions, items: [commitmentItem] };
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments?includeArchived=true") return { commitments: [commitment] } satisfies CommitmentsResponse;
+      if (path === `/commitments/${commitment.id}/payment-candidates`) {
+        return { dueDate: commitment.nextDueDate, candidates: [] };
+      }
+      if (path === `/commitments/${commitment.id}/resolutions`) return { resolutions: [] };
+      if (path === "/monthly-review") return emptyMonthlyReview;
+      if (path === "/goals?includeClosed=true") return emptyGoals;
+      if (path === "/emergency-reserve") return emptyEmergencyReserve;
+      if (path === "/register?includeArchived=true") return emptyRegister;
+      throw new ApiError(500, `unexpected ${path}`);
+    }) as Request;
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+
+    // Wait for the Commitments section (last of seven) to have rendered this commitment before
+    // Settle is clicked from Needs attention (first section) — otherwise there is nothing yet
+    // for the settlement panel's ref to attach to.
+    await screen.findByText(/Synthetic salary account/);
+    fireEvent.click(await screen.findByRole("button", { name: `Settle ${commitmentItem.title}` }));
+    await waitFor(() => {
+      expect(document.activeElement?.textContent).toBe(`Settle ${commitment.label}`);
+    });
+  });
+
+  it("gives Commitments an id and links every section from an on-page nav", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/forecast") return emptyForecast;
+      if (path === "/commitments?includeArchived=true") return { commitments: [] } satisfies CommitmentsResponse;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
+
+    await screen.findByText("No commitments are recorded yet.");
+    const nav = screen.getByRole("navigation", { name: "On this page" });
+    const hrefs = Array.from(nav.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["#actions", "#review", "#goals", "#reserve", "#register", "#forecast", "#commitments"]);
+    expect(document.getElementById("commitments")).toBeTruthy();
   });
 });
