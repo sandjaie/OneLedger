@@ -278,6 +278,17 @@ describe("authenticated workspace", () => {
     expect(screen.getAllByRole("banner")).toHaveLength(1);
   });
 
+  it("offers a keyboard shortcut past the workspace navigation", async () => {
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
+    const navigation = await screen.findByRole("navigation", { name: "Workspace" });
+    const skip = screen.getByRole("link", { name: "Skip to content" });
+    const target = document.getElementById("workspace-content");
+
+    expect(skip.getAttribute("href")).toBe("#workspace-content");
+    expect(target?.getAttribute("tabindex")).toBe("-1");
+    expect(Boolean(navigation.compareDocumentPosition(target!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
   it("opens compact navigation and closes it after a destination is chosen", async () => {
     render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
     await screen.findByRole("navigation", { name: "Workspace" });

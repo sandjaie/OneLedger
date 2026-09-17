@@ -476,6 +476,7 @@ export function Workspace({
   return (
     <div className="site-shell">
       <header className="masthead app-toolbar">
+        <a className="workspace-skip-link" href="#workspace-content">Skip to content</a>
         {state === "ready" && (
           <button
             aria-controls="workspace-navigation"
@@ -547,6 +548,8 @@ export function Workspace({
               </div>
             ))}
           </nav>
+
+          <div className="workspace-content-anchor" id="workspace-content" tabIndex={-1} />
 
           {activeSection === "overview" && currencies && (
             <OverviewScreen
