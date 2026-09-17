@@ -278,6 +278,32 @@ describe("authenticated workspace", () => {
     expect(screen.getAllByRole("banner")).toHaveLength(1);
   });
 
+  it("opens compact navigation and closes it after a destination is chosen", async () => {
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
+    await screen.findByRole("navigation", { name: "Workspace" });
+
+    const menu = screen.getByRole("button", { name: "Open workspace menu" });
+    expect(menu.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(menu);
+    expect(screen.getByRole("button", { name: "Close workspace menu" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("navigation", { name: "Workspace" }).classList.contains("is-open")).toBe(true);
+
+    const destination = screen.getByRole("link", { name: "Accounts" });
+    destination.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    fireEvent.click(destination);
+    expect(screen.getByRole("button", { name: "Open workspace menu" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("dismisses compact navigation with Escape", async () => {
+    render(<Workspace request={requestThat(household, catalogue, dashboard)} navigate={vi.fn()} />);
+    await screen.findByRole("navigation", { name: "Workspace" });
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace menu" }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.getByRole("button", { name: "Open workspace menu" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
   it.each([
     [401, "/login"], [403, "/unauthorized"],
   ])("routes a protected %i response to %s", async (status, destination) => {

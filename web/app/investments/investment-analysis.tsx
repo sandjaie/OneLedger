@@ -201,7 +201,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
   }
 
   return (
-    <section aria-labelledby="investment-analysis-title">
+    <section aria-labelledby="investment-analysis-title" className="investment-analysis">
       <h2 id="investment-analysis-title">Analysis</h2>
 
       {loadState === "loading" && <p role="status">Loading investment analysis…</p>}

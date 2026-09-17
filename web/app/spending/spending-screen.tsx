@@ -106,13 +106,14 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
   const maxCategoryRows = data?.byCategory ?? [];
 
   return (
-    <section className="workspace-content" aria-labelledby="spending-title">
-      <p className="eyebrow">Spending</p>
+    <section className="workspace-content spending-screen" aria-labelledby="spending-title">
+      <p className="eyebrow">Where it went</p>
       <h1 className="workspace-title" id="spending-title">Spending by category and bucket</h1>
-      <p className="lede">
-        Every figure reads the reportable ledger only — transfers, card payments and investment
-        legs never appear here, and a refund lowers spending rather than counting as income.
-      </p>
+      <p className="lede">Explore spending for a month or a custom period.</p>
+      <details className="experience-disclosure">
+        <summary>What counts as spending</summary>
+        <p>Figures use the reportable ledger only. Transfers, card payments and investment legs are excluded; refunds reduce spending rather than count as income.</p>
+      </details>
 
       <div className="spending-range" role="group" aria-label="Date range">
         <label className="text-field">
