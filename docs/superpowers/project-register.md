@@ -5,7 +5,7 @@ action. The [roadmap](../product/roadmap.html) owns approved product outcomes, t
 [master implementation plan](../product/master-implementation-plan.html) owns delivery order, and
 [progress](progress.md) owns live implementation state.
 
-Updated: 16 September 2026.
+Updated: 17 September 2026.
 
 ## How entries move
 
@@ -31,7 +31,7 @@ an inferred institution identity.
 | 12 Sep 2026 | Capture transfer fees when a trustworthy source supplies them | Current statement evidence does not expose a reliable fee value | Reconsider when a source document or owner-entered path exists |
 | 14 Sep 2026 | Per-lot lineage across splits, switches and platform transfers | Owner re-scoped Phase 1.6 to holding-level corporate actions; V40's `predecessor_lot_id` is present but unused | Before Phase 5.6 planning, or when the owner needs lot cost after a corporate action |
 | 14 Sep 2026 | Lot-level realised gain after a corporate action, and a realised-gain view | Phase 1.6 withholds basis and realised claims from a corporate action's date; the disposal lot-allocation API remains | Phase 4.3 planning |
-| 14 Sep 2026 | Account- and asset-class XIRR; platform and currency allocation groupings | Phase 1.6 reports holding and portfolio XIRR, and allocation by asset class and account | Phase 4.3 planning |
+| 14 Sep 2026 | Platform and currency allocation groupings | Phase 1.6 reports holding and portfolio XIRR, and allocation by asset class and account; Phase 4.3 Task 1 closed the account- and asset-class XIRR half on `GET /portfolio/analysis` | Phase 4.3 planning or when platform/currency groupings are needed |
 | 14 Sep 2026 | Resolve a blocked import group inside the import | Blocked groups stay uncommitted; the owner cancels or uses owner entry | When blocked groups recur in real monthly imports |
 | 14 Sep 2026 | Switch charges (exit load, stamp duty) | The event matrix records no switch charge, so such a switch fails closed | When real evidence contains one |
 | 14 Sep 2026 | Backdated unit events before a platform transfer | V40's order guard refuses them although holding-level transfers carry explicit units | Phase 2.2–2.4 planning — elapsed 16 Sep 2026 (Phases 2.2–2.4 planned and delivered) without this review; awaits an owner decision |
@@ -63,7 +63,7 @@ change the roadmap.
 | 6 Sep 2026 | Complete the permitted-account Google sign-in and protected-route check | Automated checks cannot prove the real identity-provider journey | Tracked as an open gate in [progress](progress.md#active-delivery-gates) |
 | 6 Sep 2026 | Complete second-account rejection and account-chooser recovery | The rejection boundary needs real provider evidence | Tracked as an open gate in [progress](progress.md#active-delivery-gates) |
 | 6 Sep 2026 | Gather missing history back to the approved anchor | Phase 2.1 can reconcile only evidence that exists | Before Phase 2.1 owner acceptance |
-| 6 Sep 2026 | Obtain complete investment history where available | Phase 1.6 and later return analysis need transaction-level continuity | Phase 4.3 planning |
+| 6 Sep 2026 | Obtain complete investment history where available | Phase 1.6 and later return analysis need transaction-level continuity; Phase 4.3 Task 1 does not infer missing history | Before Phase 4.3 owner acceptance or when a gap blocks analysis |
 | 6 Sep 2026 | Confirm whether a real loan exists | Loan support is conditional and must not be speculative | Before activating Phase 4.6 |
 | 6 Sep 2026 | Confirm whether real property evidence exists | Property uses dated valuation snapshots, but no asset should be created without owner evidence | Before property enters Phase 2.1 coverage |
 | 6 Sep 2026 | Decide whether emergency handover ever permits another person access | This changes the single-owner privacy boundary | Only through a separate product and privacy decision |

@@ -716,6 +716,8 @@ ROLLBACK;
 BEGIN;
 -- Later migrations may depend on V30 relations. Remove their objects first so this historical
 -- upgrade test can reconstruct the exact pre-V30 shape it is responsible for proving.
+-- V61's investment_benchmark references security.
+DROP TABLE investment_benchmark;
 -- V46's month_end_position references holding and uses account_valuation_mode; dropping the
 -- whole table removes both dependencies in one step.
 DROP TABLE month_end_position;
@@ -837,6 +839,8 @@ DROP TABLE security;
 DROP TABLE account_valuation_period;
 DROP TYPE valuation_confidence;
 DROP TYPE valuation_method;
+-- V61's investment_allocation_target.label uses asset_class.
+DROP TABLE investment_allocation_target;
 DROP TYPE asset_class;
 DROP TYPE security_type;
 DROP TYPE account_valuation_mode;

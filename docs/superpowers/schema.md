@@ -3665,6 +3665,53 @@ stored here. `docs/design/api-contracts.html` §2 has the exact route contracts.
 
 ---
 
+## `V61` (applied)
+
+### Investment allocation targets and benchmarks
+
+Phase 4.3 Task 1. Two household-scoped tables, RLS like V60's `payslip_earning_rule`, written
+directly by `routes/portfolio.py` under the household lock. The pure
+`api/oneledger/investment_analysis.py` reader uses stored targets and benchmarks; removing a target
+returns to read-time inference, and removing a benchmark returns to "No benchmark" — there is no
+inferred benchmark.
+
+```sql
+CREATE TABLE investment_allocation_target (
+  household_id UUID NOT NULL REFERENCES household(id),
+  label        asset_class NOT NULL,
+  ratio        NUMERIC(20,10) NOT NULL CHECK (ratio >= 0 AND ratio <= 1),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (household_id, label)
+);
+
+CREATE TABLE investment_benchmark (
+  household_id UUID NOT NULL REFERENCES household(id),
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scope_kind   TEXT NOT NULL CHECK (scope_kind IN ('portfolio', 'asset_class')),
+  asset_class  asset_class,
+  security_id  UUID NOT NULL REFERENCES security(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT investment_benchmark_scope_matches_asset_class CHECK (
+    (scope_kind = 'portfolio' AND asset_class IS NULL)
+    OR (scope_kind = 'asset_class' AND asset_class IS NOT NULL)),
+  CONSTRAINT uq_investment_benchmark_scope
+    UNIQUE NULLS NOT DISTINCT (household_id, scope_kind, asset_class)
+);
+```
+
+Both tables carry `household_isolation FOR ALL TO authenticated`. The allocation-target PUT
+replaces the whole set in one transaction; the application refuses ratios with more than ten decimal
+places and refuses a set whose ratios do not sum to exactly 1 at `NUMERIC(20,10)` rather than
+rounding. `GET /portfolio/analysis` reads these rows with holdings events, accepted prices and
+stored holdings-mode `month_end_position` rows and hands them to the pure analysis module — no
+figure is computed or stored here. `docs/design/api-contracts.html` §2 has the exact route
+contracts.
+
+---
+
 ## `0013`
 
 ### Loans
