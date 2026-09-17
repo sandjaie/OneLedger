@@ -64,6 +64,11 @@ section. Direct loads, browser Back/Forward, and keyboard selection must work. A
 must not be silently discarded on section change: either retain mounted form state or warn before
 leaving. Keep every current server-side validation and disabled reporting-pair behavior.
 
+The existing Classify link to `/settings#merchant-knowledge-title` must open Rules. Retarget the
+investment-import Data quality link to `#data-quality-title` and the Wealth missing-rate link to
+`#fx-title` so those paths select and focus the intended section. A plain `/settings` still opens
+General. Section selection is reflected in the URL, not stored only in component memory.
+
 ### Subscriptions and Recurring
 
 Lead with the next real renewal or a truthful empty state, followed by only the most useful totals.
