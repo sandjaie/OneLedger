@@ -12,10 +12,10 @@ Updated: 17 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Owner-workspace experience refresh** across the existing screens | [design](specs/2026-09-17-workspace-experience-refresh-design.md) |
-| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The workspace refresh is in this branch | [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
-| Next product action | Review the workspace refresh, complete the open owner-operated acceptance gates, then continue with Phase 4.4 | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| Current implementation task | Workspace experience refresh in `feature/ui-experience-refresh` | [refresh plan](plans/2026-09-17-workspace-experience-refresh.md) |
+| Current outcome | **Decision-first owner workspace** across the existing screens | [design for review](specs/2026-09-17-decision-first-workspace-design.md) |
+| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); the deeper redesign is in design review | [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
+| Next product action | Approve the decision-first design, then plan and implement it; complete the open owner-operated acceptance gates before Phase 4.4 | [design](specs/2026-09-17-decision-first-workspace-design.md) |
+| Current implementation task | Design review on `feature/ui-decision-first-workspace`; implementation has not started | [design](specs/2026-09-17-decision-first-workspace-design.md) |
 
 ## Canonical phase status
 
