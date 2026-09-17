@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { InvestmentAnalysis } from "@/app/investments/investment-analysis";
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import { ReviewQueue } from "@/app/investments/review-queue";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
@@ -166,6 +167,13 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
       {state === "ready" && summary && (
         <>
+          <InvestmentAnalysis
+            baseCurrency={summary.baseCurrency}
+            positions={positions}
+            refreshKey={attempt}
+            request={request}
+          />
+
           <div className="portfolio-metrics" aria-label="Portfolio totals">
             <Metric asOf={summary.asOf} label="Value" value={`${summary.baseCurrency} ${summary.valueBase}`} />
             <Metric asOf={summary.asOf} label="Contributions" value={`${summary.baseCurrency} ${summary.contributionsBase}`} />

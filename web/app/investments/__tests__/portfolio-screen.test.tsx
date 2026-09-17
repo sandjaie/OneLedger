@@ -8,6 +8,8 @@ import { Workspace } from "@/app/workspace";
 import { ApiError, type apiFetch } from "@/lib/api/client";
 import type {
   AcquisitionPosition,
+  AnalysisResponse,
+  EffectWindowOut,
   HouseholdResponse,
   PortfolioPositions,
   PortfolioSummary,
@@ -96,6 +98,36 @@ function positions(rows: Array<AcquisitionPosition> = [position()]): PortfolioPo
   return { asOf: "2026-02-06", baseCurrency: "XAA", secondaryCurrency: "XBB", positions: rows };
 }
 
+function emptyAnalysis(): AnalysisResponse {
+  const blank: EffectWindowOut = {
+    dietzPercent: null,
+    dietzReason: "no_denominator",
+    contributions: "0.0000",
+    withdrawals: "0.0000",
+    income: "0.0000",
+    charges: "0.0000",
+    marketAndFx: "0.0000",
+    opening: "0.0000",
+    closing: "0.0000",
+    benchmarkDietzPercent: null,
+    benchmarkDietzReason: null,
+    excessPercent: null,
+  };
+  return {
+    asOf: "2026-02-06",
+    wealthHistoryComputedAt: null,
+    wealthHistoryReason: "wealth_history_not_refreshed",
+    coverage: [],
+    classes: [],
+    accounts: [],
+    inception: blank,
+    years: [],
+    months: [],
+    target: { source: "none", groups: [] },
+    benchmarks: [],
+  };
+}
+
 function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Promise<unknown>): Request {
   // `async` wraps a synchronous `throw` inside `handler` into a rejected promise, matching a
   // real fetch failure rather than an uncaught exception during the effect that calls it.
@@ -111,6 +143,7 @@ describe("PortfolioScreen", () => {
         return summary({ gainBase: null, gainSecondary: null, xirrPercent: null, xirrReason: "no_sign_change" });
       }
       if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
@@ -128,6 +161,7 @@ describe("PortfolioScreen", () => {
     const request = requestFrom((path, init) => {
       if (path === "/portfolio/summary") return summary();
       if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
       if (path === "/investment-prices/refresh" && init?.method === "POST") {
         posted.push(path);
         const outcome: RefreshOutcome = { outcome: "refreshed", status: summary().priceStatus };
@@ -151,6 +185,7 @@ describe("PortfolioScreen", () => {
         return summary({ priceStatus: { ...summary().priceStatus, lastSuccessfulCheck: new Date().toISOString() } });
       }
       if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
@@ -187,6 +222,7 @@ describe("PortfolioScreen", () => {
           }),
         ]);
       }
+      if (path === "/portfolio/analysis") return emptyAnalysis();
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 
@@ -201,6 +237,7 @@ describe("PortfolioScreen", () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/summary") return summary({ allocationComplete: false });
       if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
       throw new Error(`Unexpected synthetic route ${path}`);
     });
 

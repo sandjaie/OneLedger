@@ -1698,6 +1698,8 @@ body { background: #eef2f0; }
 .holding-screen dl div { display: flex; justify-content: space-between; gap: 12px; font-size: 0.78rem; }
 .portfolio-allocation-groups dt,
 .holding-screen dt { color: var(--muted); }
+.analysis-benchmarks { display: grid; gap: 10px; }
+.analysis-benchmarks label { display: grid; gap: 4px; max-width: 28rem; }
 .holding-screen dl.portfolio-metrics { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .holding-screen dl.portfolio-metrics div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--rule); }
 
