@@ -253,15 +253,14 @@ export function RecurringScreen({ currencies, request }: Props) {
   }
 
   return (
-    <section className="workspace-content" aria-labelledby="recurring-title">
-      <p className="eyebrow">Recurring</p>
+    <section className="workspace-content recurring-screen" aria-labelledby="recurring-title">
+      <p className="eyebrow">Regular outgoings</p>
       <h1 className="workspace-title" id="recurring-title">Recurring payments</h1>
-      <p className="lede">
-        Found automatically from the ledger — nothing here needs confirming. A payment is shown as
-        a subscription or not; the one correction is that flip, which moves a row to the{" "}
-        <Link href="/subscriptions">Subscriptions</Link> screen. Remove takes a payment off this
-        list entirely and it will not return on its own.
-      </p>
+      <p className="lede">Regular payments found in your ledger, with their cadence and latest charge.</p>
+      <details className="experience-disclosure">
+        <summary>How this list works</summary>
+        <p>Nothing here needs confirming. Mark a payment as a <Link href="/subscriptions">subscription</Link> to move it there. Remove hides it from this list permanently.</p>
+      </details>
 
       {state === "loading" && <p role="status">Checking for recurring payments…</p>}
       {state === "error" && (
@@ -288,7 +287,7 @@ export function RecurringScreen({ currencies, request }: Props) {
           {shown.length > 0 && (
             <ul className="recurring-confirmed-list">
               {shown.map((row) => (
-                <li key={row.id}>
+                <li className="experience-record" key={row.id}>
                   <span>
                     {row.label}
                     {row.needsName && <span className="plans-badge">Needs a name</span>}

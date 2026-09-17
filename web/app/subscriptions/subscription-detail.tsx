@@ -235,7 +235,7 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
   }
 
   return (
-    <section className="workspace-content" aria-labelledby="subscription-detail-title">
+    <section className="workspace-content subscription-detail-screen" aria-labelledby="subscription-detail-title">
       <header className="investment-entry-header">
         <div>
           <p className="eyebrow">Subscription</p>

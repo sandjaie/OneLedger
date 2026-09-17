@@ -43,6 +43,33 @@ import type {
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
+const NAV_GROUPS = [
+  { label: "Your money", links: [
+    { label: "Overview", href: "/", sections: ["overview"] },
+    { label: "Accounts", href: "/accounts", sections: ["accounts"] },
+    { label: "Transactions", href: "/transactions", sections: ["transactions"] },
+    { label: "Spending", href: "/spending", sections: ["spending"] },
+    { label: "Subscriptions", href: "/subscriptions", sections: ["subscriptions", "subscriptions-detail"] },
+    { label: "Recurring", href: "/recurring", sections: ["recurring"] },
+  ] },
+  { label: "Build & plan", links: [
+    { label: "Investments", href: "/investments", sections: ["investments", "investments-entry", "investments-holding"] },
+    { label: "Salary", href: "/salary", sections: ["salary"] },
+    { label: "Plans", href: "/plans", sections: ["plans"] },
+    { label: "Wealth", href: "/wealth", sections: ["wealth"] },
+  ] },
+  { label: "Review & import", links: [
+    { label: "Import", href: "/import", sections: ["import", "review"] },
+    { label: "Import investments", href: "/investments/import", sections: ["investments-import"] },
+    { label: "Classify", href: "/review", sections: ["classification-review"] },
+    { label: "Documents", href: "/documents", sections: ["documents"] },
+    { label: "Coverage", href: "/coverage", sections: ["coverage"] },
+  ] },
+  { label: "Workspace", links: [
+    { label: "Settings", href: "/settings", sections: ["settings"] },
+  ] },
+];
+
 type Props = {
   section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
   // The batch under review. A path parameter rather than a section of its own, because review
@@ -183,6 +210,8 @@ export function Workspace({
   const [attempt, setAttempt] = useState(0);
   const [destination, setDestination] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
   const [logoutFailed, setLogoutFailed] = useState(false);
   const [fxDate, setFxDate] = useState("");
   const [fx, setFx] = useState<FxState>({ status: "idle" });
@@ -190,6 +219,17 @@ export function Workspace({
   const [backfillStart, setBackfillStart] = useState("");
   const [backfillEnd, setBackfillEnd] = useState("");
   const [backfill, setBackfill] = useState<BackfillState>({ status: "idle" });
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function dismissOnEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+      menuButton.current?.focus();
+    }
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => document.removeEventListener("keydown", dismissOnEscape);
+  }, [menuOpen]);
 
   useEffect(() => {
     let current = true;
@@ -436,6 +476,20 @@ export function Workspace({
   return (
     <div className="site-shell">
       <header className="masthead app-toolbar">
+        <a className="workspace-skip-link" href="#workspace-content">Skip to content</a>
+        {state === "ready" && (
+          <button
+            aria-controls="workspace-navigation"
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Close workspace menu" : "Open workspace menu"}
+            className="workspace-menu-toggle"
+            onClick={() => setMenuOpen((open) => !open)}
+            ref={menuButton}
+            type="button"
+          >
+            <span aria-hidden="true">{menuOpen ? "×" : "☰"}</span>
+          </button>
+        )}
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">OL</span>
           <span>OneLedger</span>
@@ -478,45 +532,24 @@ export function Workspace({
       )}
       {state === "ready" && household && currency && (
         <main className="workspace-grid">
-          <nav className="workspace-nav" aria-label="Workspace">
-            <Link aria-current={activeSection === "overview" ? "page" : undefined} href="/">Overview</Link>
-            <Link aria-current={activeSection === "accounts" ? "page" : undefined} href="/accounts">Accounts</Link>
-            <Link
-              aria-current={
-                activeSection === "import" || activeSection === "review" ? "page" : undefined
-              }
-              href="/import"
-            >Import</Link>
-            <Link aria-current={activeSection === "transactions" ? "page" : undefined} href="/transactions">Transactions</Link>
-            <Link aria-current={activeSection === "spending" ? "page" : undefined} href="/spending">Spending</Link>
-            <Link
-              aria-current={
-                activeSection === "subscriptions" || activeSection === "subscriptions-detail"
-                  ? "page"
-                  : undefined
-              }
-              href="/subscriptions"
-            >Subscriptions</Link>
-            <Link aria-current={activeSection === "recurring" ? "page" : undefined} href="/recurring">Recurring</Link>
-            <Link aria-current={activeSection === "documents" ? "page" : undefined} href="/documents">Documents</Link>
-            <Link
-              aria-current={
-                activeSection === "investments"
-                || activeSection === "investments-entry"
-                || activeSection === "investments-holding"
-                  ? "page"
-                  : undefined
-              }
-              href="/investments"
-            >Investments</Link>
-            <Link aria-current={activeSection === "investments-import" ? "page" : undefined} href="/investments/import">Import investments</Link>
-            <Link aria-current={activeSection === "classification-review" ? "page" : undefined} href="/review">Classify</Link>
-            <Link aria-current={activeSection === "salary" ? "page" : undefined} href="/salary">Salary</Link>
-            <Link aria-current={activeSection === "plans" ? "page" : undefined} href="/plans">Plans</Link>
-            <Link aria-current={activeSection === "coverage" ? "page" : undefined} href="/coverage">Coverage</Link>
-            <Link aria-current={activeSection === "wealth" ? "page" : undefined} href="/wealth">Wealth</Link>
-            <Link aria-current={activeSection === "settings" ? "page" : undefined} href="/settings">Settings</Link>
+          {menuOpen && <button aria-label="Dismiss navigation" className="workspace-menu-scrim" onClick={() => setMenuOpen(false)} type="button" />}
+          <nav className={`workspace-nav${menuOpen ? " is-open" : ""}`} aria-label="Workspace" id="workspace-navigation">
+            {NAV_GROUPS.map((group) => (
+              <div className="workspace-nav-group" key={group.label}>
+                <p className="workspace-nav-label">{group.label}</p>
+                {group.links.map((link) => (
+                  <Link
+                    aria-current={link.sections.includes(activeSection) ? "page" : undefined}
+                    href={link.href}
+                    key={link.href}
+                    onClick={() => setMenuOpen(false)}
+                  >{link.label}</Link>
+                ))}
+              </div>
+            ))}
           </nav>
+
+          <div className="workspace-content-anchor" id="workspace-content" tabIndex={-1} />
 
           {activeSection === "overview" && currencies && (
             <OverviewScreen
@@ -687,14 +720,10 @@ export function Workspace({
           )}
 
           {activeSection === "settings" && (
-            <section className="workspace-content" aria-labelledby="settings-title">
+            <section className="workspace-content settings-screen" aria-labelledby="settings-title">
               <p className="eyebrow">Owner settings</p>
               <h1 className="workspace-title" id="settings-title">Settings</h1>
-              <p className="lede">
-                Manage the household, data quality, categories, classification rules and stored
-                exchange rates. Choose a date below to inspect recorded exchange rates, their
-                sources and whether a prior rate was carried forward.
-              </p>
+              <p className="lede">Manage your household, review data quality, and tune how the ledger is organised.</p>
               {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
 
               <DataQuality

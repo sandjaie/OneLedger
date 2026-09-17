@@ -281,13 +281,14 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
   }
 
   return (
-    <section className="workspace-content" aria-labelledby="subscriptions-title">
-      <p className="eyebrow">Subscriptions</p>
+    <section className="workspace-content subscriptions-screen" aria-labelledby="subscriptions-title">
+      <p className="eyebrow">Your commitments</p>
       <h1 className="workspace-title" id="subscriptions-title">Subscriptions</h1>
-      <p className="lede">
-        What the ledger says you pay for — estimates built from the latest charges. The one
-        correction is &ldquo;not a subscription&rdquo;, which moves a row to Recurring.
-      </p>
+      <p className="lede">See what renews next, what it costs, and where it is paid from.</p>
+      <details className="experience-disclosure">
+        <summary>How subscriptions are identified</summary>
+        <p>Estimates come from the latest ledger charges. Choose &ldquo;not a subscription&rdquo; to move a row to Recurring.</p>
+      </details>
 
       {state === "loading" && <p role="status">Checking for subscriptions…</p>}
       {state === "error" && (
@@ -341,7 +342,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {summary.upcoming.length > 0 && (
             <ul className="recurring-confirmed-list">
               {summary.upcoming.map((row) => (
-                <li key={row.seriesId}>
+                <li className="experience-record" key={row.seriesId}>
                   <span>
                     {row.nextExpectedOn} ·{" "}
                     <Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link>
@@ -362,7 +363,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {current.length > 0 && (
             <ul className="recurring-confirmed-list">
               {current.map((row) => (
-                <li key={row.id}>
+                <li className="experience-record" key={row.id}>
                   <span>
                     <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
                     {row.needsName && <span className="plans-badge">Needs a name</span>}
@@ -416,7 +417,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {past.length > 0 && (
             <ul className="recurring-confirmed-list">
               {past.map((row) => (
-                <li key={row.id}>
+                <li className="experience-record" key={row.id}>
                   <span>
                     <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
                   </span>
@@ -439,7 +440,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {byAccount && byAccount.length > 0 && (
             <ul className="recurring-confirmed-list">
               {byAccount.map((row) => (
-                <li key={row.accountId}>
+                <li className="experience-record" key={row.accountId}>
                   <span>
                     {row.accountName}
                     {row.accountMasked ? ` (${row.accountMasked})` : ""}

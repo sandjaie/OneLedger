@@ -297,7 +297,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
   if (loading) {
     return (
-      <section className="workspace-content" aria-labelledby="investment-import-title">
+      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
         <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
         <p className="lede" role="status">Loading this import…</p>
       </section>
@@ -310,7 +310,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
     const committable = imported.groups.some((group) => group.status === "ready");
     const terminal = TERMINAL.has(imported.status);
     return (
-      <section className="workspace-content" aria-labelledby="investment-import-title">
+      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
         <p className="eyebrow">Statement import</p>
         <h1 className="workspace-title" id="investment-import-title">Review investment import</h1>
         <p className="lede">
@@ -376,7 +376,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
   if (investmentAccounts.length === 0) {
     return (
-      <section className="workspace-content investment-entry-empty" aria-labelledby="investment-import-title">
+      <section className="workspace-content investment-entry-empty investment-import-screen" aria-labelledby="investment-import-title">
         <p className="section-label">Account required</p>
         <h1 className="workspace-title" id="investment-import-title">Set up the holding container first</h1>
         <p>An investment account is required before importing a statement.</p>
@@ -385,7 +385,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
   }
 
   return (
-    <section className="workspace-content" aria-labelledby="investment-import-title">
+    <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
       <p className="eyebrow">Statement import</p>
       <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
       <p className="lede">

@@ -696,7 +696,8 @@ export function TransactionsScreen({
           a statement.
         </p>
       ) : (
-        <table className="account-table transaction-ledger">
+        <div className="transaction-table-wrap" role="region" aria-label="Transaction ledger" tabIndex={0}>
+          <table className="account-table transaction-ledger">
           <caption className="visually-hidden">The transaction ledger</caption>
           <thead>
             <tr>
@@ -902,7 +903,8 @@ export function TransactionsScreen({
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
 
       {classifying && (

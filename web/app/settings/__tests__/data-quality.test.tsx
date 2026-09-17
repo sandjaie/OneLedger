@@ -44,4 +44,29 @@ describe("Settings › Data Quality", () => {
 
     expect((await screen.findByRole("alert")).textContent).toBe("The report failed.");
   });
+
+  it("keeps warning findings open and offers a compact section summary", async () => {
+    const request = vi.fn().mockResolvedValue(report) as unknown as typeof apiFetch;
+    render(<DataQuality request={request} />);
+
+    const group = await screen.findByText("Backups");
+    const details = group.closest("details");
+    expect(details?.open).toBe(true);
+    expect(details?.querySelector("summary")?.textContent).toContain("1 needs attention");
+  });
+
+  it("collapses a long warning list behind its count", async () => {
+    const many: DoctorReport = {
+      sections: [{
+        title: "Coverage",
+        findings: ["A", "B", "C", "D"].map((letter) => ({ level: "warning", message: `Synthetic gap ${letter}` })),
+      }],
+    };
+    render(<DataQuality request={vi.fn().mockResolvedValue(many) as unknown as typeof apiFetch} />);
+
+    const group = await screen.findByText("Coverage");
+    const details = group.closest("details");
+    expect(details?.open).toBe(false);
+    expect(details?.querySelector("summary")?.textContent).toContain("4 needs attention");
+  });
 });

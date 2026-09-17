@@ -215,7 +215,8 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
       {rows.length === 0 ? (
         <p className="lede">No stored documents match this view.</p>
       ) : (
-        <table className="account-table">
+        <div className="documents-table-wrap" role="region" aria-label="Document library" tabIndex={0}>
+          <table className="account-table">
           <caption className="visually-hidden">The document library</caption>
           <thead>
             <tr>
@@ -275,7 +276,8 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       )}
 
       {rows.length < count && (
