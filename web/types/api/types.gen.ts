@@ -168,6 +168,32 @@ export type AccountResolutionCandidate = {
 };
 
 /**
+ * AccountReturnOut
+ */
+export type AccountReturnOut = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Xirrpercent
+     */
+    xirrPercent: string | null;
+    /**
+     * Xirrreason
+     */
+    xirrReason: string | null;
+    /**
+     * Valuebase
+     */
+    valueBase: string | null;
+};
+
+/**
  * AccountRow
  */
 export type AccountRow = {
@@ -821,6 +847,84 @@ export type AllocationGroupRow = {
 };
 
 /**
+ * AllocationTargetGroupIn
+ */
+export type AllocationTargetGroupIn = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Ratio
+     */
+    ratio: string;
+};
+
+/**
+ * AllocationTargetsIn
+ */
+export type AllocationTargetsIn = {
+    /**
+     * Groups
+     */
+    groups: Array<AllocationTargetGroupIn>;
+};
+
+/**
+ * AllocationTargetsOut
+ */
+export type AllocationTargetsOut = {
+    /**
+     * Groups
+     */
+    groups: Array<TargetGroupOut>;
+};
+
+/**
+ * AnalysisResponse
+ */
+export type AnalysisResponse = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Wealthhistorycomputedat
+     */
+    wealthHistoryComputedAt: unknown | null;
+    /**
+     * Wealthhistoryreason
+     */
+    wealthHistoryReason: string | null;
+    /**
+     * Coverage
+     */
+    coverage: Array<CoverageAccountOut>;
+    /**
+     * Classes
+     */
+    classes: Array<ClassReturnOut>;
+    /**
+     * Accounts
+     */
+    accounts: Array<AccountReturnOut>;
+    inception: EffectWindowOut;
+    /**
+     * Years
+     */
+    years: Array<YearOut>;
+    /**
+     * Months
+     */
+    months: Array<MonthOut>;
+    target: TargetOut;
+    /**
+     * Benchmarks
+     */
+    benchmarks: Array<BenchmarkOut>;
+};
+
+/**
  * ApplyBody
  */
 export type ApplyBody = {
@@ -936,6 +1040,48 @@ export type BaselineOut = {
      * Status
      */
     status: string;
+};
+
+/**
+ * BenchmarkIn
+ */
+export type BenchmarkIn = {
+    /**
+     * Securityid
+     */
+    securityId: string;
+};
+
+/**
+ * BenchmarkOut
+ */
+export type BenchmarkOut = {
+    /**
+     * Scopekind
+     */
+    scopeKind: 'portfolio' | 'asset_class';
+    /**
+     * Assetclass
+     */
+    assetClass: string | null;
+    /**
+     * Securityid
+     */
+    securityId: string;
+    /**
+     * Securityname
+     */
+    securityName: string;
+};
+
+/**
+ * BenchmarksOut
+ */
+export type BenchmarksOut = {
+    /**
+     * Benchmarks
+     */
+    benchmarks: Array<BenchmarkOut>;
 };
 
 /**
@@ -1965,6 +2111,29 @@ export type CheckpointResponse = {
 };
 
 /**
+ * ClassReturnOut
+ */
+export type ClassReturnOut = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Xirrpercent
+     */
+    xirrPercent: string | null;
+    /**
+     * Xirrreason
+     */
+    xirrReason: string | null;
+    /**
+     * Valuebase
+     */
+    valueBase: string | null;
+    inception: EffectWindowOut;
+};
+
+/**
  * ClassificationReviewGroup
  */
 export type ClassificationReviewGroup = {
@@ -2518,6 +2687,24 @@ export type CountAndPercent = {
      * Percent
      */
     percent: string | null;
+};
+
+/**
+ * CoverageAccountOut
+ */
+export type CoverageAccountOut = {
+    /**
+     * Accountid
+     */
+    accountId: string;
+    /**
+     * Accountname
+     */
+    accountName: string;
+    /**
+     * Valuationmode
+     */
+    valuationMode: string;
 };
 
 /**
@@ -3176,6 +3363,60 @@ export type EarningRulesResponse = {
      * Rules
      */
     rules: Array<EarningRuleRow>;
+};
+
+/**
+ * EffectWindowOut
+ */
+export type EffectWindowOut = {
+    /**
+     * Dietzpercent
+     */
+    dietzPercent: string | null;
+    /**
+     * Dietzreason
+     */
+    dietzReason: string | null;
+    /**
+     * Contributions
+     */
+    contributions: string | null;
+    /**
+     * Withdrawals
+     */
+    withdrawals: string | null;
+    /**
+     * Income
+     */
+    income: string | null;
+    /**
+     * Charges
+     */
+    charges: string | null;
+    /**
+     * Marketandfx
+     */
+    marketAndFx: string | null;
+    /**
+     * Opening
+     */
+    opening: string | null;
+    /**
+     * Closing
+     */
+    closing: string | null;
+    /**
+     * Benchmarkdietzpercent
+     */
+    benchmarkDietzPercent: string | null;
+    /**
+     * Benchmarkdietzreason
+     */
+    benchmarkDietzReason: string | null;
+    /**
+     * Excesspercent
+     */
+    excessPercent: string | null;
 };
 
 /**
@@ -5726,6 +5967,80 @@ export type MonthCell = {
 };
 
 /**
+ * MonthClassOut
+ */
+export type MonthClassOut = {
+    /**
+     * Dietzpercent
+     */
+    dietzPercent: string | null;
+    /**
+     * Dietzreason
+     */
+    dietzReason: string | null;
+    /**
+     * Contributions
+     */
+    contributions: string | null;
+    /**
+     * Withdrawals
+     */
+    withdrawals: string | null;
+    /**
+     * Income
+     */
+    income: string | null;
+    /**
+     * Charges
+     */
+    charges: string | null;
+    /**
+     * Marketandfx
+     */
+    marketAndFx: string | null;
+    /**
+     * Opening
+     */
+    opening: string | null;
+    /**
+     * Closing
+     */
+    closing: string | null;
+    /**
+     * Benchmarkdietzpercent
+     */
+    benchmarkDietzPercent: string | null;
+    /**
+     * Benchmarkdietzreason
+     */
+    benchmarkDietzReason: string | null;
+    /**
+     * Excesspercent
+     */
+    excessPercent: string | null;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Valuebase
+     */
+    valueBase: string | null;
+    /**
+     * Ratio
+     */
+    ratio: string | null;
+    /**
+     * Targetratio
+     */
+    targetRatio: string | null;
+    /**
+     * Drift
+     */
+    drift: string | null;
+};
+
+/**
  * MonthEndPosition
  */
 export type MonthEndPosition = {
@@ -5839,6 +6154,31 @@ export type MonthFlows = {
      * Savingsratepctsecondary
      */
     savingsRatePctSecondary: string | null;
+};
+
+/**
+ * MonthOut
+ */
+export type MonthOut = {
+    /**
+     * Monthend
+     */
+    monthEnd: string;
+    /**
+     * Complete
+     */
+    complete: boolean;
+    /**
+     * Statuscounts
+     */
+    statusCounts: {
+        [key: string]: number;
+    };
+    portfolio: EffectWindowOut;
+    /**
+     * Classes
+     */
+    classes: Array<MonthClassOut>;
 };
 
 /**
@@ -9572,6 +9912,34 @@ export type SystematicTransferActionCreate = {
 };
 
 /**
+ * TargetGroupOut
+ */
+export type TargetGroupOut = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Ratio
+     */
+    ratio: string;
+};
+
+/**
+ * TargetOut
+ */
+export type TargetOut = {
+    /**
+     * Source
+     */
+    source: 'rule' | 'inferred' | 'none';
+    /**
+     * Groups
+     */
+    groups: Array<TargetGroupOut>;
+};
+
+/**
  * TargetResponse
  */
 export type TargetResponse = {
@@ -10470,6 +10838,83 @@ export type WealthHistoryResponse = {
      * Months
      */
     months: Array<MonthSummary>;
+};
+
+/**
+ * YearClassOut
+ */
+export type YearClassOut = {
+    /**
+     * Dietzpercent
+     */
+    dietzPercent: string | null;
+    /**
+     * Dietzreason
+     */
+    dietzReason: string | null;
+    /**
+     * Contributions
+     */
+    contributions: string | null;
+    /**
+     * Withdrawals
+     */
+    withdrawals: string | null;
+    /**
+     * Income
+     */
+    income: string | null;
+    /**
+     * Charges
+     */
+    charges: string | null;
+    /**
+     * Marketandfx
+     */
+    marketAndFx: string | null;
+    /**
+     * Opening
+     */
+    opening: string | null;
+    /**
+     * Closing
+     */
+    closing: string | null;
+    /**
+     * Benchmarkdietzpercent
+     */
+    benchmarkDietzPercent: string | null;
+    /**
+     * Benchmarkdietzreason
+     */
+    benchmarkDietzReason: string | null;
+    /**
+     * Excesspercent
+     */
+    excessPercent: string | null;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * YearOut
+ */
+export type YearOut = {
+    /**
+     * Year
+     */
+    year: number;
+    /**
+     * Incompletemonths
+     */
+    incompleteMonths: number;
+    portfolio: EffectWindowOut;
+    /**
+     * Classes
+     */
+    classes: Array<YearClassOut>;
 };
 
 /**
@@ -14743,6 +15188,206 @@ export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses = {
 };
 
 export type HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponse = HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses[keyof HoldingLotsPortfolioHoldingsHoldingIdLotsGetResponses];
+
+export type PortfolioAnalysisPortfolioAnalysisGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Asof
+         */
+        asOf?: string | null;
+    };
+    url: '/portfolio/analysis';
+};
+
+export type PortfolioAnalysisPortfolioAnalysisGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PortfolioAnalysisPortfolioAnalysisGetError = PortfolioAnalysisPortfolioAnalysisGetErrors[keyof PortfolioAnalysisPortfolioAnalysisGetErrors];
+
+export type PortfolioAnalysisPortfolioAnalysisGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AnalysisResponse;
+};
+
+export type PortfolioAnalysisPortfolioAnalysisGetResponse = PortfolioAnalysisPortfolioAnalysisGetResponses[keyof PortfolioAnalysisPortfolioAnalysisGetResponses];
+
+export type DeleteAllocationTargetsPortfolioAllocationTargetsDeleteData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/portfolio/allocation-targets';
+};
+
+export type DeleteAllocationTargetsPortfolioAllocationTargetsDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteAllocationTargetsPortfolioAllocationTargetsDeleteError = DeleteAllocationTargetsPortfolioAllocationTargetsDeleteErrors[keyof DeleteAllocationTargetsPortfolioAllocationTargetsDeleteErrors];
+
+export type DeleteAllocationTargetsPortfolioAllocationTargetsDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteAllocationTargetsPortfolioAllocationTargetsDeleteResponse = DeleteAllocationTargetsPortfolioAllocationTargetsDeleteResponses[keyof DeleteAllocationTargetsPortfolioAllocationTargetsDeleteResponses];
+
+export type GetAllocationTargetsPortfolioAllocationTargetsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/portfolio/allocation-targets';
+};
+
+export type GetAllocationTargetsPortfolioAllocationTargetsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetAllocationTargetsPortfolioAllocationTargetsGetError = GetAllocationTargetsPortfolioAllocationTargetsGetErrors[keyof GetAllocationTargetsPortfolioAllocationTargetsGetErrors];
+
+export type GetAllocationTargetsPortfolioAllocationTargetsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AllocationTargetsOut;
+};
+
+export type GetAllocationTargetsPortfolioAllocationTargetsGetResponse = GetAllocationTargetsPortfolioAllocationTargetsGetResponses[keyof GetAllocationTargetsPortfolioAllocationTargetsGetResponses];
+
+export type PutAllocationTargetsPortfolioAllocationTargetsPutData = {
+    body: AllocationTargetsIn;
+    path?: never;
+    query?: never;
+    url: '/portfolio/allocation-targets';
+};
+
+export type PutAllocationTargetsPortfolioAllocationTargetsPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutAllocationTargetsPortfolioAllocationTargetsPutError = PutAllocationTargetsPortfolioAllocationTargetsPutErrors[keyof PutAllocationTargetsPortfolioAllocationTargetsPutErrors];
+
+export type PutAllocationTargetsPortfolioAllocationTargetsPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: AllocationTargetsOut;
+};
+
+export type PutAllocationTargetsPortfolioAllocationTargetsPutResponse = PutAllocationTargetsPortfolioAllocationTargetsPutResponses[keyof PutAllocationTargetsPortfolioAllocationTargetsPutResponses];
+
+export type GetBenchmarksPortfolioBenchmarksGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/portfolio/benchmarks';
+};
+
+export type GetBenchmarksPortfolioBenchmarksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetBenchmarksPortfolioBenchmarksGetError = GetBenchmarksPortfolioBenchmarksGetErrors[keyof GetBenchmarksPortfolioBenchmarksGetErrors];
+
+export type GetBenchmarksPortfolioBenchmarksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: BenchmarksOut;
+};
+
+export type GetBenchmarksPortfolioBenchmarksGetResponse = GetBenchmarksPortfolioBenchmarksGetResponses[keyof GetBenchmarksPortfolioBenchmarksGetResponses];
+
+export type DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Scopekind
+         */
+        scopeKind: 'portfolio' | 'asset_class';
+    };
+    query?: {
+        /**
+         * Assetclass
+         */
+        assetClass?: string | null;
+    };
+    url: '/portfolio/benchmarks/{scopeKind}';
+};
+
+export type DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteError = DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteErrors[keyof DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteErrors];
+
+export type DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteResponse = DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteResponses[keyof DeleteBenchmarkPortfolioBenchmarksScopeKindDeleteResponses];
+
+export type PutBenchmarkPortfolioBenchmarksScopeKindPutData = {
+    body: BenchmarkIn;
+    path: {
+        /**
+         * Scopekind
+         */
+        scopeKind: 'portfolio' | 'asset_class';
+    };
+    query?: {
+        /**
+         * Assetclass
+         */
+        assetClass?: string | null;
+    };
+    url: '/portfolio/benchmarks/{scopeKind}';
+};
+
+export type PutBenchmarkPortfolioBenchmarksScopeKindPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PutBenchmarkPortfolioBenchmarksScopeKindPutError = PutBenchmarkPortfolioBenchmarksScopeKindPutErrors[keyof PutBenchmarkPortfolioBenchmarksScopeKindPutErrors];
+
+export type PutBenchmarkPortfolioBenchmarksScopeKindPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: BenchmarkOut;
+};
+
+export type PutBenchmarkPortfolioBenchmarksScopeKindPutResponse = PutBenchmarkPortfolioBenchmarksScopeKindPutResponses[keyof PutBenchmarkPortfolioBenchmarksScopeKindPutResponses];
 
 export type ReadSpendingSpendingGetData = {
     body?: never;
