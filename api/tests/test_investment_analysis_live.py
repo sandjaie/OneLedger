@@ -666,6 +666,9 @@ def test_allocation_targets_put_get_delete_and_a_bad_put_leaves_the_previous_set
     assert empty.status_code == 200, empty.text
     assert empty.json() == {"groups": []}
 
+    empty_delete = _client().delete("/portfolio/allocation-targets", headers=ORIGIN)
+    assert empty_delete.status_code == 204, empty_delete.text
+
     put = _client().put(
         "/portfolio/allocation-targets",
         json={
@@ -679,6 +682,19 @@ def test_allocation_targets_put_get_delete_and_a_bad_put_leaves_the_previous_set
     assert put.status_code == 200, put.text
     stored = {g["label"]: g["ratio"] for g in put.json()["groups"]}
     assert stored == {"equity": "0.6000000000", "fixed_income": "0.4000000000"}
+
+    replay = _client().put(
+        "/portfolio/allocation-targets",
+        json={
+            "groups": [
+                {"label": "equity", "ratio": "0.6000000000"},
+                {"label": "fixed_income", "ratio": "0.4000000000"},
+            ]
+        },
+        headers=ORIGIN,
+    )
+    assert replay.status_code == 200, replay.text
+    assert {g["label"]: g["ratio"] for g in replay.json()["groups"]} == stored
 
     over_precise = _client().put(
         "/portfolio/allocation-targets",
@@ -868,6 +884,15 @@ def test_every_new_write_is_owner_only(analysis_live: AnalysisFixture) -> None:
 def test_another_household_never_sees_this_households_targets_or_benchmarks(
     analysis_live: AnalysisFixture,
 ) -> None:
+    _acquire(
+        analysis_live,
+        analysis_live.account_id,
+        analysis_live.equity_security_id,
+        "2024-01-10",
+        "4.00000000",
+        "5.000000",
+    )
+    _price(analysis_live.equity_security_id, "2024-01-31", "6.000000")
     put_target = _client().put(
         "/portfolio/allocation-targets",
         json={"groups": [{"label": "equity", "ratio": "1.0000000000"}]},
@@ -884,7 +909,125 @@ def test_another_household_never_sees_this_households_targets_or_benchmarks(
     app.dependency_overrides[auth.require_owner] = lambda: analysis_live.other_owner
     other_targets = _client().get("/portfolio/allocation-targets")
     other_benchmarks = _client().get("/portfolio/benchmarks")
+    other_analysis = _client().get("/portfolio/analysis", params={"asOf": "2024-01-31"})
     app.dependency_overrides[auth.require_owner] = lambda: analysis_live.owner
 
     assert other_targets.json() == {"groups": []}
     assert other_benchmarks.json() == {"benchmarks": []}
+    assert other_analysis.status_code == 200, other_analysis.text
+    other_payload = other_analysis.json()
+    assert other_payload["classes"] == []
+    assert other_payload["accounts"] == []
+    assert other_payload["target"] == {"source": "none", "groups": []}
+    assert other_payload["benchmarks"] == []
+
+
+def test_stored_targets_override_inference_and_delete_restores_it(
+    analysis_live: AnalysisFixture,
+) -> None:
+    _acquire(
+        analysis_live,
+        analysis_live.account_id,
+        analysis_live.equity_security_id,
+        "2024-01-10",
+        "4.00000000",
+        "5.000000",
+    )
+    _acquire(
+        analysis_live,
+        analysis_live.other_account_id,
+        analysis_live.bond_security_id,
+        "2024-01-10",
+        "3.00000000",
+        "10.000000",
+    )
+    _price(analysis_live.equity_security_id, "2024-01-31", "6.000000")
+    _price(analysis_live.bond_security_id, "2024-01-31", "11.000000")
+    _refresh()
+
+    inferred = _analysis("2024-01-31")
+    assert inferred["target"]["source"] == "inferred"
+    inferred_groups = {g["label"]: g["ratio"] for g in inferred["target"]["groups"]}
+    assert inferred_groups
+
+    put = _client().put(
+        "/portfolio/allocation-targets",
+        json={"groups": [{"label": "equity", "ratio": "1.0000000000"}]},
+        headers=ORIGIN,
+    )
+    assert put.status_code == 200, put.text
+
+    overridden = _analysis("2024-01-31")
+    assert overridden["target"]["source"] == "rule"
+    assert {g["label"]: g["ratio"] for g in overridden["target"]["groups"]} == {
+        "equity": "1.0000000000"
+    }
+    january = next(m for m in overridden["months"] if m["monthEnd"] == "2024-01-31")
+    equity = next(c for c in january["classes"] if c["label"] == "equity")
+    assert equity["targetRatio"] == "1.0000000000"
+
+    deleted = _client().delete("/portfolio/allocation-targets", headers=ORIGIN)
+    assert deleted.status_code == 204, deleted.text
+    restored = _analysis("2024-01-31")
+    assert restored["target"]["source"] == "inferred"
+    assert {g["label"]: g["ratio"] for g in restored["target"]["groups"]} == inferred_groups
+
+
+def test_get_routes_write_nothing(analysis_live: AnalysisFixture) -> None:
+    _acquire(
+        analysis_live,
+        analysis_live.account_id,
+        analysis_live.equity_security_id,
+        "2024-01-10",
+        "4.00000000",
+        "5.000000",
+    )
+    _price(analysis_live.equity_security_id, "2024-01-31", "6.000000")
+    _refresh()
+    put_target = _client().put(
+        "/portfolio/allocation-targets",
+        json={"groups": [{"label": "equity", "ratio": "1.0000000000"}]},
+        headers=ORIGIN,
+    )
+    assert put_target.status_code == 200, put_target.text
+    put_benchmark = _client().put(
+        "/portfolio/benchmarks/portfolio",
+        json={"securityId": str(analysis_live.equity_security_id)},
+        headers=ORIGIN,
+    )
+    assert put_benchmark.status_code == 200, put_benchmark.text
+
+    def counts() -> tuple[int, int, int, int, int]:
+        with analysis_live.connection.cursor() as cur:
+            cur.execute("SELECT count(*) FROM investment_allocation_target")
+            targets = cur.fetchone()
+            cur.execute("SELECT count(*) FROM investment_benchmark")
+            benchmarks = cur.fetchone()
+            cur.execute("SELECT count(*) FROM month_end_position")
+            months = cur.fetchone()
+            cur.execute("SELECT count(*) FROM wealth_history_refresh")
+            refresh = cur.fetchone()
+            cur.execute("SELECT count(*) FROM investment_transaction")
+            events = cur.fetchone()
+        assert (
+            targets is not None
+            and benchmarks is not None
+            and months is not None
+            and refresh is not None
+            and events is not None
+        )
+        return (
+            int(targets[0]),
+            int(benchmarks[0]),
+            int(months[0]),
+            int(refresh[0]),
+            int(events[0]),
+        )
+
+    before = counts()
+    for _ in range(2):
+        analysis = _client().get("/portfolio/analysis", params={"asOf": "2024-01-31"})
+        assert analysis.status_code == 200, analysis.text
+        assert _client().get("/portfolio/allocation-targets").status_code == 200
+        assert _client().get("/portfolio/benchmarks").status_code == 200
+    assert counts() == before
