@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, useRef } from "react";
+import { Button } from "@/components/ui/button";
 
 export type SectionNavItem = {
   id: string;
@@ -39,14 +40,15 @@ export function SectionNav({ activeId, items, onSelect }: SectionNavProps) {
   return (
     <nav aria-label="Section navigation" className="section-nav">
       {items.map((item, index) => (
-        <button
+        <Button
           aria-current={item.id === activeId ? "page" : undefined}
           key={item.id}
           onClick={() => onSelect(item.id)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           ref={(element) => { itemRefs.current[index] = element; }}
           type="button"
-        >{item.label}</button>
+          variant={item.id === activeId ? "secondary" : "ghost"}
+        >{item.label}</Button>
       ))}
     </nav>
   );
