@@ -98,6 +98,24 @@ function applied(overrides: Partial<RunResult> = {}): RunResult {
 afterEach(cleanup);
 
 describe("grouped classification review", () => {
+  it("makes the first unresolved decision the focus and uses readable economic labels", async () => {
+    const first = group({ proposedTxnType: "refund", proposedPaymentMethod: "card" });
+    const second = group({ groupKey: "group-2", description: "SECOND MARKET" });
+    const request = vi.fn(async (path: string) => path === "/classification-runs?limit=20&offset=0"
+      ? [] : response([first, second]));
+    render(<ClassificationReviewScreen categories={categories} request={request as never} />);
+
+    const focus = await screen.findByRole("article", { name: "SAMPLE MARKET" });
+    expect(focus.classList.contains("classification-card--focus")).toBe(true);
+    expect(within(focus).getByText("Expense → Refund")).toBeTruthy();
+    expect(within(focus).getByText("Debit")).toBeTruthy();
+    expect(within(focus).getByText("Card")).toBeTruthy();
+    const actions = focus.querySelector(".classification-actions");
+    const facts = focus.querySelector(".classification-facts");
+    expect(actions && facts && (actions.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+    expect(screen.getByRole("article", { name: "SECOND MARKET" }).classList.contains("classification-card--focus")).toBe(false);
+  });
+
   it("shows loading, grouped explanations and an empty state without financial amounts", async () => {
     let resolve!: (value: ClassificationReviewResponse) => void;
     const request = vi.fn((path: string) => {
@@ -141,6 +159,10 @@ describe("grouped classification review", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Preview 3 proposed changes" }));
     expect(await screen.findByText("3 can change · 0 conflicts · 0 unresolved")).toBeTruthy();
+    const focus = screen.getByRole("article", { name: "SAMPLE MARKET" });
+    const facts = focus.querySelector(".classification-facts");
+    const apply = within(focus).getByRole("button", { name: "Apply 3 changes" });
+    expect(facts && (facts.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
     const previewCall = request.mock.calls.find(([path]) => path === "/classification-runs/preview");
     expect(previewCall?.[1]).toMatchObject({
       method: "POST",
@@ -317,7 +339,7 @@ describe("grouped classification review", () => {
     render(<ClassificationReviewScreen categories={categories} request={request as never} />);
 
     const card = await screen.findByRole("article", { name: "SAMPLE MARKET" });
-    expect(within(card).getByText("expense → refund")).toBeTruthy();
+    expect(within(card).getByText("Expense → Refund")).toBeTruthy();
     fireEvent.click(within(card).getByRole("button", { name: "Preview 3 proposed changes" }));
 
     await screen.findByText("3 can change · 0 conflicts · 0 unresolved");

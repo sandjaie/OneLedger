@@ -7,7 +7,7 @@ import { ConfirmAction } from "@/app/ui/confirm-action";
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -247,7 +247,7 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             {state === "ready" && detail ? detail.label : "Subscription"}
           </h1>
         </div>
-        <Button nativeButton={false} render={<Link href="/subscriptions" />} variant="outline">Back to Subscriptions</Button>
+        <Link className={buttonVariants({ variant: "outline" })} href="/subscriptions">Back to Subscriptions</Link>
       </header>
 
       {state === "loading" && <p className="investment-state" role="status">Loading subscription…</p>}
