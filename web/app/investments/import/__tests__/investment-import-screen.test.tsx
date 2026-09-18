@@ -41,6 +41,13 @@ const account: AccountRow = {
   }],
 } as AccountRow;
 
+it("links an owner without an investment account to the setup action", () => {
+  render(<InvestmentImportScreen accounts={[]} request={vi.fn() as never} />);
+  expect(screen.getByRole("heading", { level: 1, name: "Import investments" })).toBeTruthy();
+  expect(screen.getByRole("heading", { level: 2, name: "Set up an investment account first" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Set up an investment account" }).getAttribute("href")).toBe("/accounts");
+});
+
 function draft(overrides: Partial<InvestmentParseResponse["groups"][number]["targets"][number]["drafts"][number]> = {}) {
   return {
     eventDate: "2026-01-05",

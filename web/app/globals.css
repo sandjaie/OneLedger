@@ -566,6 +566,13 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .accounts-heading .primary-action,
 .accounts-card .primary-action { justify-self: start; margin-top: 0; }
+.accounts-empty { gap: 0.5rem; }
+.accounts-empty > .workspace-title { margin: 0 0 1rem; font-family: var(--serif); font-size: clamp(2rem, 3.3vw, 3rem); font-weight: 400; letter-spacing: -0.035em; }
+.accounts-empty-panel, .investment-import-prerequisite { display: grid; justify-items: start; gap: 0.8rem; max-width: 700px; padding: clamp(18px, 2.5vw, 28px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.workspace-grid .accounts-empty-panel h2, .workspace-grid .investment-import-prerequisite h2 { margin: 0; font-family: var(--serif); font-size: clamp(1.3rem, 2vw, 1.65rem); font-weight: 400; }
+.accounts-empty-panel p, .investment-import-prerequisite p { max-width: 60ch; margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.55; }
+.investment-import-prerequisite { margin-top: 1.3rem; }
+.investment-import-prerequisite .primary-action { margin-top: 0.2rem; }
 .account-group { display: grid; gap: 12px; }
 .account-group-head {
   display: flex;
@@ -574,7 +581,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   gap: 12px;
   align-items: baseline;
 }
-.account-group-head h3 {
+.workspace-grid .account-group-head h2 {
   margin: 0;
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -754,7 +761,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   border-top: 4px solid var(--green);
   background: rgba(255, 255, 255, 0.9);
 }
-.account-form h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.workspace-grid .account-form h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .institution-fields {
   display: grid;
   gap: 14px;
