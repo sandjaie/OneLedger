@@ -1,21 +1,39 @@
-const COLOR_COUNT = 12;
-const VISIBLE_CATEGORY_LIMIT = 11;
+const VISIBLE_COLOR_COUNT = 11;
 
-/** Identity, not screen order or display text, determines a category's chart color. */
-export function categoryColor(identity: string): string {
-  const key = identity.trim().toLowerCase();
+function preferredSlot(identity: string): number {
   let hash = 2166136261;
-  for (const character of key) {
+  for (const character of identity) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16777619);
   }
-  return `var(--category-${(hash >>> 0) % COLOR_COUNT + 1})`;
+  return (hash >>> 0) % VISIBLE_COLOR_COUNT;
 }
 
-/** Return overflow identities for an explicitly labelled Other bucket. Values are never summed here. */
-export function partitionCategories<T>(categories: readonly T[]): { visible: T[]; overflow: T[] } {
+/**
+ * Pass the complete household taxonomy on every screen, not a filtered chart subset.
+ * Canonical ordering and collision resolution make colors independent of chart order.
+ * The twelfth token belongs to an explicitly labelled Other bucket; values are not summed here.
+ */
+export function categoryPalette(identities: readonly string[]): {
+  visible: Array<{ identity: string; color: string }>;
+  overflow: string[];
+  overflowColor: string;
+} {
+  const canonical = identities.map((identity) => identity.trim().toLowerCase()).sort();
+  if (canonical.some((identity, index) => !identity || (index > 0 && identity === canonical[index - 1]))) {
+    throw new Error("Category identities must be nonempty and unique");
+  }
+
+  const slots = new Set<number>();
+  const visible = canonical.slice(0, VISIBLE_COLOR_COUNT).map((identity) => {
+    let slot = preferredSlot(identity);
+    while (slots.has(slot)) slot = (slot + 1) % VISIBLE_COLOR_COUNT;
+    slots.add(slot);
+    return { identity, color: `var(--category-${slot + 1})` };
+  });
   return {
-    visible: categories.slice(0, VISIBLE_CATEGORY_LIMIT),
-    overflow: categories.slice(VISIBLE_CATEGORY_LIMIT),
+    visible,
+    overflow: canonical.slice(VISIBLE_COLOR_COUNT),
+    overflowColor: "var(--category-12)",
   };
 }

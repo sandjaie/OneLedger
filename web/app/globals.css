@@ -2073,6 +2073,11 @@ body { background: var(--paper); }
 .evidence-chart-head { display: grid; gap: 4px; }
 .evidence-chart-head h3 { margin: 0; font-family: var(--sans); font-size: 1.05rem; font-weight: 650; }
 .evidence-chart-head p { margin: 0; color: var(--muted-foreground); font-size: 0.85rem; }
+.evidence-chart-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; font-size: 0.78rem; }
+.evidence-chart-legend li { display: inline-flex; align-items: center; gap: 8px; }
+.evidence-chart-legend-swatch { display: inline-block; width: 24px; border-bottom: 3px solid; }
+.evidence-chart-legend-swatch[data-style="dashed"] { border-bottom-style: dashed; }
+.evidence-chart-legend-swatch[data-style="dotted"] { border-bottom-style: dotted; }
 .evidence-chart-plot { width: 100%; min-height: 180px; max-height: 300px; }
 .evidence-chart-table-wrap { max-width: 100%; overflow-x: auto; }
 .evidence-chart table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }

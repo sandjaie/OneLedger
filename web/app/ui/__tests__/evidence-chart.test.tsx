@@ -12,41 +12,65 @@ const series = [{
   label: "Actual",
   color: "var(--category-1)",
   points: [
-    { period: "Jan", coordinate: 450, exact: "45.0000" },
-    { period: "Feb", coordinate: null, exact: null },
-    { period: "Mar", coordinate: 700, exact: "70.0000" },
+    { period: "2026-01", coordinate: 450, exact: "45.0000" },
+    { period: "2026-02", coordinate: null, exact: null },
+    { period: "2026-03", coordinate: 700, exact: "70.0000" },
   ],
 }];
+const periods = ["2026-01", "2026-02", "2026-03"];
 
 describe("EvidenceChart", () => {
   it("leaves unsupported months as gaps and keeps exact values in its fallback", () => {
-    expect(chartRows(series)).toEqual([
-      { period: "Jan", actual: 450 },
-      { period: "Feb", actual: null },
-      { period: "Mar", actual: 700 },
+    expect(chartRows(periods, series)).toEqual([
+      { period: "2026-01", actual: 450 },
+      { period: "2026-02", actual: null },
+      { period: "2026-03", actual: 700 },
     ]);
 
-    render(<EvidenceChart title="Confirmed trend" description="Synthetic series" series={series} />);
+    render(<EvidenceChart title="Confirmed trend" description="Synthetic series" periods={periods} series={series} />);
     const table = screen.getByRole("table", { name: "Confirmed trend exact values" });
-    expect(within(table).getByRole("row", { name: "Jan 45.0000" })).toBeTruthy();
-    expect(within(table).getByRole("row", { name: "Feb Not available" })).toBeTruthy();
-    expect(within(table).getByRole("row", { name: "Mar 70.0000" })).toBeTruthy();
+    expect(within(table).getByRole("row", { name: "2026-01 45.0000" })).toBeTruthy();
+    expect(within(table).getByRole("row", { name: "2026-02 Not available" })).toBeTruthy();
+    expect(within(table).getByRole("row", { name: "2026-03 70.0000" })).toBeTruthy();
   });
 
   it("refuses unbounded or non-integer plotting coordinates", () => {
-    expect(() => chartRows([{
-      ...series[0], points: [{ period: "Jan", coordinate: 1.5, exact: "1.5" }],
+    expect(() => chartRows(periods, [{
+      ...series[0], points: [{ period: "2026-01", coordinate: 1.5, exact: "1.5" }],
     }])).toThrow("bounded integer");
   });
 
   it("refuses ambiguous duplicate period evidence", () => {
-    expect(() => chartRows([{
+    expect(() => chartRows(periods, [{
       ...series[0], points: [series[0].points[0], series[0].points[0]],
     }])).toThrow("duplicate period");
   });
 
+  it("requires exact evidence for every plotted coordinate", () => {
+    expect(() => chartRows(periods, [{
+      ...series[0], points: [{ period: "2026-01", coordinate: 100, exact: null }],
+    }])).toThrow("exact value");
+  });
+
+  it("uses a canonical timeline for staggered series and rejects out-of-order months", () => {
+    const staggered = [
+      { ...series[0], points: [series[0].points[0], series[0].points[2]] },
+      { ...series[0], id: "benchmark", points: [{ period: "2026-02", coordinate: 300, exact: "30.0000" }] },
+    ];
+    expect(chartRows(periods, staggered)).toEqual([
+      { period: "2026-01", actual: 450, benchmark: null },
+      { period: "2026-02", actual: null, benchmark: 300 },
+      { period: "2026-03", actual: 700, benchmark: null },
+    ]);
+    expect(() => chartRows(["2026-03", "2026-02"], staggered)).toThrow("chronological");
+    expect(() => chartRows(["2026-01", "2026-03"], staggered)).toThrow("contiguous");
+    expect(chartRows(["2025-12", "2026-01"], [])).toEqual([
+      { period: "2025-12" }, { period: "2026-01" },
+    ]);
+  });
+
   it("explains absent evidence without drawing a fabricated chart", () => {
-    render(<EvidenceChart title="Confirmed trend" description="Synthetic series" series={[]} />);
+    render(<EvidenceChart title="Confirmed trend" description="Synthetic series" periods={periods} series={[]} />);
     expect(screen.getByText("No evidenced periods yet")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
   });
