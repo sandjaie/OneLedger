@@ -13,9 +13,9 @@ Updated: 18 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.7 — Nova/shadcn owner workspace experience** across the existing screens, with evidenced charts | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1 merged in [PR #250](https://github.com/sandjaie/OneLedger/pull/250) | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1 merged in [PR #250](https://github.com/sandjaie/OneLedger/pull/250) and 4.7.2 in [PR #251](https://github.com/sandjaie/OneLedger/pull/251) | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | Next product action | Deliver the numbered Phase 4.7 Nova and chart work packages, audit every screen, then invite owner visual/UX acceptance; the owner-approved order places this before Phase 4.4 | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
-| Current implementation task | 4.7.2 `feature/p4-7-nova-foundation` — Nova tokens, shared controls, shell and chart contracts in progress | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Current implementation task | 4.7.2 delivered in [PR #251](https://github.com/sandjaie/OneLedger/pull/251); 4.7.3 Settings architecture is next and has not started | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 
 ## Canonical phase status
 
@@ -60,7 +60,7 @@ Updated: 18 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| 4.7 — owner workspace experience | **In progress** — 4.7.1 merged in PR #250; Nova conversion, charts, audit, and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| 4.7 — owner workspace experience | **In progress** — 4.7.1 merged in [PR #250](https://github.com/sandjaie/OneLedger/pull/250) and 4.7.2 in [PR #251](https://github.com/sandjaie/OneLedger/pull/251); remaining screen conversion, charts, audit, and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
