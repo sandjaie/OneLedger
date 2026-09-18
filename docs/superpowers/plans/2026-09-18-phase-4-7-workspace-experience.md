@@ -1,188 +1,209 @@
 # Phase 4.7 owner workspace experience implementation plan
 
-**Goal:** Deliver the consolidated decision-first visual and interaction system across every
-existing owner-workspace destination, then invite owner acceptance of the finished experience.
+**Goal:** Convert the existing owner workspace to one coherent Nova/shadcn visual system,
+improve decisions and interactions on every screen, and add useful, evidenced charts. Invite
+owner acceptance only after the cross-screen audit.
 
-**Architecture:** Task 1's page grammar and accessible `SectionNav`/`RowActions` are implemented
-on `feature/ui-page-grammar`; merge that branch before Task 2. Tasks 2–7 adapt screen families
-one branch at a time, using existing authenticated data and selective shadcn/ui controls. Task 8
-audits and repairs cross-screen consistency. This plan supersedes the remaining-task execution
-instructions of the [earlier decision-first plan](2026-09-17-decision-first-workspace.md); its
-exact endpoint/call-order and test inventories remain reference material where not overridden
+**Design:**
+[Phase 4.7 owner workspace experience](../specs/2026-09-18-phase-4-7-workspace-experience.md).
+The owner's `b2YOAa` preset (Nova, green/neutral, Inter, Lucide) is the starting template, not a
+pixel specification. Integrate its source components and tokens by controlled merge into the
+existing Next.js app. Task 4.7.1's page grammar is transitional; retain its behavior while
+replacing its styling and general-purpose controls. This plan supersedes the remaining-task
+instructions in the [earlier decision-first plan](2026-09-17-decision-first-workspace.md).
+Use that plan's endpoint, call-order, action, and screen-state inventories where not overridden
 here. The [earlier refresh plan](2026-09-17-workspace-experience-refresh.md) is historical.
 
-**Tech stack:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, existing CSS tokens, and
-selectively added shadcn/ui source components.
+**Stack:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui source components,
+Recharts through shadcn Chart, existing authenticated Python API, PostgreSQL `NUMERIC` and
+Python `Decimal`.
 
-**Spec:**
-[Phase 4.7 owner workspace experience](../specs/2026-09-18-phase-4-7-workspace-experience.md).
+**Workspace for every task:** `/Users/sandjaieravi/dev/OneLedger`, active checkout only;
+no worktree and one implementation writer.
 
-**Workspace:** `/Users/sandjaieravi/dev/OneLedger` — active checkout only, no worktree.
+**Base and PR target for every task:** current `develop` after the immediately preceding task
+has merged; target `develop`. Check the clean tree and `origin/develop`, fast-forward `develop`,
+then create the exact branch below. The orchestrator owns branches, pushes, PRs, and merges.
+These 4.7.x IDs are work packages within one Phase 4.7 outcome, not new roadmap phases.
 
-**Base and PR target:** each remaining task branch starts from current `develop` after its
-dependencies merge and targets `develop`. Verify `origin/develop` before branching. The first
-branch is Task 2 `feature/ui-settings-sections`; Tasks 3–7 may follow in any order, one writer at
-a time. Task 8 follows all seven earlier tasks.
+## Contracts for every work package
 
-## Global contracts
+- Convert the assigned screens and detail routes to Nova/shadcn for general-purpose controls,
+  surfaces, navigation, feedback, overlays, and data presentation. Keep domain-specific record
+  compositions, semantic HTML, authenticated `Workspace.request`, exact financial strings,
+  existing URL/endpoint/request order, and owner actions. Do not change a financial meaning to
+  satisfy a visual layout.
+- Preserve every loading, unknown, empty, error, correction, confirmation, provenance, coverage,
+  and recovery path. Destructive-dialog cancel sends no request and returns focus. The desktop
+  rail stays visible while scrolling; mobile navigation is dismissible and keyboard-operable.
+- Financial values stay `NUMERIC`/`Decimal` server-side and strings on the wire. The browser
+  formats but never parses them into floats or recalculates money, prices, rates, gains, or
+  returns. New charts use bounded server-derived integer plotting coordinates or nonfinancial
+  counts, exact strings for labels and tables, and null gaps for incomplete evidence. Any new
+  API read field/route needs owner authorization, household isolation, Decimal tests, and the
+  full verifier. Do not add a financial write or invented history.
+- Establish semantic action/status colors separately from 10–12 categorical chart colors.
+  Keep a category's mapping stable across screens, even when chart order changes. Use labels,
+  values, and line styles as well as color; group overflow explicitly. A chart must answer a
+  real comparison or trend question and have an accessible exact-value fallback.
+- Use synthetic tests and structural live observations only. Never put real figures, document
+  names, identifiers, or screenshots in code, fixtures, commits, logs, or agent messages.
+  Check desktop, 588px, and 360px, including focus, reduced motion, and no page-wide overflow.
+- Run affected tests while implementing. Keep one task `db-test` server for all database checks
+  if an API contract changes. Commit locally, obtain one read-only review, consolidate repair,
+  then run `scripts/verify-web.sh` on the clean intended head for web-only work or
+  `scripts/verify.sh` if API/database paths changed. An unchanged exact-head receipt precedes
+  first push and PR. Observe the branch diff budget in `docs/git-workflow.md`; split an
+  oversized coherent remainder into the next numbered package rather than weakening checks.
 
-- Web-only. No `api/`, `db/`, generated API type, financial contract, or owner/RLS change. A
-  concrete backend gap stops its UI task for a separate contract and test-floor decision.
-- Exact monetary values arrive as strings. TypeScript formats them without arithmetic or
-  inferred values; unknown prices, dates, returns, and totals remain visibly unknown.
-- Every screen calls Workspace's authenticated `request` wrapper. Preserve pinned fetch order,
-  request shapes, and existing confirmation semantics unless this plan explicitly changes the
-  presentation of a confirmation.
-- Preserve Task 1's shell, page grammar, `SectionNav`, and `RowActions`. Do not redo the CSS
-  foundation or apply a shadcn preset that overwrites OneLedger's colors or fonts.
-- Add only the shadcn components a task actually consumes. Inspect generated config, CSS,
-  dependencies, and source before commit; map semantic tokens to Task 1's palette.
-- Use synthetic tests and structural live observations only. No real financial values, document
-  names, full identifiers, or screenshots in code, fixtures, commits, logs, or agent messages.
-- Keep keyboard focus, labels, reduced motion, a stable loading frame, and no page-wide
-  horizontal overflow at 360px, 588px, and desktop widths. Test any shadcn control inside its
-  actual screen, including cancel and focus behavior.
-- Run affected tests during implementation. Each branch gets one read-only review, one
-  consolidated repair, then `scripts/verify-web.sh` on the clean intended commit. Its exact-head
-  receipt and diff-size result precede first push and a PR to `develop`; no API/database suite is
-  repeated for this web-only phase.
+## 4.7.1 — Shared page grammar (implemented; PR pending)
 
-## Task 1 — shared page grammar (already implemented)
+**Branch:** `feature/ui-page-grammar`. **Base and PR target:** `develop` → `develop`.
 
-Branch `feature/ui-page-grammar` contains the palette/grid grammar, `SectionNav`, `RowActions`,
-and Coverage/Wealth/Spending adoption. It passed one read-only review with a local repair and
-`scripts/verify-web.sh` at `ac410fe`, then was pushed. The Phase 4.7 specification and tracking
-update follow on the same branch. Open/merge its PR before Task 2; do not reimplement Task 1.
+The branch supplies the grouped rail, page grammar, `SectionNav`, `RowActions`, and initial
+Coverage/Wealth/Spending adoption. It was reviewed, repaired, web-verified, and pushed. The
+current canonical spec and plan update rides on this branch. Open and merge its PR before
+4.7.2. Do not redo its behavior; its CSS and custom general-purpose controls may be replaced
+by the Nova conversion.
 
-## Task 2 — Settings architecture and shadcn foundation
+## 4.7.2 — Nova foundation, shell, and component contracts
 
-**Branch:** `feature/ui-settings-sections`. **Dependency:** Task 1 merged.
+**Branch:** `feature/p4-7-nova-foundation`. **Dependency:** 4.7.1 merged.
 
-**Files:** Create `web/app/settings/settings-screen.tsx` and its test. Move the inlined Settings
-screen and FX controls from `web/app/workspace.tsx` into it. Adapt the Settings section modules,
-three incoming links, affected Workspace tests, and Settings CSS named in the
-[earlier Task 2](2026-09-17-decision-first-workspace.md#task-2--settings-section-architecture).
-Initialize
-shadcn in `web/` only after previewing config/CSS changes; add the grouped Field/Input controls
-consumed by General and an Alert consumed by genuine Data health findings. Review the generated
-`components.json`, component source, package files, and `globals.css` changes before commit.
+**Files/modules:** `web/components.json`, `web/package.json` and lockfile, `web/app/globals.css`,
+`web/app/workspace.tsx`, shared UI components and tests. Inspect the `b2YOAa` preset output
+before merging configuration, CSS, dependencies, and source; do not overwrite app files.
+Establish Nova typography, surface, spacing, radius, semantic colors, 10–12 category/chart
+tokens, stable category-color selection, Chart wrapper, and responsive chart/table frame.
+Convert shell navigation, menus, buttons, status/empty/loading surfaces, and Task 1's
+`SectionNav`/`RowActions` behavior to appropriate shadcn primitives. Remove superseded shared
+CSS only after consuming screens render correctly.
 
-**Contract:** General opens first with one Save. `SectionNav` selects General, Data health,
-Categories, Rules, and Exchange rates; all remain mounted, but only one long section is visible.
-Existing hash targets select and focus the correct section; direct links and Back/Forward work.
-No pending form edit disappears on a section change. Loading/unavailable Data health never says
-clean. Shadcn changes fields and the finding callout, not URL state or financial data.
+**Proof:** Shell/navigation tests cover sticky rail, active item, deep link, mobile dismissal,
+focus return, skip link, and stable loading frame. Component tests cover deterministic category
+color, overflow grouping, chart gaps, exact-value fallback, and reduced motion. Inspect the
+generated source and bundle; run affected web tests and live checks at three widths. No chart
+is populated with fabricated data in this foundation package.
 
-**Proof:** Settings and Workspace tests cover initial section, each deep link, Back/Forward,
-keyboard/focus, preserved draft, validation, fixed reporting pair, FX actions, and true/unknown
-health. Run affected Vitest suites, lint/typecheck, then live desktop/588px/360px checks; review,
-repair, commit, and run the web-only final verifier.
+## 4.7.3 — Settings architecture
 
-## Task 3 — Subscriptions and Recurring
+**Branch:** `feature/p4-7-settings`. **Dependency:** 4.7.2 merged.
 
-**Branch:** `feature/ui-recurring-records`. **Dependency:** Task 1 merged.
+**Files/modules:** `web/app/settings/`, Settings content currently in `web/app/workspace.tsx`,
+related sections, CSS, and tests. Move the screen into a bounded module. Use Nova fields,
+grouped controls, section navigation, alerts, and disclosures for General, Data health,
+Categories, Rules, and Exchange rates. General opens first with one Save. Keep sections mounted
+while only one long section is visible; hash/deep links, Back/Forward, heading focus, and
+unsaved drafts survive. A loading/unavailable health response never reads clean. Preserve
+validation, reporting-pair, FX actions, and incoming links. This screen needs no decorative
+chart.
 
-**Files:** Adapt `web/app/subscriptions/subscriptions-screen.tsx`, its detail screen,
-`web/app/recurring/recurring-screen.tsx`, affected tests, and screen CSS. Add only the shadcn
-AlertDialog source consumed by cancellation/removal confirmations. The
-[earlier Task 3](2026-09-17-decision-first-workspace.md#task-3--subscriptions-and-recurring-records)
-owns the
-existing fields, endpoint bodies, call counts, and exact confirmation sentences.
+**Proof:** Settings/Workspace tests for links, navigation, focus, draft, validation, and true
+versus unknown health; live edit/error/narrow-width states. Keep the earlier Task 2 endpoint
+and request contracts.
 
-**Contract:** Lead with the next real dated item or truthful absence; show Current/Upcoming/Past
-and Active/Ended views; make rows scannable with provenance in detail. Keep every lifecycle and
-correction action in `RowActions` or existing detail. An ended row never reads Active. Replace
-browser `window.confirm` with a labelled AlertDialog for destructive actions, retaining the
-exact confirmation copy and sending no request on cancel. Update tests that spy `window.confirm`
-to assert the dialog's visible text, keyboard cancel/focus return, and no POST on cancellation;
-all endpoint and request-body assertions remain unchanged.
+## 4.7.4 — Subscriptions and Recurring
 
-**Proof:** Affected Subscriptions/Recurring/Transactions suites, lint/typecheck, live current,
-ended, empty, cancel, and remove states at three widths; one review and web-only final verifier.
+**Branch:** `feature/p4-7-recurring`. **Dependency:** 4.7.3 merged.
 
-## Task 4 — Documents and Classify
+**Files/modules:** `web/app/subscriptions/`, `web/app/recurring/`, detail routes, screen CSS,
+and tests. Use Nova record items/cards, status badges, tabs/filters, and AlertDialog where a
+destructive action needs confirmation. Lead with the next real dated item or truthful absence;
+make Current/Upcoming/Past and Active/Ended scannable. Preserve all payment source,
+provenance, correction, lifecycle, and detail actions. An ended item never reads Active.
+Keep exact existing confirmation text and request bodies. Add price-history visualization
+only if an authenticated evidenced series already exists; otherwise omit it.
 
-**Branch:** `feature/ui-documents-classify`. **Dependency:** Task 1 merged.
+**Proof:** Affected Subscriptions/Recurring/Transactions tests, including dialog copy,
+keyboard cancel/focus return, no POST on cancel, and unchanged endpoints; live dense, ended,
+empty, and error states at three widths.
 
-**Files:** Adapt `web/app/documents/documents-screen.tsx`,
-`web/app/review/classification-review-screen.tsx`, their tests, and related CSS. The
-[earlier Task 4](2026-09-17-decision-first-workspace.md#task-4--documents-and-classify) records exact
-filter query order, actions, and review/evidence invariants.
+## 4.7.5 — Documents and Classify
 
-**Contract:** Documents rows show type, account, period, import state, and next action before
-provenance. Humanize enums; Type/Account filters remain visible and advanced filters collapse at
-narrow widths. All Original/Transactions/Review/Re-read actions retain their existing conditions.
-Classify keeps evidence, confidence, reversibility, and recovery, presented in the shared
-decision-first hierarchy. Use a shadcn control only if a native one cannot meet an identified
-interaction need; do not add a component for decoration.
+**Branch:** `feature/p4-7-documents-classify`. **Dependency:** 4.7.4 merged.
 
-**Proof:** Affected Documents/Classify tests, exact query and action assertions, lint/typecheck,
-live dense/empty/error states at three widths, one review and web-only final verifier.
+**Files/modules:** `web/app/documents/`, `web/app/review/`, related CSS and tests. Present
+document type, account, period, import state, and next action before provenance. Keep Type and
+Account filters visible; collapse advanced filters only when needed. Preserve Original,
+Transactions, Review, and Re-read conditions. Classify retains evidence, confidence,
+reversibility, and recovery in the common decision/record hierarchy. Humanize enums. Convert
+controls and feedback to Nova; do not add decorative charts.
 
-## Task 5 — Investments and investment import
+**Proof:** Affected Documents/Classify tests for exact query order and actions; live dense,
+empty, unavailable, and narrow states. Keep the earlier Task 4 API contract.
 
-**Branch:** `feature/ui-investments-focus`. **Dependency:** Task 1 merged.
+## 4.7.6 — Investments and investment import
 
-**Files:** Adapt portfolio, investment-analysis, and investment-import screens and their tests;
-extract shared return-reason labels only if the
-[earlier Task 5](2026-09-17-decision-first-workspace.md#task-5--investments-focus-and-analysis-depth)
-still
-needs them against current code. Keep changes to the relevant CSS family.
+**Branch:** `feature/p4-7-investments`. **Dependency:** 4.7.5 merged.
 
-**Contract:** Show real entry routes for no holdings; separate holdings, confidence, reviews,
-and analysis when populated. Preserve coverage exclusions, methodology, and import review/commit
-steps without leading with technical prose. Unknown value or return stays unknown.
+**Files/modules:** portfolio, investment analysis/import screens and detail routes, relevant
+API read response if plotting fields are absent, related tests and CSS. Separate holdings,
+valuation confidence, review work, and analysis. When no holdings exist, show the two real
+entry routes. Use Nova charts for evidenced monthly return versus benchmark and allocation;
+show exclusions, methodology, exact-value tables, and gaps for unsupported/unvalued periods.
+Keep import review and commit steps explicit. No implied valuation or return.
 
-**Proof:** Affected investment suites, lint/typecheck, live empty/valued/unvalued/import-review
-states at three widths, one review and web-only final verifier.
+**Proof:** Investment screen tests for valued/unvalued/empty and import-review paths; chart
+tests for benchmark absence, gaps, allocation overflow, and exact values. If the API changes,
+test owner/household refusal and Decimal-to-coordinate derivation with the one test server,
+then use the full verifier; otherwise use the web verifier.
 
-## Task 6 — ledger destinations
+## 4.7.7 — Overview and ledger destinations
 
-**Branch:** `feature/ui-ledger-destinations`. **Dependency:** Task 1 merged.
+**Branch:** `feature/p4-7-ledger`. **Dependency:** 4.7.6 merged.
 
-**Files:** Adapt Overview, Accounts, Transactions, and Import screens, their tests, and local
-CSS as bounded by the
-[earlier Task 6](2026-09-17-decision-first-workspace.md#task-6--ledger-destinations).
+**Files/modules:** Overview, Accounts, Transactions, Import and relevant detail routes,
+tests/CSS, plus read-only chart response fields if necessary. Preserve strong existing
+summaries, filters, imports, and reconciliation. Add Overview's evidenced twelve-month
+income/spending/net trend with reporting-currency context, explicit unknown months, and its
+exact-value table. Make the first true state and action clear without hiding dense ledger
+data or changing fetch order.
 
-**Contract:** Retain strong existing summaries and owner workflows while making the first real
-state and next action clear. Filters and dense data stay contained; no endpoint or fetch order
-changes. Preserve import review and reconciliation semantics.
+**Proof:** Affected screen tests for source series, chart gaps and exact values, request order,
+import review, and actions; live populated/empty/error and narrow states. API read-contract
+changes trigger authorization/household/Decimal tests and the full verifier.
 
-**Proof:** Affected screen suites, lint/typecheck, live four-screen checks at three widths, one
-review and web-only final verifier.
+## 4.7.8 — Spending and Plans
 
-## Task 7 — analysis and planning destinations
+**Branch:** `feature/p4-7-spending-plans`. **Dependency:** 4.7.7 merged.
 
-**Branch:** `feature/ui-analysis-destinations`. **Dependency:** Task 1 merged.
+**Files/modules:** `web/app/spending/`, `web/app/plans/`, relevant tests/CSS and read-only
+plotting fields if required. Convert Spending's evidenced category/bucket comparison to the
+Nova chart system with stable category colors and exact figures; keep refunds/negative net
+distinguishable. Plans gains a confirmed-versus-projected cash-forecast chart by the supported
+currency/account context, without mixing currencies or presenting projection as fact. Preserve
+budgets, goals, filters, forecast, uncertainty, confirmations, and existing links.
 
-**Files:** Adapt Spending, Salary, Plans, Coverage, and Wealth screens, their tests, and local
-CSS as bounded by the
-[earlier Task 7](2026-09-17-decision-first-workspace.md#task-7--analysis-destinations).
+**Proof:** Affected tests for category identity/order, refund signs, mixed-currency refusal,
+missing forecast points, series labels, exact table, and existing actions. Live positive,
+empty, incomplete, and 360px states; API changes use the full verifier and one test server.
 
-**Contract:** A real next task leads; methodology/history moves behind clear headings or
-disclosures. Preserve forecast, goal, budget, salary, coverage, and wealth meanings, existing
-links, confirmations, and uncertainty. Task 1's three adoption screens receive deeper IA only,
-not a second page-grammar layer.
+## 4.7.9 — Salary, Coverage, and Wealth
 
-**Proof:** Affected screen suites, lint/typecheck, live positive/empty/incomplete states at
-three widths, one review and web-only final verifier.
+**Branch:** `feature/p4-7-salary-wealth`. **Dependency:** 4.7.8 merged.
 
-## Task 8 — cross-screen visual and UX audit
+**Files/modules:** `web/app/salary/`, `web/app/coverage/`, `web/app/wealth/`, relevant detail
+routes, tests/CSS, and read-only plotting fields if required. Convert Wealth's month-end net
+worth history to Nova Chart with incomplete months as gaps. Salary gains earned-versus-received
+history only where its authenticated response establishes both series, with exact values and
+unmatched credits clearly separated. Coverage uses decision-first evidence/status surfaces,
+not a decorative graph. Preserve salary, coverage, and wealth workflows and caveats.
 
-**Branch:** `fix/ui-decision-first-audit`. **Dependency:** Tasks 1–7 merged.
+**Proof:** Affected tests for reconciliation, incomplete months, gaps, series labels, exact
+tables, and links/actions; live positive/empty/incomplete states at three widths. API changes
+use the full verifier and one test server.
 
-**Files:** Only screens, tests, and shared CSS with evidenced findings. The
-[earlier Task 8](2026-09-17-decision-first-workspace.md#task-8--cross-screen-audit-and-repair)
-supplies the
-destination inventory and audit boundaries.
+## 4.7.10 — Cross-screen visual and UX audit
 
-**Contract:** Inspect every sidebar destination and relevant detail route at desktop, 588px,
-and 360px for first-viewport clarity, visual coherence, visible interaction states, rail/menu
-behavior, keyboard/focus, loading/empty/error recovery, contained overflow, and preserved
-financial caveats. Record only structural observations, never real ledger contents. Fix
-evidenced defects in one coherent branch; do not expand the audit into new financial features.
+**Branch:** `fix/p4-7-workspace-audit`. **Dependency:** 4.7.1–4.7.9 merged.
 
-**Proof:** Affected tests plus web lint/types and production build through
-`scripts/verify-web.sh`, one read-only review and repair, then first push/PR. After merge, invite
-the owner to assess the completed Phase 4.7 UI/UX in the running application. Owner acceptance is
-separate from engineering verification and remains open until the owner confirms it.
+**Files/modules:** only screens, shared UI/CSS, and tests implicated by evidenced findings.
+Inspect every sidebar destination and relevant detail route at desktop, 588px, and 360px for
+first-viewport clarity, Nova consistency, chart usefulness, category-color stability,
+rail/menu persistence, keyboard/focus, reduced motion, loading/empty/error recovery, overflow,
+and exact-value alternatives. Record structural observations only, never real ledger contents.
+Repair confirmed defects in one coherent branch; no new financial feature or fabricated chart.
+
+**Proof:** Affected tests and the scope-appropriate exact-head verifier after review/repair.
+Push/PR to `develop`. After merge, invite owner assessment in the running application;
+engineering verification does not claim owner visual acceptance.

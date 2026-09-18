@@ -7,7 +7,8 @@ consolidates the earlier [workspace refresh](2026-09-17-workspace-experience-ref
 and [decision-first workspace](2026-09-17-decision-first-workspace-design.md) designs. Those
 documents and their dispatched plans remain historical evidence; this specification owns the
 remaining visual and interaction decisions. Task 1's implemented page grammar, `SectionNav`, and
-`RowActions` are the baseline, not work to redo.
+`RowActions` are a transitional baseline. The numbered shadcn conversion may replace their
+presentation and interaction plumbing while preserving their navigation and action contracts.
 
 The owner should experience one coherent, visually confident financial operating desk across
 every existing sidebar destination. In the first viewport, each screen makes it easy to answer:
@@ -22,20 +23,28 @@ uncompleted optional outcome a prerequisite for this UI work.
 
 ## Visual direction
 
-Keep OneLedger's established cool canvas `#F1F5F3`, white surface `#FFFFFF`, deep ink `#172A24`,
-action green `#176B52`, secondary slate `#52665D`, attention amber `#9A5C1B`, and established
-danger red. IBM Plex Sans carries controls and body copy; Plex Serif gives a restrained page-title
-contrast; Plex Mono is for genuine codes. Amount columns use tabular figures and align for
-comparison. These are shared design tokens, not page-specific color inventions.
+Use the owner's `b2YOAa` shadcn preset as the base visual template: Nova style, green theme,
+neutral base, Inter body type, Lucide icons, and its default radius. Integrate it by controlled
+merge into the existing Next.js app, not by replacing application files wholesale. Preserve
+OneLedger's financial semantics and brand recognition, but allow the preset's typography, surface,
+spacing, and component system to supersede Task 1's transitional CSS. Amount columns use tabular
+figures and align for comparison. Icons clarify actions or status; they never replace labels.
 
-The signature is an **owner decision band**: one visually distinct, calm focus area that frames
-a real status and its next action. It earns its prominence through evidence and task priority,
-not a fabricated score, decorative chart, or giant number. The surrounding records use tighter
-rows, purposeful dividers, stronger label/value alignment, and selective surface elevation.
-This should feel more tactile and interactive than the current subtle treatment, without turning
-every paragraph into an identical card. Long explanations are shortened or put in a named
-disclosure beside the fact they explain. Typography, whitespace, contrast, and clear interaction
-states carry the identity; gradients and repeated all-caps eyebrows do not.
+The signature is an **owner decision band**: one clear focus area that frames a real status, an
+evidence-backed visualization when useful, and its next action. It earns prominence through task
+priority, not a fabricated score or giant number. Nova Cards, Items, Tabs, and data display
+components give repeated content a stronger visual rhythm, but not every paragraph becomes the
+same box. Long explanations are shortened or put in a named disclosure beside the fact they
+explain. Typography, spacing, contrast, and clear interaction states carry the identity.
+
+Keep semantic colors separate from data colors. Green remains the principal action/success cue;
+attention, danger, information, and neutral states have their own accessible tokens. Extend the
+preset's chart palette to 10–12 distinguishable categorical series colors spanning cool and warm
+hues. A category keeps its color across Overview, Spending, Budgets, and related detail views;
+chart order and category identity must not silently recolor it. When a view has more categories
+than distinguishable colors, group the remainder as labelled Other or use a neutral treatment.
+Legends, labels, values, and (where useful) line styles carry meaning even without color. Never
+use danger red merely as the next arbitrary category color.
 
 Every interactive element has distinct rest, hover, focus, selected, expanded, disabled, loading,
 success, and error treatment where applicable. Motion is brief and tied to an action; reduced
@@ -52,8 +61,9 @@ standalone component gallery.
   next step exists. Do not make loading look like an empty result.
 - Give one focus surface to the next decision or noteworthy state. Put repeated items in compact
   rows with a clear status, key facts, and a review affordance. Keep infrequent operations in a
-  labelled secondary disclosure. Use `RowActions` and `SectionNav` from Task 1 where their
-  contracts fit; do not replace them merely to use a library.
+  labelled secondary disclosure. Convert the shell, controls, navigation, data surfaces,
+  feedback, and overlays to the shadcn design system; preserve the behavior that Task 1's
+  `RowActions` and `SectionNav` currently guarantee.
 - Use plain, action-specific language. Preserve all financial caveats, confidence, coverage,
   provenance, confirmation, and recovery information, but place each beside the affected fact
   or behind an explicit explanation. Do not invent dates, totals, valuations, prices, returns,
@@ -105,38 +115,67 @@ surface the next real task ahead of long methodology or history. Existing detail
 the visual system. Every sidebar destination retains its current owner operation, linkable
 action, and recovery path; no decorative metric or chart is added without a truthful source.
 
-## Selective shadcn/ui adoption
+## Charts and trends
 
-Task 1's custom page grammar, `SectionNav`, and `RowActions` remain. Task 2 pilots shadcn/ui's
-grouped fields and inputs in Settings General, plus an Alert for a genuine data-health finding.
-Task 3 uses an AlertDialog for destructive recurring/subscription actions, preserving each
-existing confirmation sentence and the refusal to send a request when the owner cancels. Later
-tasks may add a complex filter or selection control only where a native control is insufficient.
-Do not replace working markup or wrap every record in a Card merely to use the library.
+Use shadcn Chart, composed with Recharts, for supported comparisons and trends. Required chart
+families are the existing Spending category/bucket comparison and Wealth month-end history, plus
+Overview's twelve-month income/spending/net trend, Plans' confirmed-versus-projected cash
+forecast, Investments' monthly return/benchmark and allocation views, and Salary's
+earned-versus-received history where its authenticated response establishes both series.
+Subscription price history or other charts may be added only if their existing evidence supports
+a meaningful question. Documents, Classify, and Settings do not gain decorative graphs.
 
-The web project already uses Tailwind CSS 4 but has no shadcn project configuration. Initialize
-once in `web/` when the first chosen component is needed; inspect every generated configuration,
-CSS, package, and component diff. Map its semantic tokens to OneLedger's palette and typography.
-Do not apply a preset that overwrites the current theme, fonts, or Task 1 CSS. Keep components
-as reviewed source in the repository, use the project's actual aliases and package runner, and
-avoid unused registry dependencies. A component with client-side state uses the appropriate
-client boundary. Its keyboard behavior, focus return, labels, validation, and narrow-screen
-layout are tested in the consuming workflow, not assumed from the library.
+Every chart has a title that states the measure and period, an accessible keyboard layer, a
+legend when more than one series appears, explicit missing/incomplete segments, and a nearby
+table or list of exact values. Tooltips show the server's exact display strings; a chart never
+turns missing data into zero or connects a line across an unknown period. Color is not the only
+way to distinguish a series. At 360px the chart fits its region, offers a readable fallback,
+and never causes page-wide scrolling. Respect reduced motion.
+
+Financial amounts, rates, gains, and return inputs remain `NUMERIC`/`Decimal` on the server and
+strings on the wire. Recharts may receive only bounded, server-derived integer plotting
+coordinates or nonfinancial counts for geometry; it must not parse a money/return string into a
+JavaScript float or perform financial arithmetic. The exact source string remains authoritative
+for labels, tooltips, and tables. A missing display coordinate means a visible gap. If an
+existing endpoint lacks such coordinates or a needed evidenced series, add a separately tested
+read contract with owner authorization and household isolation; never infer or fabricate it in
+the client.
+
+## App-wide shadcn/ui conversion
+
+The target is consistent use of the Nova system on every existing screen and detail route.
+Replace general-purpose custom buttons, fields, selects, dialogs, navigation controls, tables,
+badges, alerts, loading and empty states, menus, and chart wrappers with appropriate shadcn
+source components. Domain-specific record compositions and the exact financial formatting and
+workflow logic remain OneLedger code. "Everything" means the visible UI system is coherent, not
+that every semantic HTML element must be wrapped by a library component.
+
+The web project already uses Tailwind CSS 4 but has no shadcn configuration. Use the owner's
+preset as the reference; preview generated configuration, CSS, dependencies, and component files
+before merging them into `web/`. Do not run a wholesale overwrite of application files. Commit
+reviewed component source, use the project's actual aliases and npm runner, and remove superseded
+global CSS after each screen family adopts Nova. Client-side controls keep their proper client
+boundary. Keyboard behavior, focus return, labels, validation, and narrow-screen layout are
+tested in their consuming workflows, not assumed from the library.
 
 ## Safety, verification, and owner acceptance
 
-This phase is web-only. It adds no financial endpoint, schema, calculation, or authorization
+This phase changes presentation and, only where charts require it, adds read-only evidenced
+plotting data. It adds no financial write, schema calculation shortcut, or authorization
 exception. Screens continue using Workspace's authenticated request wrapper. Exact monetary
-strings remain display-only in TypeScript. A discovered backend gap is recorded for a separate
-contract and the owner/RLS/Decimal test floor before implementation.
+strings remain display-only in TypeScript. Any new chart endpoint or response field needs an
+explicit contract, owner authorization, household isolation, Decimal-only computation, and
+tests before its chart consumes it. Do not change underlying financial meanings.
 
 Each screen branch runs affected component tests, web lint/types, and live keyboard and viewport
-checks; the final web-only verifier runs after local review on the intended commit. Inspect every
+checks. A web-only branch uses `scripts/verify-web.sh`; a branch with API/chart-contract work
+uses `scripts/verify.sh` and the same task's test database. Inspect every
 sidebar destination and relevant detail route at 360px, 588px, and desktop in the cross-screen
 audit. Use synthetic fixtures; never commit real ledger screenshots, values, filenames, or full
 identifiers. The owner checks the finished application after the plan is implemented.
 
 Acceptance means the owner can identify state and next action in the first viewport, navigate
 without losing the rail or unsaved Settings edits, scan dense records, reach all existing actions
-and evidence, and understand empty/error/loading states. The pages look unmistakably related,
-have visible and responsive interactions, and preserve every existing financial meaning.
+and evidence, and understand empty/error/loading states. The pages use the Nova system coherently
+and show useful, truthful charts with a category palette and exact-value alternatives. They have
+visible and responsive interactions and preserve every existing financial meaning.
