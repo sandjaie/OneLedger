@@ -1,5 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -267,7 +272,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
       {state === "error" && (
         <div role="alert">
           <p>The emergency reserve could not be loaded.</p>
-          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</Button>
         </div>
       )}
 
@@ -286,15 +291,15 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                     : `${data.settings.referenceMonths}-month reference period over ${data.settings.buckets.join(", ")}`}
                 </p>
               )}
-              <button className="text-action" onClick={startEditSettings} type="button">
+              <Button variant="outline" onClick={startEditSettings} type="button">
                 {data.settings ? "Edit settings" : "Set up the reserve"}
-              </button>
+              </Button>
             </>
           ) : (
             <div className="plans-reserve-form">
               <label className="text-field">
                 <span>Target months</span>
-                <input
+                <Input
                   inputMode="decimal"
                   onChange={(e) =>
                     setSettingsForm((current) => ({ ...current, targetMonths: e.target.value }))
@@ -304,7 +309,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
               </label>
               <label className="select-field">
                 <span>Baseline method</span>
-                <select
+                <NativeSelect
                   onChange={(e) =>
                     setSettingsForm((current) => ({
                       ...current,
@@ -315,13 +320,13 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                 >
                   <option value="reference_period">Reference period</option>
                   <option value="manual">Manual amount</option>
-                </select>
+                </NativeSelect>
               </label>
               {settingsForm.baselineMethod === "reference_period" ? (
                 <>
                   <label className="text-field">
                     <span>Reference months</span>
-                    <input
+                    <Input
                       onChange={(e) =>
                         setSettingsForm((current) => ({
                           ...current, referenceMonths: e.target.valueAsNumber || 0,
@@ -334,11 +339,10 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                   <fieldset>
                     <legend>Buckets</legend>
                     {BUCKETS.map((bucket) => (
-                      <label key={bucket.value}>
-                        <input
+                      <label className="flex items-center gap-2" key={bucket.value}>
+                        <Checkbox
                           checked={settingsForm.buckets.includes(bucket.value)}
-                          onChange={() => toggleBucket(bucket.value)}
-                          type="checkbox"
+                          onCheckedChange={() => toggleBucket(bucket.value)}
                         />
                         {bucket.label}
                       </label>
@@ -348,7 +352,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
               ) : (
                 <label className="text-field">
                   <span>Manual monthly amount</span>
-                  <input
+                  <Input
                     inputMode="decimal"
                     onChange={(e) =>
                       setSettingsForm((current) => ({
@@ -360,17 +364,17 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                 </label>
               )}
               {settingsProblem && <p className="inline-alert" role="alert">{settingsProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={settingsBusy}
                 onClick={() => void saveSettings()}
                 type="button"
-              >{settingsBusy ? "Saving…" : "Save settings"}</button>
-              <button
-                className="text-action"
+              >{settingsBusy ? "Saving…" : "Save settings"}</Button>
+              <Button
+                variant="outline"
                 onClick={() => setEditingSettings(false)}
                 type="button"
-              >Cancel</button>
+              >Cancel</Button>
             </div>
           )}
 
@@ -467,40 +471,40 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                   ))}
                 </ul>
               )}
-              <button className="text-action" onClick={() => startEditEligible(row)} type="button">
+              <Button variant="outline" onClick={() => startEditEligible(row)} type="button">
                 Edit
-              </button>
-              <button
-                className="text-action"
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => void removeEligible(row.accountId)}
                 type="button"
-              >Remove</button>
-              <button className="text-action" onClick={() => startReserve(row.accountId)} type="button">
+              >Remove</Button>
+              <Button variant="outline" onClick={() => startReserve(row.accountId)} type="button">
                 Reserve for emergencies
-              </button>
+              </Button>
 
               {reservingAccountId === row.accountId && (
                 <div className="plans-reserve-form">
                   <label className="text-field">
                     <span>Amount ({row.currency})</span>
-                    <input
+                    <Input
                       inputMode="decimal"
                       onChange={(e) => setReserveAmount(e.target.value)}
                       value={reserveAmount}
                     />
                   </label>
                   {reserveProblem && <p className="inline-alert" role="alert">{reserveProblem}</p>}
-                  <button
-                    className="primary-action"
+                  <Button
+                    variant="default"
                     disabled={!reserveAmount || reserveBusy}
                     onClick={() => void submitReserve()}
                     type="button"
-                  >{reserveBusy ? "Reserving…" : "Reserve"}</button>
-                  <button
-                    className="text-action"
+                  >{reserveBusy ? "Reserving…" : "Reserve"}</Button>
+                  <Button
+                    variant="outline"
                     onClick={() => setReservingAccountId(undefined)}
                     type="button"
-                  >Cancel</button>
+                  >Cancel</Button>
                 </div>
               )}
             </div>
@@ -518,11 +522,11 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                       {reservation.releaseReason && ` (${reservation.releaseReason})`}
                     </small>
                   ) : (
-                    <button
-                      className="text-action"
+                    <Button
+                      variant="outline"
                       onClick={() => void release(reservation)}
                       type="button"
-                    >Release</button>
+                    >Release</Button>
                   )}
                 </li>
               ))}
@@ -534,15 +538,15 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
             <p>Every active asset account is already marked.</p>
           )}
           {!addingAccountId && nonEligibleActiveAssetAccounts.length > 0 && (
-            <button className="text-action" onClick={startAddEligible} type="button">
+            <Button variant="outline" onClick={startAddEligible} type="button">
               Mark an account eligible
-            </button>
+            </Button>
           )}
           {addingAccountId && (
             <div className="plans-reserve-form">
               <label className="select-field">
                 <span>Account</span>
-                <select
+                <NativeSelect
                   onChange={(e) => setAddingAccountId(e.target.value)}
                   value={addingAccountId}
                 >
@@ -551,11 +555,11 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                     .map((account) => (
                       <option key={account.id} value={account.id}>{account.name}</option>
                     ))}
-                </select>
+                </NativeSelect>
               </label>
               <label className="text-field">
                 <span>Access days</span>
-                <input
+                <Input
                   onChange={(e) =>
                     setEligibilityForm((current) => ({
                       ...current, accessDays: e.target.valueAsNumber || 0,
@@ -567,7 +571,7 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
               </label>
               <label className="text-field">
                 <span>Restriction note (optional)</span>
-                <input
+                <Input
                   onChange={(e) =>
                     setEligibilityForm((current) => ({
                       ...current, restrictionNote: e.target.value,
@@ -577,17 +581,17 @@ export function EmergencyReserve({ accounts, currencies, request }: Props) {
                 />
               </label>
               {eligibilityProblem && <p className="inline-alert" role="alert">{eligibilityProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={eligibilityBusy}
                 onClick={() => void saveEligibility()}
                 type="button"
-              >{eligibilityBusy ? "Saving…" : "Save"}</button>
-              <button
-                className="text-action"
+              >{eligibilityBusy ? "Saving…" : "Save"}</Button>
+              <Button
+                variant="outline"
                 onClick={() => setAddingAccountId(undefined)}
                 type="button"
-              >Cancel</button>
+              >Cancel</Button>
             </div>
           )}
         </>

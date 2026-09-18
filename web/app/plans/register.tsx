@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
@@ -474,7 +478,7 @@ export function Register({
       {state === "error" && (
         <div role="alert">
           <p>The register could not be loaded.</p>
-          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</Button>
         </div>
       )}
 
@@ -497,64 +501,64 @@ export function Register({
                       <span>{recordSummary(record, currencies)}</span>
                       {!record.archivedAt && (
                         <div className="needs-attention-controls">
-                          <button className="text-action" onClick={() => startEdit(record)} type="button">Edit</button>
+                          <Button variant="outline" onClick={() => startEdit(record)} type="button">Edit</Button>
                           {kind !== "claim" && kind !== "administration" && (
-                            <button
-                              className="text-action"
+                            <Button
+                              variant="outline"
                               disabled={busy}
                               onClick={() => markReviewed(record)}
                               type="button"
-                            >Mark reviewed</button>
+                            >Mark reviewed</Button>
                           )}
                           {kind === "insurance_policy" && renewingId !== record.id && (
-                            <button className="text-action" onClick={() => startRenew(record)} type="button">Renewed</button>
+                            <Button variant="outline" onClick={() => startRenew(record)} type="button">Renewed</Button>
                           )}
                           {(kind === "claim" || kind === "administration") && (
-                            <button
-                              className="text-action"
+                            <Button
+                              variant="outline"
                               disabled={busy}
                               onClick={() => toggleComplete(record)}
                               type="button"
-                            >{record.completedAt ? "Reopen" : "Complete"}</button>
+                            >{record.completedAt ? "Reopen" : "Complete"}</Button>
                           )}
-                          <button
-                            className="text-action"
+                          <Button
+                            variant="outline"
                             disabled={busy}
                             onClick={() => archive(record)}
                             type="button"
-                          >Archive</button>
-                          <button
-                            className="text-action"
+                          >Archive</Button>
+                          <Button
+                            variant="outline"
                             onClick={() => toggleAttach(record)}
                             type="button"
-                          >{attachingId === record.id ? "Close" : "Attach document"}</button>
+                          >{attachingId === record.id ? "Close" : "Attach document"}</Button>
                           {/* A record with no currency has no premium or expected amount to
                               plan (the kind shape ties the two together), so it offers no
                               plan action rather than a control that cannot submit. */}
                           {PLAN_LABEL[kind] && record.currency && !record.plannedCommitment && (
-                            <button
-                              className="text-action"
+                            <Button
+                              variant="outline"
                               onClick={() => onPlanFromRecord(record)}
                               type="button"
-                            >{PLAN_LABEL[kind]}</button>
+                            >{PLAN_LABEL[kind]}</Button>
                           )}
                         </div>
                       )}
                       {renewingId === record.id && (
                         <span className="needs-attention-inline-form">
-                          <input
+                          <Input
                             aria-label={`Next renewal date for ${record.title}`}
                             onChange={(e) => setRenewalDate(e.target.value)}
                             type="date"
                             value={renewalDate}
                           />
-                          <button
-                            className="primary-action"
+                          <Button
+                            variant="default"
                             disabled={busy || !renewalDate}
                             onClick={() => submitRenewal(record)}
                             type="button"
-                          >Confirm renewal</button>
-                          <button className="text-action" onClick={() => setRenewingId(undefined)} type="button">Cancel</button>
+                          >Confirm renewal</Button>
+                          <Button variant="outline" onClick={() => setRenewingId(undefined)} type="button">Cancel</Button>
                         </span>
                       )}
 
@@ -566,12 +570,12 @@ export function Register({
                                 {doc.title ?? doc.documentType}
                               </a>
                               {!record.archivedAt && (
-                                <button
-                                  className="text-action"
+                                <Button
+                                  variant="outline"
                                   disabled={busy}
                                   onClick={() => detachDocument(record, doc.documentId)}
                                   type="button"
-                                >Detach</button>
+                                >Detach</Button>
                               )}
                             </li>
                           ))}
@@ -584,7 +588,7 @@ export function Register({
                           {libraryState === "ready" && library && library.length > 0 && (
                             <label className="select-field">
                               <span>Attach from the library</span>
-                              <select
+                              <NativeSelect
                                 defaultValue=""
                                 onChange={(e) => attachExisting(record, e.target.value)}
                               >
@@ -594,39 +598,39 @@ export function Register({
                                   .map((doc) => (
                                     <option key={doc.id} value={doc.id}>{doc.title ?? doc.documentType}</option>
                                   ))}
-                              </select>
+                              </NativeSelect>
                             </label>
                           )}
                           <p><small>Or upload a new PDF:</small></p>
                           <label className="select-field">
                             <span>Type</span>
-                            <select
+                            <NativeSelect
                               onChange={(e) => setUploadType(e.target.value as (typeof UPLOAD_TYPES)[number])}
                               value={uploadType}
                             >
                               {UPLOAD_TYPES.map((type) => (
                                 <option key={type} value={type}>{UPLOAD_TYPE_LABELS[type]}</option>
                               ))}
-                            </select>
+                            </NativeSelect>
                           </label>
                           <label className="text-field">
                             <span>Title</span>
-                            <input onChange={(e) => setUploadTitle(e.target.value)} value={uploadTitle} />
+                            <Input onChange={(e) => setUploadTitle(e.target.value)} value={uploadTitle} />
                           </label>
                           <label className="file-field">
                             <span>File</span>
-                            <input
+                            <Input
                               accept="application/pdf,.pdf"
                               onChange={(e) => setUploadFile(e.target.files?.[0])}
                               type="file"
                             />
                           </label>
-                          <button
-                            className="primary-action"
+                          <Button
+                            variant="default"
                             disabled={busy || !uploadFile || !uploadTitle}
                             onClick={() => void uploadAndAttach(record)}
                             type="button"
-                          >Upload and attach</button>
+                          >Upload and attach</Button>
                         </div>
                       )}
 
@@ -654,11 +658,11 @@ export function Register({
                             </>
                           )}
                           {" "}
-                          <button
-                            className="text-action"
+                          <Button
+                            variant="outline"
                             onClick={() => onSettle(planned.commitmentId)}
                             type="button"
-                          >Settle</button>
+                          >Settle</Button>
                         </p>
                       )}
                     </li>
@@ -674,34 +678,34 @@ export function Register({
           {!editing && (
             <label className="select-field">
               <span>Kind</span>
-              <select
+              <NativeSelect
                 onChange={(e) => startCreate(e.target.value as RegisterKind)}
                 value={creatingKind}
               >
                 {KIND_GROUPS.map(({ kind, label }) => (
                   <option key={kind} value={kind}>{label}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           )}
           <p><small>Do not record identity numbers or credentials here.</small></p>
 
           <label className="text-field">
             <span>Title</span>
-            <input onChange={(e) => changeForm("title", e.target.value)} value={form.title} />
+            <Input onChange={(e) => changeForm("title", e.target.value)} value={form.title} />
           </label>
 
           {(activeKind === "insurance_policy" || activeKind === "deposit" || activeKind === "claim") && (
             <label className="text-field">
               <span>Counterparty</span>
-              <input onChange={(e) => changeForm("counterparty", e.target.value)} value={form.counterparty} />
+              <Input onChange={(e) => changeForm("counterparty", e.target.value)} value={form.counterparty} />
             </label>
           )}
 
           {activeKind === "insurance_policy" && (
             <label className="text-field">
               <span>Covered</span>
-              <input onChange={(e) => changeForm("covered", e.target.value)} value={form.covered} />
+              <Input onChange={(e) => changeForm("covered", e.target.value)} value={form.covered} />
             </label>
           )}
 
@@ -713,15 +717,15 @@ export function Register({
                   {activeKind === "deposit" && "Expected proceeds"}
                   {activeKind === "claim" && "Expected amount"}
                 </span>
-                <input inputMode="decimal" onChange={(e) => changeForm("amount", e.target.value)} value={form.amount} />
+                <Input inputMode="decimal" onChange={(e) => changeForm("amount", e.target.value)} value={form.amount} />
               </label>
               <label className="select-field">
                 <span>Currency</span>
-                <select onChange={(e) => changeForm("currency", e.target.value)} value={form.currency}>
+                <NativeSelect onChange={(e) => changeForm("currency", e.target.value)} value={form.currency}>
                   {currencies.map((currency) => (
                     <option key={currency.code} value={currency.code}>{currency.code}</option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
             </>
           )}
@@ -730,7 +734,7 @@ export function Register({
             <>
               <label className="text-field">
                 <span>Premium amount</span>
-                <input
+                <Input
                   inputMode="decimal"
                   onChange={(e) => changeForm("premiumAmount", e.target.value)}
                   value={form.premiumAmount}
@@ -738,13 +742,13 @@ export function Register({
               </label>
               <label className="select-field">
                 <span>Premium cadence</span>
-                <select
+                <NativeSelect
                   onChange={(e) => changeForm("premiumCadence", e.target.value as PremiumCadence)}
                   value={form.premiumCadence}
                 >
                   <option value="monthly">Monthly</option>
                   <option value="annual">Annual</option>
-                </select>
+                </NativeSelect>
               </label>
             </>
           )}
@@ -757,49 +761,49 @@ export function Register({
                 {activeKind === "claim" && "Submission date"}
                 {activeKind === "administration" && "Deadline"}
               </span>
-              <input onChange={(e) => changeForm("keyDate", e.target.value)} type="date" value={form.keyDate} />
+              <Input onChange={(e) => changeForm("keyDate", e.target.value)} type="date" value={form.keyDate} />
             </label>
           )}
 
           {(activeKind === "deposit" || activeKind === "nominee") && (
             <label className="select-field">
               <span>Account</span>
-              <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
+              <NativeSelect onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
                 {accountOptionsForKind.map((account) => (
                   <option key={account.id} value={account.id}>{account.name}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           )}
 
           {activeKind === "deposit" && (
             <label className="text-field">
               <span>Renewal instruction (optional)</span>
-              <input onChange={(e) => changeForm("instruction", e.target.value)} value={form.instruction} />
+              <Input onChange={(e) => changeForm("instruction", e.target.value)} value={form.instruction} />
             </label>
           )}
 
           {activeKind === "nominee" && (
             <label className="select-field">
               <span>Nominee recorded</span>
-              <select
+              <NativeSelect
                 onChange={(e) => changeForm("nomineeRecorded", e.target.value === "yes")}
                 value={form.nomineeRecorded ? "yes" : "no"}
               >
                 <option value="yes">Yes</option>
                 <option value="no">No</option>
-              </select>
+              </NativeSelect>
             </label>
           )}
 
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={busy || !completeForm(activeKind, form)}
             onClick={() => void submit()}
             type="button"
-          >{busy ? "Saving…" : editing ? "Save changes" : "Add record"}</button>
+          >{busy ? "Saving…" : editing ? "Save changes" : "Add record"}</Button>
           {editing && (
-            <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
+            <Button variant="outline" onClick={cancelEdit} type="button">Cancel</Button>
           )}
         </>
       )}

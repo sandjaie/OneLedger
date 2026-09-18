@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -121,7 +125,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       <h2 id="review-title">Monthly review</h2>
       <label className="month-field">
         <span>Month</span>
-        <input
+        <Input
           max={currentMonth}
           onChange={(e) => setMonthOverride(e.target.value)}
           type="month"
@@ -133,7 +137,7 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
       {state === "error" && (
         <div role="alert">
           <p>{loadProblem}</p>
-          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</Button>
         </div>
       )}
       {state === "ready" && review && (
@@ -204,44 +208,44 @@ export function MonthlyReview({ accounts, currencies, request }: Props) {
           <h3>Add a follow-up</h3>
           <label className="text-field">
             <span>Title</span>
-            <input onChange={(e) => setNewTitle(e.target.value)} value={newTitle} />
+            <Input onChange={(e) => setNewTitle(e.target.value)} value={newTitle} />
           </label>
           <label className="date-field">
             <span>Due date (optional)</span>
-            <input onChange={(e) => setNewDueDate(e.target.value)} type="date" value={newDueDate} />
+            <Input onChange={(e) => setNewDueDate(e.target.value)} type="date" value={newDueDate} />
           </label>
           <label className="select-field">
             <span>Account (optional)</span>
-            <select onChange={(e) => setNewAccountId(e.target.value)} value={newAccountId}>
+            <NativeSelect onChange={(e) => setNewAccountId(e.target.value)} value={newAccountId}>
               <option value="">None</option>
               {activeAccounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           {followUpFeedback && <p role="status">{followUpFeedback}</p>}
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={followUpBusy || !newTitle.trim()}
             onClick={() => void addFollowUp()}
             type="button"
-          >Add follow-up</button>
+          >Add follow-up</Button>
 
           {review.completedAt ? (
             <p>
               Review complete since {review.completedAt.slice(0, 10)} · {review.steps.actions.open} action
               {review.steps.actions.open === 1 ? "" : "s"} remaining.{" "}
-              <button className="text-action" disabled={busy} onClick={() => void reopen()} type="button">
+              <Button variant="outline" disabled={busy} onClick={() => void reopen()} type="button">
                 Reopen review
-              </button>
+              </Button>
             </p>
           ) : (
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={busy}
               onClick={() => void markComplete()}
               type="button"
-            >Mark review complete</button>
+            >Mark review complete</Button>
           )}
         </>
       )}

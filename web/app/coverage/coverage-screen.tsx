@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -178,11 +178,11 @@ export function CoverageScreen({ request }: Props) {
       {state === "error" && (
         <div className="page-status" role="alert">
           <p>The coverage grid could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </div>
       )}
 
@@ -229,7 +229,7 @@ export function CoverageScreen({ request }: Props) {
                         && cell.status !== "in_progress";
                       return (
                         <td key={month}>
-                          <button
+                          <Button
                             aria-label={`${rowLabel(row)} ${month}: ${STATUS_LABEL[cell.status]}`}
                             className="coverage-cell"
                             disabled={!clickable}
@@ -237,7 +237,7 @@ export function CoverageScreen({ request }: Props) {
                             type="button"
                           >
                             {STATUS_LABEL[cell.status]}
-                          </button>
+                          </Button>
                         </td>
                       );
                     })}
@@ -270,7 +270,7 @@ export function CoverageScreen({ request }: Props) {
                 </>
               ) : (
                 <>
-                  <Link className="text-action" href="/import">Import statements</Link>
+                  <Link className={buttonVariants({ variant: "outline" })} href="/import">Import statements</Link>
                   <label className="select-field">
                     <span>Reason</span>
                     <NativeSelect

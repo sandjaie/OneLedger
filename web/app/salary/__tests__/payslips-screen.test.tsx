@@ -103,6 +103,11 @@ describe("salary screen", () => {
     await screen.findByText("2026-01");
     expect(screen.getByText("A 4,000.00 net · A 5,000.00 gross")).toBeTruthy();
     expect(screen.getByText("Not linked")).toBeTruthy();
+    expect(screen.getByLabelText("Pay month").getAttribute("data-slot")).toBe("input");
+    expect(screen.getByRole("combobox", { name: "Category for deduction line 2" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Line 1 type" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Line 1 label" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Line 1 amount" })).toBeTruthy();
   });
 
   it("posts typed strings with one idempotency key, reused on a retry", async () => {
@@ -290,16 +295,16 @@ describe("salary screen", () => {
     render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
     await screen.findByText("2026-01");
 
-    const checkbox = screen.getByLabelText("Count as spending") as HTMLInputElement;
-    expect(checkbox.disabled).toBe(false);
+    const checkbox = screen.getByRole("checkbox", { name: "Count as spending" });
+    expect(checkbox.getAttribute("aria-disabled")).not.toBe("true");
     fireEvent.click(checkbox);
 
     await waitFor(() => expect(posted).toEqual({ categoryId: categories[1].id }));
-    await waitFor(() => expect((screen.getByLabelText("Count as spending") as HTMLInputElement).checked).toBe(true));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Count as spending" }).getAttribute("aria-checked")).toBe("true"));
 
-    fireEvent.click(screen.getByLabelText("Count as spending"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Count as spending" }));
     await waitFor(() => expect(deleteCalls).toBe(1));
-    await waitFor(() => expect((screen.getByLabelText("Count as spending") as HTMLInputElement).checked).toBe(false));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Count as spending" }).getAttribute("aria-checked")).toBe("false"));
   });
 
   it("lists, saves and removes deduction rules with the label URI-encoded", async () => {

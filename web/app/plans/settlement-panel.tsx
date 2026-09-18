@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -146,7 +149,7 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
         {/* tabIndex so PlansScreen can focus this heading after scrolling the panel into view
             (spec: Settle can be opened from three sections above this one). */}
         <h3 tabIndex={-1}>Settle {commitment.label}</h3>
-        <button className="text-action" onClick={onClose} type="button">Close</button>
+        <Button variant="outline" onClick={onClose} type="button">Close</Button>
       </div>
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
@@ -180,12 +183,12 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
                     {candidate.bookedDate} · {moneyText(candidate.amount, candidate.currency, currencies)}
                     {candidate.description ? ` · ${candidate.description}` : ""}
                   </span>
-                  <button
-                    className="text-action"
+                  <Button
+                    variant="outline"
                     disabled={busy}
                     onClick={() => setSelected(candidate)}
                     type="button"
-                  >Select</button>
+                  >Select</Button>
                 </li>
               ))}
             </ul>
@@ -195,58 +198,58 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
               <p>
                 Link {selected.bookedDate} · {moneyText(selected.amount, selected.currency, currencies)}?
               </p>
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={busy}
                 onClick={() => void recordPayment(true)}
                 type="button"
-              >Record full payment</button>
-              <button
-                className="text-action"
+              >Record full payment</Button>
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => void recordPayment(false)}
                 type="button"
-              >Record part payment</button>
-              <button
-                className="text-action"
+              >Record part payment</Button>
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => setSelected(undefined)}
                 type="button"
-              >Cancel</button>
+              >Cancel</Button>
             </div>
           )}
 
           <div className="plans-settlement-actions">
-            <button className="text-action" disabled={busy} onClick={() => void markDone()} type="button">
+            <Button variant="outline" disabled={busy} onClick={() => void markDone()} type="button">
               Mark done
-            </button>
+            </Button>
             {!showDismiss && (
-              <button
-                className="text-action"
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => setShowDismiss(true)}
                 type="button"
-              >Dismiss</button>
+              >Dismiss</Button>
             )}
           </div>
           {showDismiss && (
             <div className="plans-dismiss-form">
               <label className="text-field">
                 <span>Reason</span>
-                <input
+                <Input
                   onChange={(e) => setDismissReason(e.target.value)}
                   value={dismissReason}
                 />
               </label>
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={busy || !dismissReason.trim()}
                 onClick={() => void dismiss()}
                 type="button"
-              >Confirm dismissal</button>
-              <button className="text-action" onClick={() => setShowDismiss(false)} type="button">
+              >Confirm dismissal</Button>
+              <Button variant="outline" onClick={() => setShowDismiss(false)} type="button">
                 Cancel
-              </button>
+              </Button>
             </div>
           )}
         </>
@@ -277,12 +280,12 @@ export function SettlementPanel({ commitment, currencies, request, onClose, onCh
                 )}
               </span>
               {resolution.undoable && (
-                <button
-                  className="text-action"
+                <Button
+                  variant="outline"
                   disabled={busy}
                   onClick={() => void undo(resolution.id)}
                   type="button"
-                >Undo</button>
+                >Undo</Button>
               )}
             </li>
           ))}

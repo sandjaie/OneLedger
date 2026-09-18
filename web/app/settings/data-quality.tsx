@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -56,8 +57,8 @@ export function DataQuality({ request, onWarningCount }: Props) {
           <h2 id="data-quality-title" tabIndex={-1}>Data Quality</h2>
         </div>
         <div className="settings-block-actions">
-          <Link className="text-action" href="/coverage">History coverage</Link>
-          <Link className="text-action" href="/investments">Investment reviews</Link>
+          <Link className={buttonVariants({ variant: "outline" })} href="/coverage">History coverage</Link>
+          <Link className={buttonVariants({ variant: "outline" })} href="/investments">Investment reviews</Link>
         </div>
       </div>
       {!report && !problem && <p className="loading-frame" role="status">Checking data health…</p>}

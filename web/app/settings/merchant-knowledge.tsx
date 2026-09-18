@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -160,11 +161,10 @@ export function MerchantKnowledge({ categories, request }: Props) {
         Private matchers help classify future records. Past decisions stay unchanged.
       </p>
 
-      <label>
-        <input
+      <label className="inline-flex items-center gap-2">
+        <Checkbox
           checked={includeInactive}
-          onChange={(event) => setIncludeInactive(event.target.checked)}
-          type="checkbox"
+          onCheckedChange={(checked) => setIncludeInactive(checked === true)}
         />
         Show inactive and superseded knowledge
       </label>

@@ -121,6 +121,7 @@ describe("register", () => {
     expect(await screen.findByRole("heading", { name: "Insurance policies" })).toBeTruthy();
     expect(screen.getByText(/Synthetic policy/)).toBeTruthy();
     expect(screen.getByText(/Renews 2027-01-01/)).toBeTruthy();
+    expect(screen.getByLabelText("Kind").getAttribute("data-slot")).toBe("native-select");
   });
 
   it("shows the error state and lets the owner try again", async () => {

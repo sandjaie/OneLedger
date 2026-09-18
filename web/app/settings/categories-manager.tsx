@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch } from "@/lib/api/client";
@@ -105,12 +106,11 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
           </label>
         </td>
         <td>
-          <label className="check-field">
-            <input
+          <label className="check-field inline-flex items-center gap-2">
+            <Checkbox
               checked={category.isActive}
               disabled={busy}
-              onChange={(event) => void save(category, { isActive: event.target.checked })}
-              type="checkbox"
+              onCheckedChange={(checked) => void save(category, { isActive: checked === true })}
             />
             <span>Active</span>
           </label>

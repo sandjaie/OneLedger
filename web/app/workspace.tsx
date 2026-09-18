@@ -427,12 +427,12 @@ export function Workspace({
           <div className="masthead-actions">
             <div className="currency-toggle" role="group" aria-label="Reporting currency">
               {household.currencies.map((option) => (
-                <button
+                <Button
                   aria-pressed={currency.code === option.code}
                   key={option.code}
                   onClick={() => selectCurrency(option)}
                   type="button"
-                >{option.code}</button>
+                >{option.code}</Button>
               ))}
             </div>
             <span

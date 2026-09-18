@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useCallback, useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -433,9 +437,9 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         {commitmentsFailed && (
           <div role="alert">
             <p>The commitments could not be loaded.</p>
-            <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">
+            <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">
               Try again
-            </button>
+            </Button>
           </div>
         )}
         {commitments && commitments.length === 0 && <p>No commitments are recorded yet.</p>}
@@ -476,18 +480,18 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
                     <small>Archived</small>
                   ) : (
                     <>
-                      <button
-                        className="text-action"
+                      <Button
+                        variant="outline"
                         onClick={() => setSettlingId(commitment.id)}
                         type="button"
-                      >{commitment.nextDueDate ? "Settle" : "History"}</button>
-                      <button className="text-action" onClick={() => startEdit(commitment)} type="button">Edit</button>
-                      <button
-                        className="text-action"
+                      >{commitment.nextDueDate ? "Settle" : "History"}</Button>
+                      <Button variant="outline" onClick={() => startEdit(commitment)} type="button">Edit</Button>
+                      <Button
+                        variant="outline"
                         disabled={busy}
                         onClick={() => void archive(commitment)}
                         type="button"
-                      >Archive</button>
+                      >Archive</Button>
                     </>
                   )}
                   {settlingId === commitment.id && (
@@ -528,54 +532,54 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         ) : (
           <label className="select-field">
             <span>Account</span>
-            <select onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
+            <NativeSelect onChange={(e) => changeForm("accountId", e.target.value)} value={form.accountId}>
               {formAccounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
         )}
-        <label className="text-field"><span>Label</span><input onChange={(e) => changeForm("label", e.target.value)} value={form.label} /></label>
+        <label className="text-field"><span>Label</span><Input onChange={(e) => changeForm("label", e.target.value)} value={form.label} /></label>
         <label className="text-field">
           <span>Amount{selectedAccount ? ` (${selectedAccount.currency})` : ""}</span>
-          <input inputMode="decimal" onChange={(e) => changeForm("amount", e.target.value)} value={form.amount} />
+          <Input inputMode="decimal" onChange={(e) => changeForm("amount", e.target.value)} value={form.amount} />
         </label>
         <label className="select-field">
           <span>Cadence</span>
-          <select onChange={(e) => changeForm("cadence", e.target.value as FormState["cadence"])} value={form.cadence}>
+          <NativeSelect onChange={(e) => changeForm("cadence", e.target.value as FormState["cadence"])} value={form.cadence}>
             <option value="once">One-off</option>
             <option value="monthly">Monthly</option>
             <option value="annual">Annual</option>
-          </select>
+          </NativeSelect>
         </label>
-        <label className="date-field"><span>First date</span><input onChange={(e) => changeForm("firstDate", e.target.value)} type="date" value={form.firstDate} /></label>
+        <label className="date-field"><span>First date</span><Input onChange={(e) => changeForm("firstDate", e.target.value)} type="date" value={form.firstDate} /></label>
         {form.cadence !== "once" && (
-          <label className="date-field"><span>End date (optional)</span><input onChange={(e) => changeForm("endDate", e.target.value)} type="date" value={form.endDate} /></label>
+          <label className="date-field"><span>End date (optional)</span><Input onChange={(e) => changeForm("endDate", e.target.value)} type="date" value={form.endDate} /></label>
         )}
         <label className="select-field">
           <span>Certainty</span>
-          <select
+          <NativeSelect
             onChange={(e) => changeForm("certainty", e.target.value as FormState["certainty"])}
             value={form.certainty}
           >
             <option value="confirmed">Confirmed</option>
             <option value="estimated">Estimated</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="date-field">
           <span>Next due date (optional)</span>
-          <input onChange={(e) => changeForm("nextDueDate", e.target.value)} type="date" value={form.nextDueDate} />
+          <Input onChange={(e) => changeForm("nextDueDate", e.target.value)} type="date" value={form.nextDueDate} />
         </label>
 
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         {feedback && <p role="status">{feedback}</p>}
         {!((planningCard || planningRecord) && formAccounts.length === 0) && (
-          <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
+          <Button variant="default" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
             {busy ? "Saving…" : editing ? "Save changes" : "Add commitment"}
-          </button>
+          </Button>
         )}
         {(editing || planningCard || planningRecord) && (
-          <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
+          <Button variant="outline" onClick={cancelEdit} type="button">Cancel</Button>
         )}
       </section>
     </section>

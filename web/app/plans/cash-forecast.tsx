@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 import { useEffect, useState } from "react";
 
 import { ForecastEvidenceChart } from "@/app/plans/forecast-evidence-chart";
@@ -81,11 +83,11 @@ export function CashForecast({
       {state === "error" && (
         <div role="alert">
           <p>The forecast could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </div>
       )}
       {state === "ready" && forecast && (
@@ -221,11 +223,11 @@ export function CashForecast({
                         <li key={index}>
                           {occurrence.date} {occurrence.label}{" "}
                           {moneyText(occurrence.amount, account.currency, currencies)}
-                          <button
-                            className="text-action"
+                          <Button
+                            variant="outline"
                             onClick={() => onSettle(occurrence.commitmentId)}
                             type="button"
-                          >Settle</button>
+                          >Settle</Button>
                         </li>
                       ))}
                     </ul>
@@ -268,11 +270,11 @@ export function CashForecast({
                   <li key={due.cardStatementId}>
                     {due.accountName} · {moneyText(due.statementBalance, due.currency, currencies)} · due{" "}
                     {due.paymentDueDate}
-                    <button
-                      className="text-action"
+                    <Button
+                      variant="outline"
                       onClick={() => onPlanCardPayment(due)}
                       type="button"
-                    >Plan payment</button>
+                    >Plan payment</Button>
                   </li>
                 ))}
               </ul>
