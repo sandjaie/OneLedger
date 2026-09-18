@@ -234,7 +234,20 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
     return data?.benchmarks.find((row) => row.scopeKind === "asset_class" && row.assetClass === label);
   }
 
-  if (quietEmpty) return null;
+  if (quietEmpty) {
+    if (loadState !== "ready" || !data || data.coverage.length === 0) return null;
+    return (
+      <details className="investment-disclosure investment-empty-coverage">
+        <summary>Valuation-only coverage</summary>
+        <div className="investment-disclosure-content">
+          <p>These accounts use recorded snapshots and are excluded from holdings analysis.</p>
+          <ul>{data.coverage.map((row) => (
+            <li key={row.accountId}>{row.accountName} · {classLabel(row.valuationMode)} — excluded from holdings analysis</li>
+          ))}</ul>
+        </div>
+      </details>
+    );
+  }
 
   return (
     <section aria-labelledby="investment-analysis-title" className="investment-analysis">

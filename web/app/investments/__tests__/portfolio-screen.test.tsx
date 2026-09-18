@@ -154,6 +154,33 @@ describe("PortfolioScreen", () => {
     expect(screen.queryByText(/XAA 0\.0000/)).toBeNull();
   });
 
+  it("keeps import reviews and valuation-only coverage reachable without holdings", async () => {
+    const reviewId = "00000000-0000-4000-8000-000000000070";
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary({ valuedCount: 0, unvaluedCount: 0 });
+      if (path === "/portfolio/positions?includeClosed=true") return positions([]);
+      if (path === "/portfolio/analysis") return {
+        ...emptyAnalysis(),
+        coverage: [{ accountId: "00000000-0000-4000-8000-000000000030", accountName: "Synthetic valuation account", valuationMode: "snapshot" }],
+      } satisfies AnalysisResponse;
+      if (path === "/investment-reviews?limit=20&offset=0") return [{
+        id: "00000000-0000-4000-8000-000000000101", reason: "unknown_security",
+        isBlocking: true, holdingId: null, securityName: null, accountName: null,
+        importId: reviewId, investmentTransactionId: null, createdAt: "2026-01-09T00:00:00Z",
+      }];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    const start = await screen.findByRole("region", { name: "Start your investments" });
+    expect(start.querySelectorAll("a[href^='/investments/']")).toHaveLength(2);
+    expect((await screen.findByRole("link", { name: "View import" })).getAttribute("href")).toBe(`/investments/import/${reviewId}`);
+    const coverage = await screen.findByText("Valuation-only coverage");
+    fireEvent.click(coverage);
+    expect(screen.getByText("Synthetic valuation account · snapshot — excluded from holdings analysis")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Portfolio totals" })).toBeNull();
+  });
+
   it("separates totals, valuation confidence, holdings, review work, then analysis", async () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/summary") return summary();

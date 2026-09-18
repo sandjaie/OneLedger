@@ -174,6 +174,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
             </p>
           </section>}
 
+          {positions.length === 0 && <ReviewQueue quietEmpty request={request} />}
           {positions.length === 0 && <InvestmentAnalysis baseCurrency={summary.baseCurrency} positions={positions}
             quietEmpty refreshKey={attempt} request={request} />}
 

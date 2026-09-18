@@ -2443,6 +2443,7 @@ body { background: var(--paper); }
 .investment-disclosure-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: clamp(16px, 2.2vw, 24px); }
 .investment-disclosure-content > p { margin: 0; max-width: 78ch; color: var(--muted-foreground); line-height: 1.55; }
 .investment-disclosure-content > section { min-width: 0; }
+.investment-empty-coverage .investment-disclosure-content ul { margin: 0; padding-left: 20px; line-height: 1.55; }
 .portfolio-screen .evidence-chart { grid-template-columns: minmax(0, 1fr); }
 .portfolio-screen .evidence-chart-table-wrap { min-width: 0; }
 .investment-import-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
