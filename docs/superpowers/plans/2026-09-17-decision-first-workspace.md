@@ -124,7 +124,7 @@ it.
   sentence, one primary action, aligned to the page grid); `.page-status` (the factual
   status/next-action strip, rendered only when a real warning or next step exists); `.focus-panel`
   (the single focus surface for the next decision); `.record-list` and `.record-row` (compact
-  repeatable record: name, status, key facts, route to detail); `.record-facts` (the row's
+  repeatable record: name, status, key facts, clear review affordance); `.record-facts` (the row's
   secondary metadata region); `.chip` with state modifiers including an amber attention state and a
   neutral ended state; `.empty-state`; `.loading-frame` (keeps the frame stable and must not read
   as an empty result); `.filter-bar` with a narrow-screen advanced region; `.section-head`;
@@ -283,11 +283,11 @@ behaviour survive.
 
 ### Task 3 — Subscriptions and Recurring records
 
-**Outcome.** Both screens lead with the next real renewal or a truthful empty state, then a small
-number of useful totals. Subscriptions has Current, Upcoming and Past views; Recurring has Active
-and Ended. Every row is one compact record, and the infrequent lifecycle and correction actions sit
-in a labelled disclosure with their semantics and confirmations unchanged. An ended item no longer
-reads as active.
+**Outcome.** Each screen leads with its next dated item or a truthful unavailable state.
+Subscriptions keeps a small number of useful totals; Recurring does not invent totals.
+Subscriptions has Current, Upcoming and Past views; Recurring has Active and Ended. Every row is
+one compact record, and the infrequent lifecycle and correction actions sit in a labelled
+disclosure with their semantics and confirmations unchanged. An ended item no longer reads as active.
 
 **Branch.** `feature/ui-recurring-records`
 
@@ -307,19 +307,26 @@ reads as active.
   item also has `lastPeriodEndedOn` with `lastEndReason`. `monthlyAmount`, `monthlyAmountBase` and
   `annualAmountBase` exist but are unread today, as are `nextExpectedOn` and `annualAmount` on
   Recurring. Invent nothing.
-- **Lead with the real next renewal.** Use `RecurringSummary.upcoming[0]` (`UpcomingRow`:
-  `seriesId`, `label`, `nextExpectedOn`, `nativeAmount`, `nativeCurrency`, `payingAccountName`) in
-  the focus surface. When it is absent, keep the existing truthful sentence "Nothing is expected to
-  renew" rather than an empty tile.
-- **Totals shrink from five tiles to three:** Monthly equivalent, Annual spend, Current. Keep the
-  "Annual spend" label — a test reads it. `renewingIn30Days` moves into the focus surface's
-  sentence and `priceChangesIn90Days` becomes a chip or a line on the Current view; neither figure
-  is dropped and neither is recomputed.
+- **Subscription focus.** Use `RecurringSummary.upcoming[0]` (`UpcomingRow`: `seriesId`, `label`,
+  `nextExpectedOn`, `nativeAmount`, `nativeCurrency`, `payingAccountName`) in Subscriptions' focus
+  surface. That summary contains current subscriptions only. When it is absent, keep the existing
+  truthful sentence "Nothing is expected to renew" rather than an empty tile.
+- **Recurring focus.** Use only the existing `GET /recurring` rows filtered to
+  `!row.isSubscription`. Of non-ended rows with a non-null `nextExpectedOn`, show the earliest
+  dated row and its server-provided facts; label an overdue date as overdue, never as a future
+  renewal. If rows exist but none has a next date, say that no next date is available. If no
+  non-subscription rows exist, keep Recurring's existing empty sentence. Do not use the
+  subscription-only summary or add a fetch; do not calculate an amount or date.
+- **Subscription totals shrink from five tiles to three:** Monthly equivalent, Annual spend,
+  Current. Keep the "Annual spend" label — a test reads it. `renewingIn30Days` moves into the
+  focus surface's sentence. `priceChangesIn90Days` becomes a chip or a line on the Current view;
+  neither figure is dropped or recomputed.
 - **Views.** Subscriptions: Current, Upcoming, Past. Recurring: Active, Ended, filtered as today to
   `!row.isSubscription`. Views are the shared selector pattern and are keyboard-operable.
 - **Record row shows** label, a status chip, amount with cadence, and the next date or — for an
   ended item — the last date with its end reason. **Payment source and provenance move to the
-  expansion or the detail screen**: `payingAccountName`/`payingAccountMasked`,
+  recurring row's review expansion or the existing subscription detail screen**:
+  `payingAccountName`/`payingAccountMasked`,
   `paymentChannelName`, `detectionMethod`, `identity`, `periodCount`, `resumed`,
   `priceChangedFrom`/`priceChangedOn`. `needsName` keeps its visible "Needs a name" badge.
 - **The ended-item defect.** Render the row's visible status from `row.status`
@@ -328,8 +335,10 @@ reads as active.
   Trial and Paused, moves inside `RowActions`. The control keeps its exact semantics and its
   `PATCH /recurring/{id}` `{lifecycle}` call; it simply no longer sits on an ended row's face
   asserting "Active".
-- **Primary versus secondary.** A row's one obvious route is to review the item — its detail
-  screen. Everything else goes inside `RowActions`, unchanged: `Not a subscription` /
+- **Primary versus secondary.** A subscription row's obvious review route is its existing
+  `/subscriptions/{seriesId}` detail screen. A recurring row instead has one labelled, keyboard-
+  operable inline review disclosure for its details; there is no recurring detail route and no new
+  route is created. Everything else goes inside `RowActions`, unchanged: `Not a subscription` /
   `A subscription` (`PATCH {isSubscription}`), `Rename` with `Save name`/`Cancel`
   (`PATCH {label}`), the status select, `Cadence` with its custom "Days between charges" 7-730
   input (`PATCH {cadence, customIntervalDays}`), `Cancel` (`POST /recurring/{id}/cancel`),
@@ -356,8 +365,10 @@ reads as active.
 and annual figures are server strings. Each action keeps its method, path, body and confirmation.
 
 **Required test behaviour.**
-- The focus surface shows the next renewal from `summary.upcoming[0]`, and the truthful empty
-  sentence when there is none.
+- Subscriptions' focus shows the next renewal from `summary.upcoming[0]` or its truthful empty
+  sentence. Recurring's focus selects the earliest dated non-ended, non-subscription row from
+  its existing response, marks an overdue date accurately, and distinguishes no dated row from
+  no recurring rows; it never shows a subscription-only summary item.
 - Each view shows only its own records; the four existing empty sentences still appear in their
   views ("Nothing is expected to renew", "No current subscription has been found yet", "No past
   subscription is recorded", "No subscription is linked to a card yet", and Recurring's "no
@@ -369,15 +380,17 @@ and annual figures are server strings. Each action keeps its method, path, body 
   disclosure first — rewrite the query, keep the assertion.
 - Both `window.confirm` tests keep their sentences and still assert no POST on a false answer.
 - The pinned call counts and order — four and two — still hold.
-- Payment source and provenance are reachable from the row's expansion or its detail screen.
+- Payment source and provenance are reachable through the recurring row's inline review or the
+  subscription row's existing detail route, without adding an endpoint or a route.
 
 **Validation.** `cd web && npm run lint && npm run typecheck`, then
 `npx vitest run app/subscriptions app/recurring app/transactions`, then live at 360px, 588px and
 desktop: an ended subscription, a current one, an empty ledger, and one cancel and one remove
 confirmation.
 
-**Acceptance.** The first viewport of each screen names the next real renewal or says truthfully
-that there is none; every action from the inventory above still exists with the same semantics and
+**Acceptance.** The first viewport of Subscriptions names its next real renewal or says truthfully
+that there is none; Recurring names its next dated non-subscription payment or truthfully explains
+that no next date or no such payment is available. Every action above keeps its semantics and
 confirmation; no ended item reads as active; rows stay legible at 360px.
 
 ---

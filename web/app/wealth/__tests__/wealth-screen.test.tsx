@@ -109,7 +109,7 @@ describe("wealth screen", () => {
     render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
 
     const chart = await screen.findByRole("img", { name: /Month-end net worth/ });
-    const bars = chart.getElementsByClassName("wealth-chart-bar");
+    const bars = chart.getElementsByClassName("data-chart-bar");
     expect(bars).toHaveLength(1); // one bar for the complete month, none for the incomplete one
     expect((bars[0] as HTMLElement).style.getPropertyValue("--ratio")).toBe("1.0000");
   });

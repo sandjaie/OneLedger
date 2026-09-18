@@ -133,8 +133,7 @@ export function CoverageScreen({ request }: Props) {
 
   return (
     <section className="workspace-content coverage-screen" aria-labelledby="coverage-title">
-      <header>
-        <p className="eyebrow">History coverage</p>
+      <header className="page-head">
         <h1 className="workspace-title" id="coverage-title">Coverage</h1>
         {coverage && (
           <p>
@@ -144,9 +143,9 @@ export function CoverageScreen({ request }: Props) {
         )}
       </header>
 
-      {state === "loading" && <p role="status">Loading the coverage grid…</p>}
+      {state === "loading" && <p className="loading-frame" role="status">Loading the coverage grid…</p>}
       {state === "error" && (
-        <div role="alert">
+        <div className="page-status" role="alert">
           <p>The coverage grid could not be loaded.</p>
           <button
             className="text-action"

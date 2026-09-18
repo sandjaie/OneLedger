@@ -1,14 +1,14 @@
-# Commit hooks provide fast staged-file feedback. The final verifier runs the
-# complete gate once; pre-push checks only its exact-head receipt and diff size.
-# Install once, for both hook types:
+# Commit hooks provide fast staged-file feedback. Run the appropriate final
+# verifier before the first push; no pre-push hook is installed.
+# Install once:
 #
-#     pre-commit install --install-hooks -t pre-commit -t pre-push
+#     pre-commit install --install-hooks -t pre-commit
 #
 # api/ and web/ do not exist until Phase 0 PR 4 and PR 6. Every hook that
 # targets them exits cleanly until they arrive, so this file is installable
 # from the first commit rather than after the code shows up.
 
-default_install_hook_types: [pre-commit, pre-push]
+default_install_hook_types: [pre-commit]
 default_stages: [pre-commit]
 minimum_pre_commit_version: "4.0.0"
 
@@ -85,21 +85,3 @@ repos:
         entry: scripts/hooks/web.sh lint
         language: system
         files: '^web/.*\.(ts|tsx|js|jsx)$'
-
-      # ---- pre-push: verified exact head and branch shape only ----
-
-      - id: verified-head
-        name: current head passed final verification
-        entry: scripts/verify.sh --check-receipt
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: diff-size
-        name: diff size is reviewable (branch vs develop)
-        entry: scripts/check-diff-size.sh
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]

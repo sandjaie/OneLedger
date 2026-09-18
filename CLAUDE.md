@@ -71,14 +71,16 @@ code, fixtures, commits, logs, errors or agent messages. Unsupported cases fail 
   `eval "$(scripts/test-db.sh up)"`; reuse it for affected tests. The final verifier reuses it and
   tears it down with `scripts/test-db.sh down`.
 - Follow the cycle in `docs/development-cycle.md`: implement and run affected tests, commit
-  locally, review once, repair once, run `scripts/verify.sh` once, then push and open the PR.
+  locally, review once, repair once, run the scope-appropriate verifier once, then push and open
+  the PR.
 
-Install the fast commit and push guards once:
+Install the fast commit guard once:
 
 ```bash
-pre-commit install --install-hooks -t pre-commit -t pre-push
+pre-commit install --install-hooks -t pre-commit
 ```
 
-Commit hooks check staged files. `scripts/verify.sh` is the single comprehensive final gate and
-records the exact passing head. Pre-push checks only that receipt and the branch diff-size budget.
-Do not use `--no-verify`.
+Commit hooks check staged files. Run `scripts/verify.sh` after review, or
+`scripts/verify-web.sh` when all changed paths are web, documentation or verifier/workflow files.
+Both record the exact passing head and check diff size. There is no pre-push hook.
+Do not use `--no-verify` for commits.

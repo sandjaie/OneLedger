@@ -107,15 +107,16 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
 
   return (
     <section className="workspace-content spending-screen" aria-labelledby="spending-title">
-      <p className="eyebrow">Where it went</p>
-      <h1 className="workspace-title" id="spending-title">Spending by category and bucket</h1>
-      <p className="lede">Explore spending for a month or a custom period.</p>
+      <header className="page-head">
+        <h1 className="workspace-title" id="spending-title">Spending by category and bucket</h1>
+        <p>Explore spending for a month or a custom period.</p>
+      </header>
       <details className="experience-disclosure">
         <summary>What counts as spending</summary>
         <p>Figures use the reportable ledger only. Transfers, card payments and investment legs are excluded; refunds reduce spending rather than count as income.</p>
       </details>
 
-      <div className="spending-range" role="group" aria-label="Date range">
+      <div className="filter-bar" role="group" aria-label="Date range">
         <label className="text-field">
           <span className="visually-hidden">Range type</span>
           <select
@@ -170,9 +171,9 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
       </div>
 
       {!rangeReady && <p role="status">Choose a from and to date.</p>}
-      {rangeReady && state === "loading" && <p role="status">Loading spending…</p>}
+      {rangeReady && state === "loading" && <p className="loading-frame" role="status">Loading spending…</p>}
       {rangeReady && state === "error" && (
-        <div role="alert">
+        <div className="page-status" role="alert">
           <p>{problem}</p>
           <button
             className="text-action"
@@ -203,7 +204,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
           </p>
           {data.byBucket.length === 0 && <p>No spending in this range.</p>}
           {data.byBucket.length > 0 && (
-            <table className="spending-table">
+            <table className="spending-table spending-table--bucket">
               <caption className="visually-hidden">Spending by bucket</caption>
               <thead>
                 <tr>
@@ -230,18 +231,18 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
             <>
               <div
                 aria-label={`Spending by category in ${data.baseCurrency}, as a bar chart — the table below states each figure`}
-                className="spending-chart"
+                className="data-chart data-chart--spending"
                 role="img"
               >
                 {maxCategoryRows.map((row: CategorySpending) => (
-                  <div className="spending-chart-column" key={row.categoryId ?? "uncategorised"}>
-                    <div className="spending-chart-track">
+                  <div className="data-chart-column" key={row.categoryId ?? "uncategorised"}>
+                    <div className="data-chart-track">
                       <div
-                        className="spending-chart-bar"
+                        className="data-chart-bar"
                         style={{ "--ratio": barRatio(row.chartRatio) } as CSSProperties}
                       />
                     </div>
-                    <span className="spending-chart-label">
+                    <span className="data-chart-label">
                       {row.categoryName}
                       {row.chartRatio.startsWith("-") && " (net refund)"}
                     </span>
@@ -249,7 +250,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                 ))}
               </div>
 
-              <table className="spending-table">
+              <table className="spending-table spending-table--category">
                 <caption className="visually-hidden">Spending by category</caption>
                 <thead>
                   <tr>

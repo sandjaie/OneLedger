@@ -2,14 +2,20 @@
 
 :root {
   color-scheme: light;
-  --paper: #eef2f0;
-  --surface: #fbfcfb;
-  --ink: #101614;
-  --muted: rgba(16, 22, 20, 0.62);
-  --rule: rgba(16, 22, 20, 0.09);
-  --blue: #1d5c44;
-  --green: #2f7a5c;
+  --paper: #F1F5F3;
+  --surface: #FFFFFF;
+  --ink: #172A24;
+  --muted: #52665D;
+  --rule: rgba(23, 42, 36, 0.14);
+  --blue: #176B52;
+  --green: #176B52;
+  --attention: #9A5C1B;
   --danger: #b1453a;
+  --page-max: 72rem;
+  --gutter: clamp(1rem, 3vw, 3rem);
+  --stack-1: 0.5rem;
+  --stack-2: 1rem;
+  --stack-3: 1.5rem;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --serif: Iowan Old Style, Baskerville, Georgia, serif;
   --mono: "SFMono-Regular", Consolas, monospace;
@@ -29,10 +35,7 @@ body {
   --mono: var(--font-plex-mono, Consolas), "SFMono-Regular", Consolas, monospace;
   margin: 0;
   color: var(--ink);
-  background:
-    linear-gradient(90deg, transparent 0 11vw, rgba(52, 87, 165, 0.12) 11vw calc(11vw + 1px), transparent calc(11vw + 1px)),
-    repeating-linear-gradient(0deg, transparent 0 39px, rgba(204, 216, 233, 0.34) 39px 40px),
-    var(--paper);
+  background: var(--paper);
   font-family: var(--sans);
 }
 
@@ -197,19 +200,35 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .household-card h2,
 .fx-card h2 { margin: 5px 0 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
 .text-field,
-.select-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.select-field,
+.date-field,
+.month-field,
+.file-field,
+.password-field,
+.check-field { color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.text-field,
+.select-field,
+.date-field,
+.month-field,
+.file-field,
+.password-field { display: grid; gap: 7px; }
 .text-field input,
-.select-field select {
+.select-field select,
+.date-field input,
+.month-field input,
+.file-field input,
+.password-field input {
   min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule);
-  color: var(--ink); background: var(--surface);
+  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
 }
 .text-field input:focus-visible,
 .select-field select:focus-visible,
-.date-field input:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.date-field input:focus-visible,
+.month-field input:focus-visible,
+.file-field input:focus-visible,
+.password-field input:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .inline-note { margin: 0; color: var(--muted); line-height: 1.5; }
 .household-card .primary-action { justify-self: start; margin-top: 0; }
-.date-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
-.date-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
 .fx-card .primary-action { justify-self: start; grid-column: 1 / -1; margin-top: 0; }
 .fx-backfill-dates { display: flex; flex-wrap: wrap; gap: 18px; }
 .fx-empty { grid-column: 1 / -1; margin: 0; color: var(--muted); }
@@ -243,26 +262,15 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 .import-controls .primary-action { margin-top: 0; }
 .file-field,
-.select-field { display: grid; gap: 7px; min-width: 0; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.select-field { min-width: 0; }
 .file-field input,
 .select-field select {
-  width: 100%; padding: 11px 12px; border: 1px solid var(--rule);
-  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
+  width: 100%;
 }
-.file-field input:focus-visible,
-.select-field select:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 
 /* The password field sits inside its own file's item — one file's password is never another's,
    and the layout has to make that obvious. */
-.password-field {
-  display: grid; gap: 6px; justify-self: start; max-width: 340px;
-  color: var(--muted); font-size: 0.82rem; font-weight: 700;
-}
-.password-field input {
-  padding: 11px 12px; border: 1px solid var(--rule);
-  color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
-}
-.password-field input:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
+.password-field { justify-self: start; max-width: 340px; }
 .password-field small { color: var(--muted); font-weight: 400; }
 
 .import-list { display: grid; gap: 22px; margin: 30px 0 0; padding: 0; list-style: none; }
@@ -546,7 +554,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   font-family: var(--mono);
   font-size: 0.72rem;
 }
-.account-table { width: 100%; border-collapse: collapse; }
+:is(.account-table, .plans-resources-table) { width: 100%; border-collapse: collapse; }
 .account-group .account-table { display: block; }
 .account-card-grid {
   display: grid;
@@ -739,12 +747,6 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 }
 
 @media (max-width: 760px) {
-  body {
-    background:
-      repeating-linear-gradient(0deg, transparent 0 39px, rgba(204, 216, 233, 0.34) 39px 40px),
-      var(--paper);
-  }
-
   .site-shell {
     padding: 20px;
   }
@@ -797,7 +799,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .overview-table td { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Product-mock application frame. */
-body { background: #eef2f0; }
+body { background: var(--paper); }
 .site-shell { position: relative; display: block; min-height: 100vh; padding: 0; }
 .masthead {
   position: absolute; z-index: 2; top: 0; left: 0; width: 132px;
@@ -1714,52 +1716,36 @@ body { background: #eef2f0; }
 .coverage-cell { padding: 2px 6px; border: none; background: none; font: inherit; color: inherit; cursor: pointer; }
 .coverage-cell:disabled { cursor: default; color: var(--muted); }
 
-/* Wealth chart — one bar per month, its height set entirely by the server's `--ratio` string
-   (Task 3d): a zero-height baseline in the middle of each track, the bar's own transform-origin,
-   so `scaleY(var(--ratio))` grows it up for a positive ratio and flips it below the baseline for
-   a negative one. No arithmetic ever runs on `--ratio` in the browser. */
-.wealth-chart { display: flex; align-items: stretch; gap: 4px; height: 140px; margin: 4px 0 18px; padding: 0 2px; overflow-x: auto; }
-.wealth-chart-column { flex: 1 0 10px; min-width: 10px; display: flex; flex-direction: column; align-items: center; }
-.wealth-chart-track { position: relative; flex: 1; width: 100%; }
-.wealth-chart-track::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule); }
-.wealth-chart-bar {
+/* The server supplies the `--ratio` string. The browser only applies it as a transform; it
+   never calculates a financial value for either chart. */
+.data-chart { display: flex; align-items: stretch; gap: 4px; height: 140px; margin: 4px 0 18px; padding: 0 2px; overflow-x: auto; }
+.data-chart-column { display: flex; flex-direction: column; align-items: center; }
+.data-chart-track { position: relative; flex: 1; width: 100%; }
+.data-chart-bar {
   position: absolute;
   left: 50%;
-  bottom: 50%;
   width: 70%;
-  max-width: 16px;
-  height: 50%;
   background: var(--blue);
   transform: translateX(-50%) scaleY(var(--ratio, 0));
   transform-origin: bottom center;
 }
-.wealth-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
+.data-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; }
+.data-chart--wealth .data-chart-column { flex: 1 0 10px; min-width: 10px; }
+.data-chart--wealth .data-chart-track::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule); }
+.data-chart--wealth .data-chart-bar { bottom: 50%; max-width: 16px; height: 50%; }
+.data-chart--spending .data-chart-column { flex: 1 0 24px; min-width: 24px; }
+.data-chart--spending .data-chart-bar { bottom: 0; max-width: 24px; height: 100%; }
+.data-chart--spending .data-chart-label { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
 .coverage-dialog { display: grid; gap: 10px; margin-top: 18px; padding: 16px 18px; border: 1px solid var(--rule); background: var(--surface); max-width: 420px; }
 
 /* Spending chart (Phase 4.1 Task 1) — one bar per category, again sized entirely by the
    server's `--ratio` string, but rising from a zero baseline at the track's own bottom rather
    than the wealth chart's midline: spending totals are all one sign, so there is nothing to
    grow downward from. The table of figures is always rendered alongside it, as wealth does. */
-.spending-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 4px 0 18px; }
 .spending-totals { display: flex; flex-wrap: wrap; gap: 24px; margin: 0 0 18px; padding: 0; }
 .spending-totals div { display: grid; gap: 4px; }
 .spending-totals dt { color: var(--muted); font-size: 0.72rem; }
 .spending-totals dd { margin: 0; font-size: 1.1rem; }
-.spending-chart { display: flex; align-items: stretch; gap: 4px; height: 140px; margin: 4px 0 18px; padding: 0 2px; overflow-x: auto; }
-.spending-chart-column { flex: 1 0 24px; min-width: 24px; display: flex; flex-direction: column; align-items: center; }
-.spending-chart-track { position: relative; flex: 1; width: 100%; }
-.spending-chart-bar {
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  width: 70%;
-  max-width: 24px;
-  height: 100%;
-  background: var(--blue);
-  transform: translateX(-50%) scaleY(var(--ratio, 0));
-  transform-origin: bottom center;
-}
-.spending-chart-label { margin-top: 4px; color: var(--muted); font-size: 0.6rem; white-space: nowrap; max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
 .spending-table { border-collapse: collapse; width: 100%; margin: 0 0 18px; }
 .spending-table th, .spending-table td { border-bottom: 1px solid var(--rule); padding: 6px 8px; text-align: left; }
 .spending-table th[scope="row"] { font-weight: 500; }
@@ -1773,6 +1759,7 @@ body { background: #eef2f0; }
    rule between rows, a wrapping row of `.text-action` controls, and `.inline-alert`'s warm
    ground for anything that interrupts the owner. Reuses --rule, --muted, --blue and
    .inline-alert's colours; nothing here is a new colour. */
+.record-list,
 .plans-commitment-list,
 .needs-attention-list,
 .plans-register-list,
@@ -1786,6 +1773,8 @@ body { background: #eef2f0; }
   padding: 0;
   list-style: none;
 }
+.record-row,
+.record-list > .record-row,
 .plans-commitment-list > li,
 .needs-attention-list > li,
 .plans-register-list > li,
@@ -1798,6 +1787,7 @@ body { background: #eef2f0; }
   padding: 14px 0;
   border-top: 1px solid var(--rule);
 }
+.record-list.record-list--compact,
 .plans-points,
 .plans-occurrences,
 .plans-exclusions,
@@ -1812,6 +1802,7 @@ body { background: #eef2f0; }
   list-style: none;
   font-size: 0.85rem;
 }
+.record-list.record-list--compact > .record-row,
 .plans-points > li,
 .plans-occurrences > li,
 .plans-exclusions > li,
@@ -1837,6 +1828,7 @@ body { background: #eef2f0; }
   line-height: 1.6;
 }
 
+.inline-actions,
 .needs-attention-controls,
 .plans-settlement-actions,
 .plans-candidate-confirm,
@@ -1853,6 +1845,7 @@ body { background: #eef2f0; }
   align-items: center;
   margin-top: 4px;
 }
+.inline-actions.is-stacked,
 .plans-reserve-form,
 .budget-line-form { display: grid; gap: 10px; }
 .needs-attention-inline-form input {
@@ -1892,9 +1885,6 @@ body { background: #eef2f0; }
 }
 .plans-settlement-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; }
 
-/* Same treatment as .account-table (width: 100%; border-collapse: collapse), duplicated rather
-   than shared so a plans-only tweak never reaches the accounts screen. */
-.plans-resources-table { width: 100%; border-collapse: collapse; }
 .plans-resources-table th,
 .plans-resources-table td {
   padding: 8px 10px;
@@ -1922,8 +1912,6 @@ body { background: #eef2f0; }
    viewport edge. */
 .plans-screen > section[id] { scroll-margin-top: 18px; }
 .plans-register-planned { margin: 6px 0 0; color: var(--muted); font-size: 0.85rem; }
-.month-field { display: grid; gap: 7px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
-.month-field input { min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule); color: var(--ink); background: var(--surface); }
 
 /* documents-screen.tsx:136,249 — pre-existing classes with no rule until now. */
 .documents-screen { width: 100%; max-width: 1180px; }
@@ -1938,7 +1926,8 @@ body { background: #eef2f0; }
    the current destination remains discoverable on long screens. Dense tables scroll in their own
    containers; the page never needs an artificial minimum width. */
 .workspace-grid { grid-template-columns: 176px minmax(0, 1fr); }
-.workspace-grid > section { width: 100%; max-width: none; min-width: 0; padding: 86px clamp(20px, 3vw, 48px) 64px; }
+.workspace-grid > section { width: 100%; max-width: none; min-width: 0; padding: 86px var(--gutter) 64px; }
+.workspace-grid > section:is(.coverage-screen, .wealth-screen, .spending-screen) { max-width: var(--page-max); }
 .workspace-nav {
   position: sticky; top: 0; align-self: start; height: 100dvh; min-height: 0;
   gap: 0; overflow-y: auto; overscroll-behavior: contain;
@@ -1971,7 +1960,7 @@ body { background: #eef2f0; }
 .workspace-menu-scrim { display: none; }
 .state-panel { margin-left: 176px; }
 
-.workspace-content { overflow-wrap: anywhere; }
+.workspace-content { width: 100%; max-width: var(--page-max); overflow-wrap: anywhere; }
 .workspace-grid h1, .workspace-grid h2 { text-wrap: balance; }
 .workspace-grid button, .workspace-grid a { touch-action: manipulation; }
 .workspace-grid [id] { scroll-margin-top: 82px; }
@@ -2032,11 +2021,82 @@ body { background: #eef2f0; }
   .transaction-filters { grid-template-columns: minmax(0, 1fr); }
   .transaction-filter-main, .transaction-filter-advanced-fields { grid-template-columns: minmax(0, 1fr); }
   .transaction-filter-main > :first-child { grid-column: auto; }
+  .filter-bar-advanced { display: grid; flex-basis: 100%; gap: var(--stack-2); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-nav { transition: none; }
 }
+
+/* Shared decision-first page grammar. Each class does one job so later screen work can compose
+   the same hierarchy without adding another component layer. */
+.page-head {
+  display: grid;
+  max-width: var(--page-max);
+  gap: var(--stack-1);
+  margin: 0 0 var(--stack-3);
+}
+.page-head .workspace-title { margin: 0; }
+.page-head > p { max-width: 46rem; margin: 0; color: var(--muted); line-height: 1.55; }
+.page-head .primary-action { justify-self: start; margin-top: var(--stack-1); }
+.page-status {
+  max-width: var(--page-max);
+  margin: 0 0 var(--stack-2);
+  padding: var(--stack-2);
+  border-left: 3px solid var(--attention);
+  background: color-mix(in srgb, var(--attention) 10%, var(--surface));
+  color: var(--ink);
+  line-height: 1.5;
+}
+.focus-panel {
+  display: grid;
+  gap: var(--stack-2);
+  margin: var(--stack-2) 0;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border-top: 2px solid var(--blue);
+  background: var(--surface);
+}
+.record-facts { display: flex; flex-wrap: wrap; gap: var(--stack-1) var(--stack-2); color: var(--muted); font-size: 0.82rem; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface));
+  color: var(--blue);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.chip.is-attention { background: color-mix(in srgb, var(--attention) 13%, var(--surface)); color: var(--attention); }
+.chip.is-ended { background: color-mix(in srgb, var(--muted) 12%, var(--surface)); color: var(--muted); }
+.empty-state { max-width: 42rem; padding: var(--stack-3) 0; color: var(--muted); line-height: 1.55; }
+.loading-frame { min-height: 8rem; padding: var(--stack-3) 0; color: var(--muted); }
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--stack-2);
+  margin: 0 0 var(--stack-3);
+  padding: var(--stack-2) 0;
+  border-block: 1px solid var(--rule);
+}
+.filter-bar-advanced { display: contents; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: var(--stack-1) var(--stack-2); }
+.section-nav { display: flex; flex-wrap: wrap; gap: var(--stack-1); margin: 0 0 var(--stack-2); }
+.section-nav button {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid transparent;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.section-nav button[aria-current="page"] { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, var(--surface)); font-weight: 700; }
+.row-actions { display: grid; gap: var(--stack-1); justify-items: start; }
+.row-actions-content { display: flex; flex-wrap: wrap; align-items: center; gap: var(--stack-1); padding-top: var(--stack-1); }
+:is(.text-action, .primary-action).is-destructive { border-color: var(--danger); color: var(--danger); }
+:is(.text-action, .primary-action).is-destructive:not(:disabled):hover { border-color: var(--danger); background: var(--danger); color: var(--surface); }
 
 /* Shared reading rhythm: a compact title, short introduction, then clearly bounded work. */
 :is(.subscriptions-screen, .recurring-screen, .spending-screen, .salary-screen, .plans-screen,
@@ -2083,13 +2143,7 @@ body { background: #eef2f0; }
   font-family: var(--serif); font-size: clamp(1.25rem, 1.8vw, 1.7rem); line-height: 1.12;
 }
 
-.recurring-confirmed-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin: 0; }
-.recurring-confirmed-list > li,
-:is(.plans-commitment-list, .needs-attention-list, .plans-register-list, .plans-goal-list) > li {
-  min-width: 0; padding: 16px 18px; border: 1px solid var(--rule);
-  border-radius: 9px; background: var(--surface);
-  box-shadow: 0 1px 0 rgba(16, 22, 20, 0.025);
-}
+.recurring-confirmed-list { margin: 0; }
 .recurring-confirmed-list > li { align-content: start; gap: 9px; }
 .recurring-confirmed-list > li > :first-child {
   color: var(--ink); font-size: 0.88rem; font-weight: 600; line-height: 1.35;
@@ -2099,16 +2153,10 @@ body { background: #eef2f0; }
   color: var(--muted); font-size: 0.76rem; line-height: 1.45;
 }
 .recurring-confirmed-list > li > .plans-badges { margin: 0; }
-.recurring-confirmed-list > li > :is(.plans-settlement-actions, .recurring-dismiss-form) {
-  padding-top: 10px; border-top: 1px solid var(--rule);
-}
-.recurring-confirmed-list > li:hover,
-:is(.plans-commitment-list, .needs-attention-list, .plans-register-list, .plans-goal-list) > li:hover {
-  border-color: rgba(47, 122, 92, 0.34); box-shadow: 0 5px 18px rgba(16, 22, 20, 0.055);
-}
+.recurring-confirmed-list > li > :is(.plans-settlement-actions, .recurring-dismiss-form) { padding-top: 10px; border-top: 1px solid var(--rule); }
 .plans-badge { color: var(--green); background: rgba(47, 122, 92, 0.055); }
 
-.spending-range, .transaction-filters, .documents-screen .transaction-filters {
+.transaction-filters, .documents-screen .transaction-filters {
   padding: 18px; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface);
 }
 .spending-totals { gap: 12px; }
@@ -2162,7 +2210,13 @@ body { background: #eef2f0; }
 .documents-table-wrap :is(th, td) { vertical-align: top; }
 .document-actions > :is(a, button) { white-space: nowrap; }
 .documents-screen .transaction-page-head { margin-bottom: 18px; }
-.wealth-chart { padding: 16px; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); }
+.data-chart { padding: 16px; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); }
+
+.spending-table--bucket :is(th:nth-child(2), th:nth-child(3), td:nth-child(n + 2)),
+.spending-table--category :is(th:nth-child(n + 3), td:nth-child(n + 3)),
+.wealth-table td:nth-child(2),
+.wealth-positions td:nth-child(4),
+.wealth-positions td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }
 
 .investment-analysis { display: grid; gap: 16px; min-width: 0; }
 .investment-analysis > section,

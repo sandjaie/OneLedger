@@ -6,16 +6,16 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 17 September 2026.
+Updated: 18 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Decision-first owner workspace** across the existing screens | [design](specs/2026-09-17-decision-first-workspace-design.md) |
-| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); the deeper redesign is designed, approved and planned with no implementation branch started | [Phase 4.3 plan](plans/2026-09-16-phase-4-3-investment-analysis.md) |
-| Next product action | Implement the decision-first redesign through the plan's eight task branches; complete the open owner-operated acceptance gates before Phase 4.4 | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
-| Current implementation task | Design approved 17 September 2026; Task 1 `feature/ui-page-grammar` is the next branch and has not been started | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
+| Current outcome | **Phase 4.7 — Nova/shadcn owner workspace experience** across the existing screens, with evidenced charts | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
+| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1 implementation was reviewed, verified and pushed, with PR and merge pending | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Next product action | Deliver the numbered Phase 4.7 Nova and chart work packages, audit every screen, then invite owner visual/UX acceptance; the owner-approved order places this before Phase 4.4 | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Current implementation task | 4.7.1 `feature/ui-page-grammar` awaits PR/merge; 4.7.2 starts from updated `develop` only after that merge | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 
 ## Canonical phase status
 
@@ -60,6 +60,7 @@ Updated: 17 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.7 — owner workspace experience | **In progress** — 4.7.1 verified and pushed; Nova conversion, charts, audit, and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

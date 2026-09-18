@@ -7,7 +7,7 @@ OneLedger is a single-owner personal application. Each branch gets one defect-fi
 exact-head proof:
 
 > phase-group plans reviewed once → implement with tests for major behavior → local commit →
-> one review → one repair → `scripts/verify.sh` once → first push → PR → merge
+> one review → one repair → scope-appropriate verifier once → first push → PR → merge
 
 ## Safety floor
 
@@ -19,7 +19,7 @@ No schedule pressure or process change relaxes these:
 - real financial data, filenames, complete identifiers and secrets never enter code, fixtures,
   commits, logs, errors or agent messages;
 - major money, authorization and database behavior has tests;
-- each branch receives one code review and one `scripts/verify.sh` run.
+- each branch receives one code review and one scope-appropriate final verifier run.
 
 ## Gate responsibilities
 
@@ -29,6 +29,7 @@ No schedule pressure or process change relaxes these:
 | `/oneledger-code-review` | A branch is implemented and its affected tests pass | One deduplicated finding set |
 | Confirmation | A repaired blocking finding concerned money, authorization/RLS or a migration | Closure of those findings only |
 | `scripts/verify.sh` | Review is resolved and the intended head is committed | One comprehensive pass and an exact-head receipt |
+| `scripts/verify-web.sh` | Same, for a web-only branch | Web, documentation, privacy and diff-size checks; no API or database suite |
 | `/oneledger-code-hygiene` | The end of a phase group, such as Phase 1.x | Findings for one `chore/` branch |
 
 Review skills are report-only unless the owner explicitly requests fix mode. The implementation
@@ -56,7 +57,7 @@ behavior — money totals, authorization, household isolation and database write
 alongside the code; test-first is optional. Obvious code, simple screens and plumbing need no
 dedicated test. Run the affected tests until green and commit the coherent branch locally.
 
-Run affected tests directly; `scripts/verify.sh` is reserved for the final gate. A necessary
+Run affected tests directly; the verifier is reserved for the final gate. A necessary
 deviation from a plan is recorded in the PR and `docs/superpowers/progress.md`, not retrofitted
 into the plan.
 
@@ -79,7 +80,7 @@ Confirmation runs only when a repaired blocking finding concerned money, authori
 migration, and it checks only those findings. If confirmation still finds a blocking defect, stop
 and ask the owner instead of starting another repair loop.
 
-Documentation-only changes receive owner review rather than code review. The final verifier
+Documentation-only changes receive owner review rather than code review. `scripts/verify.sh`
 selects their narrower executable scope automatically.
 
 ## 4. Run the final verifier once
@@ -87,20 +88,22 @@ selects their narrower executable scope automatically.
 After review and any confirmation are clean, commit the intended head and run:
 
 ```bash
-scripts/verify.sh
+scripts/verify.sh  # or scripts/verify-web.sh for a web-only branch
 ```
 
-The runner refuses a dirty tree, determines `docs-only` or `full` scope from the diff against
+The full runner refuses a dirty tree, determines `docs-only` or `full` scope from the diff against
 `develop`, runs every applicable check, verifies that the head and tree did not change, and writes
 `.git/oneledger-verified-head`. Full scope includes documentation/static checks, API lint/types and
 tests, migrations and SQL invariants, web lint/types/tests/build, generated API contracts, the
 client-bundle secret scan and diff size. Docs-only scope includes documentation/static checks,
 Markdown and diff size.
 
-The pre-push hook does not repeat those checks. It runs:
+The web-only runner refuses non-web application or database changes and runs documentation/static
+checks, web lint/types/tests/build, the client-bundle secret scan and diff size. It writes the
+same exact-head receipt. Use the full runner if its scope guard refuses the branch.
 
-- `scripts/verify.sh --check-receipt`, which requires the receipt to equal current `HEAD`;
-- `scripts/check-diff-size.sh`, which protects the review budget.
+There is no pre-push hook. The owner checks the verifier result and keeps the head unchanged
+before the first push; `scripts/verify.sh --check-receipt` remains available for manual inspection.
 
 Any commit after verification invalidates the receipt and requires one new final run on the new
 reviewed head. Do not rerun the verifier merely for reassurance on an unchanged head.

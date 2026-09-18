@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Final local gate. Run once on a clean, reviewed commit before its first push.
-# A successful run records the exact HEAD; pre-push only checks that receipt and diff size.
+# A successful run records the exact HEAD for optional manual inspection.
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
@@ -23,7 +23,7 @@ check_receipt() {
   pushed="${PRE_COMMIT_TO_REF:-$head}"
   [ -f "$receipt" ] && verified="$(sed -n '1p' "$receipt")"
   [ "$verified" = "$pushed" ] ||
-    fail "HEAD has not passed scripts/verify.sh; run it on the clean reviewed commit before pushing."
+    fail "HEAD has not passed a final verifier; run scripts/verify.sh or scripts/verify-web.sh on the clean reviewed commit."
   echo "PASS verified-head $pushed"
 }
 

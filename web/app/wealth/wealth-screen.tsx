@@ -172,8 +172,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
 
   return (
     <section aria-labelledby="wealth-title" className="workspace-content wealth-screen">
-      <header>
-        <p className="eyebrow">Wealth history</p>
+      <header className="page-head">
         <h1 className="workspace-title" id="wealth-title">Wealth</h1>
         <p>
           Month-end net worth from the history anchor, with each account&rsquo;s evidence date
@@ -186,20 +185,20 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           type="button"
         >{refreshing ? "Refreshing…" : "Refresh history"}</button>
         {refreshCounts && (
-          <p role="status">
+          <p className="page-status" role="status">
             Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}
             {refreshCounts.positionsComputed} {refreshCounts.positionsComputed === 1 ? "position" : "positions"}.
           </p>
         )}
-        {problem && <p className="inline-alert" role="alert">{problem}</p>}
+        {problem && <p className="page-status" role="alert">{problem}</p>}
         {state === "ready" && history && history.months.length > 0 && (
           <p>Last refreshed {new Date(history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)).toLocaleString()}</p>
         )}
       </header>
 
-      {state === "loading" && <p role="status">Loading wealth history…</p>}
+      {state === "loading" && <p className="loading-frame" role="status">Loading wealth history…</p>}
       {state === "error" && (
-        <div role="alert">
+        <div className="page-status" role="alert">
           <p>Wealth history could not be loaded.</p>
           <button
             className="text-action"
@@ -217,20 +216,20 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           {history.months.length > 0 && (
             <div
               aria-label={`Month-end net worth in ${history.baseCurrency}, as a bar chart — the table below states each figure`}
-              className="wealth-chart"
+              className="data-chart data-chart--wealth"
               role="img"
             >
               {history.months.map((row) => (
-                <div className="wealth-chart-column" key={row.monthEnd}>
-                  <div className="wealth-chart-track">
+                <div className="data-chart-column" key={row.monthEnd}>
+                  <div className="data-chart-track">
                     {row.chartRatio !== null && (
                       <div
-                        className="wealth-chart-bar"
+                        className="data-chart-bar"
                         style={{ "--ratio": row.chartRatio } as CSSProperties}
                       />
                     )}
                   </div>
-                  <span className="wealth-chart-label">{row.monthEnd.slice(2, 7)}</span>
+                  <span className="data-chart-label">{row.monthEnd.slice(2, 7)}</span>
                 </div>
               ))}
             </div>
