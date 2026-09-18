@@ -1171,8 +1171,8 @@ body { background: var(--paper); }
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.transaction-transfer-panel > .text-action { padding: 7px 10px; font-size: 0.72rem; }
-.transaction-transfer-panel > :not(h2):not(.text-action) { grid-column: 1 / -1; }
+.transaction-transfer-panel > [data-slot="button"] { justify-self: end; }
+.transaction-transfer-panel > :not(h2):not([data-slot="button"]) { grid-column: 1 / -1; }
 .transaction-ledger {
   min-width: 900px;
   overflow: hidden;
@@ -1221,7 +1221,7 @@ body { background: var(--paper); }
   font-size: 0.65rem;
 }
 .transaction-description .text-field { margin-top: 5px; }
-.transaction-description .text-field input {
+.transaction-description .text-field input:not([data-slot="input"]) {
   width: 100%;
   min-width: 0;
   padding: 3px 0;
@@ -1232,10 +1232,11 @@ body { background: var(--paper); }
   font-size: 0.67rem;
   font-weight: 400;
 }
-.transaction-description .text-field input:hover,
-.transaction-description .text-field input:focus { border-bottom-color: var(--rule); }
+.transaction-description .text-field input:not([data-slot="input"]):hover,
+.transaction-description .text-field input:not([data-slot="input"]):focus { border-bottom-color: var(--rule); }
+.transaction-description .text-field input[data-slot="input"] { width: 100%; min-width: 0; height: 28px; font-size: 0.7rem; }
 .transaction-category { width: 21%; }
-.transaction-category .select-field select {
+.transaction-category .select-field select:not([data-slot="native-select"]) {
   width: 100%;
   min-width: 0;
   padding: 4px 5px;
@@ -1245,8 +1246,13 @@ body { background: var(--paper); }
   font-size: 0.7rem;
   font-weight: 400;
 }
-.transaction-category .select-field select:hover,
-.transaction-category .select-field select:focus { border-color: var(--rule); background: var(--surface); }
+.transaction-category .select-field select:not([data-slot="native-select"]):hover,
+.transaction-category .select-field select:not([data-slot="native-select"]):focus { border-color: var(--rule); background: var(--surface); }
+.transaction-category .select-field select[data-slot="native-select"] {
+  height: 28px;
+  padding: 4px 32px 4px 6px;
+  font-size: 0.7rem;
+}
 .transaction-transfer-row td { background: #f3f7f5; }
 .transaction-transfer-row + .transaction-transfer-row td { background: rgba(243, 247, 245, 0.62); }
 .transaction-transfer-movement {
