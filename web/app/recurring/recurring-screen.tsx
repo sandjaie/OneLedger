@@ -287,7 +287,7 @@ export function RecurringScreen({ currencies, request }: Props) {
           {shown.length > 0 && (
             <ul className="recurring-confirmed-list">
               {shown.map((row) => (
-                <li className="experience-record" key={row.id}>
+                <li className="record-row" key={row.id}>
                   <span>
                     {row.label}
                     {row.needsName && <span className="plans-badge">Needs a name</span>}

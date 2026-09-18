@@ -342,7 +342,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {summary.upcoming.length > 0 && (
             <ul className="recurring-confirmed-list">
               {summary.upcoming.map((row) => (
-                <li className="experience-record" key={row.seriesId}>
+                <li className="record-row" key={row.seriesId}>
                   <span>
                     {row.nextExpectedOn} ·{" "}
                     <Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link>
@@ -363,7 +363,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {current.length > 0 && (
             <ul className="recurring-confirmed-list">
               {current.map((row) => (
-                <li className="experience-record" key={row.id}>
+                <li className="record-row" key={row.id}>
                   <span>
                     <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
                     {row.needsName && <span className="plans-badge">Needs a name</span>}
@@ -417,7 +417,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {past.length > 0 && (
             <ul className="recurring-confirmed-list">
               {past.map((row) => (
-                <li className="experience-record" key={row.id}>
+                <li className="record-row" key={row.id}>
                   <span>
                     <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
                   </span>
@@ -440,7 +440,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
           {byAccount && byAccount.length > 0 && (
             <ul className="recurring-confirmed-list">
               {byAccount.map((row) => (
-                <li className="experience-record" key={row.accountId}>
+                <li className="record-row" key={row.accountId}>
                   <span>
                     {row.accountName}
                     {row.accountMasked ? ` (${row.accountMasked})` : ""}
