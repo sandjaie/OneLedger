@@ -24,7 +24,7 @@ not open a documentation-only PR for them.
 ## Task flow
 
 Follow [development-cycle.md](development-cycle.md): implement with tests for major behavior, commit
-locally, review once, repair once, then run `scripts/verify.sh` once. The first push is
+locally, review once, repair once, then run the scope-appropriate verifier once. The first push is
 allowed only for that unchanged verified head.
 
 Open one PR per branch to `develop` using `.github/PULL_REQUEST_TEMPLATE.md`. Record actual evidence
@@ -52,14 +52,14 @@ Use `type(scope): a lowercase sentence stating what is now true`.
 - Common scopes: `db`, `api`, `web`, `ci`, `docs`, `plan`.
 - Keep the subject declarative. Use the body for the problem and why the change is correct.
 
-Commit hooks stay fast and staged-file-scoped. Pre-push checks only the exact-head verification
-receipt and diff size; it does not rerun application or database suites. Do not bypass either hook.
+Commit hooks stay fast and staged-file-scoped. There is no pre-push hook; run the final verifier
+before pushing and do not bypass the commit hook.
 
 ## Diff budget
 
 Plan each branch within 1,500 added production lines and 3,000 production plus test lines, grouping
 related plan tasks until a branch approaches that budget. `scripts/check-diff-size.sh` warns above
-the budget and refuses a push above 2,000 / 4,000. Documentation, configuration, lockfiles and
+the budget and fails verification above 2,000 / 4,000. Documentation, configuration, lockfiles and
 generated code do not count.
 
 Above the hard stop, move the unfinished remainder to the next branch before pushing. For a
