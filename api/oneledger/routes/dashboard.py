@@ -29,6 +29,7 @@ F02).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Any, Literal
@@ -39,9 +40,11 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
+from ..coverage import month_end, months_from_anchor
 from ..db import connect, scope_to_owner
 from ..investments.positions import current_rate_pair, read_positions
-from ..money import _out, translate
+from ..money import _out, chart_ratios, translate
+from .coverage import CoverageRow, coverage_rows
 
 router = APIRouter(tags=["dashboard"])
 
@@ -143,10 +146,23 @@ class YearToDate(BaseModel):
     investedSecondary: str
 
 
+class FlowEvidence(BaseModel):
+    month: date
+    status: Literal["complete", "unknown"]
+    incomeBaseCoordinate: int | None
+    spendingBaseCoordinate: int | None
+    netBaseCoordinate: int | None
+    incomeSecondaryCoordinate: int | None
+    spendingSecondaryCoordinate: int | None
+    netSecondaryCoordinate: int | None
+
+
 class DashboardResponse(BaseModel):
     netWorth: NetWorth
     thisMonth: MonthFlows
     trend: list[MonthFlows]
+    hasRecordedFlows: bool
+    flowEvidence: list[FlowEvidence]
     cardsDue: list[CardDue]
     yearToDate: YearToDate
 
@@ -212,7 +228,8 @@ FLOWS = """
                -sum(amount_base) FILTER (WHERE txn_type <> 'income') AS spending_base,
                -sum(amount_secondary) FILTER (WHERE txn_type <> 'income') AS spending_secondary,
                sum(amount_base) AS net_base,
-               sum(amount_secondary) AS net_secondary
+               sum(amount_secondary) AS net_secondary,
+               count(*) AS recorded_count
           FROM v_transaction_reportable
          WHERE household_id = %(household)s
            AND booked_date >= date_trunc('month', %(as_of)s::timestamp) - interval '11 months'
@@ -224,7 +241,8 @@ FLOWS = """
            coalesce(f.spending_base, 0.0000), coalesce(f.spending_secondary, 0.0000),
            coalesce(f.net_base, 0.0000), coalesce(f.net_secondary, 0.0000),
            round(f.net_base / NULLIF(GREATEST(f.income_base, 0), 0) * 100, 4),
-           round(f.net_secondary / NULLIF(GREATEST(f.income_secondary, 0), 0) * 100, 4)
+           round(f.net_secondary / NULLIF(GREATEST(f.income_secondary, 0), 0) * 100, 4),
+           coalesce(f.recorded_count, 0)
       FROM months m LEFT JOIN flows f USING (month)
      ORDER BY m.month"""
 
@@ -265,6 +283,55 @@ YEAR_TO_DATE = """
            coalesce(round(i.invested_base, 4), 0.0000),
            coalesce(round(i.invested_secondary, 4), 0.0000)
       FROM flows f, invested i"""
+
+
+def flow_evidence(
+    trend: Sequence[MonthFlows],
+    coverage_months: Sequence[date],
+    coverage: Sequence[CoverageRow],
+    as_of: date,
+) -> list[FlowEvidence]:
+    """Plot only completed statement periods. Frozen flows remain available in the detailed
+    table, but an unverified or still-open month cannot imply a complete household total."""
+    positions = {month: index for index, month in enumerate(coverage_months)}
+    complete: set[date] = set()
+    account_rows = [row for row in coverage if row.subject == "account"]
+    for item in trend:
+        index = positions.get(item.month)
+        if index is None or month_end(item.month) > as_of:
+            continue
+        applicable = [
+            row.months[index].status
+            for row in account_rows
+            if index < len(row.months) and row.months[index].status != "outside_account_life"
+        ]
+        if applicable and all(status == "reconciled" for status in applicable):
+            complete.add(item.month)
+
+    def coordinates(suffix: Literal["Base", "Secondary"]) -> dict[tuple[date, str], int]:
+        values = {
+            (item.month, field): Decimal(getattr(item, f"{field}{suffix}"))
+            for item in trend
+            if item.month in complete
+            for field in ("income", "spending", "net")
+        }
+        return {key: int(Decimal(value) * 10000) for key, value in chart_ratios(values).items()}
+
+    base = coordinates("Base")
+    secondary = coordinates("Secondary")
+    return [
+        FlowEvidence(
+            month=item.month,
+            status="complete" if item.month in complete else "unknown",
+            incomeBaseCoordinate=base.get((item.month, "income")),
+            spendingBaseCoordinate=base.get((item.month, "spending")),
+            netBaseCoordinate=base.get((item.month, "net")),
+            incomeSecondaryCoordinate=secondary.get((item.month, "income")),
+            spendingSecondaryCoordinate=secondary.get((item.month, "spending")),
+            netSecondaryCoordinate=secondary.get((item.month, "net")),
+        )
+        for item in trend
+    ]
 
 
 def _net_worth(
@@ -450,6 +517,7 @@ def read_dashboard(
         base, secondary = household_currencies(cur, owner.household_id)
         net_worth = _net_worth(cur, owner.household_id, base, secondary, as_of)
         cur.execute(FLOWS, {"as_of": as_of, "household": owner.household_id})
+        flow_rows = cur.fetchall()
         trend = [
             MonthFlows(
                 month=row[0],
@@ -462,8 +530,13 @@ def read_dashboard(
                 savingsRatePctBase=_out(row[7]),
                 savingsRatePctSecondary=_out(row[8]),
             )
-            for row in cur.fetchall()
+            for row in flow_rows
         ]
+        has_recorded_flows = any(row[9] > 0 for row in flow_rows)
+        coverage_months = months_from_anchor(as_of)
+        evidence = flow_evidence(
+            trend, coverage_months, coverage_rows(cur, owner.household_id, as_of), as_of
+        )
         cur.execute(CARDS_DUE, (as_of, owner.household_id, as_of))
         cards = [
             CardDue(
@@ -501,6 +574,8 @@ def read_dashboard(
         netWorth=net_worth,
         thisMonth=trend[-1],
         trend=trend,
+        hasRecordedFlows=has_recorded_flows,
+        flowEvidence=evidence,
         cardsDue=cards,
         yearToDate=year_to_date,
     )

@@ -169,6 +169,54 @@ def test_a_hand_tallied_month(live: Owner) -> None:
     }
 
 
+def test_evidenced_trend_requires_owned_completed_statement_coverage(live: Owner) -> None:
+    a_flow(live, live.account_id, "100.0000", date(2026, 1, 10), "income")
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO import_batch (household_id, account_id, status, period_start,
+                                          period_end, period_is_derived)
+               VALUES (%s, %s, 'completed', DATE '2026-01-01', DATE '2026-01-31', false)""",
+            (live.household_id, live.account_id),
+        )
+    live.conn.commit()
+    theirs, their_account = another_households_account(live)
+    a_flow(live, their_account, "9999.0000", date(2026, 1, 10), "income", household=theirs)
+
+    body = the_dashboard()
+    assert body["hasRecordedFlows"] is True
+    january = next(item for item in body["flowEvidence"] if item["month"] == "2026-01-01")
+    february = next(item for item in body["flowEvidence"] if item["month"] == "2026-02-01")
+    assert january["status"] == "complete"
+    assert january["incomeBaseCoordinate"] == 10000
+    assert february["status"] == "unknown"
+    assert february["incomeBaseCoordinate"] is None
+    assert (
+        next(item for item in body["trend"] if item["month"] == "2026-01-01")["incomeBase"]
+        == "100.0000"
+    )
+
+
+def test_unrecorded_flow_history_is_not_presented_as_activity(live: Owner) -> None:
+    assert the_dashboard()["hasRecordedFlows"] is False
+
+
+def test_closed_account_flow_remains_in_history(live: Owner) -> None:
+    a_flow(live, live.account_id, "100.0000", date(2026, 1, 10), "income")
+    with live.conn.cursor() as cur:
+        cur.execute(
+            "UPDATE account SET is_active = false, closed_on = DATE '2026-01-31' WHERE id = %s",
+            (live.account_id,),
+        )
+    live.conn.commit()
+
+    body = the_dashboard()
+    assert body["hasRecordedFlows"] is True
+    assert (
+        next(item for item in body["trend"] if item["month"] == "2026-01-01")["incomeBase"]
+        == "100.0000"
+    )
+
+
 def test_the_month_is_byte_identical_after_the_rate_table_moves(live: Owner) -> None:
     """I5: move every rate by a factor of ten after the rows are committed; the month does not
     move, because it reads what was frozen and never a rate."""

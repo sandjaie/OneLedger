@@ -315,7 +315,7 @@ describe("Accounts", () => {
   it("groups by class then country, as UI §6 specifies over the artboard", () => {
     render(<AccountsScreen {...props} />);
     expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent))
-      .toEqual(["Assets · XB", "Liabilities · XA"]);
+      .toEqual(["Assets · XB", "Liabilities · XA", "Closed accounts"]);
   });
 
   it("shows a native balance formatted by its own currency row", () => {
@@ -328,6 +328,7 @@ describe("Accounts", () => {
 
   it("keeps closed accounts visible with their closing date", () => {
     render(<AccountsScreen {...props} />);
+    expect(screen.getByRole("heading", { name: "Closed accounts" })).toBeTruthy();
     const closedRow = screen.getByRole("row", { name: /Old Savings/ });
     expect(closedRow.textContent).toContain("Closed 30 Jun 2026");
   });

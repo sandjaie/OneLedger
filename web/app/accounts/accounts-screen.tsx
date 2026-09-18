@@ -947,7 +947,11 @@ export function AccountsScreen({
       })}
 
       {closed.length > 0 && (
-        <section className="account-group">
+        <section className="account-group" aria-labelledby="closed-accounts-title">
+          <div className="account-group-head">
+            <h3 id="closed-accounts-title">Closed accounts</h3>
+            <p>Kept for history and reconciliation</p>
+          </div>
           <table className="account-table">
             <caption className="visually-hidden">Closed accounts</caption>
             <AccountTableHead />

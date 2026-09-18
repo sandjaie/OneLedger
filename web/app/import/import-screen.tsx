@@ -434,11 +434,14 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
     <section className="workspace-content statement-import-screen" aria-labelledby="import-title">
       <header className="statement-import-header">
         <h1 className="workspace-title" id="import-title">Statement import</h1>
-        <p>
-          Originals stay attached to their ledger rows. Nothing is uploaded until you ask for a
-          check, and nothing reaches the ledger until you stage and review it.
-        </p>
+        <p>Check first. Nothing enters the ledger until you review and commit it.</p>
       </header>
+
+      <ol aria-label="Import steps" className="statement-import-journey">
+        <li><strong>Check</strong><span>Confirm account and statement details</span></li>
+        <li><strong>Stage</strong><span>Prepare rows for review</span></li>
+        <li><strong>Commit</strong><span>Review and add to the ledger</span></li>
+      </ol>
 
       <div
         aria-label="Upload statement files"
@@ -450,8 +453,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
           <span aria-hidden="true" className="statement-import-filemark">PDF</span>
           <h2>Upload a financial statement</h2>
           <p>
-            Choose or drop bank and card statement PDFs. OneLedger detects the layout, account,
-            period and currency before anything can be staged.
+            Choose or drop bank and card PDFs. We will check their account, period and layout.
           </p>
           <span className="statement-import-format">PDF</span>
         </div>

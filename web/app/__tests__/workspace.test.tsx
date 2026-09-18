@@ -220,6 +220,12 @@ const dashboard: DashboardResponse = {
   },
   thisMonth: march,
   trend: [march],
+  hasRecordedFlows: true,
+  flowEvidence: [{
+    month: march.month, status: "unknown",
+    incomeBaseCoordinate: null, spendingBaseCoordinate: null, netBaseCoordinate: null,
+    incomeSecondaryCoordinate: null, spendingSecondaryCoordinate: null, netSecondaryCoordinate: null,
+  }],
   cardsDue: [],
   yearToDate: {
     yearStart: "2026-01-01",

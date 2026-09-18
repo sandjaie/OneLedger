@@ -13,9 +13,9 @@ Updated: 19 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.7 — Nova/shadcn owner workspace experience** across the existing screens, with evidenced charts | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1–4.7.5 merged in PRs #250, #251, #253, #254 and [#255](https://github.com/sandjaie/OneLedger/pull/255). Phase 4.7.6 Investments and investment import implemented on its task branch | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1–4.7.6 merged in PRs #250, #251, #253, #254, #255 and [#256](https://github.com/sandjaie/OneLedger/pull/256). Phase 4.7.7 Overview and ledger destinations implemented in this task branch | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | Next product action | Deliver the numbered Phase 4.7 Nova and chart work packages, audit every screen, then invite owner visual/UX acceptance; the owner-approved order places this before Phase 4.4 | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
-| Current implementation task | 4.7.6 Investments and investment import implemented; the branch also aligns stale local-gate contract tests with the existing no-pre-push workflow. 4.7.7 Overview and ledger destinations is next after the 4.7.6 PR merges | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Current implementation task | 4.7.7 Overview and ledger destinations implemented in this task branch; 4.7.8 Spending and Plans is next after its PR merges | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 
 ## Canonical phase status
 
@@ -60,7 +60,7 @@ Updated: 19 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| 4.7 — owner workspace experience | **In progress** — 4.7.1–4.7.5 merged in PRs #250, #251, #253, #254 and [#255](https://github.com/sandjaie/OneLedger/pull/255); 4.7.6 Investments and investment import implemented on its task branch; remaining screen conversion, audit, and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| 4.7 — owner workspace experience | **In progress** — 4.7.1–4.7.6 merged; 4.7.7 Overview and ledger destinations implemented in this task branch; remaining screen conversion, audit, and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

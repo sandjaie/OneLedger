@@ -229,6 +229,12 @@ describe("choosing files", () => {
     renderScreen(request);
 
     expect(screen.getByRole("heading", { name: "Statement import" })).toBeTruthy();
+    const steps = screen.getByRole("list", { name: "Import steps" });
+    expect(within(steps).getAllByRole("listitem").map((step) => step.textContent)).toEqual([
+      "CheckConfirm account and statement details",
+      "StagePrepare rows for review",
+      "CommitReview and add to the ledger",
+    ]);
     expect(screen.getByLabelText("Upload statement files").className).toContain(
       "statement-import-dropzone",
     );

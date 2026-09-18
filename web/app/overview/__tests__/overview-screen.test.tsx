@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewScreen } from "@/app/overview/overview-screen";
@@ -88,6 +88,12 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
     },
     thisMonth: march,
     trend: [...MONTHS.slice(0, 11).map((on) => month(on)), march],
+    hasRecordedFlows: true,
+    flowEvidence: MONTHS.map((on) => ({
+      month: on, status: "unknown",
+      incomeBaseCoordinate: null, spendingBaseCoordinate: null, netBaseCoordinate: null,
+      incomeSecondaryCoordinate: null, spendingSecondaryCoordinate: null, netSecondaryCoordinate: null,
+    })),
     cardsDue: [],
     yearToDate: {
       yearStart: "2026-01-01",
@@ -138,6 +144,29 @@ function renderWith(
 
 describe("overview screen", () => {
   afterEach(() => cleanup());
+
+  it("plots evidenced monthly flows with explicit gaps and exact values", async () => {
+    const ordinary = payload();
+    const january = month("2026-01-01", {
+      incomeBase: "100.0000", incomeSecondary: "4.0000",
+      spendingBase: "25.0000", spendingSecondary: "1.0000",
+      netBase: "75.0000", netSecondary: "3.0000",
+    });
+    ordinary.trend[9] = january;
+    ordinary.flowEvidence[9] = {
+      month: january.month, status: "complete",
+      incomeBaseCoordinate: 10000, spendingBaseCoordinate: 2500, netBaseCoordinate: 7500,
+      incomeSecondaryCoordinate: 10000, spendingSecondaryCoordinate: 2500, netSecondaryCoordinate: 7500,
+    };
+    renderWith(ordinary);
+
+    const trend = await screen.findByRole("region", { name: "Income, spending and net trend" });
+    const exact = within(trend).getByRole("table", { name: "Income, spending and net trend exact values" });
+    const rows = within(exact).getAllByRole("row");
+    expect(within(rows[10]).getByText("₹100.00")).toBeTruthy();
+    expect(within(rows[11]).getAllByText("Not available")).toHaveLength(3);
+    expect(within(trend).getByText(/unknown months/i)).toBeTruthy();
+  });
 
   it("presents the selected reporting currency as a glanceable net-worth headline", async () => {
     renderWith(payload());
@@ -216,6 +245,9 @@ describe("overview screen", () => {
     for (const shown of ["₹5,00,000.00", "₹1,23,456.78", "₹3,76,543.22", "75.31%"]) {
       expect(within(thisMonth).getByText(shown)).toBeTruthy();
     }
+    const recorded = screen.getByText("Recorded monthly totals").closest<HTMLDetailsElement>("details");
+    expect(recorded?.open).toBe(false);
+    fireEvent.click(screen.getByText("Recorded monthly totals"));
     const rows = within(screen.getByRole("table", { name: "The last twelve months" })).getAllByRole("row");
     expect(rows).toHaveLength(13);
     expect(within(rows[1]).getByText("Apr 2025")).toBeTruthy();
@@ -247,6 +279,7 @@ describe("overview screen", () => {
     expect(within(thisMonth).getByText("AED 22,000.00")).toBeTruthy();
     expect(within(thisMonth).getByText("AED 5,432.10")).toBeTruthy();
     expect(within(thisMonth).queryByText(/₹/)).toBeNull();
+    fireEvent.click(screen.getByText("Recorded monthly totals"));
     const trend = screen.getByRole("table", { name: "The last twelve months" });
     expect(within(trend).getByText("AED 16,567.90")).toBeTruthy();
     expect(within(trend).queryByText(/₹/)).toBeNull();
@@ -324,12 +357,38 @@ describe("overview screen", () => {
         },
         thisMonth: month("2026-03-01"),
         trend: MONTHS.map((on) => month(on)),
+        hasRecordedFlows: false,
       }),
     );
 
     expect(await screen.findByText(/Nothing to report yet/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Add an account" })).toHaveProperty("pathname", "/accounts");
+    expect(screen.getByRole("link", { name: "Import a statement" })).toHaveProperty("pathname", "/import");
+    expect(await screen.findByRole("region", { name: "Needs attention" })).toBeTruthy();
     expect(screen.queryByText(/0\.00/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps closed-account history visible without inventing a current position", async () => {
+    const past = payload();
+    past.netWorth.rates = [];
+    past.cardsDue = [];
+    past.trend[9] = month("2026-01-01", {
+      incomeBase: "100.0000", spendingBase: "25.0000", netBase: "75.0000",
+      incomeSecondary: "4.0000", spendingSecondary: "1.0000", netSecondary: "3.0000",
+    });
+    past.flowEvidence[9] = {
+      month: "2026-01-01", status: "complete",
+      incomeBaseCoordinate: 10000, spendingBaseCoordinate: 2500, netBaseCoordinate: 7500,
+      incomeSecondaryCoordinate: 10000, spendingSecondaryCoordinate: 2500, netSecondaryCoordinate: 7500,
+    };
+    renderWith(past);
+
+    expect(await screen.findByText("No current position")).toBeTruthy();
+    expect(screen.queryByText("Nothing to report yet")).toBeNull();
+    const history = screen.getByRole("region", { name: "Income, spending and net trend" });
+    expect(within(history).getByText("₹100.00")).toBeTruthy();
+    expect(screen.getByText("Recorded monthly totals")).toBeTruthy();
   });
 
   it("shows an investment coverage reason with a link, and skips a fully current one", async () => {

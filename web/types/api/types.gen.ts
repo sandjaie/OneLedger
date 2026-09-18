@@ -2867,6 +2867,14 @@ export type DashboardResponse = {
      */
     trend: Array<MonthFlows>;
     /**
+     * Hasrecordedflows
+     */
+    hasRecordedFlows: boolean;
+    /**
+     * Flowevidence
+     */
+    flowEvidence: Array<FlowEvidence>;
+    /**
      * Cardsdue
      */
     cardsDue: Array<CardDue>;
@@ -3663,6 +3671,44 @@ export type Finding = {
      * Message
      */
     message: string;
+};
+
+/**
+ * FlowEvidence
+ */
+export type FlowEvidence = {
+    /**
+     * Month
+     */
+    month: string;
+    /**
+     * Status
+     */
+    status: 'complete' | 'unknown';
+    /**
+     * Incomebasecoordinate
+     */
+    incomeBaseCoordinate: number | null;
+    /**
+     * Spendingbasecoordinate
+     */
+    spendingBaseCoordinate: number | null;
+    /**
+     * Netbasecoordinate
+     */
+    netBaseCoordinate: number | null;
+    /**
+     * Incomesecondarycoordinate
+     */
+    incomeSecondaryCoordinate: number | null;
+    /**
+     * Spendingsecondarycoordinate
+     */
+    spendingSecondaryCoordinate: number | null;
+    /**
+     * Netsecondarycoordinate
+     */
+    netSecondaryCoordinate: number | null;
 };
 
 /**

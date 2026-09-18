@@ -165,6 +165,17 @@ describe("the transactions screen", () => {
       .toBe("true");
   });
 
+  it("keeps the common ledger filters visible and tucks uncommon controls into More filters", () => {
+    renderScreen([], 0);
+    const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
+    const main = filterForm.querySelector(".transaction-filter-main");
+    const advanced = filterForm.querySelector(".transaction-filter-advanced");
+    expect(main?.querySelectorAll("label")).toHaveLength(6);
+    expect(advanced?.textContent).toContain("Amount from");
+    expect(advanced?.textContent).toContain("Currency");
+    expect(advanced?.textContent).toContain("Country");
+  });
+
   it("renders money exactly as sent, original first and converted second", () => {
     renderScreen([transaction({})], 1);
     const row = screen.getByText("COFFEE").closest("tr");
