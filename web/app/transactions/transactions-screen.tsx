@@ -560,6 +560,10 @@ export function TransactionsScreen({
             value={filters.dateTo}
           />
         </label>
+        </div>
+        <details className="transaction-filter-advanced">
+          <summary>More filters</summary>
+          <div className="transaction-filter-advanced-fields">
         <label className="text-field">
           <span>Amount from</span>
           <input
@@ -596,10 +600,6 @@ export function TransactionsScreen({
             value={filters.country}
           />
         </label>
-        </div>
-        <details className="transaction-filter-advanced">
-          <summary>More filters</summary>
-          <div className="transaction-filter-advanced-fields">
         <label className="text-field">
           <span>Tag</span>
           <input
