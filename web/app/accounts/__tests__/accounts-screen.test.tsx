@@ -115,6 +115,13 @@ afterEach(() => {
 });
 
 describe("Accounts", () => {
+  it("keeps the Accounts page title and a clear next action in the empty state", () => {
+    render(<AccountsScreen {...props} accounts={[]} totals={[]} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Accounts" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Add your first account" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add an account" })).toBeTruthy();
+  });
+
   it("keeps identifiers masked and never prefetches a reveal", () => {
     const request = vi.fn();
     render(<AccountsScreen {...props} request={request} />);
@@ -279,7 +286,7 @@ describe("Accounts", () => {
   it("presents the inventory as the compact account-card grid from the primary artboard", () => {
     render(<AccountsScreen {...props} />);
 
-    expect(screen.getByRole("heading", { level: 2, name: "Accounts" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Accounts" })).toBeTruthy();
     expect(screen.getByText("2 active accounts · latest balance 15 Jan 2026")).toBeTruthy();
 
     const assetGroup = screen.getByRole("heading", { name: "Assets · XB" }).closest(".account-group");

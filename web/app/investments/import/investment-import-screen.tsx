@@ -390,10 +390,14 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
   if (investmentAccounts.length === 0) {
     return (
-      <section className="workspace-content investment-entry-empty investment-import-screen" aria-labelledby="investment-import-title">
-        <p className="section-label">Account required</p>
-        <h1 className="workspace-title" id="investment-import-title">Set up the holding container first</h1>
-        <p>An investment account is required before importing a statement.</p>
+      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
+        <p className="eyebrow">Statement import</p>
+        <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
+        <div className="investment-import-prerequisite">
+          <h2>Set up an investment account first</h2>
+          <p>An investment account is required before importing a statement.</p>
+          <Link className="primary-action" href="/accounts">Set up an investment account</Link>
+        </div>
       </section>
     );
   }
