@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
@@ -417,6 +418,11 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         <p className="eyebrow">Recorded evidence</p>
         <h1 className="workspace-title" id="salary-title">Salary</h1>
         <p>Payslips reconcile exactly or are refused; a correction supersedes rather than edits.</p>
+        <nav aria-label="Salary actions" className="salary-action-nav">
+          <Link href="#salary-import-title">Import a payslip</Link>
+          <Link href="#salary-entry-title">Enter manually</Link>
+          <Link href="#salary-list-title">Review payslips</Link>
+        </nav>
       </header>
 
       <SalaryAnalysis currencies={currencies} refreshKey={attempt} request={request} />

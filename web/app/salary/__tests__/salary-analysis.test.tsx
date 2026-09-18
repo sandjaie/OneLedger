@@ -62,6 +62,11 @@ const analysis: SalaryAnalysisResponse = {
         },
       ],
       gaps: ["2026-02"],
+      trend: [
+        { payMonth: "2026-01", earnedNetPay: "2500.0000", cashReceived: "2500.0000", earnedCoordinate: 10000, receivedCoordinate: 10000 },
+        { payMonth: "2026-02", earnedNetPay: null, cashReceived: null, earnedCoordinate: null, receivedCoordinate: null },
+        { payMonth: "2026-03", earnedNetPay: "2500.0000", cashReceived: null, earnedCoordinate: 10000, receivedCoordinate: null },
+      ],
       increments: [
         {
           effectiveMonth: "2026-03",
@@ -108,6 +113,9 @@ describe("salary analysis", () => {
     render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
 
     await screen.findByText("2026");
+    const trend = screen.getByRole("table", { name: /Payslip net pay and linked receipts.*exact values/ });
+    expect(trend.textContent).toContain("Not available");
+    expect(trend.textContent).toContain("A 2,500.00");
     // Years row.
     expect(screen.getByText("16.67%")).toBeTruthy();
     expect(screen.getAllByText("A 6,000.00").length).toBeGreaterThan(0);

@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import type { AcknowledgementIn, CoverageResponse, CoverageRow, MonthCell } from "@/types/api";
 
@@ -43,6 +47,25 @@ function rowKey(row: CoverageRow): string {
   return `${row.subject}:${row.accountId ?? ""}`;
 }
 
+function reviewSummary(coverage: CoverageResponse) {
+  let needsReview = 0;
+  let acknowledged = 0;
+  let reconciled = 0;
+  let firstGap: Selection | undefined;
+  for (const [index, month] of coverage.months.entries()) {
+    for (const row of coverage.rows) {
+      const cell = row.months[index];
+      if (!cell) continue;
+      if (cell.status === "missing" || cell.status === "partial") {
+        needsReview += 1;
+        firstGap ??= { row, month, cell };
+      } else if (cell.status === "acknowledged") acknowledged += 1;
+      else if (cell.status === "reconciled") reconciled += 1;
+    }
+  }
+  return { needsReview, acknowledged, reconciled, firstGap };
+}
+
 export function CoverageScreen({ request }: Props) {
   const [coverage, setCoverage] = useState<CoverageResponse>();
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -53,6 +76,8 @@ export function CoverageScreen({ request }: Props) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
+  const summary = coverage ? reviewSummary(coverage) : undefined;
+  const firstGap = summary?.firstGap;
 
   useEffect(() => {
     let current = true;
@@ -134,12 +159,13 @@ export function CoverageScreen({ request }: Props) {
   return (
     <section className="workspace-content coverage-screen" aria-labelledby="coverage-title">
       <header className="page-head">
+        <p className="eyebrow">Evidence coverage</p>
         <h1 className="workspace-title" id="coverage-title">Coverage</h1>
+        <p>See what is evidenced, what has been acknowledged, and which gaps need a decision.</p>
         {coverage && (
-          <p>
-            History anchor <strong>{coverage.historyAnchor}</strong> (fixed; ADR-0011). Every
-            statement-sourced account and payslips are shown month by month from the anchor.
-          </p>
+          <details className="experience-disclosure"><summary>Coverage scope and anchor</summary>
+            <p>History anchor <strong>{coverage.historyAnchor}</strong> (fixed; ADR-0011). Every statement-sourced account and payslips are shown month by month from the anchor.</p>
+          </details>
         )}
       </header>
 
@@ -157,9 +183,18 @@ export function CoverageScreen({ request }: Props) {
 
       {state === "ready" && coverage && (
         <>
+          {summary && <section aria-label="Coverage status" className="coverage-summary">
+            <div><span>Needs review</span><strong>{summary.needsReview}</strong><small>Missing or partial month cells</small></div>
+            <div><span>Acknowledged</span><strong>{summary.acknowledged}</strong><small>Gaps explained by the owner</small></div>
+            <div><span>Reconciled</span><strong>{summary.reconciled}</strong><small>Months with recorded evidence</small></div>
+            {firstGap ? <>
+              <Button onClick={() => selectCell(firstGap.row, firstGap.month, firstGap.cell)} type="button">Review earliest gap</Button>
+              <p>{rowLabel(firstGap.row)} · {firstGap.month}</p>
+            </> : <p role="status">No missing or partial month needs review.</p>}
+          </section>}
           <ul className="coverage-legend" aria-label="Status legend">
             {(Object.keys(STATUS_LABEL) as Array<MonthCell["status"]>).map((status) => (
-              <li key={status}>{STATUS_LABEL[status]}</li>
+              <li key={status}><Badge variant={status === "missing" || status === "partial" ? "destructive" : "outline"}>{STATUS_LABEL[status]}</Badge></li>
             ))}
           </ul>
 
@@ -177,6 +212,7 @@ export function CoverageScreen({ request }: Props) {
                 </tr>
               </thead>
               <tbody>
+                {coverage.rows.length === 0 && <tr><td colSpan={coverage.months.length + 1}>No account or payslip evidence source is available for this period.</td></tr>}
                 {coverage.rows.map((row) => (
                   <tr key={rowKey(row)}>
                     <th scope="row">{rowLabel(row)}</th>
@@ -221,40 +257,38 @@ export function CoverageScreen({ request }: Props) {
                     Reason: {selected.cell.reason ? REASON_LABEL[selected.cell.reason] : ""}
                     {selected.cell.note ? ` — ${selected.cell.note}` : ""}
                   </p>
-                  <button
-                    className="primary-action"
+                  <Button
                     disabled={busy}
                     onClick={() => void removeAcknowledgement()}
                     type="button"
-                  >{busy ? "Removing…" : "Remove acknowledgement"}</button>
+                  >{busy ? "Removing…" : "Remove acknowledgement"}</Button>
                 </>
               ) : (
                 <>
                   <Link className="text-action" href="/import">Import statements</Link>
                   <label className="select-field">
                     <span>Reason</span>
-                    <select
+                    <NativeSelect
                       onChange={(e) => setReason(e.target.value as Reason)}
                       value={reason}
                     >
                       {(Object.keys(REASON_LABEL) as Array<Reason>).map((value) => (
                         <option key={value} value={value}>{REASON_LABEL[value]}</option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </label>
                   <label className="text-field">
                     <span>Note (optional)</span>
-                    <input maxLength={200} onChange={(e) => setNote(e.target.value)} value={note} />
+                    <Input maxLength={200} onChange={(e) => setNote(e.target.value)} value={note} />
                   </label>
-                  <button
-                    className="primary-action"
+                  <Button
                     disabled={busy}
                     onClick={() => void acknowledge()}
                     type="button"
-                  >{busy ? "Saving…" : "Acknowledge gap"}</button>
+                  >{busy ? "Saving…" : "Acknowledge gap"}</Button>
                 </>
               )}
-              <button className="text-action" onClick={closeDialog} type="button">Close</button>
+              <Button onClick={closeDialog} type="button" variant="outline">Close</Button>
             </section>
           )}
         </>

@@ -1820,6 +1820,41 @@ body { background: var(--paper); }
 .plans-screen :is(.plans-points, .plans-occurrences, .plans-exclusions, .plans-unplanned-dues) > li { white-space: normal; overflow-wrap: anywhere; }
 .plans-screen :is(.plans-currency-list, .plans-account-list) > li { gap: 0.35rem; }
 .plans-screen .plans-shortfall { padding: 0.75rem 1rem; border-inline-start: 3px solid var(--attention); border-radius: 0 var(--radius) var(--radius) 0; background: color-mix(in srgb, var(--attention) 8%, var(--card)); }
+.coverage-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin: 1.2rem 0; }
+.coverage-summary > div { display: grid; gap: 0.25rem; min-width: 0; padding: 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.coverage-summary > div > span { color: var(--muted); font-size: 0.72rem; font-weight: 650; }
+.coverage-summary > div > strong { font-family: var(--mono); font-size: 1.45rem; line-height: 1.2; }
+.coverage-summary > div > small { color: var(--muted); font-size: 0.68rem; }
+.coverage-summary > [data-slot="button"], .coverage-summary > p { grid-column: 1 / -1; justify-self: start; max-width: 100%; white-space: normal; text-align: left; }
+.coverage-legend [data-slot="badge"] { white-space: normal; }
+.coverage-screen .coverage-table-wrap { max-height: min(68vh, 680px); overflow: auto; }
+.coverage-screen .coverage-table :is(thead th, tbody th) { position: sticky; background: var(--card); z-index: 1; }
+.coverage-screen .coverage-table thead th { top: 0; }
+.coverage-screen .coverage-table tbody th { left: 0; }
+.coverage-screen .coverage-dialog { position: relative; display: grid; gap: 0.75rem; max-width: 540px; margin: 1rem 0; padding: 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.coverage-screen .coverage-dialog :is(h2, p) { margin: 0; }
+.coverage-screen .coverage-dialog [data-slot="button"] { justify-self: start; }
+.salary-screen .evidence-chart, .wealth-screen > .evidence-chart { margin: 1rem 0; }
+.salary-action-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+.salary-action-nav a { display: inline-flex; align-items: center; min-height: 36px; padding: 0.45rem 0.75rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); color: var(--ink); font-size: 0.73rem; font-weight: 650; text-decoration: none; }
+.salary-action-nav a:hover, .salary-action-nav a:focus-visible { border-color: var(--accent); color: var(--accent); }
+.salary-screen .overview-scroll, .wealth-screen .wealth-table-wrap { max-height: min(68vh, 600px); overflow: auto; }
+.salary-screen .overview-scroll table { min-width: max-content; }
+.wealth-screen .wealth-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 0.78rem; }
+.wealth-screen .wealth-table :is(th, td) { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.wealth-screen .wealth-table th:first-child { min-width: 120px; }
+.wealth-screen .wealth-table td:nth-child(2) { min-width: 175px; white-space: nowrap; }
+.wealth-screen .wealth-table td:nth-child(3) { min-width: 160px; }
+.salary-screen .salary-payslip-list > li { min-width: 0; padding: clamp(14px, 2vw, 20px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.salary-screen .salary-payslip-lines { min-width: 0; }
+.wealth-screen .wealth-month { min-width: 0; }
+.wealth-evidence-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; margin: 1rem 0; padding: 0.75rem 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); color: var(--muted); font-size: 0.75rem; }
+.wealth-evidence-summary > span:first-child { color: var(--ink); font-weight: 700; }
+@media (max-width: 588px) {
+  .coverage-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .coverage-summary > div:first-child { grid-column: 1 / -1; }
+  .coverage-screen .coverage-table-wrap, .salary-screen .overview-scroll, .wealth-screen .wealth-table-wrap { max-height: 460px; }
+}
 .spending-screen > h2 { margin: 1.8rem 0 0.4rem; }
 .spending-screen > .lede { max-width: 72ch; margin: 0.2rem 0 0.8rem; color: var(--muted); font-size: 0.77rem; line-height: 1.5; }
 .spending-screen .budget-panel { min-width: 0; margin-top: 1.8rem; padding: clamp(16px, 2vw, 24px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
@@ -2114,7 +2149,7 @@ body { background: var(--paper); }
 .workspace-mobile-nav a:focus-visible { outline: 3px solid var(--ring); outline-offset: -3px; }
 
 .evidence-chart {
-  display: grid; gap: 18px; min-width: 0; padding: clamp(18px, 2.5vw, 28px);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; min-width: 0; padding: clamp(18px, 2.5vw, 28px);
   border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card);
   color: var(--card-foreground);
 }

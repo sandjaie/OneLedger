@@ -52,6 +52,13 @@ afterEach(() => {
 });
 
 describe("coverage screen", () => {
+  it("explains an empty evidence grid", async () => {
+    const request = requestFrom((path) => path === "/coverage" ? { ...baseCoverage, rows: [] } : {});
+    render(<CoverageScreen request={request} />);
+    expect(await screen.findByText("No account or payslip evidence source is available for this period.")).toBeTruthy();
+    expect(screen.getByText("No missing or partial month needs review.")).toBeTruthy();
+  });
+
   it("renders the grid, its status labels and the legend", async () => {
     const request = requestFrom((path) => {
       if (path === "/coverage") return baseCoverage;
@@ -71,6 +78,18 @@ describe("coverage screen", () => {
     const legend = screen.getByRole("list", { name: "Status legend" });
     expect(within(legend).getByText("Missing")).toBeTruthy();
     expect(within(legend).getByText("Outside account life")).toBeTruthy();
+    const summary = screen.getByRole("region", { name: "Coverage status" });
+    expect(summary.textContent).toContain("Needs review2");
+    expect(summary.textContent).toContain("Acknowledged1");
+    expect(summary.textContent).toContain("Reconciled1");
+  });
+
+  it("opens the earliest unresolved gap directly from the summary", async () => {
+    const request = requestFrom((path) => path === "/coverage" ? baseCoverage : {});
+    render(<CoverageScreen request={request} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review earliest gap/ }));
+    expect(screen.getByRole("heading", { name: "Synthetic current account · 2024-02-01" })).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
   });
 
   it("acknowledges a missing cell and refreshes the grid", async () => {

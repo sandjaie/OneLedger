@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { EvidenceChart } from "@/app/ui/evidence-chart";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { dateLabel, monthLabel } from "@/lib/format/date";
 import { formatPercent, moneyText } from "@/lib/money/format";
@@ -147,6 +148,30 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {current.trend.length > 0 && (
+                <EvidenceChart
+                  title={`Payslip net pay and linked receipts · ${current.currency}`}
+                  description="Payslip net pay is an earned claim; linked receipt is shown only when every payslip in that month has an eligible matching deposit. Unlinked or ineligible receipts and months without payslips remain gaps; unmatched salary credits are listed below."
+                  periods={current.trend.map((point) => point.payMonth)}
+                  series={[
+                    {
+                      id: "earned", label: "Payslip net pay", color: "var(--category-1)", lineStyle: "solid", marker: "circle",
+                      points: current.trend.map((point) => ({
+                        period: point.payMonth, coordinate: point.earnedCoordinate,
+                        exact: point.earnedNetPay === null ? null : moneyText(point.earnedNetPay, current.currency, currencies),
+                      })),
+                    },
+                    {
+                      id: "received", label: "Linked cash received", color: "var(--category-2)", lineStyle: "dashed", marker: "square",
+                      points: current.trend.map((point) => ({
+                        period: point.payMonth, coordinate: point.receivedCoordinate,
+                        exact: point.cashReceived === null ? null : moneyText(point.cashReceived, current.currency, currencies),
+                      })),
+                    },
+                  ]}
+                />
               )}
 
               <section aria-labelledby="salary-years-title">
