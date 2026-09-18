@@ -104,6 +104,10 @@ describe("salary screen", () => {
     expect(screen.getByText("A 4,000.00 net · A 5,000.00 gross")).toBeTruthy();
     expect(screen.getByText("Not linked")).toBeTruthy();
     expect(screen.getByLabelText("Pay month").getAttribute("data-slot")).toBe("input");
+    expect(screen.getByRole("combobox", { name: "Category for deduction line 2" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Line 1 type" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Line 1 label" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Line 1 amount" })).toBeTruthy();
   });
 
   it("posts typed strings with one idempotency key, reused on a retry", async () => {

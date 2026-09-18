@@ -855,7 +855,7 @@ body { background: var(--paper); }
   display: flex; align-items: center; gap: 8px;
 }
 .currency-toggle { padding: 2px; border-radius: 7px; background: rgba(16, 22, 20, 0.06); }
-.currency-toggle button { padding: 5px 11px; border: 0; border-radius: 5px; font-size: 0.72rem; background: transparent; }
+.currency-toggle button { padding: 5px 11px; border: 0; border-radius: 5px; color: var(--ink); font-size: 0.72rem; background: transparent; }
 .currency-toggle button[aria-pressed="true"] {
   color: #101614; background: #fbfcfb; box-shadow: 0 1px 2px rgba(16, 22, 20, 0.12);
 }

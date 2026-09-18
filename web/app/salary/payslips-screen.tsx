@@ -472,6 +472,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                                 Count as spending
                               </label>
                               <NativeSelect
+                                aria-label={`Category for deduction line ${line.lineNo}`}
                                 disabled={line.countedAsSpending || busy}
                                 onChange={(e) =>
                                   setSpendingDraft((current) => ({ ...current, [key]: e.target.value }))
@@ -580,13 +581,13 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
           <legend>Lines</legend>
           {form.lines.map((line, index) => (
             <div key={index}>
-              <NativeSelect onChange={(e) => changeLine(index, { kind: e.target.value as LineDraft["kind"] })} value={line.kind}>
+              <NativeSelect aria-label={`Line ${index + 1} type`} onChange={(e) => changeLine(index, { kind: e.target.value as LineDraft["kind"] })} value={line.kind}>
                 <option value="earning">Earning</option>
                 <option value="deduction">Deduction</option>
               </NativeSelect>
-              <Input onChange={(e) => changeLine(index, { label: e.target.value })} placeholder="Label" value={line.label} />
-              <Input inputMode="decimal" onChange={(e) => changeLine(index, { amount: e.target.value })} placeholder="Amount" value={line.amount} />
-              <Button onClick={() => removeLine(index)} type="button">Remove</Button>
+              <Input aria-label={`Line ${index + 1} label`} onChange={(e) => changeLine(index, { label: e.target.value })} placeholder="Label" value={line.label} />
+              <Input aria-label={`Line ${index + 1} amount`} inputMode="decimal" onChange={(e) => changeLine(index, { amount: e.target.value })} placeholder="Amount" value={line.amount} />
+              <Button onClick={() => removeLine(index)} type="button" variant="outline">Remove</Button>
             </div>
           ))}
           <Button variant="outline" onClick={() => addLine("earning")} type="button">Add earning line</Button>
@@ -679,6 +680,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                   <li key={rule.label}>
                     <span>{rule.label}</span>
                     <NativeSelect
+                      aria-label={`Category for deduction rule ${rule.label}`}
                       disabled={deductionRuleBusy === rule.label}
                       onChange={(e) => void saveDeductionRule(rule.label, e.target.value)}
                       value={rule.categoryId}
