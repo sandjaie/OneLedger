@@ -38,8 +38,9 @@ not every small caption. Avoid repeated all-caps eyebrow labels and decorative g
   context-specific primary action. A factual status/next-action strip appears only when the page
   has a real warning or a meaningful next step; no fabricated score or empty dashboard tile.
 - Use one focus surface for the next decision or noteworthy state. Repeatable items become
-  compact, readable rows with clear status, key facts, and a route to details. Secondary metadata
-  and infrequent actions sit in an accessible disclosure. Avoid making every item the same card.
+  compact, readable rows with clear status, key facts, and an obvious way to review details.
+  Secondary metadata and infrequent actions sit in an accessible disclosure. Avoid making every
+  item the same card.
 - Use shared treatments for filters, section headers, status chips, empty/error/loading states,
   row actions, and contained dense data. Controls have a visible primary/secondary/destructive
   hierarchy. A loading state keeps the frame stable and does not masquerade as an empty result.
@@ -71,11 +72,15 @@ General. Section selection is reflected in the URL, not stored only in component
 
 ### Subscriptions and Recurring
 
-Lead with the next real renewal or a truthful empty state, followed by only the most useful totals.
+Subscriptions leads with the next real renewal from its subscription summary or a truthful empty
+state. Recurring leads with the earliest dated non-subscription payment from its existing rows,
+labels an overdue date accurately, or states truthfully when no next date is available. Show only
+the most useful subscription totals; do not invent recurring totals.
 Use distinct Current, Upcoming, and Past views for subscriptions and Active and Ended views for
 recurring payments. A record row names the item, status, amount/cadence, and next or last date;
-payment source and provenance are available on expansion or detail. Show one obvious route to
-review an item. Move infrequent correction, classification, rename, and lifecycle actions into a
+payment source and provenance are available on expansion or detail. A subscription links to its
+existing detail route; a recurring payment opens its details in the row, without a new route or
+fetch. Move infrequent correction, classification, rename, and lifecycle actions into a
 labelled secondary action disclosure without changing their semantics or confirmation behavior.
 Do not suggest an ended item is active merely because its status selector is visible.
 
