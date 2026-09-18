@@ -201,6 +201,7 @@ describe("investment statement import", () => {
     fireEvent.click(commitButton);
 
     await screen.findByText("Commit result:");
+    expect(screen.getByRole("link", { name: "Settings › Data quality" }).getAttribute("href")).toBe("/settings#data-quality-title");
 
     const commitCall = request.mock.calls[3];
     expect(commitCall[0]).toBe("/investment-imports/import-1/commit");

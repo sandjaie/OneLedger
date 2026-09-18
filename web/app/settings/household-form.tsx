@@ -2,6 +2,13 @@
 
 import { useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ApiError, errorText } from "@/lib/api/client";
 import type { CurrencyRow, HouseholdResponse, HouseholdUpdate } from "@/types/api";
 
@@ -56,63 +63,52 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
   }
 
   return (
-    <section className="household-card" aria-labelledby="household-title">
-      <div>
-        <p className="section-label">Household</p>
-        <h2 id="household-title">Name and reporting pair</h2>
-      </div>
-
-      <label className="text-field">
-        <span>Household name</span>
-        <input onChange={(e) => setName(e.target.value)} required value={name} />
-      </label>
-      <label className="text-field">
-        <span>Your display name</span>
-        <input onChange={(e) => setDisplayName(e.target.value)} required value={displayName} />
-      </label>
-      <label className="text-field">
-        <span>Tax residency</span>
-        <input
-          maxLength={2}
-          onChange={(e) => setResidency(e.target.value.toUpperCase())}
-          placeholder="ISO 3166-1 alpha-2"
-          value={residency}
-        />
-      </label>
-
-      {(
-        [
-          ["Base currency", base, setBase],
-          ["Secondary currency", secondary, setSecondary],
-        ] as const
-      ).map(([label, value, set]) => (
-        <label className="select-field" key={label}>
-          <span>{label}</span>
-          <select disabled={locked} onChange={(e) => set(e.target.value)} value={value}>
-            {currencies.map((option) => (
-              <option key={option.code} value={option.code}>
-                {option.code} — {option.name}
-              </option>
+    <section aria-labelledby="household-title" className="settings-general">
+      <Card>
+        <CardHeader>
+          <CardTitle><h2 id="household-title" tabIndex={-1}>Name and reporting pair</h2></CardTitle>
+          <CardDescription>These details identify your household and set how reports display amounts.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup className="settings-general-fields">
+            <Field>
+              <FieldLabel htmlFor="settings-household-name">Household name</FieldLabel>
+              <Input id="settings-household-name" onChange={(event) => setName(event.target.value)} required value={name} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="settings-display-name">Your display name</FieldLabel>
+              <Input id="settings-display-name" onChange={(event) => setDisplayName(event.target.value)} required value={displayName} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="settings-tax-residency">Tax residency</FieldLabel>
+              <Input id="settings-tax-residency" maxLength={2} onChange={(event) => setResidency(event.target.value.toUpperCase())} placeholder="ISO 3166-1 alpha-2" value={residency} />
+            </Field>
+            {([
+              ["Base currency", "settings-base-currency", base, setBase],
+              ["Secondary currency", "settings-secondary-currency", secondary, setSecondary],
+            ] as const).map(([label, id, value, set]) => (
+              <Field data-disabled={locked} key={id}>
+                <FieldLabel htmlFor={id}>{label}</FieldLabel>
+                <NativeSelect disabled={locked} id={id} onChange={(event) => set(event.target.value)} value={value}>
+                  {currencies.map((option) => (
+                    <NativeSelectOption key={option.code} value={option.code}>{option.code} — {option.name}</NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
             ))}
-          </select>
-        </label>
-      ))}
-
-      {locked && <p className="inline-note">{LOCKED_EXPLANATION}</p>}
-      {!locked && (
-        <p className="inline-note">
-          Choose the pair before the first import. Afterwards it is a backfill, not a setting.
-        </p>
-      )}
-      {problem && (
-        <p className="inline-alert" role="alert">
-          {problem}
-        </p>
-      )}
-
-      <button className="primary-action" disabled={saving} onClick={submit} type="button">
-        {saving ? "Saving…" : "Save household"}
-      </button>
+          </FieldGroup>
+          {locked ? (
+            <Collapsible className="settings-explanation">
+              <CollapsibleTrigger>Why does changing the reporting pair require a backfill?</CollapsibleTrigger>
+              <CollapsibleContent><p>{LOCKED_EXPLANATION}</p></CollapsibleContent>
+            </Collapsible>
+          ) : <p className="settings-explanation">Choose the pair before the first import. Afterwards changing it requires a backfill.</p>}
+          {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
+        </CardContent>
+        <CardFooter>
+          <Button disabled={saving} onClick={() => void submit()} type="button">{saving ? "Saving…" : "Save household"}</Button>
+        </CardFooter>
+      </Card>
     </section>
   );
 }
