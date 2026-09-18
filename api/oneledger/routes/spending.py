@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from ..auth import OwnerSession, require_owner
 from ..categories_sql import EFFECTIVE_CATEGORY
 from ..db import connect
-from ..money import chart_ratios
+from ..money import chart_coordinates, chart_ratios
 from ..resources import household_currencies
 
 router = APIRouter(tags=["spending"])
@@ -46,6 +46,7 @@ class CategorySpending(BaseModel):
     transactionCount: int
     previousAmountBase: str
     chartRatio: str
+    chartCoordinate: int
 
 
 class BucketSpending(BaseModel):
@@ -55,6 +56,7 @@ class BucketSpending(BaseModel):
     transactionCount: int
     previousAmountBase: str
     chartRatio: str
+    chartCoordinate: int
 
 
 class SpendingResponse(BaseModel):
@@ -181,6 +183,7 @@ def read_spending(
             for row in cur.fetchall()
         ]
         category_ratios = chart_ratios({row[0]: row[5] for row in category_rows})
+        category_coordinates = chart_coordinates({row[0]: row[5] for row in category_rows})
         category_rows.sort(key=lambda row: (-row[5], row[1]))
         by_category = [
             CategorySpending(
@@ -194,6 +197,7 @@ def read_spending(
                 transactionCount=row[7],
                 previousAmountBase=str(row[8]),
                 chartRatio=category_ratios[row[0]],
+                chartCoordinate=category_coordinates[row[0]],
             )
             for row in category_rows
         ]
@@ -204,6 +208,7 @@ def read_spending(
             for row in cur.fetchall()
         ]
         bucket_ratios = chart_ratios({row[0]: row[1] for row in bucket_rows})
+        bucket_coordinates = chart_coordinates({row[0]: row[1] for row in bucket_rows})
         bucket_rows.sort(key=lambda row: (-row[1], row[0]))
         by_bucket = [
             BucketSpending(
@@ -213,6 +218,7 @@ def read_spending(
                 transactionCount=row[3],
                 previousAmountBase=str(row[4]),
                 chartRatio=bucket_ratios[row[0]],
+                chartCoordinate=bucket_coordinates[row[0]],
             )
             for row in bucket_rows
         ]

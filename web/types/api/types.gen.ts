@@ -1342,6 +1342,10 @@ export type BucketSpending = {
      * Chartratio
      */
     chartRatio: string;
+    /**
+     * Chartcoordinate
+     */
+    chartCoordinate: number;
 };
 
 /**
@@ -2019,6 +2023,10 @@ export type CategorySpending = {
      * Chartratio
      */
     chartRatio: string;
+    /**
+     * Chartcoordinate
+     */
+    chartCoordinate: number;
 };
 
 /**
@@ -3931,6 +3939,14 @@ export type ForecastPoint = {
      * Confirmedbalance
      */
     confirmedBalance: string;
+    /**
+     * Chartbalancecoordinate
+     */
+    chartBalanceCoordinate?: number | null;
+    /**
+     * Chartconfirmedcoordinate
+     */
+    chartConfirmedCoordinate?: number | null;
 };
 
 /**

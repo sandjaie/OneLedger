@@ -42,6 +42,16 @@ def chart_ratios[K](totals: Mapping[K, Decimal]) -> dict[K, str]:
     }
 
 
+def chart_coordinates[K](totals: Mapping[K, Decimal]) -> dict[K, int]:
+    """Signed, bounded display positions; a nonzero amount keeps its direction at small scale."""
+    ratios = chart_ratios(totals)
+    result: dict[K, int] = {}
+    for key, amount in totals.items():
+        position = int(Decimal(ratios[key]) * 10000)
+        result[key] = position or (1 if amount > 0 else -1 if amount < 0 else 0)
+    return result
+
+
 def _money(value: str | None) -> str | None:
     if value is None:
         return None

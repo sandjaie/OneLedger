@@ -259,8 +259,31 @@ def test_chart_ratio_is_the_largest_magnitude_in_its_own_list(live: Owner) -> No
     body = the_spending()
     assert by_category_id(body, big)["chartRatio"] == "1.0000"
     assert by_category_id(body, small)["chartRatio"] == "0.2500"
+    assert by_category_id(body, big)["chartCoordinate"] == 10000
+    assert by_category_id(body, small)["chartCoordinate"] == 2500
     assert by_bucket(body, "need")["chartRatio"] == "1.0000"
     assert by_bucket(body, "want")["chartRatio"] == "0.2500"
+    assert by_bucket(body, "need")["chartCoordinate"] == 10000
+    assert by_bucket(body, "want")["chartCoordinate"] == 2500
+
+
+def test_refund_dominant_category_keeps_a_negative_chart_direction(live: Owner) -> None:
+    refund = a_category(live, "Synthetic refund category", "need")
+    a_spend(live, live.account_id, "20", date(2026, 3, 8), "refund", category_id=refund)
+    row = by_category_id(the_spending(), refund)
+    assert row["amountBase"] == "-20.0000"
+    assert row["chartCoordinate"] == -10000
+
+
+def test_tiny_net_refund_remains_visibly_negative(live: Owner) -> None:
+    large = a_category(live, "Synthetic large spending", "need")
+    refund = a_category(live, "Synthetic tiny refund", "want")
+    a_spend(live, live.account_id, "-100", date(2026, 3, 5), "expense", category_id=large)
+    a_spend(live, live.account_id, "0.0001", date(2026, 3, 8), "refund", category_id=refund)
+    row = by_category_id(the_spending(), refund)
+    assert row["amountBase"] == "-0.0001"
+    assert row["chartRatio"] == "0.0000"
+    assert row["chartCoordinate"] == -1
 
 
 def test_previous_period_is_the_immediately_preceding_range_of_equal_length(live: Owner) -> None:

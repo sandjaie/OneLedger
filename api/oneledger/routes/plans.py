@@ -30,7 +30,7 @@ from ..forecast import (
     project_balances,
     select_funding_accounts,
 )
-from ..money import _money
+from ..money import _money, chart_coordinates
 from ..text import normalize_bounded
 from .actions import action_list
 from .coverage import coverage_rows
@@ -156,6 +156,22 @@ class ForecastPoint(BaseModel):
     balance: str
     # Phase 3.2 spec rule 3: the same point over confirmed occurrences only.
     confirmedBalance: str
+    chartBalanceCoordinate: int | None = None
+    chartConfirmedCoordinate: int | None = None
+
+
+def _attach_forecast_coordinates(points: list[ForecastPoint]) -> list[ForecastPoint]:
+    """Use one Decimal scale for both series within this account or currency only."""
+    values = {
+        (point.days, series): Decimal(value)
+        for point in points
+        for series, value in (("projected", point.balance), ("confirmed", point.confirmedBalance))
+    }
+    coordinates = chart_coordinates(values)
+    for point in points:
+        point.chartBalanceCoordinate = coordinates[(point.days, "projected")]
+        point.chartConfirmedCoordinate = coordinates[(point.days, "confirmed")]
+    return points
 
 
 class ForecastOccurrence(BaseModel):
@@ -1195,14 +1211,16 @@ def read_forecast(
             confirmed_2tuple = [(d, a) for d, a, c in occurrences if c == "confirmed"]
             all_points = project_balances(start, all_2tuple, point_as_of)
             confirmed_points = project_balances(start, confirmed_2tuple, point_as_of)
-            return [
-                ForecastPoint(
-                    days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
-                )
-                for (days, point_date, balance), (_, _, cbal) in zip(
-                    all_points, confirmed_points, strict=True
-                )
-            ]
+            return _attach_forecast_coordinates(
+                [
+                    ForecastPoint(
+                        days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
+                    )
+                    for (days, point_date, balance), (_, _, cbal) in zip(
+                        all_points, confirmed_points, strict=True
+                    )
+                ]
+            )
 
         accounts_out: dict[UUID, ForecastAccount] = {}
         account_lowest: dict[UUID, Decimal] = {}
@@ -1307,14 +1325,16 @@ def read_forecast(
             )
             all_points = project_balances(folded_start, rest, as_of)
             confirmed_points = project_balances(folded_confirmed_start, rest_confirmed, as_of)
-            points = [
-                ForecastPoint(
-                    days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
-                )
-                for (days, point_date, balance), (_, _, cbal) in zip(
-                    all_points, confirmed_points, strict=True
-                )
-            ]
+            points = _attach_forecast_coordinates(
+                [
+                    ForecastPoint(
+                        days=days, date=point_date, balance=str(balance), confirmedBalance=str(cbal)
+                    )
+                    for (days, point_date, balance), (_, _, cbal) in zip(
+                        all_points, confirmed_points, strict=True
+                    )
+                ]
+            )
             lowest_bal, lowest_date = lowest_balance(folded_start, as_of, rest)
             lowest_conf_bal, lowest_conf_date = lowest_balance(
                 folded_confirmed_start, as_of, rest_confirmed

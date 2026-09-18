@@ -79,9 +79,9 @@ function forecast(overrides: Partial<ForecastResponse> = {}): ForecastResponse {
         startBalance: "1000.0000",
         balanceDate: "2026-01-01",
         points: [
-          { days: 30, date: "2026-04-14", balance: "-500.0000", confirmedBalance: "-500.0000" },
-          { days: 60, date: "2026-05-14", balance: "1500.0000", confirmedBalance: "1500.0000" },
-          { days: 90, date: "2026-06-13", balance: "1500.0000", confirmedBalance: "1500.0000" },
+          { days: 30, date: "2026-04-14", balance: "-500.0000", confirmedBalance: "-500.0000", chartBalanceCoordinate: -3333, chartConfirmedCoordinate: -3333 },
+          { days: 60, date: "2026-05-14", balance: "1500.0000", confirmedBalance: "1500.0000", chartBalanceCoordinate: 10000, chartConfirmedCoordinate: 10000 },
+          { days: 90, date: "2026-06-13", balance: "1500.0000", confirmedBalance: "1500.0000", chartBalanceCoordinate: 10000, chartConfirmedCoordinate: 10000 },
         ],
         occurrences: [
           {
@@ -144,9 +144,9 @@ function forecast(overrides: Partial<ForecastResponse> = {}): ForecastResponse {
         accountIds: [account.id, cardAccount.id],
         startBalance: "1500.0000",
         points: [
-          { days: 30, date: "2026-04-14", balance: "1500.0000", confirmedBalance: "1500.0000" },
-          { days: 60, date: "2026-05-14", balance: "1500.0000", confirmedBalance: "1500.0000" },
-          { days: 90, date: "2026-06-13", balance: "1500.0000", confirmedBalance: "1500.0000" },
+          { days: 30, date: "2026-04-14", balance: "1500.0000", confirmedBalance: "1500.0000", chartBalanceCoordinate: 10000, chartConfirmedCoordinate: 10000 },
+          { days: 60, date: "2026-05-14", balance: "1500.0000", confirmedBalance: "1500.0000", chartBalanceCoordinate: 10000, chartConfirmedCoordinate: 10000 },
+          { days: 90, date: "2026-06-13", balance: "1500.0000", confirmedBalance: "1500.0000", chartBalanceCoordinate: 10000, chartConfirmedCoordinate: 10000 },
         ],
         lowest: { balance: "0.0000", date: "2026-02-01" },
         lowestConfirmed: { balance: "0.0000", date: "2026-02-01" },
@@ -183,6 +183,35 @@ afterEach(() => {
 });
 
 describe("cash forecast", () => {
+  it("keeps currency and account chart contexts separate and labels both forecast series", async () => {
+    const anotherCurrency = {
+      ...forecast().currencies[0], currency: "XBB", accountIds: [],
+      points: [{ days: 30, date: "2026-04-14", balance: "20.0000", confirmedBalance: "25.0000", chartBalanceCoordinate: 8000, chartConfirmedCoordinate: 10000 }],
+    };
+    const request = requestReturning(forecast({ currencies: [...forecast().currencies, anotherCurrency] }));
+    render(<CashForecast accounts={allAccounts} currencies={[...currencies, { code: "XBB", name: "Other synthetic currency", symbol: "B", decimals: 2, numberFormat: "international" }]}
+      onPlanCardPayment={vi.fn()} onSettle={vi.fn()} refreshKey={0} request={request} />);
+
+    expect(await screen.findByRole("table", { name: /XAA · eligible accounts.*exact values/ })).toBeTruthy();
+    expect(screen.getAllByText("Confirmed-input forecast").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("All planned (includes estimates)").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Chart context"), { target: { value: "currency:XBB" } });
+    const table = screen.getByRole("table", { name: /XBB · eligible accounts.*exact values/ });
+    expect(table.textContent).toContain("B 25.00");
+    expect(table.textContent).not.toContain("A 1,500.00");
+    fireEvent.change(screen.getByLabelText("Chart context"), { target: { value: `account:${account.id}` } });
+    expect(screen.getByRole("table", { name: /Synthetic paying account.*exact values/ })).toBeTruthy();
+  });
+
+  it("shows incomplete chart points as unknown instead of plotting zero", async () => {
+    const data = forecast();
+    data.currencies[0].points[1].chartBalanceCoordinate = null;
+    render(<CashForecast accounts={allAccounts} currencies={currencies} onPlanCardPayment={vi.fn()}
+      onSettle={vi.fn()} refreshKey={0} request={requestReturning(data)} />);
+    const table = await screen.findByRole("table", { name: /XAA · eligible accounts.*exact values/ });
+    expect(table.textContent).toContain("Not available");
+  });
+
   it("renders the currency summary, per-account lowest/confirmed and badges from server strings", async () => {
     const request = requestReturning(forecast());
     render(

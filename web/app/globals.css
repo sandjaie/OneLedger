@@ -1786,6 +1786,54 @@ body { background: var(--paper); }
 .spending-table th, .spending-table td { border-bottom: 1px solid var(--rule); padding: 6px 8px; text-align: left; }
 .spending-table th[scope="row"] { font-weight: 500; }
 
+/* Phase 4.7.8: charts are overview surfaces; tables keep every exact figure and action. */
+.spending-evidence-chart, .forecast-chart-panel {
+  min-width: 0; margin: 1rem 0; padding: clamp(14px, 2vw, 22px);
+  border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card);
+}
+.spending-evidence-chart .evidence-chart-head h3,
+.forecast-evidence-chart .evidence-chart-head h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.spending-evidence-chart .evidence-chart-head p,
+.forecast-evidence-chart .evidence-chart-head p { max-width: 70ch; margin: 0.4rem 0 0; color: var(--muted); font-size: 0.78rem; line-height: 1.55; }
+.spending-evidence-plot { width: 100%; height: clamp(230px, 32vw, 390px); aspect-ratio: auto; min-width: 0; margin-top: 0.9rem; }
+.forecast-evidence-plot { width: 100%; height: clamp(210px, 30vw, 300px); aspect-ratio: auto; min-width: 0; margin: 0.8rem 0; }
+.spending-evidence-plot :is(.recharts-cartesian-axis-tick text, .recharts-label) { font-size: 0.65rem; }
+.spending-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.spending-table-wrap .spending-table { min-width: 650px; margin: 0; }
+.spending-table--category { min-width: 760px; }
+.spending-refund-label { display: block; color: var(--attention); font-size: 0.68rem; }
+.chart-overflow-note { margin: 0.7rem 0 0; color: var(--muted); font-size: 0.74rem; }
+.forecast-chart-panel > .select-field { display: grid; gap: 0.4rem; width: fit-content; max-width: 100%; margin-bottom: 1.2rem; font-size: 0.75rem; font-weight: 600; }
+.forecast-chart-panel [data-slot="native-select-wrapper"] { max-width: 100%; }
+.forecast-chart-panel [data-slot="native-select"] { max-width: 100%; }
+.forecast-evidence-chart .evidence-chart-table-wrap { max-width: 100%; overflow-x: auto; }
+.forecast-evidence-chart table { min-width: 570px; }
+.plans-assumptions-disclosure { margin-top: 1.25rem; padding: 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper); }
+.plans-assumptions-disclosure summary { color: var(--green); cursor: pointer; font-weight: 650; }
+.plans-assumptions-disclosure summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.plans-assumptions-disclosure .plans-assumptions { white-space: normal; }
+.plans-screen > section[id] { min-width: 0; margin-top: 1rem; padding: clamp(16px, 2vw, 24px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.plans-screen > section[id] > h2 { margin-top: 0; }
+.plans-screen :is(.plans-account-list, .plans-currency-list, .plans-commitment-list, .plans-register-list, .plans-goal-list, .needs-attention-list) > li {
+  min-width: 0; padding: 0.85rem 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper);
+}
+.plans-screen :is(.plans-points, .plans-occurrences, .plans-exclusions, .plans-unplanned-dues) > li { white-space: normal; overflow-wrap: anywhere; }
+.plans-screen :is(.plans-currency-list, .plans-account-list) > li { gap: 0.35rem; }
+.plans-screen .plans-shortfall { padding: 0.75rem 1rem; border-inline-start: 3px solid var(--attention); border-radius: 0 var(--radius) var(--radius) 0; background: color-mix(in srgb, var(--attention) 8%, var(--card)); }
+.spending-screen > h2 { margin: 1.8rem 0 0.4rem; }
+.spending-screen > .lede { max-width: 72ch; margin: 0.2rem 0 0.8rem; color: var(--muted); font-size: 0.77rem; line-height: 1.5; }
+.spending-screen .budget-panel { min-width: 0; margin-top: 1.8rem; padding: clamp(16px, 2vw, 24px); border: 1px solid var(--rule); border-radius: var(--radius); background: var(--card); }
+.spending-screen .budget-panel > h2 { margin-top: 0; }
+.spending-screen .budget-panel > .spending-table { display: block; max-width: 100%; overflow-x: auto; }
+.spending-screen .budget-panel > .spending-table :is(th, td) { white-space: nowrap; }
+.spending-screen .budget-line-form { max-width: 540px; margin: 1rem 0; padding: 1rem; border: 1px solid var(--rule); border-radius: var(--radius); background: var(--paper); }
+@media (max-width: 588px) {
+  .spending-evidence-chart, .forecast-chart-panel, .plans-screen > section[id] { padding: 0.9rem; }
+  .spending-evidence-plot { height: 270px; }
+  .forecast-evidence-plot { height: 210px; }
+  .spending-totals > div { flex: 1 1 100%; }
+}
+
 /* Budget panel (Phase 4.1 Task 2) — reuses .spending-table for the line listing; the only new
    rule is the variance sign, matching .transaction-amount.positive's convention. */
 .budget-variance.positive { color: var(--green); }
