@@ -23,6 +23,13 @@ describe("spending chart evidence", () => {
     expect(first.rows.find((item) => item.identity === "category-b")?.coordinate).toBe(-2500);
   });
 
+  it("distinguishes identically named child categories by their parents", () => {
+    const first = { ...row("category-a", 10000), categoryName: "Synthetic dining", parentCategoryName: "Synthetic food" };
+    const second = { ...row("category-b", 5000), categoryName: "Synthetic dining", parentCategoryName: "Synthetic travel" };
+    expect(spendingChartRows([first, second], "category").rows.map((item) => item.label))
+      .toEqual(["Synthetic food · Synthetic dining", "Synthetic travel · Synthetic dining"]);
+  });
+
   it("identifies overflow without fabricating an Other money total", () => {
     const result = spendingChartRows(Array.from({ length: 13 }, (_, index) => row(`category-${index}`, 500)), "category");
     expect(result.rows).toHaveLength(11);

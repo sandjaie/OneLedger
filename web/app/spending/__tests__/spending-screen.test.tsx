@@ -10,6 +10,7 @@ import { type apiFetch } from "@/lib/api/client";
 import type {
   BudgetsResponse,
   CategoryRow,
+  CategorySpending,
   CurrencyRow,
   HouseholdCurrency,
   SpendingResponse,
@@ -149,6 +150,18 @@ describe("spending screen", () => {
     expect(link.getAttribute("href")).toBe(
       `/transactions?categoryId=${GROCERIES_ID}&dateFrom=2026-03-01&dateTo=2026-03-31`,
     );
+  });
+
+  it("marks a net refund from its exact signed amount even when chart geometry is zero", async () => {
+    const refund: CategorySpending = {
+      ...spending.byCategory[0], categoryId: "00000000-0000-4000-8000-0000000000c2",
+      categoryName: "Synthetic tiny refund", amountBase: "-0.0001", chartRatio: "0.0000", chartCoordinate: 0,
+    };
+    const request = requestFrom((path) => path.startsWith("/spending?")
+      ? { ...spending, byCategory: [refund] }
+      : emptyBudgets);
+    render(<SpendingScreen categories={CATEGORIES} currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+    expect(await screen.findByText("Net refund")).toBeTruthy();
   });
 
   it("prompts for a range instead of throwing when the month input is cleared", async () => {

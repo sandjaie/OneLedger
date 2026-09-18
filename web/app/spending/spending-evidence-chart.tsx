@@ -23,7 +23,9 @@ export function spendingChartRows(rows: readonly SpendingRow[], kind: "category"
   return {
     rows: rows.slice(0, palette.visible.length).map((row, index) => ({
       identity: palette.visible[index].identity,
-      label: kind === "category" ? (row as CategorySpending).categoryName : (row as BucketSpending).bucket,
+      label: kind === "category"
+        ? [(row as CategorySpending).parentCategoryName, (row as CategorySpending).categoryName].filter(Boolean).join(" · ")
+        : (row as BucketSpending).bucket,
       coordinate: coordinate(row.chartCoordinate),
       color: palette.visible[index].color,
     })),

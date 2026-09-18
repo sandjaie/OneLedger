@@ -275,6 +275,17 @@ def test_refund_dominant_category_keeps_a_negative_chart_direction(live: Owner) 
     assert row["chartCoordinate"] == -10000
 
 
+def test_tiny_net_refund_remains_visibly_negative(live: Owner) -> None:
+    large = a_category(live, "Synthetic large spending", "need")
+    refund = a_category(live, "Synthetic tiny refund", "want")
+    a_spend(live, live.account_id, "-100", date(2026, 3, 5), "expense", category_id=large)
+    a_spend(live, live.account_id, "0.0001", date(2026, 3, 8), "refund", category_id=refund)
+    row = by_category_id(the_spending(), refund)
+    assert row["amountBase"] == "-0.0001"
+    assert row["chartRatio"] == "0.0000"
+    assert row["chartCoordinate"] == -1
+
+
 def test_previous_period_is_the_immediately_preceding_range_of_equal_length(live: Owner) -> None:
     """1..31 March is 31 days; the preceding 31 days run 29 Jan through 28 Feb 2026 (not a leap
     year) — a row the day before that window, and one on its first day, prove the boundary."""

@@ -250,7 +250,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                     <tr key={row.categoryId ?? "uncategorised"}>
                       <th scope="row">
                         {row.parentCategoryName ? `${row.parentCategoryName} · ${row.categoryName}` : row.categoryName}
-                        {row.chartCoordinate < 0 && <small className="spending-refund-label">Net refund</small>}
+                        {row.amountBase.startsWith("-") && <small className="spending-refund-label">Net refund</small>}
                       </th>
                       <td>{row.bucket ?? "—"}</td>
                       <td>{moneyText(amountFor(row.amountBase, row.amountSecondary, data, currency), currency.code, currencies)}</td>
