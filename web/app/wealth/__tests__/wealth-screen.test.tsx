@@ -115,6 +115,18 @@ describe("wealth screen", () => {
     expect(within(table).getByText("Not available")).toBeTruthy();
   });
 
+  it("focuses the selected panel when reviewing an incomplete month", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-02-29") return { ...january, monthEnd: "2024-02-29", positions: [] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review incomplete month/ }));
+    const heading = await screen.findByRole("heading", { name: "2024-02-29 positions" });
+    expect(document.activeElement).toBe(heading.closest("section"));
+  });
+
   it("selecting a month shows its positions table with server strings only", async () => {
     const request = requestFrom((path) => {
       if (path === "/wealth-history") return history;

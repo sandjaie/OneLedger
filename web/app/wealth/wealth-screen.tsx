@@ -103,7 +103,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   // response (the owner clicked a second month before the first one's positions/attribution
   // came back) is dropped instead of clobbering what's now on screen.
   const selectionRef = useRef(0);
+  const selectedPanelRef = useRef<HTMLElement>(null);
   const firstIncomplete = history?.months.find((row) => !row.complete);
+
+  useEffect(() => {
+    if (selected) selectedPanelRef.current?.focus();
+  }, [selected]);
 
   useEffect(() => {
     let current = true;
@@ -283,7 +288,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           </div>
 
           {selected && (
-            <section aria-labelledby="wealth-month-title" className="wealth-month">
+            <section aria-labelledby="wealth-month-title" className="wealth-month" ref={selectedPanelRef} tabIndex={-1}>
               <h2 id="wealth-month-title">{selected} positions</h2>
               {monthState === "loading" && <p role="status">Loading {selected}&rsquo;s positions…</p>}
               {monthState === "error" && (

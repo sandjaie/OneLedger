@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -76,8 +76,13 @@ export function CoverageScreen({ request }: Props) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
+  const selectedRef = useRef<HTMLElement>(null);
   const summary = coverage ? reviewSummary(coverage) : undefined;
   const firstGap = summary?.firstGap;
+
+  useEffect(() => {
+    if (selected) selectedRef.current?.focus();
+  }, [selected]);
 
   useEffect(() => {
     let current = true;
@@ -243,7 +248,7 @@ export function CoverageScreen({ request }: Props) {
           </div>
 
           {selected && (
-            <section aria-labelledby="coverage-dialog-title" className="coverage-dialog">
+            <section aria-labelledby="coverage-dialog-title" className="coverage-dialog" ref={selectedRef} tabIndex={-1}>
               <h2 id="coverage-dialog-title">
                 {rowLabel(selected.row)} · {selected.month}
               </h2>

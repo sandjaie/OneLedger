@@ -88,7 +88,9 @@ describe("coverage screen", () => {
     const request = requestFrom((path) => path === "/coverage" ? baseCoverage : {});
     render(<CoverageScreen request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: /Review earliest gap/ }));
-    expect(screen.getByRole("heading", { name: "Synthetic current account · 2024-02-01" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "Synthetic current account · 2024-02-01" });
+    expect(heading).toBeTruthy();
+    expect(document.activeElement).toBe(heading.closest("section"));
     expect(request).toHaveBeenCalledTimes(1);
   });
 
