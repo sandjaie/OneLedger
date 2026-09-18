@@ -106,10 +106,10 @@ describe("creating a rule", () => {
     fireEvent.change(screen.getByLabelText("Narration"), { target: { value: "GROCER" } });
     fireEvent.click(screen.getByRole("button", { name: "Check what this matches" }));
 
-    const counted = await screen.findByRole("status");
-    expect(counted.textContent).toContain("This rule matches");
-    expect(counted.textContent).toContain("41");
-    expect(counted.textContent).toContain("transactions in the ledger");
+    const counted = (await screen.findByText(/This rule matches/)).closest('[role="status"]');
+    expect(counted?.textContent).toContain("This rule matches");
+    expect(counted?.textContent).toContain("41");
+    expect(counted?.textContent).toContain("transactions in the ledger");
     // Nothing has been created: the count is the safeguard against an over-general pattern,
     // and it is worth nothing if the rule exists by the time it is shown.
     expect(calls.filter((call) => call.path === "/rules" && call.init?.method === "POST"))
@@ -130,7 +130,7 @@ describe("creating a rule", () => {
 
     fireEvent.change(screen.getByLabelText("Narration"), { target: { value: "CARD" } });
     fireEvent.click(screen.getByRole("button", { name: "Check what this matches" }));
-    await screen.findByRole("status");
+    await screen.findByText(/This rule matches/);
 
     const previewed = calls.find((call) => call.path === "/rules/preview");
     const body = JSON.parse(String(previewed?.init?.body));
@@ -345,12 +345,13 @@ describe("coverage and analytics", () => {
     expect(within(region).getByText(/2 reportable rows have no category \(20.00%\)/)).toBeTruthy();
   });
 
-  it("shows nothing when the analytics endpoint answers with an unexpected shape", async () => {
+  it("keeps the analytics deep-link target visible when the endpoint answers with an unexpected shape", async () => {
     const { request } = serving([], { "/rules/analytics": {}, "/rules/suggestions": {} });
     mount(request);
     await screen.findByText("No rules yet.");
 
-    expect(screen.queryByRole("region", { name: "Coverage and analytics" })).toBeNull();
+    const region = await screen.findByRole("region", { name: "Coverage and analytics" });
+    expect(within(region).getByText("Coverage is unavailable.")).toBeTruthy();
   });
 });
 

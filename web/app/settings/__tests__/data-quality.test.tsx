@@ -49,10 +49,8 @@ describe("Settings › Data Quality", () => {
     const request = vi.fn().mockResolvedValue(report) as unknown as typeof apiFetch;
     render(<DataQuality request={request} />);
 
-    const group = await screen.findByText("Backups");
-    const details = group.closest("details");
-    expect(details?.open).toBe(true);
-    expect(details?.querySelector("summary")?.textContent).toContain("1 needs attention");
+    const group = await screen.findByRole("button", { name: /Backups.*1 needs attention/ });
+    expect(group.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("collapses a long warning list behind its count", async () => {
@@ -64,9 +62,7 @@ describe("Settings › Data Quality", () => {
     };
     render(<DataQuality request={vi.fn().mockResolvedValue(many) as unknown as typeof apiFetch} />);
 
-    const group = await screen.findByText("Coverage");
-    const details = group.closest("details");
-    expect(details?.open).toBe(false);
-    expect(details?.querySelector("summary")?.textContent).toContain("4 needs attention");
+    const group = await screen.findByRole("button", { name: /Coverage.*4 needs attention/ });
+    expect(group.getAttribute("aria-expanded")).toBe("false");
   });
 });

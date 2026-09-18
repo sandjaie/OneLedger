@@ -29,7 +29,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_HREF: Record<string, string> = {
   missing_price: "/investments",
   no_snapshot: "/accounts",
-  missing_rate: "/settings",
+  missing_rate: "/settings#fx-title",
 };
 
 function statusLabel(status: string) {

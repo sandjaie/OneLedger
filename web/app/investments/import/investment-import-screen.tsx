@@ -339,7 +339,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
             <p>
               <Link href="/investments">View the portfolio</Link>
               {" · "}
-              <Link href="/settings">Settings &rsaquo; Data quality</Link>
+              <Link href="/settings#data-quality-title">Settings &rsaquo; Data quality</Link>
             </p>
           </div>
         )}

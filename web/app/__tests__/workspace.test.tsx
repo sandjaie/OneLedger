@@ -398,8 +398,97 @@ describe("authenticated workspace", () => {
     const request = requestThat(household, catalogue, []);
     render(<Workspace request={request} navigate={vi.fn()} />);
 
-    expect(await screen.findByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Data health" }));
+    expect(screen.getByRole("heading", { name: "Data Quality" })).toBeTruthy();
     expect(request).toHaveBeenCalledWith("/doctor", undefined);
+  });
+
+  it("opens bare Settings on General with one Save and keeps long sections out of view", async () => {
+    window.history.replaceState(null, "", "/settings");
+    render(<Workspace request={requestThat(household, catalogue, [])} navigate={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Name and reporting pair" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "General" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getAllByRole("button", { name: "Save household" })).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Data Quality" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Stored rate" })).toBeNull();
+  });
+
+  it.each([
+    ["#household-title", "General", "household-title"],
+    ["#data-quality-title", "Data health", "data-quality-title"],
+    ["#categories-title", "Categories", "categories-title"],
+    ["#rules-title", "Rules", "rules-title"],
+    ["#rules-analytics-title", "Rules", "rules-analytics-title"],
+    ["#rules-suggestions-title", "Rules", "rules-suggestions-title"],
+    ["#merchant-knowledge-title", "Rules", "merchant-knowledge-title"],
+    ["#fx-title", "Exchange rates", "fx-title"],
+    ["#fx-backfill-title", "Exchange rates", "fx-backfill-title"],
+  ])("selects and focuses the owner of a Settings deep link %s", async (hash, section, target) => {
+    window.history.replaceState(null, "", `/settings${hash}`);
+    render(<Workspace request={requestThat(household, catalogue, [])} navigate={vi.fn()} />);
+
+    await waitFor(() => expect(document.activeElement?.id).toBe(target));
+    expect(screen.getByRole("button", { name: section }).getAttribute("aria-current")).toBe("page");
+    expect(window.location.hash).toBe(hash);
+  });
+
+  it("ignores an unknown Settings hash and opens General", async () => {
+    window.history.replaceState(null, "", "/settings#unknown-section");
+    render(<Workspace request={requestThat(household, catalogue, [])} navigate={vi.fn()} />);
+
+    expect(await screen.findByRole("heading", { name: "Name and reporting pair" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "General" }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("shows a data-health summary only after real findings load", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const health = deferred<{ sections: Array<{ title: string; findings: Array<{ level: "warning"; message: string }> }> }>();
+    const base = requestThat(household, catalogue, []);
+    const request = ((path: string, init?: RequestInit) => path === "/doctor" ? health.promise : base(path, init)) as Request;
+    render(<Workspace request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(screen.queryByText(/data finding needs attention/i)).toBeNull();
+    health.resolve({ sections: [{ title: "Coverage", findings: [{ level: "warning", message: "Synthetic coverage gap" }] }] });
+    expect(await screen.findByText("1 data finding needs attention")).toBeTruthy();
+    fireEvent.click(screen.getByRole("link", { name: "Review data health" }));
+    expect(screen.getByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    expect(window.location.hash).toBe("#data-quality-title");
+  });
+
+  it("does not call an unavailable data-health report clean", async () => {
+    window.history.replaceState(null, "", "/settings");
+    const base = requestThat(household, catalogue, []);
+    const request = ((path: string, init?: RequestInit) => path === "/doctor"
+      ? Promise.reject(new ApiError(500, "Report unavailable")) : base(path, init)) as Request;
+    render(<Workspace request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Data health" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Report unavailable");
+    expect(screen.queryByText(/data findings? needs? attention/i)).toBeNull();
+    expect(screen.queryByText(/all clear|no issues|clean/i)).toBeNull();
+  });
+
+  it("keeps an unsaved General draft while Settings navigation and Back change the visible section", async () => {
+    window.history.replaceState(null, "", "/settings");
+    render(<Workspace request={requestThat(household, catalogue, [])} navigate={vi.fn()} />);
+    const name = await screen.findByLabelText<HTMLInputElement>("Household name");
+    fireEvent.change(name, { target: { value: "Edited household" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Categories" }));
+    expect(window.location.hash).toBe("#categories-title");
+    expect(screen.getByRole("heading", { name: "Categories" })).toBeTruthy();
+    expect(document.activeElement?.id).toBe("categories-title");
+    expect(name.closest(".settings-panel")?.hasAttribute("hidden")).toBe(true);
+
+    window.history.replaceState(null, "", "/settings#household-title");
+    fireEvent.popState(window);
+    expect(screen.getByRole("button", { name: "General" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByLabelText<HTMLInputElement>("Household name").value).toBe("Edited household");
+    await waitFor(() => expect(document.activeElement?.id).toBe("household-title"));
   });
 
   it("renders the Settings FX rate provenance for the requested date", async () => {
@@ -408,6 +497,7 @@ describe("authenticated workspace", () => {
 
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
     expect(screen.getByLabelText<HTMLInputElement>("FX date").value).toBe("");
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Check FX rate" }).disabled).toBe(true);
 
@@ -427,6 +517,7 @@ describe("authenticated workspace", () => {
     render(<Workspace request={request} navigate={vi.fn()} />);
 
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toContain("No FX rates are stored for 2024-01-31."));
@@ -450,6 +541,7 @@ describe("authenticated workspace", () => {
       .mockReturnValueOnce(fx.promise) as Request);
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
 
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     const submit = screen.getByRole("button", { name: "Check FX rate" });
@@ -484,6 +576,7 @@ describe("authenticated workspace", () => {
 
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
 
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
@@ -509,6 +602,7 @@ describe("authenticated workspace", () => {
     const request = withRules(sequenced as Request);
     render(<Workspace request={request} navigate={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
 
     fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2024-01-01" } });
     fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2024-01-31" } });
@@ -529,6 +623,7 @@ describe("authenticated workspace", () => {
     render(<Workspace request={requestThat(household, catalogue, [], new ApiError(status, "synthetic"))} navigate={navigate} />);
 
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
 
@@ -552,6 +647,7 @@ describe("authenticated workspace", () => {
 
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
 
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
@@ -588,6 +684,7 @@ describe("authenticated workspace", () => {
 
     render(<Workspace request={request} navigate={navigate} />);
     await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(screen.getByRole("button", { name: "Exchange rates" }));
 
     fireEvent.change(screen.getByLabelText("FX date"), { target: { value: "2024-01-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Check FX rate" }));
@@ -1078,6 +1175,8 @@ describe("authenticated workspace", () => {
     }) as Request;
 
     render(<Workspace section="settings" request={request} navigate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Rules" }));
 
     const card = (await screen.findByText(/narration contains .WHOLE FOODS., debit → Groceries/)).closest("li");
     if (!card) throw new Error("suggestion card not found");

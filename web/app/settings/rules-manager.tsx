@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type {
   CategoryRow,
@@ -126,14 +129,20 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
     return () => { current = false; };
   }, [request]);
 
-  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
-  if (!analytics?.coverage) return null;
+  if (problem || !analytics?.coverage) return (
+    <section aria-labelledby="rules-analytics-title" className="settings-block">
+      <h2 id="rules-analytics-title" tabIndex={-1}>Coverage and analytics</h2>
+      {problem
+        ? <p className="inline-alert" role="alert">{problem}</p>
+        : <p className="lede" role="status">{analytics ? "Coverage is unavailable." : "Loading coverage…"}</p>}
+    </section>
+  );
 
   const { coverage, rules, topUnclassified } = analytics;
 
   return (
     <section aria-labelledby="rules-analytics-title" className="settings-block">
-      <h2 id="rules-analytics-title">Coverage and analytics</h2>
+      <h2 id="rules-analytics-title" tabIndex={-1}>Coverage and analytics</h2>
       <p className="lede">{coverage.totalRows} rows counted.</p>
 
       <table className="rules-analytics-table">
@@ -314,14 +323,14 @@ function SuggestedRuleCard({
       </span>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {!rule && (
-        <button disabled={busy} onClick={() => void create()} type="button">
+        <Button disabled={busy} onClick={() => void create()} type="button">
           Create rule
-        </button>
+        </Button>
       )}
       {rule && !preview && (
-        <button disabled={busy} onClick={() => void checkPastRows()} type="button">
+        <Button disabled={busy} onClick={() => void checkPastRows()} type="button" variant="outline">
           Check past rows
-        </button>
+        </Button>
       )}
       {preview && !applied && (
         <>
@@ -340,9 +349,9 @@ function SuggestedRuleCard({
             </ul>
           )}
           {preview.changed > 0 && (
-            <button disabled={busy} onClick={() => void applyPastRows()} type="button">
+            <Button disabled={busy} onClick={() => void applyPastRows()} type="button">
               Apply {preview.changed} {preview.changed === 1 ? "change" : "changes"}
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -378,12 +387,18 @@ function SuggestedRules({
     return () => { current = false; };
   }, [request]);
 
-  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
-  if (!data?.suggestions) return null;
+  if (problem || !data?.suggestions) return (
+    <section aria-labelledby="rules-suggestions-title" className="settings-block">
+      <h2 id="rules-suggestions-title" tabIndex={-1}>Suggested rules</h2>
+      {problem
+        ? <p className="inline-alert" role="alert">{problem}</p>
+        : <p className="lede" role="status">{data ? "Suggestions are unavailable." : "Loading suggestions…"}</p>}
+    </section>
+  );
 
   return (
     <section aria-labelledby="rules-suggestions-title" className="settings-block">
-      <h2 id="rules-suggestions-title">Suggested rules</h2>
+      <h2 id="rules-suggestions-title" tabIndex={-1}>Suggested rules</h2>
       <p className="lede">Derived only from your own corrections. Nothing here is created or applied automatically.</p>
       {data.suggestions.length === 0 && (
         <p className="lede">No suggestions yet — repeated corrections will appear here.</p>
@@ -470,9 +485,9 @@ function StarterRulePacks({
         {packs.map((pack) => (
           <li key={pack.name}>
             <span>{pack.name} ({pack.ruleCount} rules)</span>{" "}
-            <button disabled={busy !== undefined} onClick={() => void load(pack.name)} type="button">
+            <Button disabled={busy !== undefined} onClick={() => void load(pack.name)} type="button" variant="outline">
               {busy === pack.name ? "Loading…" : "Load starter rules"}
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
@@ -621,10 +636,9 @@ export function RulesManager({ categories, request, onChanged }: Props) {
 
   return (
     <section aria-labelledby="rules-title" className="settings-block">
-      <h2 id="rules-title">Rules</h2>
+      <h2 id="rules-title" tabIndex={-1}>Rules</h2>
       <p className="lede">
-        Evaluated in priority order, lowest first; the first rule that matches decides and the
-        rest are not consulted. A rule you write always beats a seeded one.
+        Rules run in priority order. Your rules take precedence over starter rules.
       </p>
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
@@ -646,33 +660,34 @@ export function RulesManager({ categories, request, onChanged }: Props) {
             <span className="rule-describes">{describe(rule, categories)}</span>
             <span className="section-label">{rule.origin}</span>
             <span className="section-label">applied {rule.timesApplied}×</span>
-            <button
+            <Button
               disabled={busy}
               onClick={() => setActive(rule, !rule.isActive)}
               type="button"
+              variant="outline"
             >
               {rule.isActive ? "Deactivate" : "Activate"}
-            </button>
-            <button disabled={busy} onClick={() => remove(rule)} type="button">
+            </Button>
+            <Button disabled={busy} onClick={() => remove(rule)} type="button" variant="destructive">
               Delete
-            </button>
+            </Button>
           </li>
         ))}
       </ul>
       {rules.length === 0 && <p className="lede">No rules yet.</p>}
 
-      <form onSubmit={check}>
+      <form className="settings-rule-form" onSubmit={check}>
         <h3>Add a rule</h3>
         <label>
           Name
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             value={draft.name}
           />
         </label>
         <label>
           Narration
-          <input
+          <Input
             onChange={(event) =>
               setDraft({ ...draft, matchDescriptionPattern: event.target.value })
             }
@@ -682,50 +697,50 @@ export function RulesManager({ categories, request, onChanged }: Props) {
         </label>
         <label>
           Match
-          <select
+          <NativeSelect
             onChange={(event) =>
               setDraft({ ...draft, matchPatternKind: event.target.value as Draft["matchPatternKind"] })
             }
             value={draft.matchPatternKind}
           >
             {PATTERN_KINDS.map((kind) => (
-              <option key={kind} value={kind}>{kind}</option>
+              <NativeSelectOption key={kind} value={kind}>{kind}</NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Direction
-          <select
+          <NativeSelect
             onChange={(event) =>
               setDraft({ ...draft, matchDirection: event.target.value as Draft["matchDirection"] })
             }
             value={draft.matchDirection}
           >
             {DIRECTIONS.map((direction) => (
-              <option key={direction} value={direction}>{direction}</option>
+              <NativeSelectOption key={direction} value={direction}>{direction}</NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Category
-          <select
+          <NativeSelect
             onChange={(event) => setDraft({ ...draft, setCategoryId: event.target.value })}
             value={draft.setCategoryId}
           >
-            <option value="">Leave uncategorised</option>
+            <NativeSelectOption value="">Leave uncategorised</NativeSelectOption>
             {categories.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
+              <NativeSelectOption key={category.id} value={category.id}>{category.name}</NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Priority
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, priority: event.target.value })}
             value={draft.priority}
           />
         </label>
-        <button disabled={busy} type="submit">Check what this matches</button>
+        <Button disabled={busy} type="submit">Check what this matches</Button>
       </form>
 
       {preview && (
@@ -736,9 +751,9 @@ export function RulesManager({ categories, request, onChanged }: Props) {
             changes nothing; nothing is created until you save.
           </p>
           {preview.sample.length > 0 && (
-            <button onClick={() => setExpanded(!expanded)} type="button">
+            <Button onClick={() => setExpanded(!expanded)} type="button" variant="outline">
               {expanded ? "Hide" : "Show"} matched rows
-            </button>
+            </Button>
           )}
           {expanded && (
             <ul className="rule-sample">
@@ -750,7 +765,7 @@ export function RulesManager({ categories, request, onChanged }: Props) {
               ))}
             </ul>
           )}
-          <button disabled={busy} onClick={create} type="button">Save this rule</button>
+          <Button disabled={busy} onClick={create} type="button">Save this rule</Button>
         </div>
       )}
 
@@ -763,9 +778,9 @@ export function RulesManager({ categories, request, onChanged }: Props) {
             not one an earlier run decided.
           </strong>
         </p>
-        <button disabled={busy} onClick={() => classify(true)} type="button">
+        <Button disabled={busy} onClick={() => classify(true)} type="button" variant="outline">
           Check how many
-        </button>
+        </Button>
         {pass && (
           <p role="status">
             {pass.considered} {pass.considered === 1 ? "transaction has" : "transactions have"} no
@@ -773,9 +788,9 @@ export function RulesManager({ categories, request, onChanged }: Props) {
           </p>
         )}
         {pass && pass.changed > 0 && (
-          <button disabled={busy} onClick={() => classify(false)} type="button">
+          <Button disabled={busy} onClick={() => classify(false)} type="button">
             Apply to {pass.changed}
-          </button>
+          </Button>
         )}
       </div>
 

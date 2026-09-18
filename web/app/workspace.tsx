@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { MenuIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,11 +12,7 @@ import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CoverageScreen } from "@/app/coverage/coverage-screen";
 import { DocumentsScreen } from "@/app/documents/documents-screen";
 import { OverviewScreen } from "@/app/overview/overview-screen";
-import { CategoriesManager } from "@/app/settings/categories-manager";
-import { DataQuality } from "@/app/settings/data-quality";
-import { HouseholdForm } from "@/app/settings/household-form";
-import { MerchantKnowledge } from "@/app/settings/merchant-knowledge";
-import { RulesManager } from "@/app/settings/rules-manager";
+import { SettingsScreen } from "@/app/settings/settings-screen";
 import { ImportScreen } from "@/app/import/import-screen";
 import { InvestmentEntryScreen } from "@/app/investments/entry-screen";
 import { HoldingScreen } from "@/app/investments/holding-screen";
@@ -32,16 +28,14 @@ import { SubscriptionDetail } from "@/app/subscriptions/subscription-detail";
 import { SubscriptionsScreen } from "@/app/subscriptions/subscriptions-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { WealthScreen } from "@/app/wealth/wealth-screen";
-import { ApiError, apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
+import { ApiError, apiFetch } from "@/lib/api/client";
 import type {
   AccountsResponse,
   CategoryRow,
   CurrencyRow,
   DocumentsResponse,
-  FxRateResponse,
   HouseholdCurrency,
   HouseholdResponse,
-  HouseholdUpdate,
   InstitutionRow,
   TransactionsResponse,
 } from "@/types/api";
@@ -106,19 +100,6 @@ type Props = {
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
 };
-
-type FxState =
-  | { status: "idle" }
-  | { status: "loading"; requestedDate: string }
-  | { status: "ready"; requestedDate: string; rates: Array<FxRateResponse> }
-  | { status: "empty"; requestedDate: string }
-  | { status: "service"; requestedDate: string };
-
-type BackfillState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; written: number }
-  | { status: "error"; message: string };
 
 function authDestination(error: unknown) {
   if (!(error instanceof ApiError)) return undefined;
@@ -200,15 +181,6 @@ function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefine
   return parameters.toString();
 }
 
-function fxStatusText(fx: FxState) {
-  if (fx.status === "loading") return `Checking stored FX rates for ${fx.requestedDate}.`;
-  if (fx.status === "empty") return `No FX rates are stored for ${fx.requestedDate}.`;
-  if (fx.status === "ready") {
-    return `Loaded ${fx.rates.length} FX ${fx.rates.length === 1 ? "rate" : "rates"} for ${fx.requestedDate}.`;
-  }
-  return "";
-}
-
 export function Workspace({
   section,
   batchId,
@@ -233,12 +205,7 @@ export function Workspace({
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
-  const [fxDate, setFxDate] = useState("");
-  const [fx, setFx] = useState<FxState>({ status: "idle" });
-  const fxRequest = useRef<{ id: number; controller: AbortController } | undefined>(undefined);
-  const [backfillStart, setBackfillStart] = useState("");
-  const [backfillEnd, setBackfillEnd] = useState("");
-  const [backfill, setBackfill] = useState<BackfillState>({ status: "idle" });
+  const [fxEpoch, setFxEpoch] = useState(0);
 
   useEffect(() => {
     let current = true;
@@ -375,23 +342,14 @@ export function Workspace({
     };
   }, [attempt, request, activeSection]);
 
-  useEffect(() => () => fxRequest.current?.controller.abort(), []);
-
   useEffect(() => {
     if (destination) navigate(destination);
   }, [destination, navigate]);
 
-  function retireFxRequest() {
-    const id = (fxRequest.current?.id ?? 0) + 1;
-    fxRequest.current?.controller.abort();
-    fxRequest.current = { id, controller: new AbortController() };
-    setFx({ status: "idle" });
-  }
-
   async function logout() {
     setSigningOut(true);
     setLogoutFailed(false);
-    retireFxRequest();
+    setFxEpoch((value) => value + 1);
     try {
       await request<void>("/auth/logout", { method: "POST" });
       leaveForAuth("/login");
@@ -415,7 +373,7 @@ export function Workspace({
   }
 
   const leaveForAuth = useCallback((path: string) => {
-    fxRequest.current?.controller.abort();
+    setFxEpoch((value) => value + 1);
     setHousehold(undefined);
     setCurrency(undefined);
     setInventory(undefined);
@@ -443,44 +401,6 @@ export function Workspace({
     },
     [request, leaveForAuth],
   );
-
-  async function loadFx() {
-    const requestedDate = fxDate;
-    if (!requestedDate || signingOut) return;
-    fxRequest.current?.controller.abort();
-    const controller = new AbortController();
-    const id = (fxRequest.current?.id ?? 0) + 1;
-    fxRequest.current = { id, controller };
-    setFx({ status: "loading", requestedDate });
-    try {
-      const rates = await request<Array<FxRateResponse>>(`/fx/${encodeURIComponent(requestedDate)}`, {
-        signal: controller.signal,
-      });
-      if (fxRequest.current?.id !== id) return;
-      setFx(rates.length ? { status: "ready", requestedDate, rates } : { status: "empty", requestedDate });
-    } catch (error) {
-      if (fxRequest.current?.id !== id) return;
-      const next = authDestination(error);
-      if (next) leaveForAuth(next);
-      else setFx({ status: "service", requestedDate });
-    }
-  }
-
-  async function runBackfill() {
-    if (!backfillStart || !backfillEnd || signingOut) return;
-    setBackfill({ status: "loading" });
-    try {
-      const result = await request<{ written: number }>(
-        `/fx/backfill?start=${encodeURIComponent(backfillStart)}&end=${encodeURIComponent(backfillEnd)}`,
-        { method: "POST", timeoutMs: LONG_REQUEST_TIMEOUT_MS },
-      );
-      setBackfill({ status: "ready", written: result.written });
-    } catch (error) {
-      const next = authDestination(error);
-      if (next) leaveForAuth(next);
-      else setBackfill({ status: "error", message: errorText(error, "Rates could not be backfilled.") });
-    }
-  }
 
   return (
     <div className="site-shell">
@@ -720,137 +640,16 @@ export function Workspace({
           )}
 
           {activeSection === "settings" && (
-            <section className="workspace-content settings-screen" aria-labelledby="settings-title">
-              <p className="eyebrow">Owner settings</p>
-              <h1 className="workspace-title" id="settings-title">Settings</h1>
-              <p className="lede">Manage your household, review data quality, and tune how the ledger is organised.</p>
-              {logoutFailed && <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>}
-
-              <DataQuality
-                request={wrappedRequest}
-              />
-
-              {currencies && (
-                <HouseholdForm
-                  currencies={currencies}
-                  household={household}
-                  onSaved={() => setAttempt((value) => value + 1)}
-                  save={(body: HouseholdUpdate) =>
-                    wrappedRequest<void>("/household", {
-                      method: "PATCH",
-                      body: JSON.stringify(body),
-                      headers: { "Content-Type": "application/json" },
-                    })
-                  }
-                />
-              )}
-
-              {categories && (
-                <CategoriesManager
-                  categories={categories}
-                  onChanged={() => setAttempt((value) => value + 1)}
-                  request={wrappedRequest}
-                />
-              )}
-
-              {categories && (
-                <RulesManager
-                  categories={categories}
-                  onChanged={() => setAttempt((value) => value + 1)}
-                  request={wrappedRequest}
-                />
-              )}
-
-              {categories && (
-                <MerchantKnowledge
-                  categories={categories}
-                  request={wrappedRequest}
-                />
-              )}
-
-              <section className="fx-card" aria-labelledby="fx-title">
-                <div>
-                  <p className="section-label">FX inspector</p>
-                  <h2 id="fx-title">Stored rate</h2>
-                </div>
-                <label className="date-field">
-                  <span>FX date</span>
-                  <input
-                    onChange={(event) => setFxDate(event.target.value)}
-                    required
-                    type="date"
-                    value={fxDate}
-                  />
-                </label>
-                <button className="primary-action" disabled={!fxDate || signingOut} onClick={loadFx} type="button">
-                  {fx.status === "service" ? "Retry FX rate" : "Check FX rate"}
-                </button>
-
-                <p className="fx-empty" role="status" aria-atomic="true">{fxStatusText(fx)}</p>
-                {fx.status === "service" && <p className="inline-alert" role="alert">FX rates could not be loaded. Check the API service and retry.</p>}
-                {fx.status === "ready" && (
-                  <div className="fx-results">
-                    {fx.rates.map((item) => (
-                      <article className="fx-result" key={`${item.base}-${item.quote}`}>
-                        <div>
-                          <span className="section-label">{item.base}/{item.quote}</span>
-                          <strong>{item.rate}</strong>
-                        </div>
-                        <dl>
-                          <div><dt>Source</dt><dd>{item.source}</dd></div>
-                          <div><dt>Carry</dt><dd>{item.carried ? `Carried from ${item.carried_from}` : "Direct rate"}</dd></div>
-                          <div><dt>As of</dt><dd>As of {fx.requestedDate}</dd></div>
-                        </dl>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section className="fx-card" aria-labelledby="fx-backfill-title">
-                <div>
-                  <p className="section-label">Exchange rates</p>
-                  <h2 id="fx-backfill-title">Backfill rates</h2>
-                </div>
-                <div className="fx-backfill-dates">
-                  <label className="date-field">
-                    <span>Start date</span>
-                    <input
-                      onChange={(event) => setBackfillStart(event.target.value)}
-                      required
-                      type="date"
-                      value={backfillStart}
-                    />
-                  </label>
-                  <label className="date-field">
-                    <span>End date</span>
-                    <input
-                      onChange={(event) => setBackfillEnd(event.target.value)}
-                      required
-                      type="date"
-                      value={backfillEnd}
-                    />
-                  </label>
-                </div>
-                <button
-                  className="primary-action"
-                  disabled={!backfillStart || !backfillEnd || signingOut || backfill.status === "loading"}
-                  onClick={() => void runBackfill()}
-                  type="button"
-                >
-                  {backfill.status === "loading" ? "Backfilling…" : "Backfill rates"}
-                </button>
-
-                {backfill.status === "ready" && (
-                  <p className="fx-empty" role="status" aria-atomic="true">
-                    Wrote {backfill.written} {backfill.written === 1 ? "rate" : "rates"}.
-                  </p>
-                )}
-                {backfill.status === "error" && (
-                  <p className="inline-alert" role="alert">{backfill.message}</p>
-                )}
-              </section>
-            </section>
+            <SettingsScreen
+              categories={categories}
+              currencies={currencies}
+              fxEpoch={fxEpoch}
+              household={household}
+              logoutFailed={logoutFailed}
+              onChanged={() => setAttempt((value) => value + 1)}
+              request={wrappedRequest}
+              signingOut={signingOut}
+            />
           )}
         </main>
       )}

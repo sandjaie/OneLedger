@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import type { CategoryRow, KnowledgeBody, KnowledgeRow } from "@/types/api";
 
@@ -86,14 +89,6 @@ export function MerchantKnowledge({ categories, request }: Props) {
   const activeCategories = categories.filter((category) => category.isActive);
   const listPath = `/merchant-knowledge${includeInactive ? "?includeInactive=true" : ""}`;
 
-  // Settings renders its sections only after the workspace loads, so the browser's own jump to
-  // `#merchant-knowledge-title` (linked from Classify) happens before this heading exists.
-  useEffect(() => {
-    if (window.location.hash === "#merchant-knowledge-title") {
-      document.getElementById("merchant-knowledge-title")?.scrollIntoView?.();
-    }
-  }, []);
-
   // The state settles in the promise's continuation, not the effect's own body, so a mutation
   // handler's `reload()` (a plain async function, not called from an effect) is the only path
   // that ever calls `setRows` synchronously inside a React effect.
@@ -160,10 +155,9 @@ export function MerchantKnowledge({ categories, request }: Props) {
 
   return (
     <section aria-labelledby="merchant-knowledge-title" className="settings-block">
-      <h2 id="merchant-knowledge-title">Merchant knowledge</h2>
+      <h2 id="merchant-knowledge-title" tabIndex={-1}>Merchant knowledge</h2>
       <p className="lede">
-        Remembered private matchers, evidenced and household-only. Edits affect future
-        classification only — nothing already decided is reclassified.
+        Private matchers help classify future records. Past decisions stay unchanged.
       </p>
 
       <label>
@@ -184,14 +178,14 @@ export function MerchantKnowledge({ categories, request }: Props) {
               <>
                 <label>
                   Wording
-                  <input
+                  <Input
                     onChange={(event) => setEdits({ ...edits, pattern: event.target.value })}
                     value={edits.pattern}
                   />
                 </label>
                 <label>
                   Match
-                  <select
+                  <NativeSelect
                     onChange={(event) =>
                       setEdits({
                         ...edits,
@@ -201,39 +195,40 @@ export function MerchantKnowledge({ categories, request }: Props) {
                     value={edits.patternKind}
                   >
                     {PATTERN_KINDS.map((kind) => (
-                      <option key={kind} value={kind}>{kind}</option>
+                      <NativeSelectOption key={kind} value={kind}>{kind}</NativeSelectOption>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
                 <label>
                   Category
-                  <select
+                  <NativeSelect
                     onChange={(event) => setEdits({ ...edits, categoryId: event.target.value })}
                     value={edits.categoryId}
                   >
-                    <option value="">No category</option>
+                    <NativeSelectOption value="">No category</NativeSelectOption>
                     {activeCategories.map((category) => (
-                      <option key={category.id} value={category.id}>{category.name}</option>
+                      <NativeSelectOption key={category.id} value={category.id}>{category.name}</NativeSelectOption>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
                 <label>
                   Priority
-                  <input
+                  <Input
                     onChange={(event) => setEdits({ ...edits, priority: event.target.value })}
                     value={edits.priority}
                   />
                 </label>
-                <button
+                <Button
                   disabled={busyAliasId === row.aliasId}
                   onClick={() => saveEdit(row)}
                   type="button"
-                >Save</button>
-                <button
+                >Save</Button>
+                <Button
                   disabled={busyAliasId === row.aliasId}
                   onClick={() => { setEditingAliasId(undefined); setEdits(undefined); }}
                   type="button"
-                >Cancel</button>
+                  variant="outline"
+                >Cancel</Button>
               </>
             ) : (
               <>
@@ -243,16 +238,18 @@ export function MerchantKnowledge({ categories, request }: Props) {
                 <span className="section-label">{row.active ? "Active" : "Inactive"}</span>
                 {row.active && (
                   <>
-                    <button
+                    <Button
                       disabled={busyAliasId === row.aliasId}
                       onClick={() => startEdit(row)}
                       type="button"
-                    >Edit</button>
-                    <button
+                      variant="outline"
+                    >Edit</Button>
+                    <Button
                       disabled={busyAliasId === row.aliasId}
                       onClick={() => deactivate(row)}
                       type="button"
-                    >Remove</button>
+                      variant="destructive"
+                    >Remove</Button>
                   </>
                 )}
               </>

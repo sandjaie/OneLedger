@@ -152,7 +152,7 @@ describe("wealth screen", () => {
 
     expect(within(positions).getByRole("link", { name: "Missing price" })).toHaveProperty("pathname", "/investments");
     expect(within(positions).getByRole("link", { name: "No valuation" })).toHaveProperty("pathname", "/accounts");
-    expect(within(positions).getByRole("link", { name: "Missing exchange rate" })).toHaveProperty("pathname", "/settings");
+    expect(within(positions).getByRole("link", { name: "Missing exchange rate" }).getAttribute("href")).toBe("/settings#fx-title");
   });
 
   it("shows an incomplete month's status counts, the refresh counts, and last refreshed", async () => {

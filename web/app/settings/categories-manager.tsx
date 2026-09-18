@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch } from "@/lib/api/client";
 import type { CategoryRow } from "@/types/api";
 
@@ -73,9 +77,9 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
           {category.isSystem ? (
             <span>{child ? `— ${category.name}` : category.name}</span>
           ) : (
-            <label className="text-field">
+            <label className="settings-inline-field">
               <span className="visually-hidden">Rename {category.name}</span>
-              <input
+              <Input
                 defaultValue={category.name}
                 disabled={busy}
                 onBlur={(event) => {
@@ -87,17 +91,17 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
           )}
         </td>
         <td>
-          <label className="select-field">
+          <label className="settings-inline-field">
             <span className="visually-hidden">Bucket for {category.name}</span>
-            <select
+            <NativeSelect
               disabled={busy}
               onChange={(event) => void save(category, { bucket: event.target.value })}
               value={category.bucket}
             >
               {BUCKETS.map((bucket) => (
-                <option key={bucket} value={bucket}>{bucket}</option>
+                <NativeSelectOption key={bucket} value={bucket}>{bucket}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
         </td>
         <td>
@@ -116,70 +120,70 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
   }
 
   return (
-    <section className="accounts-card" aria-labelledby="categories-title">
+    <section className="settings-block settings-categories" aria-labelledby="categories-title">
       <div>
         <p className="section-label">Classification</p>
-        <h2 id="categories-title">Categories</h2>
+        <h2 id="categories-title" tabIndex={-1}>Categories</h2>
         <p className="lede">
           The seeded tree keeps its names; every bucket stays yours to change — it is a default,
           not a verdict.
         </p>
       </div>
-      {problem && <p className="inline-alert" role="alert">{problem}</p>}
+      {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
 
-      <form aria-label="Add a category" className="account-form" onSubmit={add}>
-        <label className="text-field">
+      <form aria-label="Add a category" className="settings-category-form" onSubmit={add}>
+        <label className="settings-form-field">
           <span>Name</span>
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             required
             value={draft.name}
           />
         </label>
-        <label className="select-field">
+        <label className="settings-form-field">
           <span>Parent</span>
-          <select
+          <NativeSelect
             onChange={(event) => setDraft({ ...draft, parentId: event.target.value })}
             value={draft.parentId}
           >
-            <option value="">None — a new top-level category</option>
+            <NativeSelectOption value="">None — a new top-level category</NativeSelectOption>
             {roots.map((root) => (
-              <option key={root.id} value={root.id}>{root.name}</option>
+              <NativeSelectOption key={root.id} value={root.id}>{root.name}</NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         {!draft.parentId && (
           <>
-            <label className="select-field">
+            <label className="settings-form-field">
               <span>Kind</span>
-              <select
+              <NativeSelect
                 onChange={(event) => setDraft({ ...draft, kind: event.target.value })}
                 value={draft.kind}
               >
                 {KINDS.map((kind) => (
-                  <option key={kind} value={kind}>{kind}</option>
+                  <NativeSelectOption key={kind} value={kind}>{kind}</NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
-            <label className="select-field">
+            <label className="settings-form-field">
               <span>Bucket</span>
-              <select
+              <NativeSelect
                 onChange={(event) => setDraft({ ...draft, bucket: event.target.value })}
                 value={draft.bucket}
               >
                 {BUCKETS.map((bucket) => (
-                  <option key={bucket} value={bucket}>{bucket}</option>
+                  <NativeSelectOption key={bucket} value={bucket}>{bucket}</NativeSelectOption>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           </>
         )}
         <div className="account-form-actions">
-          <button className="primary-action" disabled={busy} type="submit">Add category</button>
+          <Button disabled={busy} type="submit">Add category</Button>
         </div>
       </form>
 
-      <table className="account-table">
+      <div className="settings-table-frame"><table className="account-table settings-category-table">
         <caption className="visually-hidden">Category taxonomy</caption>
         <thead>
           <tr>
@@ -194,7 +198,7 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
             ...childrenOf(root.id).map((child) => row(child, true)),
           ])}
         </tbody>
-      </table>
+      </table></div>
     </section>
   );
 }
