@@ -46,8 +46,8 @@ function summary(overrides: Partial<PortfolioSummary> = {}): PortfolioSummary {
     gainSecondary: "20.0000",
     xirrPercent: "12.34560000",
     xirrReason: null,
-    allocationByAssetClass: [{ label: "equity", valueBase: "100.0000", ratio: "1.0000000000" }],
-    allocationByAccount: [{ label: "acct", valueBase: "100.0000", ratio: "1.0000000000" }],
+    allocationByAssetClass: [{ label: "equity", valueBase: "100.0000", ratio: "1.0000000000", chartCoordinate: 10000 }],
+    allocationByAccount: [{ label: "acct", valueBase: "100.0000", ratio: "1.0000000000", chartCoordinate: 10000 }],
     allocationComplete: true,
     valuedCount: 1,
     unvaluedCount: 0,
@@ -137,6 +137,61 @@ function requestFrom(handler: (path: string, init?: RequestInit) => unknown | Pr
 afterEach(cleanup);
 
 describe("PortfolioScreen", () => {
+  it("starts an empty portfolio with the two real entry routes and one limitation", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary({ valueBase: "0.0000", contributionsBase: "0.0000", gainBase: null, valuedCount: 0, unvaluedCount: 0 });
+      if (path === "/portfolio/positions?includeClosed=true") return positions([]);
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    const start = await screen.findByRole("region", { name: "Start your investments" });
+    expect(start.querySelector('a[href="/investments/entry"]')?.textContent).toBe("Record a purchase");
+    expect(start.querySelector('a[href="/investments/import"]')?.textContent).toBe("Import a statement");
+    expect(start.textContent).toMatch(/analysis.*needs|analysis.*available/i);
+    expect(screen.queryByRole("region", { name: "Portfolio totals" })).toBeNull();
+    expect(screen.queryByText(/XAA 0\.0000/)).toBeNull();
+  });
+
+  it("separates totals, valuation confidence, holdings, review work, then analysis", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary();
+      if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      if (path === "/investment-reviews?limit=20&offset=0") return [];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    const totals = await screen.findByRole("region", { name: "Portfolio totals" });
+    const confidence = screen.getByRole("region", { name: "Valuation confidence" });
+    const holdings = screen.getByRole("region", { name: "Holdings" });
+    const analysis = screen.getByRole("region", { name: "Analysis" });
+    const allocation = screen.getByRole("region", { name: "Allocation" });
+    expect(totals.compareDocumentPosition(confidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(confidence.compareDocumentPosition(holdings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(holdings.compareDocumentPosition(analysis) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(analysis.compareDocumentPosition(allocation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps an out-of-range allocation ratio exact instead of clipping the displayed value", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary({
+        allocationByAssetClass: [{ label: "equity", valueBase: "150.0000", ratio: "1.5000000000", chartCoordinate: 10000 }],
+      });
+      if (path === "/portfolio/positions?includeClosed=true") return positions();
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      if (path === "/investment-reviews?limit=20&offset=0") return [];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    const table = await screen.findByRole("table", { name: "Allocation exact values" });
+    expect(table.textContent).toContain("XAA 150.0000");
+    expect(table.textContent).toContain("1.5000000000");
+  });
+
   it("renders server value, gain and XIRR strings with an unavailable reason when withheld", async () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/summary") {
@@ -153,7 +208,7 @@ describe("PortfolioScreen", () => {
     expect(screen.getByText("No sign change across the cash flows.")).toBeTruthy();
     const gain = screen.getByLabelText("Gain");
     expect(gain.textContent).not.toMatch(/10\.0000/);
-    expect(gain.textContent).toContain("one or more holdings withhold gain");
+    expect(gain.textContent).toContain("One or more holdings do not have a supported gain.");
   });
 
   it("shows the refresh action only when the price check is due, and posts exactly once", async () => {
@@ -244,6 +299,29 @@ describe("PortfolioScreen", () => {
     render(<PortfolioScreen accounts={[]} request={request} />);
 
     expect(await screen.findByText("Incomplete — one or more holdings are unvalued.")).toBeTruthy();
+  });
+
+  it("does not display a zero portfolio value when every holding is unvalued", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary({
+        valueBase: "0.0000", valueComplete: false, valuedCount: 0, unvaluedCount: 1,
+        gainBase: null, allocationByAssetClass: [], allocationByAccount: [], allocationComplete: false,
+      });
+      if (path === "/portfolio/positions?includeClosed=true") return positions([position({
+        priceStatus: "missing", valueStatus: "missing_price", price: null, priceDate: null,
+        currentValueNative: null, currentValueBase: null, currentValueSecondary: null,
+        gainNative: null, gainBase: null, gainSecondary: null,
+      })]);
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      if (path === "/investment-reviews?limit=20&offset=0") return [];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    const value = await screen.findByLabelText("Valued portion");
+    expect(value.textContent).toContain("No holdings have a supported current value");
+    expect(value.textContent).not.toContain("XAA 0.0000");
+    expect(screen.getByRole("region", { name: "Valuation confidence" }).textContent).toContain("0 valued");
   });
 
   it("routes a protected read returning 401 through the workspace to login", async () => {

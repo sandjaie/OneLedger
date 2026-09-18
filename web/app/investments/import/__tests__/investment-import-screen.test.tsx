@@ -163,11 +163,14 @@ function pdf(name = "statement.pdf") {
 async function runToStaged(request: ReturnType<typeof vi.fn>) {
   render(<InvestmentImportScreen accounts={[account]} request={request as never} />);
 
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Check statement");
+
   const fileInput = screen.getByLabelText("Statement file");
   fireEvent.change(fileInput, { target: { files: [pdf()] } });
   fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
 
   await screen.findByText("Example Fund", { exact: false });
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Stage import");
 
   fireEvent.change(screen.getByLabelText("Public identifier"), { target: { value: "US0000000001" } });
   fireEvent.click(screen.getByRole("button", { name: "Find instrument" }));
@@ -180,6 +183,7 @@ async function runToStaged(request: ReturnType<typeof vi.fn>) {
   fireEvent.click(stageButton);
 
   await screen.findByText("Ready to commit", { exact: false });
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Commit ready groups");
 }
 
 afterEach(cleanup);

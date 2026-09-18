@@ -69,7 +69,12 @@ def test_summary_totals_reconcile_to_the_one_open_position(summary_live: EventFi
     assert summary["valuedCount"] == 1
     assert summary["unvaluedCount"] == 0
     [group] = summary["allocationByAssetClass"]
-    assert group == {"label": "equity", "valueBase": "24.0000", "ratio": "1.0000000000"}
+    assert group == {
+        "label": "equity",
+        "valueBase": "24.0000",
+        "ratio": "1.0000000000",
+        "chartCoordinate": 10000,
+    }
     assert summary["allocationComplete"] is True
 
 

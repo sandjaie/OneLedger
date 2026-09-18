@@ -53,6 +53,19 @@ const TERMINAL: ReadonlySet<string> = new Set(["completed", "cancelled", "failed
 
 type Resolution = { accountId: string; securityId: string };
 
+function ImportSteps({ current }: { current: 1 | 2 | 3 }) {
+  const steps = ["Check statement", "Stage import", "Commit ready groups"];
+  return (
+    <ol aria-label="Import steps" className="investment-import-steps">
+      {steps.map((label, index) => (
+        <li aria-current={current === index + 1 ? "step" : undefined} data-complete={index + 1 < current} key={label}>
+          <span aria-hidden="true">{index + 1}</span>{label}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function reasonsList(reasons: Array<ReasonResponse>) {
   if (reasons.length === 0) return null;
   return (
@@ -313,6 +326,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
         <p className="eyebrow">Statement import</p>
         <h1 className="workspace-title" id="investment-import-title">Review investment import</h1>
+        <ImportSteps current={3} />
         <p className="lede">
           {imported.totalGroupCount} groups · {imported.totalDraftCount} rows ·{" "}
           {imported.totalBlockerCount} blocking {imported.totalBlockerCount === 1 ? "reason" : "reasons"}
@@ -388,6 +402,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
     <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
       <p className="eyebrow">Statement import</p>
       <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
+      <ImportSteps current={preview ? 2 : 1} />
       <p className="lede">
         Upload a detailed investment statement. Nothing reaches your holdings until every group
         is resolved, staged and committed.
