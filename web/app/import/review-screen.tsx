@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+
 import { useEffect, useState } from "react";
 
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
@@ -275,22 +278,22 @@ export function ReviewScreen({
 
       {open ? (
         <div className="review-actions">
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={!selected.length || busy}
             onClick={() => decide(ACCEPTED)}
             type="button"
-          >Accept selected ({selected.length})</button>
-          <button
-            className="text-action"
+          >Accept selected ({selected.length})</Button>
+          <Button
+            variant="outline"
             disabled={!selected.length || busy}
             onClick={() => decide("rejected")}
             type="button"
-          >Reject selected ({selected.length})</button>
+          >Reject selected ({selected.length})</Button>
           {ready > 0 ? (
-            <button className="primary-action" disabled={busy} onClick={commit} type="button">
+            <Button variant="default" disabled={busy} onClick={commit} type="button">
               Import {ready} {ready === 1 ? "row" : "rows"}
-            </button>
+            </Button>
           ) : (
             <p className="review-hint">Accept some rows before importing.</p>
           )}
@@ -350,9 +353,9 @@ function Discard({
 }) {
   if (!confirming) {
     return (
-      <button className="text-action" disabled={busy} onClick={onStart} type="button">
+      <Button variant="outline" disabled={busy} onClick={onStart} type="button">
         Discard this batch
-      </button>
+      </Button>
     );
   }
   // A batch with no staged rows is reachable: `reconcile.py` reconciles a dormant month against
@@ -365,12 +368,12 @@ function Discard({
         Discard {count > 0 ? rows : "this batch"}? Nothing from it has reached your ledger, and
         its account and period become free to import again.
       </p>
-      <button className="text-action" disabled={busy} onClick={onConfirm} type="button">
+      <Button variant="outline" disabled={busy} onClick={onConfirm} type="button">
         {count > 0 ? `Discard ${count} ${count === 1 ? "row" : "rows"}` : "Discard it"}
-      </button>
-      <button className="text-action" disabled={busy} onClick={onCancel} type="button">
+      </Button>
+      <Button variant="outline" disabled={busy} onClick={onCancel} type="button">
         Keep it
-      </button>
+      </Button>
     </div>
   );
 }
@@ -431,18 +434,19 @@ function Group({
             ledger, so accepting one is a confirmed-distinct override — a deliberate act per
             row, not a group the owner can sweep up without meaning to. */}
         {open && !colliding && (
-          <label className="review-select-all">
-            <input
+          <div className="review-select-all">
+            <Checkbox
               // Named for the rows on screen, not the group's count: `count` is stated
               // separately because a later page of a large group will not carry every row, and
               // a label promising more than it ticks would go unnoticed until then.
               aria-label={`Select the ${group.rows.length} ${group.status} rows shown`}
               checked={ticked}
-              onChange={(event) => onSelectGroup(event.target.checked)}
-              type="checkbox"
+              onCheckedChange={(checked) => onSelectGroup(checked === true)}
             />
-            <span>Select all</span>
-          </label>
+            <Button onClick={() => onSelectGroup(!ticked)} size="xs" type="button" variant="link">
+              {ticked ? "Clear selection" : "Select all"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -497,14 +501,15 @@ function Row({
   return (
     <li aria-label={`Row ${row.sourceRowNumber}`} className="review-row">
       {open ? (
-        <input
-          aria-label={`Row ${row.sourceRowNumber}`}
-          checked={selected}
-          onChange={() => onToggle(row.id)}
-          type="checkbox"
-        />
+        <span className="review-row-select">
+          <Checkbox
+            aria-label={`Row ${row.sourceRowNumber}`}
+            checked={selected}
+            onCheckedChange={() => onToggle(row.id)}
+          />
+        </span>
       ) : (
-        <span aria-hidden="true" />
+        <span aria-hidden="true" className="review-row-select" />
       )}
       <span className="review-date">{row.bookedDate}</span>
       <span className="review-description">{row.descriptionRaw}</span>

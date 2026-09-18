@@ -1,5 +1,8 @@
 "use client";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 import Link from "next/link";
 import { type FormEvent, useEffect, useState } from "react";
 
@@ -145,7 +148,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
             {state === "ready" && detail ? detail.securityName : "Holding"}
           </h1>
         </div>
-        <Link className="text-action" href="/investments">Back to portfolio</Link>
+        <Link className={buttonVariants({ variant: "outline" })} href="/investments">Back to portfolio</Link>
       </header>
 
       {state === "loading" && <p className="investment-state" role="status">Loading holding…</p>}
@@ -153,7 +156,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
       {state === "error" && (
         <div className="investment-state" role="alert">
           <p>The holding could not be loaded.</p>
-          <button className="text-action" onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</button>
+          <Button variant="outline" onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</Button>
         </div>
       )}
 
@@ -198,14 +201,14 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                           funded ? (
                             <p>Unlink its funding first to correct this event.</p>
                           ) : correctingEventId === event.id ? (
-                            <button className="text-action" onClick={() => setCorrectingEventId(undefined)} type="button">Cancel correction</button>
+                            <Button variant="outline" onClick={() => setCorrectingEventId(undefined)} type="button">Cancel correction</Button>
                           ) : (
-                            <button className="text-action" onClick={() => { setCorrectionFeedback(""); setCorrectingEventId(event.id); }} type="button">Correct</button>
+                            <Button variant="outline" onClick={() => { setCorrectionFeedback(""); setCorrectingEventId(event.id); }} type="button">Correct</Button>
                           )
                         )}
                         {event.lotAllocationOpen && (
-                          <button
-                            className="text-action"
+                          <Button
+                            variant="outline"
                             onClick={() => {
                               setAllocationResult(undefined);
                               setAllocatingEventId(allocatingEventId === event.id ? undefined : event.id);
@@ -213,7 +216,7 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                             type="button"
                           >
                             {allocatingEventId === event.id ? "Hide lot allocation" : "Allocate lots"}
-                          </button>
+                          </Button>
                         )}
                       </div>
                       {correctingEventId === event.id && (
@@ -249,9 +252,9 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
             )}
             {moreEventsProblem && <p className="inline-alert" role="alert">{moreEventsProblem}</p>}
             {events.length < detail.eventsTotal && (
-              <button className="text-action" disabled={moreEventsBusy} onClick={() => void loadMoreEvents()} type="button">
+              <Button variant="outline" disabled={moreEventsBusy} onClick={() => void loadMoreEvents()} type="button">
                 {moreEventsBusy ? "Loading more events…" : "Load more events"}
-              </button>
+              </Button>
             )}
           </section>
 
@@ -303,15 +306,15 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
               {priceFeedback && <WealthRefreshNotice message={priceFeedback} />}
               <label className="date-field">
                 <span>Price date</span>
-                <input disabled={priceBusy} onChange={(event) => setPriceDate(event.target.value)} required type="date" value={priceDate} />
+                <Input disabled={priceBusy} onChange={(event) => setPriceDate(event.target.value)} required type="date" value={priceDate} />
               </label>
               <label className="text-field">
                 <span>Price ({detail.currency})</span>
-                <input disabled={priceBusy} inputMode="decimal" onChange={(event) => setPriceValue(event.target.value)} required value={priceValue} />
+                <Input disabled={priceBusy} inputMode="decimal" onChange={(event) => setPriceValue(event.target.value)} required value={priceValue} />
               </label>
-              <button className="primary-action" disabled={priceBusy || !priceDate || !priceValue} type="submit">
+              <Button variant="default" disabled={priceBusy || !priceDate || !priceValue} type="submit">
                 {priceBusy ? "Recording price…" : "Record price"}
-              </button>
+              </Button>
             </form>
           </section>
 
@@ -329,13 +332,13 @@ export function HoldingScreen({ holdingId, request, accounts }: Props) {
                         ? <p>Fully funded. Unlink existing funding before correcting this purchase.</p>
                         : <p>Not fully funded.</p>}
                     </div>
-                    <button
-                      className="text-action"
+                    <Button
+                      variant="outline"
                       onClick={() => { setFundingNotice(""); setFundingEventId(fundingEventId === event.id ? undefined : event.id); }}
                       type="button"
                     >
                       {fundingEventId === event.id ? "Hide funding" : event.fundingComplete ? "Review funding" : "Fund this purchase"}
-                    </button>
+                    </Button>
                   </li>
                 ))}
               </ul>

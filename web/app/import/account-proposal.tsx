@@ -1,5 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useId, useRef, useState } from "react";
 
 import { EyeIcon } from "@/app/accounts/eye-icon";
@@ -335,7 +340,7 @@ export function AccountProposalPanel({
           <small>Account number</small>
           <strong>{revealed ?? resolution.accountNumberMasked}</strong>
         </span>
-        <button
+        <Button
           aria-describedby={revealNote ? `${headingId}-reveal-note` : undefined}
           aria-label={sourceMaskOnly
             ? "Full account number unavailable from statement"
@@ -346,7 +351,7 @@ export function AccountProposalPanel({
           type="button"
         >
           <EyeIcon hidden={Boolean(revealed)} />
-        </button>
+        </Button>
       </div>
 
       {revealNote && (
@@ -375,15 +380,15 @@ export function AccountProposalPanel({
       {canChooseAccount && (
         <div className="account-proposal-suggestions" aria-label="Suggested existing accounts">
           {resolution.candidates.map((account) => (
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               disabled={interactionBusy}
               key={account.id}
               onClick={() => adopt(account.id)}
               type="button"
             >
               Use {account.name} {account.accountNumberMasked}
-            </button>
+            </Button>
           ))}
         </div>
       )}
@@ -391,11 +396,11 @@ export function AccountProposalPanel({
       {canCreate && <div className="account-proposal-fields">
         <label>
           Name (required)
-          <input required value={draft.name} onChange={(event) => change("name", event.target.value)} />
+          <Input required value={draft.name} onChange={(event) => change("name", event.target.value)} />
         </label>
         <label>
           Institution (required)
-          <select
+          <NativeSelect
             disabled={loadingInstitutions && resolution.institution.status === "needs_confirmation"}
             required
             value={institutionChoice}
@@ -421,14 +426,14 @@ export function AccountProposalPanel({
                 {institution.shortName ?? institution.name}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         {createsInstitution && (
           <fieldset className="account-proposal-institution account-proposal-wide">
             <legend>New institution</legend>
             <label>
               Institution name (required)
-              <input
+              <Input
                 required
                 value={institutionDraft.name}
                 onChange={(event) => setInstitutionDraft((current) => ({
@@ -439,7 +444,7 @@ export function AccountProposalPanel({
             </label>
             <label>
               Institution short name
-              <input
+              <Input
                 maxLength={40}
                 value={institutionDraft.shortName ?? ""}
                 onChange={(event) => setInstitutionDraft((current) => ({
@@ -450,7 +455,7 @@ export function AccountProposalPanel({
             </label>
             <label>
               Institution country (required)
-              <input
+              <Input
                 maxLength={2}
                 required
                 value={institutionDraft.country}
@@ -463,7 +468,7 @@ export function AccountProposalPanel({
             </label>
             <label>
               Institution type (required)
-              <select
+              <NativeSelect
                 required
                 value={institutionDraft.institutionType}
                 onChange={(event) => setInstitutionDraft((current) => ({
@@ -474,62 +479,62 @@ export function AccountProposalPanel({
                 {INSTITUTION_TYPES.map((type) => (
                   <option key={type} value={type}>{label(type)}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           </fieldset>
         )}
         <label>
           Account type (required)
-          <select required value={draft.accountType} onChange={(event) => change("accountType", event.target.value)}>
+          <NativeSelect required value={draft.accountType} onChange={(event) => change("accountType", event.target.value)}>
             <option value="">Choose a type…</option>
             {ACCOUNT_TYPES.map((type) => <option key={type} value={type}>{label(type)}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Account subtype
-          <input value={draft.accountSubtype} onChange={(event) => change("accountSubtype", event.target.value)} />
+          <Input value={draft.accountSubtype} onChange={(event) => change("accountSubtype", event.target.value)} />
         </label>
         <label>
           Currency (required)
-          <select required value={draft.currency} onChange={(event) => change("currency", event.target.value)}>
+          <NativeSelect required value={draft.currency} onChange={(event) => change("currency", event.target.value)}>
             <option value="">Choose a currency…</option>
             {currencies.map((currency) => (
               <option key={currency.code} value={currency.code}>{currency.name}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Country (required)
-          <input required value={draft.country} onChange={(event) => change("country", event.target.value)} />
+          <Input required value={draft.country} onChange={(event) => change("country", event.target.value)} />
         </label>
         <label>
           Opening balance (required)
-          <input required inputMode="decimal" value={draft.openingBalance} onChange={(event) => change("openingBalance", event.target.value)} />
+          <Input required inputMode="decimal" value={draft.openingBalance} onChange={(event) => change("openingBalance", event.target.value)} />
           {openingPreview && <small>{openingPreview}</small>}
         </label>
         <label>
           Opening balance date (required)
-          <input required type="date" value={draft.openingBalanceDate} onChange={(event) => change("openingBalanceDate", event.target.value)} />
+          <Input required type="date" value={draft.openingBalanceDate} onChange={(event) => change("openingBalanceDate", event.target.value)} />
         </label>
         <label className="account-proposal-wide">
           Opening balance note
-          <input value={draft.openingBalanceNote} onChange={(event) => change("openingBalanceNote", event.target.value)} />
+          <Input value={draft.openingBalanceNote} onChange={(event) => change("openingBalanceNote", event.target.value)} />
         </label>
         <label>
           Credit limit
-          <input inputMode="decimal" value={draft.creditLimit} onChange={(event) => change("creditLimit", event.target.value)} />
+          <Input inputMode="decimal" value={draft.creditLimit} onChange={(event) => change("creditLimit", event.target.value)} />
           {limitPreview && <small>{limitPreview}</small>}
         </label>
         <label>
           Opened on
-          <input type="date" value={draft.openedOn} onChange={(event) => change("openedOn", event.target.value)} />
+          <Input type="date" value={draft.openedOn} onChange={(event) => change("openedOn", event.target.value)} />
         </label>
         <label className="check-field">
-          <input checked={draft.includeInNetWorth} onChange={(event) => change("includeInNetWorth", event.target.checked)} type="checkbox" />
+          <Checkbox checked={draft.includeInNetWorth} onCheckedChange={(checked) => change("includeInNetWorth", checked === true)} />
           Include in net worth
         </label>
         <label className="check-field">
-          <input checked={draft.isLiquid} onChange={(event) => change("isLiquid", event.target.checked)} type="checkbox" />
+          <Checkbox checked={draft.isLiquid} onCheckedChange={(checked) => change("isLiquid", checked === true)} />
           Liquid account
         </label>
       </div>}
@@ -541,14 +546,14 @@ export function AccountProposalPanel({
       )}
 
       {canCreate && (
-        <button
-          className="primary-action"
+        <Button
+          variant="default"
           disabled={interactionBusy || !ready}
           onClick={createAccount}
           type="button"
         >
           {busy ? "Confirming account…" : "Create account and continue"}
-        </button>
+        </Button>
       )}
     </section>
   );

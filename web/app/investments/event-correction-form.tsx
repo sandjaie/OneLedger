@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 import { useState } from "react";
 
 import { CASH_FIELDS, isCashKind, type CashKind } from "@/app/investments/investment-event-form";
@@ -279,18 +282,18 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
       {fields.map((field) => (
         <label className="text-field" key={field}>
           <span>{FIELD_LABEL[field]}</span>
-          <input disabled={confirming} inputMode="decimal" onChange={(change) => changeField(field, change.target.value)} required value={draft[field]} />
+          <Input disabled={confirming} inputMode="decimal" onChange={(change) => changeField(field, change.target.value)} required value={draft[field]} />
         </label>
       ))}
       <label className="text-field">
         <span>Correction reason</span>
-        <input disabled={confirming} onChange={(change) => changeReason(change.target.value)} required value={reason} />
+        <Input disabled={confirming} onChange={(change) => changeReason(change.target.value)} required value={reason} />
       </label>
 
       {!confirming && (
-        <button className="text-action" disabled={!reason.trim()} onClick={review} type="button">
+        <Button variant="outline" disabled={!reason.trim()} onClick={review} type="button">
           Review correction
-        </button>
+        </Button>
       )}
       {confirming && (
         <div className="investment-confirmation">
@@ -305,12 +308,12 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
           {!preview && <p className="inline-alert" role="alert">This event&rsquo;s pair data is incomplete — correct it from its other leg&rsquo;s holding instead.</p>}
           {problem && <p className="inline-alert" role="alert">{problem}</p>}
           <div className="investment-confirm-actions">
-            <button className="primary-action" disabled={busy || !preview} onClick={() => void submit()} type="button">
+            <Button variant="default" disabled={busy || !preview} onClick={() => void submit()} type="button">
               {busy ? "Recording correction…" : problem ? "Retry correction" : "Confirm correction"}
-            </button>
-            <button className="text-action" disabled={busy} onClick={() => { setConfirming(false); setProblem(""); }} type="button">
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => { setConfirming(false); setProblem(""); }} type="button">
               Go back
-            </button>
+            </Button>
           </div>
         </div>
       )}

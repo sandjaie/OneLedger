@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
@@ -262,21 +266,21 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
       {positionsState === "error" && (
         <p className="inline-alert" role="alert">
           Open holdings could not be loaded.{" "}
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setPositionsState("loading"); setPositionsAttempt((value) => value + 1); }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </p>
       )}
 
       {!holding && (
         <label className="select-field">
           <span>Holding</span>
-          <select disabled={confirming} onChange={(e) => { setSelectedHoldingId(e.target.value); resetDraft(kind); }} value={selectedHoldingId}>
+          <NativeSelect disabled={confirming} onChange={(e) => { setSelectedHoldingId(e.target.value); resetDraft(kind); }} value={selectedHoldingId}>
             <option value="">Choose an open holding</option>
             {positions.map((p) => <option key={p.holdingId} value={p.holdingId}>{p.securityName} · {p.currency}</option>)}
-          </select>
+          </NativeSelect>
         </label>
       )}
 
@@ -284,67 +288,67 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
         <>
           <label className="select-field">
             <span>Event kind</span>
-            <select disabled={confirming} onChange={(e) => resetDraft(e.target.value as Kind)} value={kind}>
+            <NativeSelect disabled={confirming} onChange={(e) => resetDraft(e.target.value as Kind)} value={kind}>
               <optgroup label="Cash lifecycle">
                 {CASH_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </optgroup>
               <optgroup label="Unit action">
                 {UNIT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </optgroup>
-            </select>
+            </NativeSelect>
           </label>
 
-          <label className="date-field"><span>Event date</span><input disabled={confirming} onChange={(e) => changeDraft("eventDate", e.target.value)} required type="date" value={draft.eventDate} /></label>
+          <label className="date-field"><span>Event date</span><Input disabled={confirming} onChange={(e) => changeDraft("eventDate", e.target.value)} required type="date" value={draft.eventDate} /></label>
 
           {isCashKind(kind) && (
             <>
               {fields.map((field) => (
                 <label className="text-field" key={field}>
                   <span>{CASH_FIELD_LABEL[field]} ({selected.currency})</span>
-                  <input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft(field, e.target.value)} required value={draft[field]} />
+                  <Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft(field, e.target.value)} required value={draft[field]} />
                 </label>
               ))}
-              <label className="text-field"><span>Net cash amount ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("netAmount", e.target.value)} required value={draft.netAmount} /></label>
+              <label className="text-field"><span>Net cash amount ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("netAmount", e.target.value)} required value={draft.netAmount} /></label>
             </>
           )}
 
           {kind === "bonus" && (
-            <label className="text-field"><span>Bonus units</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("units", e.target.value)} required value={draft.units} /></label>
+            <label className="text-field"><span>Bonus units</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("units", e.target.value)} required value={draft.units} /></label>
           )}
 
           {kind === "rights" && (
             <>
-              <label className="text-field"><span>Units</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("units", e.target.value)} required value={draft.units} /></label>
-              <label className="text-field"><span>Price</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("price", e.target.value)} required value={draft.price} /></label>
-              <label className="text-field"><span>Gross amount ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("grossAmount", e.target.value)} required value={draft.grossAmount} /></label>
-              <label className="text-field"><span>Charges ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("charges", e.target.value)} required value={draft.charges} /></label>
-              <label className="text-field"><span>Withheld tax ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("withheldTax", e.target.value)} required value={draft.withheldTax} /></label>
-              <label className="text-field"><span>Net cash amount ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("netAmount", e.target.value)} required value={draft.netAmount} /></label>
+              <label className="text-field"><span>Units</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("units", e.target.value)} required value={draft.units} /></label>
+              <label className="text-field"><span>Price</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("price", e.target.value)} required value={draft.price} /></label>
+              <label className="text-field"><span>Gross amount ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("grossAmount", e.target.value)} required value={draft.grossAmount} /></label>
+              <label className="text-field"><span>Charges ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("charges", e.target.value)} required value={draft.charges} /></label>
+              <label className="text-field"><span>Withheld tax ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("withheldTax", e.target.value)} required value={draft.withheldTax} /></label>
+              <label className="text-field"><span>Net cash amount ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("netAmount", e.target.value)} required value={draft.netAmount} /></label>
             </>
           )}
 
           {kind === "split" && (
-            <label className="text-field"><span>Unit ratio</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("unitRatio", e.target.value)} required value={draft.unitRatio} /></label>
+            <label className="text-field"><span>Unit ratio</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("unitRatio", e.target.value)} required value={draft.unitRatio} /></label>
           )}
 
           {(kind === "switch" || kind === "systematic_transfer") && (
             <>
               <label className="select-field">
                 <span>Security switched into</span>
-                <select disabled={confirming} onChange={(e) => changeDraft("inSecurityId", e.target.value)} value={draft.inSecurityId}>
+                <NativeSelect disabled={confirming} onChange={(e) => changeDraft("inSecurityId", e.target.value)} value={draft.inSecurityId}>
                   <option value="">Choose another security held in this account</option>
                   {otherSecurities.map((p) => <option key={p.securityId} value={p.securityId}>{p.securityName}</option>)}
-                </select>
+                </NativeSelect>
               </label>
               {otherSecurities.length === 0 && (
                 <p className="investment-state">No other security is held in this account yet. Switching into a brand-new security is not offered here.</p>
               )}
-              <label className="text-field"><span>Units out</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outUnits", e.target.value)} required value={draft.outUnits} /></label>
-              <label className="text-field"><span>Price out</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outPrice", e.target.value)} required value={draft.outPrice} /></label>
-              <label className="text-field"><span>Gross amount out ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outGrossAmount", e.target.value)} required value={draft.outGrossAmount} /></label>
-              <label className="text-field"><span>Units in</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inUnits", e.target.value)} required value={draft.inUnits} /></label>
-              <label className="text-field"><span>Price in</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inPrice", e.target.value)} required value={draft.inPrice} /></label>
-              <label className="text-field"><span>Gross amount in ({selected.currency})</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inGrossAmount", e.target.value)} required value={draft.inGrossAmount} /></label>
+              <label className="text-field"><span>Units out</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outUnits", e.target.value)} required value={draft.outUnits} /></label>
+              <label className="text-field"><span>Price out</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outPrice", e.target.value)} required value={draft.outPrice} /></label>
+              <label className="text-field"><span>Gross amount out ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outGrossAmount", e.target.value)} required value={draft.outGrossAmount} /></label>
+              <label className="text-field"><span>Units in</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inUnits", e.target.value)} required value={draft.inUnits} /></label>
+              <label className="text-field"><span>Price in</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inPrice", e.target.value)} required value={draft.inPrice} /></label>
+              <label className="text-field"><span>Gross amount in ({selected.currency})</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inGrossAmount", e.target.value)} required value={draft.inGrossAmount} /></label>
             </>
           )}
 
@@ -352,18 +356,18 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
             <>
               <label className="select-field">
                 <span>Account transferred into</span>
-                <select disabled={confirming} onChange={(e) => changeDraft("inAccountId", e.target.value)} value={draft.inAccountId}>
+                <NativeSelect disabled={confirming} onChange={(e) => changeDraft("inAccountId", e.target.value)} value={draft.inAccountId}>
                   <option value="">Choose the receiving account</option>
                   {otherAccounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
+                </NativeSelect>
               </label>
-              <label className="text-field"><span>Units out</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outUnits", e.target.value)} required value={draft.outUnits} /></label>
-              <label className="text-field"><span>Units in</span><input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inUnits", e.target.value)} required value={draft.inUnits} /></label>
+              <label className="text-field"><span>Units out</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("outUnits", e.target.value)} required value={draft.outUnits} /></label>
+              <label className="text-field"><span>Units in</span><Input disabled={confirming} inputMode="decimal" onChange={(e) => changeDraft("inUnits", e.target.value)} required value={draft.inUnits} /></label>
             </>
           )}
 
           {!confirming && (
-            <button className="primary-action" disabled={!draftComplete(kind, draft)} type="submit">Review event</button>
+            <Button variant="default" disabled={!draftComplete(kind, draft)} type="submit">Review event</Button>
           )}
 
           {confirming && (
@@ -371,10 +375,10 @@ export function InvestmentEventForm({ request, accounts, holding, onRecorded }: 
               <p>This appends a new owner-entered event with the exact strings above.</p>
               {problem && <p className="inline-alert" role="alert">{problem}</p>}
               <div className="investment-confirm-actions">
-                <button className="primary-action" disabled={busy} onClick={() => void submit()} type="button">
+                <Button variant="default" disabled={busy} onClick={() => void submit()} type="button">
                   {busy ? "Recording event…" : problem ? "Retry event" : "Confirm event"}
-                </button>
-                <button className="text-action" disabled={busy} onClick={() => { setConfirming(false); setProblem(""); }} type="button">Go back</button>
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={() => { setConfirming(false); setProblem(""); }} type="button">Go back</Button>
               </div>
             </div>
           )}

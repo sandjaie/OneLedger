@@ -1,5 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import { useEffect, useState } from "react";
 
 import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
@@ -220,12 +225,12 @@ export function SecurityForm({
     return (
       <div className="investment-resolution" role="status">
         <InstrumentCandidate candidate={security} />
-        <button
-          className="text-action"
+        <Button
+          variant="outline"
           disabled={disabled}
           onClick={() => onChange(undefined)}
           type="button"
-        >Change security</button>
+        >Change security</Button>
       </div>
     );
   }
@@ -236,18 +241,18 @@ export function SecurityForm({
         <p className="section-label">Suggested from the statement&apos;s own identifier</p>
         <InstrumentCandidate candidate={suggestion} />
         <div className="investment-confirm-actions">
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={disabled}
             onClick={() => onChange(suggestion)}
             type="button"
-          >Use this security</button>
-          <button
-            className="text-action"
+          >Use this security</Button>
+          <Button
+            variant="outline"
             disabled={disabled}
             onClick={() => setSuggestionDismissed(true)}
             type="button"
-          >Search the catalogue instead</button>
+          >Search the catalogue instead</Button>
         </div>
       </div>
     );
@@ -260,7 +265,7 @@ export function SecurityForm({
         <>
           <label className="select-field">
             <span>Lookup method</span>
-            <select
+            <NativeSelect
               disabled={disabled}
               onChange={(event) => changeLookup(event.target.value as LookupMethod)}
               value={lookupMethod}
@@ -268,11 +273,11 @@ export function SecurityForm({
               <option value="isin">Public identifier</option>
               <option value="ticker">Ticker and exchange</option>
               <option value="name">Instrument name</option>
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-field">
             <span>{lookupMethod === "name" ? "Instrument name" : lookupMethod === "ticker" ? "Ticker" : "Public identifier"}</span>
-            <input
+            <Input
               autoComplete="off"
               disabled={disabled}
               onChange={(event) => { setIdentity(event.target.value); invalidateResolution(); }}
@@ -282,7 +287,7 @@ export function SecurityForm({
           {lookupMethod === "ticker" && (
             <label className="text-field">
               <span>Exchange</span>
-              <input
+              <Input
                 autoComplete="off"
                 disabled={disabled}
                 onChange={(event) => { setExchange(event.target.value); invalidateResolution(); }}
@@ -291,18 +296,18 @@ export function SecurityForm({
             </label>
           )}
           <div className="investment-confirm-actions">
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               disabled={disabled || resolving || !identity || (lookupMethod === "ticker" && !exchange)}
               onClick={() => void resolveInstrument()}
               type="button"
-            >{resolving ? "Checking catalogue…" : "Find instrument"}</button>
-            <button
-              className="text-action"
+            >{resolving ? "Checking catalogue…" : "Find instrument"}</Button>
+            <Button
+              variant="outline"
               disabled={disabled}
               onClick={() => setCreating(true)}
               type="button"
-            >Add a new security</button>
+            >Add a new security</Button>
           </div>
 
           {problem && <p className="inline-alert" role="alert">The catalogue request could not be completed. Check the entry and try again.</p>}
@@ -312,20 +317,17 @@ export function SecurityForm({
           {resolution && resolution.status !== "matched" && resolution.candidates.length > 0 && (
             <fieldset className="investment-candidate-list" aria-label="Confirm instrument">
               <legend>Choose the instrument supported by your evidence</legend>
-              {resolution.candidates.map((item) => (
-                <label key={item.id}>
-                  <input
-                    checked={candidateId === item.id}
-                    name="security-candidate"
-                    onChange={() => setCandidateId(item.id)}
-                    type="radio"
-                  />
-                  <InstrumentCandidate candidate={item} />
-                </label>
-              ))}
-              <button className="text-action" disabled={!candidateId} onClick={confirmCandidate} type="button">
+              <RadioGroup aria-label="Catalogue candidates" name="security-candidate" onValueChange={setCandidateId} value={candidateId}>
+                {resolution.candidates.map((item) => (
+                  <label htmlFor={`security-candidate-${item.id}`} key={item.id}>
+                    <RadioGroupItem id={`security-candidate-${item.id}`} value={item.id} />
+                    <InstrumentCandidate candidate={item} />
+                  </label>
+                ))}
+              </RadioGroup>
+              <Button variant="outline" disabled={!candidateId} onClick={confirmCandidate} type="button">
                 Use selected instrument
-              </button>
+              </Button>
             </fieldset>
           )}
         </>
@@ -333,7 +335,7 @@ export function SecurityForm({
         <div className="investment-create-security">
           <label className="text-field">
             <span>Name</span>
-            <input
+            <Input
               disabled={createBusy}
               onChange={(event) => setCreateDraft((current) => ({ ...current, name: event.target.value }))}
               value={createDraft.name}
@@ -341,27 +343,27 @@ export function SecurityForm({
           </label>
           <label className="select-field">
             <span>Security type</span>
-            <select
+            <NativeSelect
               disabled={createBusy}
               onChange={(event) => setCreateDraft((current) => ({ ...current, securityType: event.target.value as SecurityTypeName }))}
               value={createDraft.securityType}
             >
               {SECURITY_TYPES.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}
-            </select>
+            </NativeSelect>
           </label>
           <label className="select-field">
             <span>Asset class</span>
-            <select
+            <NativeSelect
               disabled={createBusy}
               onChange={(event) => setCreateDraft((current) => ({ ...current, assetClass: event.target.value as AssetClassName }))}
               value={createDraft.assetClass}
             >
               {ASSET_CLASSES.map((option) => <option key={option} value={option}>{option.replaceAll("_", " ")}</option>)}
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-field">
             <span>Currency</span>
-            <input
+            <Input
               disabled={createBusy}
               maxLength={3}
               onChange={(event) => setCreateDraft((current) => ({ ...current, currency: event.target.value }))}
@@ -370,7 +372,7 @@ export function SecurityForm({
           </label>
           <label className="text-field">
             <span>ISIN (optional)</span>
-            <input
+            <Input
               disabled={createBusy}
               maxLength={12}
               onChange={(event) => setCreateDraft((current) => ({ ...current, isin: event.target.value }))}
@@ -380,7 +382,7 @@ export function SecurityForm({
           {!createDraft.isin.trim() && (
             <label className="text-field">
               <span>Country</span>
-              <input
+              <Input
                 disabled={createBusy}
                 maxLength={2}
                 onChange={(event) => setCreateDraft((current) => ({ ...current, country: event.target.value }))}
@@ -390,15 +392,15 @@ export function SecurityForm({
           )}
           {createProblem && <p className="inline-alert" role="alert">{createProblem}</p>}
           <div className="investment-confirm-actions">
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={createBusy || !createDraft.name.trim() || !createDraft.currency.trim() || (!createDraft.isin.trim() && !createDraft.country.trim())}
               onClick={() => void submitCreate()}
               type="button"
-            >{createBusy ? "Creating…" : "Create security"}</button>
-            <button className="text-action" disabled={createBusy} onClick={() => setCreating(false)} type="button">
+            >{createBusy ? "Creating…" : "Create security"}</Button>
+            <Button variant="outline" disabled={createBusy} onClick={() => setCreating(false)} type="button">
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -84,9 +86,9 @@ export function ReviewQueue({ request, quietEmpty = false }: Props) {
       )}
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       {state === "ready" && hasMore && (
-        <button className="text-action" disabled={busy} onClick={() => void loadMore()} type="button">
+        <Button variant="outline" disabled={busy} onClick={() => void loadMore()} type="button">
           {busy ? "Loading reviews…" : "Load more reviews"}
-        </button>
+        </Button>
       )}
     </section>
   );

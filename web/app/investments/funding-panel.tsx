@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useRef, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
@@ -376,31 +380,31 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
             {unverified.kind === "confirmation" ? "Confirmation" : "Removal"} outcome not verified. {unverified.detail}
           </p>
           <p>No claim is made about whether the funding state changed.</p>
-          <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ recovery: true })} ref={reloadButton} type="button">
+          <Button variant="outline" disabled={busy} onClick={() => void loadTransactions({ recovery: true })} ref={reloadButton} type="button">
             Reload cash evidence
-          </button>
+          </Button>
         </div>
       )}
 
       {!unverified && loadState === "idle" && (
-        <button className="text-action" onClick={() => void loadTransactions()} type="button">
+        <Button variant="outline" onClick={() => void loadTransactions()} type="button">
           Find cash entries
-        </button>
+        </Button>
       )}
       {loadState === "loading" && <p className="investment-state" role="status">Loading cash entries…</p>}
       {!unverified && loadState === "error" && (
-        <button className="text-action" onClick={() => void loadTransactions()} type="button">
+        <Button variant="outline" onClick={() => void loadTransactions()} type="button">
           Try cash entries again
-        </button>
+        </Button>
       )}
 
       {!unverified && loadState === "ready" && eligible.length === 0 && !hasMoreTransactions && (
         <p className="investment-state">No eligible cash debits are recorded.</p>
       )}
       {!unverified && loadState === "ready" && eligible.length === 0 && hasMoreTransactions && (
-        <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">
+        <Button variant="outline" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">
           Continue searching cash entries
-        </button>
+        </Button>
       )}
 
       {!unverified && loadState === "ready" && (
@@ -419,18 +423,18 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
                 <legend>Allocation {index + 1}</legend>
                 <label className="select-field">
                   <span>Purchase for allocation {index + 1}</span>
-                  <select
+                  <NativeSelect
                     disabled={busy}
                     onChange={(change) => changeDraft(draft.key, "investmentEventId", change.target.value)}
                     value={draft.investmentEventId}
                   >
                     <option value="">Choose a recorded purchase</option>
                     {events.map((item) => <option key={item.id} value={item.id}>{purchaseLabel(item)}</option>)}
-                  </select>
+                  </NativeSelect>
                 </label>
                 <label className="select-field">
                   <span>Cash entry for allocation {index + 1}</span>
-                  <select
+                  <NativeSelect
                     disabled={busy}
                     onChange={(change) => changeDraft(draft.key, "cashTransactionId", change.target.value)}
                     value={draft.cashTransactionId}
@@ -439,11 +443,11 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
                     {candidates.map((transaction) => (
                       <option key={transaction.id} value={transaction.id}>{cashLabel(transaction)}</option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
                 <label className="text-field">
                   <span>Allocated amount for allocation {index + 1}</span>
-                  <input
+                  <Input
                     disabled={busy}
                     inputMode="decimal"
                     onChange={(change) => changeDraft(draft.key, "allocatedAmount", change.target.value)}
@@ -451,21 +455,21 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
                   />
                 </label>
                 {drafts.length > 1 && (
-                  <button className="text-action" disabled={busy} onClick={() => removeDraft(draft.key)} type="button">
+                  <Button variant="outline" disabled={busy} onClick={() => removeDraft(draft.key)} type="button">
                     Remove row {index + 1}
-                  </button>
+                  </Button>
                 )}
               </fieldset>
             );
           })}
           <div className="investment-funding-actions">
             {hasMoreTransactions && (
-              <button className="text-action" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">Load more cash entries</button>
+              <Button variant="outline" disabled={busy} onClick={() => void loadTransactions({ append: true })} type="button">Load more cash entries</Button>
             )}
-            <button className="text-action" disabled={busy} onClick={addDraft} type="button">Add allocation row</button>
-            <button className="primary-action" disabled={busy || !draftsComplete} onClick={() => void propose()} type="button">
+            <Button variant="outline" disabled={busy} onClick={addDraft} type="button">Add allocation row</Button>
+            <Button variant="default" disabled={busy || !draftsComplete} onClick={() => void propose()} type="button">
               {busy ? "Checking exact rows…" : "Review funding proposal"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -473,9 +477,9 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
       {!unverified && stale && (
         <div className="investment-funding-stale">
           <p>The reviewed state is no longer current. No funding link was created.</p>
-          <button className="text-action" disabled={busy} onClick={() => void propose()} type="button">
+          <Button variant="outline" disabled={busy} onClick={() => void propose()} type="button">
             Review current state
-          </button>
+          </Button>
         </div>
       )}
 
@@ -493,10 +497,10 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
             ))}
           </dl>
           <div className="investment-confirm-actions">
-            <button className="primary-action" disabled={busy} onClick={() => void confirm()} ref={confirmButton} type="button">
+            <Button variant="default" disabled={busy} onClick={() => void confirm()} ref={confirmButton} type="button">
               {busy ? "Confirming funding…" : "Confirm funding"}
-            </button>
-            <button className="text-action" disabled={busy} onClick={() => setProposal(undefined)} type="button">Edit allocation</button>
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => setProposal(undefined)} type="button">Edit allocation</Button>
           </div>
         </fieldset>
       )}
@@ -517,13 +521,13 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
                 ))}
                 <p>{allocations.length} recorded allocation{allocations.length === 1 ? "" : "s"}. The purchase and any confirmed transfer chain remain separate ledger records.</p>
                 <p>Unlink this funding before correcting the purchase it funds.</p>
-                <button
+                <Button
                   aria-label={`Review removal for ${transaction?.descriptionRaw ?? "cash entry"}`}
-                  className="text-action"
+                  variant="outline"
                   disabled={busy}
                   onClick={(event) => reviewRemoval(cashId, event.currentTarget)}
                   type="button"
-                >Review removal</button>
+                >Review removal</Button>
               </article>
             );
           })}
@@ -541,10 +545,10 @@ export function FundingPanel({ events, request, existingLinks = [], allowAdditio
           <p>All funding allocations on this cash entry will be removed.</p>
           <p>The cash entry returns to its recorded prior type. The purchase and transfer chain remain unchanged.</p>
           <div className="investment-confirm-actions">
-            <button className="primary-action" disabled={busy} onClick={() => void unlink()} ref={removeButton} type="button">
+            <Button variant="default" disabled={busy} onClick={() => void unlink()} ref={removeButton} type="button">
               {busy ? "Removing funding link…" : "Remove funding link"}
-            </button>
-            <button className="text-action" disabled={busy} onClick={closeRemoval} type="button">Keep funding link</button>
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={closeRemoval} type="button">Keep funding link</Button>
           </div>
         </fieldset>
       )}

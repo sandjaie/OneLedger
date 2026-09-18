@@ -185,6 +185,8 @@ describe("investment entry", () => {
     expect(within(holding).getByText("3.12500000 units")).toBeTruthy();
     expect(within(holding).getByText("XAA 28.1250")).toBeTruthy();
     expect(within(holding).getByText("Price XAA 9.000000 · 6 Feb 2026")).toBeTruthy();
+    expect(screen.getByLabelText("Investment account").getAttribute("data-slot")).toBe("native-select");
+    expect(screen.getByLabelText("Purchase date").getAttribute("data-slot")).toBe("input");
     expect(document.body.textContent).not.toMatch(/\b(buy|sell|hold|recommend|rebalance)\b/i);
   });
 
@@ -455,7 +457,7 @@ describe("investment entry", () => {
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
-    fireEvent.click(screen.getByLabelText("Record a dated valuation price after this purchase"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Record a dated valuation price after this purchase" }));
     fireEvent.change(screen.getByLabelText("Valuation date"), { target: { value: "2026-02-06" } });
     fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
@@ -517,7 +519,7 @@ describe("investment entry", () => {
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
-    fireEvent.click(screen.getByLabelText("Record a dated valuation price after this purchase"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Record a dated valuation price after this purchase" }));
     fireEvent.change(screen.getByLabelText("Valuation date"), { target: { value: "2026-02-06" } });
     fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
@@ -566,7 +568,7 @@ describe("investment entry", () => {
     await screen.findByText("No investment holdings are recorded yet.");
     await resolveExactInstrument();
     fillPurchase();
-    fireEvent.click(screen.getByLabelText("Record a dated valuation price after this purchase"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Record a dated valuation price after this purchase" }));
     fireEvent.change(screen.getByLabelText("Valuation date"), { target: { value: "2026-02-06" } });
     fireEvent.change(screen.getByLabelText("Valuation price"), { target: { value: "9.000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Review purchase" }));
