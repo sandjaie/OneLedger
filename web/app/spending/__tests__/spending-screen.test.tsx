@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -114,6 +116,16 @@ describe("spending screen", () => {
     expect(screen.getAllByText("AED 100.0000").length).toBeGreaterThan(0);
     expect(screen.getAllByText("AED 70.0000").length).toBeGreaterThan(0);
     screen.getByText("AED 130.0000");
+    expect(screen.getByRole("table", { name: "Spending by bucket" }).classList.contains("spending-table--bucket")).toBe(true);
+    expect(screen.getByRole("table", { name: "Spending by category" }).classList.contains("spending-table--category")).toBe(true);
+  });
+
+  it("keeps the adopted screen grid and Spending numeric columns scoped in CSS", () => {
+    const css = readFileSync(`${process.cwd()}/app/globals.css`, "utf8");
+
+    expect(css).toContain(".workspace-grid > section:is(.coverage-screen, .wealth-screen, .spending-screen)");
+    expect(css).toContain(".spending-table--bucket :is(th:nth-child(2), th:nth-child(3), td:nth-child(n + 2))");
+    expect(css).toContain(".spending-table--category :is(th:nth-child(n + 3), td:nth-child(n + 3))");
   });
 
   it("carries the category and dates on the drill-through link", async () => {

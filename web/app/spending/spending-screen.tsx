@@ -204,7 +204,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
           </p>
           {data.byBucket.length === 0 && <p>No spending in this range.</p>}
           {data.byBucket.length > 0 && (
-            <table className="spending-table">
+            <table className="spending-table spending-table--bucket">
               <caption className="visually-hidden">Spending by bucket</caption>
               <thead>
                 <tr>
@@ -250,7 +250,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                 ))}
               </div>
 
-              <table className="spending-table">
+              <table className="spending-table spending-table--category">
                 <caption className="visually-hidden">Spending by category</caption>
                 <thead>
                   <tr>

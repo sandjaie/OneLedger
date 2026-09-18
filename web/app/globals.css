@@ -1927,6 +1927,7 @@ body { background: var(--paper); }
    containers; the page never needs an artificial minimum width. */
 .workspace-grid { grid-template-columns: 176px minmax(0, 1fr); }
 .workspace-grid > section { width: 100%; max-width: none; min-width: 0; padding: 86px var(--gutter) 64px; }
+.workspace-grid > section:is(.coverage-screen, .wealth-screen, .spending-screen) { max-width: var(--page-max); }
 .workspace-nav {
   position: sticky; top: 0; align-self: start; height: 100dvh; min-height: 0;
   gap: 0; overflow-y: auto; overscroll-behavior: contain;
@@ -2211,7 +2212,8 @@ body { background: var(--paper); }
 .documents-screen .transaction-page-head { margin-bottom: 18px; }
 .data-chart { padding: 16px; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); }
 
-.spending-table td:nth-child(n + 3),
+.spending-table--bucket :is(th:nth-child(2), th:nth-child(3), td:nth-child(n + 2)),
+.spending-table--category :is(th:nth-child(n + 3), td:nth-child(n + 3)),
 .wealth-table td:nth-child(2),
 .wealth-positions td:nth-child(4),
 .wealth-positions td:nth-child(6) { text-align: right; font-variant-numeric: tabular-nums; }

@@ -13,9 +13,9 @@ Updated: 18 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Decision-first owner workspace** across the existing screens | [design](specs/2026-09-17-decision-first-workspace-design.md) |
-| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); decision-first Task 1 is locally implemented and awaits its review/final-verification gates | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
+| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); decision-first Task 1 is locally repaired after its read-only review and awaits final verification | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
 | Next product action | Implement the decision-first redesign through the plan's eight task branches; complete the open owner-operated acceptance gates before Phase 4.4 | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
-| Current implementation task | Task 1 `feature/ui-page-grammar` is implemented locally with focused web validation; read-only review and the exact-head final verifier remain before push/PR | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
+| Current implementation task | Task 1 `feature/ui-page-grammar` is locally repaired after its read-only review, with affected web validation passing; the exact-head final verifier remains before push/PR | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
 
 ## Canonical phase status
 
