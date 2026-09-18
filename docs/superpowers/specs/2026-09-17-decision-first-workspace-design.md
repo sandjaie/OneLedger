@@ -1,5 +1,9 @@
 # Decision-first owner workspace
 
+Historical design. The consolidated
+[Phase 4.7 workspace experience specification](2026-09-18-phase-4-7-workspace-experience.md)
+is the single authority for remaining UI work.
+
 ## Outcome and authority
 
 OneLedger is a private financial operating desk for its owner. Each screen should answer, in

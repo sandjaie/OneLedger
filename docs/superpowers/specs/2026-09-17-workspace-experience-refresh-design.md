@@ -1,5 +1,9 @@
 # Workspace experience refresh
 
+Historical design. The consolidated
+[Phase 4.7 workspace experience specification](2026-09-18-phase-4-7-workspace-experience.md)
+is the single authority for remaining UI work.
+
 ## Outcome
 
 OneLedger's owner workspace should feel like one product across every sidebar destination. The

@@ -12,10 +12,10 @@ Updated: 18 September 2026.
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Decision-first owner workspace** across the existing screens | [design](specs/2026-09-17-decision-first-workspace-design.md) |
-| Outcome state | Phase 4.3 implementation complete via PRs #246–#247; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); decision-first Task 1 is locally repaired after its read-only review and awaits final verification | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
-| Next product action | Implement the decision-first redesign through the plan's eight task branches; complete the open owner-operated acceptance gates before Phase 4.4 | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
-| Current implementation task | Task 1 `feature/ui-page-grammar` is locally repaired after its read-only review, with affected web validation passing; the exact-head final verifier remains before push/PR | [decision-first plan](plans/2026-09-17-decision-first-workspace.md) |
+| Current outcome | **Phase 4.7 — owner workspace experience** across the existing screens | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
+| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7 Task 1 passed web-only exact-head verification and was pushed, with PR and merge pending | [current plan](plans/2026-09-17-decision-first-workspace.md) |
+| Next product action | Deliver Phase 4.7 through the remaining screen tasks and cross-screen audit, then invite owner visual/UX acceptance; the owner-approved order places this before Phase 4.4 | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
+| Current implementation task | Task 1 `feature/ui-page-grammar` is pushed at `ac410fe` after review and passing `scripts/verify-web.sh`; PR/merge precede Task 2 | [current plan](plans/2026-09-17-decision-first-workspace.md) |
 
 ## Canonical phase status
 
@@ -60,6 +60,7 @@ Updated: 18 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
+| 4.7 — owner workspace experience | **In progress** — Task 1 verified and pushed; remaining screens and owner acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [current plan](plans/2026-09-17-decision-first-workspace.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

@@ -404,10 +404,9 @@ current state. The conflict is fixed in the owning document rather than worked a
   -> Phase 4.x  analysis and optimisation
   -> Phase 5.x  optional private intelligence
 </code></pre>
-<p>Outcomes inside a group execute in numeric order. An accepted identifier never changes.
-Reordering future work requires owner approval and a coordinated rebaseline before any affected
-branch starts. Conditional work may be skipped when its activation condition is absent and does not
-block the next numbered outcome.</p>
+<p>Outcomes inside a group execute in numeric order unless the owner approves a recorded
+rebaseline. An accepted identifier never changes. Conditional work may be skipped when its
+activation condition is absent and does not block the next numbered outcome.</p>
 <table>
 <thead><tr><th>Phase</th><th>Delivery boundary</th><th>Depends on</th></tr></thead>
 <tbody>
@@ -438,6 +437,7 @@ block the next numbered outcome.</p>
 <tr><td><strong>Phase 4.4</strong></td><td>FX and remittance analysis</td><td>Phase 4.3</td></tr>
 <tr><td><strong>Phase 4.5</strong></td><td>Optional email ingestion</td><td>Phase 4.4</td></tr>
 <tr><td><strong>Phase 4.6</strong></td><td>Conditional loan support</td><td>Owner confirms a real loan</td></tr>
+<tr><td><strong>Phase 4.7</strong></td><td>Owner workspace experience</td><td>Phase 4.3; owner-approved pull-forward before Phase 4.4</td></tr>
 <tr><td><strong>Phase 5.1</strong></td><td>Privacy, safety, and runtime decision</td><td>Phase 4.x outcomes needed by the chosen feature</td></tr>
 <tr><td><strong>Phase 5.2</strong></td><td>Ask My Finances</td><td>Phase 5.1 and stable query contracts</td></tr>
 <tr><td><strong>Phase 5.3</strong></td><td>Classification fallback</td><td>Phase 5.1 and proven deterministic coverage</td></tr>
@@ -561,9 +561,14 @@ comparison.</li>
 preserving ordinary import review.</li>
 <li><strong>Phase 4.6:</strong> when activated, loan terms, schedules, actual events, prepayments,
 rate changes, and liquidity-aware simulation.</li>
+<li><strong>Phase 4.7:</strong> one coherent, decision-first owner workspace across all existing
+destinations, with readable records, accessible interactions, and visual acceptance by the owner.</li>
 </ul>
 <p><strong>Conditional activation:</strong> Phase 4.6 starts only after the owner confirms a real
 loan and supplies evidence. Its absence does not block Phase 5.x.</p>
+<p><strong>Owner-approved order exception:</strong> Phase 4.7 follows Phase 4.3 and is delivered
+before the unstarted Phase 4.4–4.6 outcomes. Their identifiers and financial scopes do not change.
+This pull-forward does not make Phase 4.7 dependent on optional Phase 4.6.</p>
 <hr>
 <h2 id="phase-5-delivery">Phase 5.x — optional private intelligence</h2>
 <ul>
