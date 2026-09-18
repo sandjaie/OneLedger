@@ -46,9 +46,9 @@ whole group, not once per phase; the planner applies its blocking findings. Ther
 review and no confirmation pass.
 
 The plan's forecast is made once. There is no dispatch-time reforecast. If a branch nears the hard
-stop, finish its coherent part, name the remainder as the next branch in
-`docs/superpowers/progress.md` within the same PR, and continue. Splits, re-baselines, deviations
-and status updates never need a documentation-only PR or another plan review.
+stop, finish its coherent part, and record the completed implementation and next branch in
+`docs/superpowers/progress.md` within that task's PR. Splits, re-baselines and deviations belong
+in the same PR; routine status updates need no later documentation-only PR or another plan review.
 
 ## 2. Implement with focused feedback
 
@@ -140,9 +140,11 @@ without a second server. The final verifier reuses the server and always tears i
 
 Push only the unchanged verified head, then open one PR to `develop` using the repository template.
 Record actual affected-test, review, confirmation and final-verification evidence; mark anything
-not run honestly. The orchestrator merges when all required evidence is green and deletes the task
-branch. Anything targeting `main`, or a required check recorded as not run, remains an owner
-decision.
+not run honestly. Before final verification on a planned task branch, include that task's truthful
+implementation status and exact next task in `docs/superpowers/progress.md`. The orchestrator
+merges when all required evidence is green and the tracker has no stale "in progress" claim for
+that task, then deletes the branch. Anything targeting `main`, or a required check recorded as
+not run, remains an owner decision.
 
 At the end of a phase group, run `/oneledger-code-hygiene`; deliver its accepted findings on one
 `chore/` branch through this same cycle.

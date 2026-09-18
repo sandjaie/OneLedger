@@ -18,8 +18,9 @@ merges. One implementation writer works at a time.
 
 Before dispatch, every task plan records the exact `Workspace`, `Branch`, and `Base and PR target`.
 Start each task branch from current `develop`. A phase may use several task branches; its approved
-plan lands with the first. Splits, re-baselines and status updates ride in the next feature PR; do
-not open a documentation-only PR for them.
+plan lands with the first. Record the current planned task's implementation status, splits and
+re-baselines in that task's PR, not in a later feature PR. Do not open a documentation-only PR for
+routine status updates.
 
 ## Task flow
 
@@ -28,9 +29,14 @@ locally, review once, repair once, then run the scope-appropriate verifier once.
 allowed only for that unchanged verified head.
 
 Open one PR per branch to `develop` using `.github/PULL_REQUEST_TEMPLATE.md`. Record actual evidence
-and any approved deviation from the plan. The orchestrator merges when required gates are green,
-then deletes the branch. A required check marked `Not run` and anything targeting `main` require an
-owner decision.
+and any approved deviation from the plan. Each planned task PR must update `docs/superpowers/progress.md`:
+mark its implementation complete, name the exact next task (or state that none is planned), and
+remove any stale "in progress" claim for the completed task. Use wording that is true while the PR
+is open and after it merges; do not claim a merge or owner acceptance in advance. A missing or
+misleading tracker update blocks the merge. Do not make a post-merge status-only commit merely to
+add the PR number; that evidence can be added with the next task PR. The orchestrator merges when
+required gates are green, then deletes the branch. A required check marked `Not run` and anything
+targeting `main` require an owner decision.
 
 ## Pull request titles
 
