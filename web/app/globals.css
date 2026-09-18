@@ -2078,6 +2078,9 @@ body { background: var(--paper); }
 .evidence-chart-legend-swatch { display: inline-block; width: 24px; border-bottom: 3px solid; }
 .evidence-chart-legend-swatch[data-style="dashed"] { border-bottom-style: dashed; }
 .evidence-chart-legend-swatch[data-style="dotted"] { border-bottom-style: dotted; }
+.evidence-chart-legend-marker { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.evidence-chart-legend-marker[data-marker="square"] { border-radius: 1px; }
+.evidence-chart-legend-marker[data-marker="diamond"] { border-radius: 1px; transform: rotate(45deg); }
 .evidence-chart-plot { width: 100%; min-height: 180px; max-height: 300px; }
 .evidence-chart-table-wrap { max-width: 100%; overflow-x: auto; }
 .evidence-chart table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }

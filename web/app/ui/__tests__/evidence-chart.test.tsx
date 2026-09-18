@@ -4,6 +4,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EvidenceChart, chartRows } from "@/app/ui/evidence-chart";
+import { categoryPalette } from "@/lib/charts/category-colors";
 
 afterEach(cleanup);
 
@@ -11,6 +12,8 @@ const series = [{
   id: "actual",
   label: "Actual",
   color: "var(--category-1)",
+  lineStyle: "solid" as const,
+  marker: "circle" as const,
   points: [
     { period: "2026-01", coordinate: 450, exact: "45.0000" },
     { period: "2026-02", coordinate: null, exact: null },
@@ -73,5 +76,28 @@ describe("EvidenceChart", () => {
     render(<EvidenceChart title="Confirmed trend" description="Synthetic series" periods={periods} series={[]} />);
     expect(screen.getByText("No evidenced periods yet")).toBeTruthy();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps secondary marks with category identity when colliding colors reorder", () => {
+    const palette = categoryPalette(["category-03", "category-08"]);
+    expect(palette.visible).toEqual([
+      { identity: "category-03", color: "var(--category-2)", lineStyle: "dotted", marker: "circle" },
+      { identity: "category-08", color: "var(--category-2)", lineStyle: "solid", marker: "square" },
+    ]);
+    const categories = palette.visible.map((style) => ({
+      id: style.identity, label: style.identity, color: style.color,
+      lineStyle: style.lineStyle, marker: style.marker,
+      points: [{ period: "2026-01", coordinate: 100, exact: "10.0000" }],
+    }));
+    const { rerender } = render(<EvidenceChart title="Category trend" description="Synthetic series" periods={["2026-01"]} series={categories} />);
+    const mark = (id: string) => {
+      const row = within(screen.getByRole("list", { name: "Chart series" })).getByText(id).closest("li");
+      return [row?.querySelector("[data-style]")?.getAttribute("data-style"), row?.querySelector("[data-marker]")?.getAttribute("data-marker")];
+    };
+    expect(mark("category-03")).toEqual(["dotted", "circle"]);
+    expect(mark("category-08")).toEqual(["solid", "square"]);
+    rerender(<EvidenceChart title="Category trend" description="Synthetic series" periods={["2026-01"]} series={[...categories].reverse()} />);
+    expect(mark("category-03")).toEqual(["dotted", "circle"]);
+    expect(mark("category-08")).toEqual(["solid", "square"]);
   });
 });

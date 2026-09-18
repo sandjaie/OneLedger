@@ -17,8 +17,22 @@ export type EvidenceSeries = {
   id: string;
   label: string;
   color: string;
+  lineStyle: "solid" | "dashed" | "dotted";
+  marker: "circle" | "square" | "diamond";
   points: EvidencePoint[];
 };
+
+function ChartPoint({ cx, cy, color, marker }: {
+  cx?: number;
+  cy?: number;
+  color: string;
+  marker: EvidenceSeries["marker"];
+}) {
+  if (cx === undefined || cy === undefined) return null;
+  if (marker === "square") return <rect x={cx - 4} y={cy - 4} width="8" height="8" fill={color} />;
+  if (marker === "diamond") return <path d={`M ${cx} ${cy - 5} L ${cx + 5} ${cy} L ${cx} ${cy + 5} L ${cx - 5} ${cy} Z`} fill={color} />;
+  return <circle cx={cx} cy={cy} r="4" fill={color} />;
+}
 
 export function chartRows(periods: readonly string[], series: readonly EvidenceSeries[]): Array<Record<string, string | number | null>> {
   if (periods.some((period, index) => !/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || (index > 0 && period <= periods[index - 1]))) {
@@ -81,9 +95,10 @@ export function EvidenceChart({ title, description, periods, series }: {
       ) : (
         <>
           <ul aria-label="Chart series" className="evidence-chart-legend">
-            {series.map((item, index) => (
+            {series.map((item) => (
               <li key={item.id}>
-                <span aria-hidden="true" className="evidence-chart-legend-swatch" data-style={index % 3 === 0 ? "solid" : index % 3 === 1 ? "dashed" : "dotted"} style={{ borderColor: item.color }} />
+                <span aria-hidden="true" className="evidence-chart-legend-swatch" data-style={item.lineStyle} style={{ borderColor: item.color }} />
+                <span aria-hidden="true" className="evidence-chart-legend-marker" data-marker={item.marker} style={{ backgroundColor: item.color }} />
                 {item.label}
               </li>
             ))}
@@ -92,14 +107,15 @@ export function EvidenceChart({ title, description, periods, series }: {
             <LineChart data={rows} accessibilityLayer>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="period" tickLine={false} axisLine={false} />
-              {series.map((item, index) => (
+              {series.map((item) => (
                 <Line
                   key={item.id}
                   dataKey={item.id}
                   stroke={`var(--color-${item.id})`}
-                  strokeDasharray={index % 3 === 1 ? "6 3" : index % 3 === 2 ? "2 3" : undefined}
+                  strokeDasharray={item.lineStyle === "dashed" ? "6 3" : item.lineStyle === "dotted" ? "2 3" : undefined}
                   strokeWidth={2.5}
-                  dot
+                  dot={(props) => <ChartPoint cx={props.cx} cy={props.cy} color={`var(--color-${item.id})`} marker={item.marker} />}
+                  activeDot={false}
                   connectNulls={false}
                   isAnimationActive={false}
                 />

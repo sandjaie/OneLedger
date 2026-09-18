@@ -1,35 +1,39 @@
 const VISIBLE_COLOR_COUNT = 11;
 
-function preferredSlot(identity: string): number {
+function identityHash(identity: string): number {
   let hash = 2166136261;
   for (const character of identity) {
     hash ^= character.codePointAt(0) ?? 0;
     hash = Math.imul(hash, 16777619);
   }
-  return (hash >>> 0) % VISIBLE_COLOR_COUNT;
+  return hash >>> 0;
 }
 
 /**
- * Pass the complete household taxonomy on every screen, not a filtered chart subset.
- * Canonical ordering and collision resolution make colors independent of chart order.
+ * Color and secondary marks depend only on category identity, never order or taxonomy membership.
+ * Charts must show labels/values too: a finite palette cannot promise unique colors for arbitrary ids.
  * The twelfth token belongs to an explicitly labelled Other bucket; values are not summed here.
  */
 export function categoryPalette(identities: readonly string[]): {
-  visible: Array<{ identity: string; color: string }>;
+  visible: Array<{ identity: string; color: string; lineStyle: "solid" | "dashed" | "dotted"; marker: "circle" | "square" | "diamond" }>;
   overflow: string[];
   overflowColor: string;
 } {
-  const canonical = identities.map((identity) => identity.trim().toLowerCase()).sort();
-  if (canonical.some((identity, index) => !identity || (index > 0 && identity === canonical[index - 1]))) {
+  const canonical = identities.map((identity) => identity.trim().toLowerCase());
+  if (canonical.some((identity) => !identity) || new Set(canonical).size !== canonical.length) {
     throw new Error("Category identities must be nonempty and unique");
   }
 
-  const slots = new Set<number>();
   const visible = canonical.slice(0, VISIBLE_COLOR_COUNT).map((identity) => {
-    let slot = preferredSlot(identity);
-    while (slots.has(slot)) slot = (slot + 1) % VISIBLE_COLOR_COUNT;
-    slots.add(slot);
-    return { identity, color: `var(--category-${slot + 1})` };
+    const hash = identityHash(identity);
+    const lineStyles = ["solid", "dashed", "dotted"] as const;
+    const markers = ["circle", "square", "diamond"] as const;
+    return {
+      identity,
+      color: `var(--category-${hash % VISIBLE_COLOR_COUNT + 1})`,
+      lineStyle: lineStyles[Math.floor(hash / VISIBLE_COLOR_COUNT) % lineStyles.length],
+      marker: markers[Math.floor(hash / (VISIBLE_COLOR_COUNT * lineStyles.length)) % markers.length],
+    };
   });
   return {
     visible,
