@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { MenuIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CoverageScreen } from "@/app/coverage/coverage-screen";
@@ -69,6 +74,22 @@ const NAV_GROUPS = [
     { label: "Settings", href: "/settings", sections: ["settings"] },
   ] },
 ];
+
+function WorkspaceNavGroups({ activeSection, onNavigate }: { activeSection: string; onNavigate?: () => void }) {
+  return NAV_GROUPS.map((group) => (
+    <div className="workspace-nav-group" key={group.label}>
+      <p className="workspace-nav-label">{group.label}</p>
+      {group.links.map((link) => (
+        <Link
+          aria-current={link.sections.includes(activeSection) ? "page" : undefined}
+          href={link.href}
+          key={link.href}
+          onClick={onNavigate}
+        >{link.label}</Link>
+      ))}
+    </div>
+  ));
+}
 
 type Props = {
   section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
@@ -211,7 +232,6 @@ export function Workspace({
   const [destination, setDestination] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuButton = useRef<HTMLButtonElement>(null);
   const [logoutFailed, setLogoutFailed] = useState(false);
   const [fxDate, setFxDate] = useState("");
   const [fx, setFx] = useState<FxState>({ status: "idle" });
@@ -219,17 +239,6 @@ export function Workspace({
   const [backfillStart, setBackfillStart] = useState("");
   const [backfillEnd, setBackfillEnd] = useState("");
   const [backfill, setBackfill] = useState<BackfillState>({ status: "idle" });
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    function dismissOnEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setMenuOpen(false);
-      menuButton.current?.focus();
-    }
-    document.addEventListener("keydown", dismissOnEscape);
-    return () => document.removeEventListener("keydown", dismissOnEscape);
-  }, [menuOpen]);
 
   useEffect(() => {
     let current = true;
@@ -478,17 +487,17 @@ export function Workspace({
       <header className="masthead app-toolbar">
         <a className="workspace-skip-link" href="#workspace-content">Skip to content</a>
         {state === "ready" && (
-          <button
-            aria-controls="workspace-navigation"
-            aria-expanded={menuOpen}
-            aria-label={menuOpen ? "Close workspace menu" : "Open workspace menu"}
-            className="workspace-menu-toggle"
-            onClick={() => setMenuOpen((open) => !open)}
-            ref={menuButton}
-            type="button"
-          >
-            <span aria-hidden="true">{menuOpen ? "×" : "☰"}</span>
-          </button>
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetTrigger render={<Button aria-label="Open workspace menu" className="workspace-menu-toggle" size="icon" type="button" variant="outline" />}>
+              <MenuIcon aria-hidden="true" />
+            </SheetTrigger>
+            <SheetContent className="workspace-mobile-sheet" side="left">
+              <SheetTitle>Workspace navigation</SheetTitle>
+              <nav aria-label="Mobile workspace" className="workspace-mobile-nav">
+                <WorkspaceNavGroups activeSection={activeSection} onNavigate={() => setMenuOpen(false)} />
+              </nav>
+            </SheetContent>
+          </Sheet>
         )}
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">OL</span>
@@ -513,40 +522,31 @@ export function Workspace({
             >
               {household.ownerDisplayName.trim().slice(0, 1).toUpperCase()}
             </span>
-            <button className="text-action" disabled={signingOut} onClick={logout} type="button">
+            <Button disabled={signingOut} onClick={logout} type="button" variant="outline">
               {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
-            </button>
+            </Button>
           </div>
         )}
       </header>
 
-      {state === "loading" && <main className="state-panel"><p>Checking owner access…</p></main>}
-      {state === "leaving" && <main className="state-panel"><p>Closing owner workspace…</p></main>}
+      {state === "loading" && <main className="state-panel"><Skeleton aria-hidden="true" className="state-skeleton" /><p>Checking owner access…</p></main>}
+      {state === "leaving" && <main className="state-panel"><Skeleton aria-hidden="true" className="state-skeleton" /><p>Closing owner workspace…</p></main>}
       {state === "service" && (
         <main className="state-panel">
-          <p className="eyebrow">Connection problem</p>
-          <h1 className="state-title">OneLedger is unavailable</h1>
-          <p className="lede">The owner workspace could not be loaded. Check the API service and try again.</p>
-          <button className="primary-action" onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</button>
+          <Empty>
+            <EmptyHeader>
+              <p className="eyebrow">Connection problem</p>
+              <EmptyTitle><h1 className="state-title">OneLedger is unavailable</h1></EmptyTitle>
+              <EmptyDescription>The owner workspace could not be loaded. Check the API service and try again.</EmptyDescription>
+            </EmptyHeader>
+            <Button onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</Button>
+          </Empty>
         </main>
       )}
       {state === "ready" && household && currency && (
         <main className="workspace-grid">
-          {menuOpen && <button aria-label="Dismiss navigation" className="workspace-menu-scrim" onClick={() => setMenuOpen(false)} type="button" />}
-          <nav className={`workspace-nav${menuOpen ? " is-open" : ""}`} aria-label="Workspace" id="workspace-navigation">
-            {NAV_GROUPS.map((group) => (
-              <div className="workspace-nav-group" key={group.label}>
-                <p className="workspace-nav-label">{group.label}</p>
-                {group.links.map((link) => (
-                  <Link
-                    aria-current={link.sections.includes(activeSection) ? "page" : undefined}
-                    href={link.href}
-                    key={link.href}
-                    onClick={() => setMenuOpen(false)}
-                  >{link.label}</Link>
-                ))}
-              </div>
-            ))}
+          <nav className="workspace-nav" aria-label="Workspace" id="workspace-navigation">
+            <WorkspaceNavGroups activeSection={activeSection} />
           </nav>
 
           <div className="workspace-content-anchor" id="workspace-content" tabIndex={-1} />

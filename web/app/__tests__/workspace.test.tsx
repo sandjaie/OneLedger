@@ -296,13 +296,12 @@ describe("authenticated workspace", () => {
     const menu = screen.getByRole("button", { name: "Open workspace menu" });
     expect(menu.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(menu);
-    expect(screen.getByRole("button", { name: "Close workspace menu" }).getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("navigation", { name: "Workspace" }).classList.contains("is-open")).toBe(true);
+    expect(screen.getByRole("navigation", { name: "Mobile workspace" })).toBeTruthy();
 
-    const destination = screen.getByRole("link", { name: "Accounts" });
+    const destination = within(screen.getByRole("navigation", { name: "Mobile workspace" })).getByRole("link", { name: "Accounts" });
     destination.addEventListener("click", (event) => event.preventDefault(), { once: true });
     fireEvent.click(destination);
-    expect(screen.getByRole("button", { name: "Open workspace menu" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("navigation", { name: "Mobile workspace" })).toBeNull();
   });
 
   it("dismisses compact navigation with Escape", async () => {
@@ -312,7 +311,8 @@ describe("authenticated workspace", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(screen.getByRole("button", { name: "Open workspace menu" }).getAttribute("aria-expanded")).toBe("false");
+    await waitFor(() => expect(screen.queryByRole("navigation", { name: "Mobile workspace" })).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Open workspace menu" }));
   });
 
   it.each([

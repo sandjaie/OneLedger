@@ -1,6 +1,7 @@
 "use client";
 
 import { type KeyboardEvent, type ReactNode, useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 type RowActionsProps = {
   children: ReactNode;
@@ -44,15 +45,15 @@ export function RowActions({ children, id, label }: RowActionsProps) {
 
   return (
     <div className="row-actions">
-      <button
+      <Button
         aria-controls={contentId}
         aria-expanded={open}
-        className="text-action"
         onClick={toggle}
         onKeyDown={handleTriggerKeyDown}
         ref={triggerRef}
         type="button"
-      >{label}</button>
+        variant="outline"
+      >{label}</Button>
       <div
         aria-label={label}
         className="row-actions-content"
