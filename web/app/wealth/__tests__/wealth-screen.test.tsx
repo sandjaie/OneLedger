@@ -34,6 +34,7 @@ const history: WealthHistoryResponse = {
       statusCounts: { available: 1 },
       computedAt: "2026-09-14T00:00:00Z",
       chartRatio: "1.0000",
+      chartCoordinate: 10000,
     },
     {
       // Fails closed: an incomplete month's totals are null, never a partial sum — and its
@@ -45,6 +46,7 @@ const history: WealthHistoryResponse = {
       statusCounts: { available: 1, before_opening: 1 },
       computedAt: "2026-09-14T00:00:00Z",
       chartRatio: null,
+      chartCoordinate: null,
     },
   ],
 };
@@ -93,7 +95,7 @@ describe("wealth screen", () => {
     });
     render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
 
-    const table = await screen.findByRole("table", { name: /Month-end net worth/ });
+    const table = await screen.findByRole("table", { name: /Month-end net worth, in/ });
     expect(within(table).getByText("2024-01-31")).toBeTruthy();
     expect(within(table).getByText("AED 1,500.0000")).toBeTruthy();
     expect(within(table).getByText("Complete")).toBeTruthy();
@@ -101,17 +103,28 @@ describe("wealth screen", () => {
     expect(within(table).getByText("Unavailable — incomplete")).toBeTruthy();
   });
 
-  it("draws a chart bar from the server's ratio string and none for an incomplete month", async () => {
+  it("draws the Nova trend from server coordinates with an exact-value gap", async () => {
     const request = requestFrom((path) => {
       if (path === "/wealth-history") return history;
       throw new ApiError(500, "unexpected");
     });
     render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
 
-    const chart = await screen.findByRole("img", { name: /Month-end net worth/ });
-    const bars = chart.getElementsByClassName("data-chart-bar");
-    expect(bars).toHaveLength(1); // one bar for the complete month, none for the incomplete one
-    expect((bars[0] as HTMLElement).style.getPropertyValue("--ratio")).toBe("1.0000");
+    const table = await screen.findByRole("table", { name: /Month-end net worth.*exact values/ });
+    expect(within(table).getByText("AED 1,500.0000")).toBeTruthy();
+    expect(within(table).getByText("Not available")).toBeTruthy();
+  });
+
+  it("focuses the selected panel when reviewing an incomplete month", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-02-29") return { ...january, monthEnd: "2024-02-29", positions: [] };
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Review incomplete month/ }));
+    const heading = await screen.findByRole("heading", { name: "2024-02-29 positions" });
+    expect(document.activeElement).toBe(heading.closest("section"));
   });
 
   it("selecting a month shows its positions table with server strings only", async () => {
@@ -165,9 +178,10 @@ describe("wealth screen", () => {
     });
     render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
 
-    const table = await screen.findByRole("table", { name: /Month-end net worth/ });
+    const table = await screen.findByRole("table", { name: /Month-end net worth, in/ });
     expect(within(table).getByText("Before opening: 1")).toBeTruthy();
-    expect(screen.getByText(/^Last refreshed /)).toBeTruthy();
+    fireEvent.click(screen.getByText("How this history is stored"));
+    expect(screen.getByText(/Last refreshed /)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
 
@@ -193,7 +207,7 @@ describe("wealth screen", () => {
     expect(await screen.findByText("No history yet. Refresh to compute it.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
 
-    await waitFor(() => expect(screen.getByText("AED 1,600.0000")).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText("AED 1,600.0000").length).toBeGreaterThan(0));
   });
 
   it("reloads the selected month's positions after a refresh", async () => {

@@ -244,6 +244,15 @@ def test_superseded_payslip_is_excluded_from_analysis(live: SalaryFixture) -> No
     assert len(currency["payslips"]) == 1
     assert currency["payslips"][0]["netPay"] == "4200.0000"
     assert currency["years"][0]["netPay"] == "4200.0000"
+    assert currency["trend"] == [
+        {
+            "payMonth": "2026-01",
+            "earnedNetPay": "4200.0000",
+            "cashReceived": None,
+            "earnedCoordinate": 10000,
+            "receivedCoordinate": None,
+        }
+    ]
 
 
 def test_receipt_status_received_unlinked_and_ineligible(live: SalaryFixture) -> None:
@@ -317,6 +326,50 @@ def test_receipt_status_received_unlinked_and_ineligible(live: SalaryFixture) ->
     by_year = {y["year"]: y for y in currency["years"]}
     assert by_year[2026]["cashReceived"] == "4000.0000"
     assert by_year[2026]["receivedMonths"] == 1
+    trend = {point["payMonth"]: point for point in currency["trend"]}
+    assert list(trend) == ["2026-01", "2026-02", "2026-03"]
+    assert [trend[month]["cashReceived"] for month in trend] == [None, "4000.0000", None]
+    assert [trend[month]["receivedCoordinate"] for month in trend] == [None, 10000, None]
+
+
+def test_monthly_trend_with_multiple_payslips_requires_all_receipts(live: SalaryFixture) -> None:
+    first = _create_payslip(live, payMonth="2026-02")
+    second = _create_payslip(
+        live,
+        payMonth="2026-02",
+        grossEarnings="4000.0000",
+        netPay="3000.0000",
+        lines=[
+            {"kind": "earning", "label": "Bonus", "amount": "4000.0000"},
+            {"kind": "deduction", "label": "Tax", "amount": "1000.0000"},
+        ],
+    )
+    first_credit = _income(live, amount="4000.0000", on=date(2026, 2, 1))
+    linked = client().put(
+        f"/payslips/{first['id']}/deposit",
+        json={"transactionId": str(first_credit)},
+        headers=ORIGIN,
+    )
+    assert linked.status_code == 200, linked.json()
+
+    point = _currency_block(_analysis(), live.currency)["trend"][0]
+    assert point["payMonth"] == "2026-02"
+    assert point["earnedNetPay"] == "7000.0000"
+    assert point["cashReceived"] is None
+    assert point["receivedCoordinate"] is None
+
+    second_credit = _income(live, amount="3000.0000", on=date(2026, 2, 2))
+    linked = client().put(
+        f"/payslips/{second['id']}/deposit",
+        json={"transactionId": str(second_credit)},
+        headers=ORIGIN,
+    )
+    assert linked.status_code == 200, linked.json()
+    point = _currency_block(_analysis(), live.currency)["trend"][0]
+    assert point["earnedNetPay"] == "7000.0000"
+    assert point["cashReceived"] == "7000.0000"
+    assert point["earnedCoordinate"] == 10000
+    assert point["receivedCoordinate"] == 10000
 
 
 def test_salary_credits_without_payslip_excludes_linked_and_v44_income_leg(

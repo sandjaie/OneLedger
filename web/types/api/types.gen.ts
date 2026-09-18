@@ -6311,6 +6311,10 @@ export type MonthSummary = {
      * Chartratio
      */
     chartRatio: string | null;
+    /**
+     * Chartcoordinate
+     */
+    chartCoordinate: number | null;
 };
 
 /**
@@ -9237,6 +9241,10 @@ export type SalaryCurrencyOut = {
      * Labels
      */
     labels: Array<SalaryLabelOut>;
+    /**
+     * Trend
+     */
+    trend: Array<SalaryTrendPointOut>;
 };
 
 /**
@@ -9355,6 +9363,32 @@ export type SalaryPayslipOut = {
      * Lines
      */
     lines: Array<EarningLineOut>;
+};
+
+/**
+ * SalaryTrendPointOut
+ */
+export type SalaryTrendPointOut = {
+    /**
+     * Paymonth
+     */
+    payMonth: string;
+    /**
+     * Earnednetpay
+     */
+    earnedNetPay: string | null;
+    /**
+     * Cashreceived
+     */
+    cashReceived: string | null;
+    /**
+     * Earnedcoordinate
+     */
+    earnedCoordinate: number | null;
+    /**
+     * Receivedcoordinate
+     */
+    receivedCoordinate: number | null;
 };
 
 /**

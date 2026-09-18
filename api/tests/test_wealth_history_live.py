@@ -980,13 +980,17 @@ def test_chart_ratio_is_exact_for_mixed_sign_months_and_null_for_incomplete() ->
 
         assert by_month["2024-02-29"]["complete"] is False
         assert by_month["2024-02-29"]["chartRatio"] is None
+        assert by_month["2024-02-29"]["chartCoordinate"] is None
 
         assert by_month["2024-03-31"]["totalBase"] == "1000.0000"
         assert by_month["2024-03-31"]["chartRatio"] == "0.5000"
+        assert by_month["2024-03-31"]["chartCoordinate"] == 5000
         assert by_month["2024-04-30"]["totalBase"] == "-2000.0000"
         assert by_month["2024-04-30"]["chartRatio"] == "-1.0000"
+        assert by_month["2024-04-30"]["chartCoordinate"] == -10000
         assert by_month["2024-05-31"]["totalBase"] == "500.0000"
         assert by_month["2024-05-31"]["chartRatio"] == "0.2500"
+        assert by_month["2024-05-31"]["chartCoordinate"] == 2500
     finally:
         app.dependency_overrides.clear()
         with connection.cursor() as cur:

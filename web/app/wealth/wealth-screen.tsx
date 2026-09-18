@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { EvidenceChart } from "@/app/ui/evidence-chart";
+import { Button } from "@/components/ui/button";
 import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -101,6 +103,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   // response (the owner clicked a second month before the first one's positions/attribution
   // came back) is dropped instead of clobbering what's now on screen.
   const selectionRef = useRef(0);
+  const selectedPanelRef = useRef<HTMLElement>(null);
+  const firstIncomplete = history?.months.find((row) => !row.complete);
+
+  useEffect(() => {
+    if (selected) selectedPanelRef.current?.focus();
+  }, [selected]);
 
   useEffect(() => {
     let current = true;
@@ -173,17 +181,14 @@ export function WealthScreen({ currency, currencies, request }: Props) {
   return (
     <section aria-labelledby="wealth-title" className="workspace-content wealth-screen">
       <header className="page-head">
+        <p className="eyebrow">Stored month-end evidence</p>
         <h1 className="workspace-title" id="wealth-title">Wealth</h1>
-        <p>
-          Month-end net worth from the history anchor, with each account&rsquo;s evidence date
-          and translation rate stored so a past figure is reproducible.
-        </p>
-        <button
-          className="primary-action"
+        <p>Follow recorded month-end net worth and investigate any gap before trusting a trend.</p>
+        <Button
           disabled={refreshing}
           onClick={() => void refresh()}
           type="button"
-        >{refreshing ? "Refreshing…" : "Refresh history"}</button>
+        >{refreshing ? "Refreshing…" : "Refresh history"}</Button>
         {refreshCounts && (
           <p className="page-status" role="status">
             Refreshed {refreshCounts.monthsComputed} {refreshCounts.monthsComputed === 1 ? "month" : "months"},{" "}
@@ -191,9 +196,10 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           </p>
         )}
         {problem && <p className="page-status" role="alert">{problem}</p>}
-        {state === "ready" && history && history.months.length > 0 && (
-          <p>Last refreshed {new Date(history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)).toLocaleString()}</p>
-        )}
+        {state === "ready" && history && history.months.length > 0 && <details className="experience-disclosure">
+          <summary>How this history is stored</summary>
+          <p>Each account&rsquo;s evidence date and translation rate are stored so past figures remain reproducible. Last refreshed {new Date(history.months.reduce((latest, row) => (row.computedAt > latest ? row.computedAt : latest), history.months[0].computedAt)).toLocaleString()}.</p>
+        </details>}
       </header>
 
       {state === "loading" && <p className="loading-frame" role="status">Loading wealth history…</p>}
@@ -210,29 +216,25 @@ export function WealthScreen({ currency, currencies, request }: Props) {
 
       {state === "ready" && history && (
         <>
+          {history.months.length > 0 && <div className="wealth-evidence-summary">
+            <span>{history.months.filter((row) => row.complete).length} of {history.months.length} months complete</span>
+            {firstIncomplete ? <Button onClick={() => selectMonth(firstIncomplete.monthEnd)} type="button" variant="outline">
+              Review incomplete month · {firstIncomplete.monthEnd}
+            </Button> : <span>All stored months have complete values.</span>}
+          </div>}
           {history.months.length > 0 && (
-            <p className="lede">The chart shows month-end net worth in {history.baseCurrency}.</p>
-          )}
-          {history.months.length > 0 && (
-            <div
-              aria-label={`Month-end net worth in ${history.baseCurrency}, as a bar chart — the table below states each figure`}
-              className="data-chart data-chart--wealth"
-              role="img"
-            >
-              {history.months.map((row) => (
-                <div className="data-chart-column" key={row.monthEnd}>
-                  <div className="data-chart-track">
-                    {row.chartRatio !== null && (
-                      <div
-                        className="data-chart-bar"
-                        style={{ "--ratio": row.chartRatio } as CSSProperties}
-                      />
-                    )}
-                  </div>
-                  <span className="data-chart-label">{row.monthEnd.slice(2, 7)}</span>
-                </div>
-              ))}
-            </div>
+            <EvidenceChart
+              title={`Month-end net worth · ${history.baseCurrency}`}
+              description="Stored month-end totals only. Incomplete months are gaps, not zero; select a month in the ledger table for its positions and attribution."
+              periods={history.months.map((row) => row.monthEnd.slice(0, 7))}
+              series={[{
+                id: "networth", label: "Net worth", color: "var(--category-1)", lineStyle: "solid", marker: "circle",
+                points: history.months.map((row) => ({
+                  period: row.monthEnd.slice(0, 7), coordinate: row.chartCoordinate,
+                  exact: !row.complete || row.totalBase === null ? null : moneyText(row.totalBase, history.baseCurrency, currencies),
+                })),
+              }]}
+            />
           )}
 
           <div className="wealth-table-wrap">
@@ -286,7 +288,7 @@ export function WealthScreen({ currency, currencies, request }: Props) {
           </div>
 
           {selected && (
-            <section aria-labelledby="wealth-month-title" className="wealth-month">
+            <section aria-labelledby="wealth-month-title" className="wealth-month" ref={selectedPanelRef} tabIndex={-1}>
               <h2 id="wealth-month-title">{selected} positions</h2>
               {monthState === "loading" && <p role="status">Loading {selected}&rsquo;s positions…</p>}
               {monthState === "error" && (

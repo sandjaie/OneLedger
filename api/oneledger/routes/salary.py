@@ -3,7 +3,8 @@ specs/2026-09-16-phase-4-2-salary-analysis.md`, plan `docs/superpowers/plans/202
 salary-analysis.md` "Phase 4.2 Task 1"). This module reads active payslips and their earning
 lines, each payslip's receipt status, the household's `payslip_earning_rule` rows and salary
 credits with no payslip, then hands the payslip rows to the pure `salary_analysis.analyze_salary`
-— no figure is computed here. `GET /salary/analysis` and `GET /salary/earning-rules` open
+— except read-only, Decimal-exact chart aggregation, no figure is computed here. `GET
+/salary/analysis` and `GET /salary/earning-rules` open
 `SET TRANSACTION READ ONLY`; the earning-rule writes take the household lock first, matching
 `routes/recurring.py`'s convention.
 
@@ -26,11 +27,13 @@ from pydantic import BaseModel, ConfigDict
 from ..auth import OwnerSession, require_owner
 from ..categories_sql import EFFECTIVE_CATEGORY
 from ..db import connect
+from ..money import chart_coordinates
 from ..salary_analysis import (
     Component,
     CurrencyAnalysis,
     EarningLineIn,
     PayslipIn,
+    PayslipOut,
     ReceiptStatus,
     analyze_salary,
 )
@@ -105,6 +108,14 @@ class SalaryLabelOut(BaseModel):
     latestAmount: str
 
 
+class SalaryTrendPointOut(BaseModel):
+    payMonth: str
+    earnedNetPay: str | None
+    cashReceived: str | None
+    earnedCoordinate: int | None
+    receivedCoordinate: int | None
+
+
 class SalaryCurrencyOut(BaseModel):
     currency: str
     years: list[SalaryYearOut]
@@ -113,6 +124,7 @@ class SalaryCurrencyOut(BaseModel):
     increments: list[SalaryIncrementOut]
     variablePay: list[SalaryVariablePayOut]
     labels: list[SalaryLabelOut]
+    trend: list[SalaryTrendPointOut]
 
 
 class SalaryCreditOut(BaseModel):
@@ -233,6 +245,35 @@ def _load_salary_credits_without_payslip(
 
 
 def _out_currency(analysis: CurrencyAnalysis) -> SalaryCurrencyOut:
+    by_month: dict[date, list[PayslipOut]] = {}
+    for payslip in analysis.payslips:
+        by_month.setdefault(payslip.pay_month, []).append(payslip)
+    month_values: dict[date, tuple[Decimal | None, Decimal | None]] = {}
+    for month in sorted(set(by_month) | set(analysis.gaps)):
+        slips = by_month.get(month, [])
+        if not slips:
+            month_values[month] = (None, None)
+        else:
+            earned = sum((slip.net_pay for slip in slips), Decimal(0))
+            # A partially linked month is unknown as a whole. Showing the linked subset as a
+            # received total would invite an invalid earned-versus-received comparison.
+            received = (
+                sum(
+                    (slip.cash_received for slip in slips if slip.cash_received is not None),
+                    Decimal(0),
+                )
+                if all(slip.cash_received is not None for slip in slips)
+                else None
+            )
+            month_values[month] = (earned, received)
+    coordinates = chart_coordinates(
+        {
+            (month, series): amount
+            for month, (earned, received) in month_values.items()
+            for series, amount in (("earned", earned), ("received", received))
+            if amount is not None
+        }
+    )
     return SalaryCurrencyOut(
         currency=analysis.currency,
         years=[
@@ -310,6 +351,16 @@ def _out_currency(analysis: CurrencyAnalysis) -> SalaryCurrencyOut:
                 latestAmount=str(label.latest_amount),
             )
             for label in analysis.labels
+        ],
+        trend=[
+            SalaryTrendPointOut(
+                payMonth=_pay_month_str(month),
+                earnedNetPay=None if earned is None else str(earned),
+                cashReceived=None if received is None else str(received),
+                earnedCoordinate=coordinates.get((month, "earned")),
+                receivedCoordinate=coordinates.get((month, "received")),
+            )
+            for month, (earned, received) in month_values.items()
         ],
     )
 

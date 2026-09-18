@@ -26,7 +26,7 @@ from .. import attribution
 from ..auth import OwnerSession, require_owner
 from ..db import connect
 from ..investments.positions import current_rate_pair
-from ..money import _ZERO, _out, chart_ratios
+from ..money import _ZERO, _out, chart_coordinates, chart_ratios
 from ..resources import household_currencies
 from ..wealth_history import RefreshCounts, refresh, stored_month_ends
 
@@ -47,6 +47,7 @@ class MonthSummary(BaseModel):
     # bar height comes from a server string rather than browser arithmetic on money. Null for
     # an incomplete month, "0.0000" for every complete month when that largest total is zero.
     chartRatio: str | None
+    chartCoordinate: int | None
 
 
 class WealthHistoryResponse(BaseModel):
@@ -168,6 +169,7 @@ def read_wealth_history(
                 assert total_base is not None
                 complete_totals[month_end_value] = total_base
         ratios = chart_ratios(complete_totals)
+        coordinates = chart_coordinates(complete_totals)
         months = [
             MonthSummary(
                 monthEnd=month_end_value,
@@ -177,6 +179,7 @@ def read_wealth_history(
                 statusCounts=counts_by_month.get(month_end_value, {}),
                 computedAt=computed_at,
                 chartRatio=ratios.get(month_end_value) if complete else None,
+                chartCoordinate=coordinates.get(month_end_value) if complete else None,
             )
             for month_end_value, total_base, total_secondary, complete in rows
         ]
