@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RecurringScreen } from "@/app/recurring/recurring-screen";
@@ -63,6 +63,43 @@ afterEach(() => {
 });
 
 describe("recurring screen", () => {
+  it("leads with the earliest dated non-subscription payment", async () => {
+    const response: RecurringResponse = { series: [
+      aSeries({ id: "later", label: "Synthetic later", nextExpectedOn: "2026-10-10" }),
+      aSeries({ id: "earlier", label: "Synthetic earlier", nextExpectedOn: "2026-09-20" }),
+      aSeries({ id: "subscription", label: "Synthetic subscription", isSubscription: true, nextExpectedOn: "2026-09-19" }),
+    ] };
+    const request = vi.fn((path: string) => path === "/recurring/refresh"
+      ? Promise.resolve({}) : Promise.resolve(response));
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+
+    const next = await screen.findByRole("region", { name: "Next payment" });
+    expect(next.textContent).toContain("Synthetic earlier");
+    expect(next.textContent).toContain("2026-09-20");
+    expect(next.textContent).not.toContain("Synthetic subscription");
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it("separates Active and Ended and keeps lifecycle controls behind review", async () => {
+    const response: RecurringResponse = { series: [
+      aSeries({ id: "active", label: "Synthetic active" }),
+      aSeries({ id: "ended", label: "Synthetic ended", isCurrent: false, status: "ended",
+        lastPeriodEndedOn: "2026-08-15", lastEndReason: "lapsed" }),
+    ] };
+    const request = vi.fn((path: string) => path === "/recurring/refresh"
+      ? Promise.resolve({}) : Promise.resolve(response));
+    render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+
+    await screen.findByRole("button", { name: "Active" });
+    expect(within(screen.getByRole("region", { name: "Active payments" })).getByText("Synthetic active")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Active payments" })).queryByText("Synthetic ended")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Ended" }));
+    expect(within(screen.getByRole("region", { name: "Ended payments" })).getByText("Synthetic ended")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Ended payments" })).queryByText("Synthetic active")).toBeNull();
+    expect(screen.getByText(/ended 2026-08-15/)).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
+  });
+
   it("refreshes once on open, then lists the returned series from server strings", async () => {
     const response: RecurringResponse = { series: [aSeries()] };
     const request = vi.fn((path: string) => {
@@ -73,8 +110,9 @@ describe("recurring screen", () => {
 
     const { rerender } = render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
 
-    await screen.findByText(/Synthetic streaming service/);
-    expect(screen.getByText(/\$15\.0000/)).toBeTruthy();
+    const active = await screen.findByRole("region", { name: "Active payments" });
+    expect(within(active).getByText("Synthetic streaming service")).toBeTruthy();
+    expect(within(active).getByText(/\$15\.0000/)).toBeTruthy();
     expect(request).toHaveBeenCalledTimes(2);
     expect(request.mock.calls[0][0]).toBe("/recurring/refresh");
     const [, refreshInit] = request.mock.calls[0] as unknown as [string, RequestInit];
@@ -96,8 +134,9 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByText(/Synthetic streaming service/);
+    await screen.findByRole("region", { name: "Active payments" });
 
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "A subscription" }));
 
     await waitFor(() =>
@@ -117,9 +156,8 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    expect(
-      await screen.findByText(/no recurring payment other than a subscription has been found yet/i),
-    ).toBeTruthy();
+    expect(within(await screen.findByRole("region", { name: "Next payment" }))
+      .getByText(/no recurring payment other than a subscription has been found yet/i)).toBeTruthy();
     expect(screen.queryByText(/Synthetic streaming service/)).toBeNull();
   });
 
@@ -140,8 +178,10 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    await screen.findByRole("button", { name: "Review Synthetic streaming service" });
+    fireEvent.click(screen.getByRole("button", { name: "Review Synthetic streaming service" }));
     expect(await screen.findByText(/Everyday card \(•••• 4242\)/)).toBeTruthy();
-    expect(screen.getByText(/Channel: App store/)).toBeTruthy();
+    expect(screen.getByText("App store")).toBeTruthy();
   });
 
   it("asks before removing, and only posts remove on confirmation", async () => {
@@ -152,20 +192,22 @@ describe("recurring screen", () => {
       if (path === "/recurring/series-1/remove") return Promise.resolve({ removed: true });
       throw new Error(`unexpected path ${path}`);
     });
-    const confirm = vi.spyOn(window, "confirm");
-
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByText(/Synthetic streaming service/);
+    await screen.findByRole("region", { name: "Active payments" });
 
-    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText('Remove Synthetic streaming service? This is not "not a subscription" — it stops tracking this payment, and it will not come back on its own.')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep payment" }));
     expect(request).not.toHaveBeenCalledWith(
       "/recurring/series-1/remove",
       expect.anything(),
     );
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Remove"));
 
-    confirm.mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Confirm remove" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         "/recurring/series-1/remove",
@@ -182,17 +224,19 @@ describe("recurring screen", () => {
       if (path === "/recurring/series-1/cancel") return Promise.resolve(aSeries());
       throw new Error(`unexpected path ${path}`);
     });
-    const confirm = vi.spyOn(window, "confirm");
-
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByText(/Synthetic streaming service/);
+    await screen.findByRole("region", { name: "Active payments" });
 
-    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Cancel Synthetic streaming service? This closes its current billing period.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep payment" }));
     expect(request).not.toHaveBeenCalledWith("/recurring/series-1/cancel", expect.anything());
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Cancel"));
 
-    confirm.mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Confirm cancel" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         "/recurring/series-1/cancel",
@@ -217,8 +261,11 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findByText(/Synthetic streaming service/);
+    await screen.findByRole("button", { name: "Ended" });
+    fireEvent.click(screen.getByRole("button", { name: "Ended" }));
 
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
+    expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
@@ -243,6 +290,8 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
+    await screen.findByRole("button", { name: "Ended" });
+    fireEvent.click(screen.getByRole("button", { name: "Ended" }));
     expect(await screen.findByText(/ended 2026-08-15/)).toBeTruthy();
     expect(screen.getByText(/stopped charging/)).toBeTruthy();
   });
@@ -255,8 +304,7 @@ describe("recurring screen", () => {
     });
 
     render(<RecurringScreen currencies={CURRENCIES} request={request as Request} />);
-    expect(
-      await screen.findByText(/no recurring payment other than a subscription has been found yet/i),
-    ).toBeTruthy();
+    expect(within(await screen.findByRole("region", { name: "Next payment" }))
+      .getByText(/no recurring payment other than a subscription has been found yet/i)).toBeTruthy();
   });
 });

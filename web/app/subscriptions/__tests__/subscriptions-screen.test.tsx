@@ -103,6 +103,33 @@ afterEach(() => {
 });
 
 describe("subscriptions screen", () => {
+  it("leads with the next evidenced renewal and keeps totals to three", async () => {
+    render(<SubscriptionsScreen currencies={CURRENCIES} request={fixedRequest([aSeries()], aSummary()) as Request} />);
+
+    const next = await screen.findByRole("region", { name: "Next renewal" });
+    expect(within(next).getByText(/Synthetic streaming service/)).toBeTruthy();
+    expect(within(next).getByText(/2026-09-01/)).toBeTruthy();
+    expect(within(next).getByText(/\$15\.0000/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Subscription totals" })).getAllByRole("article")).toHaveLength(3);
+  });
+
+  it("switches Current and Past without presenting an ended row as current", async () => {
+    const current = aSeries({ id: "current", label: "Synthetic current" });
+    const past = aSeries({ id: "past", label: "Synthetic ended", isCurrent: false,
+      status: "ended", lastPeriodEndedOn: "2026-08-15", lastEndReason: "cancelled" });
+    render(<SubscriptionsScreen currencies={CURRENCIES}
+      request={fixedRequest([current, past], aSummary({ upcoming: [] })) as Request} />);
+
+    await screen.findByRole("button", { name: "Current" });
+    expect(screen.getByRole("button", { name: "Current" }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("link", { name: "Synthetic current" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Synthetic ended" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Past" }));
+    expect(screen.getByRole("link", { name: "Synthetic ended" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Synthetic current" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
+  });
+
   it("refreshes once on open, then renders the summary, upcoming and current lists from server strings", async () => {
     const series = [aSeries()];
     const summary = aSummary();
@@ -114,7 +141,7 @@ describe("subscriptions screen", () => {
     expect(screen.getAllByText(/\$15\.0000/).length).toBeGreaterThan(0);
     const annualCard = screen.getByText("Annual spend").parentElement!;
     expect(within(annualCard).getByText("$180.0000")).toBeTruthy();
-    expect(screen.getByText(/\$15\.0000 a month · \$180\.0000 a year/)).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Current subscriptions" })).getByText(/\$15\.0000 a month/)).toBeTruthy();
 
     expect(request.mock.calls[0][0]).toBe("/recurring/refresh");
     const [, refreshInit] = request.mock.calls[0] as unknown as [string, RequestInit];
@@ -144,6 +171,7 @@ describe("subscriptions screen", () => {
     render(<SubscriptionsScreen currencies={CURRENCIES} request={request as Request} />);
     await screen.findAllByText(/Synthetic streaming service/);
 
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "Not a subscription" }));
 
     await waitFor(() =>
@@ -156,6 +184,7 @@ describe("subscriptions screen", () => {
       ),
     );
     expect(await screen.findByText(/No current subscription has been found yet/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Past" }));
     expect(screen.getByText(/No past subscription is recorded/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Not a subscription" })).toBeNull();
   });
@@ -179,17 +208,19 @@ describe("subscriptions screen", () => {
       }
       throw new Error(`unexpected path ${path}`);
     });
-    const confirm = vi.spyOn(window, "confirm");
-
     render(<SubscriptionsScreen currencies={CURRENCIES} request={request as Request} />);
     await screen.findAllByText(/Synthetic streaming service/);
 
-    confirm.mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(within(dialog).getByText("Cancel Synthetic streaming service? This closes its current billing period.")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep payment" }));
     expect(request).not.toHaveBeenCalledWith("/recurring/series-1/cancel", expect.anything());
+    await waitFor(() => expect(document.activeElement?.textContent).toBe("Cancel"));
 
-    confirm.mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Confirm cancel" }));
 
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
@@ -197,10 +228,13 @@ describe("subscriptions screen", () => {
         expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
       ),
     );
+    fireEvent.click(screen.getByRole("button", { name: "Past" }));
     await screen.findByText(/ended 2026-08-15/);
     expect(screen.getByText(/\(cancelled\)/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
   });
 
   it("resumes a past subscription, moving it back to Current", async () => {
@@ -225,7 +259,10 @@ describe("subscriptions screen", () => {
     });
 
     render(<SubscriptionsScreen currencies={CURRENCIES} request={request as Request} />);
-    await screen.findAllByText(/Synthetic streaming service/);
+    await screen.findByRole("button", { name: "Past" });
+    fireEvent.click(screen.getByRole("button", { name: "Past" }));
+    await screen.findByRole("link", { name: "Synthetic streaming service" });
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
@@ -236,7 +273,10 @@ describe("subscriptions screen", () => {
         expect.objectContaining({ method: "POST", body: JSON.stringify({}) }),
       ),
     );
-    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Current" }));
+    await screen.findByRole("link", { name: "Synthetic streaming service" });
+    fireEvent.click(screen.getByRole("button", { name: "Manage Synthetic streaming service" }));
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
   });
 
   it("renders by-card grouping with masked identifiers", async () => {
@@ -268,9 +308,13 @@ describe("subscriptions screen", () => {
     const request = fixedRequest([], summary);
 
     render(<SubscriptionsScreen currencies={CURRENCIES} request={request as Request} />);
-    expect(await screen.findByText(/Nothing is expected to renew/)).toBeTruthy();
+    expect(within(await screen.findByRole("region", { name: "Next renewal" })).getByText(/Nothing is expected to renew/)).toBeTruthy();
     expect(screen.getByText(/No current subscription has been found yet/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Past" }));
     expect(screen.getByText(/No past subscription is recorded/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
+    expect(within(screen.getByRole("region", { name: "Upcoming subscriptions" })).getByText(/Nothing is expected to renew/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Current" }));
     expect(screen.getByText(/No subscription is linked to a card yet/)).toBeTruthy();
   });
 });
