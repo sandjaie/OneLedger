@@ -156,11 +156,14 @@ describe("the transactions screen", () => {
     );
 
     const entryToggle = screen.getByRole("button", { name: "Record a transaction" });
+    expect(entryToggle.getAttribute("data-slot")).toBe("button");
     expect(entryToggle.getAttribute("aria-expanded")).toBe("false");
     expect(entryToggle.getAttribute("aria-controls")).toBe("manual-transaction-entry");
 
     fireEvent.click(entryToggle);
-    expect(screen.getByRole("form", { name: "Record a transaction" })).toBeTruthy();
+    const entryForm = screen.getByRole("form", { name: "Record a transaction" });
+    expect(within(entryForm).getByLabelText("Account").getAttribute("data-slot")).toBe("native-select");
+    expect(within(entryForm).getByLabelText("Description").getAttribute("data-slot")).toBe("input");
     expect(screen.getByRole("button", { name: "Close manual entry" }).getAttribute("aria-expanded"))
       .toBe("true");
   });
@@ -853,9 +856,8 @@ describe("adding a spending charge as a subscription", () => {
       .getAllByRole("button", { name: "Add as subscription" })
       .find((button) => button.closest("tr")?.textContent?.includes("CHARGE B"))!;
     fireEvent.click(secondOpener);
-    const submit = screen
-      .getAllByRole("button", { name: "Add as subscription" })
-      .find((button) => button.classList.contains("primary-action"))!;
+    const draft = screen.getByText("CHARGE B").closest("tr")?.querySelector(".recurring-dismiss-form");
+    const submit = within(draft as HTMLElement).getByRole("button", { name: "Add as subscription" });
     fireEvent.click(submit);
     await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
 

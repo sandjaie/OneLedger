@@ -13,9 +13,9 @@ Updated: 19 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.7 — Nova/shadcn owner workspace experience** across the existing screens, with evidenced charts | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1–4.7.9 merged in PRs #250, #251, #253, #254, #255, [#256](https://github.com/sandjaie/OneLedger/pull/256), [#257](https://github.com/sandjaie/OneLedger/pull/257), [#258](https://github.com/sandjaie/OneLedger/pull/258), and [#259](https://github.com/sandjaie/OneLedger/pull/259). Phase 4.7.10 cross-screen audit repairs implemented in this task branch | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
-| Next product action | After this audit PR merges, invite owner visual/UX assessment in the running application; engineering verification does not close acceptance. The owner-approved order places this before Phase 4.4 | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
-| Current implementation task | 4.7.10 cross-screen audit repairs implemented in this task branch; no further Phase 4.7 implementation task is planned before owner assessment | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Outcome state | Phase 4.7.1–4.7.10 merged, most recently [PR #260](https://github.com/sandjaie/OneLedger/pull/260). Source audit found remaining custom general-purpose controls; 4.7.11 corrective Accounts/Transactions conversion implemented in this PR. Owner visual/UX acceptance remains open | [closure plan](plans/2026-09-19-phase-4-7-nova-control-closure.md) |
+| Next product action | Finish 4.7.12–4.7.13 control conversion, then invite owner visual/UX assessment in the running application before Phase 4.4 | [closure plan](plans/2026-09-19-phase-4-7-nova-control-closure.md) |
+| Current implementation task | 4.7.11 Accounts and transaction controls in this PR; 4.7.12 Import and investments next | [closure plan](plans/2026-09-19-phase-4-7-nova-control-closure.md) |
 
 ## Canonical phase status
 
@@ -60,7 +60,7 @@ Updated: 19 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| 4.7 — owner workspace experience | **In progress** — 4.7.1–4.7.9 merged; 4.7.10 audit repairs implemented in this task branch; owner visual/UX acceptance open | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| 4.7 — owner workspace experience | **In progress** — 4.7.1–4.7.10 merged; 4.7.11 corrective control conversion in this PR; 4.7.12–4.7.13 remain before owner visual/UX acceptance | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [closure plan](plans/2026-09-19-phase-4-7-nova-control-closure.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

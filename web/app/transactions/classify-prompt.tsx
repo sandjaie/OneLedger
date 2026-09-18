@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import type { ClassifyResult, RuleRow, TransactionRow } from "@/types/api";
 
@@ -135,7 +137,7 @@ export function ClassifyPrompt({
       </p>
       <label className="text-field">
         <span>Pattern</span>
-        <input
+        <Input
           disabled={busy || result !== undefined}
           onChange={(event) => {
             setPattern(event.target.value);
@@ -167,18 +169,17 @@ export function ClassifyPrompt({
         </p>
       )}
       <div className="account-form-actions">
-        <button
-          className="primary-action"
+        <Button
           disabled={busy || !valid || !preview || result !== undefined}
           onClick={() => void always()}
           type="button"
         >
           Always mark rows like this
-        </button>
-        <button disabled={busy || result !== undefined} onClick={() => void once()} type="button">
+        </Button>
+        <Button disabled={busy || result !== undefined} onClick={() => void once()} type="button" variant="outline">
           Just this one
-        </button>
-        <button disabled={busy} onClick={onClose} type="button">Close</button>
+        </Button>
+        <Button disabled={busy} onClick={onClose} type="button" variant="outline">Close</Button>
       </div>
     </section>
   );

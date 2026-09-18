@@ -360,6 +360,16 @@ describe("Accounts", () => {
     expect(screen.getByRole("button", { name: /add institution/i })).toBeTruthy();
   });
 
+  it("uses Nova controls for the account entry path", () => {
+    render(<AccountsScreen {...props} />);
+    const add = screen.getByRole("button", { name: "Add an account" });
+    expect(add.getAttribute("data-slot")).toBe("button");
+    fireEvent.click(add);
+    expect(screen.getByLabelText("Account name").getAttribute("data-slot")).toBe("input");
+    expect(screen.getByLabelText("Institution").getAttribute("data-slot")).toBe("native-select");
+    expect(screen.getByRole("checkbox", { name: "Include in net worth" }).getAttribute("data-slot")).toBe("checkbox");
+  });
+
   it("offers every database-supported institution type", () => {
     render(<AccountsScreen {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Add an account" }));

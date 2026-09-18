@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { EyeIcon } from "@/app/accounts/eye-icon";
 import { ValuationPanel } from "@/app/accounts/valuation-panel";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { ACCOUNT_TYPES, INSTITUTION_TYPES, LIABILITY_TYPES } from "@/lib/accounts/types";
 import { ApiError, type apiFetch, errorText } from "@/lib/api/client";
 import { formatOwed, moneyText } from "@/lib/money/format";
@@ -313,16 +318,18 @@ function AccountIdentifierValue({
       </span>
       <span className="account-identifier-line">
         <span className="account-identifier-value">{revealed ?? identifier.masked}</span>
-        <button
+        <Button
           aria-describedby={!canReveal || note ? explanationId : undefined}
           aria-label={accessibleName}
           className="account-identifier-reveal"
           disabled={!canReveal || busy}
           onClick={() => void reveal()}
+          size="icon-xs"
           type="button"
+          variant="ghost"
         >
           <EyeIcon hidden={Boolean(revealed)} />
-        </button>
+        </Button>
       </span>
       {!canReveal && (
         <span className="account-identifier-note" id={explanationId}>
@@ -564,40 +571,40 @@ export function AccountsScreen({
         <h2>{creating ? "New account" : `Edit ${editing?.name ?? "account"}`}</h2>
         <label className="text-field">
           <span>Account name</span>
-          <input onChange={(event) => field("name", event.target.value)} required value={draft.name} />
+          <Input onChange={(event) => field("name", event.target.value)} required value={draft.name} />
         </label>
         <label className="select-field">
           <span>Institution</span>
-          <select onChange={(event) => field("institutionId", event.target.value)} value={draft.institutionId}>
+          <NativeSelect onChange={(event) => field("institutionId", event.target.value)} value={draft.institutionId}>
             <option value="">None</option>
             {institutions.map((row) => (
               <option key={row.id} value={row.id}>{row.name}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
-        <button onClick={() => setAddingInstitution((open) => !open)} type="button">
+        <Button className="justify-self-start" onClick={() => setAddingInstitution((open) => !open)} type="button" variant="outline">
           Add institution
-        </button>
+        </Button>
         {addingInstitution && (
           <fieldset className="institution-fields">
             <legend>New institution</legend>
             <label className="text-field">
               <span>Institution name</span>
-              <input
+              <Input
                 onChange={(event) => setInstitutionDraft((current) => ({ ...current, name: event.target.value }))}
                 value={institutionDraft.name}
               />
             </label>
             <label className="text-field">
               <span>Short name</span>
-              <input
+              <Input
                 onChange={(event) => setInstitutionDraft((current) => ({ ...current, shortName: event.target.value }))}
                 value={institutionDraft.shortName ?? ""}
               />
             </label>
             <label className="text-field">
               <span>Institution country</span>
-              <input
+              <Input
                 maxLength={2}
                 onChange={(event) => setInstitutionDraft((current) => ({
                   ...current,
@@ -608,7 +615,7 @@ export function AccountsScreen({
             </label>
             <label className="select-field">
               <span>Institution type</span>
-              <select
+              <NativeSelect
                 onChange={(event) => setInstitutionDraft((current) => ({
                   ...current,
                   institutionType: event.target.value,
@@ -618,34 +625,34 @@ export function AccountsScreen({
                 {INSTITUTION_TYPES.map((type) => (
                   <option key={type} value={type}>{type}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
-            <button disabled={locked} onClick={() => void saveInstitution()} type="button">Save institution</button>
+            <Button className="self-start" disabled={locked} onClick={() => void saveInstitution()} type="button">Save institution</Button>
           </fieldset>
         )}
         <label className="select-field">
           <span>Account type</span>
-          <select onChange={(event) => field("accountType", event.target.value)} value={draft.accountType}>
+          <NativeSelect onChange={(event) => field("accountType", event.target.value)} value={draft.accountType}>
             {ACCOUNT_TYPES.map((type) => (
               <option key={type} value={type}>{type}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-field">
           <span>Subtype</span>
-          <input onChange={(event) => field("accountSubtype", event.target.value)} value={draft.accountSubtype} />
+          <Input onChange={(event) => field("accountSubtype", event.target.value)} value={draft.accountSubtype} />
         </label>
         <label className="select-field">
           <span>Currency</span>
-          <select onChange={(event) => field("currency", event.target.value)} value={draft.currency}>
+          <NativeSelect onChange={(event) => field("currency", event.target.value)} value={draft.currency}>
             {currencies.map((row) => (
               <option key={row.code} value={row.code}>{row.code}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-field">
           <span>Country</span>
-          <input
+          <Input
             maxLength={2}
             onChange={(event) => field("country", event.target.value.toUpperCase())}
             required
@@ -655,7 +662,7 @@ export function AccountsScreen({
         {creating && (
           <label className="text-field">
             <span>Account or card number</span>
-            <input
+            <Input
               autoComplete="off"
               onChange={(event) => field("accountNumber", event.target.value)}
               value={draft.accountNumber}
@@ -664,11 +671,11 @@ export function AccountsScreen({
         )}
         <label className="date-field">
           <span>Opened on</span>
-          <input onChange={(event) => field("openedOn", event.target.value)} type="date" value={draft.openedOn} />
+          <Input onChange={(event) => field("openedOn", event.target.value)} type="date" value={draft.openedOn} />
         </label>
         <label className="text-field">
           <span>{LIABILITY_TYPES.has(draft.accountType) ? "Amount owed" : "Opening balance"}</span>
-          <input
+          <Input
             inputMode="decimal"
             onChange={(event) => field(
               "openingBalance",
@@ -687,7 +694,7 @@ export function AccountsScreen({
         </label>
         <label className="date-field">
           <span>Opening balance date</span>
-          <input
+          <Input
             onChange={(event) => field("openingBalanceDate", event.target.value)}
             required
             type="date"
@@ -696,14 +703,14 @@ export function AccountsScreen({
         </label>
         <label className="text-field">
           <span>Opening balance note</span>
-          <input
+          <Input
             onChange={(event) => field("openingBalanceNote", event.target.value)}
             value={draft.openingBalanceNote}
           />
         </label>
         <label className="text-field">
           <span>Credit limit</span>
-          <input
+          <Input
             inputMode="decimal"
             onChange={(event) => field("creditLimit", event.target.value)}
             required={draft.accountType === "credit_card"}
@@ -711,35 +718,36 @@ export function AccountsScreen({
             value={draft.creditLimit}
           />
         </label>
-        <label className="check-field">
-          <input
+        <Field orientation="horizontal">
+          <Checkbox
             checked={draft.includeInNetWorth}
-            onChange={(event) => field("includeInNetWorth", event.target.checked)}
-            type="checkbox"
+            id="account-include-net-worth"
+            onCheckedChange={(checked) => field("includeInNetWorth", checked === true)}
           />
-          <span>Include in net worth</span>
-        </label>
-        <label className="check-field">
-          <input
+          <FieldLabel htmlFor="account-include-net-worth">Include in net worth</FieldLabel>
+        </Field>
+        <Field orientation="horizontal">
+          <Checkbox
             checked={draft.isLiquid}
-            onChange={(event) => field("isLiquid", event.target.checked)}
-            type="checkbox"
+            id="account-is-liquid"
+            onCheckedChange={(checked) => field("isLiquid", checked === true)}
           />
-          <span>Liquid</span>
-        </label>
+          <FieldLabel htmlFor="account-is-liquid">Liquid</FieldLabel>
+        </Field>
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         <div className="account-form-actions">
-          <button className="primary-action" disabled={locked} type="submit">
+          <Button disabled={locked} type="submit">
             {creating ? "Create account" : "Save account"}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               setMode("view");
               setEditing(undefined);
               setDraft(emptyDraft(currencies, institutions));
             }}
             type="button"
-          >Cancel</button>
+            variant="outline"
+          >Cancel</Button>
         </div>
       </form>
     );
@@ -801,29 +809,33 @@ export function AccountsScreen({
           {!account.openingBalanceConfirmedAt && (
             <div className="opening-evidence">
               <span>Opening balance not acknowledged</span>
-              <button
+              <Button
                 aria-label={`Acknowledge ${account.name}`}
                 disabled={locked}
                 onClick={() => void acknowledge(account)}
+                size="sm"
                 type="button"
+                variant="outline"
               >
                 Acknowledge
-              </button>
+              </Button>
             </div>
           )}
         </td>
         <td className="account-card-actions">
           <div className="account-row-actions">
-            <button
+            <Button
               aria-label={`Edit ${account.name}`}
               disabled={locked}
               onClick={() => openEdit(account)}
+              size="sm"
               type="button"
+              variant="ghost"
             >
               Edit
-            </button>
+            </Button>
             {account.accountClass === "asset" && account.isActive && (
-              <button
+              <Button
                 aria-label={
                   needsFirstValuation
                     ? `Add valuation for ${account.name}`
@@ -831,29 +843,35 @@ export function AccountsScreen({
                 }
                 disabled={locked}
                 onClick={() => openValuation(account)}
+                size="sm"
                 type="button"
+                variant="ghost"
               >
                 {needsFirstValuation ? "Add valuation" : "Valuation"}
-              </button>
+              </Button>
             )}
             {account.isActive ? (
-              <button
+              <Button
                 aria-label={`Close ${account.name}`}
                 disabled={locked}
                 onClick={() => void closeAccount(account)}
+                size="sm"
                 type="button"
+                variant="ghost"
               >
                 Close
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 aria-label={`Reopen ${account.name}`}
                 disabled={locked}
                 onClick={() => void reopenAccount(account)}
+                size="sm"
                 type="button"
+                variant="ghost"
               >
                 Reopen
-              </button>
+              </Button>
             )}
           </div>
         </td>
@@ -872,7 +890,7 @@ export function AccountsScreen({
             An account is a named store of money you own or owe. Start with its opening balance;
             closed accounts remain visible so their history is not lost.
           </p>
-          <button className="primary-action" onClick={openAdd} type="button">Add an account</button>
+          <Button onClick={openAdd} type="button">Add an account</Button>
         </div>
       </section>
     );
@@ -889,7 +907,7 @@ export function AccountsScreen({
           </p>
         </div>
         {mode === "view" && (
-          <button className="primary-action" onClick={openAdd} type="button">Add an account</button>
+          <Button onClick={openAdd} type="button">Add an account</Button>
         )}
       </div>
 
