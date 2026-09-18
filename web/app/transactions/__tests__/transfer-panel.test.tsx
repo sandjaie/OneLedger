@@ -164,9 +164,12 @@ describe("the transfer queue", () => {
     queue(request);
 
     expect(request).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Find transfers" }));
+    const find = screen.getByRole("button", { name: "Find transfers" });
+    expect(find.getAttribute("data-slot")).toBe("button");
+    fireEvent.click(find);
 
     await screen.findByText("OUT 1", { exact: false });
+    expect(screen.getByRole("checkbox").getAttribute("data-slot")).toBe("checkbox");
     const methods = request.mock.calls.map(([, init]) => (init as RequestInit | undefined)?.method ?? "GET");
     expect(methods.every((method) => method === "GET")).toBe(true);
   });
@@ -190,9 +193,9 @@ describe("the transfer queue", () => {
     const high = await screen.findByRole("group", { name: /High confidence/ });
     const probable = screen.getByRole("group", { name: /Probable/ });
     const weak = screen.getByRole("group", { name: /Weak/ });
-    expect((within(high).getByRole("checkbox") as HTMLInputElement).checked).toBe(true);
-    expect((within(probable).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
-    expect((within(weak).getByRole("checkbox") as HTMLInputElement).checked).toBe(false);
+    expect(within(high).getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
+    expect(within(probable).getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
+    expect(within(weak).getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
   });
 
   it("confirming posts once per ticked pair, as a detected pair, and reports the change", async () => {

@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -174,9 +177,9 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
     <section aria-labelledby="transfers-title" className="account-form transaction-transfer-panel">
       <h2 id="transfers-title">Transfers</h2>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
-      <button className="text-action" disabled={busy} onClick={() => void find()} type="button">
+      <Button disabled={busy} onClick={() => void find()} type="button" variant="outline">
         Find transfers
-      </button>
+      </Button>
 
       {open && (
         <>
@@ -189,12 +192,12 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
                 <legend>{title}</legend>
                 <small>{note}</small>
                 {members.map((candidate) => (
-                  <label className="checkbox-field" key={pairKey(candidate)}>
-                    <input
+                  <label className="checkbox-field" htmlFor={`transfer-${pairKey(candidate)}`} key={pairKey(candidate)}>
+                    <Checkbox
                       checked={ticked.has(pairKey(candidate))}
                       disabled={busy}
-                      onChange={() => toggle(candidate)}
-                      type="checkbox"
+                      id={`transfer-${pairKey(candidate)}`}
+                      onCheckedChange={() => toggle(candidate)}
                     />
                     <span>
                       {describeLeg(candidate.debit, legAmount)} → {describeLeg(candidate.credit, legAmount)}
@@ -206,14 +209,13 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
             );
           })}
           {candidates.length > 0 && (
-            <button
-              className="primary-action"
+            <Button
               disabled={busy || ticked.size === 0}
               onClick={() => void confirmTicked()}
               type="button"
             >
               Confirm selected
-            </button>
+            </Button>
           )}
 
           {confirmed.length > 0 && (
@@ -224,15 +226,16 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
                   {money(transfer.sourceAmount, transfer.sourceCurrency)} →{" "}
                   {money(transfer.destinationAmount, transfer.destinationCurrency)}
                   <small> · {cost(transfer)}</small>
-                  <button
+                  <Button
                     aria-label={`Unlink transfer of ${transfer.transferDate}`}
-                    className="text-action"
                     disabled={busy}
                     onClick={() => void unlink(transfer)}
+                    size="sm"
                     type="button"
+                    variant="ghost"
                   >
                     Unlink
-                  </button>
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -314,7 +317,7 @@ export function PeerPicker({
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
       <label className="text-field">
         <span>Search peers</span>
-        <input onChange={(event) => setSearch(event.target.value)} value={search} />
+        <Input onChange={(event) => setSearch(event.target.value)} value={search} />
       </label>
       {peers === undefined ? (
         <p className="lede">Loading peers…</p>
@@ -328,21 +331,22 @@ export function PeerPicker({
               <li key={pairKey(candidate)}>
                 {describeLeg(peer, legAmount)}
                 <small> · score {candidate.score.toFixed(2)}</small>
-                <button
+                <Button
                   aria-label={`Link ${peer.descriptionRaw}`}
-                  className="text-action"
                   disabled={busy}
                   onClick={() => void link(candidate)}
+                  size="sm"
                   type="button"
+                  variant="ghost"
                 >
                   Link
-                </button>
+                </Button>
               </li>
             );
           })}
         </ol>
       )}
-      <button className="text-action" onClick={onClose} type="button">Close</button>
+      <Button onClick={onClose} type="button" variant="outline">Close</Button>
     </section>
   );
 }

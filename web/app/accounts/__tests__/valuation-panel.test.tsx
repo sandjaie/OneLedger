@@ -62,6 +62,10 @@ describe("ValuationPanel", () => {
 
     expect(await screen.findByText((_, element) => element?.tagName === "STRONG" && element.textContent === "Dated valuation")).toBeTruthy();
     expect(screen.getByText("No valuation recorded yet.")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Valuation — Synthetic retirement account" })).toBeTruthy();
+    expect(screen.getByLabelText("As of date").getAttribute("data-slot")).toBe("input");
+    expect(screen.getByLabelText("Method").getAttribute("data-slot")).toBe("native-select");
+    expect(screen.getByRole("button", { name: "Review valuation" }).getAttribute("data-slot")).toBe("button");
   });
 
   const SNAPSHOT_ROW: ValuationSnapshotRow = {

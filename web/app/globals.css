@@ -248,12 +248,13 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
 .month-field,
 .file-field,
 .password-field { display: grid; gap: 7px; }
-.text-field input,
-.select-field select,
-.date-field input,
-.month-field input,
-.file-field input,
-.password-field input {
+.select-field > [data-slot="native-select-wrapper"] { width: 100%; }
+.text-field input:not([data-slot="input"]),
+.select-field select:not([data-slot="native-select"]),
+.date-field input:not([data-slot="input"]),
+.month-field input:not([data-slot="input"]),
+.file-field input:not([data-slot="input"]),
+.password-field input:not([data-slot="input"]) {
   min-width: 160px; padding: 11px 12px; border: 1px solid var(--rule);
   color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
 }
@@ -741,7 +742,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   gap: 9px;
   padding-left: 12px;
 }
-.account-card button {
+.account-card button:not([data-slot="button"]) {
   padding: 0;
   border: 0;
   color: var(--green);
@@ -751,8 +752,8 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   font-weight: 600;
   text-align: left;
 }
-.account-card button:hover { text-decoration: underline; }
-.account-card button:disabled { cursor: not-allowed; opacity: 0.48; }
+.account-card button:not([data-slot="button"]):hover { text-decoration: underline; }
+.account-card button:not([data-slot="button"]):disabled { cursor: not-allowed; opacity: 0.48; }
 .account-form {
   display: grid;
   gap: 16px;
@@ -761,7 +762,7 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   border-top: 4px solid var(--green);
   background: rgba(255, 255, 255, 0.9);
 }
-.workspace-grid .account-form h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.workspace-grid .account-form h2 { margin: 0; font-family: var(--sans); font-weight: 600; }
 .institution-fields {
   display: grid;
   gap: 14px;
@@ -1133,8 +1134,8 @@ body { background: var(--paper); }
 .transaction-filters .text-field,
 .transaction-filters .select-field,
 .transaction-filters .date-field { min-width: 0; gap: 4px; font-size: 0.65rem; }
-.transaction-filters input,
-.transaction-filters select {
+.transaction-filters input:not([data-slot="input"]),
+.transaction-filters select:not([data-slot="native-select"]) {
   width: 100%;
   min-width: 0;
   padding: 8px 9px;

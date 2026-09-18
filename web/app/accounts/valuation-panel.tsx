@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { apiFetch } from "@/lib/api/client";
 import { errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -209,7 +212,7 @@ export function ValuationPanel({
 
   return (
     <section aria-labelledby="valuation-panel-title" className="valuation-panel">
-      <h3 id="valuation-panel-title">Valuation — {accountName}</h3>
+      <h2 id="valuation-panel-title">Valuation — {accountName}</h2>
       {state === "loading" && <p className="investment-state" role="status">Loading valuation…</p>}
       {state === "error" && <p className="investment-state" role="alert">Valuation could not be loaded.</p>}
       {state === "ready" && data && (
@@ -228,10 +231,10 @@ export function ValuationPanel({
 
           {data.currentMode === "snapshot" && (
             <form className="valuation-form" onSubmit={(event) => void reviewSnapshot(event)}>
-              <h4>Add valuation</h4>
+              <h3>Add valuation</h3>
               <label className="date-field">
                 <span>As of date</span>
-                <input
+                <Input
                   max={today()}
                   onChange={(event) => editField(setAsOfDate)(event.target.value)}
                   required
@@ -241,7 +244,7 @@ export function ValuationPanel({
               </label>
               <label className="text-field">
                 <span>Value ({currency})</span>
-                <input
+                <Input
                   inputMode="decimal"
                   onChange={(event) => editField(setValueNative)(event.target.value)}
                   required
@@ -251,32 +254,32 @@ export function ValuationPanel({
               </label>
               <label className="select-field">
                 <span>Method</span>
-                <select
+                <NativeSelect
                   onChange={(event) => editField(setMethod)(event.target.value as (typeof METHODS)[number])}
                   value={method}
                 >
                   {METHODS.map((option) => (
                     <option key={option} value={option}>{METHOD_LABEL[option]}</option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
               <label className="select-field">
                 <span>Confidence</span>
-                <select
+                <NativeSelect
                   onChange={(event) => editField(setConfidence)(event.target.value as (typeof CONFIDENCES)[number])}
                   value={confidence}
                 >
                   {CONFIDENCES.map((option) => (
                     <option key={option} value={option}>{CONFIDENCE_LABEL[option]}</option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
               <label className="text-field">
                 <span>Source note</span>
-                <input onChange={(event) => editField(setSourceNote)(event.target.value)} value={sourceNote} />
+                <Input onChange={(event) => editField(setSourceNote)(event.target.value)} value={sourceNote} />
               </label>
               {reviewProblem && <p className="inline-alert" role="alert">{reviewProblem}</p>}
-              <button className="primary-action" disabled={reviewBusy} type="submit">Review valuation</button>
+              <Button disabled={reviewBusy} type="submit">Review valuation</Button>
             </form>
           )}
 
@@ -290,14 +293,13 @@ export function ValuationPanel({
                 own date.
               </p>
               {confirmProblem && <p className="inline-alert" role="alert">{confirmProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
                 disabled={confirmBusy}
                 onClick={() => void confirmSnapshot()}
                 type="button"
               >
                 Confirm and record
-              </button>
+              </Button>
             </div>
           )}
 
@@ -310,21 +312,21 @@ export function ValuationPanel({
           )}
 
           <form className="valuation-mode-form" onSubmit={(event) => void submitMode(event)}>
-            <h4>Change valuation mode</h4>
+            <h3>Change valuation mode</h3>
             <label className="select-field">
               <span>Mode</span>
-              <select
+              <NativeSelect
                 onChange={(event) => setNewMode(event.target.value as (typeof VALUATION_MODES)[number])}
                 value={newMode}
               >
                 {VALUATION_MODES.map((mode) => (
                   <option key={mode} value={mode}>{MODE_LABEL[mode]}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             <label className="date-field">
               <span>Effective from</span>
-              <input
+              <Input
                 min={dayAfter(data.currentEffectiveFrom)}
                 onChange={(event) => setEffectiveFrom(event.target.value)}
                 required
@@ -333,7 +335,7 @@ export function ValuationPanel({
               />
             </label>
             {modeProblem && <p className="inline-alert" role="alert">{modeProblem}</p>}
-            <button disabled={modeBusy} type="submit">Change mode</button>
+            <Button disabled={modeBusy} type="submit" variant="outline">Change mode</Button>
           </form>
           {modeNotice && (
             <p className="valuation-mode-notice" role="status">
@@ -343,7 +345,7 @@ export function ValuationPanel({
           )}
         </>
       )}
-      <button onClick={onClose} type="button">Close</button>
+      <Button onClick={onClose} type="button" variant="outline">Close</Button>
     </section>
   );
 }

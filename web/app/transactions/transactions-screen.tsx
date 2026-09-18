@@ -7,6 +7,9 @@ import { apiUrl } from "@/lib/api/url";
 import { ClassifyPrompt } from "@/app/transactions/classify-prompt";
 import { CADENCE_TEXT } from "@/app/recurring/recurring-screen";
 import { PeerPicker, TransferQueue } from "@/app/transactions/transfer-panel";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { formatMoney, moneyText } from "@/lib/money/format";
 import type {
   AccountRow,
@@ -393,15 +396,15 @@ export function TransactionsScreen({
             {active.length === 1 ? "account" : "accounts"}
           </p>
         </div>
-        <button
+        <Button
           aria-controls="manual-transaction-entry"
           aria-expanded={entryOpen}
-          className="text-action"
           onClick={() => setEntryOpen((open) => !open)}
           type="button"
+          variant="outline"
         >
           {entryOpen ? "Close manual entry" : "Record a transaction"}
-        </button>
+        </Button>
       </header>
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
@@ -413,7 +416,7 @@ export function TransactionsScreen({
       >
         <label className="select-field">
           <span>Account</span>
-          <select
+          <NativeSelect
             onChange={(event) => setDraft({ ...draft, accountId: event.target.value })}
             required
             value={draft.accountId}
@@ -424,11 +427,11 @@ export function TransactionsScreen({
                 {account.name} · {account.currency}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="date-field">
           <span>Date</span>
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, bookedDate: event.target.value })}
             required
             type="date"
@@ -437,7 +440,7 @@ export function TransactionsScreen({
         </label>
         <label className="text-field">
           <span>Description</span>
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, description: event.target.value })}
             required
             value={draft.description}
@@ -445,7 +448,7 @@ export function TransactionsScreen({
         </label>
         <label className="text-field">
           <span>Amount (signed)</span>
-          <input
+          <Input
             inputMode="decimal"
             onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
             placeholder="-310.5000"
@@ -456,18 +459,18 @@ export function TransactionsScreen({
         </label>
         <label className="select-field">
           <span>Type</span>
-          <select
+          <NativeSelect
             onChange={(event) => setDraft({ ...draft, txnType: event.target.value })}
             value={draft.txnType}
           >
             {MANUAL_TYPES.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Category</span>
-          <select
+          <NativeSelect
             onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}
             value={draft.categoryId}
           >
@@ -475,19 +478,19 @@ export function TransactionsScreen({
             {categories.filter((row) => row.isActive).map((row) => (
               <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-field">
           <span>Note</span>
-          <input
+          <Input
             onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
             value={draft.notes}
           />
         </label>
         <div className="account-form-actions">
-          <button className="primary-action" disabled={busy} type="submit">
+          <Button disabled={busy} type="submit">
             {busy ? "Saving…" : "Record transaction"}
-          </button>
+          </Button>
         </div>
       </form>}
 
@@ -503,14 +506,14 @@ export function TransactionsScreen({
         <div className="transaction-filter-main">
         <label className="text-field">
           <span>Search descriptions</span>
-          <input
+          <Input
             onChange={(event) => setFilters({ ...filters, q: event.target.value })}
             value={filters.q}
           />
         </label>
         <label className="select-field">
           <span>Account</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, accountId: event.target.value })}
             value={filters.accountId}
           >
@@ -518,11 +521,11 @@ export function TransactionsScreen({
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Category</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}
             value={filters.categoryId}
           >
@@ -530,11 +533,11 @@ export function TransactionsScreen({
             {categories.map((row) => (
               <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Type</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, txnType: event.target.value })}
             value={filters.txnType}
           >
@@ -542,11 +545,11 @@ export function TransactionsScreen({
             {ALL_TYPES.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="date-field">
           <span>From</span>
-          <input
+          <Input
             onChange={(event) => setFilters({ ...filters, dateFrom: event.target.value })}
             type="date"
             value={filters.dateFrom}
@@ -554,7 +557,7 @@ export function TransactionsScreen({
         </label>
         <label className="date-field">
           <span>To</span>
-          <input
+          <Input
             onChange={(event) => setFilters({ ...filters, dateTo: event.target.value })}
             type="date"
             value={filters.dateTo}
@@ -566,7 +569,7 @@ export function TransactionsScreen({
           <div className="transaction-filter-advanced-fields">
         <label className="text-field">
           <span>Amount from</span>
-          <input
+          <Input
             inputMode="decimal"
             onChange={(event) => setFilters({ ...filters, amountMin: event.target.value })}
             value={filters.amountMin}
@@ -574,7 +577,7 @@ export function TransactionsScreen({
         </label>
         <label className="text-field">
           <span>Amount to</span>
-          <input
+          <Input
             inputMode="decimal"
             onChange={(event) => setFilters({ ...filters, amountMax: event.target.value })}
             value={filters.amountMax}
@@ -582,7 +585,7 @@ export function TransactionsScreen({
         </label>
         <label className="select-field">
           <span>Currency</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, currency: event.target.value })}
             value={filters.currency}
           >
@@ -590,11 +593,11 @@ export function TransactionsScreen({
             {currencies.map((option) => (
               <option key={option.code} value={option.code}>{option.code}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="text-field">
           <span>Country</span>
-          <input
+          <Input
             maxLength={2}
             onChange={(event) => setFilters({ ...filters, country: event.target.value })}
             value={filters.country}
@@ -602,21 +605,21 @@ export function TransactionsScreen({
         </label>
         <label className="text-field">
           <span>Tag</span>
-          <input
+          <Input
             onChange={(event) => setFilters({ ...filters, tag: event.target.value })}
             value={filters.tag}
           />
         </label>
         <label className="text-field">
           <span>Merchant id</span>
-          <input
+          <Input
             onChange={(event) => setFilters({ ...filters, merchantId: event.target.value })}
             value={filters.merchantId}
           />
         </label>
         <label className="text-field">
           <span>Source document id</span>
-          <input
+          <Input
             onChange={(event) =>
               setFilters({ ...filters, sourceDocumentId: event.target.value })
             }
@@ -625,28 +628,28 @@ export function TransactionsScreen({
         </label>
         <label className="select-field">
           <span>Review state</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, reviewState: event.target.value })}
             value={filters.reviewState}
           >
             <option value="">All rows</option>
             <option value="reviewed">Reviewed</option>
             <option value="unreviewed">Unreviewed</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Classification</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, classifiedBy: event.target.value })}
             value={filters.classifiedBy}
           >
             <option value="">All rows</option>
             <option value="unclassified">Needs a category</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Sort by</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, sort: event.target.value })}
             value={filters.sort}
           >
@@ -654,22 +657,22 @@ export function TransactionsScreen({
             <option value="amount">Amount</option>
             <option value="description">Description</option>
             <option value="account">Account</option>
-          </select>
+          </NativeSelect>
         </label>
         <label className="select-field">
           <span>Direction</span>
-          <select
+          <NativeSelect
             onChange={(event) => setFilters({ ...filters, direction: event.target.value })}
             value={filters.direction}
           >
             <option value="desc">Newest / largest first</option>
             <option value="asc">Oldest / smallest first</option>
-          </select>
+          </NativeSelect>
         </label>
           </div>
         </details>
         <div className="account-form-actions">
-          <button className="primary-action" disabled={busy} type="submit">Apply filters</button>
+          <Button disabled={busy} type="submit">Apply filters</Button>
         </div>
       </form>
 
@@ -748,25 +751,27 @@ export function TransactionsScreen({
                   ) : null}
                   <span className="transaction-description-raw">{row.descriptionRaw}</span>
                   {!row.transferId && !row.isSplitParent && (
-                    <button
+                    <Button
                       aria-label={`Link ${row.descriptionRaw} as a transfer`}
-                      className="text-action"
                       disabled={busy}
                       onClick={() => setLinking(row)}
+                      size="sm"
                       type="button"
+                      variant="ghost"
                     >
                       Link as transfer
-                    </button>
+                    </Button>
                   )}
                   {isSpendingCharge(row) && subscribingId !== row.id && (
-                    <button
-                      className="text-action"
+                    <Button
                       disabled={busy}
                       onClick={() => startSubscribe(row)}
+                      size="sm"
                       type="button"
+                      variant="ghost"
                     >
                       Add as subscription
-                    </button>
+                    </Button>
                   )}
                   {row.parentTransactionId && <small> · split</small>}
                   <small> · {row.source}</small>
@@ -785,7 +790,7 @@ export function TransactionsScreen({
                   )}
                   <label className="text-field">
                     <span className="visually-hidden">Note for {row.descriptionRaw}</span>
-                    <input
+                    <Input
                       defaultValue={row.notes ?? ""}
                       disabled={busy}
                       onBlur={(event) => void saveNote(row, event.target.value)}
@@ -796,7 +801,7 @@ export function TransactionsScreen({
                     <div className="recurring-dismiss-form">
                       <label className="text-field">
                         <span>Name</span>
-                        <input
+                        <Input
                           onChange={(event) =>
                             setSubscribeForm({ ...subscribeForm, label: event.target.value })
                           }
@@ -805,7 +810,7 @@ export function TransactionsScreen({
                       </label>
                       <label className="select-field">
                         <span>Cadence</span>
-                        <select
+                        <NativeSelect
                           onChange={(event) =>
                             setSubscribeForm({ ...subscribeForm, cadence: event.target.value })
                           }
@@ -814,12 +819,12 @@ export function TransactionsScreen({
                           {Object.entries(CADENCE_TEXT).map(([value, text]) => (
                             <option key={value} value={value}>{text}</option>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </label>
                       {subscribeForm.cadence === "custom" && (
                         <label className="text-field">
                           <span>Days between charges</span>
-                          <input
+                          <Input
                             max={730}
                             min={7}
                             onChange={(event) =>
@@ -836,8 +841,7 @@ export function TransactionsScreen({
                       {subscribeProblem && (
                         <p className="inline-alert" role="alert">{subscribeProblem}</p>
                       )}
-                      <button
-                        className="primary-action"
+                      <Button
                         disabled={
                           subscribeBusy ||
                           !subscribeForm.label.trim() ||
@@ -846,24 +850,26 @@ export function TransactionsScreen({
                               Number.isNaN(subscribeForm.customIntervalDays)))
                         }
                         onClick={() => void submitSubscribe(row)}
+                        size="sm"
                         type="button"
                       >
                         {subscribeBusy ? "Saving…" : "Add as subscription"}
-                      </button>
-                      <button
-                        className="text-action"
+                      </Button>
+                      <Button
                         onClick={() => setSubscribingId(undefined)}
+                        size="sm"
                         type="button"
+                        variant="outline"
                       >
                         Cancel
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </td>
                 <td className="transaction-category">
                   <label className="select-field">
                     <span className="visually-hidden">Category for {row.descriptionRaw}</span>
-                    <select
+                    <NativeSelect
                       disabled={busy || row.isSplitParent}
                       title={
                         row.isSplitParent
@@ -883,7 +889,7 @@ export function TransactionsScreen({
                           <option key={one.id} value={one.id}>{categoryLabel(one)}</option>
                         ),
                       )}
-                    </select>
+                    </NativeSelect>
                   </label>
                   {row.categoryId && !categoryName.has(row.categoryId) && (
                     <small>Category no longer listed</small>
@@ -925,14 +931,14 @@ export function TransactionsScreen({
       )}
 
       {rows.length < count && (
-        <button
-          className="text-action"
+        <Button
           disabled={busy}
           onClick={() => void reload(applied, rows.length, true)}
           type="button"
+          variant="outline"
         >
           Load {Math.min(PAGE, count - rows.length)} more
-        </button>
+        </Button>
       )}
     </section>
   );
