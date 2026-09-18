@@ -16,12 +16,19 @@ from uuid import UUID
 import psycopg
 from pydantic import BaseModel
 
-from ..money import _out
+from ..money import _out, chart_ratios
 from . import funding
 from .adapters import ReviewReason
 from .positions import read_positions
 from .prices import PriceStatus, read_status
-from .returns import PositionValue, XirrReason, group_allocation, portfolio_flows, xirr
+from .returns import (
+    AllocationGroup,
+    PositionValue,
+    XirrReason,
+    group_allocation,
+    portfolio_flows,
+    xirr,
+)
 
 _MONEY_QUANT = Decimal("0.0001")
 
@@ -34,6 +41,21 @@ class AllocationGroupRow(BaseModel):
     label: str
     valueBase: str
     ratio: str | None
+    chartCoordinate: int | None = None
+
+
+def _allocation_rows(groups: list[AllocationGroup]) -> list[AllocationGroupRow]:
+    """Plot signed known values within bounded display space, keeping exact sums/ratios."""
+    coordinates = chart_ratios({group.label: group.value_base for group in groups})
+    return [
+        AllocationGroupRow(
+            label=group.label,
+            valueBase=_money(group.value_base),
+            ratio=_out(group.ratio),
+            chartCoordinate=int(Decimal(coordinates[group.label]) * 10000),
+        )
+        for group in groups
+    ]
 
 
 class PortfolioSummary(BaseModel):
@@ -144,14 +166,8 @@ def read_summary(
         gainSecondary=gain_secondary,
         xirrPercent=xirr_percent,
         xirrReason=xirr_reason,
-        allocationByAssetClass=[
-            AllocationGroupRow(label=g.label, valueBase=_money(g.value_base), ratio=_out(g.ratio))
-            for g in allocation.by_asset_class
-        ],
-        allocationByAccount=[
-            AllocationGroupRow(label=g.label, valueBase=_money(g.value_base), ratio=_out(g.ratio))
-            for g in allocation.by_account
-        ],
+        allocationByAssetClass=_allocation_rows(allocation.by_asset_class),
+        allocationByAccount=_allocation_rows(allocation.by_account),
         allocationComplete=allocation.complete,
         valuedCount=valued_count,
         unvaluedCount=len(positions) - valued_count,

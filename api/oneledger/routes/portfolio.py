@@ -56,7 +56,7 @@ from ..investments.positions import (
     read_positions,
 )
 from ..investments.returns import holding_flows, xirr
-from ..money import _out
+from ..money import _out, chart_ratios
 from ..resources import household_currencies
 from ..wealth_history import stored_month_ends
 
@@ -611,6 +611,26 @@ class MonthOut(BaseModel):
     statusCounts: dict[str, int]
     portfolio: EffectWindowOut
     classes: list[MonthClassOut]
+    returnCoordinate: int | None = None
+    benchmarkCoordinate: int | None = None
+
+
+def _attach_chart_coordinates(months: list[MonthOut]) -> None:
+    """Add bounded display coordinates on one shared Decimal scale; never alter exact returns."""
+    values: dict[tuple[date, str], Decimal] = {}
+    for month in months:
+        if not month.complete:
+            continue
+        if month.portfolio.dietzPercent is not None:
+            values[(month.monthEnd, "actual")] = Decimal(month.portfolio.dietzPercent)
+        if month.portfolio.benchmarkDietzPercent is not None:
+            values[(month.monthEnd, "benchmark")] = Decimal(month.portfolio.benchmarkDietzPercent)
+    ratios = chart_ratios(values)
+    for month in months:
+        actual = ratios.get((month.monthEnd, "actual"))
+        benchmark = ratios.get((month.monthEnd, "benchmark"))
+        month.returnCoordinate = None if actual is None else int(Decimal(actual) * 10000)
+        month.benchmarkCoordinate = None if benchmark is None else int(Decimal(benchmark) * 10000)
 
 
 class TargetGroupOut(BaseModel):
@@ -965,6 +985,7 @@ def portfolio_analysis(
                 _month_out(m, benchmark_by_scope, base, secondary, cur)
                 for m in sorted(final_months, key=lambda m: m.month_end, reverse=True)
             ]
+            _attach_chart_coordinates(months_out)
             years_by_year: dict[int, list[MonthResult]] = {}
             for m in final_months:
                 years_by_year.setdefault(m.month_end.year, []).append(m)

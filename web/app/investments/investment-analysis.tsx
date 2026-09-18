@@ -2,6 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 
+import { EvidenceChart, type EvidenceSeries } from "@/app/ui/evidence-chart";
+import { DIETZ_REASON_TEXT, XIRR_REASON_TEXT } from "@/app/investments/return-reasons";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
 import type {
@@ -19,6 +21,8 @@ type Props = {
   request: typeof apiFetch;
   /** Bumped after a price refresh or a recorded event so analysis reloads with them. */
   refreshKey: number;
+  /** Preserve the read without repeating empty-state explanations in the portfolio focus. */
+  quietEmpty?: boolean;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -32,21 +36,6 @@ const ASSET_CLASSES: Array<AssetClassName> = [
   "alternative",
   "other",
 ];
-
-const XIRR_REASON_TEXT: Record<string, string> = {
-  no_sign_change: "No sign change across the cash flows.",
-  multiple_roots: "More than one rate solves the cash flows.",
-  missing_terminal_value: "No current or realised value is recorded.",
-  incomplete_history: "History includes a switch, transfer or split.",
-  missing_price: "A dated price is missing.",
-  blocked_action: "An unrecognized event blocks this calculation.",
-  not_converged: "The calculation did not converge.",
-};
-
-const DIETZ_REASON_TEXT: Record<string, string> = {
-  no_denominator: "Opening value and weighted contribution are zero.",
-  missing_price: "A dated price is missing.",
-};
 
 function classLabel(label: string) {
   return label.replaceAll("_", " ");
@@ -108,7 +97,51 @@ function statusLine(counts: Record<string, number>) {
   return parts.length === 0 ? "" : parts.join(", ");
 }
 
-export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKey }: Props) {
+function monthlyTrend(data: AnalysisResponse): { periods: string[]; series: EvidenceSeries[] } {
+  const months = new Map(data.months.map((month) => [month.monthEnd.slice(0, 7), month]));
+  const recorded = [...months.keys()].sort();
+  const periods: string[] = [];
+  if (recorded.length > 0) {
+    const cursor = new Date(`${recorded[0]}-01T00:00:00.000Z`);
+    const last = recorded[recorded.length - 1];
+    while (cursor.toISOString().slice(0, 7) <= last) {
+      periods.push(cursor.toISOString().slice(0, 7));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+  }
+  const actual: EvidenceSeries = {
+    id: "actual", label: "Portfolio return", color: "var(--category-1)",
+    lineStyle: "solid", marker: "circle",
+    points: periods.map((period) => {
+      const month = months.get(period);
+      return {
+        period,
+        coordinate: month?.complete ? month.returnCoordinate ?? null : null,
+        exact: month?.complete && month.portfolio.dietzPercent !== null
+          ? `${month.portfolio.dietzPercent}%` : null,
+      };
+    }),
+  };
+  const series = [actual];
+  if (data.benchmarks.some((benchmark) => benchmark.scopeKind === "portfolio")) {
+    series.push({
+      id: "benchmark", label: "Benchmark return", color: "var(--category-2)",
+      lineStyle: "dashed", marker: "square",
+      points: periods.map((period) => {
+        const month = months.get(period);
+        return {
+          period,
+          coordinate: month?.complete ? month.benchmarkCoordinate ?? null : null,
+          exact: month?.complete && month.portfolio.benchmarkDietzPercent !== null
+            ? `${month.portfolio.benchmarkDietzPercent}%` : null,
+        };
+      }),
+    });
+  }
+  return { periods, series };
+}
+
+export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKey, quietEmpty = false }: Props) {
   const [data, setData] = useState<AnalysisResponse>();
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [retryAttempt, setRetryAttempt] = useState(0);
@@ -195,9 +228,25 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
 
   const securities = uniqueSecurities(positions);
   const portfolioBenchmark = data?.benchmarks.find((row) => row.scopeKind === "portfolio");
+  const trend = data ? monthlyTrend(data) : null;
 
   function classBenchmark(label: string): BenchmarkOut | undefined {
     return data?.benchmarks.find((row) => row.scopeKind === "asset_class" && row.assetClass === label);
+  }
+
+  if (quietEmpty) {
+    if (loadState !== "ready" || !data || data.coverage.length === 0) return null;
+    return (
+      <details className="investment-disclosure investment-empty-coverage">
+        <summary>Valuation-only coverage</summary>
+        <div className="investment-disclosure-content">
+          <p>These accounts use recorded snapshots and are excluded from holdings analysis.</p>
+          <ul>{data.coverage.map((row) => (
+            <li key={row.accountId}>{row.accountName} · {classLabel(row.valuationMode)} — excluded from holdings analysis</li>
+          ))}</ul>
+        </div>
+      </details>
+    );
   }
 
   return (
@@ -223,10 +272,20 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
 
       {loadState === "ready" && data && (
         <>
+          {trend && <EvidenceChart
+            title="Monthly return evidence"
+            description="Modified Dietz returns by month. Unvalued or unsupported months remain gaps; exact percentages are listed below."
+            periods={trend.periods}
+            series={trend.series}
+          />}
           {data.classes.length === 0 && data.accounts.length === 0 && (
-            <p>No holdings to analyse.</p>
+            <p>{positions.length === 0 ? "No holdings to analyse." : "No supported holding analysis yet."}</p>
           )}
 
+          <details className="investment-disclosure">
+            <summary>Methodology and detailed returns</summary>
+            <div className="investment-disclosure-content">
+              <p>Returns use recorded cash flows and dated values. Modified Dietz compares monthly opening and closing values with time-weighted flows; XIRR follows the holding cash-flow history. Missing evidence remains unavailable.</p>
           {data.wealthHistoryReason === "wealth_history_not_refreshed" && (
             <p className="investment-state">Wealth history has not been refreshed. Month and year figures are empty until a refresh stores them.</p>
           )}
@@ -527,6 +586,8 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
               </label>
             ))}
           </section>
+            </div>
+          </details>
         </>
       )}
     </section>

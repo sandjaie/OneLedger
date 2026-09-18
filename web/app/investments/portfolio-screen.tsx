@@ -3,10 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { AllocationEvidenceChart } from "@/app/investments/allocation-evidence-chart";
 import { InvestmentAnalysis } from "@/app/investments/investment-analysis";
 import { InvestmentEventForm } from "@/app/investments/investment-event-form";
 import { ReviewQueue } from "@/app/investments/review-queue";
+import { XIRR_REASON_TEXT } from "@/app/investments/return-reasons";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
 import type {
@@ -26,16 +30,6 @@ type Props = {
 type LoadState = "loading" | "ready" | "error";
 
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
-
-const XIRR_REASON_TEXT: Record<string, string> = {
-  no_sign_change: "No sign change across the cash flows.",
-  multiple_roots: "More than one rate solves the cash flows.",
-  missing_terminal_value: "No current or realised value is recorded.",
-  incomplete_history: "History includes a switch, transfer or split.",
-  missing_price: "A dated price is missing.",
-  blocked_action: "An unrecognized event blocks this calculation.",
-  not_converged: "The calculation did not converge.",
-};
 
 function reasonText(reason: string | null) {
   if (!reason) return "";
@@ -143,6 +137,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
   const closed = positions.filter((position) => position.closed);
   const visible = showClosed ? positions : open;
   const due = summary ? isRefreshDue(summary.priceStatus) : false;
+  const hasInvestmentAccount = accounts.some((account) => account.isActive && INVESTMENT_ACCOUNT_TYPES.has(account.accountType));
 
   return (
     <section className="workspace-content portfolio-screen" aria-labelledby="portfolio-title">
@@ -151,10 +146,10 @@ export function PortfolioScreen({ request, accounts }: Props) {
           <p className="eyebrow">Owner portfolio</p>
           <h1 className="workspace-title" id="portfolio-title">Investments</h1>
         </div>
-        <div className="portfolio-links">
-          <Link className="text-action" href="/investments/entry">Record a purchase</Link>
-          <Link className="text-action" href="/investments/import">Import a statement</Link>
-        </div>
+        {state === "ready" && positions.length > 0 && <div className="portfolio-links">
+          <Link className={buttonVariants({ variant: "outline" })} href="/investments/entry">Record a purchase</Link>
+          <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import a statement</Link>
+        </div>}
       </header>
 
       {state === "loading" && <p className="investment-state" role="status">Loading portfolio…</p>}
@@ -167,21 +162,40 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
       {state === "ready" && summary && (
         <>
-          <InvestmentAnalysis
-            baseCurrency={summary.baseCurrency}
-            positions={positions}
-            refreshKey={attempt}
-            request={request}
-          />
+          {positions.length === 0 && <section aria-label="Start your investments" className="portfolio-start">
+            <p className="section-label">Start here</p>
+            <h2>Bring your investments into view</h2>
+            <div className="portfolio-start-actions">
+              <Link className={buttonVariants()} href="/investments/entry">Record a purchase</Link>
+              <Link className={buttonVariants({ variant: "outline" })} href="/investments/import">Import a statement</Link>
+            </div>
+            <p>Analysis needs a recorded holding and dated evidence before value, gain or return can be shown.
+              {!hasInvestmentAccount && <> An investment account is required before recording a purchase. <Link href="/accounts">Add an account</Link>.</>}
+            </p>
+          </section>}
 
-          <div className="portfolio-metrics" aria-label="Portfolio totals">
-            <Metric asOf={summary.asOf} label="Value" value={`${summary.baseCurrency} ${summary.valueBase}`} />
+          {positions.length === 0 && <ReviewQueue quietEmpty request={request} />}
+          {positions.length === 0 && <InvestmentAnalysis baseCurrency={summary.baseCurrency} positions={positions}
+            quietEmpty refreshKey={attempt} request={request} />}
+
+          {positions.length > 0 && <>
+
+          <section className="portfolio-metrics" aria-label="Portfolio totals">
+            <Metric asOf={summary.asOf} label={summary.valueComplete ? "Value" : "Valued portion"}
+              reason={summary.valuedCount === 0 ? "No holdings have a supported current value." : null}
+              value={summary.valuedCount === 0 ? null : `${summary.baseCurrency} ${summary.valueBase}`} />
             <Metric asOf={summary.asOf} label="Contributions" value={`${summary.baseCurrency} ${summary.contributionsBase}`} />
-            <Metric asOf={summary.asOf} label="Gain" reason={summary.gainBase === null ? "one or more holdings withhold gain" : null} value={summary.gainBase === null ? null : `${summary.baseCurrency} ${summary.gainBase}`} />
+            <Metric asOf={summary.asOf} label="Gain" reason={summary.gainBase === null ? "One or more holdings do not have a supported gain." : null} value={summary.gainBase === null ? null : `${summary.baseCurrency} ${summary.gainBase}`} />
             <Metric label="XIRR" reason={summary.xirrReason} value={summary.xirrPercent === null ? null : `${summary.xirrPercent}%`} />
+          </section>
+          <section aria-label="Valuation confidence" className="portfolio-confidence">
+          <div className="portfolio-confidence-head">
+            <div><p className="section-label">Evidence status</p><h2>Valuation confidence</h2></div>
+            <p>{summary.valuedCount} valued · {summary.unvaluedCount} unvalued
+              {summary.staleCount > 0 && ` · ${summary.staleCount} stale`}</p>
           </div>
           {!summary.valueComplete && (
-            <p className="investment-state">{summary.unvaluedCount} of {summary.valuedCount + summary.unvaluedCount} holdings are not valued and are excluded from Value.</p>
+            <p className="investment-state">{summary.unvaluedCount} of {summary.valuedCount + summary.unvaluedCount} holdings are not valued and are excluded from the displayed valued portion.</p>
           )}
 
           <section aria-labelledby="price-status-title" className="portfolio-price-status">
@@ -190,51 +204,20 @@ export function PortfolioScreen({ request, accounts }: Props) {
               <p>
                 {summary.priceStatus.mappedCount} mapped, {summary.priceStatus.unmappedCount} unmapped.
                 {summary.priceStatus.latestPriceDate && ` Latest price ${dateLabel(summary.priceStatus.latestPriceDate)}.`}
-                {summary.staleCount > 0 && ` ${summary.staleCount} holding${summary.staleCount === 1 ? "" : "s"} carry a stale price.`}
+                {summary.staleCount > 0 && ` ${summary.staleCount} holding${summary.staleCount === 1 ? " carries" : "s carry"} a stale price.`}
               </p>
             </div>
             {due ? (
-              <button className="text-action" disabled={refreshing} onClick={() => void refreshPrices()} type="button">
+              <Button disabled={refreshing} onClick={() => void refreshPrices()} type="button" variant="outline">
                 {refreshing ? "Checking source…" : "Check for new prices"}
-              </button>
+              </Button>
             ) : (
               <p className="investment-exact">Checked within the last 24 hours.</p>
             )}
             {refreshMessage && <p className="investment-feedback" role="status">{refreshMessage}</p>}
             {refreshProblem && <p className="inline-alert" role="alert">The price check could not be completed.</p>}
           </section>
-
-          <section aria-labelledby="allocation-title" className="portfolio-allocation">
-            <p className="section-label" id="allocation-title">Allocation</p>
-            {!summary.allocationComplete && <p className="investment-state">Incomplete — one or more holdings are unvalued.</p>}
-            <div className="portfolio-allocation-groups">
-              <div aria-label="Allocation by asset class">
-                <h3>By asset class</h3>
-                {summary.allocationByAssetClass.length === 0 && <p className="investment-state">No valued holdings.</p>}
-                <dl>
-                  {summary.allocationByAssetClass.map((group) => (
-                    <div key={group.label}>
-                      <dt>{group.label}</dt>
-                      <dd>{summary.baseCurrency} {group.valueBase}{group.ratio && ` · ratio ${group.ratio}`}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-              <div aria-label="Allocation by account">
-                <h3>By account</h3>
-                <dl>
-                  {summary.allocationByAccount.map((group) => (
-                    <div key={group.label}>
-                      <dt>{group.label}</dt>
-                      <dd>{summary.baseCurrency} {group.valueBase}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
           </section>
-
-          <ReviewQueue request={request} />
 
           <section aria-labelledby="holdings-title" className="investment-holdings">
             <div className="investment-section-head">
@@ -272,6 +255,32 @@ export function PortfolioScreen({ request, accounts }: Props) {
             )}
           </section>
 
+          <ReviewQueue request={request} />
+
+          <InvestmentAnalysis baseCurrency={summary.baseCurrency} positions={positions}
+            refreshKey={attempt} request={request} />
+
+          <section aria-labelledby="allocation-title" className="portfolio-allocation">
+            <div>
+              <p className="section-label">Composition</p>
+              <h2 id="allocation-title">Allocation</h2>
+              {!summary.allocationComplete && <p className="investment-state">Incomplete — one or more holdings are unvalued.</p>}
+            </div>
+            <AllocationEvidenceChart currency={summary.baseCurrency} groups={summary.allocationByAssetClass} />
+            <details className="investment-disclosure">
+              <summary>Allocation by account</summary>
+              <div className="evidence-chart-table-wrap">
+                <table aria-label="Allocation by account exact values">
+                  <thead><tr><th scope="col">Account</th><th scope="col">Value</th><th scope="col">Ratio</th></tr></thead>
+                  <tbody>{summary.allocationByAccount.map((group) => (
+                    <tr key={group.label}><th scope="row">{group.label}</th><td>{summary.baseCurrency} {group.valueBase}</td><td>{group.ratio ?? "Not available"}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </details>
+          </section>
+
+
           <section aria-labelledby="portfolio-record-event-title">
             <p className="section-label" id="portfolio-record-event-title">Record an event</p>
             {eventNotice && <WealthRefreshNotice message={eventNotice} />}
@@ -284,6 +293,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
               request={request}
             />
           </section>
+          </>}
         </>
       )}
     </section>

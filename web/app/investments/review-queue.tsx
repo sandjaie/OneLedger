@@ -9,6 +9,8 @@ import type { ReviewItemRow } from "@/types/api";
 
 type Props = {
   request: typeof apiFetch;
+  /** Keep actionable import reviews visible when the portfolio has no holdings. */
+  quietEmpty?: boolean;
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -16,7 +18,7 @@ const PAGE_SIZE = 20;
 
 /** Every open investment review this household owns — a holding-scoped row (lot allocation)
  * links to its holding, an import-scoped row to its import. */
-export function ReviewQueue({ request }: Props) {
+export function ReviewQueue({ request, quietEmpty = false }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [rows, setRows] = useState<Array<ReviewItemRow>>([]);
   const [hasMore, setHasMore] = useState(true);
@@ -56,6 +58,8 @@ export function ReviewQueue({ request }: Props) {
       setBusy(false);
     }
   }
+
+  if (quietEmpty && (state === "loading" || (state === "ready" && rows.length === 0))) return null;
 
   return (
     <section aria-labelledby="investment-reviews-title" className="investment-reviews">

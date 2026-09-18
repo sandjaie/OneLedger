@@ -844,6 +844,10 @@ export type AllocationGroupRow = {
      * Ratio
      */
     ratio: string | null;
+    /**
+     * Chartcoordinate
+     */
+    chartCoordinate?: number | null;
 };
 
 /**
@@ -6179,6 +6183,14 @@ export type MonthOut = {
      * Classes
      */
     classes: Array<MonthClassOut>;
+    /**
+     * Returncoordinate
+     */
+    returnCoordinate?: number | null;
+    /**
+     * Benchmarkcoordinate
+     */
+    benchmarkCoordinate?: number | null;
 };
 
 /**

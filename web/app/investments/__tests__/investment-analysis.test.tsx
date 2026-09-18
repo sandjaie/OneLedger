@@ -100,6 +100,8 @@ const analysis: AnalysisResponse = {
     {
       monthEnd: "2024-01-31",
       complete: true,
+      returnCoordinate: 10000,
+      benchmarkCoordinate: 6400,
       statusCounts: { available: 1 },
       portfolio: windowOut({ contributions: "50.0000" }),
       classes: [
@@ -166,6 +168,32 @@ afterEach(() => {
 });
 
 describe("investment analysis", () => {
+  it("plots only server coordinates and keeps unsupported months as exact-value gaps", async () => {
+    const request = requestFrom((path) => path === "/portfolio/analysis" ? analysis : null);
+    render(<InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />);
+
+    const chart = await screen.findByRole("region", { name: "Monthly return evidence" });
+    expect(chart.querySelector("[data-style='dashed']")).toBeTruthy();
+    const table = screen.getByRole("table", { name: "Monthly return evidence exact values" });
+    expect(table.textContent).toContain("1.25000000%");
+    expect(table.textContent).toContain("0.80000000%");
+    expect(table.textContent).toContain("Not available");
+  });
+
+  it("does not invent a benchmark series when none is assigned", async () => {
+    const request = requestFrom((path) => path === "/portfolio/analysis" ? {
+      ...analysis, benchmarks: [], months: analysis.months.map((month) => ({
+        ...month, benchmarkCoordinate: null,
+        portfolio: { ...month.portfolio, benchmarkDietzPercent: null },
+      })),
+    } satisfies AnalysisResponse : null);
+    render(<InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />);
+
+    const chart = await screen.findByRole("region", { name: "Monthly return evidence" });
+    expect(chart.textContent).not.toContain("Benchmark return");
+    expect(screen.getByRole("table", { name: "Monthly return evidence exact values" }).querySelectorAll("thead th")).toHaveLength(2);
+  });
+
   it("renders class XIRR, contribution lines, drift, excess and an incomplete month from server strings", async () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/analysis") return analysis;
@@ -175,7 +203,10 @@ describe("investment analysis", () => {
       <InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />,
     );
 
-    const classes = await screen.findByRole("table", { name: "Returns by asset class" });
+    const disclosure = await screen.findByText("Methodology and detailed returns");
+    expect(disclosure.closest("details")?.open).toBe(false);
+    fireEvent.click(disclosure);
+    const classes = screen.getByRole("table", { name: "Returns by asset class" });
     expect(classes.textContent).toContain("12.34560000%");
     expect(classes.textContent).toContain("XAA 24.0000");
     expect(classes.textContent).toContain("XAA 50.0000");
@@ -215,7 +246,17 @@ describe("investment analysis", () => {
     render(<InvestmentAnalysis baseCurrency="XAA" positions={[]} refreshKey={0} request={request} />);
 
     await screen.findByText("No holdings to analyse.");
+    fireEvent.click(screen.getByText("Methodology and detailed returns"));
     expect(screen.getByText(/Wealth history has not been refreshed/)).toBeTruthy();
+  });
+
+  it("does not claim holdings are absent when analysis has no supported rows yet", async () => {
+    const request = requestFrom((path) => path === "/portfolio/analysis"
+      ? { ...analysis, classes: [], accounts: [] } satisfies AnalysisResponse : null);
+    render(<InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />);
+
+    expect(await screen.findByText("No supported holding analysis yet.")).toBeTruthy();
+    expect(screen.queryByText("No holdings to analyse.")).toBeNull();
   });
 
   it("shows an error with retry", async () => {
@@ -253,7 +294,8 @@ describe("investment analysis", () => {
       <InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />,
     );
 
-    const input = await screen.findByLabelText("Target ratio for equity");
+    fireEvent.click(await screen.findByText("Methodology and detailed returns"));
+    const input = screen.getByLabelText("Target ratio for equity");
     fireEvent.change(input, { target: { value: "1.0000000000" } });
     fireEvent.click(screen.getByRole("button", { name: "Save target" }));
 
@@ -281,7 +323,8 @@ describe("investment analysis", () => {
       <InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />,
     );
 
-    const select = await screen.findByLabelText("Portfolio benchmark");
+    fireEvent.click(await screen.findByText("Methodology and detailed returns"));
+    const select = screen.getByLabelText("Portfolio benchmark");
     fireEvent.change(select, { target: { value: "" } });
 
     await waitFor(() => expect(deleted).toBe(true));
@@ -306,7 +349,8 @@ describe("investment analysis", () => {
       <InvestmentAnalysis baseCurrency="XAA" positions={positions} refreshKey={0} request={request} />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Use inference" }));
+    fireEvent.click(await screen.findByText("Methodology and detailed returns"));
+    fireEvent.click(screen.getByRole("button", { name: "Use inference" }));
     await waitFor(() => expect(deleted).toBe(true));
     await waitFor(() => expect(loads).toBe(2));
   });

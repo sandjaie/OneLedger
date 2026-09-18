@@ -2408,6 +2408,50 @@ body { background: var(--paper); }
 .investment-holding:hover { border-color: rgba(47, 122, 92, 0.36); box-shadow: 0 5px 18px rgba(16, 22, 20, 0.06); }
 .classification-recent-runs, .classification-sort { min-width: 0; }
 
+/* 4.7.6: investment evidence is legible before methodology is expanded. */
+.portfolio-screen > :is(section, div), .portfolio-screen section { min-width: 0; }
+.portfolio-start {
+  display: grid; gap: 14px; padding: clamp(22px, 4vw, 40px);
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--rule)); border-radius: 14px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--green) 9%, var(--surface)), var(--surface) 70%);
+}
+.portfolio-start h2 { margin: 0; font-size: clamp(1.35rem, 2.2vw, 2rem); line-height: 1.15; }
+.portfolio-start p:last-child { max-width: 65ch; margin: 0; color: var(--muted-foreground); line-height: 1.55; }
+.portfolio-start-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.portfolio-metric { min-width: 0; padding: 20px; }
+.portfolio-metric strong { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; font-size: clamp(1.2rem, 1.7vw, 1.6rem); font-weight: 650; }
+.portfolio-metric .investment-state { padding: 0; border: 0; background: transparent; }
+.portfolio-confidence { display: grid; gap: 10px; }
+.portfolio-confidence-head { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 8px 16px; }
+.portfolio-confidence-head h2 { margin: 2px 0 0; font-size: 1.05rem; }
+.portfolio-confidence-head > p { margin: 0; color: var(--muted-foreground); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.portfolio-confidence > .investment-state { margin: 0; padding: 12px 16px; border-radius: 8px; background: var(--surface); }
+.portfolio-price-status { border-radius: 9px; }
+.investment-holdings, .investment-reviews, .portfolio-screen > section:last-child { min-width: 0; }
+.portfolio-allocation { gap: 18px; padding: clamp(16px, 2.2vw, 24px); }
+.portfolio-allocation h2 { margin: 2px 0 0; font-size: 1.15rem; }
+.allocation-evidence-chart { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.allocation-evidence-chart h3 { margin: 0 0 4px; font-size: 1rem; }
+.allocation-evidence-chart p { margin: 0; color: var(--muted-foreground); font-size: 0.85rem; }
+.allocation-evidence-plot { width: 100%; min-height: 170px; max-height: 350px; }
+.allocation-evidence-chart table, .portfolio-allocation table { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.allocation-evidence-chart :is(th, td), .portfolio-allocation :is(th, td) { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; white-space: nowrap; }
+.investment-disclosure { min-width: 0; border: 1px solid var(--rule); border-radius: 9px; background: var(--surface); }
+.investment-disclosure > summary { cursor: pointer; padding: 15px 18px; color: var(--green); font-weight: 650; }
+.investment-disclosure > summary:hover { background: color-mix(in srgb, var(--green) 6%, var(--surface)); }
+.investment-disclosure[open] > summary { border-bottom: 1px solid var(--rule); }
+.investment-disclosure-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: clamp(16px, 2.2vw, 24px); }
+.investment-disclosure-content > p { margin: 0; max-width: 78ch; color: var(--muted-foreground); line-height: 1.55; }
+.investment-disclosure-content > section { min-width: 0; }
+.investment-empty-coverage .investment-disclosure-content ul { margin: 0; padding-left: 20px; line-height: 1.55; }
+.portfolio-screen .evidence-chart { grid-template-columns: minmax(0, 1fr); }
+.portfolio-screen .evidence-chart-table-wrap { min-width: 0; }
+.investment-import-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.investment-import-steps li { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px 12px; border: 1px solid var(--rule); border-radius: 8px; color: var(--muted-foreground); background: var(--surface); font-size: 0.8rem; }
+.investment-import-steps li > span { display: grid; flex: 0 0 23px; place-items: center; height: 23px; border: 1px solid currentColor; border-radius: 50%; font-variant-numeric: tabular-nums; }
+.investment-import-steps li[aria-current="step"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--rule)); font-weight: 650; }
+.investment-import-steps li[data-complete="true"] { color: var(--foreground); }
+
 /* 4.7.5: the document's next action is visible without a horizontal table. */
 .documents-screen .transaction-filters { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .documents-screen .document-filter-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2470,6 +2514,12 @@ body { background: var(--paper); }
 .classification-recent-runs > ul > li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 12px 0; border-top: 1px solid var(--rule); }
 
 @media (max-width: 588px) {
+  .portfolio-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portfolio-start-actions > a { flex: 1 1 100%; }
+  .allocation-evidence-plot { min-height: 210px; }
+  .allocation-evidence-chart table { table-layout: fixed; }
+  .allocation-evidence-chart :is(th, td) { padding: 7px 4px; white-space: normal; overflow-wrap: anywhere; font-size: 0.72rem; }
+  .investment-import-steps { grid-template-columns: minmax(0, 1fr); }
   .documents-screen .document-filter-primary, .document-advanced-filters .transaction-filter-main { grid-template-columns: minmax(0, 1fr); }
   .document-record-facts { display: grid; gap: 10px; }
   .document-actions > :is(a, button) { flex: 1 1 auto; }
@@ -2500,6 +2550,9 @@ body { background: var(--paper); }
   :is(.subscription-next-facts, .recurring-next-facts) { display: grid; gap: 5px; }
   .recurring-record-review dl { grid-template-columns: 1fr; }
   :is(.subscription-record, .recurring-record) { padding: 14px !important; }
+}
+@media (max-width: 400px) {
+  .portfolio-metrics { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   :is(.text-action, .primary-action) { transition: none; }
