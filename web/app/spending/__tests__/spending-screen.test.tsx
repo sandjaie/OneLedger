@@ -39,6 +39,7 @@ const spending: SpendingResponse = {
       transactionCount: 2,
       previousAmountBase: "70.0000",
       chartRatio: "1.0000",
+      chartCoordinate: 10000,
     },
     {
       categoryId: null,
@@ -51,6 +52,7 @@ const spending: SpendingResponse = {
       transactionCount: 1,
       previousAmountBase: "0.0000",
       chartRatio: "0.3000",
+      chartCoordinate: 3000,
     },
   ],
   byBucket: [
@@ -61,6 +63,7 @@ const spending: SpendingResponse = {
       transactionCount: 2,
       previousAmountBase: "70.0000",
       chartRatio: "1.0000",
+      chartCoordinate: 10000,
     },
   ],
   totalBase: "130.0000",

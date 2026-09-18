@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { type CSSProperties, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { BudgetPanel } from "@/app/spending/budget-panel";
+import { SpendingEvidenceChart } from "@/app/spending/spending-evidence-chart";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
 import { moneyText } from "@/lib/money/format";
@@ -54,12 +57,6 @@ function amountFor(base: string, secondary: string, response: SpendingResponse, 
   return currency.code === response.baseCurrency ? base : secondary;
 }
 
-/** A category whose in-range refunds exceed its spending has a negative ratio; the bar is drawn
- * flat and the row is marked, rather than scaling below the track and overflowing it. */
-function barRatio(chartRatio: string) {
-  return chartRatio.startsWith("-") ? "0" : chartRatio;
-}
-
 function transactionsHref(categoryId: string | null, from: string, to: string) {
   const parameters = new URLSearchParams();
   if (categoryId) parameters.set("categoryId", categoryId);
@@ -108,8 +105,9 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
   return (
     <section className="workspace-content spending-screen" aria-labelledby="spending-title">
       <header className="page-head">
-        <h1 className="workspace-title" id="spending-title">Spending by category and bucket</h1>
-        <p>Explore spending for a month or a custom period.</p>
+        <p className="eyebrow">Reportable ledger</p>
+        <h1 className="workspace-title" id="spending-title">Spending</h1>
+        <p>Compare net spending by category or bucket, then open the underlying transactions.</p>
       </header>
       <details className="experience-disclosure">
         <summary>What counts as spending</summary>
@@ -119,18 +117,18 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
       <div className="filter-bar" role="group" aria-label="Date range">
         <label className="text-field">
           <span className="visually-hidden">Range type</span>
-          <select
+          <NativeSelect
             onChange={(event) => { setState("loading"); setMode(event.target.value as RangeMode); }}
             value={mode}
           >
             <option value="month">Month</option>
             <option value="custom">Custom range</option>
-          </select>
+          </NativeSelect>
         </label>
         {mode === "month" ? (
           <label className="date-field">
             <span>Month</span>
-            <input
+            <Input
               max={currentMonthValue()}
               onChange={(event) => { setState("loading"); setMonth(event.target.value); }}
               type="month"
@@ -141,7 +139,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
           <>
             <label className="date-field">
               <span>From</span>
-              <input
+              <Input
                 onChange={(event) => { setState("loading"); setCustomFrom(event.target.value); }}
                 type="date"
                 value={customFrom}
@@ -149,7 +147,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
             </label>
             <label className="date-field">
               <span>To</span>
-              <input
+              <Input
                 onChange={(event) => { setState("loading"); setCustomTo(event.target.value); }}
                 type="date"
                 value={customTo}
@@ -204,12 +202,15 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
           </p>
           {data.byBucket.length === 0 && <p>No spending in this range.</p>}
           {data.byBucket.length > 0 && (
-            <table className="spending-table spending-table--bucket">
+            <>
+            <SpendingEvidenceChart rows={data.byBucket} kind="bucket" currency={data.baseCurrency} from={data.from} to={data.to} />
+            <div className="spending-table-wrap"><table className="spending-table spending-table--bucket">
               <caption className="visually-hidden">Spending by bucket</caption>
               <thead>
                 <tr>
                   <th scope="col">Bucket</th>
                   <th scope="col">This period</th>
+                  {currency.code !== data.baseCurrency && <th scope="col">Chart value ({data.baseCurrency})</th>}
                   <th scope="col">Previous period ({data.baseCurrency})</th>
                 </tr>
               </thead>
@@ -218,45 +219,28 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                   <tr key={row.bucket}>
                     <th scope="row">{row.bucket}</th>
                     <td>{moneyText(amountFor(row.amountBase, row.amountSecondary, data, currency), currency.code, currencies)}</td>
+                    {currency.code !== data.baseCurrency && <td>{moneyText(row.amountBase, data.baseCurrency, currencies)}</td>}
                     <td>{moneyText(row.previousAmountBase, data.baseCurrency, currencies)}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
+            </>
           )}
 
           <h2>By category</h2>
           {maxCategoryRows.length === 0 && <p>No spending in this range.</p>}
           {maxCategoryRows.length > 0 && (
             <>
-              <div
-                aria-label={`Spending by category in ${data.baseCurrency}, as a bar chart — the table below states each figure`}
-                className="data-chart data-chart--spending"
-                role="img"
-              >
-                {maxCategoryRows.map((row: CategorySpending) => (
-                  <div className="data-chart-column" key={row.categoryId ?? "uncategorised"}>
-                    <div className="data-chart-track">
-                      <div
-                        className="data-chart-bar"
-                        style={{ "--ratio": barRatio(row.chartRatio) } as CSSProperties}
-                      />
-                    </div>
-                    <span className="data-chart-label">
-                      {row.categoryName}
-                      {row.chartRatio.startsWith("-") && " (net refund)"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <table className="spending-table spending-table--category">
+              <SpendingEvidenceChart rows={maxCategoryRows} kind="category" currency={data.baseCurrency} from={data.from} to={data.to} />
+              <div className="spending-table-wrap"><table className="spending-table spending-table--category">
                 <caption className="visually-hidden">Spending by category</caption>
                 <thead>
                   <tr>
                     <th scope="col">Category</th>
                     <th scope="col">Bucket</th>
                     <th scope="col">This period</th>
+                    {currency.code !== data.baseCurrency && <th scope="col">Chart value ({data.baseCurrency})</th>}
                     <th scope="col">Previous period ({data.baseCurrency})</th>
                     <th scope="col">Transactions</th>
                   </tr>
@@ -266,9 +250,11 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                     <tr key={row.categoryId ?? "uncategorised"}>
                       <th scope="row">
                         {row.parentCategoryName ? `${row.parentCategoryName} · ${row.categoryName}` : row.categoryName}
+                        {row.chartCoordinate < 0 && <small className="spending-refund-label">Net refund</small>}
                       </th>
                       <td>{row.bucket ?? "—"}</td>
                       <td>{moneyText(amountFor(row.amountBase, row.amountSecondary, data, currency), currency.code, currencies)}</td>
+                      {currency.code !== data.baseCurrency && <td>{moneyText(row.amountBase, data.baseCurrency, currencies)}</td>}
                       <td>{moneyText(row.previousAmountBase, data.baseCurrency, currencies)}</td>
                       <td>
                         <Link href={transactionsHref(row.categoryId, data.from, data.to)}>
@@ -278,7 +264,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </>
           )}
 

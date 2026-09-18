@@ -526,6 +526,8 @@ def test_confirmed_figures_and_currency_fold_pre_as_of_occurrences_into_an_as_of
         ("-50.0000", "850.0000"),
         ("-50.0000", "850.0000"),
     ]
+    assert [p["chartBalanceCoordinate"] for p in paying["points"]] == [-3529, -588, -588]
+    assert [p["chartConfirmedCoordinate"] for p in paying["points"]] == [7059, 10000, 10000]
     assert paying["lowest"] == {"balance": "-300.0000", "date": "2026-04-01"}
     assert paying["lowestConfirmed"] == {"balance": "600.0000", "date": "2026-03-10"}
 
@@ -538,6 +540,8 @@ def test_confirmed_figures_and_currency_fold_pre_as_of_occurrences_into_an_as_of
         ("2250.0000", "3150.0000"),
         ("2250.0000", "3150.0000"),
     ]
+    assert [p["chartBalanceCoordinate"] for p in currency_row["points"]] == [6349, 7143, 7143]
+    assert [p["chartConfirmedCoordinate"] for p in currency_row["points"]] == [9206, 10000, 10000]
     assert currency_row["lowest"] == {"balance": "2000.0000", "date": "2026-04-01"}
     assert currency_row["lowestConfirmed"] == {"balance": "2900.0000", "date": AS_OF.isoformat()}
 

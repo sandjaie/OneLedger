@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { ForecastEvidenceChart } from "@/app/plans/forecast-evidence-chart";
+import { NativeSelect } from "@/components/ui/native-select";
 import { type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type { AccountRow, CurrencyRow, ForecastResponse, UnplannedCardDue } from "@/types/api";
@@ -48,6 +50,7 @@ export function CashForecast({
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [forecast, setForecast] = useState<ForecastResponse>();
   const [attempt, setAttempt] = useState(0);
+  const [selectedContext, setSelectedContext] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -65,6 +68,12 @@ export function CashForecast({
     };
   }, [attempt, refreshKey, request]);
 
+  const contexts = forecast ? [
+    ...forecast.currencies.map((row) => ({ id: `currency:${row.currency}`, title: `${row.currency} · eligible accounts`, currency: row.currency, points: row.points })),
+    ...forecast.accounts.map((row) => ({ id: `account:${row.accountId}`, title: `${row.accountName} · ${row.currency}`, currency: row.currency, points: row.points })),
+  ] : [];
+  const context = contexts.find((item) => item.id === selectedContext) ?? contexts[0];
+
   return (
     <section aria-labelledby="plans-forecast-title" id="forecast">
       <h2 id="plans-forecast-title">Forecast{forecast ? ` as of ${forecast.asOf}` : ""}</h2>
@@ -81,6 +90,21 @@ export function CashForecast({
       )}
       {state === "ready" && forecast && (
         <>
+          {context && <div className="forecast-chart-panel">
+            <label className="select-field">
+              <span>Chart context</span>
+              <NativeSelect onChange={(event) => setSelectedContext(event.target.value)} value={context.id}>
+                <optgroup label="Separate currency totals">
+                  {forecast.currencies.map((row) => <option key={row.currency} value={`currency:${row.currency}`}>{row.currency} · eligible accounts</option>)}
+                </optgroup>
+                <optgroup label="Individual accounts">
+                  {forecast.accounts.map((row) => <option key={row.accountId} value={`account:${row.accountId}`}>{row.accountName} · {row.currency}</option>)}
+                </optgroup>
+              </NativeSelect>
+            </label>
+            <ForecastEvidenceChart title={`${context.title} · 30 / 60 / 90-day cash forecast`}
+              currency={context.currency} currencies={currencies} points={context.points} />
+          </div>}
           <h3>By currency</h3>
           {forecast.currencies.length === 0 && <p>No currency can be forecast yet.</p>}
           {forecast.currencies.length > 0 && (
@@ -257,8 +281,8 @@ export function CashForecast({
         </>
       )}
 
-      <section aria-labelledby="plans-assumptions-title">
-        <h3 id="plans-assumptions-title">Assumptions</h3>
+      <details className="plans-assumptions-disclosure">
+        <summary id="plans-assumptions-title">Forecast assumptions and exclusions</summary>
         <ul className="plans-assumptions">
           <li>Balances start from each account&rsquo;s latest ledger balance and its date.</li>
           <li>
@@ -282,7 +306,7 @@ export function CashForecast({
           <li>Funding accounts are suggestions; nothing here moves money.</li>
           <li>Currency totals cover liquid asset accounts and credit cards, with no conversion.</li>
         </ul>
-      </section>
+      </details>
     </section>
   );
 }
