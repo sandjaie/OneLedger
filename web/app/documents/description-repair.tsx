@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { errorText, LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import type { DescriptionReparseResult, DocumentRow } from "@/types/api";
 
@@ -52,7 +55,7 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
       {document.isPasswordProtected && (
         <label className="text-field">
           <span>Password</span>
-          <input
+          <Input
             onChange={(event) => setPassword(event.target.value)}
             type="password"
             value={password}
@@ -60,7 +63,7 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
         </label>
       )}
       {problem && (
-        <p className="inline-alert" role="alert">{problem}</p>
+        <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>
       )}
       {preview && (
         <p className="lede">
@@ -70,23 +73,22 @@ export function DescriptionRepair({ document, request, onApplied }: Props) {
         </p>
       )}
       <div className="account-form-actions">
-        <button
-          className="text-action"
+        <Button
           disabled={busy}
           onClick={() => void run(false)}
           type="button"
+          variant="outline"
         >
           {busy ? "Checking…" : "Preview re-read"}
-        </button>
+        </Button>
         {preview && !preview.applied && (
-          <button
-            className="primary-action"
+          <Button
             disabled={busy}
             onClick={() => void run(true)}
             type="button"
           >
             Apply
-          </button>
+          </Button>
         )}
       </div>
     </div>

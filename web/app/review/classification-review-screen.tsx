@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
+import { dateLabel } from "@/lib/format/date";
 import type {
   CategoryRow,
   ClassificationReviewGroup,
@@ -40,6 +46,10 @@ const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
   recognized_pending: "Ready to apply",
   unclassified: "Unclassified",
 };
+
+function humanLabel(value: string | null) {
+  return value ? value.replaceAll("_", " ").replace(/^./, (first) => first.toUpperCase()) : "Not identified";
+}
 
 function key(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -119,10 +129,12 @@ async function postJson<T>(request: typeof apiFetch, path: string, body: unknown
 
 function GroupCard({
   categories,
+  featured,
   group,
   request,
 }: {
   categories: Array<CategoryRow>;
+  featured: boolean;
   group: ClassificationReviewGroup;
   request: typeof apiFetch;
 }) {
@@ -267,46 +279,36 @@ function GroupCard({
   }
 
   return (
-    <article className="classification-card" aria-label={group.description}>
+    <article className={`classification-card${featured ? " classification-card--focus" : ""}`} aria-label={group.description}>
       <div className="classification-card-head">
         <div>
-          <span className={`classification-reason classification-reason-${group.reason}`}>
+          <Badge className={`classification-reason classification-reason-${group.reason}`} variant="outline">
             {REASON_LABELS[group.reason]}
-          </span>
+          </Badge>
           <h2>{group.description}</h2>
         </div>
-        <span className="classification-count">
+        <Badge className="classification-count" variant="secondary">
           {group.occurrences} {group.occurrences === 1 ? "occurrence" : "occurrences"}
-        </span>
+        </Badge>
       </div>
 
       <p className="classification-explanation">{group.explanation}</p>
-      <dl className="classification-facts">
-        <div><dt>Account</dt><dd>{group.accountName}</dd></div>
-        <div><dt>Dates</dt><dd>{group.firstBookedDate} – {group.lastBookedDate}</dd></div>
-        <div><dt>Direction</dt><dd>{group.direction}</dd></div>
-        <div><dt>Current</dt><dd>{group.currentCategoryName ?? "Unclassified"}</dd></div>
-        <div><dt>Economic role</dt><dd>{knownProposal && group.proposedTxnType && group.proposedTxnType !== group.currentTxnType ? `${group.currentTxnType} → ${group.proposedTxnType}` : group.currentTxnType}</dd></div>
-        <div><dt>Payment method</dt><dd>{group.proposedPaymentMethod ?? group.currentPaymentMethod ?? "Not identified"}</dd></div>
-        {knownProposal && <div><dt>Proposed</dt><dd>{proposedCategory}</dd></div>}
-        {knownProposal && <div><dt>Confidence</dt><dd>{group.proposedConfidence}</dd></div>}
-      </dl>
 
       {!knownProposal && (
         <div className="classification-answer-fields">
           <label className="classification-category">
             Category for {group.description}
-            <select value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-              <option value="">Choose a category…</option>
+            <NativeSelect value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
+              <NativeSelectOption value="">Choose a category…</NativeSelectOption>
               {activeCategories.map((category) => (
-                <option key={category.id} value={category.id}>{category.name}</option>
+                <NativeSelectOption key={category.id} value={category.id}>{category.name}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           {canRemember && (
             <label className="classification-category">
               Wording to remember
-              <input value={pattern} onChange={(event) => setPattern(event.target.value)} />
+              <Input value={pattern} onChange={(event) => setPattern(event.target.value)} />
               <small>Remove reference numbers or personal identifiers before saving a reusable answer.</small>
             </label>
           )}
@@ -314,9 +316,9 @@ function GroupCard({
       )}
 
       {incompleteScope && (
-        <p className="classification-warning">Narrow the date range before applying this group; the complete set of rows is not loaded.</p>
+        <Alert variant="destructive"><AlertDescription>Narrow the date range before applying this group; the complete set of rows is not loaded.</AlertDescription></Alert>
       )}
-      {problem && <p className="inline-alert" role="alert">{problem}</p>}
+      {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
       {message && <p className="classification-result" role="status">{message}</p>}
       {preview && !appliedRunId && (
         <p className="classification-preview" role="status">
@@ -324,41 +326,51 @@ function GroupCard({
         </p>
       )}
 
-      <div className="classification-actions">
-        {(knownProposal || canRemember) && (
-          <button
-            className="text-action"
+      {(knownProposal || canRemember) && <div className="classification-actions">
+          <Button
             disabled={busy || incompleteScope || (!knownProposal && (!categoryId || !pattern.trim()))}
             onClick={makePreview}
             type="button"
+            variant={featured ? "default" : "outline"}
           >
             {knownProposal
               ? `Preview ${group.occurrences} proposed changes`
               : `Remember and preview ${group.occurrences}`}
-          </button>
-        )}
+          </Button>
+      </div>}
+      <h3 className="classification-evidence-title">Evidence and scope</h3>
+      <dl className="classification-facts">
+        <div><dt>Account</dt><dd>{group.accountName}</dd></div>
+        <div><dt>Dates</dt><dd>{group.firstBookedDate} – {group.lastBookedDate}</dd></div>
+        <div><dt>Direction</dt><dd>{humanLabel(group.direction)}</dd></div>
+        <div><dt>Current</dt><dd>{group.currentCategoryName ?? "Unclassified"}</dd></div>
+        <div><dt>Economic role</dt><dd>{knownProposal && group.proposedTxnType && group.proposedTxnType !== group.currentTxnType ? `${humanLabel(group.currentTxnType)} → ${humanLabel(group.proposedTxnType)}` : humanLabel(group.currentTxnType)}</dd></div>
+        <div><dt>Payment method</dt><dd>{humanLabel(group.proposedPaymentMethod ?? group.currentPaymentMethod)}</dd></div>
+        {knownProposal && <div><dt>Proposed</dt><dd>{proposedCategory}</dd></div>}
+        {knownProposal && <div><dt>Confidence</dt><dd>{group.proposedConfidence}</dd></div>}
+      </dl>
+      {(!knownProposal || (preview && !appliedRunId) || appliedRunId) && <div className="classification-actions classification-commit-actions">
         {!knownProposal && (
-          <button
-            className="text-action"
+          <Button
             disabled={busy || !categoryId || group.transactionIds.length === 0}
             onClick={applyOne}
             type="button"
-          >Apply to one only</button>
+            variant="outline"
+          >Apply to one only</Button>
         )}
         {preview && !appliedRunId && (
-          <button
-            className="classification-primary"
+          <Button
             disabled={busy || preview.changed === 0 || preview.conflicted > 0}
             onClick={applyPreview}
             type="button"
-          >Apply {preview.changed} changes</button>
+          >Apply {preview.changed} changes</Button>
         )}
         {appliedRunId && (
-          <button className="text-action" disabled={busy} onClick={undo} type="button">
+          <Button disabled={busy} onClick={undo} type="button" variant="outline">
             Undo this application
-          </button>
+          </Button>
         )}
-      </div>
+      </div>}
     </article>
   );
 }
@@ -418,7 +430,7 @@ function RecentRuns({ request }: { request: typeof apiFetch }) {
     }
   }
 
-  if (problem) return <p className="inline-alert" role="alert">{problem}</p>;
+  if (problem) return <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>;
   if (!runs) return null;
 
   return (
@@ -431,16 +443,17 @@ function RecentRuns({ request }: { request: typeof apiFetch }) {
             const outcome = outcomes[run.runId];
             return (
               <li key={run.runId}>
-                <span>{run.appliedAt}</span>
+                <span>{dateLabel(run.appliedAt.slice(0, 10))}</span>
                 <span>{run.reason}</span>
                 <span>{run.changed} {run.changed === 1 ? "change" : "changes"}</span>
                 {run.knowledgeDisplayName && <span>{run.knowledgeDisplayName}</span>}
                 {!run.undone && run.sourceRunId === null && (
-                  <button
+                  <Button
                     disabled={busyRunId === run.runId}
                     onClick={() => undo(run)}
                     type="button"
-                  >Undo</button>
+                    variant="outline"
+                  >Undo</Button>
                 )}
                 {outcome?.kind === "error" && (
                   <p className="inline-alert" role="alert">{outcome.message}</p>
@@ -537,37 +550,37 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
         <div>
           <p className="classification-kicker">Household knowledge</p>
           <h1 id="classification-review-title">Classify</h1>
-          <p>Answer recurring classification questions once, then inspect the exact scope before anything changes.</p>
+          <p>Review the next household question, preview its exact scope, then apply only when it is right.</p>
         </div>
         {page && (
           <div className="classification-summary" aria-label="Review queue summary">
             <strong>{page.totalGroups}</strong>
-            <span>groups · {page.totalOccurrences} occurrences</span>
+            <span>{page.totalGroups === 1 ? "group" : "groups"} · {page.totalOccurrences} occurrences</span>
           </div>
         )}
       </header>
 
       <label className="classification-sort">
         Sort
-        <select
+        <NativeSelect
           disabled={loading}
           onChange={(event) => changeSort(event.target.value as Sort)}
           value={sort}
         >
-          <option value="default">Most urgent first</option>
-          <option value="impact">Largest amount first</option>
-        </select>
+          <NativeSelectOption value="default">Most urgent first</NativeSelectOption>
+          <NativeSelectOption value="impact">Largest amount first</NativeSelectOption>
+        </NativeSelect>
       </label>
 
       {loading && <p className="classification-state">Loading review queue…</p>}
       {!loading && problem && (
         <div className="classification-state">
-          <p className="inline-alert" role="alert">{problem}</p>
-          <button className="text-action" onClick={retry} type="button">Try again</button>
+          <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>
+          <Button onClick={retry} type="button" variant="outline">Try again</Button>
         </div>
       )}
       {!loading && !problem && page?.candidateLimitReached && (
-        <p className="classification-warning">The candidate scan limit was reached. Use a narrower date range before treating this queue as complete.</p>
+        <Alert variant="destructive"><AlertDescription>The candidate scan limit was reached. Use a narrower date range before treating this queue as complete.</AlertDescription></Alert>
       )}
       {!loading && !problem && page?.groups.length === 0 && (
         <p className="classification-empty">Nothing needs classification review.</p>
@@ -575,17 +588,17 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
       {!loading && !problem && page && page.groups.length > 0 && (
         <>
           <div className="classification-list">
-            {page.groups.map((group) => (
-              <GroupCard categories={categories} group={group} key={group.groupKey} request={request} />
+            {page.groups.map((group, index) => (
+              <GroupCard categories={categories} featured={index === 0} group={group} key={group.groupKey} request={request} />
             ))}
           </div>
-          {moreProblem && <p className="inline-alert" role="alert">{moreProblem}</p>}
+          {moreProblem && <Alert variant="destructive"><AlertDescription>{moreProblem}</AlertDescription></Alert>}
           {remaining > 0 && (
-            <button className="classification-load-more" disabled={loadingMore} onClick={loadMore} type="button">
+            <Button disabled={loadingMore} onClick={loadMore} type="button" variant="outline">
               {loadingMore
                 ? "Loading more groups…"
                 : `Load ${Math.min(PAGE_SIZE, remaining)} more ${Math.min(PAGE_SIZE, remaining) === 1 ? "group" : "groups"}`}
-            </button>
+            </Button>
           )}
         </>
       )}

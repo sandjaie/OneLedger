@@ -94,16 +94,20 @@ function renderScreen(
 afterEach(cleanup);
 
 describe("the documents screen", () => {
-  it("shows type, account, period, pages, upload date and import status", () => {
+  it("shows a readable record with type, account, period, state and next action", () => {
     renderScreen([document({})], 1);
 
     expect(screen.getByText("1 document")).toBeTruthy();
-    const table = within(screen.getByRole("table"));
-    expect(table.getByText("bank_statement")).toBeTruthy();
-    expect(table.getByText("Ledger Savings · ****7890")).toBeTruthy();
-    expect(table.getByText("2026-03-01 – 2026-03-31 (derived from the rows)")).toBeTruthy();
-    expect(table.getByText("2026-03-10")).toBeTruthy();
-    expect(table.getByText("awaiting_review")).toBeTruthy();
+    const record = within(screen.getByRole("article", { name: "Bank statement" }));
+    expect(record.getByText("Bank statement")).toBeTruthy();
+    expect(record.getByText("Ledger Savings · ****7890")).toBeTruthy();
+    expect(record.getByText("2026-03-01 – 2026-03-31 (derived from the rows)")).toBeTruthy();
+    expect(record.getByText("Awaiting review")).toBeTruthy();
+    expect(record.getByRole("link", { name: "Review" })).toBeTruthy();
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(record.getByRole("button", { name: "Details for Bank statement" }));
+    expect(record.getByText("3 pages")).toBeTruthy();
+    expect(record.getByText("10 Mar 2026")).toBeTruthy();
   });
 
   it("shows an em dash for a document with no account or period", () => {
@@ -132,6 +136,31 @@ describe("the documents screen", () => {
     );
   });
 
+  it("keeps Type and Account visible while naming advanced filters and enums for people", () => {
+    renderScreen([document({})], 1);
+    expect(screen.getByLabelText("Type")).toBeTruthy();
+    expect(screen.getByLabelText("Account")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Bank statement" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Awaiting review" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Advanced filters" })).toBeTruthy();
+    expect(screen.getByLabelText("Period from")).toBeTruthy();
+    expect(screen.getByLabelText("Period to")).toBeTruthy();
+  });
+
+  it("keeps manually opened mobile filters open through same-width viewport changes", () => {
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 360 });
+    try {
+      renderScreen([document({})], 1);
+      fireEvent.click(screen.getByRole("button", { name: "Advanced filters" }));
+      expect(screen.getByLabelText("Period from")).toBeTruthy();
+      fireEvent(window, new Event("resize"));
+      expect(screen.getByLabelText("Period from")).toBeTruthy();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
+  });
+
   it("links Original for every row and Transactions only for a statement", () => {
     renderScreen([document({}), investment], 2);
 
@@ -157,6 +186,7 @@ describe("the documents screen", () => {
     renderScreen([document({}), completedWithNewerLayout], 2);
 
     const button = screen.getByRole("button", { name: "Re-read descriptions" });
+    expect(within(screen.getAllByRole("article", { name: "Bank statement" })[1]).getByRole("button", { name: "Re-read descriptions" })).toBeTruthy();
     fireEvent.click(button);
     expect(screen.getByText("A newer layout is available for this import.")).toBeTruthy();
   });
@@ -164,8 +194,8 @@ describe("the documents screen", () => {
   it("shows an upload by its title with no import link", () => {
     renderScreen([upload], 1);
 
-    const table = within(screen.getByRole("table"));
-    expect(table.getByText("Synthetic policy schedule")).toBeTruthy();
+    const record = within(screen.getByRole("article", { name: "Synthetic policy schedule" }));
+    expect(record.getByText("Synthetic policy schedule")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Transactions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
   });
@@ -173,5 +203,25 @@ describe("the documents screen", () => {
   it("offers more rows when the library is longer than the page", () => {
     renderScreen([document({})], 5);
     expect(screen.getByText("Load 4 more")).toBeTruthy();
+  });
+
+  it("appends the next page from the current record count", async () => {
+    const request = vi.fn().mockResolvedValue({ documents: [document({ id: "doc-2", title: "Synthetic second" })], total: 2 });
+    renderScreen([document({})], 2, request as unknown as typeof apiFetch);
+    fireEvent.click(screen.getByRole("button", { name: "Load 1 more" }));
+
+    await screen.findByRole("article", { name: "Synthetic second" });
+    expect(request).toHaveBeenCalledWith("/documents?limit=50&offset=1");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("labels previously loaded records honestly when a filter reload is unavailable", async () => {
+    const request = vi.fn().mockRejectedValue(new Error("Synthetic service unavailable"));
+    renderScreen([document({})], 1, request as unknown as typeof apiFetch);
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByText(/previously loaded records remain/)).toBeTruthy();
+    expect(screen.getByRole("article", { name: "Bank statement" })).toBeTruthy();
   });
 });

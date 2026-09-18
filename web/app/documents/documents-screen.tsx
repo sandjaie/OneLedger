@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 
 import { DescriptionRepair } from "@/app/documents/description-repair";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch } from "@/lib/api/client";
 import { apiUrl } from "@/lib/api/url";
+import { dateLabel } from "@/lib/format/date";
 import type { AccountRow, DocumentRow, DocumentsResponse } from "@/types/api";
 
 type Props = {
@@ -50,7 +57,62 @@ const IMPORT_STATUSES = [
   "partially_committed",
 ] as const;
 
+const DOCUMENT_TYPE_LABELS: Record<(typeof DOCUMENT_TYPES)[number], string> = {
+  bank_statement: "Bank statement",
+  card_statement: "Card statement",
+  payslip: "Payslip",
+  loan_statement: "Loan statement",
+  investment_statement: "Investment statement",
+  cas: "Consolidated account statement",
+  tax_document: "Tax document",
+  insurance_policy: "Insurance policy",
+  property_document: "Property document",
+  fd_certificate: "Fixed deposit certificate",
+  receipt: "Receipt",
+  other: "Other",
+};
+
+const IMPORT_STATUS_LABELS: Record<(typeof IMPORT_STATUSES)[number], string> = {
+  uploaded: "Uploaded",
+  extracting: "Extracting",
+  normalizing: "Normalizing",
+  deduping: "Checking duplicates",
+  classifying: "Classifying",
+  matching_transfers: "Matching transfers",
+  reconciling: "Reconciling",
+  awaiting_review: "Awaiting review",
+  importing: "Importing",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+  staged: "Staged",
+  partially_committed: "Partially committed",
+};
+
+function readable(value: string) {
+  return value.replaceAll("_", " ").replace(/^./, (first) => first.toUpperCase());
+}
+
+function typeLabel(value: string) {
+  return DOCUMENT_TYPE_LABELS[value as keyof typeof DOCUMENT_TYPE_LABELS] ?? readable(value);
+}
+
+function statusLabel(value: string | null) {
+  return value ? IMPORT_STATUS_LABELS[value as keyof typeof IMPORT_STATUS_LABELS] ?? readable(value) : "Stored";
+}
+
 const PAGE = 50;
+const ADVANCED_BREAKPOINT = "(min-width: 588px)";
+
+function subscribeBreakpoint(onChange: () => void) {
+  const media = window.matchMedia?.(ADVANCED_BREAKPOINT);
+  media?.addEventListener("change", onChange);
+  return () => media?.removeEventListener("change", onChange);
+}
+
+function desktopSnapshot() {
+  return window.matchMedia?.(ADVANCED_BREAKPOINT).matches ?? window.innerWidth >= 588;
+}
 
 type Filters = {
   documentType: string;
@@ -117,6 +179,9 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [repairing, setRepairing] = useState<string>();
+  const desktop = useSyncExternalStore(subscribeBreakpoint, desktopSnapshot, () => false);
+  const [advancedOverride, setAdvancedOverride] = useState<boolean | null>(null);
+  const advancedOpen = advancedOverride ?? desktop;
 
   async function reload(nextFilters: Filters, offset: number, append: boolean) {
     setBusy(true);
@@ -142,7 +207,9 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
           </p>
         </div>
       </header>
-      {problem && <p className="inline-alert" role="alert">{problem}</p>}
+      {problem && <Alert variant="destructive"><AlertDescription>
+        {problem} {rows.length > 0 && "The previously loaded records remain; new filters were not applied."}
+      </AlertDescription></Alert>}
 
       <form
         aria-label="Filter documents"
@@ -153,34 +220,38 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
           void reload(filters, 0, false);
         }}
       >
-        <div className="transaction-filter-main">
+        <div className="transaction-filter-main document-filter-primary">
           <label className="select-field">
             <span>Type</span>
-            <select
+            <NativeSelect
               onChange={(event) => setFilters({ ...filters, documentType: event.target.value })}
               value={filters.documentType}
             >
-              <option value="">All types</option>
+              <NativeSelectOption value="">All types</NativeSelectOption>
               {DOCUMENT_TYPES.map((value) => (
-                <option key={value} value={value}>{value}</option>
+                <NativeSelectOption key={value} value={value}>{DOCUMENT_TYPE_LABELS[value]}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="select-field">
             <span>Account</span>
-            <select
+            <NativeSelect
               onChange={(event) => setFilters({ ...filters, accountId: event.target.value })}
               value={filters.accountId}
             >
-              <option value="">All accounts</option>
+              <NativeSelectOption value="">All accounts</NativeSelectOption>
               {accounts.map((account) => (
-                <option key={account.id} value={account.id}>{account.name}</option>
+                <NativeSelectOption key={account.id} value={account.id}>{account.name}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
+        </div>
+        <Collapsible className="document-advanced-filters" onOpenChange={setAdvancedOverride} open={advancedOpen}>
+          <CollapsibleTrigger>Advanced filters <span aria-hidden="true">⌄</span></CollapsibleTrigger>
+          <CollapsibleContent className="transaction-filter-main">
           <label className="date-field">
             <span>Period from</span>
-            <input
+            <Input
               onChange={(event) => setFilters({ ...filters, periodFrom: event.target.value })}
               type="date"
               value={filters.periodFrom}
@@ -188,7 +259,7 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
           </label>
           <label className="date-field">
             <span>Period to</span>
-            <input
+            <Input
               onChange={(event) => setFilters({ ...filters, periodTo: event.target.value })}
               type="date"
               value={filters.periodTo}
@@ -196,99 +267,90 @@ export function DocumentsScreen({ documents, total, accounts, request }: Props) 
           </label>
           <label className="select-field">
             <span>Import status</span>
-            <select
+            <NativeSelect
               onChange={(event) => setFilters({ ...filters, importStatus: event.target.value })}
               value={filters.importStatus}
             >
-              <option value="">Any status</option>
+              <NativeSelectOption value="">Any status</NativeSelectOption>
               {IMPORT_STATUSES.map((value) => (
-                <option key={value} value={value}>{value}</option>
+                <NativeSelectOption key={value} value={value}>{IMPORT_STATUS_LABELS[value]}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
-        </div>
+          </CollapsibleContent>
+        </Collapsible>
         <div className="account-form-actions">
-          <button className="primary-action" disabled={busy} type="submit">Apply filters</button>
+          <Button disabled={busy} type="submit">Apply filters</Button>
         </div>
       </form>
 
       {rows.length === 0 ? (
         <p className="lede">No stored documents match this view.</p>
       ) : (
-        <div className="documents-table-wrap" role="region" aria-label="Document library" tabIndex={0}>
-          <table className="account-table">
-          <caption className="visually-hidden">The document library</caption>
-          <thead>
-            <tr>
-              <th scope="col">Type</th>
-              <th scope="col">Account</th>
-              <th scope="col">Period</th>
-              <th scope="col">Pages</th>
-              <th scope="col">Uploaded</th>
-              <th scope="col">Import</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
+        <div className="document-record-list" aria-label="Document library">
+          {rows.map((row) => {
               const review = reviewHref(row);
+              const title = row.title ?? typeLabel(row.documentType);
+              const canRepair = Boolean(row.newerLayoutId && row.importStatus === "completed");
+              const primary = review ? "review" : canRepair ? "repair" : row.importKind === "statement" ? "transactions" : "original";
               return (
-                <tr key={row.id}>
-                  <td>
-                    {row.title ?? row.documentType}
-                    {row.title && <small> · {row.documentType}</small>}
-                    {row.isPasswordProtected && <small> · password protected</small>}
-                  </td>
-                  <td>{accountLabel(row)}</td>
-                  <td>{periodLabel(row)}</td>
-                  <td>{row.pageCount ?? "—"}</td>
-                  <td>{row.uploadedOn.slice(0, 10)}</td>
-                  <td>
-                    {row.importStatus ?? "—"}
-                    {row.reconciliationStatus && <small> · {row.reconciliationStatus}</small>}
-                  </td>
-                  <td className="document-actions">
-                    <a href={apiUrl(`/documents/${row.id}/original`)} rel="noreferrer" target="_blank">
-                      Original
-                    </a>
-                    {row.importKind === "statement" && (
-                      <Link href={`/transactions?sourceDocumentId=${row.id}`}>Transactions</Link>
-                    )}
-                    {review && <Link href={review}>Review</Link>}
-                    {row.newerLayoutId && row.importStatus === "completed" && (
-                      <button
-                        className="text-action"
-                        onClick={() => setRepairing((current) => (current === row.id ? undefined : row.id))}
-                        type="button"
-                      >
+                <article aria-label={title} className="document-record" key={row.id}>
+                  <div className="document-record-head">
+                    <div>
+                      <h2>{title}</h2>
+                      {row.title && <span>{typeLabel(row.documentType)}</span>}
+                    </div>
+                    <Badge variant={row.importStatus === "failed" ? "destructive" : "secondary"}>{statusLabel(row.importStatus)}</Badge>
+                  </div>
+                  <dl className="document-record-facts">
+                    <div><dt>Account</dt><dd>{accountLabel(row)}</dd></div>
+                    <div><dt>Period</dt><dd>{periodLabel(row)}</dd></div>
+                  </dl>
+                  <div className="document-actions">
+                    {review && <Link className={buttonVariants({ variant: primary === "review" ? "default" : "outline" })} href={review}>Review</Link>}
+                    {canRepair && (
+                      <Button onClick={() => setRepairing((current) => (current === row.id ? undefined : row.id))}
+                        type="button" variant={primary === "repair" ? "default" : "outline"}>
                         Re-read descriptions
-                      </button>
+                      </Button>
                     )}
-                    {repairing === row.id && (
-                      <DescriptionRepair
-                        document={row}
-                        onApplied={() => void reload(applied, 0, false)}
-                        request={request}
-                      />
+                    {row.importKind === "statement" && (
+                      <Link className={buttonVariants({ variant: primary === "transactions" ? "default" : "outline" })}
+                        href={`/transactions?sourceDocumentId=${row.id}`}>Transactions</Link>
                     )}
-                  </td>
-                </tr>
+                    <a className={buttonVariants({ variant: primary === "original" ? "default" : "outline" })}
+                      href={apiUrl(`/documents/${row.id}/original`)} rel="noreferrer" target="_blank">Original</a>
+                  </div>
+                  {repairing === row.id && <DescriptionRepair document={row}
+                    onApplied={() => void reload(applied, 0, false)} request={request} />}
+                  <Collapsible className="document-record-details">
+                    <CollapsibleTrigger>Details for {title} <span aria-hidden="true">⌄</span></CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <dl>
+                        <div><dt>Pages</dt><dd>{row.pageCount === null ? "Unknown" : `${row.pageCount} ${row.pageCount === 1 ? "page" : "pages"}`}</dd></div>
+                        <div><dt>Uploaded</dt><dd>{dateLabel(row.uploadedOn.slice(0, 10))}</dd></div>
+                        {row.isPasswordProtected && <div><dt>Protection</dt><dd>Password protected</dd></div>}
+                        {row.parsedStatus && <div><dt>Parsing</dt><dd>{readable(row.parsedStatus)}</dd></div>}
+                        {row.reconciliationStatus && <div><dt>Reconciliation</dt><dd>{readable(row.reconciliationStatus)}</dd></div>}
+                        {row.layoutId && <div><dt>Layout</dt><dd>{row.layoutId}{row.layoutVersion ? ` · version ${row.layoutVersion}` : ""}</dd></div>}
+                      </dl>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </article>
               );
             })}
-          </tbody>
-          </table>
         </div>
       )}
 
       {rows.length < count && (
-        <button
-          className="text-action"
+        <Button
           disabled={busy}
           onClick={() => void reload(applied, rows.length, true)}
           type="button"
+          variant="outline"
         >
           Load {Math.min(PAGE, count - rows.length)} more
-        </button>
+        </Button>
       )}
     </section>
   );
