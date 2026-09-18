@@ -15,7 +15,7 @@ Updated: 19 September 2026.
 | Current outcome | **Phase 4.7 — Nova/shadcn owner workspace experience** across the existing screens, with evidenced charts | [canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
 | Outcome state | Phase 4.3 implementation complete; owner acceptance open. Phases 4.1 and 4.2 implementation complete with owner acceptance open. The first workspace refresh merged in [PR #248](https://github.com/sandjaie/OneLedger/pull/248); Phase 4.7.1–4.7.5 merged in PRs #250, #251, #253, #254 and [#255](https://github.com/sandjaie/OneLedger/pull/255). Phase 4.7.6 Investments and investment import implemented on its task branch | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 | Next product action | Deliver the numbered Phase 4.7 Nova and chart work packages, audit every screen, then invite owner visual/UX acceptance; the owner-approved order places this before Phase 4.4 | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
-| Current implementation task | 4.7.6 Investments and investment import implemented; 4.7.7 Overview and ledger destinations is next after the 4.7.6 PR merges | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
+| Current implementation task | 4.7.6 Investments and investment import implemented; the branch also aligns stale local-gate contract tests with the existing no-pre-push workflow. 4.7.7 Overview and ledger destinations is next after the 4.7.6 PR merges | [Phase 4.7 plan](plans/2026-09-18-phase-4-7-workspace-experience.md) |
 
 ## Canonical phase status
 

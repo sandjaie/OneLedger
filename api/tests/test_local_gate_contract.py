@@ -33,22 +33,15 @@ def test_commit_stage_is_staged_file_fast() -> None:
     assert "stages: [manual]" in _hook("markdownlint")
 
 
-def test_pre_push_only_enforces_the_verification_receipt_and_diff_size() -> None:
+def test_no_pre_push_hook_repeats_the_final_verifier() -> None:
     config = CONFIG.read_text()
-    pre_push_ids = set(
-        re.findall(
-            r"(?ms)^      - id: ([^\n]+)\n(?:(?!^      - id: ).)*?"
-            r"^        stages: \[pre-push\]$",
-            config,
-        )
-    )
-
-    assert pre_push_ids == {"verified-head", "diff-size"}
+    assert "default_install_hook_types: [pre-commit]" in config
+    assert "stages: [pre-push]" not in config
+    assert "scripts/verify.sh --check-receipt" not in config
 
     for hook_id in ("pytest", "vitest", "db-invariants", "mypy", "tsc", "api-types"):
         assert f"      - id: {hook_id}\n" not in config
 
-    assert "scripts/verify.sh --check-receipt" in _hook("verified-head")
     ci = CI.read_text()
     assert "run: scripts/verify.sh" in ci
     assert "postgresql-client" in ci
@@ -176,7 +169,7 @@ def test_receipt_check_refuses_a_commit_created_after_verification(tmp_path: Pat
     )
 
     assert stale.returncode != 0
-    assert "HEAD has not passed scripts/verify.sh" in stale.stderr
+    assert "HEAD has not passed a final verifier" in stale.stderr
 
 
 def test_receipt_check_uses_the_commit_being_pushed(tmp_path: Path) -> None:
@@ -194,7 +187,7 @@ def test_receipt_check_uses_the_commit_being_pushed(tmp_path: Path) -> None:
     )
 
     assert result.returncode != 0
-    assert "HEAD has not passed scripts/verify.sh" in result.stderr
+    assert "HEAD has not passed a final verifier" in result.stderr
 
 
 def _recording_tool(tmp_path: Path, name: str) -> tuple[Path, dict[str, str]]:
