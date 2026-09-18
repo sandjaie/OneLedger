@@ -167,8 +167,11 @@ describe("subscription detail", () => {
     ).toBeTruthy();
   });
 
-  it("renders the price history", async () => {
-    const request = fixedRequest(aDetail());
+  it("renders an evidenced price-history timeline without inferred prices", async () => {
+    const request = fixedRequest(aDetail({ priceHistory: [
+      { observedOn: "2026-01-03", amount: "15.0000", currency: "USD" },
+      { observedOn: "2026-08-03", amount: "18.0000", currency: "USD" },
+    ] }));
     render(
       <SubscriptionDetail
         baseCurrency="USD"
@@ -180,6 +183,8 @@ describe("subscription detail", () => {
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
     const history = screen.getByText("Price history").nextElementSibling as HTMLElement;
     expect(within(history).getByText(/2026-01-03 · \$15\.0000/)).toBeTruthy();
+    expect(within(history).getByText(/2026-08-03 · \$18\.0000/)).toBeTruthy();
+    expect(history.classList.contains("subscription-price-timeline")).toBe(true);
   });
 
   it("asks before cancelling and posts the cancel", async () => {
@@ -190,8 +195,6 @@ describe("subscription detail", () => {
       if (path === "/recurring/series-1/cancel") return Promise.resolve(detail);
       throw new Error(`unexpected path ${path}`);
     });
-    const confirm = vi.spyOn(window, "confirm");
-
     render(
       <SubscriptionDetail
         baseCurrency="USD"
@@ -202,12 +205,20 @@ describe("subscription detail", () => {
     );
     await screen.findByRole("heading", { name: "Synthetic streaming service" });
 
-    confirm.mockReturnValueOnce(false);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(screen.getByText("Cancel Synthetic streaming service? This closes its current billing period.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Keep payment" }));
     expect(request).not.toHaveBeenCalledWith("/recurring/series-1/cancel", expect.anything());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" })));
 
-    confirm.mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(request).not.toHaveBeenCalledWith("/recurring/series-1/cancel", expect.anything());
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" })));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm cancel" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(
         "/recurring/series-1/cancel",
@@ -262,5 +273,17 @@ describe("subscription detail", () => {
       />,
     );
     expect(await screen.findByText("This subscription could not be found.")).toBeTruthy();
+  });
+
+  it("does not present an ended subscription as Active in its controls", async () => {
+    const detail = aDetail({ isCurrent: false, status: "ended", lifecycle: "active",
+      lastPeriodEndedOn: "2026-08-15", lastEndReason: "cancelled" });
+    render(<SubscriptionDetail baseCurrency="USD" currencies={CURRENCIES}
+      request={fixedRequest(detail) as Request} seriesId="series-1" />);
+
+    await screen.findByRole("heading", { name: "Synthetic streaming service" });
+    expect(screen.getByText("Ended")).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Status" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   });
 });

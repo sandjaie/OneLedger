@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
+import { ConfirmAction } from "@/app/ui/confirm-action";
+import { RowActions } from "@/app/ui/row-actions";
+import { SectionNav } from "@/app/ui/section-nav";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -21,6 +31,7 @@ type Props = {
 };
 
 type State = "loading" | "ready" | "error";
+type View = "current" | "upcoming" | "past";
 
 const PER_CADENCE_TEXT: Record<string, string> = {
   weekly: "a week",
@@ -42,6 +53,7 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
   const [byAccount, setByAccount] = useState<Array<ByAccountRow>>();
   const [state, setState] = useState<State>("loading");
   const [problem, setProblem] = useState<string>();
+  const [view, setView] = useState<View>("current");
 
   const [renamingId, setRenamingId] = useState<string>();
   const [renameValue, setRenameValue] = useState("");
@@ -167,9 +179,6 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
   }
 
   async function cancel(row: RecurringSeriesRow) {
-    if (!window.confirm(`Cancel ${row.label}? This closes its current billing period.`)) {
-      return;
-    }
     setCancelBusy(row.id);
     setCancelProblem(undefined);
     try {
@@ -209,50 +218,32 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
 
   function rowActions(row: RecurringSeriesRow) {
     return (
-      <div className="plans-settlement-actions">
-        <button
-          className="text-action"
-          disabled={flipBusy === row.id}
-          onClick={() => void flipOff(row)}
-          type="button"
-        >
-          {flipBusy === row.id ? "Saving…" : "Not a subscription"}
-        </button>
-        {renamingId !== row.id && (
-          <button className="text-action" onClick={() => startRename(row)} type="button">
-            Rename
-          </button>
-        )}
-        <select
-          aria-label="Status"
-          disabled={statusBusy === row.id}
-          onChange={(e) => void setStatus(row, e.target.value)}
-          value={row.lifecycle}
-        >
-          <option value="active">Active</option>
-          <option value="trial">Trial</option>
-          <option value="paused">Paused</option>
-        </select>
-        {row.isCurrent ? (
-          <button
-            className="text-action"
-            disabled={cancelBusy === row.id}
-            onClick={() => void cancel(row)}
-            type="button"
-          >
-            {cancelBusy === row.id ? "Cancelling…" : "Cancel"}
-          </button>
-        ) : (
-          <button
-            className="text-action"
-            disabled={resumeBusy === row.id}
-            onClick={() => void resume(row)}
-            type="button"
-          >
-            {resumeBusy === row.id ? "Resuming…" : "Resume"}
-          </button>
-        )}
-      </div>
+      <RowActions label={`Manage ${row.label}`}>
+        <div className="plans-settlement-actions">
+          <Button disabled={flipBusy === row.id} onClick={() => void flipOff(row)} type="button" variant="outline">
+            {flipBusy === row.id ? "Saving…" : "Not a subscription"}
+          </Button>
+          {renamingId !== row.id && (
+            <Button onClick={() => startRename(row)} type="button" variant="outline">Rename</Button>
+          )}
+          {row.isCurrent && <NativeSelect aria-label="Status" disabled={statusBusy === row.id}
+            onChange={(event) => void setStatus(row, event.target.value)} value={row.lifecycle}>
+            <NativeSelectOption value="active">Active</NativeSelectOption>
+            <NativeSelectOption value="trial">Trial</NativeSelectOption>
+            <NativeSelectOption value="paused">Paused</NativeSelectOption>
+          </NativeSelect>}
+          {row.isCurrent ? (
+            <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy === row.id}
+              message={`Cancel ${row.label}? This closes its current billing period.`}
+              onConfirm={() => cancel(row)} title="Cancel subscription" triggerLabel="Cancel" />
+          ) : (
+            <Button disabled={resumeBusy === row.id} onClick={() => void resume(row)} type="button" variant="outline">
+              {resumeBusy === row.id ? "Resuming…" : "Resume"}
+            </Button>
+          )}
+        </div>
+        {renameForm(row)}
+      </RowActions>
     );
   }
 
@@ -260,53 +251,92 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
     if (renamingId !== row.id) return null;
     return (
       <div className="recurring-dismiss-form">
-        <label className="text-field">
+        <label className="subscription-edit-field">
           <span>Label</span>
-          <input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
+          <Input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
         </label>
-        {renameProblem && <p className="inline-alert" role="alert">{renameProblem}</p>}
-        <button
-          className="primary-action"
+        {renameProblem && <Alert variant="destructive"><AlertDescription>{renameProblem}</AlertDescription></Alert>}
+        <Button
           disabled={renameBusy || !renameValue.trim()}
           onClick={() => void submitRename(row.id)}
           type="button"
         >
           {renameBusy ? "Saving…" : "Save name"}
-        </button>
-        <button className="text-action" onClick={() => setRenamingId(undefined)} type="button">
+        </Button>
+        <Button onClick={() => setRenamingId(undefined)} type="button" variant="ghost">
           Cancel
-        </button>
+        </Button>
       </div>
+    );
+  }
+
+  function subscriptionRecord(row: RecurringSeriesRow) {
+    return (
+      <li className="record-row subscription-record" key={row.id}>
+        <div className="subscription-record-head">
+          <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
+          <Badge variant={row.status === "overdue" ? "destructive" : "secondary"}>
+            {STATUS_TEXT[row.status] ?? row.status}
+          </Badge>
+          {row.needsName && <Badge variant="outline">Needs a name</Badge>}
+        </div>
+        <strong className="subscription-record-amount">
+          {row.nativeAmount !== null && row.nativeCurrency !== null
+            ? `${moneyText(row.nativeAmount, row.nativeCurrency, currencies)} ${perCadence(row.cadence, row.customIntervalDays)}`
+            : "Amount appears after the next refresh"}
+        </strong>
+        <span className="subscription-record-date">
+          {row.status === "ended"
+            ? `ended ${row.lastPeriodEndedOn ?? row.lastSeenOn}${row.lastEndReason ? ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})` : ""}`
+            : row.nextExpectedOn ? `Next expected ${row.nextExpectedOn}` : `Last charged ${row.lastSeenOn}`}
+        </span>
+        {rowActions(row)}
+      </li>
     );
   }
 
   return (
     <section className="workspace-content subscriptions-screen" aria-labelledby="subscriptions-title">
-      <p className="eyebrow">Your commitments</p>
-      <h1 className="workspace-title" id="subscriptions-title">Subscriptions</h1>
-      <p className="lede">See what renews next, what it costs, and where it is paid from.</p>
-      <details className="experience-disclosure">
-        <summary>How subscriptions are identified</summary>
-        <p>Estimates come from the latest ledger charges. Choose &ldquo;not a subscription&rdquo; to move a row to Recurring.</p>
-      </details>
+      <header className="page-head">
+        <p className="eyebrow">Your commitments</p>
+        <h1 className="workspace-title" id="subscriptions-title">Subscriptions</h1>
+      </header>
+      <Collapsible className="experience-disclosure">
+        <CollapsibleTrigger>How subscriptions are identified</CollapsibleTrigger>
+        <CollapsibleContent><p>Estimates come from the latest ledger charges. Choose &ldquo;not a subscription&rdquo; to move a row to Recurring.</p></CollapsibleContent>
+      </Collapsible>
 
-      {state === "loading" && <p role="status">Checking for subscriptions…</p>}
+      {state === "loading" && <p className="loading-frame" role="status">Checking for subscriptions…</p>}
       {state === "error" && (
-        <div role="alert">
-          <p>{problem}</p>
-          <button className="text-action" onClick={() => void reload()} type="button">
-            Try again
-          </button>
-        </div>
+        <Alert variant="destructive"><AlertDescription>
+          {problem} <Button onClick={() => void reload()} type="button" variant="outline">Try again</Button>
+        </AlertDescription></Alert>
       )}
 
       {state === "ready" && summary && (
         <>
-          {problem && <p className="inline-alert" role="alert">{problem}</p>}
-          {flipProblem && <p className="inline-alert" role="alert">{flipProblem}</p>}
-          {statusProblem && <p className="inline-alert" role="alert">{statusProblem}</p>}
-          {cancelProblem && <p className="inline-alert" role="alert">{cancelProblem}</p>}
-          {resumeProblem && <p className="inline-alert" role="alert">{resumeProblem}</p>}
+          {[problem, flipProblem, statusProblem, cancelProblem, resumeProblem].filter(Boolean).map((message) => (
+            <Alert key={message} variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>
+          ))}
+
+          <section aria-label="Next renewal" className="subscription-next">
+            <Card>
+              <CardHeader><CardTitle>Next renewal</CardTitle></CardHeader>
+              <CardContent>
+                {summary.upcoming[0] ? (
+                  <div className="subscription-next-facts">
+                    <Link href={`/subscriptions/${summary.upcoming[0].seriesId}`}>{summary.upcoming[0].label}</Link>
+                    <strong>{summary.upcoming[0].nextExpectedOn}</strong>
+                    <span>{summary.upcoming[0].nativeAmount !== null && summary.upcoming[0].nativeCurrency !== null
+                      ? moneyText(summary.upcoming[0].nativeAmount, summary.upcoming[0].nativeCurrency, currencies)
+                      : "Amount appears after the next refresh"}</span>
+                    {summary.upcoming[0].payingAccountName && <span>Paid from {summary.upcoming[0].payingAccountName}</span>}
+                    <span>{summary.renewingIn30Days} renewing in the next 30 days</span>
+                  </div>
+                ) : <p>Nothing is expected to renew in the next 30 days.</p>}
+              </CardContent>
+            </Card>
+          </section>
 
           <section aria-label="Subscription totals" className="overview-summary-grid">
             <article>
@@ -325,135 +355,54 @@ export function SubscriptionsScreen({ currencies, request }: Props) {
               <p className="section-label">Current</p>
               <p className="overview-summary-value">{summary.currentCount}</p>
             </article>
-            <article>
-              <p className="section-label">Renewing in 30 days</p>
-              <p className="overview-summary-value">{summary.renewingIn30Days}</p>
-            </article>
-            <article>
-              <p className="section-label">Price changes in 90 days</p>
-              <p className="overview-summary-value">{summary.priceChangesIn90Days}</p>
-            </article>
           </section>
 
-          <h2>Upcoming</h2>
-          {summary.upcoming.length === 0 && (
-            <p>Nothing is expected to renew in the next 30 days.</p>
-          )}
-          {summary.upcoming.length > 0 && (
-            <ul className="recurring-confirmed-list">
-              {summary.upcoming.map((row) => (
-                <li className="record-row" key={row.seriesId}>
-                  <span>
-                    {row.nextExpectedOn} ·{" "}
-                    <Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link>
-                  </span>
-                  <span>
-                    {row.nativeAmount !== null && row.nativeCurrency !== null
-                      ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
-                      : "Amount appears after the next refresh"}
-                    {row.payingAccountName ? ` · ${row.payingAccountName}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          <SectionNav activeId={view} items={[
+            { id: "current", label: "Current" },
+            { id: "upcoming", label: "Upcoming" },
+            { id: "past", label: "Past" },
+          ]} onSelect={(id) => setView(id as View)} />
 
-          <h2>Current</h2>
-          {current.length === 0 && <p>No current subscription has been found yet.</p>}
-          {current.length > 0 && (
-            <ul className="recurring-confirmed-list">
-              {current.map((row) => (
-                <li className="record-row" key={row.id}>
-                  <span>
-                    <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
-                    {row.needsName && <span className="plans-badge">Needs a name</span>}
-                    {row.categoryName ? ` · ${row.categoryName}` : ""}
-                  </span>
-                  <div className="plans-badges">
-                    <span className="plans-badge">{STATUS_TEXT[row.status] ?? row.status}</span>
-                    {row.resumed && <span className="plans-badge">Resumed</span>}
-                  </div>
-                  <span>
-                    {row.nativeAmount !== null && row.nativeCurrency !== null
-                      ? `${moneyText(row.nativeAmount, row.nativeCurrency, currencies)} ${perCadence(
-                          row.cadence,
-                          row.customIntervalDays,
-                        )}`
-                      : "Amount appears after the next refresh"}
-                    {row.annualAmount !== null && row.nativeCurrency !== null && (
-                      <> · {moneyText(row.annualAmount, row.nativeCurrency, currencies)} a year</>
-                    )}
-                  </span>
-                  <span>
-                    {row.payingAccountName && (
-                      <>
-                        Paying: {row.payingAccountName}
-                        {row.payingAccountMasked ? ` (${row.payingAccountMasked})` : ""}
-                      </>
-                    )}
-                    {" "}· last charged {row.lastSeenOn}
-                    {row.nextExpectedOn && ` · next expected ${row.nextExpectedOn}`}
-                  </span>
-                  {row.priceChangedFrom &&
-                    row.priceChangedOn &&
-                    row.nativeAmount !== null &&
-                    row.nativeCurrency !== null && (
-                      <span>
-                        price changed from{" "}
-                        {moneyText(row.priceChangedFrom, row.nativeCurrency, currencies)} to{" "}
-                        {moneyText(row.nativeAmount, row.nativeCurrency, currencies)} on{" "}
-                        {row.priceChangedOn}
-                      </span>
-                    )}
-                  {rowActions(row)}
-                  {renameForm(row)}
-                </li>
-              ))}
-            </ul>
-          )}
+          {view === "upcoming" && <section className="subscription-view" aria-label="Upcoming subscriptions">
+            <h2>Upcoming</h2>
+            {summary.upcoming.length === 0 && <p>Nothing is expected to renew in the next 30 days.</p>}
+            {summary.upcoming.length > 0 && <ul className="recurring-confirmed-list">
+              {summary.upcoming.map((row) => <li className="record-row subscription-record" key={row.seriesId}>
+                <Link href={`/subscriptions/${row.seriesId}`}>{row.label}</Link>
+                <strong>{row.nativeAmount !== null && row.nativeCurrency !== null
+                  ? moneyText(row.nativeAmount, row.nativeCurrency, currencies)
+                  : "Amount appears after the next refresh"}</strong>
+                <span>Expected {row.nextExpectedOn}</span>
+                {row.payingAccountName && <span>Paid from {row.payingAccountName}</span>}
+              </li>)}
+            </ul>}
+          </section>}
 
-          <h2>Past</h2>
-          {past.length === 0 && <p>No past subscription is recorded.</p>}
-          {past.length > 0 && (
-            <ul className="recurring-confirmed-list">
-              {past.map((row) => (
-                <li className="record-row" key={row.id}>
-                  <span>
-                    <Link href={`/subscriptions/${row.id}`}>{row.label}</Link>
-                  </span>
-                  <span>
-                    {row.lastPeriodEndedOn && `ended ${row.lastPeriodEndedOn}`}
-                    {row.lastEndReason &&
-                      ` (${END_REASON_TEXT[row.lastEndReason] ?? row.lastEndReason})`}
-                  </span>
-                  {rowActions(row)}
-                  {renameForm(row)}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <h2>By card</h2>
-          {(!byAccount || byAccount.length === 0) && (
-            <p>No subscription is linked to a card yet.</p>
-          )}
-          {byAccount && byAccount.length > 0 && (
-            <ul className="recurring-confirmed-list">
-              {byAccount.map((row) => (
-                <li className="record-row" key={row.accountId}>
-                  <span>
-                    {row.accountName}
-                    {row.accountMasked ? ` (${row.accountMasked})` : ""}
-                  </span>
-                  <span>
-                    {row.count} {row.count === 1 ? "subscription" : "subscriptions"} ·{" "}
-                    {row.labels.join(", ")}
-                  </span>
+          {view === "current" && <section className="subscription-view" aria-label="Current subscriptions">
+            <div className="section-head">
+              <h2>Current</h2>
+              <Badge variant="outline">{summary.priceChangesIn90Days} price changes in 90 days</Badge>
+            </div>
+            {current.length === 0 && <p>No current subscription has been found yet.</p>}
+            {current.length > 0 && <ul className="recurring-confirmed-list">{current.map(subscriptionRecord)}</ul>}
+            <div className="subscription-by-card">
+              <h3>By card</h3>
+              {(!byAccount || byAccount.length === 0) && <p>No subscription is linked to a card yet.</p>}
+              {byAccount && byAccount.length > 0 && <ul className="recurring-confirmed-list">
+                {byAccount.map((row) => <li className="record-row" key={row.accountId}>
+                  <strong>{row.accountName}{row.accountMasked ? ` (${row.accountMasked})` : ""}</strong>
+                  <span>{row.count} {row.count === 1 ? "subscription" : "subscriptions"} · {row.labels.join(", ")}</span>
                   <span>{moneyText(row.monthlyBase, summary.baseCurrency, currencies)} / month</span>
-                </li>
-              ))}
-            </ul>
-          )}
+                </li>)}
+              </ul>}
+            </div>
+          </section>}
+
+          {view === "past" && <section className="subscription-view" aria-label="Past subscriptions">
+            <h2>Past</h2>
+            {past.length === 0 && <p>No past subscription is recorded.</p>}
+            {past.length > 0 && <ul className="recurring-confirmed-list">{past.map(subscriptionRecord)}</ul>}
+          </section>}
         </>
       )}
     </section>

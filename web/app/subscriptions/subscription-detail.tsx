@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { ConfirmAction } from "@/app/ui/confirm-action";
 import { CADENCE_TEXT, END_REASON_TEXT, STATUS_TEXT } from "@/app/recurring/recurring-screen";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { ApiError, errorText, type apiFetch } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import { perCadence } from "@/app/subscriptions/subscriptions-screen";
@@ -160,9 +167,6 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
 
   async function cancel() {
     if (!detail) return;
-    if (!window.confirm(`Cancel ${detail.label}? This closes its current billing period.`)) {
-      return;
-    }
     setCancelBusy(true);
     setCancelProblem(undefined);
     try {
@@ -243,7 +247,7 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             {state === "ready" && detail ? detail.label : "Subscription"}
           </h1>
         </div>
-        <Link className="text-action" href="/subscriptions">Back to Subscriptions</Link>
+        <Button nativeButton={false} render={<Link href="/subscriptions" />} variant="outline">Back to Subscriptions</Button>
       </header>
 
       {state === "loading" && <p className="investment-state" role="status">Loading subscription…</p>}
@@ -265,12 +269,13 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
 
       {state === "ready" && detail && (
         <>
-          {detail.needsName && <p className="plans-badge">Needs a name</p>}
-          {flipProblem && <p className="inline-alert" role="alert">{flipProblem}</p>}
-          {statusProblem && <p className="inline-alert" role="alert">{statusProblem}</p>}
-          {channelProblem && <p className="inline-alert" role="alert">{channelProblem}</p>}
-          {cancelProblem && <p className="inline-alert" role="alert">{cancelProblem}</p>}
-          {resumeProblem && <p className="inline-alert" role="alert">{resumeProblem}</p>}
+          <div className="subscription-detail-status">
+            <Badge variant={detail.status === "overdue" ? "destructive" : "secondary"}>{STATUS_TEXT[detail.status] ?? detail.status}</Badge>
+            {detail.needsName && <Badge variant="outline">Needs a name</Badge>}
+          </div>
+          {[flipProblem, statusProblem, channelProblem, cancelProblem, resumeProblem].filter(Boolean).map((message) => (
+            <Alert key={message} variant="destructive"><AlertDescription>{message}</AlertDescription></Alert>
+          ))}
 
           <dl className="portfolio-metrics" aria-label="Subscription facts">
             <div>
@@ -310,64 +315,66 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             </p>
           )}
 
-          <div className="plans-settlement-actions">
-            <button className="text-action" disabled={flipBusy} onClick={() => void flipOff()} type="button">
+          <Card className="subscription-detail-controls">
+            <CardHeader><CardTitle>Manage subscription</CardTitle></CardHeader>
+            <CardContent className="plans-settlement-actions">
+            <Button disabled={flipBusy} onClick={() => void flipOff()} type="button" variant="outline">
               {flipBusy ? "Saving…" : "Not a subscription"}
-            </button>
+            </Button>
             {!renaming && (
-              <button className="text-action" onClick={startRename} type="button">Rename</button>
+              <Button onClick={startRename} type="button" variant="outline">Rename</Button>
             )}
-            <select
+            {detail.isCurrent && <NativeSelect
               aria-label="Status"
               disabled={statusBusy}
               onChange={(e) => void setStatus(e.target.value)}
               value={detail.lifecycle}
             >
-              <option value="active">Active</option>
-              <option value="trial">Trial</option>
-              <option value="paused">Paused</option>
-            </select>
-            <select
+              <NativeSelectOption value="active">Active</NativeSelectOption>
+              <NativeSelectOption value="trial">Trial</NativeSelectOption>
+              <NativeSelectOption value="paused">Paused</NativeSelectOption>
+            </NativeSelect>}
+            <NativeSelect
               aria-label="Payment channel"
               disabled={channelBusy}
               onChange={(e) => void setChannel(e.target.value)}
               value={detail.paymentChannelId ?? ""}
             >
-              <option value="">No channel set</option>
+              <NativeSelectOption value="">No channel set</NativeSelectOption>
               {channels.map((channel) => (
-                <option key={channel.id} value={channel.id}>{channel.name}</option>
+                <NativeSelectOption key={channel.id} value={channel.id}>{channel.name}</NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
             {!cadenceEditing && (
-              <button className="text-action" onClick={startCadence} type="button">Cadence</button>
+              <Button onClick={startCadence} type="button" variant="outline">Cadence</Button>
             )}
             {detail.isCurrent ? (
-              <button className="text-action" disabled={cancelBusy} onClick={() => void cancel()} type="button">
-                {cancelBusy ? "Cancelling…" : "Cancel"}
-              </button>
+              <ConfirmAction actionLabel="Confirm cancel" busy={cancelBusy}
+                message={`Cancel ${detail.label}? This closes its current billing period.`}
+                onConfirm={cancel} title="Cancel subscription" triggerLabel="Cancel" />
             ) : (
-              <button className="text-action" disabled={resumeBusy} onClick={() => void resume()} type="button">
+              <Button disabled={resumeBusy} onClick={() => void resume()} type="button" variant="outline">
                 {resumeBusy ? "Resuming…" : "Resume"}
-              </button>
+              </Button>
             )}
-          </div>
+            </CardContent>
+          </Card>
 
           {renaming && (
             <div className="recurring-dismiss-form">
               <label className="text-field">
                 <span>Label</span>
-                <input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
+                <Input onChange={(e) => setRenameValue(e.target.value)} value={renameValue} />
               </label>
               {renameProblem && <p className="inline-alert" role="alert">{renameProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
                 disabled={renameBusy || !renameValue.trim()}
                 onClick={() => void submitRename()}
                 type="button"
               >
                 {renameBusy ? "Saving…" : "Save name"}
-              </button>
-              <button className="text-action" onClick={() => setRenaming(false)} type="button">Cancel</button>
+              </Button>
+              <Button onClick={() => setRenaming(false)} type="button" variant="ghost">Cancel</Button>
             </div>
           )}
 
@@ -375,16 +382,16 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             <div className="recurring-dismiss-form">
               <label className="text-field">
                 <span>Cadence</span>
-                <select onChange={(e) => setCadenceValue(e.target.value)} value={cadenceValue}>
+                <NativeSelect onChange={(e) => setCadenceValue(e.target.value)} value={cadenceValue}>
                   {Object.entries(CADENCE_TEXT).map(([value, text]) => (
-                    <option key={value} value={value}>{text}</option>
+                    <NativeSelectOption key={value} value={value}>{text}</NativeSelectOption>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
               {cadenceValue === "custom" && (
                 <label className="text-field">
                   <span>Days between charges</span>
-                  <input
+                  <Input
                     max={730}
                     min={7}
                     onChange={(e) => setCustomIntervalValue(e.target.valueAsNumber)}
@@ -394,8 +401,7 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
                 </label>
               )}
               {cadenceProblem && <p className="inline-alert" role="alert">{cadenceProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
                 disabled={
                   cadenceBusy ||
                   (cadenceValue === "custom" &&
@@ -405,8 +411,8 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
                 type="button"
               >
                 {cadenceBusy ? "Saving…" : "Save cadence"}
-              </button>
-              <button className="text-action" onClick={() => setCadenceEditing(false)} type="button">Cancel</button>
+              </Button>
+              <Button onClick={() => setCadenceEditing(false)} type="button" variant="ghost">Cancel</Button>
             </div>
           )}
 
@@ -445,7 +451,7 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
             <p className="section-label" id="subscription-price-history-title">Price history</p>
             {detail.priceHistory.length === 0 && <p>No price history is recorded.</p>}
             {detail.priceHistory.length > 0 && (
-              <ul className="plans-history-list">
+              <ul className="plans-history-list subscription-price-timeline">
                 {detail.priceHistory.map((entry, index) => (
                   <li key={`${entry.observedOn}-${index}`}>
                     {entry.observedOn} · {moneyText(entry.amount, entry.currency, currencies)}
