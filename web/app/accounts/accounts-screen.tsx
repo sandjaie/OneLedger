@@ -561,7 +561,7 @@ export function AccountsScreen({
           else void saveEdit();
         }}
       >
-        <h3>{creating ? "New account" : `Edit ${editing?.name ?? "account"}`}</h3>
+        <h2>{creating ? "New account" : `Edit ${editing?.name ?? "account"}`}</h2>
         <label className="text-field">
           <span>Account name</span>
           <input onChange={(event) => field("name", event.target.value)} required value={draft.name} />
@@ -922,7 +922,7 @@ export function AccountsScreen({
         return (
           <section className="account-group" key={key}>
             <div className="account-group-head">
-              <h3>{title}</h3>
+              <h2>{title}</h2>
               <p>
                 {groupTotals.map((row, index) => (
                   <span key={`${row.currency}-${row.total}`}>
@@ -952,7 +952,7 @@ export function AccountsScreen({
       {closed.length > 0 && (
         <section className="account-group" aria-labelledby="closed-accounts-title">
           <div className="account-group-head">
-            <h3 id="closed-accounts-title">Closed accounts</h3>
+            <h2 id="closed-accounts-title">Closed accounts</h2>
             <p>Kept for history and reconciliation</p>
           </div>
           <table className="account-table">

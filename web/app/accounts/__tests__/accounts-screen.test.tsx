@@ -321,7 +321,7 @@ describe("Accounts", () => {
 
   it("groups by class then country, as UI §6 specifies over the artboard", () => {
     render(<AccountsScreen {...props} />);
-    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent))
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent))
       .toEqual(["Assets · XB", "Liabilities · XA", "Closed accounts"]);
   });
 
@@ -353,6 +353,7 @@ describe("Accounts", () => {
   it("offers every catalogue currency and every institution when adding an account", () => {
     render(<AccountsScreen {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Add an account" }));
+    expect(screen.getByRole("heading", { level: 2, name: "New account" })).toBeTruthy();
     const currency = screen.getByLabelText("Currency") as HTMLSelectElement;
     expect([...currency.options].map((o) => o.value)).toEqual(["XAE", "XIN", "XZZ"]);
     expect(screen.getByLabelText("Institution")).toBeTruthy();
