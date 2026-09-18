@@ -238,12 +238,14 @@ describe("choosing files", () => {
     expect(screen.getByLabelText("Upload statement files").className).toContain(
       "statement-import-dropzone",
     );
+    expect(screen.getByLabelText("Statement files").getAttribute("data-slot")).toBe("input");
     expect(screen.getByText("PDF", { selector: ".statement-import-format" })).toBeTruthy();
     expect(screen.queryByText("CSV", { selector: ".statement-import-format" })).toBeNull();
 
     choose([pdf("march.pdf")]);
     const chosen = await screen.findByRole("listitem", { name: /march\.pdf/ });
     expect(chosen.className).toContain("statement-import-file-card");
+    expect(screen.getByRole("button", { name: "Check statements" }).getAttribute("data-slot")).toBe("button");
   });
 
   it("lists every chosen file independently and uploads none of them", async () => {

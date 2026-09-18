@@ -173,6 +173,7 @@ async function runToStaged(request: ReturnType<typeof vi.fn>) {
   expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Check statement");
 
   const fileInput = screen.getByLabelText("Statement file");
+  expect(fileInput.getAttribute("data-slot")).toBe("input");
   fireEvent.change(fileInput, { target: { files: [pdf()] } });
   fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
 

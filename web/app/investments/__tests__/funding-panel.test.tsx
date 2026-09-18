@@ -175,6 +175,7 @@ describe("investment funding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Find cash entries" }));
 
     const group = await screen.findByRole("group", { name: "Funding allocation 1" });
+    expect(within(group).getByLabelText("Purchase for allocation 1").getAttribute("data-slot")).toBe("native-select");
     expect((within(group).getByLabelText("Cash entry for allocation 1") as HTMLSelectElement).value).toBe("");
     expect(screen.queryByText("Synthetic confirmed transfer leg")).toBeNull();
     expect(screen.queryByText("XBB 12.0000 → XAA 24.0000")).toBeNull();

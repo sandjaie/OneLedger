@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { Fragment, useEffect, useState } from "react";
 
 import { EvidenceChart, type EvidenceSeries } from "@/app/ui/evidence-chart";
@@ -257,8 +261,8 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
       {loadState === "error" && (
         <div role="alert">
           <p>Investment analysis could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => {
               setLoadState("loading");
               setRetryAttempt((value) => value + 1);
@@ -266,7 +270,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
             type="button"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
@@ -522,7 +526,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     <tr key={label}>
                       <th scope="row">{classLabel(label)}</th>
                       <td>
-                        <input
+                        <Input
                           aria-label={`Target ratio for ${classLabel(label)}`}
                           disabled={targetBusy}
                           onChange={(event) =>
@@ -537,13 +541,13 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
               </table>
             </div>
             <div className="portfolio-links">
-              <button className="text-action" disabled={targetBusy} onClick={() => void saveTargets()} type="button">
+              <Button variant="outline" disabled={targetBusy} onClick={() => void saveTargets()} type="button">
                 Save target
-              </button>
+              </Button>
               {data.target.source === "rule" && (
-                <button className="text-action" disabled={targetBusy} onClick={() => void restoreInference()} type="button">
+                <Button variant="outline" disabled={targetBusy} onClick={() => void restoreInference()} type="button">
                   Use inference
-                </button>
+                </Button>
               )}
             </div>
           </section>
@@ -553,7 +557,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
             {benchmarkProblem && <p className="inline-alert" role="alert">{benchmarkProblem}</p>}
             <label>
               Portfolio
-              <select
+              <NativeSelect
                 aria-label="Portfolio benchmark"
                 disabled={benchmarkBusy === "portfolio"}
                 onChange={(event) => void assignBenchmark("portfolio", event.target.value)}
@@ -565,12 +569,12 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     {security.securityName}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
             {data.classes.map((row) => (
               <label key={row.label}>
                 {classLabel(row.label)}
-                <select
+                <NativeSelect
                   aria-label={`${classLabel(row.label)} benchmark`}
                   disabled={benchmarkBusy === row.label}
                   onChange={(event) => void assignBenchmark("asset_class", event.target.value, row.label)}
@@ -582,7 +586,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                       {security.securityName}
                     </option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
             ))}
           </section>

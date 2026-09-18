@@ -10,6 +10,7 @@ import { ReviewQueue } from "@/app/investments/review-queue";
 import { XIRR_REASON_TEXT } from "@/app/investments/return-reasons";
 import { WealthRefreshNotice } from "@/app/investments/wealth-refresh-notice";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
@@ -156,7 +157,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
       {state === "error" && (
         <div className="investment-state" role="alert">
           <p>The portfolio could not be loaded.</p>
-          <button className="text-action" onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</button>
+          <Button variant="outline" onClick={() => { setState("loading"); setAttempt((value) => value + 1); }} type="button">Try again</Button>
         </div>
       )}
 
@@ -227,7 +228,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
               </div>
               {closed.length > 0 && (
                 <label className="check-field">
-                  <input checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)} type="checkbox" />
+                  <Checkbox checked={showClosed} onCheckedChange={(checked) => setShowClosed(checked === true)} />
                   <span>Show {closed.length} closed holding{closed.length === 1 ? "" : "s"}</span>
                 </label>
               )}

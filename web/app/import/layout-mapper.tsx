@@ -1,5 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useId, useState } from "react";
 
 import { ACCOUNT_TYPES } from "@/lib/accounts/types";
@@ -250,7 +255,7 @@ export function LayoutMapper({
       <div className="account-proposal-fields">
         <label>
           Name (required)
-          <input
+          <Input
             disabled={seed.remap}
             required
             value={draft.name}
@@ -259,93 +264,91 @@ export function LayoutMapper({
         </label>
         <label>
           Account type (required)
-          <select
+          <NativeSelect
             required
             value={draft.accountType ?? ""}
             onChange={(event) => change("accountType", event.target.value || null)}
           >
             <option value="">Choose a type…</option>
             {ACCOUNT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Date format (required)
-          <select value={draft.dateFormat} onChange={(event) => change("dateFormat", event.target.value)}>
+          <NativeSelect value={draft.dateFormat} onChange={(event) => change("dateFormat", event.target.value)}>
             {DATE_FORMATS.map((format) => <option key={format} value={format}>{format}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Sign convention (required)
-          <select
+          <NativeSelect
             value={draft.signConvention}
             onChange={(event) => change("signConvention", event.target.value)}
           >
             {SIGN_CONVENTIONS.map((convention) => (
               <option key={convention} value={convention}>{convention}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
         <label className="check-field">
-          <input
+          <Checkbox
             checked={draft.invertsSign}
-            onChange={(event) => change("invertsSign", event.target.checked)}
-            type="checkbox"
+            onCheckedChange={(checked) => change("invertsSign", checked === true)}
           />
           Invert sign
         </label>
         <label>
           Chronological order
-          <select
+          <NativeSelect
             value={draft.chronologicalOrder}
             onChange={(event) => change("chronologicalOrder", event.target.value)}
           >
             {CHRONOLOGICAL_ORDERS.map((order) => <option key={order} value={order}>{order}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Row-start rule
-          <select
+          <NativeSelect
             value={draft.rowStartRule}
             onChange={(event) => change("rowStartRule", event.target.value)}
           >
             {ROW_START_RULES.map((rule) => <option key={rule} value={rule}>{rule}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label>
           Continuation rule
-          <select
+          <NativeSelect
             value={draft.continuationRule ?? ""}
             onChange={(event) => change("continuationRule", event.target.value || null)}
           >
             <option value="">None</option>
             {CONTINUATION_RULES.map((rule) => <option key={rule} value={rule}>{rule}</option>)}
-          </select>
+          </NativeSelect>
         </label>
         <label className="check-field">
-          <input
+          <Checkbox
             checked={draft.hasRunningBalance}
-            onChange={(event) => change("hasRunningBalance", event.target.checked)}
-            type="checkbox"
+            onCheckedChange={(checked) => change("hasRunningBalance", checked === true)}
           />
           Has running balance
         </label>
         <label className="account-proposal-wide">
           Header row pattern
-          <input
+          <Input
             value={draft.headerRowPattern ?? ""}
             onChange={(event) => change("headerRowPattern", event.target.value || null)}
           />
         </label>
         <label>
           Opening balance pattern
-          <input
+          <Input
             value={draft.openingBalancePattern ?? ""}
             onChange={(event) => change("openingBalancePattern", event.target.value || null)}
           />
         </label>
         <label>
           Closing balance pattern
-          <input
+          <Input
             value={draft.closingBalancePattern ?? ""}
             onChange={(event) => change("closingBalancePattern", event.target.value || null)}
           />
@@ -356,10 +359,9 @@ export function LayoutMapper({
         <legend>Quirks</legend>
         {QUIRKS.map((quirk) => (
           <label className="check-field" key={quirk}>
-            <input
+            <Checkbox
               checked={draft.quirks.includes(quirk)}
-              onChange={() => toggleQuirk(quirk)}
-              type="checkbox"
+              onCheckedChange={() => toggleQuirk(quirk)}
             />
             {quirk}
           </label>
@@ -370,53 +372,53 @@ export function LayoutMapper({
         <legend>Fingerprints</legend>
         {draft.fingerprints.map((value, index) => (
           <div className="layout-mapper-list-row" key={index}>
-            <input
+            <Input
               onChange={(event) => changeListItem("fingerprints", index, event.target.value)}
               value={value}
             />
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               onClick={() => removeListItem("fingerprints", index)}
               type="button"
-            >Remove</button>
+            >Remove</Button>
           </div>
         ))}
-        <button className="text-action" onClick={() => addListItem("fingerprints")} type="button">
+        <Button variant="outline" onClick={() => addListItem("fingerprints")} type="button">
           Add fingerprint
-        </button>
+        </Button>
       </fieldset>
 
       <fieldset className="account-proposal-institution layout-mapper-list">
         <legend>Skip line patterns</legend>
         {draft.skipLinePatterns.map((value, index) => (
           <div className="layout-mapper-list-row" key={index}>
-            <input
+            <Input
               onChange={(event) => changeListItem("skipLinePatterns", index, event.target.value)}
               value={value}
             />
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               onClick={() => removeListItem("skipLinePatterns", index)}
               type="button"
-            >Remove</button>
+            >Remove</Button>
           </div>
         ))}
-        <button className="text-action" onClick={() => addListItem("skipLinePatterns")} type="button">
+        <Button variant="outline" onClick={() => addListItem("skipLinePatterns")} type="button">
           Add skip line pattern
-        </button>
+        </Button>
       </fieldset>
 
       <fieldset className="account-proposal-institution layout-mapper-list layout-mapper-columns">
         <legend>Column bands</legend>
         {draft.columns.map((column, index) => (
           <div className="layout-mapper-list-row layout-mapper-column-row" key={index}>
-            <select
+            <NativeSelect
               onChange={(event) => changeColumn(index, { field: event.target.value })}
               value={column.field}
             >
               {COLUMN_FIELDS.map((field) => <option key={field} value={field}>{field}</option>)}
-            </select>
-            <input
+            </NativeSelect>
+            <Input
               inputMode="decimal"
               onChange={(event) => {
                 const xMin = event.target.valueAsNumber;
@@ -425,7 +427,7 @@ export function LayoutMapper({
               type="number"
               value={column.xMin}
             />
-            <input
+            <Input
               inputMode="decimal"
               onChange={(event) => {
                 const xMax = event.target.valueAsNumber;
@@ -434,41 +436,41 @@ export function LayoutMapper({
               type="number"
               value={column.xMax}
             />
-            <input
+            <Input
               onChange={(event) => changeColumn(index, { label: event.target.value || null })}
               placeholder="Label"
               value={column.label ?? ""}
             />
-            <button className="text-action" onClick={() => removeColumn(index)} type="button">
+            <Button variant="outline" onClick={() => removeColumn(index)} type="button">
               Remove
-            </button>
+            </Button>
           </div>
         ))}
-        <button className="text-action" onClick={addColumn} type="button">Add column</button>
+        <Button variant="outline" onClick={addColumn} type="button">Add column</Button>
       </fieldset>
 
       <fieldset className="account-proposal-institution layout-mapper-list">
         <legend>Metadata patterns</legend>
         {metadataRows.map((row, index) => (
           <div className="layout-mapper-list-row" key={index}>
-            <input
+            <Input
               onChange={(event) => changeMetadataKey(index, event.target.value)}
               placeholder="Key"
               value={row.key}
             />
-            <input
+            <Input
               onChange={(event) => changeMetadataPattern(index, event.target.value)}
               placeholder="Pattern"
               value={row.pattern}
             />
-            <button className="text-action" onClick={() => removeMetadataRow(index)} type="button">
+            <Button variant="outline" onClick={() => removeMetadataRow(index)} type="button">
               Remove
-            </button>
+            </Button>
           </div>
         ))}
-        <button className="text-action" onClick={addMetadataRow} type="button">
+        <Button variant="outline" onClick={addMetadataRow} type="button">
           Add metadata pattern
-        </button>
+        </Button>
       </fieldset>
 
       {sameName && (
@@ -479,12 +481,12 @@ export function LayoutMapper({
 
       {previewProblem && <p className="inline-alert" role="alert">{previewProblem}</p>}
 
-      <button
-        className="text-action"
+      <Button
+        variant="outline"
         disabled={previewBusy || saveBusy}
         onClick={() => void runPreview()}
         type="button"
-      >{previewBusy ? "Previewing…" : "Preview"}</button>
+      >{previewBusy ? "Previewing…" : "Preview"}</Button>
 
       {preview && (
         <div className="import-summary layout-mapper-preview">
@@ -523,13 +525,13 @@ export function LayoutMapper({
       {saveProblem && <p className="inline-alert" role="alert">{saveProblem}</p>}
 
       <div className="layout-mapper-actions">
-        <button
-          className="primary-action"
+        <Button
+          variant="default"
           disabled={!canSave || saveBusy}
           onClick={() => void runSave()}
           type="button"
-        >{saveBusy ? "Saving…" : "Save layout"}</button>
-        <button className="text-action" onClick={onCancel} type="button">Cancel</button>
+        >{saveBusy ? "Saving…" : "Save layout"}</Button>
+        <Button variant="outline" onClick={onCancel} type="button">Cancel</Button>
         {saveDisabledReason && !saveBusy && <small>{saveDisabledReason}</small>}
       </div>
     </section>

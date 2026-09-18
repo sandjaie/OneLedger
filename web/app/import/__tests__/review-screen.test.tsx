@@ -328,8 +328,9 @@ describe("deciding rows", () => {
     renderScreen(request);
     await screen.findByRole("listitem", { name: /row 1/i });
 
-    for (const box of screen.getAllByRole<HTMLInputElement>("checkbox")) {
-      expect(box.checked).toBe(false);
+    for (const box of screen.getAllByRole("checkbox")) {
+      expect(box.getAttribute("aria-checked")).toBe("false");
+      expect(box.getAttribute("data-slot")).toBe("checkbox");
     }
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: /^accept selected/i }).disabled,
@@ -387,12 +388,14 @@ describe("deciding rows", () => {
     renderScreen(request);
     await screen.findByRole("listitem", { name: /row 1/i });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /select the 2 new rows shown/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
 
     const ticked = screen
-      .getAllByRole<HTMLInputElement>("checkbox")
-      .filter((box) => box.checked && box.getAttribute("aria-label")?.startsWith("Row"));
+      .getAllByRole("checkbox")
+      .filter((box) => box.getAttribute("aria-checked") === "true" && box.getAttribute("aria-label")?.startsWith("Row"));
     expect(ticked).toHaveLength(2);
+    fireEvent.click(screen.getByRole("checkbox", { name: /select the 2 new rows shown/i }));
+    expect(screen.getByRole("button", { name: "Select all" })).toBeTruthy();
   });
 
   it("names the rows it will tick, not the group's total", async () => {

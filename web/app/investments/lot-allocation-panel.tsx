@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
 import { useEffect, useState } from "react";
 
 import { ApiError, errorText, type apiFetch } from "@/lib/api/client";
@@ -169,7 +172,7 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
           {eligibleLots.map((lot) => (
             <label className="text-field" key={lot.lotId}>
               <span>{lotLabel(lot)}</span>
-              <input
+              <Input
                 disabled={busy}
                 inputMode="decimal"
                 onChange={(event) => changeDraft(lot.lotId, event.target.value)}
@@ -178,9 +181,9 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
             </label>
           ))}
           {stale && <p>The reviewed state is no longer current. No allocation was created.</p>}
-          <button className="primary-action" disabled={busy || allocations.length === 0} onClick={() => void propose()} type="button">
+          <Button variant="default" disabled={busy || allocations.length === 0} onClick={() => void propose()} type="button">
             {busy ? "Checking exact units…" : "Review allocation proposal"}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -196,10 +199,10 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
             ))}
           </dl>
           <div className="investment-confirm-actions">
-            <button className="primary-action" disabled={busy} onClick={() => void confirm()} type="button">
+            <Button variant="default" disabled={busy} onClick={() => void confirm()} type="button">
               {busy ? "Confirming allocation…" : "Confirm allocation"}
-            </button>
-            <button className="text-action" disabled={busy} onClick={() => setProposal(undefined)} type="button">Edit allocation</button>
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => setProposal(undefined)} type="button">Edit allocation</Button>
           </div>
         </fieldset>
       )}

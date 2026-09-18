@@ -374,8 +374,9 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   display: grid; align-content: start; gap: 7px;
   color: var(--muted); font-size: 0.78rem; font-weight: 700;
 }
-.account-proposal-fields input:not([type="checkbox"]),
-.account-proposal-fields select {
+.account-proposal-fields [data-slot="native-select-wrapper"] { width: 100%; }
+.account-proposal-fields input:not([type="checkbox"]):not([data-slot="input"]),
+.account-proposal-fields select:not([data-slot="native-select"]) {
   width: 100%; min-width: 0; padding: 10px 11px;
   border: 1px dashed rgba(16, 22, 20, 0.3); border-radius: 6px;
   color: var(--ink); background: var(--surface); font: inherit; font-weight: 400;
@@ -394,20 +395,19 @@ a:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; }
   margin: 0; padding: 11px 13px; border-left: 3px solid var(--blue);
   color: var(--muted); background: rgba(255, 255, 255, 0.62); line-height: 1.5;
 }
-.account-proposal > .primary-action { justify-self: start; margin-top: 0; }
+.account-proposal > [data-slot="button"] { justify-self: start; }
 
 /* Layout mapper — repeatable lists (fingerprints, skip lines, columns, metadata patterns) over
    the same card and field styling `.account-proposal` already defines. */
 .layout-mapper-quirks { display: grid; gap: 8px; }
 .layout-mapper-list { display: grid; gap: 10px; }
 .layout-mapper-list-row { display: flex; align-items: center; gap: 10px; }
-.layout-mapper-list-row input,
-.layout-mapper-list-row select { flex: 1; min-width: 0; padding: 8px 10px; border: 1px dashed rgba(16, 22, 20, 0.3); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; }
-.layout-mapper-list-row .text-action { flex: 0 0 auto; padding: 6px 10px; margin: 0; }
-.layout-mapper-column-row select { flex: 1.4; }
-.layout-mapper-column-row input[type="number"] { flex: 0.7; }
+.layout-mapper-list-row > [data-slot="input"],
+.layout-mapper-list-row > [data-slot="native-select-wrapper"] { flex: 1; min-width: 0; }
+.layout-mapper-list-row > [data-slot="button"] { flex: 0 0 auto; }
+.layout-mapper-column-row > [data-slot="native-select-wrapper"] { flex: 1.4; }
+.layout-mapper-column-row > [data-slot="input"][type="number"] { flex: 0.7; }
 .layout-mapper-actions { display: flex; align-items: center; gap: 14px; }
-.layout-mapper-actions .primary-action { margin-top: 0; }
 
 /* Review — grouped by attention needed, not chronologically. The groups arrive in that order
    from the API; the screen renders them as sent rather than sorting again. */
@@ -1378,9 +1378,8 @@ body { background: var(--paper); }
 }
 .statement-import-dropzone .file-field,
 .statement-import-dropzone .select-field { gap: 5px; font-size: 0.7rem; }
-.statement-import-dropzone input,
-.statement-import-dropzone select { padding: 9px 10px; border-radius: 5px; font-size: 0.74rem; }
-.statement-import-dropzone .primary-action { padding: 10px 14px; border-radius: 6px; font-size: 0.76rem; }
+.statement-import-dropzone input:not([data-slot="input"]),
+.statement-import-dropzone select:not([data-slot="native-select"]) { padding: 9px 10px; border-radius: 5px; font-size: 0.74rem; }
 .statement-import-screen .import-list { gap: 14px; margin-top: 0; }
 .statement-import-file-card {
   gap: 16px;
@@ -1538,8 +1537,8 @@ body { background: var(--paper); }
 .investment-entry-empty .primary-action { margin-top: 4px; }
 .investment-entry-docket { border-top: 4px solid var(--green); }
 .investment-entry-docket > .select-field { max-width: 480px; }
-.investment-entry-docket input,
-.investment-entry-docket select {
+.investment-entry-docket input:not([data-slot="input"]):not([type="checkbox"]):not([type="radio"]),
+.investment-entry-docket select:not([data-slot="native-select"]) {
   width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--rule);
   border-radius: 5px; color: var(--ink); background: #fff;
   font-family: var(--mono); font-size: 0.72rem;
@@ -1562,7 +1561,7 @@ body { background: var(--paper); }
   padding: 0 8px 0 0; color: var(--ink); font-family: var(--mono);
   font-size: 0.64rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
 }
-.investment-instrument-fields > .text-action { align-self: end; padding: 9px 12px; }
+.investment-instrument-fields > [data-slot="button"] { align-self: end; }
 .investment-resolution,
 .investment-candidate-list,
 .investment-instrument-fields > .investment-state,
@@ -1576,18 +1575,17 @@ body { background: var(--paper); }
 .investment-candidate-copy strong { font-size: 0.76rem; }
 .investment-candidate-copy small { color: var(--muted); font-family: var(--mono); font-size: 0.62rem; }
 .investment-candidate-list label { display: flex; gap: 10px; align-items: flex-start; }
-.investment-candidate-list input { width: auto; margin-top: 3px; }
-.investment-candidate-list .text-action { justify-self: start; padding: 8px 11px; }
+.investment-candidate-list [data-slot="radio-group-item"] { margin-top: 3px; }
+.investment-candidate-list > [data-slot="button"] { justify-self: start; }
 .investment-purchase-fields,
 .investment-valuation-fields {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
   padding-top: 17px; border-top: 1px solid var(--rule);
 }
 .investment-valuation-toggle { font-size: 0.76rem; }
-.investment-valuation-toggle input { width: auto; }
 .investment-valuation-fields { grid-template-columns: minmax(150px, 0.4fr) minmax(180px, 0.6fr) minmax(260px, 1fr); }
 .investment-valuation-fields p { margin: 22px 0 0; color: var(--muted); font-size: 0.7rem; line-height: 1.45; }
-.investment-entry-docket > .primary-action { justify-self: start; margin: 0; }
+.investment-entry-docket > [data-slot="button"] { justify-self: start; }
 .investment-confirmation {
   padding: 18px; border: 1px solid rgba(29, 92, 68, 0.24);
   border-top: 4px solid var(--green); border-radius: 8px; background: rgba(29, 92, 68, 0.05);
@@ -1618,7 +1616,7 @@ body { background: var(--paper); }
 .investment-funding-panel .investment-docket-head > small {
   max-width: 440px; margin: 0; color: var(--muted); font-size: 0.7rem; line-height: 1.5;
 }
-.investment-funding-panel > .text-action { justify-self: start; }
+.investment-funding-panel > [data-slot="button"] { justify-self: start; }
 .investment-funding-drafts { display: grid; gap: 12px; }
 .investment-funding-drafts fieldset {
   display: grid; grid-template-columns: minmax(180px, 0.85fr) minmax(260px, 1.4fr) minmax(150px, 0.6fr) auto;
@@ -1635,8 +1633,8 @@ body { background: var(--paper); }
 .investment-funding-drafts .select-field {
   display: grid; gap: 5px; color: var(--muted); font-size: 0.66rem; font-weight: 600;
 }
-.investment-funding-drafts input,
-.investment-funding-drafts select {
+.investment-funding-drafts input:not([data-slot="input"]),
+.investment-funding-drafts select:not([data-slot="native-select"]) {
   width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--rule);
   border-radius: 5px; color: var(--ink); background: #fff;
   font-family: var(--mono); font-size: 0.68rem;

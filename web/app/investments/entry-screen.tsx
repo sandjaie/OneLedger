@@ -1,5 +1,11 @@
 "use client";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -309,7 +315,7 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
         {loadState === "error" && (
           <div className="investment-state" role="alert">
             <p>Recorded holdings could not be loaded.</p>
-            <button className="text-action" onClick={() => { setLoadState("loading"); setLoadAttempt((value) => value + 1); }} type="button">Try again</button>
+            <Button variant="outline" onClick={() => { setLoadState("loading"); setLoadAttempt((value) => value + 1); }} type="button">Try again</Button>
           </div>
         )}
         {loadState === "ready" && portfolio?.positions.length === 0 && (
@@ -343,7 +349,7 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
           <p className="section-label">Account required</p>
           <h2 id="investment-account-required">Set up the holding container first</h2>
           <p>An investment account is required before recording a purchase.</p>
-          <Link className="primary-action" href="/accounts">Add an investment account</Link>
+          <Link className={buttonVariants()} href="/accounts">Add an investment account</Link>
         </section>
       ) : (
         <form className="investment-entry-docket" onSubmit={reviewPurchase}>
@@ -357,26 +363,26 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
 
           <label className="select-field">
             <span>Investment account</span>
-            <select disabled={purchaseLocked} onChange={(event) => { setAccountId(event.target.value); setConfirmation(false); }} value={accountId}>
+            <NativeSelect disabled={purchaseLocked} onChange={(event) => { setAccountId(event.target.value); setConfirmation(false); }} value={accountId}>
               {investmentAccounts.map((item) => (
                 <option key={item.id} value={item.id}>{accountLabel(item)}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
 
           <fieldset className="investment-instrument-fields">
             <legend>Catalogue instrument</legend>
             <label className="select-field">
               <span>Lookup method</span>
-              <select disabled={purchaseLocked} onChange={(event) => changeLookup(event.target.value as LookupMethod)} value={lookupMethod}>
+              <NativeSelect disabled={purchaseLocked} onChange={(event) => changeLookup(event.target.value as LookupMethod)} value={lookupMethod}>
                 <option value="isin">Public identifier</option>
                 <option value="ticker">Ticker and exchange</option>
                 <option value="name">Instrument name</option>
-              </select>
+              </NativeSelect>
             </label>
             <label className="text-field">
               <span>{lookupMethod === "name" ? "Instrument name" : lookupMethod === "ticker" ? "Ticker" : "Public identifier"}</span>
-              <input
+              <Input
                 autoComplete="off"
                 disabled={purchaseLocked}
                 onChange={(event) => { setIdentity(event.target.value); invalidateResolution(); }}
@@ -387,15 +393,15 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
             {lookupMethod === "ticker" && (
               <label className="text-field">
                 <span>Exchange</span>
-                <input autoComplete="off" disabled={purchaseLocked} onChange={(event) => { setExchange(event.target.value); invalidateResolution(); }} required value={exchange} />
+                <Input autoComplete="off" disabled={purchaseLocked} onChange={(event) => { setExchange(event.target.value); invalidateResolution(); }} required value={exchange} />
               </label>
             )}
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               disabled={purchaseLocked || resolving || !identity || (lookupMethod === "ticker" && !exchange)}
               onClick={() => void resolveInstrument()}
               type="button"
-            >{resolving ? "Checking catalogue…" : "Find instrument"}</button>
+            >{resolving ? "Checking catalogue…" : "Find instrument"}</Button>
 
             {problem && !confirmation && <p className="inline-alert" role="alert">The catalogue request could not be completed. Check the entry and try again.</p>}
             {security && resolution?.status === "matched" && (
@@ -416,13 +422,15 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
             {resolution && resolution.status !== "matched" && resolution.candidates.length > 0 && !security && (
               <fieldset className="investment-candidate-list" aria-label="Confirm instrument">
                 <legend>Choose the instrument supported by your evidence</legend>
-                {resolution.candidates.map((item) => (
-                  <label key={item.id}>
-                    <input checked={candidateId === item.id} name="security-candidate" onChange={() => setCandidateId(item.id)} type="radio" />
-                    <InstrumentCandidate candidate={item} />
-                  </label>
-                ))}
-                <button className="text-action" disabled={!candidateId} onClick={confirmCandidate} type="button">Use selected instrument</button>
+                <RadioGroup aria-label="Catalogue candidates" name="security-candidate" onValueChange={setCandidateId} value={candidateId}>
+                  {resolution.candidates.map((item) => (
+                    <label htmlFor={`entry-candidate-${item.id}`} key={item.id}>
+                      <RadioGroupItem id={`entry-candidate-${item.id}`} value={item.id} />
+                      <InstrumentCandidate candidate={item} />
+                    </label>
+                  ))}
+                </RadioGroup>
+                <Button variant="outline" disabled={!candidateId} onClick={confirmCandidate} type="button">Use selected instrument</Button>
               </fieldset>
             )}
           </fieldset>
@@ -430,23 +438,23 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
           <div className="investment-purchase-fields">
             <label className="select-field">
               <span>Entry kind</span>
-              <select disabled={purchaseLocked} onChange={(event) => changeDraft("eventKind", event.target.value as Draft["eventKind"])} value={draft.eventKind}>
+              <NativeSelect disabled={purchaseLocked} onChange={(event) => changeDraft("eventKind", event.target.value as Draft["eventKind"])} value={draft.eventKind}>
                 <option value="purchase">Purchase</option>
                 <option value="recurring_purchase">Recurring purchase</option>
-              </select>
+              </NativeSelect>
             </label>
-            <label className="date-field"><span>Purchase date</span><input disabled={purchaseLocked} onChange={(event) => changeDraft("eventDate", event.target.value)} required type="date" value={draft.eventDate} /></label>
-            <label className="text-field"><span>Units acquired</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("units", event.target.value)} required value={draft.units} /></label>
-            <label className="text-field"><span>Transaction price</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("price", event.target.value)} required value={draft.price} /></label>
-            <label className="text-field"><span>Gross amount</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("grossAmount", event.target.value)} required value={draft.grossAmount} /></label>
-            <label className="text-field"><span>Charges</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("charges", event.target.value)} required value={draft.charges} /></label>
-            <label className="text-field"><span>Withheld tax</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("withheldTax", event.target.value)} required value={draft.withheldTax} /></label>
-            <label className="text-field"><span>Net cash amount</span><input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("netAmount", event.target.value)} required value={draft.netAmount} /></label>
+            <label className="date-field"><span>Purchase date</span><Input disabled={purchaseLocked} onChange={(event) => changeDraft("eventDate", event.target.value)} required type="date" value={draft.eventDate} /></label>
+            <label className="text-field"><span>Units acquired</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("units", event.target.value)} required value={draft.units} /></label>
+            <label className="text-field"><span>Transaction price</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("price", event.target.value)} required value={draft.price} /></label>
+            <label className="text-field"><span>Gross amount</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("grossAmount", event.target.value)} required value={draft.grossAmount} /></label>
+            <label className="text-field"><span>Charges</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("charges", event.target.value)} required value={draft.charges} /></label>
+            <label className="text-field"><span>Withheld tax</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("withheldTax", event.target.value)} required value={draft.withheldTax} /></label>
+            <label className="text-field"><span>Net cash amount</span><Input disabled={purchaseLocked} inputMode="decimal" onChange={(event) => changeDraft("netAmount", event.target.value)} required value={draft.netAmount} /></label>
           </div>
 
           {security?.manualPriceEligible ? (
             <label className="check-field investment-valuation-toggle">
-              <input checked={draft.addValuation} disabled={purchaseLocked} onChange={(event) => changeDraft("addValuation", event.target.checked)} type="checkbox" />
+              <Checkbox checked={draft.addValuation} disabled={purchaseLocked} onCheckedChange={(checked) => changeDraft("addValuation", checked === true)} />
               <span>Record a dated valuation price after this purchase</span>
             </label>
           ) : security ? (
@@ -454,15 +462,15 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
           ) : null}
           {draft.addValuation && (
             <div className="investment-valuation-fields">
-              <label className="date-field"><span>Valuation date</span><input disabled={mutationProgress === "complete"} onChange={(event) => changeDraft("valuationDate", event.target.value)} required type="date" value={draft.valuationDate} /></label>
-              <label className="text-field"><span>Valuation price</span><input disabled={mutationProgress === "complete"} inputMode="decimal" onChange={(event) => changeDraft("valuationPrice", event.target.value)} required value={draft.valuationPrice} /></label>
+              <label className="date-field"><span>Valuation date</span><Input disabled={mutationProgress === "complete"} onChange={(event) => changeDraft("valuationDate", event.target.value)} required type="date" value={draft.valuationDate} /></label>
+              <label className="text-field"><span>Valuation price</span><Input disabled={mutationProgress === "complete"} inputMode="decimal" onChange={(event) => changeDraft("valuationPrice", event.target.value)} required value={draft.valuationPrice} /></label>
               <p>This is separate dated valuation evidence, not a change to the transaction price.</p>
             </div>
           )}
 
-          <button className="primary-action" disabled={!completeDraft || busy || mutationProgress === "complete"} type="submit">
+          <Button variant="default" disabled={!completeDraft || busy || mutationProgress === "complete"} type="submit">
             {mutationProgress === "purchase" ? "Review dated price" : "Review purchase"}
-          </button>
+          </Button>
 
           {confirmation && account && security && (
             <fieldset className="investment-confirmation" aria-label={mutationProgress === "purchase" ? "Confirm dated price" : mutationProgress === "complete" ? "Reload holdings" : "Confirm purchase"}>
@@ -493,7 +501,7 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
                 </p>
               )}
               <div className="investment-confirm-actions">
-                <button className="primary-action" disabled={busy} onClick={() => void submitPurchase()} ref={confirmButton} type="button">
+                <Button variant="default" disabled={busy} onClick={() => void submitPurchase()} ref={confirmButton} type="button">
                   {busy
                     ? mutationProgress === "purchase"
                       ? "Recording dated price…"
@@ -509,11 +517,11 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
                           : mutationProgress === "purchase"
                             ? "Confirm dated price"
                             : "Confirm purchase"}
-                </button>
+                </Button>
                 {mutationProgress !== "complete" && (
-                  <button className="text-action" disabled={busy} onClick={() => { setConfirmation(false); setProblem(false); }} type="button">
+                  <Button variant="outline" disabled={busy} onClick={() => { setConfirmation(false); setProblem(false); }} type="button">
                     {mutationProgress === "purchase" ? "Edit dated price" : "Go back"}
-                  </button>
+                  </Button>
                 )}
               </div>
             </fieldset>

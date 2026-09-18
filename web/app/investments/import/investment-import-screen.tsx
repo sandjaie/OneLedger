@@ -1,5 +1,9 @@
 "use client";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -360,12 +364,12 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
         {!terminal && (
           <div className="review-actions">
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={busy || !committable}
               onClick={() => void commit()}
               type="button"
-            >Commit ready groups</button>
+            >Commit ready groups</Button>
             <Cancel
               busy={busy}
               confirming={confirmingCancel}
@@ -396,7 +400,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
         <div className="investment-import-prerequisite">
           <h2>Set up an investment account first</h2>
           <p>An investment account is required before importing a statement.</p>
-          <Link className="primary-action" href="/accounts">Set up an investment account</Link>
+          <Link className={buttonVariants()} href="/accounts">Set up an investment account</Link>
         </div>
       </section>
     );
@@ -415,7 +419,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
       <div className="import-controls">
         <label className="file-field">
           <span>Statement file</span>
-          <input
+          <Input
             accept="application/pdf,.pdf"
             disabled={busy}
             onChange={(event) => chooseFile(event.target.files)}
@@ -425,7 +429,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
         {locked && (
           <label className="password-field">
             <span>Password for this statement</span>
-            <input
+            <Input
               autoComplete="new-password"
               onChange={(event) => setPassword(event.target.value)}
               type="password"
@@ -434,9 +438,9 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
             <small>Used for this file only, for this check. It is not saved anywhere.</small>
           </label>
         )}
-        <button className="primary-action" disabled={!file || busy} onClick={() => void check()} type="button">
+        <Button variant="default" disabled={!file || busy} onClick={() => void check()} type="button">
           {busy ? "Checking…" : "Check statement"}
-        </button>
+        </Button>
       </div>
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
@@ -465,8 +469,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
               resolutions={resolutions}
             />
           ))}
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={
               busy
               || !preview.supported
@@ -475,7 +479,7 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
             }
             onClick={() => void stage()}
             type="button"
-          >{busy ? "Staging…" : "Stage import"}</button>
+          >{busy ? "Staging…" : "Stage import"}</Button>
         </>
       )}
     </section>
@@ -501,16 +505,16 @@ function Cancel({
 }) {
   if (!confirming) {
     return (
-      <button className="text-action" disabled={busy} onClick={onStart} type="button">
+      <Button variant="outline" disabled={busy} onClick={onStart} type="button">
         Cancel this import
-      </button>
+      </Button>
     );
   }
   return (
     <div className="review-discard" role="group" aria-label="Confirm cancelling this import">
       <p className="review-hint">Cancel this import? Nothing staged from it will reach your holdings.</p>
-      <button className="text-action" disabled={busy} onClick={onConfirm} type="button">Cancel it</button>
-      <button className="text-action" disabled={busy} onClick={onCancel} type="button">Keep it</button>
+      <Button variant="outline" disabled={busy} onClick={onConfirm} type="button">Cancel it</Button>
+      <Button variant="outline" disabled={busy} onClick={onCancel} type="button">Keep it</Button>
     </div>
   );
 }
@@ -595,7 +599,7 @@ function PreviewTarget({
       {needsAccount && (
         <label className="select-field">
           <span>Account</span>
-          <select
+          <NativeSelect
             disabled={busy}
             onChange={(event) => onResolve(target.sourceGroupNumber, { accountId: event.target.value })}
             value={resolution?.accountId ?? ""}
@@ -604,7 +608,7 @@ function PreviewTarget({
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>{account.name}</option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
       )}
 

@@ -1,5 +1,9 @@
 "use client";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
@@ -461,7 +465,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
         <div className="import-controls">
           <label className="file-field statement-import-picker">
             <span>Statement files</span>
-            <input
+            <Input
               accept="application/pdf,.pdf"
               disabled={busy}
               multiple
@@ -472,7 +476,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
 
           <label className="select-field">
             <span>Account</span>
-            <select
+            <NativeSelect
               disabled={busy}
               onChange={(event) => setAccountId(event.target.value)}
               value={accountId}
@@ -481,15 +485,15 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
 
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={!checkable || busy}
             onClick={checkAll}
             type="button"
-          >{busy ? "Checking…" : "Check statements"}</button>
+          >{busy ? "Checking…" : "Check statements"}</Button>
         </div>
       </div>
 
@@ -523,18 +527,18 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
 
             {item.state === "chosen" && needsMapping(item.problem) && !item.mapping && (
-              <button
-                className="text-action"
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => void openMapper(item, false)}
                 type="button"
-              >Map this layout</button>
+              >Map this layout</Button>
             )}
 
             {item.locked && (
               <label className="password-field">
                 <span>Password for this statement</span>
-                <input
+                <Input
                   // `new-password` rather than `off`: browsers increasingly ignore `off` on a
                   // password field and offer to save the value. The owner's own password manager
                   // is not a never-store violation — the list binds OneLedger — but an unprompted
@@ -584,18 +588,18 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
             )}
 
             {item.state === "checked" && item.parsed?.identityResolution.status === "matched" && canStage(item.parsed) && (
-              <button className="primary-action" disabled={busy} onClick={() => stage(item)} type="button">
+              <Button variant="default" disabled={busy} onClick={() => stage(item)} type="button">
                 Stage batch
-              </button>
+              </Button>
             )}
 
             {item.state === "checked" && item.parsed && needsRemap(item.parsed) && !item.mapping && (
-              <button
-                className="text-action"
+              <Button
+                variant="outline"
                 disabled={busy}
                 onClick={() => void openMapper(item, true)}
                 type="button"
-              >Remap this layout</button>
+              >Remap this layout</Button>
             )}
 
             {item.mapping && item.mapperSeed && (
@@ -611,7 +615,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
             )}
 
             {item.state === "staged" && item.batchId && (
-              <a className="text-action" href={`/import/${item.batchId}`}>Review this batch</a>
+              <a className={buttonVariants({ variant: "outline" })} href={`/import/${item.batchId}`}>Review this batch</a>
             )}
           </li>
         ))}
