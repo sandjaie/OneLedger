@@ -1,5 +1,7 @@
 "use client";
 
+import { Button, buttonVariants } from "@/components/ui/button";
+
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -237,7 +239,7 @@ export function OverviewScreen({ household, currency, currencies, request, logou
       </>}
       {actionsState === "error" && <p className="inline-alert" role="alert">
         Needs attention could not be loaded.{" "}
-        <button className="text-action" onClick={() => setActionsAttempt((value) => value + 1)} type="button">Try again</button>
+        <Button variant="outline" onClick={() => setActionsAttempt((value) => value + 1)} type="button">Try again</Button>
       </p>}
     </section>
   );
@@ -260,14 +262,14 @@ export function OverviewScreen({ household, currency, currencies, request, logou
       {state.status === "failed" && (
         <>
           <p className="inline-alert" role="alert">{state.sentence}</p>
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             onClick={() => {
               setState({ status: "loading" });
               setAttempt((value) => value + 1);
             }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </>
       )}
       {state.status !== "ready" && attentionPanel()}
@@ -287,8 +289,8 @@ export function OverviewScreen({ household, currency, currencies, request, logou
             <h2>Nothing to report yet</h2>
             <p>Add an account or import a statement to build the household picture.</p>
             <div className="overview-empty-actions">
-              <Link className="primary-action" href="/accounts">Add an account</Link>
-              <Link className="text-action" href="/import">Import a statement</Link>
+              <Link className={buttonVariants()} href="/accounts">Add an account</Link>
+              <Link className={buttonVariants({ variant: "outline" })} href="/import">Import a statement</Link>
             </div>
           </div>
           {attentionPanel()}
@@ -354,7 +356,7 @@ export function OverviewScreen({ household, currency, currencies, request, logou
           <p className="section-label">Historical activity</p>
           <h2>No current position</h2>
           <p>Past transactions remain below. Closed or excluded accounts are not included in current net worth.</p>
-          <div className="overview-empty-actions"><Link className="text-action" href="/accounts">Review accounts</Link></div>
+          <div className="overview-empty-actions"><Link className={buttonVariants({ variant: "outline" })} href="/accounts">Review accounts</Link></div>
         </div>}
         {currentPosition && (
         <section className="overview-hero-card" aria-labelledby="worth-title">

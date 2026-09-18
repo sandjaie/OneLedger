@@ -72,6 +72,19 @@ afterEach(() => {
 });
 
 describe("budget panel", () => {
+  it("uses Nova controls for the budget entry form", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/budgets?month=2026-03-01") return budgets({ lines: [] });
+      throw new Error(`unexpected ${path}`);
+    });
+    render(<BudgetPanel baseCurrency="AED" categories={CATEGORIES} currencies={CURRENCIES} month="2026-03-01" request={request} />);
+    await screen.findByRole("button", { name: "Add budget" });
+    expect(document.querySelector('[data-slot="native-select"]')).toBeTruthy();
+    expect(document.querySelector('[data-slot="checkbox"]')).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Category" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Bucket" })).toBeTruthy();
+  });
+
   it("shows a line's variance, carried figure and excluded categories from server strings", async () => {
     const request = requestFrom((path) => {
       if (path === "/budgets?month=2026-03-01") {
@@ -175,7 +188,7 @@ describe("budget panel", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     const editForm = document.querySelector(".budget-line-form") as HTMLElement;
-    fireEvent.click(within(editForm).getByLabelText(/Carry the unspent or overspent remainder/));
+    fireEvent.click(within(editForm).getByRole("checkbox", { name: /Carry the unspent or overspent remainder/ }));
     fireEvent.click(within(editForm).getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(screen.queryByText("Edit Synthetic groceries")).toBeNull());

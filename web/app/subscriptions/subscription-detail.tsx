@@ -257,13 +257,13 @@ export function SubscriptionDetail({ currencies, baseCurrency, request, seriesId
       {state === "error" && (
         <div className="investment-state" role="alert">
           <p>The subscription could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
             type="button"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
 

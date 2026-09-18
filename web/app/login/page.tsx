@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { buttonVariants } from "@/components/ui/button";
 import { apiUrl } from "@/lib/api/url";
 
 type Props = { searchParams: Promise<{ reason?: string | string[] }> };
@@ -16,7 +17,7 @@ export default async function LoginPage({ searchParams }: Props) {
         <h1 className="auth-title" id="login-title">Workspace access needs another try.</h1>
         <p className="lede">OneLedger could not open the configured owner workspace.</p>
         <p className="inline-alert" role="alert">Check that the service is available, then try again.</p>
-        <a className="primary-action" href={apiUrl("/auth/login")}>Try again</a>
+        <a className={buttonVariants()} href={apiUrl("/auth/login")}>Try again</a>
       </section>
     </main>
   );

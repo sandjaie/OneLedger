@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { BudgetPanel } from "@/app/spending/budget-panel";
 import { SpendingEvidenceChart } from "@/app/spending/spending-evidence-chart";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { errorText, type apiFetch } from "@/lib/api/client";
@@ -157,7 +158,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
         )}
         {rangeReady && (
           <a
-            className="text-action"
+            className={buttonVariants({ variant: "outline" })}
             download
             href={apiUrl(
               `/spending/export.csv?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
@@ -173,11 +174,11 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
       {rangeReady && state === "error" && (
         <div className="page-status" role="alert">
           <p>{problem}</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </div>
       )}
 

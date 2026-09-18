@@ -206,11 +206,11 @@ export function WealthScreen({ currency, currencies, request }: Props) {
       {state === "error" && (
         <div className="page-status" role="alert">
           <p>Wealth history could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => { setState("loading"); setAttempt((value) => value + 1); }}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </div>
       )}
 
@@ -256,12 +256,12 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                   return (
                     <tr key={row.monthEnd}>
                       <th scope="row">
-                        <button
+                        <Button
                           aria-current={selected === row.monthEnd ? "true" : undefined}
-                          className="text-action"
+                          variant="outline"
                           onClick={() => selectMonth(row.monthEnd)}
                           type="button"
-                        >{row.monthEnd}</button>
+                        >{row.monthEnd}</Button>
                       </th>
                       <td>
                         {total === null
@@ -294,9 +294,9 @@ export function WealthScreen({ currency, currencies, request }: Props) {
               {monthState === "error" && (
                 <p className="inline-alert" role="alert">
                   This month&rsquo;s positions could not be loaded.{" "}
-                  <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                  <Button variant="outline" onClick={() => selectMonth(selected)} type="button">
                     Try again
-                  </button>
+                  </Button>
                 </p>
               )}
               {monthState === "ready" && month && (
@@ -355,9 +355,9 @@ export function WealthScreen({ currency, currencies, request }: Props) {
                 {waterfallState === "error" && (
                   <p className="inline-alert" role="alert">
                     This month&rsquo;s attribution could not be loaded.{" "}
-                    <button className="text-action" onClick={() => selectMonth(selected)} type="button">
+                    <Button variant="outline" onClick={() => selectMonth(selected)} type="button">
                       Try again
-                    </button>
+                    </Button>
                   </p>
                 )}
                 {waterfallState === "ready" && waterfall && (() => {

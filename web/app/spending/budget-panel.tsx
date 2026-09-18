@@ -1,5 +1,11 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+
 import { useEffect, useState } from "react";
 
 import { errorText, type apiFetch } from "@/lib/api/client";
@@ -247,11 +253,11 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
       {state === "error" && (
         <div role="alert">
           <p>{problem}</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => setAttempt((value) => value + 1)}
             type="button"
-          >Try again</button>
+          >Try again</Button>
         </div>
       )}
 
@@ -303,12 +309,12 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
                       {moneyText(row.varianceBase, row.currency, currencies)}
                     </td>
                     <td>
-                      <button className="text-action" onClick={() => startEdit(row)} type="button">
+                      <Button variant="outline" onClick={() => startEdit(row)} type="button">
                         Edit
-                      </button>
-                      <button className="text-action" onClick={() => void removeLine(row)} type="button">
+                      </Button>
+                      <Button variant="outline" onClick={() => void removeLine(row)} type="button">
                         Remove
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -321,127 +327,117 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
               <h3>Edit {scopeLabel(editingLine)}</h3>
               <label className="text-field">
                 <span>Amount ({editingLine.currency})</span>
-                <input
+                <Input
                   inputMode="decimal"
                   onChange={(e) => setEditForm((current) => ({ ...current, amountBase: e.target.value }))}
                   value={editForm.amountBase}
                 />
               </label>
-              <label>
-                <input
+              <label className="flex items-start gap-2 text-sm">
+                <Checkbox
                   checked={editForm.rolloverEnabled}
-                  onChange={(e) =>
-                    setEditForm((current) => ({ ...current, rolloverEnabled: e.target.checked }))
+                  onCheckedChange={(checked) =>
+                    setEditForm((current) => ({ ...current, rolloverEnabled: checked === true }))
                   }
-                  type="checkbox"
                 />
-                {" "}Carry the unspent or overspent remainder into next month
+                <span>Carry the unspent or overspent remainder into next month</span>
               </label>
               <label className="text-field">
                 <span>Note (optional)</span>
-                <input
+                <Input
                   onChange={(e) => setEditForm((current) => ({ ...current, note: e.target.value }))}
                   value={editForm.note}
                 />
               </label>
               {editProblem && <p className="inline-alert" role="alert">{editProblem}</p>}
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={editBusy || !editForm.amountBase}
                 onClick={() => void submitEdit(editingId)}
                 type="button"
-              >{editBusy ? "Saving…" : "Save changes"}</button>
-              <button className="text-action" onClick={() => setEditingId(undefined)} type="button">
+              >{editBusy ? "Saving…" : "Save changes"}</Button>
+              <Button variant="outline" onClick={() => setEditingId(undefined)} type="button">
                 Cancel
-              </button>
+              </Button>
             </div>
           )}
 
           <div className="budget-panel-actions">
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               disabled={copyBusy}
               onClick={() => void copyLastMonth()}
               type="button"
-            >{copyBusy ? "Copying…" : "Copy last month"}</button>
+            >{copyBusy ? "Copying…" : "Copy last month"}</Button>
           </div>
           {copyMessage && <p role="status">{copyMessage}</p>}
           {copyProblem && <p className="inline-alert" role="alert">{copyProblem}</p>}
 
           <h3>Set a budget</h3>
-          <div aria-label="Scope" role="radiogroup">
-            <label>
-              <input
-                checked={form.scopeKind === "category"}
-                onChange={() => setForm((current) => ({ ...current, scopeKind: "category" }))}
-                type="radio"
-              />
-              {" "}Category
+          <RadioGroup aria-label="Scope" className="flex flex-wrap gap-4" onValueChange={(scopeKind) => setForm((current) => ({ ...current, scopeKind: scopeKind as LineFormState["scopeKind"] }))} value={form.scopeKind}>
+            <label className="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="category" />
+              Category
             </label>
-            <label>
-              <input
-                checked={form.scopeKind === "bucket"}
-                onChange={() => setForm((current) => ({ ...current, scopeKind: "bucket" }))}
-                type="radio"
-              />
-              {" "}Bucket
+            <label className="flex items-center gap-2 text-sm">
+              <RadioGroupItem value="bucket" />
+              Bucket
             </label>
-          </div>
+          </RadioGroup>
           {form.scopeKind === "category" ? (
             <label className="select-field">
               <span>Category</span>
-              <select
+              <NativeSelect
                 onChange={(e) => setForm((current) => ({ ...current, categoryId: e.target.value }))}
                 value={form.categoryId}
               >
                 {activeCategories.map((category) => (
                   <option key={category.id} value={category.id}>{category.name}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           ) : (
             <label className="select-field">
               <span>Bucket</span>
-              <select
+              <NativeSelect
                 onChange={(e) => setForm((current) => ({ ...current, bucket: e.target.value }))}
                 value={form.bucket}
               >
                 {BUCKETS.map((bucket) => (
                   <option key={bucket} value={bucket}>{BUCKET_TEXT[bucket]}</option>
                 ))}
-              </select>
+              </NativeSelect>
             </label>
           )}
           <label className="text-field">
             <span>Amount ({baseCurrency})</span>
-            <input
+            <Input
               inputMode="decimal"
               onChange={(e) => setForm((current) => ({ ...current, amountBase: e.target.value }))}
               value={form.amountBase}
             />
           </label>
-          <label>
-            <input
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox
               checked={form.rolloverEnabled}
-              onChange={(e) => setForm((current) => ({ ...current, rolloverEnabled: e.target.checked }))}
-              type="checkbox"
+              onCheckedChange={(checked) => setForm((current) => ({ ...current, rolloverEnabled: checked === true }))}
             />
-            {" "}Carry the unspent or overspent remainder into next month
+            <span>Carry the unspent or overspent remainder into next month</span>
           </label>
           <label className="text-field">
             <span>Note (optional)</span>
-            <input
+            <Input
               onChange={(e) => setForm((current) => ({ ...current, note: e.target.value }))}
               value={form.note}
             />
           </label>
           {formProblem && <p className="inline-alert" role="alert">{formProblem}</p>}
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={formBusy || !completeLineForm}
             onClick={() => void submitLine()}
             type="button"
-          >{formBusy ? "Saving…" : "Add budget"}</button>
+          >{formBusy ? "Saving…" : "Add budget"}</Button>
         </>
       )}
     </section>

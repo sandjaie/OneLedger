@@ -1,5 +1,10 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -433,7 +438,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         {loadState === "error" && (
           <div role="alert">
             <p>Payslips could not be loaded.</p>
-            <button className="text-action" onClick={() => { setLoadState("loading"); setAttempt((v) => v + 1); }} type="button">Try again</button>
+            <Button variant="outline" onClick={() => { setLoadState("loading"); setAttempt((v) => v + 1); }} type="button">Try again</Button>
           </div>
         )}
         {loadState === "ready" && payslips?.length === 0 && <p>No payslips are recorded yet.</p>}
@@ -458,16 +463,15 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                           <span>{line.kind}: {line.label} {moneyText(line.amount, payslip.currency, currencies)}</span>
                           {line.kind === "deduction" && (
                             <span className="salary-line-spending">
-                              <label>
-                                <input
+                              <label className="inline-flex items-center gap-2">
+                                <Checkbox
                                   checked={line.countedAsSpending}
                                   disabled={busy || (!line.countedAsSpending && !chosenCategory)}
-                                  onChange={() => void toggleSpending(payslip, line)}
-                                  type="checkbox"
+                                  onCheckedChange={() => void toggleSpending(payslip, line)}
                                 />
                                 Count as spending
                               </label>
-                              <select
+                              <NativeSelect
                                 disabled={line.countedAsSpending || busy}
                                 onChange={(e) =>
                                   setSpendingDraft((current) => ({ ...current, [key]: e.target.value }))
@@ -478,7 +482,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                                 {expenseCategories.map((row) => (
                                   <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
                                 ))}
-                              </select>
+                              </NativeSelect>
                               {spendingProblem?.key === key && (
                                 <span className="inline-alert" role="alert">{spendingProblem.message}</span>
                               )}
@@ -488,33 +492,33 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                       );
                     })}
                   </ul>
-                  <button
-                    className="text-action"
+                  <Button
+                    variant="outline"
                     disabled={Boolean(payslip.deposit) || Boolean(payslip.supersededByPayslipId)}
                     onClick={() => startCorrection(payslip)}
                     type="button"
-                  >{payslip.deposit ? "Unlink before correcting" : "Correct"}</button>
+                  >{payslip.deposit ? "Unlink before correcting" : "Correct"}</Button>
 
                   {!payslip.supersededByPayslipId && (
                     payslip.deposit ? (
                       <>
-                        <button
-                          className="text-action"
+                        <Button
+                          variant="outline"
                           disabled={linkBusy}
                           onClick={() => void unlink(payslip)}
                           type="button"
-                        >Unlink</button>
+                        >Unlink</Button>
                         {unlinkFor === payslip.id && unlinkProblem && (
                           <p className="inline-alert" role="alert">{unlinkProblem}</p>
                         )}
                       </>
                     ) : (
-                      <button
-                        className="text-action"
+                      <Button
+                        variant="outline"
                         disabled={candidatesBusy}
                         onClick={() => void findCandidates(payslip)}
                         type="button"
-                      >Find net-pay credit</button>
+                      >Find net-pay credit</Button>
                     )
                   )}
 
@@ -528,11 +532,11 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                           {candidates.map((candidate) => (
                             <li key={candidate.transactionId}>
                               <span>{candidate.bookedDate} · {moneyText(candidate.amount, candidate.currency, currencies)} · {candidate.description}</span>
-                              <button
-                                className="text-action"
+                              <Button
+                                variant="outline"
                                 onClick={() => setConfirmingCandidate(candidate)}
                                 type="button"
-                              >Link</button>
+                              >Link</Button>
                             </li>
                           ))}
                         </ul>
@@ -540,13 +544,13 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                       {confirmingCandidate && (
                         <div role="alertdialog">
                           <p>Link the credit on {confirmingCandidate.bookedDate} to this payslip&rsquo;s net pay?</p>
-                          <button className="primary-action" disabled={linkBusy} onClick={() => void confirmLink(payslip)} type="button">
+                          <Button variant="default" disabled={linkBusy} onClick={() => void confirmLink(payslip)} type="button">
                             {linkBusy ? "Linking…" : "Confirm link"}
-                          </button>
-                          <button className="text-action" onClick={() => setConfirmingCandidate(undefined)} type="button">Cancel</button>
+                          </Button>
+                          <Button variant="outline" onClick={() => setConfirmingCandidate(undefined)} type="button">Cancel</Button>
                         </div>
                       )}
-                      <button className="text-action" onClick={cancelCandidates} type="button">Close</button>
+                      <Button variant="outline" onClick={cancelCandidates} type="button">Close</Button>
                     </div>
                   )}
                 </li>
@@ -560,57 +564,57 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         <h2 id="salary-entry-title">{correcting ? `Correct ${correcting.payMonth}` : "Enter a payslip"}</h2>
         <label className="date-field">
           <span>Pay month</span>
-          <input onChange={(e) => changeForm("payMonth", e.target.value)} type="month" value={form.payMonth} />
+          <Input onChange={(e) => changeForm("payMonth", e.target.value)} type="month" value={form.payMonth} />
         </label>
         <label className="select-field">
           <span>Currency</span>
-          <select onChange={(e) => changeForm("currency", e.target.value)} value={form.currency}>
+          <NativeSelect onChange={(e) => changeForm("currency", e.target.value)} value={form.currency}>
             {currencies.map((row) => <option key={row.code} value={row.code}>{row.code}</option>)}
-          </select>
+          </NativeSelect>
         </label>
-        <label className="text-field"><span>Gross earnings</span><input inputMode="decimal" onChange={(e) => changeForm("grossEarnings", e.target.value)} value={form.grossEarnings} /></label>
-        <label className="text-field"><span>Total deductions</span><input inputMode="decimal" onChange={(e) => changeForm("totalDeductions", e.target.value)} value={form.totalDeductions} /></label>
-        <label className="text-field"><span>Net pay</span><input inputMode="decimal" onChange={(e) => changeForm("netPay", e.target.value)} value={form.netPay} /></label>
+        <label className="text-field"><span>Gross earnings</span><Input inputMode="decimal" onChange={(e) => changeForm("grossEarnings", e.target.value)} value={form.grossEarnings} /></label>
+        <label className="text-field"><span>Total deductions</span><Input inputMode="decimal" onChange={(e) => changeForm("totalDeductions", e.target.value)} value={form.totalDeductions} /></label>
+        <label className="text-field"><span>Net pay</span><Input inputMode="decimal" onChange={(e) => changeForm("netPay", e.target.value)} value={form.netPay} /></label>
 
         <fieldset>
           <legend>Lines</legend>
           {form.lines.map((line, index) => (
             <div key={index}>
-              <select onChange={(e) => changeLine(index, { kind: e.target.value as LineDraft["kind"] })} value={line.kind}>
+              <NativeSelect onChange={(e) => changeLine(index, { kind: e.target.value as LineDraft["kind"] })} value={line.kind}>
                 <option value="earning">Earning</option>
                 <option value="deduction">Deduction</option>
-              </select>
-              <input onChange={(e) => changeLine(index, { label: e.target.value })} placeholder="Label" value={line.label} />
-              <input inputMode="decimal" onChange={(e) => changeLine(index, { amount: e.target.value })} placeholder="Amount" value={line.amount} />
-              <button onClick={() => removeLine(index)} type="button">Remove</button>
+              </NativeSelect>
+              <Input onChange={(e) => changeLine(index, { label: e.target.value })} placeholder="Label" value={line.label} />
+              <Input inputMode="decimal" onChange={(e) => changeLine(index, { amount: e.target.value })} placeholder="Amount" value={line.amount} />
+              <Button onClick={() => removeLine(index)} type="button">Remove</Button>
             </div>
           ))}
-          <button className="text-action" onClick={() => addLine("earning")} type="button">Add earning line</button>
-          <button className="text-action" onClick={() => addLine("deduction")} type="button">Add deduction line</button>
+          <Button variant="outline" onClick={() => addLine("earning")} type="button">Add earning line</Button>
+          <Button variant="outline" onClick={() => addLine("deduction")} type="button">Add deduction line</Button>
         </fieldset>
 
         {problem && <p className="inline-alert" role="alert">{problem}</p>}
         {feedback && <p role="status">{feedback}</p>}
-        <button className="primary-action" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
+        <Button variant="default" disabled={!completeForm || busy} onClick={() => void submit()} type="button">
           {busy ? "Recording…" : correcting ? "Record correction" : "Record payslip"}
-        </button>
-        {correcting && <button className="text-action" onClick={cancelCorrection} type="button">Cancel correction</button>}
+        </Button>
+        {correcting && <Button variant="outline" onClick={cancelCorrection} type="button">Cancel correction</Button>}
       </section>
 
       <section aria-labelledby="salary-import-title">
         <h2 id="salary-import-title">Import from a PDF</h2>
         <label className="file-field">
           <span>Payslip file</span>
-          <input accept="application/pdf,.pdf" disabled={importBusy} onChange={(e) => chooseFile(e.target.files)} type="file" />
+          <Input accept="application/pdf,.pdf" disabled={importBusy} onChange={(e) => chooseFile(e.target.files)} type="file" />
         </label>
         {locked && (
           <label className="password-field">
             <span>Password for this file</span>
-            <input autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} type="password" value={password} />
+            <Input autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} type="password" value={password} />
           </label>
         )}
         {importProblem && <p className="inline-alert" role="alert">{importProblem}</p>}
-        <button className="text-action" disabled={!file || importBusy} onClick={() => void checkImport()} type="button">Check file</button>
+        <Button variant="outline" disabled={!file || importBusy} onClick={() => void checkImport()} type="button">Check file</Button>
 
         {preview && !importResult && (
           <div>
@@ -625,12 +629,12 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                     </li>
                   ))}
                 </ul>
-                <button
-                  className="primary-action"
+                <Button
+                  variant="default"
                   disabled={importBusy || !preview.months.some((m) => m.reason === null)}
                   onClick={() => void confirmImport()}
                   type="button"
-                >Import reconciling months</button>
+                >Import reconciling months</Button>
               </>
             )}
           </div>
@@ -658,11 +662,11 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
         {deductionRulesState === "error" && (
           <div role="alert">
             <p>Deduction rules could not be loaded.</p>
-            <button
-              className="text-action"
+            <Button
+              variant="outline"
               onClick={() => { setDeductionRulesState("loading"); setDeductionRulesAttempt((v) => v + 1); }}
               type="button"
-            >Try again</button>
+            >Try again</Button>
           </div>
         )}
         {deductionRuleProblem && <p className="inline-alert" role="alert">{deductionRuleProblem}</p>}
@@ -674,7 +678,7 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                 {deductionRules.map((rule) => (
                   <li key={rule.label}>
                     <span>{rule.label}</span>
-                    <select
+                    <NativeSelect
                       disabled={deductionRuleBusy === rule.label}
                       onChange={(e) => void saveDeductionRule(rule.label, e.target.value)}
                       value={rule.categoryId}
@@ -685,13 +689,13 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
                       {expenseCategories.map((row) => (
                         <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
                       ))}
-                    </select>
-                    <button
-                      className="text-action"
+                    </NativeSelect>
+                    <Button
+                      variant="outline"
                       disabled={deductionRuleBusy === rule.label}
                       onClick={() => void removeDeductionRule(rule.label)}
                       type="button"
-                    >Remove</button>
+                    >Remove</Button>
                   </li>
                 ))}
               </ul>
@@ -699,23 +703,23 @@ export function PayslipsScreen({ currencies, categories, request }: Props) {
             <div className="salary-deduction-rule-form">
               <label className="text-field">
                 <span>Deduction label</span>
-                <input onChange={(e) => setNewRuleLabel(e.target.value)} value={newRuleLabel} />
+                <Input onChange={(e) => setNewRuleLabel(e.target.value)} value={newRuleLabel} />
               </label>
               <label className="select-field">
                 <span>Category</span>
-                <select onChange={(e) => setNewRuleCategoryId(e.target.value)} value={newRuleCategoryId}>
+                <NativeSelect onChange={(e) => setNewRuleCategoryId(e.target.value)} value={newRuleCategoryId}>
                   <option value="">Choose a category</option>
                   {expenseCategories.map((row) => (
                     <option key={row.id} value={row.id}>{categoryLabel(row)}</option>
                   ))}
-                </select>
+                </NativeSelect>
               </label>
-              <button
-                className="primary-action"
+              <Button
+                variant="default"
                 disabled={!newRuleLabel.trim() || !newRuleCategoryId || deductionRuleBusy === newRuleLabel.trim()}
                 onClick={() => void saveDeductionRule(newRuleLabel, newRuleCategoryId)}
                 type="button"
-              >Add rule</button>
+              >Add rule</Button>
             </div>
           </>
         )}

@@ -1,5 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -114,8 +117,8 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
       {loadState === "error" && (
         <div role="alert">
           <p>Salary analysis could not be loaded.</p>
-          <button
-            className="text-action"
+          <Button
+            variant="outline"
             onClick={() => {
               setLoadState("loading");
               setRetryAttempt((value) => value + 1);
@@ -123,7 +126,7 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
             type="button"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
 
@@ -138,14 +141,14 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
               {data.currencies.length > 1 && (
                 <div aria-label="Analysis currency" className="currency-toggle" role="group">
                   {data.currencies.map((row) => (
-                    <button
+                    <Button
                       aria-pressed={row.currency === current.currency}
                       key={row.currency}
                       onClick={() => setSelectedCurrency(row.currency)}
                       type="button"
                     >
                       {row.currency}
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
@@ -328,7 +331,7 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                         <tr key={label.label}>
                           <th scope="row">{label.label}</th>
                           <td>
-                            <select
+                            <NativeSelect
                               aria-label={`Component for ${label.label}`}
                               disabled={ruleBusy === label.label}
                               onChange={(e) => void saveRule(label.label, e.target.value as EarningComponent)}
@@ -337,7 +340,7 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                               <option value="fixed">Fixed</option>
                               <option value="variable">Variable</option>
                               <option value="reimbursement">Reimbursement</option>
-                            </select>
+                            </NativeSelect>
                             {label.source === "inferred" && <span className="plans-badge">Inferred</span>}
                           </td>
                           <td>{label.monthCount}</td>
@@ -346,14 +349,14 @@ export function SalaryAnalysis({ currencies, request, refreshKey }: Props) {
                           <td>{moneyText(label.latestAmount, current.currency, currencies)}</td>
                           <td>
                             {label.source === "rule" && (
-                              <button
-                                className="text-action"
+                              <Button
+                                variant="outline"
                                 disabled={ruleBusy === label.label}
                                 onClick={() => void clearRule(label.label)}
                                 type="button"
                               >
                                 Use inference
-                              </button>
+                              </Button>
                             )}
                           </td>
                         </tr>

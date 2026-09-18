@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -280,94 +284,94 @@ export function NeedsAttention({
       <div className="needs-attention-controls">
         {item.kind === "commitment" && item.commitmentId && (
           <>
-            <button
+            <Button
               aria-label={`Settle ${item.title}`}
-              className="text-action"
+              variant="outline"
               onClick={() => onSettle(item.commitmentId as string)}
               type="button"
             >
               Settle
-            </button>
-            <button
+            </Button>
+            <Button
               aria-label={`Mark done ${item.title}`}
-              className="text-action"
+              variant="outline"
               disabled={busy}
               onClick={() => markDone(item)}
               type="button"
-            >Mark done</button>
+            >Mark done</Button>
           </>
         )}
         {item.kind === "card_due" && (
-          <button
+          <Button
             aria-label={`Plan payment ${item.title}`}
-            className="text-action"
+            variant="outline"
             onClick={() => onPlanCardPayment(item)}
             type="button"
-          >Plan payment</button>
+          >Plan payment</Button>
         )}
         {item.kind === "follow_up" && (
-          <button
+          <Button
             aria-label={`Complete ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => completeFollowUp(item)}
             type="button"
-          >Complete</button>
+          >Complete</Button>
         )}
         {item.kind === "record" && item.reason === "review_due" && (
-          <button
+          <Button
             aria-label={`Mark reviewed ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => markRecordReviewed(item)}
             type="button"
-          >Mark reviewed</button>
+          >Mark reviewed</Button>
         )}
         {item.kind === "record" && item.reason === "deadline_due" && (
-          <button
+          <Button
             aria-label={`Complete ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => completeRecordDeadline(item)}
             type="button"
-          >Complete</button>
+          >Complete</Button>
         )}
         {item.kind === "record" && item.reason === "renewal_due" && formOpen !== "renew" && (
-          <button
+          <Button
             aria-label={`Renewed ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "renew" }); setDraftText(""); }}
             type="button"
-          >Renewed</button>
+          >Renewed</Button>
         )}
         {formOpen !== "reason" && item.kind !== "goal" && item.kind !== "reserve" && item.kind !== "record" && (
-          <button
+          <Button
             aria-label={`Dismiss ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "reason" }); setDraftText(""); }}
             type="button"
-          >Dismiss</button>
+          >Dismiss</Button>
         )}
         {formOpen !== "snooze" && (
-          <button
+          <Button
             aria-label={`Snooze ${item.title}`}
-            className="text-action"
+            variant="outline"
             disabled={busy}
             onClick={() => { setOpenForm({ key: item.actionKey, kind: "snooze" }); setDraftText(""); }}
             type="button"
-          >Snooze</button>
+          >Snooze</Button>
         )}
         {formOpen === "reason" && (
           <span className="needs-attention-inline-form">
-            <input
+            <Input
               aria-label={`Reason to dismiss ${item.title}`}
               onChange={(e) => setDraftText(e.target.value)}
               value={draftText}
             />
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={busy || !draftText.trim()}
               onClick={() => {
                 if (item.kind === "commitment") dismissCommitment(item, draftText.trim());
@@ -375,42 +379,42 @@ export function NeedsAttention({
                 else dismissFollowUp(item, draftText.trim());
               }}
               type="button"
-            >Confirm dismissal</button>
-            <button className="text-action" onClick={closeForm} type="button">Cancel</button>
+            >Confirm dismissal</Button>
+            <Button variant="outline" onClick={closeForm} type="button">Cancel</Button>
           </span>
         )}
         {formOpen === "snooze" && (
           <span className="needs-attention-inline-form">
-            <input
+            <Input
               aria-label={`Snooze ${item.title} until`}
               onChange={(e) => setDraftText(e.target.value)}
               type="date"
               value={draftText}
             />
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={busy || !draftText}
               onClick={() => snooze(item, draftText)}
               type="button"
-            >Confirm snooze</button>
-            <button className="text-action" onClick={closeForm} type="button">Cancel</button>
+            >Confirm snooze</Button>
+            <Button variant="outline" onClick={closeForm} type="button">Cancel</Button>
           </span>
         )}
         {formOpen === "renew" && (
           <span className="needs-attention-inline-form">
-            <input
+            <Input
               aria-label={`Next renewal date for ${item.title}`}
               onChange={(e) => setDraftText(e.target.value)}
               type="date"
               value={draftText}
             />
-            <button
-              className="primary-action"
+            <Button
+              variant="default"
               disabled={busy || !draftText}
               onClick={() => renewRecord(item, draftText)}
               type="button"
-            >Confirm renewal</button>
-            <button className="text-action" onClick={closeForm} type="button">Cancel</button>
+            >Confirm renewal</Button>
+            <Button variant="outline" onClick={closeForm} type="button">Cancel</Button>
           </span>
         )}
       </div>
@@ -442,7 +446,7 @@ export function NeedsAttention({
       {state === "error" && (
         <div role="alert">
           <p>Needs attention could not be loaded.</p>
-          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</Button>
         </div>
       )}
       {state === "ready" && actions && (
@@ -455,9 +459,9 @@ export function NeedsAttention({
 
           {actions.snoozed.length > 0 && (
             <div>
-              <button className="text-action" onClick={() => setShowSnoozed((v) => !v)} type="button">
+              <Button variant="outline" onClick={() => setShowSnoozed((v) => !v)} type="button">
                 {showSnoozed ? "Hide" : "Show"} snoozed ({actions.snoozed.length})
-              </button>
+              </Button>
               {showSnoozed && (
                 <ul className="needs-attention-list">
                   {actions.snoozed.map((item) => (
@@ -465,12 +469,12 @@ export function NeedsAttention({
                       <span>
                         {REASON_TEXT[item.reason]} · {item.title} · snoozed until {item.snoozedUntil}
                       </span>
-                      <button
-                        className="text-action"
+                      <Button
+                        variant="outline"
                         disabled={busyKey === item.actionKey}
                         onClick={() => wake(item.actionKey)}
                         type="button"
-                      >Wake</button>
+                      >Wake</Button>
                     </li>
                   ))}
                 </ul>
@@ -481,36 +485,36 @@ export function NeedsAttention({
           <h3>Add a follow-up</h3>
           <label className="text-field">
             <span>Title</span>
-            <input onChange={(e) => setNewTitle(e.target.value)} value={newTitle} />
+            <Input onChange={(e) => setNewTitle(e.target.value)} value={newTitle} />
           </label>
           <label className="date-field">
             <span>Due date (optional)</span>
-            <input onChange={(e) => setNewDueDate(e.target.value)} type="date" value={newDueDate} />
+            <Input onChange={(e) => setNewDueDate(e.target.value)} type="date" value={newDueDate} />
           </label>
           <label className="select-field">
             <span>Account (optional)</span>
-            <select onChange={(e) => setNewAccountId(e.target.value)} value={newAccountId}>
+            <NativeSelect onChange={(e) => setNewAccountId(e.target.value)} value={newAccountId}>
               <option value="">None</option>
               {activeAccounts.map((account) => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           {followUpProblem && <p className="inline-alert" role="alert">{followUpProblem}</p>}
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={followUpBusy || !newTitle.trim()}
             onClick={() => void addFollowUp()}
             type="button"
-          >Add follow-up</button>
+          >Add follow-up</Button>
 
           {actions.resolvedFollowUps.length > 0 && (
             <div>
-              <button
-                className="text-action"
+              <Button
+                variant="outline"
                 onClick={() => setShowResolved((v) => !v)}
                 type="button"
-              >{showResolved ? "Hide" : "Show"} recently resolved follow-ups</button>
+              >{showResolved ? "Hide" : "Show"} recently resolved follow-ups</Button>
               {showResolved && (
                 <ul className="needs-attention-list">
                   {actions.resolvedFollowUps.map((followUp) => (
@@ -520,12 +524,12 @@ export function NeedsAttention({
                         {" · "}
                         {followUp.state === "completed" ? "Completed" : `Dismissed: ${followUp.dismissReason}`}
                       </span>
-                      <button
-                        className="text-action"
+                      <Button
+                        variant="outline"
                         disabled={busyKey === followUp.id}
                         onClick={() => reopenFollowUp(followUp.id)}
                         type="button"
-                      >Reopen</button>
+                      >Reopen</Button>
                     </li>
                   ))}
                 </ul>

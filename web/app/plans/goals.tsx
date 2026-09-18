@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+
 import { useEffect, useState } from "react";
 
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -275,7 +279,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
       {state === "error" && (
         <div role="alert">
           <p>Goals could not be loaded.</p>
-          <button className="text-action" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</button>
+          <Button variant="outline" onClick={() => setAttempt((value) => value + 1)} type="button">Try again</Button>
         </div>
       )}
 
@@ -353,12 +357,12 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                               {reservation.releaseReason && ` (${reservation.releaseReason})`}
                             </small>
                           ) : (
-                            <button
-                              className="text-action"
+                            <Button
+                              variant="outline"
                               disabled={busy}
                               onClick={() => void release(reservation)}
                               type="button"
-                            >Release</button>
+                            >Release</Button>
                           )}
                         </li>
                       ))}
@@ -367,20 +371,20 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
 
                   {goal.state === "active" && (
                     <>
-                      <button className="text-action" onClick={() => startEdit(goal)} type="button">Edit</button>
-                      <button className="text-action" onClick={() => startReserve(goal)} type="button">Reserve</button>
-                      <button
-                        className="text-action"
+                      <Button variant="outline" onClick={() => startEdit(goal)} type="button">Edit</Button>
+                      <Button variant="outline" onClick={() => startReserve(goal)} type="button">Reserve</Button>
+                      <Button
+                        variant="outline"
                         disabled={busy}
                         onClick={() => void closeGoal(goal, "achieved")}
                         type="button"
-                      >Mark achieved</button>
-                      <button
-                        className="text-action"
+                      >Mark achieved</Button>
+                      <Button
+                        variant="outline"
                         disabled={busy}
                         onClick={() => void closeGoal(goal, "abandoned")}
                         type="button"
-                      >Abandon</button>
+                      >Abandon</Button>
                     </>
                   )}
 
@@ -389,7 +393,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                       <h4>Reserve for {goal.name}</h4>
                       <label className="select-field">
                         <span>Account</span>
-                        <select
+                        <NativeSelect
                           onChange={(e) =>
                             setReserveForm((current) => ({ ...current, accountId: e.target.value }))
                           }
@@ -398,7 +402,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                           {activeAssetAccounts.map((account) => (
                             <option key={account.id} value={account.id}>{account.name}</option>
                           ))}
-                        </select>
+                        </NativeSelect>
                       </label>
                       {reservingAccount && (
                         <p>
@@ -419,7 +423,7 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                       )}
                       <label className="select-field">
                         <span>Reserve</span>
-                        <select
+                        <NativeSelect
                           onChange={(e) =>
                             setReserveForm((current) => ({
                               ...current, kind: e.target.value as ReserveKind,
@@ -429,12 +433,12 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                         >
                           <option value="amount">An amount</option>
                           <option value="whole_account">The whole account</option>
-                        </select>
+                        </NativeSelect>
                       </label>
                       {reserveForm.kind === "amount" && (
                         <label className="text-field">
                           <span>Amount{reservingAccount ? ` (${reservingAccount.currency})` : ""}</span>
-                          <input
+                          <Input
                             inputMode="decimal"
                             onChange={(e) =>
                               setReserveForm((current) => ({ ...current, amount: e.target.value }))
@@ -444,17 +448,17 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
                         </label>
                       )}
                       {reserveProblem && <p className="inline-alert" role="alert">{reserveProblem}</p>}
-                      <button
-                        className="primary-action"
+                      <Button
+                        variant="default"
                         disabled={!completeReserveForm || reserveBusy}
                         onClick={() => void submitReserve(goal.id)}
                         type="button"
-                      >{reserveBusy ? "Reserving…" : "Reserve"}</button>
-                      <button
-                        className="text-action"
+                      >{reserveBusy ? "Reserving…" : "Reserve"}</Button>
+                      <Button
+                        variant="outline"
                         onClick={() => setReservingGoalId(undefined)}
                         type="button"
-                      >Cancel</button>
+                      >Cancel</Button>
                     </div>
                   )}
                 </li>
@@ -465,11 +469,11 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
           <h3>{editing ? `Edit ${editing.name}` : "Add a goal"}</h3>
           <label className="text-field">
             <span>Name</span>
-            <input onChange={(e) => changeForm("name", e.target.value)} value={form.name} />
+            <Input onChange={(e) => changeForm("name", e.target.value)} value={form.name} />
           </label>
           <label className="text-field">
             <span>Target amount</span>
-            <input
+            <Input
               inputMode="decimal"
               onChange={(e) => changeForm("targetAmount", e.target.value)}
               value={form.targetAmount}
@@ -477,18 +481,18 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
           </label>
           <label className="select-field">
             <span>Currency</span>
-            <select
+            <NativeSelect
               onChange={(e) => changeForm("targetCurrency", e.target.value)}
               value={form.targetCurrency}
             >
               {goalCurrencies.map((currency) => (
                 <option key={currency.code} value={currency.code}>{currency.code}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="date-field">
             <span>Target date</span>
-            <input
+            <Input
               onChange={(e) => changeForm("targetDate", e.target.value)}
               type="date"
               value={form.targetDate}
@@ -496,18 +500,18 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
           </label>
           <label className="select-field">
             <span>Priority</span>
-            <select
+            <NativeSelect
               onChange={(e) => changeForm("priority", PRIORITIES[e.target.selectedIndex])}
               value={form.priority}
             >
               {PRIORITIES.map((priority) => (
                 <option key={priority} value={priority}>{priority}</option>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label className="text-field">
             <span>Planned monthly (optional)</span>
-            <input
+            <Input
               inputMode="decimal"
               onChange={(e) => changeForm("plannedMonthly", e.target.value)}
               value={form.plannedMonthly}
@@ -515,14 +519,14 @@ export function Goals({ accounts, currencies, householdCurrencies, request }: Pr
           </label>
 
           {problem && <p className="inline-alert" role="alert">{problem}</p>}
-          <button
-            className="primary-action"
+          <Button
+            variant="default"
             disabled={!completeGoalForm || busy}
             onClick={() => void submitGoal()}
             type="button"
-          >{busy ? "Saving…" : editing ? "Save changes" : "Add goal"}</button>
+          >{busy ? "Saving…" : editing ? "Save changes" : "Add goal"}</Button>
           {editing && (
-            <button className="text-action" onClick={cancelEdit} type="button">Cancel</button>
+            <Button variant="outline" onClick={cancelEdit} type="button">Cancel</Button>
           )}
 
           <h3>Resources</h3>
