@@ -104,6 +104,7 @@ function sourceDocumentIdFromLocation() {
 }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 // The Spending screen's own drill-through (`/transactions?categoryId=…&dateFrom=…&dateTo=…`),
 // the same query-string convention `sourceDocumentIdFromLocation` and the accounts screen's own
@@ -122,10 +123,18 @@ function dateFromLocation(param: string) {
   return value && DATE_PATTERN.test(value) ? value : undefined;
 }
 
+function transactionIdFromLocation() {
+  if (typeof window === "undefined") return undefined;
+  const value = new URLSearchParams(window.location.search).get("transactionId");
+  return value && UUID_PATTERN.test(value) ? value : undefined;
+}
+
 // The first page Workspace fetches must carry every deep-linked filter, or the ledger below the
 // filter form is not the set the form describes.
 function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefined) {
   const parameters = new URLSearchParams({ limit: "50", offset: "0" });
+  const transactionId = transactionIdFromLocation();
+  if (transactionId) parameters.set("transactionId", transactionId);
   const sourceDocumentId = sourceDocumentIdFromLocation();
   if (sourceDocumentId) parameters.set("sourceDocumentId", sourceDocumentId);
   const categoryId = categoryIdFromLocation(categories);
@@ -435,6 +444,7 @@ export function Workspace({
               currency={currency}
               household={household}
               initialSourceDocumentId={sourceDocumentIdFromLocation()}
+              initialTransactionId={transactionIdFromLocation()}
               initialCategoryId={categoryIdFromLocation(categories)}
               initialDateFrom={dateFromLocation("dateFrom")}
               initialDateTo={dateFromLocation("dateTo")}

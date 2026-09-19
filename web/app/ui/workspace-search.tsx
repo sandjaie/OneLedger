@@ -18,6 +18,8 @@ const GROUPS: ReadonlyArray<{ kind: SearchResult["kind"]; label: string }> = [
   { kind: "register", label: "Register" },
 ];
 
+type SearchState = "idle" | "loading" | "success" | "error";
+
 type Props = {
   request?: typeof apiFetch;
   navigate?: (path: string) => void;
@@ -29,11 +31,13 @@ export function WorkspaceSearch({
 }: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Array<SearchResult>>([]);
-  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<SearchState>("idle");
   const [active, setActive] = useState(-1);
   const [announcement, setAnnouncement] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const requestSequence = useRef(0);
+  const open = state !== "idle";
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -48,7 +52,7 @@ export function WorkspaceSearch({
         .then((response) => {
           if (sequence !== requestSequence.current) return;
           setResults(response.results);
-          setOpen(true);
+          setState("success");
           setActive(-1);
           setAnnouncement(
             `${response.results.length} ${response.results.length === 1 ? "result" : "results"}`,
@@ -57,7 +61,8 @@ export function WorkspaceSearch({
         .catch((error: unknown) => {
           if (sequence !== requestSequence.current || controller.signal.aborted) return;
           setResults([]);
-          setOpen(true);
+          setState("error");
+          setActive(-1);
           setAnnouncement("Search is unavailable");
           if (process.env.NODE_ENV === "test") return;
           console.error(error);
@@ -70,38 +75,47 @@ export function WorkspaceSearch({
     };
   }, [query, request]);
 
+  useEffect(() => {
+    if (active < 0) return;
+    resultRefs.current[active]?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
   function changeQuery(value: string) {
     setQuery(value);
-    if (value.trim().length >= 2) return;
     requestSequence.current += 1;
     setResults([]);
-    setOpen(false);
     setActive(-1);
-    setAnnouncement("");
+    if (value.trim().length < 2) {
+      setState("idle");
+      setAnnouncement("");
+      return;
+    }
+    setState("loading");
+    setAnnouncement("Searching");
   }
 
   function clear() {
     requestSequence.current += 1;
     setQuery("");
     setResults([]);
-    setOpen(false);
+    setState("idle");
     setActive(-1);
     setAnnouncement("");
     inputRef.current?.focus();
   }
 
   function choose(result: SearchResult) {
-    setOpen(false);
+    setState("idle");
     navigate(result.route);
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
       clear();
       return;
     }
-    if (!open || results.length === 0) return;
+    if (event.target !== inputRef.current || state !== "success" || results.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActive((value) => (value + 1) % results.length);
@@ -115,17 +129,16 @@ export function WorkspaceSearch({
   }
 
   return (
-    <div className="workspace-search">
+    <div className="workspace-search" onKeyDown={onKeyDown}>
       <SearchIcon aria-hidden="true" className="workspace-search-icon" />
       <Input
-        aria-activedescendant={active >= 0 ? `workspace-search-result-${active}` : undefined}
+        aria-activedescendant={state === "success" && active >= 0 ? `workspace-search-result-${active}` : undefined}
         aria-autocomplete="list"
         aria-controls="workspace-search-results"
         aria-expanded={open}
         aria-label="Search OneLedger"
         autoComplete="off"
         onChange={(event) => changeQuery(event.currentTarget.value)}
-        onKeyDown={onKeyDown}
         placeholder="Search accounts, transactions…"
         ref={inputRef}
         role="combobox"
@@ -139,8 +152,12 @@ export function WorkspaceSearch({
       )}
       <p aria-live="polite" className="sr-only">{announcement}</p>
       {open && (
-        <div className="workspace-search-popover" id="workspace-search-results" role="listbox" aria-label="Search results">
-          {results.length === 0 ? (
+        <div aria-busy={state === "loading"} className="workspace-search-popover" id="workspace-search-results" role="listbox" aria-label="Search results">
+          {state === "loading" ? (
+            <p className="workspace-search-empty">Searching…</p>
+          ) : state === "error" ? (
+            <p className="workspace-search-empty" role="alert">Search is unavailable. Try again.</p>
+          ) : results.length === 0 ? (
             <p className="workspace-search-empty">No matching workspace records.</p>
           ) : GROUPS.map((group) => {
             const grouped = results
@@ -158,6 +175,7 @@ export function WorkspaceSearch({
                     key={`${result.kind}-${result.resourceId}`}
                     onClick={() => choose(result)}
                     onMouseEnter={() => setActive(index)}
+                    ref={(element) => { resultRefs.current[index] = element; }}
                     role="option"
                     type="button"
                   >

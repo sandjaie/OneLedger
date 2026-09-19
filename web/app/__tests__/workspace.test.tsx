@@ -843,6 +843,21 @@ describe("authenticated workspace", () => {
     expect(paths).toContain("/transactions?limit=50&offset=0&sourceDocumentId=doc-9");
   });
 
+  it("forwards a validated search-result transaction id to its first ledger request", async () => {
+    const transactionId = "018f2f95-6a58-7f8c-9e61-2d388d928b42";
+    window.history.replaceState(null, "", `/transactions?transactionId=${transactionId}`);
+    const ledger = { transactions: [], total: 0 };
+    const inventory: AccountsResponse = { accounts: [], totals: [] };
+    const request = requestThat(household, [], ledger, inventory, catalogue);
+    render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
+
+    await screen.findByRole("heading", { name: "Transactions" });
+    const paths = (request as ReturnType<typeof vi.fn>).mock.calls.map((call) => call[0]);
+    expect(paths).toContain(
+      `/transactions?limit=50&offset=0&transactionId=${transactionId}`,
+    );
+  });
+
   it("filters its first ledger page by a spending drill-through link", async () => {
     window.history.replaceState(
       null,
@@ -866,7 +881,11 @@ describe("authenticated workspace", () => {
   });
 
   it("ignores a drill-through category that is not in the loaded taxonomy", async () => {
-    window.history.replaceState(null, "", "/transactions?categoryId=cat-missing&dateTo=nonsense");
+    window.history.replaceState(
+      null,
+      "",
+      "/transactions?categoryId=cat-missing&dateTo=nonsense&transactionId=not-a-uuid",
+    );
     const ledger = { transactions: [], total: 0 };
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     const request = requestThat(household, [], ledger, inventory, catalogue);

@@ -383,6 +383,7 @@ def delete_ledger_transaction(
 @router.get("/transactions")
 def list_transactions(
     owner: Annotated[OwnerSession, Depends(require_owner)],
+    transactionId: Annotated[UUID | None, Query()] = None,
     accountId: Annotated[UUID | None, Query()] = None,
     categoryId: Annotated[UUID | None, Query()] = None,
     txnType: Annotated[str | None, Query(max_length=40)] = None,
@@ -413,6 +414,9 @@ def list_transactions(
 ) -> TransactionsResponse:
     clauses = ["t.household_id = %s"]
     params: list[Any] = [owner.household_id]
+    if transactionId is not None:
+        clauses.append("t.id = %s")
+        params.append(transactionId)
     if accountId is not None:
         clauses.append("t.account_id = %s")
         params.append(accountId)

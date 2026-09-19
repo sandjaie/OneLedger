@@ -507,6 +507,6 @@ acceptance may mark Phase 4.8 accepted in `docs/superpowers/progress.md`.
 - Each task branch includes its truthful progress update before final verification and PR.
 - Run focused tests during implementation, one read-only review, one consolidated repair and one
   exact-head verifier. Use `scripts/verify-web.sh` only when the branch changes no API, database or
-  generated contract; otherwise use `scripts/verify.sh`.
+  generated contract; otherwise use `scripts/verify.sh` with the task's named affected tests.
 - Phase 4.8 is not complete until every planned task is merged, the cross-screen fidelity audit is
   green and the owner records visual/UX acceptance.

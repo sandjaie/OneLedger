@@ -105,7 +105,7 @@ export function AppShell({
           <SheetContent className="workspace-mobile-sheet" side="left">
             <SheetTitle>Workspace navigation</SheetTitle>
             <Brand />
-            <nav aria-label="Mobile workspace" className="workspace-mobile-nav">
+            <nav aria-label="Mobile workspace" className="workspace-nav workspace-mobile-nav">
               <WorkspaceNavGroups activeSection={activeSection} onNavigate={() => setMenuOpen(false)} />
             </nav>
             <div className="workspace-mobile-utilities">

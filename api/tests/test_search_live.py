@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID, uuid4
 
 import jwt
@@ -14,7 +15,7 @@ from fastapi.testclient import TestClient
 from oneledger import auth
 from oneledger.main import app
 
-from .live_database import connect_to_test_database
+from .live_database import clear_synthetic_account_valuation_periods, connect_to_test_database
 
 LiveFixture = tuple[psycopg.Connection, auth.OwnerSession]
 
@@ -63,7 +64,11 @@ def live() -> Iterator[LiveFixture]:
         institution_id = cur.fetchone()[0]  # type: ignore[index]
 
         account_ids: list[UUID] = []
-        for name in ("Atlas Reserve", "Family Atlas Account", "Megaatlas Account"):
+        for name in (
+            "Atlas Reserve",
+            "Family Atlas Account",
+            "Megaatlas Account",
+        ):
             cur.execute(
                 """INSERT INTO account (
                        household_id, owner_person_id, institution_id, name, account_type,
@@ -73,6 +78,13 @@ def live() -> Iterator[LiveFixture]:
                 (household_id, person_id, institution_id, name, base),
             )
             account_ids.append(UUID(str(cur.fetchone()[0])))  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO account (
+                   household_id, owner_person_id, name, account_type,
+                   currency, country, opening_balance_date)
+               VALUES (%s, %s, %s, 'savings', %s, 'XZ', DATE '2026-01-01')""",
+            (household_id, person_id, r"Literal %_\ marker", base),
+        )
         cur.execute(
             """INSERT INTO account_identifier (
                    household_id, account_id, kind, masked_value, visible_suffix, provenance)
@@ -143,22 +155,83 @@ def live() -> Iterator[LiveFixture]:
             """INSERT INTO account (
                    household_id, owner_person_id, name, account_type, currency, country,
                    opening_balance_date)
-               VALUES (%s, %s, 'Atlas Foreign Account', 'savings', %s, 'XZ', DATE '2026-01-01')""",
+               VALUES (%s, %s, 'Atlas Foreign Account', 'savings', %s, 'XZ', DATE '2026-01-01')
+               RETURNING id""",
             (other_household_id, other_person_id, base),
         )
+        foreign_account_id = cur.fetchone()[0]  # type: ignore[index]
+        for household, account_id, description in (
+            (household_id, account_ids[0], "Unrelated payment"),
+            (other_household_id, foreign_account_id, "Foreign private payment"),
+        ):
+            cur.execute(
+                """INSERT INTO transaction (
+                       household_id, account_id, booked_date, description_raw,
+                       amount, currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                       amount_base, amount_secondary, txn_type, source, dedupe_hash)
+                   VALUES (%s, %s, DATE '2026-02-04', %s, -2, %s, DATE '2026-02-04', 1, 1,
+                           -2, -2, 'expense', 'manual', %s)""",
+                (household, account_id, description, base, uuid4().hex),
+            )
     connection.commit()
     app.dependency_overrides[auth.require_owner] = lambda: owner
     try:
         yield connection, owner
     finally:
         app.dependency_overrides.clear()
+        connection.rollback()
+        with connection.cursor() as cur:
+            cur.execute("SELECT current_database()")
+            database = cur.fetchone()
+            assert database is not None and str(database[0]).startswith("pytest_")
+            # Search spans several otherwise-independent financial surfaces. Its synthetic rows
+            # must not survive this module and contaminate the shared per-run test database.
+            # Immutable projections can only be cleared by truncation, and only after proving
+            # conftest created the disposable pytest database.
+            cur.execute("TRUNCATE transaction, document, holding, register_record CASCADE")
+            cur.execute(
+                "DELETE FROM goal WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute(
+                "DELETE FROM commitment WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute(
+                "DELETE FROM account_identifier WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            clear_synthetic_account_valuation_periods(cur)
+            cur.execute(
+                "DELETE FROM account WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute(
+                "DELETE FROM security WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute(
+                "DELETE FROM merchant WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute(
+                "DELETE FROM institution WHERE household_id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+            cur.execute("DELETE FROM app_user WHERE id = %s", (user_id,))
+            cur.execute("DELETE FROM person WHERE id IN (%s, %s)", (person_id, other_person_id))
+            cur.execute(
+                "DELETE FROM household WHERE id IN (%s, %s)",
+                (household_id, other_household_id),
+            )
+        connection.commit()
         connection.close()
 
 
 def _results(query: str, limit: int = 10) -> list[dict[str, object]]:
     response = TestClient(app).get("/search", params={"q": query, "limit": limit})
     assert response.status_code == 200, response.text
-    return response.json()["results"]
+    return cast(list[dict[str, object]], response.json()["results"])
 
 
 def test_owner_search_returns_all_kinds_in_fixed_order_and_excludes_other_households(
@@ -204,6 +277,33 @@ def test_per_kind_limit_ranking_masked_lookup_and_transaction_redaction(
     assert "1234567890" not in str(transaction)
 
 
+def test_search_matches_wildcard_characters_literally(live: LiveFixture) -> None:
+    results = _results("%_\\")
+
+    assert [(row["kind"], row["primaryLabel"]) for row in results] == [
+        ("account", r"Literal %_\ marker")
+    ]
+
+
+def test_transaction_search_route_filters_the_owner_ledger_by_exact_id(
+    live: LiveFixture,
+) -> None:
+    connection, _ = live
+    [search_result] = [row for row in _results("Atlas") if row["kind"] == "transaction"]
+
+    selected = TestClient(app).get(str(search_result["route"]))
+    assert selected.status_code == 200, selected.text
+    assert selected.json()["total"] == 1
+    assert [row["id"] for row in selected.json()["transactions"]] == [search_result["resourceId"]]
+
+    with connection.cursor() as cur:
+        cur.execute("SELECT id FROM transaction WHERE description_raw = 'Foreign private payment'")
+        foreign_id = cur.fetchone()[0]  # type: ignore[index]
+    absent = TestClient(app).get("/transactions", params={"transactionId": str(foreign_id)})
+    assert absent.status_code == 200, absent.text
+    assert absent.json() == {"transactions": [], "total": 0}
+
+
 def test_search_is_read_only_and_never_serializes_private_document_or_identifier_fields(
     live: LiveFixture,
 ) -> None:
@@ -238,7 +338,15 @@ def test_search_is_read_only_and_never_serializes_private_document_or_identifier
         )
         after = cur.fetchone()
     assert after == before
-    forbidden = {
+
+    def response_keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | set().union(*(response_keys(item) for item in value.values()))
+        if isinstance(value, list):
+            return set().union(*(response_keys(item) for item in value))
+        return set()
+
+    forbidden_keys = {
         "filename",
         "originalFilename",
         "storagePath",
@@ -248,7 +356,10 @@ def test_search_is_read_only_and_never_serializes_private_document_or_identifier
         "normalizedValue",
         "accountNumber",
     }
-    assert forbidden.isdisjoint(str(payload))
+    assert forbidden_keys.isdisjoint(response_keys(payload))
+    serialized = response.text
+    for private_value in ("fixture.pdf", "fixture/path", "1234567890"):
+        assert private_value not in serialized
 
 
 def test_search_refuses_short_queries_and_out_of_range_limits(live: LiveFixture) -> None:

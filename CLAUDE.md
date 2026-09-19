@@ -80,7 +80,8 @@ Install the fast commit guard once:
 pre-commit install --install-hooks -t pre-commit
 ```
 
-Commit hooks check staged files. Run `scripts/verify.sh` after review, or
+Commit hooks check staged files. Run `scripts/verify.sh` with the task's affected API/database test
+paths after review, or
 `scripts/verify-web.sh` when all changed paths are web, documentation or verifier/workflow files.
 Both record the exact passing head and check diff size. There is no pre-push hook.
 Do not use `--no-verify` for commits.

@@ -11853,6 +11853,10 @@ export type ListTransactionsTransactionsGetData = {
     path?: never;
     query?: {
         /**
+         * Transactionid
+         */
+        transactionId?: string | null;
+        /**
          * Accountid
          */
         accountId?: string | null;

@@ -42,12 +42,12 @@ def _rank(*fields: str) -> str:
         safe = f"coalesce({field}, '')"
         ranks.append(
             f"""CASE
-                  WHEN lower({safe}) LIKE lower(%(query)s) || '%%' THEN 0
+                  WHEN left(lower({safe}), char_length(%(query)s)) = lower(%(query)s) THEN 0
                   WHEN strpos(
                          ' ' || regexp_replace(lower({safe}), '[^[:alnum:]]+', ' ', 'g'),
                          ' ' || lower(%(query)s)
                        ) > 0 THEN 1
-                  WHEN lower({safe}) LIKE '%%' || lower(%(query)s) || '%%' THEN 2
+                  WHEN strpos(lower({safe}), lower(%(query)s)) > 0 THEN 2
                   ELSE 3
                 END"""
         )
@@ -56,7 +56,7 @@ def _rank(*fields: str) -> str:
 
 def _matches(*fields: str) -> str:
     return " OR ".join(
-        f"lower(coalesce({field}, '')) LIKE '%%' || lower(%(query)s) || '%%'" for field in fields
+        f"strpos(lower(coalesce({field}, '')), lower(%(query)s)) > 0" for field in fields
     )
 
 
@@ -113,7 +113,7 @@ def search(
                      SELECT 1 FROM account_identifier searched
                       WHERE searched.household_id = a.household_id
                         AND searched.account_id = a.id AND searched.is_active
-                        AND lower(searched.masked_value) LIKE '%%' || lower(%(query)s) || '%%'
+                        AND strpos(lower(searched.masked_value), lower(%(query)s)) > 0
                    ))
                  ORDER BY {_rank(*account_fields)}, lower(a.name), a.id
                  LIMIT %(limit)s""",

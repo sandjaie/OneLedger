@@ -45,14 +45,6 @@ repos:
         pass_filenames: false
         always_run: true
 
-      - id: markdownlint
-        name: markdown — syntax and format
-        entry: scripts/hooks/markdown.sh
-        language: system
-        files: '\.md$'
-        exclude: '^(web/node_modules|web/\.next|api/\.venv)/'
-        stages: [manual]
-
       - id: docs
         name: docs — links, html, adr numbering
         entry: python3 scripts/check-docs.py

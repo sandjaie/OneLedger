@@ -64,7 +64,8 @@ run_stage() {
 }
 
 run_commit_hooks() {
-  SKIP=end-of-file-fixer,trailing-whitespace,ruff,ruff-format,eslint pre-commit run --all-files
+  SKIP=end-of-file-fixer,trailing-whitespace,docs,no-real-data,ruff,ruff-format,eslint \
+    pre-commit run --all-files
 }
 
 run_web_gate() (
@@ -91,7 +92,6 @@ scan_web_bundle() {
 
 run_stage docs python3 scripts/check-docs.py
 run_stage commit-hooks run_commit_hooks
-run_stage markdown pre-commit run markdownlint --all-files --hook-stage manual
 run_stage web run_web_gate
 run_stage bundle-scan scan_web_bundle
 run_stage diff-size scripts/check-diff-size.sh

@@ -55,9 +55,9 @@ Python `Decimal`, Vitest and pytest.
 - During implementation run only focused affected tests. Each branch then receives one read-only
   review, one consolidated repair, and one final verifier run on the clean final commit. Do not run
   the full verifier before review or rerun it on an unchanged head.
-- Use `scripts/verify.sh` when API or generated contracts change; otherwise use
-  `scripts/verify-web.sh`. Each task PR updates `docs/superpowers/progress.md` truthfully and names
-  the exact next task before final verification.
+- Use `scripts/verify.sh` with the task's named affected API/database tests when API, database or
+  generated contracts change; otherwise use `scripts/verify-web.sh`. Each task PR updates
+  `docs/superpowers/progress.md` truthfully and names the exact next task before final verification.
 - Automated checks and merged PRs do not equal visual acceptance. Only the owner may mark Phase 4.8
   accepted after Task 4.8.13's running-application review.
 
@@ -208,7 +208,7 @@ cd ../web && npm test -- app/ui/__tests__/workspace-search.test.tsx app/__tests_
 
 **Commit:** `feat(web): establish the compact financial console shell`
 
-**Final verifier:** `scripts/verify.sh`
+**Final verifier:** `scripts/verify.sh --api-test tests/test_search_live.py --api-test tests/test_local_gate_contract.py`
 
 **Progress next task:** 4.8.2 — Overview console and position composition.
 

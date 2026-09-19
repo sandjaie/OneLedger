@@ -10,8 +10,9 @@ type Request = typeof apiFetch;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
-  return { promise, resolve };
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, reject, resolve };
 }
 
 const atlas = {
@@ -22,9 +23,18 @@ const atlas = {
 };
 
 describe("workspace search", () => {
-  beforeEach(() => vi.useFakeTimers());
+  const scrollIntoView = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+  });
   afterEach(() => {
     cleanup();
+    scrollIntoView.mockClear();
     vi.useRealTimers();
   });
 
@@ -43,7 +53,7 @@ describe("workspace search", () => {
     expect(screen.queryByText("Atlas Reserve")).toBeNull();
   });
 
-  it("groups results, supports keyboard selection, and returns focus after Escape", async () => {
+  it("groups results, scrolls keyboard selection into view, and navigates", async () => {
     const navigate = vi.fn();
     render(<WorkspaceSearch navigate={navigate} request={vi.fn().mockResolvedValue(atlas) as Request} />);
     const input = screen.getByRole("combobox", { name: "Search OneLedger" });
@@ -56,16 +66,69 @@ describe("workspace search", () => {
     expect(document.querySelector("[aria-live='polite']")?.textContent).toContain("2 results");
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: "nearest" });
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(navigate).toHaveBeenCalledWith("/transactions?transactionId=t1");
+  });
 
+  it("clears and returns focus when Escape is pressed on a result", async () => {
+    render(<WorkspaceSearch navigate={vi.fn()} request={vi.fn().mockResolvedValue(atlas) as Request} />);
+    const input = screen.getByRole("combobox", { name: "Search OneLedger" });
     fireEvent.change(input, { target: { value: "Atlas" } });
     await act(() => vi.advanceTimersByTimeAsync(250));
-    fireEvent.keyDown(input, { key: "Escape" });
+
+    const result = screen.getByRole("option", { name: /Atlas Reserve/ });
+    result.focus();
+    fireEvent.keyDown(result, { key: "Escape" });
     expect(document.activeElement).toBe(input);
     expect(screen.queryByRole("listbox", { name: "Search results" })).toBeNull();
     expect((input as HTMLInputElement).value).toBe("");
+  });
+
+  it("invalidates prior selection immediately and blocks stale Enter", async () => {
+    const latest = deferred<typeof atlas>();
+    const navigate = vi.fn();
+    const request = vi.fn()
+      .mockResolvedValueOnce(atlas)
+      .mockReturnValueOnce(latest.promise) as Request;
+    render(<WorkspaceSearch navigate={navigate} request={request} />);
+    const input = screen.getByRole("combobox", { name: "Search OneLedger" });
+
+    fireEvent.change(input, { target: { value: "Atlas" } });
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.change(input, { target: { value: "Beacon" } });
+
+    expect(screen.queryByText("Atlas Reserve")).toBeNull();
+    expect(screen.getByText("Searching…")).toBeTruthy();
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(navigate).not.toHaveBeenCalled();
+
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await act(async () => latest.resolve({ results: [] }));
+  });
+
+  it("shows distinct loading, empty, and error states", async () => {
+    const failure = deferred<typeof atlas>();
+    const request = vi.fn()
+      .mockResolvedValueOnce({ results: [] })
+      .mockReturnValueOnce(failure.promise) as Request;
+    render(<WorkspaceSearch navigate={vi.fn()} request={request} />);
+    const input = screen.getByRole("combobox", { name: "Search OneLedger" });
+
+    fireEvent.change(input, { target: { value: "Empty" } });
+    expect(screen.getByText("Searching…")).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(screen.getByText("No matching workspace records.")).toBeTruthy();
+
+    fireEvent.change(input, { target: { value: "Error" } });
+    expect(screen.getByText("Searching…")).toBeTruthy();
+    expect(screen.queryByText("No matching workspace records.")).toBeNull();
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    await act(async () => failure.reject(new Error("synthetic unavailable")));
+    expect(screen.getByRole("alert").textContent).toContain("Search is unavailable");
   });
 
   it("does not let a stale response replace the latest query", async () => {
