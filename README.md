@@ -85,6 +85,22 @@ cd api
 uv run uvicorn oneledger.main:app --reload --port 8000 --no-access-log
 ```
 
+### Run the development stack
+
+Use the development launcher for the working ledger:
+
+```bash
+scripts/dev-stack.sh up
+scripts/dev-stack.sh status
+scripts/dev-stack.sh logs web
+scripts/dev-stack.sh down
+```
+
+`up` rebuilds the application, waits for healthy containers and applies pending migrations to the
+existing development database. `down` stops the containers without deleting the persistent
+`oneledger_pgdata` or `oneledger_documents` volumes. Run `logs` without a service name to show the
+latest output from every container.
+
 ### Run the clean local-production stack
 
 The existing `docker-compose.yml` remains the development and acceptance environment, including
