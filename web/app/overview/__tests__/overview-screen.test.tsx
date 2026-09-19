@@ -12,6 +12,7 @@ import type {
   HouseholdResponse,
   InvestmentCoverage,
   MonthFlows,
+  TransactionsResponse,
 } from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
@@ -109,6 +110,17 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
       investedBase: "200000.0000",
       investedSecondary: "8800.0000",
     },
+    upcomingCommitments: {
+      asOf: "2026-03-15",
+      through: "2026-04-14",
+      count: 0,
+      totalBase: "0.0000",
+      totalSecondary: "0.0000",
+      missingBaseCurrencies: [],
+      missingSecondaryCurrencies: [],
+      next: null,
+      items: [],
+    },
     ...overrides,
   };
 }
@@ -123,11 +135,13 @@ function renderWith(
     resolvedFollowUps: [],
     previousMonthReview: { month: "2026-02-01", completedAt: null },
   },
+  recent: TransactionsResponse = { transactions: [], total: 0 },
 ) {
   // Needs attention (Task 2) fetches /actions alongside /dashboard; every test here is about
   // the rest of the screen, so it gets a quiet empty response unless a test overrides it.
   const request = vi.fn(async (path: string) => {
     if (path === "/actions") return actions;
+    if (path === "/transactions?limit=5&offset=0") return recent;
     if (body instanceof Error) throw body;
     return body;
   });
@@ -207,7 +221,11 @@ describe("overview screen", () => {
     expect(within(worth).getByText("You owe AED 180,500.00")).toBeTruthy();
     expect(within(worth).getByText("₹1,00,000.00")).toBeTruthy();
     expect(within(worth).getByText("₹95,500.00")).toBeTruthy();
-    expect(request.mock.calls.map((call: unknown[]) => call[0])).toEqual(["/dashboard", "/actions"]);
+    expect(request.mock.calls.map((call: unknown[]) => call[0])).toEqual([
+      "/dashboard",
+      "/actions",
+      "/transactions?limit=5&offset=0",
+    ]);
   });
 
   it("labels a carried rate with its real date, and states a missing rate instead of a number", async () => {
@@ -339,6 +357,121 @@ describe("overview screen", () => {
     expect(within(second).getByText("No limit stated")).toBeTruthy();
   });
 
+  it("renders the next-30-days commitment total and next item from exact server strings", async () => {
+    const next = {
+      commitmentId: "commitment-1",
+      label: "Synthetic annual service",
+      dueDate: "2026-03-22",
+      nativeAmount: "-1234.5600",
+      nativeCurrency: "XIN",
+      remainingBase: "-1234.5600",
+      remainingSecondary: "-54.4400",
+    };
+    renderWith(payload({
+      upcomingCommitments: {
+        asOf: "2026-03-15",
+        through: "2026-04-14",
+        count: 1,
+        totalBase: "-1234.5600",
+        totalSecondary: "-54.4400",
+        missingBaseCurrencies: [],
+        missingSecondaryCurrencies: [],
+        next,
+        items: [next],
+      },
+    }));
+
+    const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
+    expect(within(region).getByText("You owe ₹1,234.56")).toBeTruthy();
+    expect(within(region).getByText("1 commitment due")).toBeTruthy();
+    expect(within(region).getByText(/Synthetic annual service/)).toBeTruthy();
+    expect(within(region).getByText(/2026-03-22/)).toBeTruthy();
+    expect(within(region).getByRole("link", { name: "Review commitments" })).toHaveProperty("pathname", "/plans");
+  });
+
+  it("does not present a confident commitment total when either reporting conversion is incomplete", async () => {
+    const missing = {
+      commitmentId: "commitment-2",
+      label: "Synthetic mixed-currency service",
+      dueDate: "2026-03-24",
+      nativeAmount: "-99.9900",
+      nativeCurrency: "XZZ",
+      remainingBase: null,
+      remainingSecondary: null,
+    };
+    renderWith(payload({
+      upcomingCommitments: {
+        asOf: "2026-03-15",
+        through: "2026-04-14",
+        count: 1,
+        totalBase: null,
+        totalSecondary: null,
+        missingBaseCurrencies: ["XZZ"],
+        missingSecondaryCurrencies: ["XZZ"],
+        next: missing,
+        items: [missing],
+      },
+    }));
+
+    const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
+    expect(within(region).getByText(/cannot be stated in XIN/i)).toBeTruthy();
+    expect(within(region).getByText(/Missing rates: XZZ/)).toBeTruthy();
+    expect(within(region).queryByText("₹0.00")).toBeNull();
+  });
+
+  it("states the evidenced absence of open commitments without inventing a total card", async () => {
+    renderWith(payload());
+
+    const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
+    expect(within(region).getByText("No open commitments fall in this period.")).toBeTruthy();
+    expect(within(region).queryByText("You owe ₹0.00")).toBeNull();
+  });
+
+  it("renders recent activity from server strings without recomputing its amount", async () => {
+    renderWith(payload(), undefined, undefined, {
+      total: 1,
+      transactions: [{
+        id: "transaction-1",
+        accountId: "account-1",
+        accountName: "Synthetic current account",
+        bookedDate: "2026-03-14",
+        descriptionRaw: "Synthetic merchant reference",
+        descriptionClean: "Synthetic merchant",
+        amount: "-987.6500",
+        currency: "XIN",
+        originalAmount: null,
+        originalCurrency: null,
+        amountBase: "-987.6500",
+        amountSecondary: "-43.4566",
+        fxRateDate: "2026-03-14",
+        fxRateIsCarried: false,
+        fxRateToBase: "1.0000000000",
+        fxRateToSecondary: "0.0440000000",
+        txnType: "debit",
+        categoryId: null,
+        categoryName: null,
+        merchantId: null,
+        transferId: null,
+        parentTransactionId: null,
+        isSplitParent: false,
+        isExcluded: false,
+        classifiedBy: "system",
+        source: "statement",
+        notes: null,
+        sourceDocumentId: null,
+        sourcePageNumber: null,
+        sourceRowNumber: null,
+      }],
+    });
+
+    const region = await screen.findByRole("region", { name: "Recent activity" });
+    expect(within(region).getByText("Synthetic merchant")).toBeTruthy();
+    expect(within(region).getByText("-₹987.65")).toBeTruthy();
+    expect(within(region).queryByText(/You owe/)).toBeNull();
+    expect(within(region).getByText(/Synthetic current account · 2026-03-14/)).toBeTruthy();
+    expect(within(region).getByRole("link", { name: "View all transactions" })).toHaveProperty("pathname", "/transactions");
+  });
+
   it("shows an empty state for an empty ledger rather than zeros presented as facts", async () => {
     const zero = "0.0000";
     renderWith(
@@ -367,6 +500,51 @@ describe("overview screen", () => {
     expect(await screen.findByRole("region", { name: "Needs attention" })).toBeTruthy();
     expect(screen.queryByText(/0\.00/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps upcoming commitments visible when the current position and flows are empty", async () => {
+    const next = {
+      commitmentId: "commitment-excluded-account",
+      label: "Synthetic excluded-account commitment",
+      dueDate: "2026-03-25",
+      nativeAmount: "-45.6700",
+      nativeCurrency: "XIN",
+      remainingBase: "-45.6700",
+      remainingSecondary: "-2.0095",
+    };
+    renderWith(payload({
+      netWorth: {
+        ...payload().netWorth,
+        totalBase: "0.0000",
+        totalSecondary: "0.0000",
+        assetsBase: "0.0000",
+        assetsSecondary: "0.0000",
+        liabilitiesBase: "0.0000",
+        liabilitiesSecondary: "0.0000",
+        liquidBase: "0.0000",
+        liquidSecondary: "0.0000",
+        rates: [],
+      },
+      thisMonth: month("2026-03-01"),
+      trend: MONTHS.map((on) => month(on)),
+      hasRecordedFlows: false,
+      upcomingCommitments: {
+        asOf: "2026-03-15",
+        through: "2026-04-14",
+        count: 1,
+        totalBase: "-45.6700",
+        totalSecondary: "-2.0095",
+        missingBaseCurrencies: [],
+        missingSecondaryCurrencies: [],
+        next,
+        items: [next],
+      },
+    }));
+
+    expect(await screen.findByText("Nothing to report yet")).toBeTruthy();
+    const commitments = screen.getByRole("region", { name: "Upcoming commitments — next 30 days" });
+    expect(within(commitments).getByText("You owe ₹45.67")).toBeTruthy();
+    expect(within(commitments).getByText("Synthetic excluded-account commitment")).toBeTruthy();
   });
 
   it("keeps closed-account history visible without inventing a current position", async () => {
@@ -475,10 +653,11 @@ describe("overview screen", () => {
       previousMonthReview: { month: "2026-02-01", completedAt: null },
     });
 
-    const heading = await screen.findByRole("link", { name: "Needs attention (6)" });
-    expect(heading).toHaveProperty("pathname", "/plans");
-    expect(heading).toHaveProperty("hash", "#actions");
-    const region = screen.getByRole("region", { name: "Needs attention (6)" });
+    const region = await screen.findByRole("region", { name: "Needs attention (6)" });
+    expect(within(region).getByRole("heading", { name: "Needs attention (6)" })).toBeTruthy();
+    const action = within(region).getByRole("link", { name: "Review plans" });
+    expect(action).toHaveProperty("pathname", "/plans");
+    expect(action).toHaveProperty("hash", "#actions");
     expect(within(region).getAllByRole("listitem")).toHaveLength(5);
     expect(within(region).getByText(/Synthetic item 4/)).toBeTruthy();
     expect(within(region).queryByText(/Synthetic item 5/)).toBeNull();

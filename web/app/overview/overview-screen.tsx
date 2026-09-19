@@ -6,6 +6,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { EvidenceChart, type EvidenceSeries } from "@/app/ui/evidence-chart";
+import { DecisionBand } from "@/app/ui/decision-band";
+import { MetricStrip } from "@/app/ui/metric-strip";
+import { PageHeader } from "@/app/ui/page-header";
 import { errorText, type apiFetch } from "@/lib/api/client";
 import { type Currency, formatOwed, formatPercent, moneyText } from "@/lib/money/format";
 import type {
@@ -18,6 +21,7 @@ import type {
   InvestmentCoverage,
   MissingRate,
   MonthFlows,
+  TransactionsResponse,
   YearToDate,
 } from "@/types/api";
 
@@ -194,6 +198,26 @@ export function OverviewScreen({ household, currency, currencies, request, logou
     };
   }, [actionsAttempt]);
 
+  const [recentState, setRecentState] = useState<"loading" | "ready" | "error">("loading");
+  const [recent, setRecent] = useState<TransactionsResponse>();
+  useEffect(() => {
+    let current = true;
+    latest
+      .current<TransactionsResponse>("/transactions?limit=5&offset=0")
+      .then((result) => {
+        if (current) {
+          setRecent(result);
+          setRecentState("ready");
+        }
+      })
+      .catch(() => {
+        if (current) setRecentState("error");
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
   const rowFor = (code: string): Currency | undefined =>
     household.currencies.find((row) => row.code === code) ?? currencies.find((row) => row.code === code);
   const money = (value: string, code: string) =>
@@ -210,51 +234,97 @@ export function OverviewScreen({ household, currency, currencies, request, logou
   };
   const coverageLabel = (item: InvestmentCoverage) => (item.holdingId ? "View holding" : "View account");
 
+  const commitmentsPanel = (dashboard: DashboardResponse) => {
+    const commitments = dashboard.upcomingCommitments;
+    const base = currency.code === dashboard.netWorth.baseCurrency;
+    const shown = base ? dashboard.netWorth.baseCurrency : dashboard.netWorth.secondaryCurrency;
+    const commitmentTotal = base ? commitments.totalBase : commitments.totalSecondary;
+    const missingCommitmentRates = base
+      ? commitments.missingBaseCurrencies
+      : commitments.missingSecondaryCurrencies;
+
+    return (
+      <section aria-labelledby="commitments-title" className="overview-panel overview-commitments">
+        <div className="overview-section-head">
+          <div>
+            <p className="section-label">Forward view</p>
+            <h2 id="commitments-title">Upcoming commitments — next 30 days</h2>
+          </div>
+          <Link href="/plans#commitments">Review commitments</Link>
+        </div>
+        {commitments.count === 0 ? (
+          <p>No open commitments fall in this period.</p>
+        ) : (
+          <>
+            {commitmentTotal === null ? (
+              <div className="overview-commitment-total">
+                <p>The total cannot be stated in {shown} because one or more required rates are missing.</p>
+                <p>Missing rates: {missingCommitmentRates.join(", ")}.</p>
+              </div>
+            ) : (
+              <div className="overview-commitment-total">
+                <strong>{owed(commitmentTotal, shown)}</strong>
+                <span>{commitments.count} {commitments.count === 1 ? "commitment" : "commitments"} due</span>
+              </div>
+            )}
+            {commitments.next && (
+              <p className="overview-next-commitment">
+                <strong>{commitments.next.label}</strong>
+                <span>{commitments.next.dueDate} · {owed(commitments.next.nativeAmount, commitments.next.nativeCurrency)}</span>
+              </p>
+            )}
+          </>
+        )}
+      </section>
+    );
+  };
+
   const attentionPanel = () => (
-    <section className="overview-panel" aria-labelledby="actions-title">
-      <h2 id="actions-title">
-        {actionsState === "ready" && actions && actions.items.length > 0 ? (
-          <Link href="/plans#actions">Needs attention ({actions.items.length})</Link>
-        ) : "Needs attention"}
-      </h2>
+    <>
       {actionsState === "loading" && <p role="status">Checking for actions…</p>}
-      {actionsState === "ready" && actions && <>
-        {actions.items.length > 0 && <>
-          <ul className="overview-notes">
-            {actions.items.slice(0, NEEDS_ATTENTION_PREVIEW).map((item) => (
-              <li key={item.actionKey}>
-                {item.title}
-                {item.dueDate && <> · {item.dueDate}</>}
-                {item.overdue && <> · overdue</>}
-              </li>
-            ))}
-          </ul>
-          <p><Link href="/plans#actions">View all</Link></p>
-        </>}
-        <p><Link href="/plans#review">
-          {actions.previousMonthReview.completedAt
-            ? `Last month's review is complete (${actions.previousMonthReview.completedAt.slice(0, 10)})`
-            : "Last month's review is not yet complete"}
-        </Link></p>
-      </>}
+      {actionsState === "ready" && actions && (
+        <DecisionBand
+          tone={actions.items.some((item) => item.overdue) ? "danger" : actions.items.length > 0 || !actions.previousMonthReview.completedAt ? "attention" : "success"}
+          title={actions.items.length > 0 ? `Needs attention (${actions.items.length})` : "Needs attention"}
+          summary={actions.items.length > 0
+            ? `${actions.items.length} ${actions.items.length === 1 ? "item needs" : "items need"} an owner decision.`
+            : actions.previousMonthReview.completedAt
+              ? "The previous monthly review is complete."
+              : "The previous monthly review is still open."}
+          action={<Link className={buttonVariants({ variant: "outline" })} href={actions.items.length > 0 ? "/plans#actions" : "/plans#review"}>Review plans</Link>}
+        >
+          {actions.items.length > 0 && (
+            <ul className="overview-notes">
+              {actions.items.slice(0, NEEDS_ATTENTION_PREVIEW).map((item) => (
+                <li key={item.actionKey}>
+                  {item.title}
+                  {item.dueDate && <> · {item.dueDate}</>}
+                  {item.overdue && <> · overdue</>}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p><Link href="/plans#review">
+            {actions.previousMonthReview.completedAt
+              ? `Last month's review is complete (${actions.previousMonthReview.completedAt.slice(0, 10)})`
+              : "Last month's review is not yet complete"}
+          </Link></p>
+        </DecisionBand>
+      )}
       {actionsState === "error" && <p className="inline-alert" role="alert">
         Needs attention could not be loaded.{" "}
         <Button variant="outline" onClick={() => setActionsAttempt((value) => value + 1)} type="button">Try again</Button>
       </p>}
-    </section>
+    </>
   );
 
   return (
-    <section className="workspace-content overview" aria-labelledby="overview-title">
-      <div className="overview-page-heading visually-hidden">
-        <div>
-          <p className="eyebrow">Owner workspace</p>
-          <h1 className="workspace-title" id="overview-title">Overview</h1>
-        </div>
-        {state.status === "ready" && (
-          <p className="overview-as-of">Position as of {state.dashboard.netWorth.asOf}</p>
-        )}
-      </div>
+    <section className="workspace-content overview" aria-labelledby="page-title">
+      <PageHeader
+        eyebrow="Your money"
+        title="Overview"
+        description="Your current financial position, cash flow, and next decisions."
+      />
       {logoutFailed && (
         <p className="inline-alert" role="alert">OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</p>
       )}
@@ -294,6 +364,7 @@ export function OverviewScreen({ household, currency, currencies, request, logou
             </div>
           </div>
           {attentionPanel()}
+          {commitmentsPanel(dashboard)}
         </>
       );
     }
@@ -358,8 +429,8 @@ export function OverviewScreen({ household, currency, currencies, request, logou
           <p>Past transactions remain below. Closed or excluded accounts are not included in current net worth.</p>
           <div className="overview-empty-actions"><Link className={buttonVariants({ variant: "outline" })} href="/accounts">Review accounts</Link></div>
         </div>}
-        {currentPosition && (
-        <section className="overview-hero-card" aria-labelledby="worth-title">
+        {(currentPosition || dashboard.hasRecordedFlows) && <div className="overview-lead-grid">
+        {currentPosition && <section className="overview-hero-card" aria-labelledby="worth-title">
           <h2 className="visually-hidden" id="worth-title">Net worth</h2>
           <div className="overview-primary-position">
             <p className="section-label">Primary reporting currency · {primary.code}</p>
@@ -377,8 +448,17 @@ export function OverviewScreen({ household, currency, currencies, request, logou
               ))}
             </ul>
           )}
-        </section>
-        )}
+        </section>}
+        <div className="overview-trend-card">
+          <EvidenceChart
+            title="Income, spending and net trend"
+            description={`Last twelve months · ${shown}. Only reconciled, completed statement months are plotted; ${unknownMonths} unknown months remain gaps. Exact values are in the chart table.`}
+            periods={trendChart.periods}
+            series={trendChart.series}
+          />
+          {unknownMonths > 0 && <p className="overview-chart-note">The detailed totals below include recorded activity in incomplete months. <Link href="/coverage">Review coverage</Link> before treating those months as complete.</p>}
+        </div>
+        </div>}
 
         {attentionPanel()}
 
@@ -396,31 +476,19 @@ export function OverviewScreen({ household, currency, currencies, request, logou
         )}
 
         {currentPosition && primary.assets !== null && primary.liabilities !== null && primary.liquid !== null && (
-          <section aria-label="Position summary" className="overview-summary-grid">
-            <article>
-              <p className="section-label">Total assets</p>
-              <p className="overview-summary-value">{money(primary.assets, primary.code)}</p>
-              <p>Everything currently included in net worth</p>
-            </article>
-            <article>
-              <p className="section-label">Total liabilities</p>
-              <p className="overview-summary-value liability">{owed(primary.liabilities, primary.code)}</p>
-              <p>Signed balances presented as what is owed</p>
-            </article>
-            <article>
-              <p className="section-label">Liquid net worth</p>
-              <p className="overview-summary-value">{money(primary.liquid, primary.code)}</p>
-              <p>Accounts the owner marks as liquid, net of their signed balances</p>
-            </article>
-            <article>
-              <p className="section-label">Savings rate</p>
-              <p className="overview-summary-value">{percent(now.savings)}</p>
-              <p>Income retained in the current month</p>
-            </article>
-          </section>
+          <MetricStrip
+            label="Position summary"
+            items={[
+              { label: "Total assets", value: money(primary.assets, primary.code), detail: "Included in net worth" },
+              { label: "Total liabilities", value: owed(primary.liabilities, primary.code), detail: "Presented as what is owed" },
+              { label: "Liquid net worth", value: money(primary.liquid, primary.code), detail: "Owner-marked liquid accounts" },
+              { label: "Savings rate", value: percent(now.savings), detail: "Current month" },
+            ]}
+          />
         )}
 
         {currentPosition && <>
+        <div className="overview-period-grid">
         <section className="overview-month-card" aria-labelledby="month-title">
           <h2 className="visually-hidden" id="month-title">This month</h2>
           <p className="section-label">This month · {monthLabel(dashboard.thisMonth.month)}</p>
@@ -443,19 +511,38 @@ export function OverviewScreen({ household, currency, currencies, request, logou
             <div><dt>Invested</dt><dd><Link href="/investments">{money(ytd.invested, shown)}</Link></dd></div>
           </dl>
         </section>
+        </div>
         </>}
 
-        <div className="overview-trend-card">
-          <EvidenceChart
-            title="Income, spending and net trend"
-            description={`Last twelve months · ${shown}. Only reconciled, completed statement months are plotted; ${unknownMonths} unknown months remain gaps. Exact values are in the chart table.`}
-            periods={trendChart.periods}
-            series={trendChart.series}
-          />
-          {unknownMonths > 0 && <p className="overview-chart-note">The detailed totals below include recorded activity in incomplete months. <Link href="/coverage">Review coverage</Link> before treating those months as complete.</p>}
-        </div>
-
         <div className="overview-lower-grid">
+        <section aria-labelledby="recent-title" className="overview-panel overview-recent">
+          <div className="overview-section-head">
+            <div>
+              <p className="section-label">Ledger</p>
+              <h2 id="recent-title">Recent activity</h2>
+            </div>
+            <Link href="/transactions">View all transactions</Link>
+          </div>
+          {recentState === "loading" && <p role="status">Loading recent activity…</p>}
+          {recentState === "error" && <p className="inline-alert">Recent activity could not be loaded.</p>}
+          {recentState === "ready" && recent?.transactions.length === 0 && <p>No recorded transactions yet.</p>}
+          {recentState === "ready" && recent && recent.transactions.length > 0 && (
+            <ul className="overview-activity-list">
+              {recent.transactions.map((transaction) => (
+                <li key={transaction.id}>
+                  <div>
+                    <strong>{transaction.descriptionClean ?? transaction.descriptionRaw}</strong>
+                    <span>{transaction.accountName} · {transaction.bookedDate}</span>
+                  </div>
+                  <span>{money(transaction.amount, transaction.currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {commitmentsPanel(dashboard)}
+
         <details className="overview-panel overview-recorded-details">
           <summary>Recorded monthly totals</summary>
           <p>Includes activity in months whose statement coverage is incomplete.</p>

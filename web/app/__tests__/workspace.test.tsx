@@ -78,6 +78,9 @@ function outOfBand(path: string): Promise<unknown> | undefined {
       previousMonthReview: { month: "2026-02-01", completedAt: null },
     });
   }
+  if (path === "/transactions?limit=5&offset=0") {
+    return Promise.resolve({ transactions: [], total: 0 });
+  }
   // Goals (Phase 3.3 Task 1) fetches alongside the forecast and commitments on Plans; every test
   // here is about the rest of the screen, so it sees no goals or reservable accounts.
   if (path === "/goals?includeClosed=true") {
@@ -241,6 +244,17 @@ const dashboard: DashboardResponse = {
     investedBase: "0.0000",
     investedSecondary: "0.0000",
   },
+  upcomingCommitments: {
+    asOf: "2026-03-15",
+    through: "2026-04-14",
+    count: 0,
+    totalBase: "0.0000",
+    totalSecondary: "0.0000",
+    missingBaseCurrencies: [],
+    missingSecondaryCurrencies: [],
+    next: null,
+    items: [],
+  },
 };
 
 describe("authenticated workspace", () => {
@@ -268,6 +282,7 @@ describe("authenticated workspace", () => {
     expect(await screen.findByRole("group", { name: "Reporting currency" })).toBeTruthy();
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: "Workspace" }).closest("[data-slot=sidebar]")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Overview" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "Settings" }).getAttribute("href")).toBe("/settings");
     expect(screen.getByRole("link", { name: "Accounts" }).getAttribute("href")).toBe("/accounts");
@@ -1112,6 +1127,7 @@ describe("authenticated workspace", () => {
       "/currencies",
       "/dashboard",
       "/actions",
+      "/transactions?limit=5&offset=0",
     ]);
     expect(screen.queryByText(/Phase 0/)).toBeNull();
   });

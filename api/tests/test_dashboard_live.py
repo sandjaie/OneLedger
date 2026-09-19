@@ -10,12 +10,13 @@ Skipped when no database is reachable. Every figure is invented.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 
@@ -40,12 +41,32 @@ def live(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Fixture]:
     with conn.cursor() as cur:
         cur.execute("SELECT id FROM household")
         seeded: list[UUID] = [row[0] for row in cur.fetchall()]
+
+    def clean_overview_commitments() -> None:
+        with conn.cursor() as cur:
+            cur.execute(
+                """DELETE FROM commitment_resolution
+                     WHERE commitment_id IN (
+                       SELECT id FROM commitment WHERE label LIKE 'Synthetic overview %'
+                     )"""
+            )
+            cur.execute("DELETE FROM commitment WHERE label LIKE 'Synthetic overview %'")
+            clear_synthetic_account_valuation_periods(cur)
+            cur.execute("DELETE FROM account WHERE name = 'Synthetic overview foreign account'")
+            cur.execute(
+                "DELETE FROM person WHERE display_name = 'Synthetic overview foreign owner'"
+            )
+            cur.execute("DELETE FROM household WHERE name = 'Synthetic overview foreign household'")
+        conn.commit()
+
+    clean_overview_commitments()
     try:
         fixture = Fixture(conn)
         app.dependency_overrides[auth.require_owner] = fixture.owner
         yield fixture
     finally:
         app.dependency_overrides.clear()
+        clean_overview_commitments()
         with conn.cursor() as cur:
             _clean(cur)
             clear_synthetic_account_valuation_periods(cur)
@@ -141,6 +162,76 @@ def a_rate(
                                     is_carried_forward, carried_from)
                VALUES (%s, %s, %s, %s, 'manual', %s, %s)""",
             (on, currency, live.base, Decimal(rate), carried_from is not None, carried_from),
+        )
+    live.conn.commit()
+
+
+def an_overview_commitment(
+    live: Fixture,
+    *,
+    label: str,
+    amount: str = "-100.1250",
+    due: date | None = RATED,
+    currency: str | None = None,
+    archived: bool = False,
+    household: UUID | None = None,
+    account: UUID | None = None,
+) -> UUID:
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO commitment (
+                   household_id, idempotency_key, account_id, label, amount, currency,
+                   cadence, first_date, archived_at, next_due_date)
+               VALUES (%s, %s, %s, %s, %s, %s, 'once', %s, %s, %s)
+               RETURNING id""",
+            (
+                household or live.household_id,
+                uuid4(),
+                account or live.account_id,
+                label,
+                Decimal(amount),
+                currency or live.base,
+                due or RATED,
+                datetime.now(UTC) if archived else None,
+                due,
+            ),
+        )
+        found = cur.fetchone()
+        assert found is not None
+    live.conn.commit()
+    return UUID(str(found[0]))
+
+
+def pay_toward_commitment(live: Fixture, commitment_id: UUID, *, amount: str, due: date) -> None:
+    value = Decimal(amount)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO transaction (
+                   household_id, account_id, booked_date, description_raw, description_clean,
+                   amount, currency, fx_rate_date, fx_rate_to_base, fx_rate_to_secondary,
+                   amount_base, amount_secondary, txn_type, source, dedupe_hash)
+               VALUES (%s, %s, %s, 'synthetic overview payment',
+                       'synthetic overview payment', %s, %s, %s, 1, 0.25, %s, %s,
+                       'expense', 'manual', %s)
+               RETURNING id""",
+            (
+                live.household_id,
+                live.account_id,
+                due,
+                value,
+                live.base,
+                due,
+                value,
+                value * Decimal("0.25"),
+                uuid4().hex + uuid4().hex,
+            ),
+        )
+        transaction_id = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO commitment_resolution (
+                   household_id, commitment_id, due_date, kind, closes, transaction_id)
+               VALUES (%s, %s, %s, 'payment', false, %s)""",
+            (live.household_id, commitment_id, due, transaction_id),
         )
     live.conn.commit()
 
@@ -330,6 +421,154 @@ def test_a_cycle_after_the_as_of_date_is_not_yet_known(live: Fixture) -> None:
 
 
 # ---------------------------------------------------------------------------------------
+# Upcoming commitments.
+
+
+def test_upcoming_commitments_are_empty_without_an_open_occurrence(live: Fixture) -> None:
+    summary = the_dashboard(RATED)["upcomingCommitments"]
+
+    assert summary == {
+        "asOf": "2026-03-02",
+        "through": "2026-04-01",
+        "count": 0,
+        "totalBase": "0.0000",
+        "totalSecondary": "0.0000",
+        "missingBaseCurrencies": [],
+        "missingSecondaryCurrencies": [],
+        "next": None,
+        "items": [],
+    }
+
+
+def test_upcoming_commitments_include_day_thirty_and_exclude_closed_or_foreign_rows(
+    live: Fixture,
+) -> None:
+    included = an_overview_commitment(
+        live,
+        label="Synthetic overview included",
+        due=RATED + timedelta(days=30),
+    )
+    an_overview_commitment(live, label="Synthetic overview overdue", due=RATED - timedelta(days=1))
+    an_overview_commitment(
+        live,
+        label="Synthetic overview archived",
+        due=RATED + timedelta(days=2),
+        archived=True,
+    )
+    an_overview_commitment(live, label="Synthetic overview finished", due=None)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('Synthetic overview foreign household', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        foreign_household = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO person (household_id, display_name, is_self)
+               VALUES (%s, 'Synthetic overview foreign owner', true) RETURNING id""",
+            (foreign_household,),
+        )
+        foreign_person = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+        cur.execute(
+            """INSERT INTO account (
+                   household_id, owner_person_id, name, account_type, currency, country,
+                   opening_balance, opening_balance_date)
+               VALUES (%s, %s, 'Synthetic overview foreign account', 'savings', %s, 'XZ',
+                       0, DATE '2026-01-01') RETURNING id""",
+            (foreign_household, foreign_person, live.base),
+        )
+        foreign_account = UUID(str(cur.fetchone()[0]))  # type: ignore[index]
+    live.conn.commit()
+    an_overview_commitment(
+        live,
+        label="Synthetic overview foreign",
+        due=RATED + timedelta(days=1),
+        household=foreign_household,
+        account=foreign_account,
+    )
+
+    summary = the_dashboard(RATED)["upcomingCommitments"]
+
+    assert summary["count"] == 1
+    assert summary["next"]["commitmentId"] == str(included)
+    assert [item["label"] for item in summary["items"]] == ["Synthetic overview included"]
+
+
+def test_upcoming_commitments_total_the_exact_remaining_amount_in_both_currencies(
+    live: Fixture,
+) -> None:
+    commitment_id = an_overview_commitment(
+        live,
+        label="Synthetic overview partly paid",
+        amount="-100.1250",
+        due=RATED + timedelta(days=3),
+    )
+    pay_toward_commitment(live, commitment_id, amount="-25.1250", due=RATED + timedelta(days=3))
+
+    summary = the_dashboard(RATED)["upcomingCommitments"]
+
+    assert summary["totalBase"] == "-75.0000"
+    assert summary["totalSecondary"] == "-18.7500"
+    assert summary["items"] == [
+        {
+            "commitmentId": str(commitment_id),
+            "label": "Synthetic overview partly paid",
+            "dueDate": "2026-03-05",
+            "nativeAmount": "-75.0000",
+            "nativeCurrency": live.base,
+            "remainingBase": "-75.0000",
+            "remainingSecondary": "-18.7500",
+        }
+    ]
+
+
+def test_a_missing_rate_nulls_the_whole_commitment_total(live: Fixture) -> None:
+    other = third_currency(live)
+    other_account = an_account(live, "savings", "0.0000", currency=other)
+    an_overview_commitment(
+        live,
+        label="Synthetic overview missing rate",
+        amount="-12.3400",
+        currency=other,
+        account=other_account,
+        due=RATED + timedelta(days=4),
+    )
+
+    summary = the_dashboard(RATED)["upcomingCommitments"]
+
+    assert summary["totalBase"] is None
+    assert summary["totalSecondary"] is None
+    assert summary["missingBaseCurrencies"] == [other]
+    assert summary["missingSecondaryCurrencies"] == [other]
+    assert summary["items"][0]["remainingBase"] is None
+    assert summary["items"][0]["remainingSecondary"] is None
+
+
+def test_dashboard_refuses_a_member_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A member is absent from the owner-only active-session lookup, so the route rejects it."""
+    app.dependency_overrides.clear()
+    monkeypatch.setattr(auth, "_lookup_active_session", lambda *_: None)
+    now = datetime.now(UTC).replace(microsecond=0)
+    token = jwt.encode(
+        {
+            "sub": str(uuid4()),
+            "email": "member@example.invalid",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(hours=12)).timestamp()),
+            "jti": str(uuid4()),
+            "iss": auth.SESSION_ISSUER,
+            "aud": auth.SESSION_AUDIENCE,
+        },
+        auth.session_secret(),
+        algorithm="HS256",
+    )
+    client = TestClient(app)
+    client.cookies.set("session", token)
+
+    assert client.get("/dashboard", headers=ORIGIN).status_code == 403
+
+
+# ---------------------------------------------------------------------------------------
 # The wire.
 
 
@@ -346,6 +585,8 @@ def test_every_money_figure_is_a_string(live: Fixture) -> None:
     for due in body["cardsDue"]:
         for key in ("statementBalance", "minimumDue", "utilisationPct"):
             assert isinstance(due[key], str), key
+    assert isinstance(body["upcomingCommitments"]["totalBase"], str)
+    assert isinstance(body["upcomingCommitments"]["totalSecondary"], str)
 
 
 def test_the_as_of_date_defaults_to_today(live: Fixture) -> None:

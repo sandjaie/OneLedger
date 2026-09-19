@@ -30,7 +30,7 @@ F02).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -40,6 +40,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from ..auth import OwnerSession, require_owner
+from ..commitments import commitment_progress
 from ..coverage import month_end, months_from_anchor
 from ..db import connect, scope_to_owner
 from ..investments.positions import current_rate_pair, read_positions
@@ -157,6 +158,28 @@ class FlowEvidence(BaseModel):
     netSecondaryCoordinate: int | None
 
 
+class UpcomingCommitment(BaseModel):
+    commitmentId: UUID
+    label: str
+    dueDate: date
+    nativeAmount: str
+    nativeCurrency: str
+    remainingBase: str | None
+    remainingSecondary: str | None
+
+
+class UpcomingCommitmentsSummary(BaseModel):
+    asOf: date
+    through: date
+    count: int
+    totalBase: str | None
+    totalSecondary: str | None
+    missingBaseCurrencies: list[str]
+    missingSecondaryCurrencies: list[str]
+    next: UpcomingCommitment | None
+    items: list[UpcomingCommitment]
+
+
 class DashboardResponse(BaseModel):
     netWorth: NetWorth
     thisMonth: MonthFlows
@@ -165,6 +188,7 @@ class DashboardResponse(BaseModel):
     flowEvidence: list[FlowEvidence]
     cardsDue: list[CardDue]
     yearToDate: YearToDate
+    upcomingCommitments: UpcomingCommitmentsSummary
 
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
@@ -283,6 +307,89 @@ YEAR_TO_DATE = """
            coalesce(round(i.invested_base, 4), 0.0000),
            coalesce(round(i.invested_secondary, 4), 0.0000)
       FROM flows f, invested i"""
+
+
+UPCOMING_COMMITMENTS = """
+    SELECT c.id, c.label, c.amount, c.currency, c.next_due_date
+      FROM commitment c
+     WHERE c.household_id = %s
+       AND c.archived_at IS NULL
+       AND c.next_due_date >= %s
+       AND c.next_due_date <= %s
+     ORDER BY c.next_due_date, c.label, c.id"""
+
+
+def _upcoming_commitments(
+    cur: psycopg.Cursor[Any],
+    household_id: UUID,
+    base: str,
+    secondary: str,
+    as_of: date,
+) -> UpcomingCommitmentsSummary:
+    through = as_of + timedelta(days=30)
+    cur.execute(UPCOMING_COMMITMENTS, (household_id, as_of, through))
+    rows = cur.fetchall()
+    progress = commitment_progress(
+        cur,
+        household_id,
+        as_of,
+        [(row[0], None, row[4], Decimal(row[2])) for row in rows],
+    )
+    rates: dict[str, tuple[Decimal | None, Decimal | None]] = {}
+    missing_base: set[str] = set()
+    missing_secondary: set[str] = set()
+    total_base = Decimal("0.0000")
+    total_secondary = Decimal("0.0000")
+    items: list[UpcomingCommitment] = []
+
+    for commitment_id, label, _amount, currency_raw, due_date in rows:
+        commitment_id = UUID(str(commitment_id))
+        currency = str(currency_raw).strip()
+        remaining_raw = progress[commitment_id][3]
+        assert remaining_raw is not None
+        remaining = Decimal(remaining_raw)
+        if currency not in rates:
+            pair = current_rate_pair(cur, currency, base, secondary, as_of)
+            rates[currency] = (
+                None if pair.to_base is None else pair.to_base.rate,
+                None if pair.to_secondary is None else pair.to_secondary.rate,
+            )
+        rate_base, rate_secondary = rates[currency]
+        remaining_base = None if rate_base is None else translate(remaining, rate_base)
+        remaining_secondary = (
+            None if rate_secondary is None else translate(remaining, rate_secondary)
+        )
+        if remaining_base is None:
+            missing_base.add(currency)
+        else:
+            total_base += remaining_base
+        if remaining_secondary is None:
+            missing_secondary.add(currency)
+        else:
+            total_secondary += remaining_secondary
+        items.append(
+            UpcomingCommitment(
+                commitmentId=commitment_id,
+                label=label,
+                dueDate=due_date,
+                nativeAmount=str(remaining),
+                nativeCurrency=currency,
+                remainingBase=_out(remaining_base),
+                remainingSecondary=_out(remaining_secondary),
+            )
+        )
+
+    return UpcomingCommitmentsSummary(
+        asOf=as_of,
+        through=through,
+        count=len(items),
+        totalBase=None if missing_base else str(total_base),
+        totalSecondary=None if missing_secondary else str(total_secondary),
+        missingBaseCurrencies=sorted(missing_base),
+        missingSecondaryCurrencies=sorted(missing_secondary),
+        next=items[0] if items else None,
+        items=items,
+    )
 
 
 def flow_evidence(
@@ -570,6 +677,9 @@ def read_dashboard(
             investedBase=str(ytd[8]),
             investedSecondary=str(ytd[9]),
         )
+        upcoming_commitments = _upcoming_commitments(
+            cur, owner.household_id, base, secondary, as_of
+        )
     return DashboardResponse(
         netWorth=net_worth,
         thisMonth=trend[-1],
@@ -578,4 +688,5 @@ def read_dashboard(
         flowEvidence=evidence,
         cardsDue=cards,
         yearToDate=year_to_date,
+        upcomingCommitments=upcoming_commitments,
     )
