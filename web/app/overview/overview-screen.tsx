@@ -234,6 +234,51 @@ export function OverviewScreen({ household, currency, currencies, request, logou
   };
   const coverageLabel = (item: InvestmentCoverage) => (item.holdingId ? "View holding" : "View account");
 
+  const commitmentsPanel = (dashboard: DashboardResponse) => {
+    const commitments = dashboard.upcomingCommitments;
+    const base = currency.code === dashboard.netWorth.baseCurrency;
+    const shown = base ? dashboard.netWorth.baseCurrency : dashboard.netWorth.secondaryCurrency;
+    const commitmentTotal = base ? commitments.totalBase : commitments.totalSecondary;
+    const missingCommitmentRates = base
+      ? commitments.missingBaseCurrencies
+      : commitments.missingSecondaryCurrencies;
+
+    return (
+      <section aria-labelledby="commitments-title" className="overview-panel overview-commitments">
+        <div className="overview-section-head">
+          <div>
+            <p className="section-label">Forward view</p>
+            <h2 id="commitments-title">Upcoming commitments — next 30 days</h2>
+          </div>
+          <Link href="/plans#commitments">Review commitments</Link>
+        </div>
+        {commitments.count === 0 ? (
+          <p>No open commitments fall in this period.</p>
+        ) : (
+          <>
+            {commitmentTotal === null ? (
+              <div className="overview-commitment-total">
+                <p>The total cannot be stated in {shown} because one or more required rates are missing.</p>
+                <p>Missing rates: {missingCommitmentRates.join(", ")}.</p>
+              </div>
+            ) : (
+              <div className="overview-commitment-total">
+                <strong>{owed(commitmentTotal, shown)}</strong>
+                <span>{commitments.count} {commitments.count === 1 ? "commitment" : "commitments"} due</span>
+              </div>
+            )}
+            {commitments.next && (
+              <p className="overview-next-commitment">
+                <strong>{commitments.next.label}</strong>
+                <span>{commitments.next.dueDate} · {owed(commitments.next.nativeAmount, commitments.next.nativeCurrency)}</span>
+              </p>
+            )}
+          </>
+        )}
+      </section>
+    );
+  };
+
   const attentionPanel = () => (
     <>
       {actionsState === "loading" && <p role="status">Checking for actions…</p>}
@@ -319,6 +364,7 @@ export function OverviewScreen({ household, currency, currencies, request, logou
             </div>
           </div>
           {attentionPanel()}
+          {commitmentsPanel(dashboard)}
         </>
       );
     }
@@ -341,11 +387,6 @@ export function OverviewScreen({ household, currency, currencies, request, logou
     const carried = worth.rates.filter((rate) => rate.carried);
     const trendChart = flowTrend(dashboard, base, shown, money);
     const unknownMonths = dashboard.flowEvidence.filter((item) => item.status !== "complete").length;
-    const commitments = dashboard.upcomingCommitments;
-    const commitmentTotal = base ? commitments.totalBase : commitments.totalSecondary;
-    const missingCommitmentRates = base
-      ? commitments.missingBaseCurrencies
-      : commitments.missingSecondaryCurrencies;
 
     const detail = (side: (typeof sides)[number], primarySide = false) => {
       const reasons = worth.missing.filter((missing) => missing.reportingCurrency === side.code);
@@ -493,45 +534,14 @@ export function OverviewScreen({ household, currency, currencies, request, logou
                     <strong>{transaction.descriptionClean ?? transaction.descriptionRaw}</strong>
                     <span>{transaction.accountName} · {transaction.bookedDate}</span>
                   </div>
-                  <span>{owed(transaction.amount, transaction.currency)}</span>
+                  <span>{money(transaction.amount, transaction.currency)}</span>
                 </li>
               ))}
             </ul>
           )}
         </section>
 
-        <section aria-labelledby="commitments-title" className="overview-panel overview-commitments">
-          <div className="overview-section-head">
-            <div>
-              <p className="section-label">Forward view</p>
-              <h2 id="commitments-title">Upcoming commitments — next 30 days</h2>
-            </div>
-            <Link href="/plans#commitments">Review commitments</Link>
-          </div>
-          {commitments.count === 0 ? (
-            <p>No open commitments fall in this period.</p>
-          ) : (
-            <>
-              {commitmentTotal === null ? (
-                <div className="overview-commitment-total">
-                  <p>The total cannot be stated in {shown} because one or more required rates are missing.</p>
-                  <p>Missing rates: {missingCommitmentRates.join(", ")}.</p>
-                </div>
-              ) : (
-                <div className="overview-commitment-total">
-                  <strong>{owed(commitmentTotal, shown)}</strong>
-                  <span>{commitments.count} {commitments.count === 1 ? "commitment" : "commitments"} due</span>
-                </div>
-              )}
-              {commitments.next && (
-                <p className="overview-next-commitment">
-                  <strong>{commitments.next.label}</strong>
-                  <span>{commitments.next.dueDate} · {owed(commitments.next.nativeAmount, commitments.next.nativeCurrency)}</span>
-                </p>
-              )}
-            </>
-          )}
-        </section>
+        {commitmentsPanel(dashboard)}
 
         <details className="overview-panel overview-recorded-details">
           <summary>Recorded monthly totals</summary>

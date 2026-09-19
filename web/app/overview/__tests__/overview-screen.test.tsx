@@ -466,7 +466,8 @@ describe("overview screen", () => {
 
     const region = await screen.findByRole("region", { name: "Recent activity" });
     expect(within(region).getByText("Synthetic merchant")).toBeTruthy();
-    expect(within(region).getByText("You owe ₹987.65")).toBeTruthy();
+    expect(within(region).getByText("-₹987.65")).toBeTruthy();
+    expect(within(region).queryByText(/You owe/)).toBeNull();
     expect(within(region).getByText(/Synthetic current account · 2026-03-14/)).toBeTruthy();
     expect(within(region).getByRole("link", { name: "View all transactions" })).toHaveProperty("pathname", "/transactions");
   });
@@ -499,6 +500,51 @@ describe("overview screen", () => {
     expect(await screen.findByRole("region", { name: "Needs attention" })).toBeTruthy();
     expect(screen.queryByText(/0\.00/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  it("keeps upcoming commitments visible when the current position and flows are empty", async () => {
+    const next = {
+      commitmentId: "commitment-excluded-account",
+      label: "Synthetic excluded-account commitment",
+      dueDate: "2026-03-25",
+      nativeAmount: "-45.6700",
+      nativeCurrency: "XIN",
+      remainingBase: "-45.6700",
+      remainingSecondary: "-2.0095",
+    };
+    renderWith(payload({
+      netWorth: {
+        ...payload().netWorth,
+        totalBase: "0.0000",
+        totalSecondary: "0.0000",
+        assetsBase: "0.0000",
+        assetsSecondary: "0.0000",
+        liabilitiesBase: "0.0000",
+        liabilitiesSecondary: "0.0000",
+        liquidBase: "0.0000",
+        liquidSecondary: "0.0000",
+        rates: [],
+      },
+      thisMonth: month("2026-03-01"),
+      trend: MONTHS.map((on) => month(on)),
+      hasRecordedFlows: false,
+      upcomingCommitments: {
+        asOf: "2026-03-15",
+        through: "2026-04-14",
+        count: 1,
+        totalBase: "-45.6700",
+        totalSecondary: "-2.0095",
+        missingBaseCurrencies: [],
+        missingSecondaryCurrencies: [],
+        next,
+        items: [next],
+      },
+    }));
+
+    expect(await screen.findByText("Nothing to report yet")).toBeTruthy();
+    const commitments = screen.getByRole("region", { name: "Upcoming commitments — next 30 days" });
+    expect(within(commitments).getByText("You owe ₹45.67")).toBeTruthy();
+    expect(within(commitments).getByText("Synthetic excluded-account commitment")).toBeTruthy();
   });
 
   it("keeps closed-account history visible without inventing a current position", async () => {

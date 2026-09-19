@@ -2829,7 +2829,9 @@ body {
   box-shadow: inset 2px 0 0 var(--sage);
 }
 .masthead.app-toolbar { left: 13.5rem; background: color-mix(in srgb, var(--surface) 96%, transparent); }
-.app-toolbar .brand { width: 13.5rem; background: var(--sidebar); }
+@media (min-width: 801px) {
+  .app-toolbar .brand { width: 13.5rem; background: var(--sidebar); }
+}
 .state-panel { margin-left: 13.5rem; }
 .workspace-content-anchor { left: 13.5rem; }
 .owner-badge [data-slot="avatar-fallback"] { color: var(--ink); background: var(--sage); }
