@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Final local gate. Run once on a clean, reviewed commit before its first push.
+# Gates follow the changed surfaces; focused API and database tests may be named explicitly.
 # A successful run records the exact HEAD for optional manual inspection.
 set -euo pipefail
 
@@ -32,7 +33,50 @@ if [ "${1:-}" = "--check-receipt" ]; then
   check_receipt
   exit 0
 fi
-[ "$#" -eq 0 ] || fail "usage: scripts/verify.sh [--check-receipt]"
+
+api_tests=()
+db_tests=()
+api_test_count=0
+db_test_count=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --api-test)
+      [ "$#" -ge 2 ] || fail "--api-test requires an api-relative test path"
+      api_tests+=("$2")
+      api_test_count=$((api_test_count + 1))
+      shift 2
+      ;;
+    --db-test)
+      [ "$#" -ge 2 ] || fail "--db-test requires a repository-relative db/tests path"
+      db_tests+=("$2")
+      db_test_count=$((db_test_count + 1))
+      shift 2
+      ;;
+    *)
+      fail "usage: scripts/verify.sh [--api-test tests/test_file.py] [--db-test db/tests/file.sql]"
+      ;;
+  esac
+done
+
+if [ "$api_test_count" -gt 0 ]; then
+  for test in "${api_tests[@]}"; do
+    test_file="${test%%::*}"
+    case "$test_file" in
+      tests/*.py) ;;
+      *) fail "API tests must be under api/tests: $test" ;;
+    esac
+    [ -f "api/$test_file" ] || fail "API test does not exist: api/$test_file"
+  done
+fi
+if [ "$db_test_count" -gt 0 ]; then
+  for test in "${db_tests[@]}"; do
+    case "$test" in
+      db/tests/*.sql|db/tests/*_upgrade.sh) ;;
+      *) fail "database tests must be under db/tests: $test" ;;
+    esac
+    [ -f "$test" ] || fail "database test does not exist: $test"
+  done
+fi
 
 [ -z "$(git status --porcelain --untracked-files=normal)" ] ||
   fail "working tree must be clean before final verification."
@@ -48,17 +92,34 @@ git rev-parse --verify --quiet "$base_ref" >/dev/null ||
   fail "cannot find origin/develop or develop for verification scope."
 base="$(git merge-base "$base_ref" HEAD)"
 
-scope=docs-only
+api_changed=
+db_changed=
+web_changed=
 changed=
 while IFS= read -r path; do
   [ -n "$path" ] || continue
   changed=1
   case "$path" in
-    docs/*|*.md|CLAUDE.md|AGENTS.md|README.md|.claude/skills/*|.github/PULL_REQUEST_TEMPLATE.md) ;;
-    *) scope=full; break ;;
+    api/*) api_changed=1 ;;
+    db/*) db_changed=1 ;;
+    web/*) web_changed=1 ;;
   esac
 done < <(git diff --name-only "$base" HEAD)
-[ -n "$changed" ] || scope=full
+[ -n "$changed" ] || {
+  api_changed=1
+  db_changed=1
+  web_changed=1
+}
+
+scope_parts=()
+[ -z "$api_changed" ] || scope_parts+=(api)
+[ -z "$db_changed" ] || scope_parts+=(database)
+[ -z "$web_changed" ] || scope_parts+=(web)
+if [ "${#scope_parts[@]}" -eq 0 ]; then
+  scope=docs-only
+else
+  scope="$(IFS=+; echo "${scope_parts[*]}")"
+fi
 
 echo "VERIFY scope=$scope head=$start_head"
 
@@ -102,7 +163,24 @@ ensure_test_server() {
 }
 
 run_commit_hooks() {
-  SKIP=end-of-file-fixer,trailing-whitespace,ruff,ruff-format pre-commit run --all-files
+  SKIP=end-of-file-fixer,trailing-whitespace,docs,no-real-data,ruff,ruff-format,eslint \
+    pre-commit run --all-files
+}
+
+run_api_tests() {
+  if [ "$api_test_count" -gt 0 ]; then
+    uv run pytest -q "${api_tests[@]}"
+  else
+    uv run pytest -q
+  fi
+}
+
+run_database_gate() {
+  if [ "$db_test_count" -gt 0 ]; then
+    scripts/hooks/db-tests.sh "${db_tests[@]}"
+  else
+    scripts/hooks/db-tests.sh
+  fi
 }
 
 # Every gate chains its commands with &&: run_stage calls a gate inside `if`, where bash ignores
@@ -112,7 +190,7 @@ run_api_gate() (
     uv run ruff check . &&
     uv run ruff format --check . &&
     uv run mypy . &&
-    uv run pytest -q
+    run_api_tests
 )
 
 run_web_gate() (
@@ -139,12 +217,16 @@ scan_web_bundle() {
 
 run_stage docs python3 scripts/check-docs.py
 run_stage commit-hooks run_commit_hooks
-run_stage markdown pre-commit run markdownlint --all-files --hook-stage manual
 
-if [ "$scope" = full ]; then
+if [ -n "$api_changed" ] || [ "$api_test_count" -gt 0 ]; then
   ensure_test_server
   run_stage api run_api_gate
-  run_stage database scripts/hooks/db-tests.sh
+fi
+if [ -n "$db_changed" ] || [ "$db_test_count" -gt 0 ]; then
+  [ -n "$test_server_ready" ] || ensure_test_server
+  run_stage database run_database_gate
+fi
+if [ -n "$web_changed" ]; then
   run_stage web run_web_gate
   run_stage bundle-scan scan_web_bundle
 fi

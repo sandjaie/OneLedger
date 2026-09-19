@@ -20,9 +20,35 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 shopt -s nullglob
-tests=(db/tests/*.sql)
-upgrade_tests=(db/tests/*_upgrade.sh)
-[ ${#tests[@]} -gt 0 ] || { echo "no db tests yet — skipping"; exit 0; }
+tests=()
+upgrade_tests=()
+test_count=0
+upgrade_test_count=0
+if [ "$#" -gt 0 ]; then
+  for selected in "$@"; do
+    case "$selected" in
+      db/tests/*.sql) tests+=("$selected"); test_count=$((test_count + 1)) ;;
+      db/tests/*_upgrade.sh)
+        upgrade_tests+=("$selected")
+        upgrade_test_count=$((upgrade_test_count + 1))
+        ;;
+      *) echo "invalid database test path: $selected" >&2; exit 2 ;;
+    esac
+  done
+else
+  for selected in db/tests/*.sql; do
+    tests+=("$selected")
+    test_count=$((test_count + 1))
+  done
+  for selected in db/tests/*_upgrade.sh; do
+    upgrade_tests+=("$selected")
+    upgrade_test_count=$((upgrade_test_count + 1))
+  done
+fi
+[ $((test_count + upgrade_test_count)) -gt 0 ] || {
+  echo "no selected db tests — skipping"
+  exit 0
+}
 
 if [ -z "${ONELEDGER_TEST_DSN:-}" ]; then
   eval "$(scripts/test-db.sh env)" >/dev/null
@@ -52,12 +78,17 @@ done
 rm -f "/tmp/db-tests-$$.err"
 for f in db/seeds/*.sql; do psql "$db" -q -v ON_ERROR_STOP=1 -f "$f" >/dev/null; done
 
-for t in "${tests[@]}"; do
-  echo "  $t"
-  psql "$db" -v ON_ERROR_STOP=1 -f "$t" >/dev/null
-done
-for t in "${upgrade_tests[@]}"; do
-  echo "  $t"
-  bash "$t" "$server"
-done
-echo "OK: $migrations migration(s) applied from empty; ${#tests[@]} invariant test(s) passed"
+if [ "$test_count" -gt 0 ]; then
+  for t in "${tests[@]}"; do
+    echo "  $t"
+    psql "$db" -v ON_ERROR_STOP=1 -f "$t" >/dev/null
+  done
+fi
+if [ "$upgrade_test_count" -gt 0 ]; then
+  for t in "${upgrade_tests[@]}"; do
+    echo "  $t"
+    bash "$t" "$server"
+  done
+fi
+echo "OK: $migrations migration(s) applied from empty; " \
+  "$((test_count + upgrade_test_count)) selected invariant test(s) passed"

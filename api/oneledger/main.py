@@ -48,6 +48,7 @@ from .routes import (
     register,
     rules,
     salary,
+    search,
     spending,
     transactions,
     transfers,
@@ -218,6 +219,7 @@ app.include_router(plans.router)
 app.include_router(goals.router)
 app.include_router(emergency_reserve.router)
 app.include_router(register.router)
+app.include_router(search.router)
 app.include_router(monthly_review.router)
 app.include_router(commitment_resolutions.router)
 app.include_router(portfolio.router)

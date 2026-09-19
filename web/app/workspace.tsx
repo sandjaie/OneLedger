@@ -1,42 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import {
-  ArrowLeftRightIcon,
-  CalendarDaysIcon,
-  CandlestickChartIcon,
-  ChartPieIcon,
-  ClipboardListIcon,
-  FilesIcon,
-  LandmarkIcon,
-  LayoutDashboardIcon,
-  LineChartIcon,
-  MenuIcon,
-  Repeat2Icon,
-  SettingsIcon,
-  ShieldCheckIcon,
-  TagsIcon,
-  TrendingUpIcon,
-  UploadIcon,
-  WalletCardsIcon,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CoverageScreen } from "@/app/coverage/coverage-screen";
@@ -58,6 +26,7 @@ import { SubscriptionDetail } from "@/app/subscriptions/subscription-detail";
 import { SubscriptionsScreen } from "@/app/subscriptions/subscriptions-screen";
 import { TransactionsScreen } from "@/app/transactions/transactions-screen";
 import { WealthScreen } from "@/app/wealth/wealth-screen";
+import { AppShell } from "@/app/ui/app-shell";
 import { ApiError, apiFetch } from "@/lib/api/client";
 import type {
   AccountsResponse,
@@ -71,66 +40,6 @@ import type {
 } from "@/types/api";
 
 const PREFERENCE_KEY = "oneledger.reportingCurrency";
-
-const NAV_GROUPS = [
-  { label: "Your money", links: [
-    { label: "Overview", href: "/", sections: ["overview"], icon: LayoutDashboardIcon },
-    { label: "Accounts", href: "/accounts", sections: ["accounts"], icon: LandmarkIcon },
-    { label: "Transactions", href: "/transactions", sections: ["transactions"], icon: ArrowLeftRightIcon },
-    { label: "Spending", href: "/spending", sections: ["spending"], icon: ChartPieIcon },
-    { label: "Subscriptions", href: "/subscriptions", sections: ["subscriptions", "subscriptions-detail"], icon: CalendarDaysIcon },
-    { label: "Recurring", href: "/recurring", sections: ["recurring"], icon: Repeat2Icon },
-  ] },
-  { label: "Build & plan", links: [
-    { label: "Investments", href: "/investments", sections: ["investments", "investments-entry", "investments-holding"], icon: TrendingUpIcon },
-    { label: "Salary", href: "/salary", sections: ["salary"], icon: WalletCardsIcon },
-    { label: "Plans", href: "/plans", sections: ["plans"], icon: ClipboardListIcon },
-    { label: "Wealth", href: "/wealth", sections: ["wealth"], icon: LineChartIcon },
-  ] },
-  { label: "Review & import", links: [
-    { label: "Import", href: "/import", sections: ["import", "review"], icon: UploadIcon },
-    { label: "Import investments", href: "/investments/import", sections: ["investments-import"], icon: CandlestickChartIcon },
-    { label: "Classify", href: "/review", sections: ["classification-review"], icon: TagsIcon },
-    { label: "Documents", href: "/documents", sections: ["documents"], icon: FilesIcon },
-    { label: "Coverage", href: "/coverage", sections: ["coverage"], icon: ShieldCheckIcon },
-  ] },
-  { label: "Workspace", links: [
-    { label: "Settings", href: "/settings", sections: ["settings"], icon: SettingsIcon },
-  ] },
-];
-
-function WorkspaceNavGroups({ activeSection, onNavigate }: { activeSection: string; onNavigate?: () => void }) {
-  return NAV_GROUPS.map((group) => (
-    <SidebarGroup className="workspace-nav-group" key={group.label}>
-      <SidebarGroupLabel className="workspace-nav-label">{group.label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {group.links.map((link) => {
-            const active = link.sections.includes(activeSection);
-            const Icon = link.icon;
-            return (
-              <SidebarMenuItem key={link.href}>
-                <SidebarMenuButton
-                  isActive={active}
-                  render={(
-                    <Link
-                      aria-current={active ? "page" : undefined}
-                      href={link.href}
-                      onClick={onNavigate}
-                    />
-                  )}
-                >
-                  <Icon aria-hidden="true" />
-                  <span>{link.label}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </SidebarGroup>
-  ));
-}
 
 type Props = {
   section?: "overview" | "settings" | "accounts" | "transactions" | "spending" | "subscriptions" | "subscriptions-detail" | "recurring" | "documents" | "investments" | "investments-entry" | "investments-holding" | "investments-import" | "import" | "review" | "classification-review" | "salary" | "plans" | "coverage" | "wealth";
@@ -195,6 +104,7 @@ function sourceDocumentIdFromLocation() {
 }
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 
 // The Spending screen's own drill-through (`/transactions?categoryId=…&dateFrom=…&dateTo=…`),
 // the same query-string convention `sourceDocumentIdFromLocation` and the accounts screen's own
@@ -213,10 +123,18 @@ function dateFromLocation(param: string) {
   return value && DATE_PATTERN.test(value) ? value : undefined;
 }
 
+function transactionIdFromLocation() {
+  if (typeof window === "undefined") return undefined;
+  const value = new URLSearchParams(window.location.search).get("transactionId");
+  return value && UUID_PATTERN.test(value) ? value : undefined;
+}
+
 // The first page Workspace fetches must carry every deep-linked filter, or the ledger below the
 // filter form is not the set the form describes.
 function transactionsQueryFromLocation(categories: Array<CategoryRow> | undefined) {
   const parameters = new URLSearchParams({ limit: "50", offset: "0" });
+  const transactionId = transactionIdFromLocation();
+  if (transactionId) parameters.set("transactionId", transactionId);
   const sourceDocumentId = sourceDocumentIdFromLocation();
   if (sourceDocumentId) parameters.set("sourceDocumentId", sourceDocumentId);
   const categoryId = categoryIdFromLocation(categories);
@@ -250,7 +168,6 @@ export function Workspace({
   const [attempt, setAttempt] = useState(0);
   const [destination, setDestination] = useState<string>();
   const [signingOut, setSigningOut] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [logoutFailed, setLogoutFailed] = useState(false);
   const [fxEpoch, setFxEpoch] = useState(0);
 
@@ -451,51 +368,6 @@ export function Workspace({
 
   return (
     <SidebarProvider className="site-shell">
-      <header className="masthead app-toolbar">
-        <a className="workspace-skip-link" href="#workspace-content">Skip to content</a>
-        {state === "ready" && (
-          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-            <SheetTrigger render={<Button aria-label="Open workspace menu" className="workspace-menu-toggle" size="icon" type="button" variant="outline" />}>
-              <MenuIcon aria-hidden="true" />
-            </SheetTrigger>
-            <SheetContent className="workspace-mobile-sheet" side="left">
-              <SheetTitle>Workspace navigation</SheetTitle>
-              <nav aria-label="Mobile workspace" className="workspace-mobile-nav">
-                <WorkspaceNavGroups activeSection={activeSection} onNavigate={() => setMenuOpen(false)} />
-              </nav>
-            </SheetContent>
-          </Sheet>
-        )}
-        <div className="brand">
-          <span className="brand-mark" aria-hidden="true">OL</span>
-          <span>OneLedger</span>
-        </div>
-        {state === "ready" && household && currency && (
-          <div className="masthead-actions">
-            <div className="currency-toggle" role="group" aria-label="Reporting currency">
-              {household.currencies.map((option) => (
-                <Button
-                  aria-pressed={currency.code === option.code}
-                  key={option.code}
-                  onClick={() => selectCurrency(option)}
-                  type="button"
-                >{option.code}</Button>
-              ))}
-            </div>
-            <Avatar
-              aria-label={`${household.ownerDisplayName} account`}
-              className="owner-badge"
-              title={household.ownerDisplayName}
-            >
-              <AvatarFallback>{household.ownerDisplayName.trim().slice(0, 1).toUpperCase()}</AvatarFallback>
-            </Avatar>
-            <Button disabled={signingOut} onClick={logout} type="button" variant="outline">
-              {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
-            </Button>
-          </div>
-        )}
-      </header>
-
       {state === "loading" && <main className="state-panel"><Skeleton aria-hidden="true" className="state-skeleton" /><p>Checking owner access…</p></main>}
       {state === "leaving" && <main className="state-panel"><Skeleton aria-hidden="true" className="state-skeleton" /><p>Closing owner workspace…</p></main>}
       {state === "service" && (
@@ -511,16 +383,17 @@ export function Workspace({
         </main>
       )}
       {state === "ready" && household && currency && (
-        <main className="workspace-grid">
-          <Sidebar className="editorial-rail" collapsible="none">
-            <SidebarContent>
-              <nav className="workspace-nav" aria-label="Workspace" id="workspace-navigation">
-                <WorkspaceNavGroups activeSection={activeSection} />
-              </nav>
-            </SidebarContent>
-          </Sidebar>
-
-          <div className="workspace-content-anchor" id="workspace-content" tabIndex={-1} />
+        <AppShell
+          activeSection={activeSection}
+          currency={currency}
+          household={household}
+          logoutFailed={logoutFailed}
+          navigate={navigate}
+          onCurrencyChange={selectCurrency}
+          onLogout={() => void logout()}
+          request={wrappedRequest}
+          signingOut={signingOut}
+        >
 
           {activeSection === "overview" && currencies && (
             <OverviewScreen
@@ -571,6 +444,7 @@ export function Workspace({
               currency={currency}
               household={household}
               initialSourceDocumentId={sourceDocumentIdFromLocation()}
+              initialTransactionId={transactionIdFromLocation()}
               initialCategoryId={categoryIdFromLocation(categories)}
               initialDateFrom={dateFromLocation("dateFrom")}
               initialDateTo={dateFromLocation("dateTo")}
@@ -702,7 +576,7 @@ export function Workspace({
               signingOut={signingOut}
             />
           )}
-        </main>
+        </AppShell>
       )}
 
       <footer className="footer"><p>Private owner workspace</p></footer>

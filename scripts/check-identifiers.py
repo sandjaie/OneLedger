@@ -211,6 +211,9 @@ BASE_TABLE_READERS = {
     "api/oneledger/routes/description_reparse.py",
     # Classification review groups unanswered ledger rows and never reports spending or income.
     "api/oneledger/routes/classification_review.py",
+    # Workspace search finds individual visible ledger rows; it does not compute a financial
+    # report, and transfer or excluded rows must remain findable just as they are in the ledger.
+    "api/oneledger/routes/search.py",
     # Transfer matching looks for unlinked legs, which the reportable view drops by design.
     "api/oneledger/routes/transfers.py",
     # Funding decisions inspect and relabel exact cash leaves; they are not flow reports.

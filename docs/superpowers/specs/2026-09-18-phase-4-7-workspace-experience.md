@@ -1,5 +1,10 @@
 # Phase 4.7 — owner workspace experience
 
+> **Superseded on 20 September 2026 after Task 4.7.14.** Task 4.7.15 must not
+> resume, and Tasks 4.7.16–4.7.21 must not start. Phase 4.8 owns the replacement UI direction.
+> Delivered Phase 4.7 work remains historical implementation evidence; Phase 4.7 did not receive
+> owner visual/UX acceptance.
+
 Revision: 19 September 2026 — owner-selected editorial workspace refinement.
 
 ## Authority and outcome

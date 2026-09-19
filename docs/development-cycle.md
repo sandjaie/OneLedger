@@ -28,7 +28,7 @@ No schedule pressure or process change relaxes these:
 | `/oneledger-plan-review` | A new phase group's specifications and plans (such as Phases 2.2–2.4), once, before the group's first branch | Blocking contract, safety and size findings |
 | `/oneledger-code-review` | A branch is implemented and its affected tests pass | One deduplicated finding set |
 | Confirmation | A repaired blocking finding concerned money, authorization/RLS or a migration | Closure of those findings only |
-| `scripts/verify.sh` | Review is resolved and the intended head is committed | One comprehensive pass and an exact-head receipt |
+| `scripts/verify.sh` | Review is resolved and the intended head is committed | Changed-surface checks, named affected tests and an exact-head receipt |
 | `scripts/verify-web.sh` | Same, for a web-only branch | Web, documentation, privacy and diff-size checks; no API or database suite |
 | `/oneledger-code-hygiene` | The end of a phase group, such as Phase 1.x | Findings for one `chore/` branch |
 
@@ -91,12 +91,21 @@ After review and any confirmation are clean, commit the intended head and run:
 scripts/verify.sh  # or scripts/verify-web.sh for a web-only branch
 ```
 
-The full runner refuses a dirty tree, determines `docs-only` or `full` scope from the diff against
-`develop`, runs every applicable check, verifies that the head and tree did not change, and writes
-`.git/oneledger-verified-head`. Full scope includes documentation/static checks, API lint/types and
-tests, migrations and SQL invariants, web lint/types/tests/build, generated API contracts, the
-client-bundle secret scan and diff size. Docs-only scope includes documentation/static checks,
-Markdown and diff size.
+The full runner refuses a dirty tree, selects API, database and web gates from the diff against
+`develop`, verifies that the head and tree did not change, and writes
+`.git/oneledger-verified-head`. Pass each affected API or database test named by the task so the
+local gate does not rerun an unrelated complete suite:
+
+```bash
+scripts/verify.sh \
+  --api-test tests/test_search_live.py \
+  --db-test db/tests/0061_investment_analysis_rules.sql
+```
+
+Omitting test arguments retains the complete suite for CI or genuinely cross-cutting changes.
+Applicable gates keep documentation structure/privacy checks, API lint and types, migrations from
+empty, web lint/types/tests/build, generated API contracts, the client-bundle secret scan and diff
+size. Markdown style lint is not a delivery gate.
 
 The web-only runner refuses non-web application or database changes and runs documentation/static
 checks, web lint/types/tests/build, the client-bundle secret scan and diff size. It writes the

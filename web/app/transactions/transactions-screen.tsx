@@ -34,6 +34,9 @@ type Props = {
   // Carried from `/transactions?sourceDocumentId=…` — the Documents screen's own link — so the
   // filter that already produced the first page is what the form shows too.
   initialSourceDocumentId?: string;
+  // Carried from a workspace-search result. It remains part of reloads until the owner clears
+  // filters, so an action on the selected row cannot silently replace it with the whole ledger.
+  initialTransactionId?: string;
   // Carried from the Spending screen's own drill-through link
   // (`/transactions?categoryId=…&dateFrom=…&dateTo=…`); Workspace has already checked the
   // category id against the loaded taxonomy and the dates against a plain date pattern, so
@@ -75,6 +78,7 @@ function isSpendingCharge(row: TransactionRow): boolean {
 }
 
 type Filters = {
+  transactionId: string;
   accountId: string;
   categoryId: string;
   txnType: string;
@@ -95,6 +99,7 @@ type Filters = {
 };
 
 const NO_FILTERS: Filters = {
+  transactionId: "",
   accountId: "",
   categoryId: "",
   txnType: "",
@@ -116,6 +121,7 @@ const NO_FILTERS: Filters = {
 
 function query(filters: Filters, offset: number) {
   const parameters = new URLSearchParams();
+  if (filters.transactionId) parameters.set("transactionId", filters.transactionId);
   if (filters.accountId) parameters.set("accountId", filters.accountId);
   if (filters.categoryId) parameters.set("categoryId", filters.categoryId);
   if (filters.txnType) parameters.set("txnType", filters.txnType);
@@ -150,20 +156,19 @@ export function TransactionsScreen({
   request,
   onChanged,
   initialSourceDocumentId,
+  initialTransactionId,
   initialCategoryId,
   initialDateFrom,
   initialDateTo,
 }: Props) {
-  const initialFilters: Filters = initialSourceDocumentId
-    ? { ...NO_FILTERS, sourceDocumentId: initialSourceDocumentId }
-    : initialCategoryId || initialDateFrom || initialDateTo
-      ? {
-          ...NO_FILTERS,
-          categoryId: initialCategoryId ?? "",
-          dateFrom: initialDateFrom ?? "",
-          dateTo: initialDateTo ?? "",
-        }
-      : NO_FILTERS;
+  const initialFilters: Filters = {
+    ...NO_FILTERS,
+    transactionId: initialTransactionId ?? "",
+    sourceDocumentId: initialSourceDocumentId ?? "",
+    categoryId: initialCategoryId ?? "",
+    dateFrom: initialDateFrom ?? "",
+    dateTo: initialDateTo ?? "",
+  };
   const [rows, setRows] = useState(transactions);
   const [count, setCount] = useState(total);
   const [filters, setFilters] = useState<Filters>(initialFilters);

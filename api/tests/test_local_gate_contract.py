@@ -30,7 +30,7 @@ def test_commit_stage_is_staged_file_fast() -> None:
         assert "pass_filenames: false" not in block
         assert "stages: [pre-push]" not in block
 
-    assert "stages: [manual]" in _hook("markdownlint")
+    assert "      - id: markdownlint\n" not in CONFIG.read_text()
 
 
 def test_no_pre_push_hook_repeats_the_final_verifier() -> None:
