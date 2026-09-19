@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OneLedger Compact Financial Console</title>
+  <style>html, body { margin: 0; min-height: 100%; background: #eef1f5; }</style>
+</head>
+<body>
+<div id="oneledger-console-preview" class="ol-preview">
+  <style>
+    #oneledger-console-preview {
+      --ol-blue: #1261c9;
+      --ol-blue-strong: #084fae;
+      --ol-blue-soft: #eef5ff;
+      --ol-ink: #161b26;
+      --ol-muted: #697386;
+      --ol-faint: #98a2b3;
+      --ol-line: #e5e9f0;
+      --ol-line-strong: #d4dbe5;
+      --ol-soft: #f6f8fb;
+      --ol-white: #ffffff;
+      --ol-green: #13835f;
+      --ol-green-soft: #edf8f3;
+      --ol-amber: #b66b0a;
+      --ol-amber-soft: #fff7e8;
+      --ol-red: #c43d4d;
+      --ol-red-soft: #fff0f2;
+      --ol-violet: #7656c9;
+      color: var(--ol-ink);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      line-height: 1.42;
+      background: #eef1f5;
+      padding: 18px;
+      min-width: 0;
+    }
+
+    #oneledger-console-preview * { box-sizing: border-box; }
+    #oneledger-console-preview button,
+    #oneledger-console-preview input,
+    #oneledger-console-preview select { font: inherit; }
+
+    #oneledger-console-preview .ol-window {
+      min-height: 760px;
+      background: var(--ol-white);
+      border: 1px solid var(--ol-line-strong);
+      border-radius: 14px;
+      box-shadow: 0 24px 70px rgba(20, 32, 50, 0.12);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 218px minmax(0, 1fr);
+    }
+
+    #oneledger-console-preview .ol-sidebar {
+      border-right: 1px solid var(--ol-line);
+      padding: 24px 14px 16px;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #fcfdff;
+    }
+
+    #oneledger-console-preview .ol-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px 22px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    #oneledger-console-preview .ol-brand-mark {
+      width: 29px;
+      height: 29px;
+      border-radius: 9px 9px 9px 2px;
+      background: linear-gradient(145deg, #2680eb, #0751bb);
+      display: grid;
+      place-items: center;
+      color: white;
+    }
+
+    #oneledger-console-preview .ol-brand-mark svg { width: 16px; height: 16px; }
+
+    #oneledger-console-preview .ol-nav-label {
+      color: var(--ol-faint);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin: 17px 10px 7px;
+    }
+
+    #oneledger-console-preview .ol-nav {
+      display: grid;
+      gap: 3px;
+    }
+
+    #oneledger-console-preview .ol-nav-button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: #4d596b;
+      width: 100%;
+      min-height: 38px;
+      border-radius: 7px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+      font-weight: 500;
+    }
+
+    #oneledger-console-preview .ol-nav-button:hover { background: var(--ol-soft); color: var(--ol-ink); }
+    #oneledger-console-preview .ol-nav-button[aria-selected="true"] {
+      background: var(--ol-blue-soft);
+      color: var(--ol-blue-strong);
+    }
+    #oneledger-console-preview .ol-nav-button svg { width: 17px; height: 17px; flex: 0 0 auto; }
+    #oneledger-console-preview .ol-nav-spacer { flex: 1; min-height: 18px; }
+    #oneledger-console-preview .ol-preview-note {
+      margin: 14px 9px 0;
+      padding-top: 14px;
+      border-top: 1px solid var(--ol-line);
+      color: var(--ol-muted);
+      font-size: 11px;
+    }
+
+    #oneledger-console-preview .ol-main { min-width: 0; background: var(--ol-white); }
+
+    #oneledger-console-preview .ol-topbar {
+      min-height: 70px;
+      border-bottom: 1px solid var(--ol-line);
+      padding: 14px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    #oneledger-console-preview .ol-search {
+      width: min(350px, 44%);
+      position: relative;
+    }
+
+    #oneledger-console-preview .ol-search svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      width: 17px;
+      height: 17px;
+      transform: translateY(-50%);
+      color: var(--ol-muted);
+    }
+
+    #oneledger-console-preview .ol-search input {
+      width: 100%;
+      height: 39px;
+      border: 1px solid var(--ol-line-strong);
+      border-radius: 7px;
+      background: var(--ol-white);
+      padding: 0 12px 0 38px;
+      color: var(--ol-ink);
+    }
+
+    #oneledger-console-preview .ol-utilities { display: flex; align-items: center; gap: 6px; }
+    #oneledger-console-preview .ol-env {
+      color: var(--ol-muted);
+      padding-right: 9px;
+      margin-right: 2px;
+      border-right: 1px solid var(--ol-line);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    #oneledger-console-preview .ol-icon-button,
+    #oneledger-console-preview .ol-avatar {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      color: #526074;
+    }
+    #oneledger-console-preview .ol-icon-button:hover { background: var(--ol-soft); color: var(--ol-ink); }
+    #oneledger-console-preview .ol-icon-button svg { width: 18px; height: 18px; }
+    #oneledger-console-preview .ol-avatar {
+      background: var(--ol-blue);
+      color: white;
+      border-radius: 50%;
+      font-weight: 650;
+      font-size: 12px;
+    }
+
+    #oneledger-console-preview .ol-page {
+      padding: 28px 30px 36px;
+      display: none;
+      min-width: 0;
+    }
+    #oneledger-console-preview .ol-page.is-active { display: block; }
+
+    #oneledger-console-preview .ol-page-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 19px;
+    }
+    #oneledger-console-preview .ol-title-wrap h1 {
+      margin: 0;
+      font-size: 29px;
+      line-height: 1.14;
+      letter-spacing: -0.035em;
+      font-weight: 650;
+    }
+    #oneledger-console-preview .ol-title-wrap p {
+      margin: 6px 0 0;
+      color: var(--ol-muted);
+      font-size: 13px;
+    }
+    #oneledger-console-preview .ol-actions,
+    #oneledger-console-preview .ol-filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #oneledger-console-preview .ol-button,
+    #oneledger-console-preview .ol-select,
+    #oneledger-console-preview .ol-filter-input {
+      height: 36px;
+      border: 1px solid var(--ol-line-strong);
+      border-radius: 7px;
+      background: var(--ol-white);
+      color: var(--ol-ink);
+      padding: 0 12px;
+      font-weight: 550;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+    #oneledger-console-preview .ol-button { appearance: none; }
+    #oneledger-console-preview .ol-button:hover { border-color: #aeb8c6; background: var(--ol-soft); }
+    #oneledger-console-preview .ol-button-primary {
+      background: var(--ol-blue);
+      color: white;
+      border-color: var(--ol-blue);
+    }
+    #oneledger-console-preview .ol-button-primary:hover { background: var(--ol-blue-strong); border-color: var(--ol-blue-strong); }
+    #oneledger-console-preview .ol-button svg { width: 15px; height: 15px; }
+
+    #oneledger-console-preview .ol-filter-row {
+      border-bottom: 1px solid var(--ol-line);
+      padding-bottom: 17px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    #oneledger-console-preview .ol-filter-input { min-width: 210px; justify-content: flex-start; color: var(--ol-muted); font-weight: 450; }
+
+    #oneledger-console-preview .ol-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      border-top: 1px solid var(--ol-line);
+      border-bottom: 1px solid var(--ol-line);
+      margin-bottom: 24px;
+    }
+    #oneledger-console-preview .ol-metric {
+      padding: 17px 18px 17px 0;
+      min-width: 0;
+    }
+    #oneledger-console-preview .ol-metric + .ol-metric { border-left: 1px solid var(--ol-line); padding-left: 22px; }
+    #oneledger-console-preview .ol-kicker {
+      color: var(--ol-muted);
+      font-size: 12px;
+      font-weight: 550;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #oneledger-console-preview .ol-metric-value {
+      font-size: 24px;
+      line-height: 1.18;
+      letter-spacing: -0.025em;
+      font-weight: 630;
+      font-variant-numeric: tabular-nums;
+    }
+    #oneledger-console-preview .ol-metric-context { color: var(--ol-muted); font-size: 12px; margin-top: 6px; }
+    #oneledger-console-preview .ol-positive { color: var(--ol-green); }
+    #oneledger-console-preview .ol-negative { color: var(--ol-red); }
+
+    #oneledger-console-preview .ol-dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+    }
+    #oneledger-console-preview .ol-module {
+      padding: 0 24px 26px 0;
+      min-width: 0;
+    }
+    #oneledger-console-preview .ol-module:nth-child(3n + 2),
+    #oneledger-console-preview .ol-module:nth-child(3n + 3) {
+      border-left: 1px solid var(--ol-line);
+      padding-left: 24px;
+    }
+    #oneledger-console-preview .ol-module:nth-child(n + 4) {
+      border-top: 1px solid var(--ol-line);
+      padding-top: 24px;
+    }
+    #oneledger-console-preview .ol-module-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 13px;
+    }
+    #oneledger-console-preview .ol-module-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+    #oneledger-console-preview .ol-module-meta { color: var(--ol-muted); font-size: 11px; white-space: nowrap; }
+    #oneledger-console-preview .ol-module-value { font-size: 20px; font-weight: 630; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+    #oneledger-console-preview .ol-module-sub { color: var(--ol-muted); font-size: 12px; }
+
+    #oneledger-console-preview .ol-chart {
+      width: 100%;
+      height: 130px;
+      margin-top: 10px;
+      overflow: visible;
+    }
+    #oneledger-console-preview .ol-chart .ol-gridline { stroke: var(--ol-line); stroke-width: 1; }
+    #oneledger-console-preview .ol-chart .ol-axis { stroke: #bdc6d2; stroke-width: 1; }
+    #oneledger-console-preview .ol-chart .ol-line { fill: none; stroke: var(--ol-blue); stroke-width: 2.2; }
+    #oneledger-console-preview .ol-chart .ol-line-green { fill: none; stroke: var(--ol-green); stroke-width: 2.2; }
+    #oneledger-console-preview .ol-chart .ol-area { fill: #eaf3ff; }
+    #oneledger-console-preview .ol-chart text { fill: var(--ol-muted); font-size: 9px; font-family: inherit; }
+
+    #oneledger-console-preview .ol-stack { height: 11px; display: flex; border-radius: 3px; overflow: hidden; background: var(--ol-soft); margin: 13px 0 10px; }
+    #oneledger-console-preview .ol-stack span:nth-child(1) { background: var(--ol-blue); width: 47%; }
+    #oneledger-console-preview .ol-stack span:nth-child(2) { background: #4ba4ca; width: 24%; }
+    #oneledger-console-preview .ol-stack span:nth-child(3) { background: var(--ol-violet); width: 18%; }
+    #oneledger-console-preview .ol-stack span:nth-child(4) { background: #c2cad6; width: 11%; }
+
+    #oneledger-console-preview .ol-list { display: grid; }
+    #oneledger-console-preview .ol-list-row {
+      min-height: 45px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--ol-line);
+      padding: 8px 0;
+    }
+    #oneledger-console-preview .ol-list-title { font-weight: 550; font-size: 13px; }
+    #oneledger-console-preview .ol-list-sub { color: var(--ol-muted); font-size: 11px; margin-top: 2px; }
+    #oneledger-console-preview .ol-list-value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #oneledger-console-preview .ol-inline-link { color: var(--ol-blue); font-weight: 600; text-decoration: none; font-size: 12px; }
+    #oneledger-console-preview .ol-module-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
+
+    #oneledger-console-preview .ol-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #oneledger-console-preview .ol-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    #oneledger-console-preview .ol-status-ok { color: var(--ol-green); background: var(--ol-green-soft); }
+    #oneledger-console-preview .ol-status-warn { color: var(--ol-amber); background: var(--ol-amber-soft); }
+    #oneledger-console-preview .ol-status-danger { color: var(--ol-red); background: var(--ol-red-soft); }
+    #oneledger-console-preview .ol-status-neutral { color: var(--ol-muted); background: var(--ol-soft); }
+
+    #oneledger-console-preview .ol-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 24px 0 10px;
+    }
+    #oneledger-console-preview .ol-section-head h2 { margin: 0; font-size: 16px; font-weight: 650; }
+    #oneledger-console-preview .ol-section-meta { color: var(--ol-muted); font-size: 12px; }
+
+    #oneledger-console-preview .ol-table-wrap { width: 100%; overflow-x: auto; }
+    #oneledger-console-preview .ol-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    #oneledger-console-preview .ol-table th {
+      text-align: left;
+      color: var(--ol-muted);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 10px 12px;
+      border-top: 1px solid var(--ol-line);
+      border-bottom: 1px solid var(--ol-line);
+      background: #fbfcfe;
+      white-space: nowrap;
+    }
+    #oneledger-console-preview .ol-table td {
+      padding: 12px;
+      border-bottom: 1px solid var(--ol-line);
+      vertical-align: middle;
+      font-size: 12px;
+    }
+    #oneledger-console-preview .ol-table .ol-role-group td {
+      padding: 14px 4px 7px;
+      color: var(--ol-muted);
+      background: var(--ol-white);
+      border-bottom-color: var(--ol-line-strong);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    #oneledger-console-preview .ol-table th:first-child,
+    #oneledger-console-preview .ol-table td:first-child { padding-left: 4px; }
+    #oneledger-console-preview .ol-table th:last-child,
+    #oneledger-console-preview .ol-table td:last-child { padding-right: 4px; }
+    #oneledger-console-preview .ol-table .ol-number { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+    #oneledger-console-preview .ol-entity { display: flex; align-items: center; gap: 10px; min-width: 180px; }
+    #oneledger-console-preview .ol-entity-icon {
+      width: 31px;
+      height: 31px;
+      border-radius: 7px;
+      background: var(--ol-blue-soft);
+      color: var(--ol-blue);
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+    }
+    #oneledger-console-preview .ol-entity-icon svg { width: 15px; height: 15px; }
+    #oneledger-console-preview .ol-entity-title { font-weight: 600; }
+    #oneledger-console-preview .ol-entity-sub { color: var(--ol-muted); font-size: 11px; margin-top: 2px; }
+    #oneledger-console-preview .ol-mini-actions { color: var(--ol-muted); display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+
+    #oneledger-console-preview .ol-attention {
+      background: #fbfcfe;
+      border: 1px solid var(--ol-line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    #oneledger-console-preview .ol-attention-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    #oneledger-console-preview .ol-attention-icon { color: var(--ol-amber); }
+    #oneledger-console-preview .ol-attention-title { font-weight: 620; }
+    #oneledger-console-preview .ol-attention-sub { color: var(--ol-muted); font-size: 12px; margin-top: 1px; }
+
+    #oneledger-console-preview .ol-plan-grid {
+      display: grid;
+      grid-template-columns: 1.05fr 1.95fr;
+      gap: 28px;
+      align-items: start;
+    }
+    #oneledger-console-preview .ol-plan-aside { border-right: 1px solid var(--ol-line); padding-right: 28px; }
+    #oneledger-console-preview .ol-progress-row { padding: 13px 0; border-bottom: 1px solid var(--ol-line); }
+    #oneledger-console-preview .ol-progress-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; font-size: 12px; }
+    #oneledger-console-preview .ol-progress-track { height: 6px; background: #edf0f5; border-radius: 3px; overflow: hidden; }
+    #oneledger-console-preview .ol-progress-fill { display: block; height: 100%; background: var(--ol-blue); border-radius: inherit; }
+    #oneledger-console-preview .ol-callout-number { font-size: 31px; font-weight: 650; letter-spacing: -0.035em; margin-top: 4px; }
+    #oneledger-console-preview .ol-callout-line { color: var(--ol-muted); font-size: 12px; margin: 5px 0 15px; }
+
+    #oneledger-console-preview .ol-mobile-nav { display: none; }
+
+    @media (max-width: 900px) {
+      #oneledger-console-preview { padding: 10px; }
+      #oneledger-console-preview .ol-window { grid-template-columns: 178px minmax(0, 1fr); }
+      #oneledger-console-preview .ol-topbar { padding: 12px 20px; }
+      #oneledger-console-preview .ol-page { padding: 23px 20px 30px; }
+      #oneledger-console-preview .ol-dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      #oneledger-console-preview .ol-module:nth-child(3n + 2),
+      #oneledger-console-preview .ol-module:nth-child(3n + 3) { border-left: 0; padding-left: 0; }
+      #oneledger-console-preview .ol-module:nth-child(even) { border-left: 1px solid var(--ol-line); padding-left: 22px; }
+      #oneledger-console-preview .ol-module:nth-child(n + 3) { border-top: 1px solid var(--ol-line); padding-top: 22px; }
+      #oneledger-console-preview .ol-plan-grid { grid-template-columns: 1fr; }
+      #oneledger-console-preview .ol-plan-aside { border-right: 0; border-bottom: 1px solid var(--ol-line); padding: 0 0 24px; }
+    }
+
+    @media (max-width: 650px) {
+      #oneledger-console-preview { padding: 0; }
+      #oneledger-console-preview .ol-window { display: block; border-radius: 0; min-height: 0; }
+      #oneledger-console-preview .ol-sidebar { display: none; }
+      #oneledger-console-preview .ol-topbar { padding: 11px 14px; }
+      #oneledger-console-preview .ol-search { width: min(250px, 68%); }
+      #oneledger-console-preview .ol-env, #oneledger-console-preview .ol-icon-optional { display: none; }
+      #oneledger-console-preview .ol-page { padding: 20px 14px 26px; }
+      #oneledger-console-preview .ol-page-head { align-items: flex-start; flex-direction: column; }
+      #oneledger-console-preview .ol-title-wrap h1 { font-size: 25px; }
+      #oneledger-console-preview .ol-mobile-nav {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border-bottom: 1px solid var(--ol-line);
+        background: white;
+      }
+      #oneledger-console-preview .ol-mobile-nav .ol-nav-button { justify-content: center; border-radius: 0; padding: 0 5px; font-size: 11px; }
+      #oneledger-console-preview .ol-mobile-nav .ol-nav-button svg { display: none; }
+      #oneledger-console-preview .ol-metric-grid { grid-template-columns: 1fr; }
+      #oneledger-console-preview .ol-metric + .ol-metric { border-left: 0; border-top: 1px solid var(--ol-line); padding-left: 0; }
+      #oneledger-console-preview .ol-dashboard-grid { grid-template-columns: 1fr; }
+      #oneledger-console-preview .ol-module,
+      #oneledger-console-preview .ol-module:nth-child(even),
+      #oneledger-console-preview .ol-module:nth-child(n + 3) {
+        border-left: 0;
+        border-top: 1px solid var(--ol-line);
+        padding: 20px 0;
+      }
+      #oneledger-console-preview .ol-module:first-child { border-top: 0; padding-top: 0; }
+      #oneledger-console-preview .ol-filter-row { align-items: stretch; }
+      #oneledger-console-preview .ol-filters, #oneledger-console-preview .ol-filter-input { width: 100%; }
+      #oneledger-console-preview .ol-select { flex: 1; min-width: 0; }
+      #oneledger-console-preview .ol-attention { align-items: flex-start; }
+    }
+  </style>
+
+  <section class="ol-window" aria-label="OneLedger compact financial console concept">
+    <aside class="ol-sidebar" aria-label="Primary navigation">
+      <div class="ol-brand">
+        <span class="ol-brand-mark"><svg aria-hidden="true" data-icon="landmark" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7"></path><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path></svg></span>
+        <span>OneLedger</span>
+      </div>
+
+      <div class="ol-nav-label">Money</div>
+      <nav class="ol-nav" aria-label="Money pages">
+        <button class="ol-nav-button" type="button" data-page="overview" aria-selected="true"><svg aria-hidden="true" data-icon="layout-dashboard" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg><span>Overview</span></button>
+        <button class="ol-nav-button" type="button" data-page="accounts" aria-selected="false"><svg aria-hidden="true" data-icon="wallet-cards" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h3.75a2 2 0 0 1 1.6.8l.45.6a4 4 0 0 0 6.4 0l.45-.6a2 2 0 0 1 1.6-.8H21"></path><path d="M3 7h18"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg><span>Accounts</span></button>
+        <button class="ol-nav-button" type="button" data-page="transactions" aria-selected="false"><svg aria-hidden="true" data-icon="arrow-left-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg><span>Transactions</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="chart-pie" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z"></path><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path></svg><span>Spending</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="calendar-days" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v3"></path><path d="M16 2v3"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M8 13h.01"></path><path d="M12 13h.01"></path><path d="M16 13h.01"></path><path d="M8 17h.01"></path><path d="M12 17h.01"></path><path d="M16 17h.01"></path></svg><span>Subscriptions</span></button>
+      </nav>
+
+      <div class="ol-nav-label">Build &amp; plan</div>
+      <nav class="ol-nav" aria-label="Planning pages">
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="chart-no-axes-combined" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16v5"></path><path d="M16 14.639V21"></path><path d="M20 10.656V21"></path><path d="m22 3-8.646 8.646a.5.5 0 0 1-.708 0L9.354 8.354a.5.5 0 0 0-.707 0L2 15"></path><path d="M4 18.463V21"></path><path d="M8 14.656V21"></path></svg><span>Investments</span></button>
+        <button class="ol-nav-button" type="button" data-page="plans" aria-selected="false"><svg aria-hidden="true" data-icon="target" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg><span>Plans</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="shield-check" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path></svg><span>Coverage</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="sprout" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3"></path><path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4"></path><path d="M5 21h14"></path></svg><span>Wealth</span></button>
+      </nav>
+
+      <div class="ol-nav-label">Review</div>
+      <nav class="ol-nav" aria-label="Review pages">
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="file-input" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1"></path><path d="M14 2v5a1 1 0 0 0 1 1h5"></path><path d="M2 15h10"></path><path d="m9 18 3-3-3-3"></path></svg><span>Import</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="tags" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.172 2a2 2 0 0 1 1.414.586l6.71 6.71a2.4 2.4 0 0 1 0 3.408l-4.592 4.592a2.4 2.4 0 0 1-3.408 0l-6.71-6.71A2 2 0 0 1 6 9.172V3a1 1 0 0 1 1-1z"></path><path d="M2 7v6.172a2 2 0 0 0 .586 1.414l6.71 6.71a2.4 2.4 0 0 0 3.191.193"></path><circle cx="10.5" cy="6.5" r=".5" fill="currentColor"></circle></svg><span>Classify</span></button>
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="files" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg><span>Documents</span></button>
+      </nav>
+
+      <div class="ol-nav-spacer"></div>
+      <nav class="ol-nav" aria-label="Workspace pages">
+        <button class="ol-nav-button" type="button" aria-selected="false"><svg aria-hidden="true" data-icon="settings" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Settings</span></button>
+      </nav>
+      <div class="ol-preview-note">Design preview · synthetic data</div>
+    </aside>
+
+    <main class="ol-main">
+      <header class="ol-topbar">
+        <label class="ol-search">
+          <span class="sr-only">Search OneLedger</span>
+          <svg aria-hidden="true" data-icon="search" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg>
+          <input type="search" placeholder="Search accounts, transactions…" />
+        </label>
+        <div class="ol-utilities">
+          <span class="ol-env">Personal workspace</span>
+          <button class="ol-icon-button ol-icon-optional" type="button" aria-label="Open shortcuts"><svg aria-hidden="true" data-icon="grid-2x2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M3 12h18"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg></button>
+          <button class="ol-icon-button ol-icon-optional" type="button" aria-label="Open help"><svg aria-hidden="true" data-icon="circle-help" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg></button>
+          <button class="ol-icon-button" type="button" aria-label="Open notifications"><svg aria-hidden="true" data-icon="bell" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg></button>
+          <button class="ol-avatar" type="button" aria-label="Open profile">OL</button>
+        </div>
+      </header>
+
+      <nav class="ol-mobile-nav" aria-label="Preview pages">
+        <button class="ol-nav-button" type="button" data-page="overview" aria-selected="true">Overview</button>
+        <button class="ol-nav-button" type="button" data-page="accounts" aria-selected="false">Accounts</button>
+        <button class="ol-nav-button" type="button" data-page="transactions" aria-selected="false">Transactions</button>
+        <button class="ol-nav-button" type="button" data-page="plans" aria-selected="false">Plans</button>
+      </nav>
+
+      <section class="ol-page is-active" id="ol-page-overview" data-page-panel="overview" aria-labelledby="ol-overview-title">
+        <div class="ol-page-head">
+          <div class="ol-title-wrap">
+            <h1 id="ol-overview-title">Your overview</h1>
+            <p>A concise view of position, movement, and what needs attention.</p>
+          </div>
+          <div class="ol-actions">
+            <button class="ol-button" type="button"><svg aria-hidden="true" data-icon="calendar-range" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M16 2v3"></path><path d="M3 9h18"></path><path d="M8 2v3"></path><path d="M17 13h-6"></path><path d="M13 17H7"></path><path d="M7 13h.01"></path><path d="M17 17h.01"></path></svg>Last 12 months</button>
+            <button class="ol-button ol-button-primary" type="button"><svg aria-hidden="true" data-icon="plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add</button>
+          </div>
+        </div>
+
+        <div class="ol-metric-grid" aria-label="Position summary">
+          <div class="ol-metric">
+            <div class="ol-kicker">Net position <svg aria-hidden="true" data-icon="info" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg></div>
+            <div class="ol-metric-value">¤ 184,250.00</div>
+            <div class="ol-metric-context"><span class="ol-positive">↑ 8.6%</span> over 12 months</div>
+          </div>
+          <div class="ol-metric">
+            <div class="ol-kicker">Liquid balance</div>
+            <div class="ol-metric-value">¤ 66,330.00</div>
+            <div class="ol-metric-context">Across 3 available accounts</div>
+          </div>
+          <div class="ol-metric">
+            <div class="ol-kicker">Known next 30 days</div>
+            <div class="ol-metric-value">¤ 1,240.00</div>
+            <div class="ol-metric-context">4 upcoming commitments</div>
+          </div>
+        </div>
+
+        <div class="ol-dashboard-grid">
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Position mix</h2><span class="ol-module-meta">Today</span></div>
+            <div class="ol-module-value">¤ 184,250.00</div>
+            <div class="ol-module-sub">6 connected financial surfaces</div>
+            <div class="ol-stack" aria-label="Cash 47 percent, investments 24 percent, property 18 percent, other 11 percent"><span></span><span></span><span></span><span></span></div>
+            <div class="ol-list">
+              <div class="ol-list-row"><div><div class="ol-list-title">Cash &amp; equivalents</div><div class="ol-list-sub">47% of total</div></div><div class="ol-list-value">¤ 86,580</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Investments</div><div class="ol-list-sub">24% of total</div></div><div class="ol-list-value">¤ 44,220</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Property &amp; other</div><div class="ol-list-sub">29% of total</div></div><div class="ol-list-value">¤ 53,450</div></div>
+            </div>
+            <div class="ol-module-foot"><a href="#" class="ol-inline-link">View accounts</a><span class="ol-module-meta">Reconciled today</span></div>
+          </article>
+
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Net position trend</h2><span class="ol-module-meta">12 months</span></div>
+            <div class="ol-module-value">+ ¤ 14,620.00</div>
+            <div class="ol-module-sub">Change across the selected period</div>
+            <svg class="ol-chart" viewBox="0 0 300 130" role="img" aria-label="Net position rises gradually over twelve months">
+              <line class="ol-gridline" x1="24" y1="28" x2="294" y2="28"></line><line class="ol-gridline" x1="24" y1="67" x2="294" y2="67"></line><line class="ol-axis" x1="24" y1="107" x2="294" y2="107"></line>
+              <path class="ol-area" d="M24 92 L48 88 L72 82 L96 83 L120 70 L144 62 L168 59 L192 47 L216 45 L240 34 L266 35 L294 25 L294 107 L24 107 Z"></path>
+              <path class="ol-line" d="M24 92 L48 88 L72 82 L96 83 L120 70 L144 62 L168 59 L192 47 L216 45 L240 34 L266 35 L294 25"></path>
+              <text x="24" y="123">Oct</text><text x="141" y="123">Apr</text><text x="276" y="123">Sep</text>
+            </svg>
+            <div class="ol-module-foot"><a href="#" class="ol-inline-link">Explore history</a><span class="ol-module-meta">Updated today</span></div>
+          </article>
+
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Cash flow</h2><span class="ol-module-meta">This month</span></div>
+            <div class="ol-module-value">¤ 12,280.00</div>
+            <div class="ol-module-sub">Expected to remain after commitments</div>
+            <svg class="ol-chart" viewBox="0 0 300 130" role="img" aria-label="Income, spending, and commitments across four weeks">
+              <line class="ol-gridline" x1="24" y1="28" x2="294" y2="28"></line><line class="ol-gridline" x1="24" y1="67" x2="294" y2="67"></line><line class="ol-axis" x1="24" y1="107" x2="294" y2="107"></line>
+              <path class="ol-line-green" d="M24 84 L60 30 L96 60 L132 46 L168 75 L204 66 L240 78 L294 70"></path>
+              <path class="ol-line" style="stroke:#c43d4d" d="M24 96 L60 90 L96 78 L132 88 L168 68 L204 80 L240 69 L294 74"></path>
+              <text x="24" y="123">Week 1</text><text x="141" y="123">Week 3</text><text x="267" y="123">Now</text>
+            </svg>
+            <div class="ol-module-foot"><a href="#" class="ol-inline-link">View cash flow</a><span class="ol-module-meta">Forecast</span></div>
+          </article>
+
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Needs attention</h2><span class="ol-status ol-status-warn">3 items</span></div>
+            <div class="ol-list">
+              <div class="ol-list-row"><div><div class="ol-list-title">2 transactions need categories</div><div class="ol-list-sub">Imported within the last 7 days</div></div><a href="#" class="ol-inline-link">Review</a></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">1 opening balance needs confirmation</div><div class="ol-list-sub">Evidence is present but not acknowledged</div></div><a href="#" class="ol-inline-link">Confirm</a></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">1 account-month has a coverage gap</div><div class="ol-list-sub">No supported statement evidence for the period</div></div><a href="#" class="ol-inline-link">Review</a></div>
+            </div>
+          </article>
+
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Upcoming commitments</h2><span class="ol-module-meta">Next 30 days</span></div>
+            <div class="ol-list">
+              <div class="ol-list-row"><div><div class="ol-list-title">Workspace subscription</div><div class="ol-list-sub">Renews in 3 days</div></div><div class="ol-list-value">¤ 22.00</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Home services</div><div class="ol-list-sub">Expected in 9 days</div></div><div class="ol-list-value">¤ 84.00</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Reserve contribution</div><div class="ol-list-sub">Planned in 14 days</div></div><div class="ol-list-value">¤ 300.00</div></div>
+            </div>
+            <div class="ol-module-foot"><a href="#" class="ol-inline-link">View calendar</a><span class="ol-module-meta">¤ 406 total</span></div>
+          </article>
+
+          <article class="ol-module">
+            <div class="ol-module-head"><h2 class="ol-module-title">Recent activity</h2><span class="ol-module-meta">Latest verified</span></div>
+            <div class="ol-list">
+              <div class="ol-list-row"><div><div class="ol-list-title">Grocery purchase</div><div class="ol-list-sub">Food &amp; dining · Today</div></div><div class="ol-list-value">− ¤ 62.40</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Income deposit</div><div class="ol-list-sub">Income · Yesterday</div></div><div class="ol-list-value ol-positive">+ ¤ 1,200.00</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Internal transfer</div><div class="ol-list-sub">Transfer · 2 days ago</div></div><div class="ol-list-value">¤ 300.00</div></div>
+            </div>
+            <div class="ol-module-foot"><a href="#" class="ol-inline-link">View transactions</a><span class="ol-module-meta">Synthetic preview</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="ol-page" id="ol-page-accounts" data-page-panel="accounts" aria-labelledby="ol-accounts-title" hidden>
+        <div class="ol-page-head">
+          <div class="ol-title-wrap"><h1 id="ol-accounts-title">Accounts</h1><p>Balances, evidence state, and account roles in one operational view.</p></div>
+          <div class="ol-actions"><button class="ol-button" type="button"><svg aria-hidden="true" data-icon="upload" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m17 8-5-5-5 5"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path></svg>Import evidence</button><button class="ol-button ol-button-primary" type="button"><svg aria-hidden="true" data-icon="plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Add account</button></div>
+        </div>
+        <div class="ol-metric-grid">
+          <div class="ol-metric"><div class="ol-kicker">Assets</div><div class="ol-metric-value">¤ 196,730.00</div><div class="ol-metric-context">Across 5 asset accounts</div></div>
+          <div class="ol-metric"><div class="ol-kicker">Liabilities</div><div class="ol-metric-value">¤ 12,480.00</div><div class="ol-metric-context">Across 1 liability account</div></div>
+          <div class="ol-metric"><div class="ol-kicker">Evidence actions</div><div class="ol-metric-value">2 items</div><div class="ol-metric-context"><span class="ol-negative">1 opening · 1 snapshot</span></div></div>
+        </div>
+        <div class="ol-attention"><div class="ol-attention-main"><svg class="ol-attention-icon"  aria-hidden="true" data-icon="triangle-alert" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg><div><div class="ol-attention-title">Two accounts need evidence actions</div><div class="ol-attention-sub">Confirm one opening balance and add one required snapshot.</div></div></div><button class="ol-button" type="button">Review accounts</button></div>
+        <div class="ol-filter-row">
+          <div class="ol-filters"><div class="ol-filter-input"><svg aria-hidden="true" data-icon="search" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg>Search accounts</div><select class="ol-select" aria-label="Filter by role"><option>All roles</option><option>Everyday</option><option>Reserve</option><option>Investment</option><option>Property</option><option>Credit</option><option>Loan</option><option>Other</option></select><select class="ol-select" aria-label="Filter by status"><option>All statuses</option><option>Current</option><option>Needs confirmation</option><option>Missing snapshot</option><option>Coverage problem</option></select></div>
+          <span class="ol-section-meta">6 accounts · synthetic data</span>
+        </div>
+        <div class="ol-section-head"><h2>Accounts by role</h2><span class="ol-section-meta">Deterministic grouping</span></div>
+        <div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Account</th><th>Role</th><th>Currency</th><th>Evidence</th><th>Status</th><th class="ol-number">Balance</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+          <tr class="ol-role-group"><td colspan="7">Everyday · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="landmark" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 18v-7"></path><path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="M3 22h18"></path><path d="M6 18v-7"></path></svg></span><div><div class="ol-entity-title">Primary current</div><div class="ol-entity-sub">Institution A · •• 1042</div></div></div></td><td>Everyday</td><td>XCR</td><td>Today</td><td><span class="ol-status ol-status-ok">Current</span></td><td class="ol-number">¤ 28,640.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr class="ol-role-group"><td colspan="7">Credit · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="credit-card" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"></rect><line x1="2" x2="22" y1="10" y2="10"></line><path d="M6 14h2"></path></svg></span><div><div class="ol-entity-title">Daily card</div><div class="ol-entity-sub">Institution B · •• 6281</div></div></div></td><td>Credit</td><td>XCR</td><td>Yesterday</td><td><span class="ol-status ol-status-ok">Current</span></td><td class="ol-number ol-negative">− ¤ 2,480.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr class="ol-role-group"><td colspan="7">Other · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="wallet" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"></path><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"></path></svg></span><div><div class="ol-entity-title">Travel wallet</div><div class="ol-entity-sub">Provider C · •• 3308</div></div></div></td><td>Other</td><td>XDG</td><td>6 days ago</td><td><span class="ol-status ol-status-ok">Current</span></td><td class="ol-number">¤ 4,280.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr class="ol-role-group"><td colspan="7">Reserve · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="piggy-bank" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 17h3v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-3a3.16 3.16 0 0 0 2-2h1a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1h-1a5 5 0 0 0-2-4V3a4 4 0 0 0-3.2 1.6l-.3.4H11a6 6 0 0 0-6 6v1a5 5 0 0 0 2 4v3a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"></path><path d="M16 10h.01"></path><path d="M2 8v1a2 2 0 0 0 2 2h1"></path></svg></span><div><div class="ol-entity-title">Emergency reserve</div><div class="ol-entity-sub">Institution A · •• 7406</div></div></div></td><td>Reserve</td><td>XCR</td><td>Today</td><td><span class="ol-status ol-status-ok">Current</span></td><td class="ol-number">¤ 33,410.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr class="ol-role-group"><td colspan="7">Investment · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="line-chart" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></svg></span><div><div class="ol-entity-title">Investment account</div><div class="ol-entity-sub">Provider D · •• 5920</div></div></div></td><td>Investment</td><td>XCR</td><td>3 days ago</td><td><span class="ol-status ol-status-ok">Current</span></td><td class="ol-number">¤ 44,220.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr class="ol-role-group"><td colspan="7">Property · 1 account</td></tr>
+          <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="house" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></span><div><div class="ol-entity-title">Property position</div><div class="ol-entity-sub">Snapshot-valued asset</div></div></div></td><td>Property</td><td>XCR</td><td>Not recorded</td><td><span class="ol-status ol-status-warn">Missing snapshot</span></td><td class="ol-number">Unavailable</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="ol-page" id="ol-page-transactions" data-page-panel="transactions" aria-labelledby="ol-transactions-title" hidden>
+        <div class="ol-page-head">
+          <div class="ol-title-wrap"><h1 id="ol-transactions-title">Transactions</h1><p>Review money movement quickly, with evidence and classification kept visible.</p></div>
+          <div class="ol-actions"><button class="ol-button" type="button"><svg aria-hidden="true" data-icon="download" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"></path><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="m7 10 5 5 5-5"></path></svg>Export</button><button class="ol-button ol-button-primary" type="button"><svg aria-hidden="true" data-icon="plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Record transaction</button></div>
+        </div>
+        <div class="ol-filter-row">
+          <div class="ol-filters"><div class="ol-filter-input"><svg aria-hidden="true" data-icon="search" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg>Search transactions</div><select class="ol-select" aria-label="Date range"><option>Last 30 days</option><option>This month</option><option>Last 90 days</option></select><select class="ol-select" aria-label="Account"><option>All accounts</option><option>Primary current</option><option>Daily card</option></select><select class="ol-select" aria-label="Category"><option>All categories</option><option>Needs category</option><option>Income</option></select></div>
+          <button class="ol-button" type="button"><svg aria-hidden="true" data-icon="sliders-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"></path><path d="M12 19H3"></path><path d="M14 3v4"></path><path d="M16 17v4"></path><path d="M21 12h-9"></path><path d="M21 19h-5"></path><path d="M21 5h-7"></path><path d="M8 10v4"></path><path d="M8 12H3"></path></svg>More filters</button>
+        </div>
+        <div class="ol-metric-grid">
+          <div class="ol-metric"><div class="ol-kicker">Reportable income</div><div class="ol-metric-value ol-positive">¤ 18,500.00</div><div class="ol-metric-context">4 income rows in period</div></div>
+          <div class="ol-metric"><div class="ol-kicker">Reportable spending</div><div class="ol-metric-value">¤ 6,220.00</div><div class="ol-metric-context">Refunds reduce this value</div></div>
+          <div class="ol-metric"><div class="ol-kicker">Needs review</div><div class="ol-metric-value">2 items</div><div class="ol-metric-context"><span class="ol-negative">Missing categories</span></div></div>
+        </div>
+        <div class="ol-section-head"><h2>Recent activity</h2><span class="ol-section-meta">32 transactions · synthetic data</span></div>
+        <div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Date</th><th>Description</th><th>Account</th><th>Category</th><th>Evidence</th><th class="ol-number">Amount</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+          <tr><td>19 Sep</td><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="shopping-basket" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 11-1 9"></path><path d="m19 11-4-7"></path><path d="M2 11h20"></path><path d="m3.5 11 1.6 7.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 2-1.6l1.7-7.4"></path><path d="M4.5 15.5h15"></path><path d="m5 11 4-7"></path><path d="m9 11 1 9"></path></svg></span><div><div class="ol-entity-title">Grocery purchase</div><div class="ol-entity-sub">Card transaction</div></div></div></td><td>Daily card</td><td>Food &amp; dining</td><td><span class="ol-status ol-status-ok">Matched</span></td><td class="ol-number">− ¤ 62.40</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr><td>18 Sep</td><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="briefcase-business" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12h.01"></path><path d="M16 6V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path><path d="M22 13a18.15 18.15 0 0 1-20 0"></path><rect width="20" height="14" x="2" y="6" rx="2"></rect></svg></span><div><div class="ol-entity-title">Income deposit</div><div class="ol-entity-sub">Bank transfer</div></div></div></td><td>Primary current</td><td>Income</td><td><span class="ol-status ol-status-ok">Matched</span></td><td class="ol-number ol-positive">+ ¤ 1,200.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr><td>17 Sep</td><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="monitor-play" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z"></path><path d="M12 17v4"></path><path d="M8 21h8"></path><rect x="2" y="3" width="20" height="14" rx="2"></rect></svg></span><div><div class="ol-entity-title">Media subscription</div><div class="ol-entity-sub">Recurring card transaction</div></div></div></td><td>Daily card</td><td>Subscriptions</td><td><span class="ol-status ol-status-ok">Matched</span></td><td class="ol-number">− ¤ 22.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr><td>16 Sep</td><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="circle-help" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><path d="M12 17h.01"></path></svg></span><div><div class="ol-entity-title">Merchant entry</div><div class="ol-entity-sub">Imported description withheld</div></div></div></td><td>Primary current</td><td><span class="ol-status ol-status-warn">Uncategorized</span></td><td><span class="ol-status ol-status-ok">Matched</span></td><td class="ol-number">− ¤ 84.17</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+          <tr><td>15 Sep</td><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="repeat-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 9 3-3 3 3"></path><path d="M13 18H7a2 2 0 0 1-2-2V6"></path><path d="m22 15-3 3-3-3"></path><path d="M11 6h6a2 2 0 0 1 2 2v10"></path></svg></span><div><div class="ol-entity-title">Internal transfer</div><div class="ol-entity-sub">Linked transfer pair</div></div></div></td><td>Primary current</td><td>Transfer</td><td><span class="ol-status ol-status-ok">Linked</span></td><td class="ol-number">− ¤ 300.00</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="ol-page" id="ol-page-plans" data-page-panel="plans" aria-labelledby="ol-plans-title" hidden>
+        <div class="ol-page-head">
+          <div class="ol-title-wrap"><h1 id="ol-plans-title">Plans</h1><p>Commitments, reserves, and goals presented as decisions—not essays.</p></div>
+          <div class="ol-actions"><button class="ol-button" type="button"><svg aria-hidden="true" data-icon="calendar-range" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M16 2v3"></path><path d="M3 9h18"></path><path d="M8 2v3"></path><path d="M17 13h-6"></path><path d="M13 17H7"></path><path d="M7 13h.01"></path><path d="M17 17h.01"></path></svg>12-month view</button><button class="ol-button ol-button-primary" type="button"><svg aria-hidden="true" data-icon="plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Create plan</button></div>
+        </div>
+        <div class="ol-attention"><div class="ol-attention-main"><svg class="ol-attention-icon"  aria-hidden="true" data-icon="circle-alert" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg><div><div class="ol-attention-title">Two plans need a decision</div><div class="ol-attention-sub">One contribution is overdue and one goal has no target date.</div></div></div><button class="ol-button" type="button">Review decisions</button></div>
+        <div class="ol-plan-grid">
+          <aside class="ol-plan-aside">
+            <div class="ol-kicker">Available after known commitments</div>
+            <div class="ol-callout-number">¤ 12,280</div>
+            <div class="ol-callout-line">Projected remainder for this month, based on recorded plans and recurring items.</div>
+            <svg class="ol-chart" viewBox="0 0 300 130" role="img" aria-label="Available cash projection declines through the month and ends above the reserve line">
+              <line class="ol-gridline" x1="24" y1="30" x2="294" y2="30"></line><line class="ol-gridline" x1="24" y1="67" x2="294" y2="67"></line><line class="ol-axis" x1="24" y1="107" x2="294" y2="107"></line>
+              <path class="ol-area" d="M24 25 L62 34 L100 49 L138 54 L176 66 L214 70 L252 82 L294 85 L294 107 L24 107 Z"></path><path class="ol-line" d="M24 25 L62 34 L100 49 L138 54 L176 66 L214 70 L252 82 L294 85"></path>
+              <text x="24" y="123">Now</text><text x="138" y="123">Mid-month</text><text x="267" y="123">Month end</text>
+            </svg>
+            <div class="ol-section-head"><h2>Goal progress</h2><span class="ol-section-meta">3 active</span></div>
+            <div class="ol-progress-row"><div class="ol-progress-label"><span>Emergency reserve</span><strong>78%</strong></div><div class="ol-progress-track"><span class="ol-progress-fill" style="width:78%"></span></div></div>
+            <div class="ol-progress-row"><div class="ol-progress-label"><span>Annual obligations</span><strong>52%</strong></div><div class="ol-progress-track"><span class="ol-progress-fill" style="width:52%"></span></div></div>
+            <div class="ol-progress-row"><div class="ol-progress-label"><span>Travel fund</span><strong>34%</strong></div><div class="ol-progress-track"><span class="ol-progress-fill" style="width:34%"></span></div></div>
+          </aside>
+          <div>
+            <div class="ol-section-head" style="margin-top:0"><h2>Active plans</h2><span class="ol-section-meta">Sorted by next decision</span></div>
+            <div class="ol-table-wrap"><table class="ol-table"><thead><tr><th>Plan</th><th>Type</th><th>Next action</th><th>Status</th><th class="ol-number">Funded</th><th class="ol-number">Target</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+              <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="shield" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path></svg></span><div><div class="ol-entity-title">Emergency reserve</div><div class="ol-entity-sub">Core resilience</div></div></div></td><td>Reserve</td><td>Contribute in 14 days</td><td><span class="ol-status ol-status-ok">On track</span></td><td class="ol-number">¤ 23,400</td><td class="ol-number">¤ 30,000</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+              <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="receipt-text" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 16H8"></path><path d="M14 8H8"></path><path d="M16 12H8"></path><path d="M4 3a1 1 0 0 1 1-1 1.3 1.3 0 0 1 .7.2l.933.6a1.3 1.3 0 0 0 1.4 0l.934-.6a1.3 1.3 0 0 1 1.4 0l.933.6a1.3 1.3 0 0 0 1.4 0l.933-.6a1.3 1.3 0 0 1 1.4 0l.934.6a1.3 1.3 0 0 0 1.4 0l.933-.6A1.3 1.3 0 0 1 19 2a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1 1.3 1.3 0 0 1-.7-.2l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.934.6a1.3 1.3 0 0 1-1.4 0l-.933-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-1.4 0l-.934-.6a1.3 1.3 0 0 0-1.4 0l-.933.6a1.3 1.3 0 0 1-.7.2 1 1 0 0 1-1-1z"></path></svg></span><div><div class="ol-entity-title">Annual obligations</div><div class="ol-entity-sub">Known yearly costs</div></div></div></td><td>Sinking fund</td><td>Contribution overdue</td><td><span class="ol-status ol-status-danger">Action</span></td><td class="ol-number">¤ 6,240</td><td class="ol-number">¤ 12,000</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+              <tr><td><div class="ol-entity"><span class="ol-entity-icon"><svg aria-hidden="true" data-icon="plane" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"></path></svg></span><div><div class="ol-entity-title">Travel fund</div><div class="ol-entity-sub">Discretionary goal</div></div></div></td><td>Goal</td><td>Add target date</td><td><span class="ol-status ol-status-warn">Needs date</span></td><td class="ol-number">¤ 2,040</td><td class="ol-number">¤ 6,000</td><td><div class="ol-mini-actions"><svg aria-hidden="true" data-icon="more-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg></div></td></tr>
+            </tbody></table></div>
+            <div class="ol-section-head"><h2>Upcoming commitments</h2><span class="ol-section-meta">Next 30 days</span></div>
+            <div class="ol-list">
+              <div class="ol-list-row"><div><div class="ol-list-title">Workspace subscription</div><div class="ol-list-sub">3 days · recurring</div></div><div class="ol-list-value">¤ 22.00</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Reserve contribution</div><div class="ol-list-sub">14 days · planned</div></div><div class="ol-list-value">¤ 300.00</div></div>
+              <div class="ol-list-row"><div><div class="ol-list-title">Annual obligation allocation</div><div class="ol-list-sub">21 days · planned</div></div><div class="ol-list-value">¤ 520.00</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <script>
+    (() => {
+      const root = document.getElementById('oneledger-console-preview');
+      if (!root) return;
+      const buttons = [...root.querySelectorAll('[data-page]')];
+      const panels = [...root.querySelectorAll('[data-page-panel]')];
+      const showPage = (page) => {
+        panels.forEach((panel) => {
+          const active = panel.dataset.pagePanel === page;
+          panel.classList.toggle('is-active', active);
+          panel.hidden = !active;
+        });
+        buttons.forEach((button) => button.setAttribute('aria-selected', String(button.dataset.page === page)));
+      };
+      buttons.forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
+      if (window.lucide) window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -9469,6 +9469,50 @@ export type SalaryYearOut = {
 };
 
 /**
+ * SearchResponse
+ */
+export type SearchResponse = {
+    /**
+     * Results
+     */
+    results: Array<SearchResult>;
+};
+
+/**
+ * SearchResult
+ */
+export type SearchResult = {
+    /**
+     * Kind
+     */
+    kind: 'account' | 'transaction' | 'document' | 'holding' | 'goal' | 'commitment' | 'register';
+    /**
+     * Resourceid
+     */
+    resourceId: string;
+    /**
+     * Primarylabel
+     */
+    primaryLabel: string;
+    /**
+     * Secondarylabel
+     */
+    secondaryLabel: string | null;
+    /**
+     * Route
+     */
+    route: string;
+    /**
+     * Date
+     */
+    date: string | null;
+    /**
+     * Status
+     */
+    status: string | null;
+};
+
+/**
  * SecurityCandidate
  */
 export type SecurityCandidate = {
@@ -15021,6 +15065,40 @@ export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses = {
 };
 
 export type LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponse = LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses[keyof LinkDocumentRegisterRecordIdDocumentsDocumentIdPutResponses];
+
+export type SearchSearchGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Q
+         */
+        q: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/search';
+};
+
+export type SearchSearchGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SearchSearchGetError = SearchSearchGetErrors[keyof SearchSearchGetErrors];
+
+export type SearchSearchGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SearchResponse;
+};
+
+export type SearchSearchGetResponse = SearchSearchGetResponses[keyof SearchSearchGetResponses];
 
 export type ReadMonthlyReviewMonthlyReviewGetData = {
     body?: never;

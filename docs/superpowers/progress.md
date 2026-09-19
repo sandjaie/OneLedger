@@ -6,16 +6,16 @@ the next action, active delivery gates, and links to evidence. Product outcomes 
 [master implementation plan](../product/master-implementation-plan.html), and deferred or
 unapproved information in the [project register](project-register.md).
 
-Updated: 19 September 2026.
+Updated: 20 September 2026.
 
 ## Current position
 
 | Item | Current state | Evidence |
 | --- | --- | --- |
-| Current outcome | **Phase 4.7 — owner workspace experience editorial refinement** | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Nova/shadcn baseline 4.7.1–4.7.13 is merged; the owner approved the Quiet Editorial Ledger refinement. Task 4.7.14 is implemented locally; its focused API/web checks and one read-only review plus repair are complete, while full verification and PR remain open | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
-| Next product action | Run the one full verifier, open the 4.7.14 PR, and merge it before beginning 4.7.15 | [development cycle](../development-cycle.md) |
-| Current implementation task | **4.7.14 — Editorial foundation, shell and Overview** on `feature/p4-7-editorial-foundation` | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
+| Current outcome | **Phase 4.8 — compact financial console** | [Phase 4.8 specification](specs/2026-09-20-phase-4-8-compact-financial-console.md) |
+| Outcome state | The owner approved the four-screen Compact Financial Console reference, Phase 4.8 specification and thirteen-task implementation plan. Phase 4.7.1–4.7.14 remain delivered history without owner visual acceptance; 4.7.15 was stopped and 4.7.16–4.7.21 are superseded. Task 4.8.1 implementation is complete on its branch; its delivery gates remain open | [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md) |
+| Next product action | Run the one read-only Task 4.8.1 review, then its one repair and full verifier before the first push; begin 4.8.2 only after 4.8.1 is delivered | [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md#task-481--console-foundation-authenticated-shell-and-workspace-search) |
+| Current implementation task | **4.8.1 — Console foundation, authenticated shell and workspace search** on `feature/p4-8a-compact-console-foundation`; implementation complete, review next; do not resume 4.7.15 | [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md#task-481--console-foundation-authenticated-shell-and-workspace-search) |
 
 ## Canonical phase status
 
@@ -60,7 +60,8 @@ Updated: 19 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| 4.7 — owner workspace experience | **Editorial refinement in implementation** — Nova/shadcn baseline 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263); Task 4.7.14 is at local delivery gates and 4.7.15–4.7.21 remain unstarted | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
+| 4.7 — owner workspace experience | **Superseded; not owner-accepted** — 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263), 4.7.14 merged through [PR #266](https://github.com/sandjaie/OneLedger/pull/266), 4.7.15 stopped and 4.7.16–4.7.21 replaced by Phase 4.8 | [superseded design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [superseded plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
+| 4.8 — compact financial console | **Task 4.8.1 implementation complete; review next** — specification and thirteen-task plan approved; 4.8.2 remains queued until 4.8.1 is delivered | [Phase 4.8 specification](specs/2026-09-20-phase-4-8-compact-financial-console.md) · [Phase 4.8 plan](plans/2026-09-20-phase-4-8-compact-financial-console.md) · [visual reference](../product/mockups/CompactFinancialConsole.html) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

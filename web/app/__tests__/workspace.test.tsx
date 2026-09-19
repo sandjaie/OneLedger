@@ -280,6 +280,7 @@ describe("authenticated workspace", () => {
 
     pending.resolve(household);
     expect(await screen.findByRole("group", { name: "Reporting currency" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Search OneLedger" })).toBeTruthy();
     expect(await screen.findByText("₹12,34,567.89")).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" })).toBeTruthy();
     expect(screen.getByRole("navigation", { name: "Workspace" }).closest("[data-slot=sidebar]")).toBeTruthy();

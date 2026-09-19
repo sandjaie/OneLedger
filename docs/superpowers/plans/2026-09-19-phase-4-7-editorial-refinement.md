@@ -1,5 +1,10 @@
 # Phase 4.7 Quiet Editorial Ledger Implementation Plan
 
+> **Superseded on 20 September 2026 after Task 4.7.14.** Task 4.7.15 must not
+> resume, and Tasks 4.7.16–4.7.21 must not start. Phase 4.8 owns the replacement UI direction.
+> Delivered Phase 4.7 work remains historical implementation evidence; Phase 4.7 did not receive
+> owner visual/UX acceptance.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking.
