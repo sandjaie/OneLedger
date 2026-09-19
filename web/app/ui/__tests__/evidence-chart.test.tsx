@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EvidenceChart, chartRows } from "@/app/ui/evidence-chart";
@@ -70,6 +70,17 @@ describe("EvidenceChart", () => {
     expect(chartRows(["2025-12", "2026-01"], [])).toEqual([
       { period: "2025-12" }, { period: "2026-01" },
     ]);
+  });
+
+  it("keeps the exact values reachable when a console module renders it densely", () => {
+    render(<EvidenceChart dense title="Confirmed trend" description="Synthetic series" periods={periods} series={series} />);
+
+    // The module owns the heading; the chart's accessible equivalent is collapsed, never dropped.
+    expect(screen.queryByRole("heading", { name: "Confirmed trend" })).toBeNull();
+    const disclosure = screen.getByText("Exact values");
+    fireEvent.click(disclosure);
+    const table = screen.getByRole("table", { name: "Confirmed trend exact values" });
+    expect(within(table).getByRole("row", { name: "2026-02 Not available" })).toBeTruthy();
   });
 
   it("explains absent evidence without drawing a fabricated chart", () => {

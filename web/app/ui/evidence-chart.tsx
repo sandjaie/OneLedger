@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CartesianGrid, Line, LineChart, XAxis } from "recharts";
 
 import { ChartContainer } from "@/components/ui/chart";
@@ -69,22 +70,28 @@ export function chartRows(periods: readonly string[], series: readonly EvidenceS
   ]));
 }
 
-export function EvidenceChart({ title, description, periods, series }: {
+export function EvidenceChart({ title, description, periods, series, dense = false }: {
   title: string;
   description: string;
   periods: string[];
   series: EvidenceSeries[];
+  /** Inside a console module: the head is the module's own, and the exact values — which stay
+   * the chart's accessible equivalent — collapse behind a disclosure instead of doubling the
+   * module's height. Nothing is dropped; a dense chart is still readable without the plot. */
+  dense?: boolean;
 }) {
   const rows = chartRows(periods, series);
   const hasSeries = rows.length > 0 && series.length > 0;
   const config = Object.fromEntries(series.map((item) => [item.id, { label: item.label, color: item.color }]));
 
   return (
-    <section className="evidence-chart" aria-label={title}>
-      <div className="evidence-chart-head">
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
+    <section className="evidence-chart" aria-label={title} data-dense={dense ? "true" : undefined}>
+      {!dense && (
+        <div className="evidence-chart-head">
+          <h3>{title}</h3>
+          <p>{description}</p>
+        </div>
+      )}
       {!hasSeries ? (
         <Empty>
           <EmptyHeader>
@@ -124,7 +131,9 @@ export function EvidenceChart({ title, description, periods, series }: {
           </ChartContainer>
         </>
       )}
-      {hasSeries && <div className="evidence-chart-table-wrap">
+      {hasSeries && wrapTable(
+        dense,
+        <div className="evidence-chart-table-wrap">
         <table aria-label={`${title} exact values`}>
           <thead><tr><th scope="col">Period</th>{series.map((item) => <th key={item.id} scope="col">{item.label}</th>)}</tr></thead>
           <tbody>
@@ -136,7 +145,18 @@ export function EvidenceChart({ title, description, periods, series }: {
             ))}
           </tbody>
         </table>
-      </div>}
+      </div>,
+      )}
     </section>
+  );
+}
+
+function wrapTable(dense: boolean, table: ReactNode): ReactNode {
+  if (!dense) return table;
+  return (
+    <details className="evidence-chart-exact">
+      <summary>Exact values</summary>
+      {table}
+    </details>
   );
 }

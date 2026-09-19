@@ -648,12 +648,26 @@ def test_holdings_mode_replaces_the_account_balance_exactly_once_in_both_currenc
     acquired = _investment_acquisition(investment_dashboard)
     _investment_price(investment_dashboard, date(2026, 2, 2))
 
-    worth = the_dashboard(date(2026, 2, 5))["netWorth"]
+    body = the_dashboard(date(2026, 2, 5))
+    worth = body["netWorth"]
 
     assert worth["totalBase"] == "24.0000"
     assert worth["totalSecondary"] == "48.0000"
     assert worth["assetsBase"] == "24.0000"
     assert worth["liquidBase"] == "24.0000"
+    # The composition reads those same holding values, not the placeholder balance beside them.
+    assert body["positionComposition"]["rows"] == [
+        {
+            "key": "investments",
+            "label": "Investments",
+            "valueBase": "24.0000",
+            "valueSecondary": "48.0000",
+            "sharePercentBase": "100.0000",
+            "sharePercentSecondary": "100.0000",
+            "chartCoordinateBase": 10000,
+            "chartCoordinateSecondary": 10000,
+        }
+    ]
     assert worth["investmentCoverage"] == [
         {
             "accountId": str(investment_dashboard.account_id),
@@ -965,3 +979,81 @@ def test_snapshot_reentry_does_not_carry_a_snapshot_across_an_intervening_period
             "confidence": None,
         }
     ]
+
+
+# ---------------------------------------------------------------------------------------
+# Position composition — the same resolved values, grouped by account type.
+
+
+def test_position_composition_buckets_the_same_values_net_worth_summed(live: Fixture) -> None:
+    """The I2 case again, grouped: the bucket values reconcile with the very figures the
+    balance sheet reports, and the shares are absolute so the loan is visible."""
+    i2(live)
+
+    body = the_dashboard(RATED)
+    rows = {row["key"]: row for row in body["positionComposition"]["rows"]}
+
+    assert [row["key"] for row in body["positionComposition"]["rows"]] == ["cash", "liabilities"]
+    # The fixture's own savings account holds zero, so cash is the +100,000 account alone.
+    assert rows["cash"]["valueBase"] == "100000.0000"
+    assert rows["liabilities"]["valueBase"] == "-4004500.0000"
+    assert body["netWorth"]["assetsBase"] == rows["cash"]["valueBase"]
+    assert body["netWorth"]["liabilitiesBase"] == rows["liabilities"]["valueBase"]
+    # 100,000 / 4,104,500 and 4,004,500 / 4,104,500 — absolute, so they total 100%.
+    assert rows["cash"]["sharePercentBase"] == "2.4364"
+    assert rows["liabilities"]["sharePercentBase"] == "97.5636"
+    assert rows["cash"]["chartCoordinateBase"] == 244
+    assert rows["liabilities"]["chartCoordinateBase"] == 9756
+    assert rows["liabilities"]["valueSecondary"] == "-1001125.0000"
+    assert body["positionComposition"]["missing"] == []
+
+
+def test_position_composition_counts_only_this_household_s_included_accounts(
+    live: Fixture,
+) -> None:
+    i2(live)
+    an_account(live, "brokerage", "7.0000", counted=False)
+    an_account(live, "property", "11.0000", closed=True)
+    with live.conn.cursor() as cur:
+        cur.execute(
+            """INSERT INTO household (name, base_currency, secondary_currency)
+               VALUES ('theirs', %s, %s) RETURNING id""",
+            (live.base, live.secondary),
+        )
+        theirs = cur.fetchone()[0]  # type: ignore[index]
+        cur.execute(
+            "INSERT INTO person (household_id, display_name, is_self) VALUES (%s, 'them', true)",
+            (theirs,),
+        )
+    live.conn.commit()
+    an_account(live, "retirement", "999999.0000", household=theirs)
+
+    rows = the_dashboard(RATED)["positionComposition"]["rows"]
+
+    assert [row["key"] for row in rows] == ["cash", "liabilities"]
+
+
+def test_a_missing_rate_nulls_the_whole_composition_in_that_currency_only(
+    live: Fixture,
+) -> None:
+    """The same fail-closed rule net worth applies. Before any rate is held the base currency
+    needs none — it is the identity leg — so its composition stands while the secondary one
+    goes null for every row and names each account it could not translate."""
+    savings = an_account(live, "savings", "100000.0000")
+    card = an_account(live, "credit_card", "-4500.0000")
+    loan = an_account(live, "home_loan", "-4000000.0000", liquid=False)
+
+    composition = the_dashboard(date(2025, 12, 31))["positionComposition"]
+    rows = {row["key"]: row for row in composition["rows"]}
+
+    assert rows["cash"]["valueBase"] == "100000.0000"
+    assert rows["cash"]["sharePercentBase"] == "2.4364"
+    assert rows["liabilities"]["chartCoordinateBase"] == 9756
+    assert [row["valueSecondary"] for row in composition["rows"]] == [None, None]
+    assert [row["sharePercentSecondary"] for row in composition["rows"]] == [None, None]
+    assert [row["chartCoordinateSecondary"] for row in composition["rows"]] == [None, None]
+
+    assert {item["currency"] for item in composition["missing"]} == {live.secondary}
+    assert {str(savings), str(card), str(loan)} <= {
+        item["accountId"] for item in composition["missing"]
+    }

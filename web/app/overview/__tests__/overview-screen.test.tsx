@@ -12,7 +12,9 @@ import type {
   HouseholdResponse,
   InvestmentCoverage,
   MonthFlows,
+  PositionComposition,
   TransactionsResponse,
+  WealthHistoryResponse,
 } from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
@@ -121,9 +123,58 @@ function payload(overrides: Partial<DashboardResponse> = {}): DashboardResponse 
       next: null,
       items: [],
     },
+    positionComposition: composition(),
     ...overrides,
   };
 }
+
+function composition(overrides: Partial<PositionComposition> = {}): PositionComposition {
+  return {
+    rows: [
+      {
+        key: "cash",
+        label: "Cash and equivalents",
+        valueBase: "100000.0000",
+        valueSecondary: "4500.0000",
+        sharePercentBase: "2.4364",
+        sharePercentSecondary: "2.4364",
+        chartCoordinateBase: 244,
+        chartCoordinateSecondary: 244,
+      },
+      {
+        key: "liabilities",
+        label: "Liabilities",
+        valueBase: "-4004500.0000",
+        valueSecondary: "-180500.0000",
+        sharePercentBase: "97.5636",
+        sharePercentSecondary: "97.5636",
+        chartCoordinateBase: 9756,
+        chartCoordinateSecondary: 9756,
+      },
+    ],
+    missing: [],
+    ...overrides,
+  };
+}
+
+const HISTORY: WealthHistoryResponse = {
+  baseCurrency: "XIN",
+  secondaryCurrency: "XAE",
+  months: [
+    {
+      monthEnd: "2026-01-31", totalBase: "90000.0000", totalSecondary: "4050.0000", complete: true,
+      statusCounts: {}, computedAt: "2026-03-01T00:00:00Z", chartRatio: "0.9000", chartCoordinate: 9000,
+    },
+    {
+      monthEnd: "2026-02-28", totalBase: null, totalSecondary: null, complete: false,
+      statusCounts: {}, computedAt: "2026-03-01T00:00:00Z", chartRatio: null, chartCoordinate: null,
+    },
+    {
+      monthEnd: "2026-03-31", totalBase: "100000.0000", totalSecondary: "4500.0000", complete: true,
+      statusCounts: {}, computedAt: "2026-03-01T00:00:00Z", chartRatio: "1.0000", chartCoordinate: 10000,
+    },
+  ],
+};
 
 function renderWith(
   body: DashboardResponse | Error,
@@ -136,12 +187,17 @@ function renderWith(
     previousMonthReview: { month: "2026-02-01", completedAt: null },
   },
   recent: TransactionsResponse = { transactions: [], total: 0 },
+  history: WealthHistoryResponse | Error = HISTORY,
 ) {
   // Needs attention (Task 2) fetches /actions alongside /dashboard; every test here is about
   // the rest of the screen, so it gets a quiet empty response unless a test overrides it.
   const request = vi.fn(async (path: string) => {
     if (path === "/actions") return actions;
     if (path === "/transactions?limit=5&offset=0") return recent;
+    if (path === "/wealth-history") {
+      if (history instanceof Error) throw history;
+      return history;
+    }
     if (body instanceof Error) throw body;
     return body;
   });
@@ -159,6 +215,115 @@ function renderWith(
 describe("overview screen", () => {
   afterEach(() => cleanup());
 
+  it("states the position, liquid balance and next-30-day commitments from exact server strings", async () => {
+    const next = {
+      commitmentId: "commitment-1",
+      label: "Synthetic annual service",
+      dueDate: "2026-03-22",
+      nativeAmount: "-1234.5600",
+      nativeCurrency: "XIN",
+      remainingBase: "-1234.5600",
+      remainingSecondary: "-54.4400",
+    };
+    renderWith(payload({
+      upcomingCommitments: {
+        asOf: "2026-03-15",
+        through: "2026-04-14",
+        count: 1,
+        totalBase: "-1234.5600",
+        totalSecondary: "-54.4400",
+        missingBaseCurrencies: [],
+        missingSecondaryCurrencies: [],
+        next,
+        items: [next],
+      },
+    }));
+
+    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeTruthy();
+    const summary = screen.getByRole("region", { name: "Position summary" });
+    expect(within(summary).getByText("Net position")).toBeTruthy();
+    expect(within(summary).getByText("-₹39,04,500.00")).toBeTruthy();
+    expect(within(summary).getByText("₹95,500.00")).toBeTruthy();
+    expect(within(summary).getByText("Known next 30 days")).toBeTruthy();
+    expect(within(summary).getByText("You owe ₹1,234.56")).toBeTruthy();
+    expect(within(summary).getByText("1 commitment due through 2026-04-14")).toBeTruthy();
+  });
+
+  it("renders the approved six modules and keeps no promotional panel", async () => {
+    renderWith(payload());
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+
+    for (const name of [
+      "Position composition",
+      "Net position history",
+      "Cash flow",
+      "Needs attention",
+      "Upcoming commitments — next 30 days",
+      "Recent activity",
+    ]) {
+      expect(screen.getByRole("region", { name })).toBeTruthy();
+    }
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.queryByText(/Your money/)).toBeNull();
+  });
+
+  it("renders the position composition from the server's own shares and keeps a liability signed", async () => {
+    renderWith(payload());
+
+    const panel = await screen.findByRole("region", { name: "Position composition" });
+    const [cash, liabilities] = within(panel).getAllByRole("listitem");
+    expect(within(cash).getByText("Cash and equivalents")).toBeTruthy();
+    expect(within(cash).getByText("2.44% of the position")).toBeTruthy();
+    expect(within(cash).getByText("₹1,00,000.00")).toBeTruthy();
+    expect(within(liabilities).getByText("Liabilities")).toBeTruthy();
+    // The share is absolute so the loan is visible; the amount is still what is owed.
+    expect(within(liabilities).getByText("97.56% of the position")).toBeTruthy();
+    expect(within(liabilities).getByText("You owe ₹40,04,500.00")).toBeTruthy();
+    // The bar is drawn from the server's coordinates; nothing is divided in the browser.
+    const bar = panel.querySelector(".position-bar");
+    expect([...(bar?.children ?? [])].map((part) => part.getAttribute("style"))).toEqual([
+      "--share: 244;", "--share: 9756;",
+    ]);
+  });
+
+  it("withholds every share when one reporting currency has no value, keeping the other intact", async () => {
+    const withheld = composition({
+      rows: composition().rows.map((row) => ({
+        ...row,
+        valueSecondary: null,
+        sharePercentSecondary: null,
+        chartCoordinateSecondary: null,
+      })),
+      missing: [{ accountId: "account-1", currency: "XAE" }],
+    });
+    renderWith(payload({ positionComposition: withheld }), household.currencies[1]);
+
+    const panel = await screen.findByRole("region", { name: "Position composition" });
+    expect(within(panel).getAllByText("Not available")).toHaveLength(2);
+    expect(within(panel).getAllByText("Share unavailable")).toHaveLength(2);
+    expect(within(panel).getByText(/cannot be stated in XAE/)).toBeTruthy();
+    expect(panel.querySelector(".position-bar")).toBeNull();
+  });
+
+  it("plots the stored month ends with a gap for an incomplete month", async () => {
+    renderWith(payload());
+
+    const panel = await screen.findByRole("region", { name: "Net position history" });
+    expect(within(panel).getByText("1 of 3 months are incomplete and remain gaps, never zero.")).toBeTruthy();
+    fireEvent.click(within(panel).getByText("Exact values"));
+    const table = within(panel).getByRole("table", { name: "Month-end net position · XIN exact values" });
+    expect(within(table).getByRole("row", { name: "2026-01 ₹90,000.00" })).toBeTruthy();
+    expect(within(table).getByRole("row", { name: "2026-02 Not available" })).toBeTruthy();
+  });
+
+  it("states missing stored history without inventing a flat line", async () => {
+    renderWith(payload(), undefined, undefined, undefined, { ...HISTORY, months: [] });
+
+    const panel = await screen.findByRole("region", { name: "Net position history" });
+    expect(within(panel).getByText(/No month end has been stored yet/)).toBeTruthy();
+    expect(within(panel).queryByRole("table")).toBeNull();
+  });
+
   it("plots evidenced monthly flows with explicit gaps and exact values", async () => {
     const ordinary = payload();
     const january = month("2026-01-01", {
@@ -174,149 +339,121 @@ describe("overview screen", () => {
     };
     renderWith(ordinary);
 
-    const trend = await screen.findByRole("region", { name: "Income, spending and net trend" });
-    const exact = within(trend).getByRole("table", { name: "Income, spending and net trend exact values" });
+    const panel = await screen.findByRole("region", { name: "Cash flow" });
+    expect(within(panel).getByText(/11 months have incomplete statement coverage/)).toBeTruthy();
+    fireEvent.click(within(panel).getByText("Exact values"));
+    const exact = within(panel).getByRole("table", { name: "Income, spending and net trend exact values" });
     const rows = within(exact).getAllByRole("row");
     expect(within(rows[10]).getByText("₹100.00")).toBeTruthy();
     expect(within(rows[11]).getAllByText("Not available")).toHaveLength(3);
-    expect(within(trend).getByText(/unknown months/i)).toBeTruthy();
   });
 
-  it("presents the selected reporting currency as a glanceable net-worth headline", async () => {
+  it("shows this month's net and both flow sides from the payload", async () => {
     renderWith(payload());
-
-    expect(await screen.findByRole("heading", { name: "Overview", level: 1 })).toBeTruthy();
-    const worth = screen.getByRole("region", { name: "Net worth" });
-    expect(within(worth).getByText("Primary reporting currency · XIN")).toBeTruthy();
-    expect(
-      within(worth).getByRole("heading", { name: "Net worth in XIN: -₹39,04,500.00" }),
-    ).toBeTruthy();
-
-    const summary = screen.getByRole("region", { name: "Position summary" });
-    for (const label of ["Total assets", "Total liabilities", "Liquid net worth", "Savings rate"]) {
-      expect(within(summary).getByText(label)).toBeTruthy();
-    }
-    expect(within(summary).queryByText("Cash available")).toBeNull();
+    const panel = await screen.findByRole("region", { name: "Cash flow" });
+    expect(within(panel).getByText("₹3,76,543.22")).toBeTruthy();
+    expect(within(panel).getByText("Net this month · ₹5,00,000.00 in, ₹1,23,456.78 out")).toBeTruthy();
+    expect(within(panel).getByText("Savings rate 75.31%")).toBeTruthy();
   });
 
-  it("links net worth to Wealth, invested to Investments, and offers a Coverage link", async () => {
-    renderWith(payload());
-    const worth = await screen.findByRole("region", { name: "Net worth" });
+  it("shows every figure in the reporting currency the owner chose", async () => {
+    renderWith(payload(), household.currencies[1]);
+    const panel = await screen.findByRole("region", { name: "Cash flow" });
+    expect(within(panel).getByText("Net this month · AED 22,000.00 in, AED 5,432.10 out")).toBeTruthy();
+    expect(within(panel).queryByText(/₹/)).toBeNull();
+    const composed = screen.getByRole("region", { name: "Position composition" });
+    expect(within(composed).getByText("AED 4,500.00")).toBeTruthy();
+    expect(within(composed).queryByText(/₹/)).toBeNull();
+  });
 
-    expect(within(worth).getByRole("link", { name: "-₹39,04,500.00" })).toHaveProperty("pathname", "/wealth");
-    expect(screen.getByRole("link", { name: "Coverage" })).toHaveProperty("pathname", "/coverage");
+  it("names every reason a figure may be incomplete, including a carried and a missing rate", async () => {
+    const missingPrice: InvestmentCoverage = {
+      accountId: "acct-1",
+      holdingId: "holding-1",
+      valuationMode: "holdings",
+      status: "missing_price",
+      valueDate: null,
+      carried: false,
+      ageDays: null,
+      method: null,
+      confidence: null,
+    };
+    const current: InvestmentCoverage = {
+      accountId: "acct-3",
+      holdingId: "holding-3",
+      valuationMode: "holdings",
+      status: "current_price",
+      valueDate: "2026-03-15",
+      carried: false,
+      ageDays: 0,
+      method: null,
+      confidence: null,
+    };
+    const base = payload().netWorth;
+    renderWith(payload({
+      netWorth: {
+        ...base,
+        totalSecondary: null,
+        assetsSecondary: null,
+        liabilitiesSecondary: null,
+        liquidSecondary: null,
+        missing: [{ currency: "XZZ", reportingCurrency: "XAE", asOf: "2026-03-15" }],
+        investmentCoverage: [missingPrice, current],
+      },
+    }));
+
+    const region = await screen.findByRole("region", { name: "Why some figures may be incomplete" });
+    expect(within(region).getByText(
+      "No XZZ rate is stored on or before 2026-03-15, so net worth in XAE cannot be stated.",
+    )).toBeTruthy();
+    expect(within(region).getByText("XAE: as of the rate for 2026-03-13, carried forward")).toBeTruthy();
+    expect(within(region).getByText(/No accepted price is recorded for this holding\./)).toBeTruthy();
+    expect(within(region).getByRole("link", { name: "View holding" })).toHaveProperty(
+      "pathname",
+      "/investments/holding-1",
+    );
+    // The fully current holding names no reason and gets no row.
+    expect(within(region).getAllByRole("listitem")).toHaveLength(3);
+  });
+
+  it("keeps both reporting currencies exact in the detail table and never states a withheld one", async () => {
+    const base = payload().netWorth;
+    renderWith(payload({
+      netWorth: {
+        ...base,
+        totalSecondary: null,
+        assetsSecondary: null,
+        liabilitiesSecondary: null,
+        liquidSecondary: null,
+        missing: [{ currency: "XZZ", reportingCurrency: "XAE", asOf: "2026-03-15" }],
+      },
+    }));
+
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    fireEvent.click(screen.getByText("Detailed totals and evidence"));
+    const detail = screen.getByRole("region", { name: "Position detail" });
+    const [, first, second] = within(detail).getAllByRole("row");
+    expect(within(first).getByText("-₹39,04,500.00")).toBeTruthy();
+    expect(within(first).getByText("You owe ₹40,04,500.00")).toBeTruthy();
+    expect(within(second).getAllByText("Not available")).toHaveLength(4);
+    expect(screen.queryByText("-AED 176,000.00")).toBeNull();
+  });
+
+  it("keeps year-to-date and the recorded monthly totals as progressive detail", async () => {
+    renderWith(payload());
+    await screen.findByRole("heading", { name: "Overview", level: 1 });
+    fireEvent.click(screen.getByText("Detailed totals and evidence"));
 
     const year = screen.getByRole("region", { name: "This year so far" });
-    expect(within(year).getByRole("link", { name: "₹2,00,000.00" })).toHaveProperty("pathname", "/investments");
-  });
-
-  it("renders net worth in both currencies, flipping a liability in presentation only", async () => {
-    const request = renderWith(payload());
-    const worth = await screen.findByRole("region", { name: "Net worth" });
-
-    // A negative net worth is a negative figure, not something owed; liabilities are owed.
-    expect(within(worth).getByText("-₹39,04,500.00")).toBeTruthy();
-    expect(within(worth).getByText("-AED 176,000.00")).toBeTruthy();
-    expect(within(worth).getByText("You owe ₹40,04,500.00")).toBeTruthy();
-    expect(within(worth).getByText("You owe AED 180,500.00")).toBeTruthy();
-    expect(within(worth).getByText("₹1,00,000.00")).toBeTruthy();
-    expect(within(worth).getByText("₹95,500.00")).toBeTruthy();
-    expect(request.mock.calls.map((call: unknown[]) => call[0])).toEqual([
-      "/dashboard",
-      "/actions",
-      "/transactions?limit=5&offset=0",
-    ]);
-  });
-
-  it("labels a carried rate with its real date, and states a missing rate instead of a number", async () => {
-    const base = payload().netWorth;
-    renderWith(
-      payload({
-        netWorth: {
-          ...base,
-          totalSecondary: null,
-          assetsSecondary: null,
-          liabilitiesSecondary: null,
-          liquidSecondary: null,
-          missing: [{ currency: "XZZ", reportingCurrency: "XAE", asOf: "2026-03-15" }],
-        },
-      }),
-    );
-    const worth = await screen.findByRole("region", { name: "Net worth" });
-
-    expect(within(worth).getByText("XAE: as of the rate for 2026-03-13, carried forward")).toBeTruthy();
-    expect(
-      within(worth).getByText(
-        "No XZZ rate is stored on or before 2026-03-15, so net worth in XAE cannot be stated.",
-      ),
-    ).toBeTruthy();
-    // The secondary side states its reason and no figure at all.
-    for (const figure of ["-AED 176,000.00", "AED 4,500.00", "You owe AED 180,500.00", "AED 4,300.00"]) {
-      expect(within(worth).queryByText(figure)).toBeNull();
-    }
-    expect(within(worth).getByText("-₹39,04,500.00")).toBeTruthy();
-  });
-
-  it("renders this month and the trend from the payload, and a changed payload changes every figure", async () => {
-    renderWith(payload());
-    const thisMonth = await screen.findByRole("region", { name: "This month" });
-    for (const shown of ["₹5,00,000.00", "₹1,23,456.78", "₹3,76,543.22", "75.31%"]) {
-      expect(within(thisMonth).getByText(shown)).toBeTruthy();
-    }
-    const recorded = screen.getByText("Recorded monthly totals").closest<HTMLDetailsElement>("details");
-    expect(recorded?.open).toBe(false);
-    fireEvent.click(screen.getByText("Recorded monthly totals"));
-    const rows = within(screen.getByRole("table", { name: "The last twelve months" })).getAllByRole("row");
-    expect(rows).toHaveLength(13);
-    expect(within(rows[1]).getByText("Apr 2025")).toBeTruthy();
-    expect(within(rows[1]).getAllByText("₹0.00")).toHaveLength(3);
-    expect(within(rows[1]).getByText("Not applicable")).toBeTruthy();
-    expect(within(rows[12]).getByText("Mar 2026")).toBeTruthy();
-    expect(within(rows[12]).getByText("₹3,76,543.22")).toBeTruthy();
-
-    cleanup();
-    const april = month("2026-03-01", {
-      incomeBase: "600000.0000",
-      spendingBase: "150000.0000",
-      netBase: "450000.0000",
-      savingsRatePctBase: "75.0000",
-    });
-    renderWith(payload({ thisMonth: april, trend: [...MONTHS.slice(0, 11).map((on) => month(on)), april] }));
-    const changed = await screen.findByRole("region", { name: "This month" });
-    for (const shown of ["₹6,00,000.00", "₹1,50,000.00", "₹4,50,000.00", "75.00%"]) {
-      expect(within(changed).getByText(shown)).toBeTruthy();
-    }
-    for (const gone of ["₹5,00,000.00", "₹1,23,456.78", "₹3,76,543.22", "75.31%"]) {
-      expect(screen.queryByText(gone)).toBeNull();
-    }
-  });
-
-  it("shows the month and the trend in the reporting currency the owner chose", async () => {
-    renderWith(payload(), household.currencies[1]);
-    const thisMonth = await screen.findByRole("region", { name: "This month" });
-    expect(within(thisMonth).getByText("AED 22,000.00")).toBeTruthy();
-    expect(within(thisMonth).getByText("AED 5,432.10")).toBeTruthy();
-    expect(within(thisMonth).queryByText(/₹/)).toBeNull();
-    fireEvent.click(screen.getByText("Recorded monthly totals"));
-    const trend = screen.getByRole("table", { name: "The last twelve months" });
-    expect(within(trend).getByText("AED 16,567.90")).toBeTruthy();
-    expect(within(trend).queryByText(/₹/)).toBeNull();
-  });
-
-  it("renders the year-to-date panel from the payload, switching currency with the toggle", async () => {
-    renderWith(payload());
-    const year = await screen.findByRole("region", { name: "This year so far" });
-    expect(within(year).getByText("This year so far · 2026-01-01 to 2026-03-15")).toBeTruthy();
     for (const shown of ["₹15,00,000.00", "₹3,70,000.00", "₹11,30,000.00", "75.33%", "₹2,00,000.00"]) {
       expect(within(year).getByText(shown)).toBeTruthy();
     }
+    expect(within(year).getByRole("link", { name: "₹2,00,000.00" })).toHaveProperty("pathname", "/investments");
 
-    cleanup();
-    renderWith(payload(), household.currencies[1]);
-    const secondary = await screen.findByRole("region", { name: "This year so far" });
-    expect(within(secondary).getByText("AED 66,000.00")).toBeTruthy();
-    expect(within(secondary).getByText("AED 8,800.00")).toBeTruthy();
-    expect(within(secondary).queryByText(/₹/)).toBeNull();
+    const rows = within(screen.getByRole("table", { name: "The last twelve months" })).getAllByRole("row");
+    expect(rows).toHaveLength(13);
+    expect(within(rows[1]).getByText("Apr 2025")).toBeTruthy();
+    expect(within(rows[12]).getByText("₹3,76,543.22")).toBeTruthy();
   });
 
   it("renders each card's dues in that card's own currency, with its due date and days remaining", async () => {
@@ -349,44 +486,11 @@ describe("overview screen", () => {
 
     expect(within(first).getByText("Synthetic Card")).toBeTruthy();
     expect(within(first).getByText("Z 4,500.000")).toBeTruthy();
-    expect(within(first).getByText("Z 40.000")).toBeTruthy();
     expect(within(first).getByText("2026-03-20 · in 18 days")).toBeTruthy();
     expect(within(first).getByText("22.50%")).toBeTruthy();
     expect(within(second).getByText("₹1,200.00")).toBeTruthy();
     expect(within(second).getByText("2026-03-10 · 5 days overdue")).toBeTruthy();
     expect(within(second).getByText("No limit stated")).toBeTruthy();
-  });
-
-  it("renders the next-30-days commitment total and next item from exact server strings", async () => {
-    const next = {
-      commitmentId: "commitment-1",
-      label: "Synthetic annual service",
-      dueDate: "2026-03-22",
-      nativeAmount: "-1234.5600",
-      nativeCurrency: "XIN",
-      remainingBase: "-1234.5600",
-      remainingSecondary: "-54.4400",
-    };
-    renderWith(payload({
-      upcomingCommitments: {
-        asOf: "2026-03-15",
-        through: "2026-04-14",
-        count: 1,
-        totalBase: "-1234.5600",
-        totalSecondary: "-54.4400",
-        missingBaseCurrencies: [],
-        missingSecondaryCurrencies: [],
-        next,
-        items: [next],
-      },
-    }));
-
-    const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
-    expect(within(region).getByText("You owe ₹1,234.56")).toBeTruthy();
-    expect(within(region).getByText("1 commitment due")).toBeTruthy();
-    expect(within(region).getByText(/Synthetic annual service/)).toBeTruthy();
-    expect(within(region).getByText(/2026-03-22/)).toBeTruthy();
-    expect(within(region).getByRole("link", { name: "Review commitments" })).toHaveProperty("pathname", "/plans");
   });
 
   it("does not present a confident commitment total when either reporting conversion is incomplete", async () => {
@@ -416,10 +520,13 @@ describe("overview screen", () => {
     const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
     expect(within(region).getByText(/cannot be stated in XIN/i)).toBeTruthy();
     expect(within(region).getByText(/Missing rates: XZZ/)).toBeTruthy();
+    expect(within(region).getByText("Total unavailable in XIN")).toBeTruthy();
     expect(within(region).queryByText("₹0.00")).toBeNull();
+    const summary = screen.getByRole("region", { name: "Position summary" });
+    expect(within(summary).getByText("Not available")).toBeTruthy();
   });
 
-  it("states the evidenced absence of open commitments without inventing a total card", async () => {
+  it("states the evidenced absence of open commitments without inventing a total", async () => {
     renderWith(payload());
 
     const region = await screen.findByRole("region", { name: "Upcoming commitments — next 30 days" });
@@ -491,12 +598,16 @@ describe("overview screen", () => {
         thisMonth: month("2026-03-01"),
         trend: MONTHS.map((on) => month(on)),
         hasRecordedFlows: false,
+        positionComposition: { rows: [], missing: [] },
       }),
     );
 
     expect(await screen.findByText(/Nothing to report yet/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add an account" })).toHaveProperty("pathname", "/accounts");
-    expect(screen.getByRole("link", { name: "Import a statement" })).toHaveProperty("pathname", "/import");
+    // The page action and the empty state both offer the same real next step.
+    for (const link of screen.getAllByRole("link", { name: "Import a statement" })) {
+      expect(link).toHaveProperty("pathname", "/import");
+    }
     expect(await screen.findByRole("region", { name: "Needs attention" })).toBeTruthy();
     expect(screen.queryByText(/0\.00/)).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
@@ -528,6 +639,7 @@ describe("overview screen", () => {
       thisMonth: month("2026-03-01"),
       trend: MONTHS.map((on) => month(on)),
       hasRecordedFlows: false,
+      positionComposition: { rows: [], missing: [] },
       upcomingCommitments: {
         asOf: "2026-03-15",
         through: "2026-04-14",
@@ -543,7 +655,7 @@ describe("overview screen", () => {
 
     expect(await screen.findByText("Nothing to report yet")).toBeTruthy();
     const commitments = screen.getByRole("region", { name: "Upcoming commitments — next 30 days" });
-    expect(within(commitments).getByText("You owe ₹45.67")).toBeTruthy();
+    expect(within(commitments).getByText("You owe ₹45.67 total")).toBeTruthy();
     expect(within(commitments).getByText("Synthetic excluded-account commitment")).toBeTruthy();
   });
 
@@ -564,65 +676,9 @@ describe("overview screen", () => {
 
     expect(await screen.findByText("No current position")).toBeTruthy();
     expect(screen.queryByText("Nothing to report yet")).toBeNull();
-    const history = screen.getByRole("region", { name: "Income, spending and net trend" });
-    expect(within(history).getByText("₹100.00")).toBeTruthy();
-    expect(screen.getByText("Recorded monthly totals")).toBeTruthy();
-  });
-
-  it("shows an investment coverage reason with a link, and skips a fully current one", async () => {
-    const missingPrice: InvestmentCoverage = {
-      accountId: "acct-1",
-      holdingId: "holding-1",
-      valuationMode: "holdings",
-      status: "missing_price",
-      valueDate: null,
-      carried: false,
-      ageDays: null,
-      method: null,
-      confidence: null,
-    };
-    const carriedSnapshot: InvestmentCoverage = {
-      accountId: "acct-2",
-      holdingId: null,
-      valuationMode: "snapshot",
-      status: "carried_snapshot",
-      valueDate: "2026-02-01",
-      carried: true,
-      ageDays: 42,
-      method: "owner_entered",
-      confidence: "medium",
-    };
-    const current: InvestmentCoverage = {
-      accountId: "acct-3",
-      holdingId: "holding-3",
-      valuationMode: "holdings",
-      status: "current_price",
-      valueDate: "2026-03-15",
-      carried: false,
-      ageDays: 0,
-      method: null,
-      confidence: null,
-    };
-    const base = payload().netWorth;
-    renderWith(
-      payload({
-        netWorth: { ...base, investmentCoverage: [missingPrice, carriedSnapshot, current] },
-      }),
-    );
-
-    const region = await screen.findByRole("region", { name: "Why some figures may be incomplete" });
-    expect(within(region).getByText(/No accepted price is recorded for this holding\./)).toBeTruthy();
-    expect(within(region).getByRole("link", { name: "View holding" })).toHaveProperty(
-      "pathname",
-      "/investments/holding-1",
-    );
-    expect(within(region).getByText(/carried forward/)).toBeTruthy();
-    const snapshotLink = within(region).getByRole("link", { name: "View account" });
-    expect(snapshotLink).toHaveProperty("pathname", "/accounts");
-    // A snapshot-mode account's coverage reason opens straight into its valuation panel.
-    expect(snapshotLink).toHaveProperty("search", "?valuation=acct-2");
-    // The fully current entry names no reason and gets no row.
-    expect(within(region).getAllByRole("listitem")).toHaveLength(2);
+    const flow = screen.getByRole("region", { name: "Cash flow" });
+    fireEvent.click(within(flow).getByText("Exact values"));
+    expect(within(flow).getByText("₹100.00")).toBeTruthy();
   });
 
   it("shows the open count and the first five needs-attention items, linking to Plans", async () => {
@@ -666,9 +722,9 @@ describe("overview screen", () => {
   it("shows only the review status when there is nothing else to attend to", async () => {
     renderWith(payload());
     await screen.findByRole("heading", { name: "Overview", level: 1 });
-    expect(screen.queryByRole("link", { name: /Needs attention \(/ })).toBeNull();
     const region = screen.getByRole("region", { name: "Needs attention" });
     expect(within(region).queryAllByRole("listitem")).toHaveLength(0);
+    expect(within(region).getByText("The previous monthly review is still open.")).toBeTruthy();
     const reviewLink = within(region).getByRole("link", { name: "Last month's review is not yet complete" });
     expect(reviewLink).toHaveProperty("pathname", "/plans");
     expect(reviewLink).toHaveProperty("hash", "#review");

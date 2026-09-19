@@ -19,6 +19,12 @@ currency with no rate at or before the date makes that reporting currency's net 
 naming the currency and the date — never a partial sum, which would be a smaller, confident, wrong
 number. This route fetches no rate: reads write nothing.
 
+**The composition reuses that one selection (Phase 4.8).** `positionComposition` groups exactly
+the values net worth resolved into six stable buckets; it opens no second valuation model and
+reads no account a second way. Shares are absolute over the absolute included total, so a
+liability is a visible part of the position rather than a cancellation of an asset, and a missing
+reporting value nulls that reporting currency for the whole composition rather than shrinking it.
+
 **Flows are frozen (I3, I5).** This month and the eleven before it sum `amount_base` and
 `amount_secondary` as each row froze them on its own day — never the base table, never a rate.
 Income is the `income` rows; spending is every other reportable row with its sign turned, so a
@@ -31,7 +37,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -44,7 +50,7 @@ from ..commitments import commitment_progress
 from ..coverage import month_end, months_from_anchor
 from ..db import connect, scope_to_owner
 from ..investments.positions import current_rate_pair, read_positions
-from ..money import _out, chart_ratios, translate
+from ..money import _ZERO, CENT, _out, chart_ratios, translate
 from .coverage import CoverageRow, coverage_rows
 
 router = APIRouter(tags=["dashboard"])
@@ -101,6 +107,57 @@ class NetWorth(BaseModel):
     rates: list[RateUsed]
     missing: list[MissingRate]
     investmentCoverage: list[InvestmentCoverage]
+
+
+BucketKey = Literal["cash", "investments", "property", "retirement", "other", "liabilities"]
+
+# The composition's stable order and membership (Phase 4.8 spec, "Dashboard position
+# composition"). An included liability lands in `liabilities` whatever its type, so the two
+# residual buckets are decided by `account_class` rather than by listing every liability type
+# here — a new liability type cannot silently become an asset bucket.
+_BUCKETS: tuple[tuple[BucketKey, str, frozenset[str]], ...] = (
+    (
+        "cash",
+        "Cash and equivalents",
+        frozenset({"cash", "current", "savings", "salary", "fixed_deposit", "recurring_deposit"}),
+    ),
+    (
+        "investments",
+        "Investments",
+        frozenset({"brokerage", "mutual_fund_folio", "crypto", "precious_metal"}),
+    ),
+    ("property", "Property", frozenset({"property"})),
+    ("retirement", "Retirement", frozenset({"retirement"})),
+    ("other", "Other assets", frozenset()),
+    ("liabilities", "Liabilities", frozenset()),
+)
+
+_PERCENT_PLACES = Decimal("0.0001")
+
+
+class PositionCompositionMissing(BaseModel):
+    accountId: UUID
+    currency: str
+
+
+class PositionCompositionRow(BaseModel):
+    key: BucketKey
+    label: str
+    # Signed, as the ledger holds it: a liability row stays negative (ADR-0010).
+    valueBase: str | None
+    valueSecondary: str | None
+    # The row's absolute share of the absolute included total, so a liability is visible instead
+    # of cancelling an asset. Human-readable at four places: "12.5000" is 12.5%.
+    sharePercentBase: str | None
+    sharePercentSecondary: str | None
+    # The same ratio on the inclusive 0–10,000 integer scale — always non-negative.
+    chartCoordinateBase: int | None
+    chartCoordinateSecondary: int | None
+
+
+class PositionComposition(BaseModel):
+    rows: list[PositionCompositionRow]
+    missing: list[PositionCompositionMissing]
 
 
 class CardDue(BaseModel):
@@ -189,6 +246,7 @@ class DashboardResponse(BaseModel):
     cardsDue: list[CardDue]
     yearToDate: YearToDate
     upcomingCommitments: UpcomingCommitmentsSummary
+    positionComposition: PositionComposition
 
 
 _COUNTED = "a.household_id = %s AND a.is_active AND a.include_in_net_worth"
@@ -441,12 +499,103 @@ def flow_evidence(
     ]
 
 
+def _bucket_for(account_class: str, account_type: str) -> BucketKey:
+    if account_class == "liability":
+        return "liabilities"
+    for key, _, types in _BUCKETS:
+        if account_type in types:
+            return key
+    return "other"
+
+
+def position_composition(
+    facts: Sequence[tuple[UUID, str, str, Decimal | None, Decimal | None]],
+    base: str,
+    secondary: str,
+) -> PositionComposition:
+    """The included position grouped into the spec's six stable buckets from exactly the facts
+    net worth already resolved — the same one-source-per-account selection, never a second
+    valuation model. A share is the bucket's **absolute** value over the sum of absolute bucket
+    values, so a liability is a visible part of the position instead of cancelling an asset,
+    while `value*` keeps the ledger's sign. A missing reporting value nulls that reporting
+    currency for the whole composition and names the account, exactly as net worth refuses a
+    partial sum (I7): a smaller, confident, wrong share is worse than an absent one.
+
+    `facts` is (accountId, account_class, account_type, valueBase, valueSecondary); a
+    holdings-mode account contributes one fact per holding, so nothing is counted twice.
+    """
+    order = {key: index for index, (key, _, _) in enumerate(_BUCKETS)}
+    labels = {key: label for key, label, _ in _BUCKETS}
+    totals: dict[BucketKey, tuple[Decimal, Decimal]] = {}
+    missing_base: set[UUID] = set()
+    missing_secondary: set[UUID] = set()
+
+    for account_id, account_class, account_type, value_base, value_secondary in facts:
+        key = _bucket_for(account_class, account_type)
+        running_base, running_secondary = totals.get(key, (_ZERO, _ZERO))
+        if value_base is None:
+            missing_base.add(account_id)
+        else:
+            running_base += value_base
+        if value_secondary is None:
+            missing_secondary.add(account_id)
+        else:
+            running_secondary += value_secondary
+        totals[key] = (running_base, running_secondary)
+
+    keys = sorted(totals, key=lambda key: order[key])
+    base_whole = not missing_base
+    secondary_whole = not missing_secondary
+    base_denominator = sum((abs(totals[key][0]) for key in keys), _ZERO)
+    secondary_denominator = sum((abs(totals[key][1]) for key in keys), _ZERO)
+
+    def share(value: Decimal, denominator: Decimal) -> tuple[str, int]:
+        if denominator == 0:
+            return "0.0000", 0
+        ratio = abs(value) / denominator
+        return (
+            str((ratio * 100).quantize(_PERCENT_PLACES, rounding=ROUND_HALF_EVEN)),
+            int((ratio * 10000).quantize(Decimal(1), rounding=ROUND_HALF_EVEN)),
+        )
+
+    rows: list[PositionCompositionRow] = []
+    for key in keys:
+        value_base = totals[key][0].quantize(CENT, rounding=ROUND_HALF_EVEN)
+        value_secondary = totals[key][1].quantize(CENT, rounding=ROUND_HALF_EVEN)
+        base_share = share(value_base, base_denominator) if base_whole else None
+        secondary_share = share(value_secondary, secondary_denominator) if secondary_whole else None
+        rows.append(
+            PositionCompositionRow(
+                key=key,
+                label=labels[key],
+                valueBase=str(value_base) if base_whole else None,
+                valueSecondary=str(value_secondary) if secondary_whole else None,
+                sharePercentBase=None if base_share is None else base_share[0],
+                sharePercentSecondary=None if secondary_share is None else secondary_share[0],
+                chartCoordinateBase=None if base_share is None else base_share[1],
+                chartCoordinateSecondary=(None if secondary_share is None else secondary_share[1]),
+            )
+        )
+
+    return PositionComposition(
+        rows=rows,
+        missing=sorted(
+            [
+                PositionCompositionMissing(accountId=account_id, currency=currency)
+                for currency, absent in ((base, missing_base), (secondary, missing_secondary))
+                for account_id in absent
+            ],
+            key=lambda item: (str(item.accountId), item.currency),
+        ),
+    )
+
+
 def _net_worth(
     cur: psycopg.Cursor[Any], household_id: UUID, base: str, secondary: str, as_of: date
-) -> NetWorth:
+) -> tuple[NetWorth, PositionComposition]:
     cur.execute(
         f"""SELECT a.id, a.account_class::text, a.is_liquid, a.currency, a.current_balance,
-                   period.valuation_mode::text, period.effective_from
+                   period.valuation_mode::text, period.effective_from, a.account_type::text
               FROM account a
               JOIN account_valuation_period period
                 ON period.id = {VALUATION_PERIOD_FOR_ACCOUNT}
@@ -490,18 +639,44 @@ def _net_worth(
     values_base: list[Decimal | None] = []
     values_secondary: list[Decimal | None] = []
     coverage: list[InvestmentCoverage] = []
+    # The same resolved facts the sum below reads, kept with their account identity and type so
+    # the composition groups them without resolving any account a second way.
+    facts: list[tuple[UUID, str, str, Decimal | None, Decimal | None]] = []
 
-    for account_id, account_class, liquid, currency_raw, balance, mode, effective_from in accounts:
+    def counted(
+        account_id: UUID,
+        account_class: str,
+        account_type: str,
+        liquid: bool,
+        value_base: Decimal | None,
+        value_secondary: Decimal | None,
+    ) -> None:
+        classes.append(account_class)
+        liquidity.append(liquid)
+        values_base.append(value_base)
+        values_secondary.append(value_secondary)
+        facts.append((account_id, account_class, account_type, value_base, value_secondary))
+
+    for (
+        account_id,
+        account_class,
+        liquid,
+        currency_raw,
+        balance,
+        mode,
+        effective_from,
+        account_type,
+    ) in accounts:
         currency = str(currency_raw).strip()
         if mode == "ledger_balance":
             rate_base, rate_secondary = rate_pairs[currency]
-            classes.append(account_class)
-            liquidity.append(bool(liquid))
-            values_base.append(
-                None if rate_base is None else translate(Decimal(balance), rate_base)
-            )
-            values_secondary.append(
-                None if rate_secondary is None else translate(Decimal(balance), rate_secondary)
+            counted(
+                account_id,
+                account_class,
+                account_type,
+                bool(liquid),
+                None if rate_base is None else translate(Decimal(balance), rate_base),
+                None if rate_secondary is None else translate(Decimal(balance), rate_secondary),
             )
         elif mode == "snapshot":
             cur.execute(
@@ -514,10 +689,14 @@ def _net_worth(
                 (household_id, account_id, effective_from, as_of),
             )
             snapshot = cur.fetchone()
-            classes.append(account_class)
-            liquidity.append(bool(liquid))
-            values_base.append(None if snapshot is None else Decimal(snapshot[1]))
-            values_secondary.append(None if snapshot is None else Decimal(snapshot[2]))
+            counted(
+                account_id,
+                account_class,
+                account_type,
+                bool(liquid),
+                None if snapshot is None else Decimal(snapshot[1]),
+                None if snapshot is None else Decimal(snapshot[2]),
+            )
             value_date = None if snapshot is None else snapshot[0]
             coverage.append(
                 InvestmentCoverage(
@@ -547,15 +726,17 @@ def _net_worth(
     }
     for position in positions:
         account = account_by_id[position.accountId]
-        classes.append(str(account[1]))
-        liquidity.append(bool(account[2]))
-        values_base.append(
-            None if position.currentValueBase is None else Decimal(position.currentValueBase)
-        )
-        values_secondary.append(
-            None
-            if position.currentValueSecondary is None
-            else Decimal(position.currentValueSecondary)
+        counted(
+            position.accountId,
+            str(account[1]),
+            str(account[7]),
+            bool(account[2]),
+            None if position.currentValueBase is None else Decimal(position.currentValueBase),
+            (
+                None
+                if position.currentValueSecondary is None
+                else Decimal(position.currentValueSecondary)
+            ),
         )
         coverage.append(
             InvestmentCoverage(
@@ -585,7 +766,7 @@ def _net_worth(
     def shown(value: Decimal | None, whole: bool) -> str | None:
         return _out(value) if whole else None
 
-    return NetWorth(
+    worth = NetWorth(
         asOf=as_of,
         baseCurrency=base,
         secondaryCurrency=secondary,
@@ -607,6 +788,7 @@ def _net_worth(
             ),
         ),
     )
+    return worth, position_composition(facts, base, secondary)
 
 
 @router.get("/dashboard")
@@ -622,7 +804,7 @@ def read_dashboard(
     with connect() as conn, conn.cursor() as cur:
         scope_to_owner(conn, owner.user_id)
         base, secondary = household_currencies(cur, owner.household_id)
-        net_worth = _net_worth(cur, owner.household_id, base, secondary, as_of)
+        net_worth, composition = _net_worth(cur, owner.household_id, base, secondary, as_of)
         cur.execute(FLOWS, {"as_of": as_of, "household": owner.household_id})
         flow_rows = cur.fetchall()
         trend = [
@@ -689,4 +871,5 @@ def read_dashboard(
         cardsDue=cards,
         yearToDate=year_to_date,
         upcomingCommitments=upcoming_commitments,
+        positionComposition=composition,
     )
