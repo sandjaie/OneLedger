@@ -2887,6 +2887,7 @@ export type DashboardResponse = {
      */
     cardsDue: Array<CardDue>;
     yearToDate: YearToDate;
+    upcomingCommitments: UpcomingCommitmentsSummary;
 };
 
 /**
@@ -10677,6 +10678,40 @@ export type UnplannedCardDue = {
 };
 
 /**
+ * UpcomingCommitment
+ */
+export type UpcomingCommitment = {
+    /**
+     * Commitmentid
+     */
+    commitmentId: string;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Duedate
+     */
+    dueDate: string;
+    /**
+     * Nativeamount
+     */
+    nativeAmount: string;
+    /**
+     * Nativecurrency
+     */
+    nativeCurrency: string;
+    /**
+     * Remainingbase
+     */
+    remainingBase: string | null;
+    /**
+     * Remainingsecondary
+     */
+    remainingSecondary: string | null;
+};
+
+/**
  * UpcomingCommitmentRow
  */
 export type UpcomingCommitmentRow = {
@@ -10696,6 +10731,45 @@ export type UpcomingCommitmentRow = {
      * Remainingnext
      */
     remainingNext: string | null;
+};
+
+/**
+ * UpcomingCommitmentsSummary
+ */
+export type UpcomingCommitmentsSummary = {
+    /**
+     * Asof
+     */
+    asOf: string;
+    /**
+     * Through
+     */
+    through: string;
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Totalbase
+     */
+    totalBase: string | null;
+    /**
+     * Totalsecondary
+     */
+    totalSecondary: string | null;
+    /**
+     * Missingbasecurrencies
+     */
+    missingBaseCurrencies: Array<string>;
+    /**
+     * Missingsecondarycurrencies
+     */
+    missingSecondaryCurrencies: Array<string>;
+    next: UpcomingCommitment | null;
+    /**
+     * Items
+     */
+    items: Array<UpcomingCommitment>;
 };
 
 /**

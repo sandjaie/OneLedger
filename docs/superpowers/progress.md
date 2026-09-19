@@ -13,9 +13,9 @@ Updated: 19 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.7 — owner workspace experience editorial refinement** | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Nova/shadcn baseline 4.7.1–4.7.13 is merged; after inspecting it, the owner selected the Quiet Editorial Ledger direction and approved the revised specification on 19 Sep 2026. Tasks 4.7.14–4.7.21 are in plan review; implementation is not started | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
-| Next product action | Owner review and execution-method selection for Tasks 4.7.14–4.7.21 | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
-| Current implementation task | None; do not start 4.7.14 until the editorial refinement plan is approved | [development cycle](../development-cycle.md) |
+| Outcome state | Nova/shadcn baseline 4.7.1–4.7.13 is merged; the owner approved the Quiet Editorial Ledger refinement. Task 4.7.14 is implemented locally and is passing its focused API/web checks; read-only review, repair, full verification and PR remain open | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
+| Next product action | Complete the 4.7.14 delivery gates and merge it before beginning 4.7.15 | [development cycle](../development-cycle.md) |
+| Current implementation task | **4.7.14 — Editorial foundation, shell and Overview** on `feature/p4-7-editorial-foundation` | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
 
 ## Canonical phase status
 
@@ -60,7 +60,7 @@ Updated: 19 September 2026.
 | 4.4 — FX and remittance analysis | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.5 — optional email ingestion | **Planned** | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
 | 4.6 — conditional loan support | **Conditional** — no real loan has been confirmed | [master plan](../product/master-implementation-plan.html#phase-4-delivery) |
-| 4.7 — owner workspace experience | **Editorial refinement in plan review** — Nova/shadcn baseline 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263); owner approved the revised design on 19 Sep 2026 | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
+| 4.7 — owner workspace experience | **Editorial refinement in implementation** — Nova/shadcn baseline 4.7.1–4.7.13 merged through [PR #263](https://github.com/sandjaie/OneLedger/pull/263); Task 4.7.14 is at local delivery gates and 4.7.15–4.7.21 remain unstarted | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) · [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md) |
 | 5.1 — privacy, safety, and runtime decision | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.2 — Ask My Finances | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |
 | 5.3 — classification fallback | **Planned** | [master plan](../product/master-implementation-plan.html#phase-5-delivery) |

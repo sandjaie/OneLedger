@@ -2,11 +2,41 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { MenuIcon } from "lucide-react";
+import {
+  ArrowLeftRightIcon,
+  CalendarDaysIcon,
+  CandlestickChartIcon,
+  ChartPieIcon,
+  ClipboardListIcon,
+  FilesIcon,
+  LandmarkIcon,
+  LayoutDashboardIcon,
+  LineChartIcon,
+  MenuIcon,
+  Repeat2Icon,
+  SettingsIcon,
+  ShieldCheckIcon,
+  TagsIcon,
+  TrendingUpIcon,
+  UploadIcon,
+  WalletCardsIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
 
 import { AccountsScreen } from "@/app/accounts/accounts-screen";
 import { CoverageScreen } from "@/app/coverage/coverage-screen";
@@ -44,44 +74,61 @@ const PREFERENCE_KEY = "oneledger.reportingCurrency";
 
 const NAV_GROUPS = [
   { label: "Your money", links: [
-    { label: "Overview", href: "/", sections: ["overview"] },
-    { label: "Accounts", href: "/accounts", sections: ["accounts"] },
-    { label: "Transactions", href: "/transactions", sections: ["transactions"] },
-    { label: "Spending", href: "/spending", sections: ["spending"] },
-    { label: "Subscriptions", href: "/subscriptions", sections: ["subscriptions", "subscriptions-detail"] },
-    { label: "Recurring", href: "/recurring", sections: ["recurring"] },
+    { label: "Overview", href: "/", sections: ["overview"], icon: LayoutDashboardIcon },
+    { label: "Accounts", href: "/accounts", sections: ["accounts"], icon: LandmarkIcon },
+    { label: "Transactions", href: "/transactions", sections: ["transactions"], icon: ArrowLeftRightIcon },
+    { label: "Spending", href: "/spending", sections: ["spending"], icon: ChartPieIcon },
+    { label: "Subscriptions", href: "/subscriptions", sections: ["subscriptions", "subscriptions-detail"], icon: CalendarDaysIcon },
+    { label: "Recurring", href: "/recurring", sections: ["recurring"], icon: Repeat2Icon },
   ] },
   { label: "Build & plan", links: [
-    { label: "Investments", href: "/investments", sections: ["investments", "investments-entry", "investments-holding"] },
-    { label: "Salary", href: "/salary", sections: ["salary"] },
-    { label: "Plans", href: "/plans", sections: ["plans"] },
-    { label: "Wealth", href: "/wealth", sections: ["wealth"] },
+    { label: "Investments", href: "/investments", sections: ["investments", "investments-entry", "investments-holding"], icon: TrendingUpIcon },
+    { label: "Salary", href: "/salary", sections: ["salary"], icon: WalletCardsIcon },
+    { label: "Plans", href: "/plans", sections: ["plans"], icon: ClipboardListIcon },
+    { label: "Wealth", href: "/wealth", sections: ["wealth"], icon: LineChartIcon },
   ] },
   { label: "Review & import", links: [
-    { label: "Import", href: "/import", sections: ["import", "review"] },
-    { label: "Import investments", href: "/investments/import", sections: ["investments-import"] },
-    { label: "Classify", href: "/review", sections: ["classification-review"] },
-    { label: "Documents", href: "/documents", sections: ["documents"] },
-    { label: "Coverage", href: "/coverage", sections: ["coverage"] },
+    { label: "Import", href: "/import", sections: ["import", "review"], icon: UploadIcon },
+    { label: "Import investments", href: "/investments/import", sections: ["investments-import"], icon: CandlestickChartIcon },
+    { label: "Classify", href: "/review", sections: ["classification-review"], icon: TagsIcon },
+    { label: "Documents", href: "/documents", sections: ["documents"], icon: FilesIcon },
+    { label: "Coverage", href: "/coverage", sections: ["coverage"], icon: ShieldCheckIcon },
   ] },
   { label: "Workspace", links: [
-    { label: "Settings", href: "/settings", sections: ["settings"] },
+    { label: "Settings", href: "/settings", sections: ["settings"], icon: SettingsIcon },
   ] },
 ];
 
 function WorkspaceNavGroups({ activeSection, onNavigate }: { activeSection: string; onNavigate?: () => void }) {
   return NAV_GROUPS.map((group) => (
-    <div className="workspace-nav-group" key={group.label}>
-      <p className="workspace-nav-label">{group.label}</p>
-      {group.links.map((link) => (
-        <Link
-          aria-current={link.sections.includes(activeSection) ? "page" : undefined}
-          href={link.href}
-          key={link.href}
-          onClick={onNavigate}
-        >{link.label}</Link>
-      ))}
-    </div>
+    <SidebarGroup className="workspace-nav-group" key={group.label}>
+      <SidebarGroupLabel className="workspace-nav-label">{group.label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {group.links.map((link) => {
+            const active = link.sections.includes(activeSection);
+            const Icon = link.icon;
+            return (
+              <SidebarMenuItem key={link.href}>
+                <SidebarMenuButton
+                  isActive={active}
+                  render={(
+                    <Link
+                      aria-current={active ? "page" : undefined}
+                      href={link.href}
+                      onClick={onNavigate}
+                    />
+                  )}
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{link.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
   ));
 }
 
@@ -403,7 +450,7 @@ export function Workspace({
   );
 
   return (
-    <div className="site-shell">
+    <SidebarProvider className="site-shell">
       <header className="masthead app-toolbar">
         <a className="workspace-skip-link" href="#workspace-content">Skip to content</a>
         {state === "ready" && (
@@ -435,13 +482,13 @@ export function Workspace({
                 >{option.code}</Button>
               ))}
             </div>
-            <span
+            <Avatar
               aria-label={`${household.ownerDisplayName} account`}
               className="owner-badge"
               title={household.ownerDisplayName}
             >
-              {household.ownerDisplayName.trim().slice(0, 1).toUpperCase()}
-            </span>
+              <AvatarFallback>{household.ownerDisplayName.trim().slice(0, 1).toUpperCase()}</AvatarFallback>
+            </Avatar>
             <Button disabled={signingOut} onClick={logout} type="button" variant="outline">
               {signingOut ? "Signing out…" : logoutFailed ? "Retry sign out" : "Sign out"}
             </Button>
@@ -465,9 +512,13 @@ export function Workspace({
       )}
       {state === "ready" && household && currency && (
         <main className="workspace-grid">
-          <nav className="workspace-nav" aria-label="Workspace" id="workspace-navigation">
-            <WorkspaceNavGroups activeSection={activeSection} />
-          </nav>
+          <Sidebar className="editorial-rail" collapsible="none">
+            <SidebarContent>
+              <nav className="workspace-nav" aria-label="Workspace" id="workspace-navigation">
+                <WorkspaceNavGroups activeSection={activeSection} />
+              </nav>
+            </SidebarContent>
+          </Sidebar>
 
           <div className="workspace-content-anchor" id="workspace-content" tabIndex={-1} />
 
@@ -655,6 +706,6 @@ export function Workspace({
       )}
 
       <footer className="footer"><p>Private owner workspace</p></footer>
-    </div>
+    </SidebarProvider>
   );
 }
