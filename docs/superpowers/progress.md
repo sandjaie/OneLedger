@@ -13,8 +13,8 @@ Updated: 19 September 2026.
 | Item | Current state | Evidence |
 | --- | --- | --- |
 | Current outcome | **Phase 4.7 — owner workspace experience editorial refinement** | [revised canonical design](specs/2026-09-18-phase-4-7-workspace-experience.md) |
-| Outcome state | Nova/shadcn baseline 4.7.1–4.7.13 is merged; the owner approved the Quiet Editorial Ledger refinement. Task 4.7.14 is implemented locally and is passing its focused API/web checks; read-only review, repair, full verification and PR remain open | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
-| Next product action | Complete the 4.7.14 delivery gates and merge it before beginning 4.7.15 | [development cycle](../development-cycle.md) |
+| Outcome state | Nova/shadcn baseline 4.7.1–4.7.13 is merged; the owner approved the Quiet Editorial Ledger refinement. Task 4.7.14 is implemented locally; its focused API/web checks and one read-only review plus repair are complete, while full verification and PR remain open | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
+| Next product action | Run the one full verifier, open the 4.7.14 PR, and merge it before beginning 4.7.15 | [development cycle](../development-cycle.md) |
 | Current implementation task | **4.7.14 — Editorial foundation, shell and Overview** on `feature/p4-7-editorial-foundation` | [editorial refinement plan](plans/2026-09-19-phase-4-7-editorial-refinement.md#4714--editorial-foundation-shell-and-overview) |
 
 ## Canonical phase status
