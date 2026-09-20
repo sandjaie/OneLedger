@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ValuationPanel } from "@/app/accounts/valuation-panel";
@@ -293,6 +293,60 @@ describe("ValuationPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review valuation" }));
 
     expect(await screen.findByText("wrong mode")).toBeTruthy();
+  });
+
+  it("lists stored valuations newest first, with the rate date each was frozen against", async () => {
+    const snapshot = (asOfDate: string, valueNative: string, valueBase: string, fxRateDate: string): ValuationSnapshotRow => ({
+      id: `snapshot-${asOfDate}`,
+      asOfDate,
+      valueNative,
+      currency: "XBB",
+      fxRateDate,
+      fxRateToBase: "2.0000000000",
+      fxRateToSecondary: "1.0000000000",
+      valueBase,
+      valueSecondary: valueNative,
+      method: "owner_entered",
+      confidence: "high",
+      sourceNote: null,
+      createdAt: `${asOfDate}T00:00:00Z`,
+    });
+    const request = requestFrom((path) => {
+      if (path === `/accounts/${ACCOUNT_ID}/valuations`) {
+        // The route already answers newest first; the panel states that order rather than re-sorting.
+        return valuations({
+          snapshots: [
+            snapshot("2026-03-31", "300.0000", "600.0000", "2026-03-30"),
+            snapshot("2026-02-28", "200.0000", "400.0000", "2026-02-27"),
+            snapshot("2026-01-31", "100.0000", "200.0000", "2026-01-30"),
+          ],
+        });
+      }
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(
+      <ValuationPanel
+        accountId={ACCOUNT_ID}
+        accountName="Synthetic retirement account"
+        baseCurrency="XAA"
+        currencies={currencies}
+        currency="XBB"
+        onChanged={vi.fn()}
+        onClose={vi.fn()}
+        request={request}
+      />,
+    );
+
+    const table = await screen.findByRole("table", { name: "Stored valuations, newest first" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getByRole("rowheader").textContent))
+      .toEqual(["2026-03-31", "2026-02-28", "2026-01-31"]);
+    // Exact server strings in both the account's own currency and the base currency.
+    expect(within(rows[0]).getByText("B 300.00")).toBeTruthy();
+    expect(within(rows[0]).getByText("A 600.00")).toBeTruthy();
+    expect(within(rows[0]).getByText("2026-03-30")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Stored valuation evidence table" })).toBeTruthy();
   });
 
   it("closes through the onClose callback", async () => {

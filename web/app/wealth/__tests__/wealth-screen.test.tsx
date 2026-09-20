@@ -181,11 +181,86 @@ describe("wealth screen", () => {
     const table = await screen.findByRole("table", { name: /Month-end net worth, in/ });
     expect(within(table).getByText("Before opening: 1")).toBeTruthy();
     fireEvent.click(screen.getByText("How this history is stored"));
-    expect(screen.getByText(/Last refreshed /)).toBeTruthy();
+    expect(screen.getByText(/evidence date and translation rate are stored/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh history" }));
 
-    expect(await screen.findByText("Refreshed 2 months, 3 positions.")).toBeTruthy();
+    // Announced, not merely printed: the owner does not have to find it on screen.
+    expect((await screen.findByText("Refreshed 2 months, 3 positions.")).getAttribute("role")).toBe("status");
+  });
+
+  it("keeps the newer selection when an earlier month's positions arrive late", async () => {
+    const february: MonthPositionsResponse = {
+      ...january,
+      monthEnd: "2024-02-29",
+      positions: [{ ...january.positions[0], accountName: "Synthetic February account" }],
+    };
+    let releaseJanuary: (() => void) | undefined;
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      if (path === "/wealth-history/2024-01-31") {
+        return new Promise((resolve) => {
+          releaseJanuary = () => resolve(january);
+        });
+      }
+      if (path === "/wealth-history/2024-02-29") return february;
+      if (path.endsWith("/attribution")) return new Promise(() => undefined);
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+    await screen.findByRole("table", { name: /Month-end net worth, in/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "2024-01-31" }));
+    fireEvent.click(screen.getByRole("button", { name: "2024-02-29" }));
+    expect(await screen.findByText("Synthetic February account")).toBeTruthy();
+
+    // January's answer arrives after February replaced it: the superseded response is dropped.
+    releaseJanuary?.();
+    await waitFor(() => expect(screen.getByText("Synthetic February account")).toBeTruthy());
+    expect(screen.queryByText("Synthetic savings account")).toBeNull();
+    expect(screen.getByRole("heading", { name: "2024-02-29 positions" })).toBeTruthy();
+  });
+
+  it("leads with the selected complete month, completeness and the refresh state", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    const summary = await screen.findByRole("region", { name: "Stored history summary" });
+    // The newest month with complete values, in the reporting currency the owner chose.
+    expect(within(summary).getByText("AED 1,500.0000")).toBeTruthy();
+    expect(within(summary).getByText("2024-01-31 · in AED")).toBeTruthy();
+    // An incomplete month is never counted as complete, and never shown as a zero.
+    expect(within(summary).getByText("1 of 2")).toBeTruthy();
+    expect(within(summary).getByText("Earliest incomplete month 2024-02-29")).toBeTruthy();
+  });
+
+  it("states that no month is complete instead of inventing a latest figure", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") {
+        return { ...history, months: [history.months[1]] } satisfies WealthHistoryResponse;
+      }
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    const summary = await screen.findByRole("region", { name: "Stored history summary" });
+    expect(within(summary).getByText("Not available")).toBeTruthy();
+    expect(within(summary).getByText("No stored month has complete values yet")).toBeTruthy();
+    expect(within(summary).getByText("0 of 1")).toBeTruthy();
+  });
+
+  it("scrolls a wide month table only inside its own named region", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/wealth-history") return history;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<WealthScreen currencies={CURRENCIES} currency={CURRENCY} request={request} />);
+
+    const region = await screen.findByRole("region", { name: "Month-end net worth table" });
+    expect(within(region).getByRole("table", { name: /Month-end net worth, in/ })).toBeTruthy();
   });
 
   it("refresh posts to the refresh route and reloads the month table", async () => {

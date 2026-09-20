@@ -21,7 +21,9 @@ export function ChartContainer({
   initialDimension?: { width: number; height: number };
 }) {
   const colors = Object.fromEntries(Object.entries(config).map(([key, item]) => {
-    if (!/^[a-z][a-z0-9-]*$/.test(key) || !/^var\(--(?:category-(?:[1-9]|1[0-2])|chart-[1-5])\)$/.test(item.color)) {
+    // `--console-blue` is the approved primary series token (Phase 4.8 colour table); every
+    // other mark keeps a stored category identity or the shadcn chart palette.
+    if (!/^[a-z][a-z0-9-]*$/.test(key) || !/^var\(--(?:category-(?:[1-9]|1[0-2])|chart-[1-5]|console-blue)\)$/.test(item.color)) {
       throw new Error("Chart colors must use safe series ids and approved palette tokens");
     }
     return [`--color-${key}`, item.color];
