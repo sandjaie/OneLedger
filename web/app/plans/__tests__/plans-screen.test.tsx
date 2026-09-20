@@ -410,8 +410,11 @@ describe("plans screen", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Plan proceeds" }));
-    expect(screen.getByRole("heading", { name: "Plan proceeds" })).toBeTruthy();
+    const planButton = await screen.findByRole("button", { name: "Plan proceeds" });
+    planButton.focus();
+    fireEvent.click(planButton);
+    const editorHeading = screen.getByRole("heading", { name: "Plan proceeds" });
+    await waitFor(() => expect(document.activeElement).toBe(editorHeading));
     // The deposit's own account, another currency and a liability are all out: the proceeds land
     // on an active asset account in the record's currency that is not the deposit itself.
     const picker = screen.getByLabelText("Account") as HTMLSelectElement;
@@ -433,6 +436,7 @@ describe("plans screen", () => {
     });
     // The register re-reads once the plan exists, so the record shows it without a reload.
     await waitFor(() => expect(registerCalls).toBeGreaterThan(before));
+    await waitFor(() => expect(document.activeElement).toBe(planButton));
   });
 
   it("renders certainty, status, next due date and paid/remaining from server strings", async () => {
@@ -474,8 +478,14 @@ describe("plans screen", () => {
     });
     render(<PlansScreen accounts={[account]} currencies={currencies} householdCurrencies={householdCurrencies} request={request} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Settle" }));
-    expect(await screen.findByText("Settle Synthetic salary")).toBeTruthy();
+    const settleButton = await screen.findByRole("button", { name: "Settle" });
+    settleButton.focus();
+    fireEvent.click(settleButton);
+    const settlementHeading = await screen.findByRole("heading", { name: "Settle Synthetic salary" });
+    await waitFor(() => expect(document.activeElement).toBe(settlementHeading));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(settleButton));
   });
 
   it("the forecast's Settle and Plan payment open the Phase 3.1 settlement panel and card pre-fill", async () => {

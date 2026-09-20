@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ConsolePageHeader } from "@/app/ui/console-page-header";
 import { DataToolbar } from "@/app/ui/data-toolbar";
@@ -110,6 +110,10 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
   const [problem, setProblem] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [settlingId, setSettlingId] = useState<string>();
+  const editorHeadingRef = useRef<HTMLHeadingElement>(null);
+  const commitmentsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const editorOpenerRef = useRef<HTMLElement | null>(null);
+  const settlementOpenerRef = useRef<HTMLElement | null>(null);
   // Settle can be started from Needs attention, the Register or the Forecast — sections above
   // this one's own <SettlementPanel> (spec: seven sections, Commitments last) — so opening it
   // there leaves nothing visibly different unless the panel is brought into view itself. A
@@ -121,6 +125,29 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
     panel.scrollIntoView?.({ block: "center" });
     panel.querySelector("h3")?.focus();
   }, []);
+
+  function activeControl(): HTMLElement | null {
+    return document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+
+  function restoreFocus(opener: HTMLElement | null) {
+    requestAnimationFrame(() => {
+      const target = opener?.isConnected ? opener : commitmentsHeadingRef.current;
+      target?.focus();
+    });
+  }
+
+  function openSettlement(commitmentId: string) {
+    settlementOpenerRef.current = activeControl();
+    setSettlingId(commitmentId);
+  }
+
+  function closeSettlement() {
+    const opener = settlementOpenerRef.current;
+    settlementOpenerRef.current = null;
+    setSettlingId(undefined);
+    restoreFocus(opener);
+  }
   // Set only while planning a card statement's payment (Plan payment); cleared on cancel, on any
   // other edit start, and after a successful submit. Limits the account picker to active asset
   // accounts in the statement's currency and is sent as the create body's sourceCardStatementId.
@@ -158,6 +185,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
   }
 
   function startEdit(commitment: CommitmentRow) {
+    editorOpenerRef.current = activeControl();
     setEditing(commitment);
     setForm(formFromCommitment(commitment));
     setPlanningCard(undefined);
@@ -167,12 +195,15 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
   }
 
   function cancelEdit() {
+    const opener = editorOpenerRef.current;
+    editorOpenerRef.current = null;
     setEditing(undefined);
     setPlanningCard(undefined);
     setPlanningRecord(undefined);
     setForm(emptyForm(activeAccounts));
     setIdempotencyKey(crypto.randomUUID());
     setProblem(undefined);
+    restoreFocus(opener);
   }
 
   // Plan payment (Needs attention Task 2, and the forecast's Card statements with no planned
@@ -187,6 +218,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
     amount: string;
     dueDate: string | null;
   }) {
+    editorOpenerRef.current = activeControl();
     setEditing(undefined);
     setPlanningCard({ statementId: due.cardStatementId, currency: due.currency });
     const firstChoice = accounts.find(
@@ -234,6 +266,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
   // and the source — with the account picker narrowed below in formAccounts.
   function startRecordPlan(record: RegisterRow) {
     if (!record.currency) return;
+    editorOpenerRef.current = activeControl();
     setEditing(undefined);
     setPlanningCard(undefined);
     setPlanningRecord({
@@ -278,6 +311,12 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
     setProblem(undefined);
     setFeedback(undefined);
   }
+
+  useEffect(() => {
+    if (!editing && !planningCard && !planningRecord) return;
+    editorHeadingRef.current?.scrollIntoView?.({ block: "center" });
+    editorHeadingRef.current?.focus();
+  }, [editing, planningCard, planningRecord]);
 
   const selectedAccount = accounts.find((account) => account.id === form.accountId);
   // The ordinary picker offers every active account; planning a card payment or a deposit/claim's
@@ -351,6 +390,9 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
       setForm(emptyForm(activeAccounts));
       setIdempotencyKey(crypto.randomUUID());
       setAttempt((value) => value + 1);
+      const opener = editorOpenerRef.current;
+      editorOpenerRef.current = null;
+      restoreFocus(opener);
     } catch (error) {
       setProblem(errorText(error, "This commitment could not be saved."));
     } finally {
@@ -404,7 +446,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         currencies={currencies}
         onCommitmentResolved={() => setAttempt((value) => value + 1)}
         onPlanCardPayment={startCardPlan}
-        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        onSettle={openSettlement}
         refreshKey={attempt}
         request={request}
       />
@@ -413,7 +455,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         accounts={accounts}
         currencies={currencies}
         onPlanCardPayment={startCardPlanFromDue}
-        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        onSettle={openSettlement}
         refreshKey={attempt}
         request={request}
       />
@@ -431,7 +473,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
 
       <section className="plans-commitments-section" aria-labelledby="plans-commitments-title" id="commitments">
         <div className="console-section-head">
-          <h2 id="plans-commitments-title">Commitments</h2>
+          <h2 id="plans-commitments-title" ref={commitmentsHeadingRef} tabIndex={-1}>Commitments</h2>
           {commitments && <span>{commitments.length} recorded</span>}
         </div>
         {commitmentsFailed && (
@@ -482,7 +524,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
                     <>
                       <Button
                         variant="outline"
-                        onClick={() => setSettlingId(commitment.id)}
+                        onClick={() => openSettlement(commitment.id)}
                         type="button"
                       >{commitment.nextDueDate ? "Settle" : "History"}</Button>
                       <Button variant="outline" onClick={() => startEdit(commitment)} type="button">Edit</Button>
@@ -500,7 +542,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
                         commitment={commitment}
                         currencies={currencies}
                         request={request}
-                        onClose={() => setSettlingId(undefined)}
+                        onClose={closeSettlement}
                         onChanged={() => setAttempt((value) => value + 1)}
                       />
                     </div>
@@ -512,7 +554,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         )}
 
         <div className="plans-context-panel" id="commitment-editor">
-        <h3>
+        <h3 ref={editorHeadingRef} tabIndex={-1}>
           {editing
             ? `Edit ${editing.label}`
             : planningCard
@@ -589,7 +631,7 @@ export function PlansScreen({ accounts, currencies, request, householdCurrencies
         accounts={accounts}
         currencies={currencies}
         onPlanFromRecord={startRecordPlan}
-        onSettle={(commitmentId) => setSettlingId(commitmentId)}
+        onSettle={openSettlement}
         refreshKey={attempt}
         request={request}
       />
