@@ -6,6 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 
 import { Fragment, useEffect, useState } from "react";
 
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { EvidenceChart, type EvidenceSeries } from "@/app/ui/evidence-chart";
 import { DIETZ_REASON_TEXT, XIRR_REASON_TEXT } from "@/app/investments/return-reasons";
 import { errorText, type apiFetch } from "@/lib/api/client";
@@ -114,7 +115,7 @@ function monthlyTrend(data: AnalysisResponse): { periods: string[]; series: Evid
     }
   }
   const actual: EvidenceSeries = {
-    id: "actual", label: "Portfolio return", color: "var(--category-1)",
+    id: "actual", label: "Portfolio return", color: "var(--console-blue)",
     lineStyle: "solid", marker: "circle",
     points: periods.map((period) => {
       const month = months.get(period);
@@ -255,7 +256,10 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
 
   return (
     <section aria-labelledby="investment-analysis-title" className="investment-analysis">
-      <h2 id="investment-analysis-title">Analysis</h2>
+      <div className="console-section-head">
+        <h2 id="investment-analysis-title">Analysis</h2>
+        <span>Server-computed return evidence</span>
+      </div>
 
       {loadState === "loading" && <p role="status">Loading investment analysis…</p>}
       {loadState === "error" && (
@@ -277,6 +281,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
       {loadState === "ready" && data && (
         <>
           {trend && <EvidenceChart
+            dense
             title="Monthly return evidence"
             description="Modified Dietz returns by month. Unvalued or unsupported months remain gaps; exact percentages are listed below."
             periods={trend.periods}
@@ -286,7 +291,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
             <p>{positions.length === 0 ? "No holdings to analyse." : "No supported holding analysis yet."}</p>
           )}
 
-          <details className="investment-disclosure">
+          <details className="console-details investment-disclosure investment-analysis-details">
             <summary>Methodology and detailed returns</summary>
             <div className="investment-disclosure-content">
               <p>Returns use recorded cash flows and dated values. Modified Dietz compares monthly opening and closing values with time-weighted flows; XIRR follows the holding cash-flow history. Missing evidence remains unavailable.</p>
@@ -310,8 +315,8 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
           {data.classes.length > 0 && (
             <section aria-labelledby="analysis-classes-title">
               <p className="section-label" id="analysis-classes-title">Asset classes</p>
-              <div className="overview-scroll">
-                <table className="spending-table">
+              <DataTableRegion label="Returns by asset class table">
+                <table className="console-table investment-analysis-table">
                   <caption className="visually-hidden">Returns by asset class</caption>
                   <thead>
                     <tr>
@@ -338,15 +343,15 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </DataTableRegion>
             </section>
           )}
 
           {data.accounts.length > 0 && (
             <section aria-labelledby="analysis-accounts-title">
               <p className="section-label" id="analysis-accounts-title">Accounts</p>
-              <div className="overview-scroll">
-                <table className="spending-table">
+              <DataTableRegion label="Returns by account table">
+                <table className="console-table investment-analysis-table">
                   <caption className="visually-hidden">Returns by account</caption>
                   <thead>
                     <tr>
@@ -365,14 +370,14 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </DataTableRegion>
             </section>
           )}
 
           <section aria-labelledby="analysis-inception-title">
             <p className="section-label" id="analysis-inception-title">Inception</p>
-            <div className="overview-scroll">
-              <table className="spending-table">
+            <DataTableRegion label="Inception return table">
+              <table className="console-table investment-analysis-table">
                 <caption className="visually-hidden">Inception to as-of</caption>
                 <thead>
                   <tr>
@@ -391,15 +396,15 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </DataTableRegion>
           </section>
 
           <section aria-labelledby="analysis-years-title">
             <p className="section-label" id="analysis-years-title">Years</p>
             {data.years.length === 0 && <p>No year figures yet.</p>}
             {data.years.length > 0 && (
-              <div className="overview-scroll">
-                <table className="spending-table">
+              <DataTableRegion label="Returns by year table">
+                <table className="console-table investment-analysis-table">
                   <caption className="visually-hidden">Returns by year</caption>
                   <thead>
                     <tr>
@@ -440,7 +445,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </DataTableRegion>
             )}
           </section>
 
@@ -448,8 +453,8 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
             <p className="section-label" id="analysis-months-title">Months</p>
             {data.months.length === 0 && <p>No month figures yet.</p>}
             {data.months.length > 0 && (
-              <div className="overview-scroll">
-                <table className="spending-table">
+              <DataTableRegion label="Returns by month table">
+                <table className="console-table investment-analysis-table">
                   <caption className="visually-hidden">Returns by month</caption>
                   <thead>
                     <tr>
@@ -496,7 +501,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </DataTableRegion>
             )}
           </section>
 
@@ -512,8 +517,8 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
               )}
               {data.target.source === "none" && "No target yet."}
             </p>
-            <div className="overview-scroll">
-              <table className="spending-table">
+            <DataTableRegion label="Allocation target ratios table">
+              <table className="console-table investment-analysis-table">
                 <caption className="visually-hidden">Allocation target ratios</caption>
                 <thead>
                   <tr>
@@ -539,7 +544,7 @@ export function InvestmentAnalysis({ baseCurrency, positions, request, refreshKe
                   ))}
                 </tbody>
               </table>
-            </div>
+            </DataTableRegion>
             <div className="portfolio-links">
               <Button variant="outline" disabled={targetBusy} onClick={() => void saveTargets()} type="button">
                 Save target

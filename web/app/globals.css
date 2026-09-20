@@ -3438,3 +3438,121 @@ body {
   .subscription-price-timeline > li:first-child { padding: 10px 0; border-top: 1px solid var(--console-line); border-left: 0; }
   .subscription-price-timeline > li:first-child { border-top: 0; }
 }
+
+/* Phase 4.8 Task 6 — investments lead with evidenced value, expose confidence gaps, and keep
+   holdings, reviews, return history and allocation in the same compact console hierarchy. */
+.workspace-content.portfolio-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  min-width: 0;
+}
+.workspace-content.portfolio-screen > * { min-width: 0; }
+.portfolio-screen .console-page-header { margin-bottom: 0; }
+.portfolio-screen .metric-strip { padding-block: 14px; }
+.portfolio-screen .portfolio-start {
+  padding: 22px 24px;
+  border: 1px solid var(--console-line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.portfolio-screen .portfolio-start h2 { font-family: inherit; font-size: 17px; font-weight: 650; letter-spacing: normal; }
+.portfolio-confidence,
+.investment-holdings,
+.investment-reviews,
+.investment-analysis,
+.portfolio-allocation { display: grid; gap: 12px; min-width: 0; }
+.portfolio-confidence-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.portfolio-price-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  padding: 14px 0 0;
+  border: 0;
+  border-top: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+}
+.portfolio-price-status > div { min-width: 0; }
+.portfolio-price-status h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.portfolio-price-status p { color: var(--console-muted); font-size: 11px; }
+.investment-holdings {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.portfolio-screen .data-table-region { border-bottom: 1px solid var(--console-line); }
+.portfolio-holdings-table { min-width: 980px; }
+.portfolio-holdings-table :is(th, td) { vertical-align: top; }
+.portfolio-holdings-table .portfolio-price-evidence { min-width: 220px; white-space: normal; }
+.portfolio-holdings-table .portfolio-price-evidence p { margin: 0; color: var(--console-muted); font-size: 11px; line-height: 1.45; }
+.investment-reviews-table { min-width: 720px; }
+.investment-reviews-table :is(th, td) { vertical-align: top; }
+.investment-reviews-table td:nth-child(2) { min-width: 180px; white-space: normal; }
+.investment-reviews-table a { color: var(--console-blue); font-weight: 600; text-decoration: none; }
+
+.portfolio-screen .investment-analysis { padding: 22px 0 0; border-top: 1px solid var(--console-line); }
+.portfolio-screen .investment-analysis > section {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.portfolio-screen .investment-analysis .evidence-chart { margin: 0; }
+.portfolio-screen .investment-analysis-details,
+.portfolio-screen .portfolio-allocation > .investment-disclosure {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.portfolio-screen .investment-disclosure > summary {
+  padding: 0;
+  color: var(--console-blue);
+  font-size: 13px;
+  font-weight: 600;
+}
+.portfolio-screen .investment-disclosure > summary:hover { background: transparent; }
+.portfolio-screen .investment-disclosure[open] > summary { border-bottom: 0; }
+.portfolio-screen .investment-disclosure-content { gap: 18px; padding: 16px 0 0; }
+.portfolio-screen .investment-disclosure-content > section { display: grid; gap: 8px; }
+.portfolio-screen .investment-disclosure-content .section-label { margin: 0; color: var(--console-muted); font-size: 11px; }
+.investment-analysis-table { min-width: max-content; }
+.investment-analysis-table :is(th, td) { vertical-align: top; }
+.investment-analysis-table td:last-child { max-width: 420px; white-space: normal; }
+.portfolio-screen .analysis-benchmarks { display: grid; gap: 10px; }
+
+.portfolio-screen .portfolio-allocation {
+  padding: 22px 0 0;
+  border: 0;
+  border-top: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+}
+.portfolio-screen .portfolio-allocation h2 { margin: 0; font-size: 16px; }
+.portfolio-screen .allocation-evidence-chart { gap: 12px; }
+.portfolio-screen .allocation-evidence-chart h3 { font-size: 14px; }
+.portfolio-screen .allocation-evidence-chart p { color: var(--console-muted); font-size: 12px; }
+.portfolio-screen .allocation-evidence-plot { min-height: 150px; max-height: 260px; }
+.allocation-exact-table,
+.portfolio-allocation-table { min-width: 560px; }
+.portfolio-screen .allocation-evidence-chart :is(th, td),
+.portfolio-screen .portfolio-allocation :is(th, td) { padding: 10px 12px; border-bottom-color: var(--console-line); }
+
+@media (max-width: 1024px) {
+  .portfolio-confidence-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 14px; }
+  .portfolio-confidence-facts > div:nth-child(odd) { padding-left: 0; border-left: 0; }
+}
+
+@media (max-width: 588px) {
+  .portfolio-confidence-facts { grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+  .portfolio-confidence-facts > div,
+  .portfolio-confidence-facts > div:nth-child(odd) { padding: 10px 0; border-top: 1px solid var(--console-line); border-left: 0; }
+  .portfolio-confidence-facts > div:first-child { padding-top: 0; border-top: 0; }
+  .portfolio-price-status { align-items: flex-start; flex-direction: column; }
+  .portfolio-start-actions > a { flex: 1 1 100%; }
+  .portfolio-screen .allocation-evidence-chart table { table-layout: auto; }
+  .portfolio-screen .allocation-evidence-chart :is(th, td) { white-space: nowrap; }
+}

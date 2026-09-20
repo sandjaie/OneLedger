@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { ChartContainer } from "@/components/ui/chart";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import type { AllocationGroupRow } from "@/types/api";
 
 export function allocationChartRows(groups: readonly AllocationGroupRow[]) {
@@ -38,7 +39,7 @@ export function AllocationEvidenceChart({ currency, groups }: {
       ) : (
         <>
           <ChartContainer aria-hidden="true" className="allocation-evidence-plot"
-            config={{ allocation: { label: "Valued holdings", color: "var(--category-1)" } }}>
+            config={{ allocation: { label: "Valued holdings", color: "var(--console-blue)" } }}>
             <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 8 }}>
               <CartesianGrid horizontal={false} />
               <XAxis domain={hasNegative ? [-10000, 10000] : [0, 10000]} hide type="number" />
@@ -46,8 +47,8 @@ export function AllocationEvidenceChart({ currency, groups }: {
               <Bar dataKey="coordinate" fill="var(--color-allocation)" isAnimationActive={false} radius={3} />
             </BarChart>
           </ChartContainer>
-          <div className="evidence-chart-table-wrap">
-            <table aria-label="Allocation exact values">
+          <DataTableRegion label="Allocation exact values table">
+            <table aria-label="Allocation exact values" className="console-table allocation-exact-table">
               <thead><tr><th scope="col">Asset class</th><th scope="col">Value</th><th scope="col">Ratio</th></tr></thead>
               <tbody>{groups.map((group) => (
                 <tr key={group.label}>
@@ -57,7 +58,7 @@ export function AllocationEvidenceChart({ currency, groups }: {
                 </tr>
               ))}</tbody>
             </table>
-          </div>
+          </DataTableRegion>
         </>
       )}
     </section>

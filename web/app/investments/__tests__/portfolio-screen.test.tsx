@@ -147,8 +147,8 @@ describe("PortfolioScreen", () => {
     render(<PortfolioScreen accounts={[]} request={request} />);
 
     const start = await screen.findByRole("region", { name: "Start your investments" });
-    expect(start.querySelector('a[href="/investments/entry"]')?.textContent).toBe("Record a purchase");
-    expect(start.querySelector('a[href="/investments/import"]')?.textContent).toBe("Import a statement");
+    expect(start.querySelector('a[href="/investments/entry"]')?.textContent).toBe("Record event");
+    expect(start.querySelector('a[href="/investments/import"]')?.textContent).toBe("Import evidence");
     expect(start.textContent).toMatch(/analysis.*needs|analysis.*available/i);
     expect(screen.queryByRole("region", { name: "Portfolio totals" })).toBeNull();
     expect(screen.queryByText(/XAA 0\.0000/)).toBeNull();
@@ -200,6 +200,7 @@ describe("PortfolioScreen", () => {
     expect(confidence.compareDocumentPosition(holdings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(holdings.compareDocumentPosition(analysis) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(analysis.compareDocumentPosition(allocation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(/12\.34560000%/)).toHaveLength(1);
   });
 
   it("keeps an out-of-range allocation ratio exact instead of clipping the displayed value", async () => {
@@ -219,6 +220,32 @@ describe("PortfolioScreen", () => {
     expect(table.textContent).toContain("1.5000000000");
   });
 
+  it("preserves closed holding history behind the explicit holdings control", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary();
+      if (path === "/portfolio/positions?includeClosed=true") return positions([
+        position(),
+        position({
+          holdingId: "00000000-0000-4000-8000-000000000059",
+          securityName: "Closed Growth Fund",
+          closed: true,
+        }),
+      ]);
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      if (path === "/investment-reviews?limit=20&offset=0") return [];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    await screen.findByRole("region", { name: "Portfolio totals" });
+    expect(screen.getByText("Closed history", { selector: "dt" }).parentElement?.textContent).toBe("Closed history1");
+    expect(screen.queryByRole("link", { name: "Closed Growth Fund" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show 1 closed holding" }));
+    expect(screen.getByRole("link", { name: "Closed Growth Fund" })).toBeTruthy();
+    expect(screen.getByText("Closed", { selector: "span" })).toBeTruthy();
+  });
+
   it("renders server value, gain and XIRR strings with an unavailable reason when withheld", async () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/summary") {
@@ -231,9 +258,10 @@ describe("PortfolioScreen", () => {
 
     render(<PortfolioScreen accounts={[]} request={request} />);
 
-    expect((await screen.findByLabelText("Value")).textContent).toContain("XAA 100.0000");
+    const totals = await screen.findByRole("region", { name: "Portfolio totals" });
+    expect(totals.querySelector("dt")?.parentElement?.textContent).toContain("XAA 100.0000");
     expect(screen.getByText("No sign change across the cash flows.")).toBeTruthy();
-    const gain = screen.getByLabelText("Gain");
+    const gain = screen.getByText("Gain", { selector: "dt" }).parentElement!;
     expect(gain.textContent).not.toMatch(/10\.0000/);
     expect(gain.textContent).toContain("One or more holdings do not have a supported gain.");
   });
@@ -280,7 +308,13 @@ describe("PortfolioScreen", () => {
 
   it("labels a stale and a missing holding price without computing a value", async () => {
     const request = requestFrom((path) => {
-      if (path === "/portfolio/summary") return summary();
+      if (path === "/portfolio/summary") return summary({
+        valueComplete: false,
+        valuedCount: 1,
+        unvaluedCount: 1,
+        staleCount: 1,
+        allocationComplete: false,
+      });
       if (path === "/portfolio/positions?includeClosed=true") {
         return positions([
           position({
@@ -313,6 +347,7 @@ describe("PortfolioScreen", () => {
     expect(await screen.findByText(/Price XAA 10.000000/, { selector: "p" })).toBeTruthy();
     expect(screen.getByText("No dated price recorded.")).toBeTruthy();
     expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Valuation gaps" }).textContent).toContain("1 unvalued");
   });
 
   it("states allocation is incomplete rather than a false percentage", async () => {
@@ -325,7 +360,9 @@ describe("PortfolioScreen", () => {
 
     render(<PortfolioScreen accounts={[]} request={request} />);
 
-    expect(await screen.findByText("Incomplete — one or more holdings are unvalued.")).toBeTruthy();
+    expect((await screen.findByRole("region", { name: "Incomplete allocation" })).textContent).toContain(
+      "One or more holdings are unvalued",
+    );
   });
 
   it("does not display a zero portfolio value when every holding is unvalued", async () => {
@@ -345,10 +382,13 @@ describe("PortfolioScreen", () => {
     });
     render(<PortfolioScreen accounts={[]} request={request} />);
 
-    const value = await screen.findByLabelText("Valued portion");
+    await screen.findByRole("region", { name: "Portfolio totals" });
+    const value = screen.getByText("Valued portion", { selector: "dt" }).parentElement!;
     expect(value.textContent).toContain("No holdings have a supported current value");
     expect(value.textContent).not.toContain("XAA 0.0000");
-    expect(screen.getByRole("region", { name: "Valuation confidence" }).textContent).toContain("0 valued");
+    const confidence = screen.getByRole("region", { name: "Valuation confidence" });
+    expect(screen.getByText("Valued", { selector: "dt" }).parentElement?.textContent).toBe("Valued0");
+    expect(confidence.textContent).toContain("1 unvalued");
   });
 
   it("routes a protected read returning 401 through the workspace to login", async () => {
