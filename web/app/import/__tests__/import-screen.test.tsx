@@ -231,10 +231,13 @@ describe("choosing files", () => {
     expect(screen.getByRole("heading", { name: "Statement import" })).toBeTruthy();
     const steps = screen.getByRole("list", { name: "Import steps" });
     expect(within(steps).getAllByRole("listitem").map((step) => step.textContent)).toEqual([
-      "CheckConfirm account and statement details",
-      "StagePrepare rows for review",
-      "CommitReview and add to the ledger",
+      "1UploadChoose source evidence",
+      "2Identify / resolveConfirm the destination",
+      "3ParseCheck extracted evidence",
+      "4ReviewDecide what is ready",
+      "5CommitWrite confirmed records",
     ]);
+    expect(steps.querySelector('[aria-current="step"]')).toBeNull();
     expect(screen.getByLabelText("Upload statement files").className).toContain(
       "statement-import-dropzone",
     );
@@ -328,6 +331,16 @@ describe("per-file outcomes", () => {
     // order, so april's verdict is the proof that both checks have rendered.
     expect(await within(april).findByText("no layout matched this statement")).toBeTruthy();
     expect(within(march).getByText(/2 rows/, { selector: "dd" })).toBeTruthy();
+    expect(
+      within(march)
+        .getByRole("list", { name: "march.pdf import progress" })
+        .querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Parse");
+    expect(
+      within(april)
+        .getByRole("list", { name: "april.pdf import progress" })
+        .querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Upload");
     expect(request).toHaveBeenCalledTimes(2);
   });
 
@@ -525,6 +538,11 @@ describe("staging", () => {
     expect((init.body as FormData).get("stage")).toBe("true");
     const link = await within(march).findByRole("link", { name: /review/i });
     expect(link.getAttribute("href")).toBe("/import/batch-1");
+    expect(
+      within(march)
+        .getByRole("list", { name: "march.pdf import progress" })
+        .querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Review");
   });
 
   it("does not claim a file was staged when the API says it was not", async () => {

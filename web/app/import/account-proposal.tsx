@@ -325,7 +325,7 @@ export function AccountProposalPanel({
     : resolution.institution.candidates;
 
   return (
-    <section className="account-proposal" aria-labelledby={headingId}>
+    <section className="account-proposal import-resolution-panel" aria-labelledby={headingId}>
       <header>
         <p className="eyebrow">Identity decision</p>
         <h3 id={headingId}>{decisionHeading(resolution, institutionChoice)}</h3>
