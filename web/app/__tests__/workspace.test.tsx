@@ -471,7 +471,7 @@ describe("authenticated workspace", () => {
 
     await screen.findByRole("heading", { name: "Settings" });
     fireEvent.click(screen.getByRole("button", { name: "Data health" }));
-    expect(screen.getByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Data health" })).toBeTruthy();
     expect(request).toHaveBeenCalledWith("/doctor", undefined);
   });
 
@@ -482,7 +482,7 @@ describe("authenticated workspace", () => {
     expect(await screen.findByRole("heading", { name: "Name and reporting pair" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "General" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getAllByRole("button", { name: "Save household" })).toHaveLength(1);
-    expect(screen.queryByRole("heading", { name: "Data Quality" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Data health" })).toBeNull();
     expect(screen.queryByRole("heading", { name: "Stored rate" })).toBeNull();
   });
 
@@ -525,7 +525,7 @@ describe("authenticated workspace", () => {
     health.resolve({ sections: [{ title: "Coverage", findings: [{ level: "warning", message: "Synthetic coverage gap" }] }] });
     expect(await screen.findByText("1 data finding needs attention")).toBeTruthy();
     fireEvent.click(screen.getByRole("link", { name: "Review data health" }));
-    expect(screen.getByRole("heading", { name: "Data Quality" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Data health" })).toBeTruthy();
     expect(window.location.hash).toBe("#data-quality-title");
   });
 

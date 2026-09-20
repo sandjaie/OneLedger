@@ -171,7 +171,7 @@ export function MerchantKnowledge({ categories, request }: Props) {
 
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
 
-      <ul className="merchant-knowledge-list">
+      <ul className="merchant-knowledge-list settings-record-list">
         {rows.map((row) => (
           <li key={row.aliasId}>
             {editingAliasId === row.aliasId && edits ? (

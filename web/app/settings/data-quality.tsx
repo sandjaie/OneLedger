@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import type { DoctorReport } from "@/types/api";
@@ -51,10 +49,10 @@ export function DataQuality({ request, onWarningCount }: Props) {
 
   return (
     <section aria-labelledby="data-quality-title" className="settings-block">
-      <div className="settings-block-head">
+      <div className="settings-section-head">
         <div>
           <p className="section-label">Keep your ledger reliable</p>
-          <h2 id="data-quality-title" tabIndex={-1}>Data Quality</h2>
+          <h2 id="data-quality-title" tabIndex={-1}>Data health</h2>
         </div>
         <div className="settings-block-actions">
           <Link className={buttonVariants({ variant: "outline" })} href="/coverage">History coverage</Link>
@@ -68,13 +66,12 @@ export function DataQuality({ request, onWarningCount }: Props) {
           {report.sections.map((section) => {
             const warnings = section.findings.filter((finding) => finding.level === "warning").length;
             return (
-              <Card className="data-quality-group" key={section.title}>
-                <Collapsible defaultOpen={warnings > 0 && section.findings.length <= 2}>
+              <Collapsible className="data-quality-group" defaultOpen={warnings > 0 && section.findings.length <= 2} key={section.title}>
                   <CollapsibleTrigger className="data-quality-trigger">
                     <span>{section.title}</span>
-                    <Badge variant={warnings > 0 ? "destructive" : "secondary"}>
+                    <span className="settings-status-chip" data-tone={warnings > 0 ? "attention" : "neutral"}>
                       {warnings > 0 ? `${warnings} needs attention` : "No warnings"}
-                    </Badge>
+                    </span>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <ul>
@@ -85,8 +82,7 @@ export function DataQuality({ request, onWarningCount }: Props) {
                       ))}
                     </ul>
                   </CollapsibleContent>
-                </Collapsible>
-              </Card>
+              </Collapsible>
             );
           })}
         </div>

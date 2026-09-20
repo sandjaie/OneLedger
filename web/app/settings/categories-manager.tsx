@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -183,7 +184,7 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
         </div>
       </form>
 
-      <div className="settings-table-frame"><table className="account-table settings-category-table">
+      <DataTableRegion label="Category taxonomy"><table className="console-table settings-category-table">
         <caption className="visually-hidden">Category taxonomy</caption>
         <thead>
           <tr>
@@ -198,7 +199,7 @@ export function CategoriesManager({ categories, request, onChanged }: Props) {
             ...childrenOf(root.id).map((child) => row(child, true)),
           ])}
         </tbody>
-      </table></div>
+      </table></DataTableRegion>
     </section>
   );
 }

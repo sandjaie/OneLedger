@@ -7,10 +7,10 @@ import { DataQuality } from "@/app/settings/data-quality";
 import { HouseholdForm } from "@/app/settings/household-form";
 import { MerchantKnowledge } from "@/app/settings/merchant-knowledge";
 import { RulesManager } from "@/app/settings/rules-manager";
+import { AttentionRow } from "@/app/ui/attention-row";
 import { SectionNav } from "@/app/ui/section-nav";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ApiError, type apiFetch, errorText, LONG_REQUEST_TIMEOUT_MS } from "@/lib/api/client";
@@ -157,17 +157,21 @@ export function SettingsScreen({ household, currencies, categories, request, onC
 
   return (
     <section className="workspace-content settings-screen" aria-labelledby="settings-title">
-      <header className="page-head settings-page-head">
-        <p className="eyebrow">Owner settings</p>
-        <h1 className="workspace-title" id="settings-title">Settings</h1>
-      </header>
+      <div className="console-page-header settings-page-head">
+        <div className="console-page-header-copy">
+          <h1 id="settings-title">Settings</h1>
+          <p>Manage household preferences, data health and ledger automation.</p>
+        </div>
+      </div>
 
       {logoutFailed && <Alert variant="destructive"><AlertDescription>OneLedger could not confirm that the server session was revoked. Your workspace remains open; retry sign out.</AlertDescription></Alert>}
       {healthWarnings > 0 && (
-        <Alert>
-          <AlertTitle>{healthWarnings} data {healthWarnings === 1 ? "finding needs" : "findings need"} attention</AlertTitle>
-          <AlertDescription><a href="#data-quality-title" onClick={(event) => { event.preventDefault(); selectSection("data-quality-title"); }}>Review data health</a></AlertDescription>
-        </Alert>
+        <AttentionRow
+          action={<a href="#data-quality-title" onClick={(event) => { event.preventDefault(); selectSection("data-quality-title"); }}>Review data health</a>}
+          detail="Open the authenticated report for the exact findings and recovery paths."
+          title={`${healthWarnings} data ${healthWarnings === 1 ? "finding needs" : "findings need"} attention`}
+          tone="attention"
+        />
       )}
 
       <SectionNav activeId={selection.sectionId} items={SECTIONS} onSelect={selectSection} />
@@ -201,10 +205,14 @@ export function SettingsScreen({ household, currencies, categories, request, onC
       </div>
 
       <div className="settings-panel settings-fx-panel" hidden={selection.sectionId !== "fx-title"}>
-        <section aria-labelledby="fx-title">
-          <Card>
-            <CardHeader><CardTitle><h2 id="fx-title" tabIndex={-1}>Stored rate</h2></CardTitle></CardHeader>
-            <CardContent>
+        <section aria-labelledby="fx-title" className="settings-block settings-fx-workspace">
+          <div className="settings-section-head">
+            <div>
+              <p className="section-label">Evidence lookup</p>
+              <h2 id="fx-title" tabIndex={-1}>Stored rate</h2>
+              <p>Inspect the rate evidence already stored for an exact date.</p>
+            </div>
+          </div>
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="settings-fx-date">FX date</FieldLabel>
@@ -230,14 +238,16 @@ export function SettingsScreen({ household, currencies, categories, request, onC
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
         </section>
 
-        <section aria-labelledby="fx-backfill-title">
-          <Card>
-            <CardHeader><CardTitle><h2 id="fx-backfill-title" tabIndex={-1}>Backfill rates</h2></CardTitle></CardHeader>
-            <CardContent>
+        <section aria-labelledby="fx-backfill-title" className="settings-block settings-fx-workspace">
+          <div className="settings-section-head">
+            <div>
+              <p className="section-label">Maintenance</p>
+              <h2 id="fx-backfill-title" tabIndex={-1}>Backfill rates</h2>
+              <p>Fetch missing historical rates for the selected date range.</p>
+            </div>
+          </div>
               <FieldGroup>
                 <Field>
                   <FieldLabel htmlFor="settings-backfill-start">Start date</FieldLabel>
@@ -253,8 +263,6 @@ export function SettingsScreen({ household, currencies, categories, request, onC
               </FieldGroup>
               {backfill.status === "ready" && <p className="fx-empty" role="status" aria-atomic="true">Wrote {backfill.written} {backfill.written === 1 ? "rate" : "rates"}.</p>}
               {backfill.status === "error" && <Alert variant="destructive"><AlertDescription>{backfill.message}</AlertDescription></Alert>}
-            </CardContent>
-          </Card>
         </section>
       </div>
     </section>

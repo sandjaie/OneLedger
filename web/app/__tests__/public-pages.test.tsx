@@ -33,6 +33,9 @@ describe("public authentication pages", () => {
     render(page);
     const retry = screen.getByRole("link", { name: "Try again" });
     expect(retry.getAttribute("href")).toBe("http://localhost:8000/auth/login");
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /reporting currency/i })).toBeNull();
     expect(redirectMock).not.toHaveBeenCalled();
   });
 
@@ -40,5 +43,8 @@ describe("public authentication pages", () => {
     render(<UnauthorizedPage />);
     expect(screen.getByRole("heading", { name: "This account is not authorized" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Sign in again" })).toBeTruthy();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+    expect(screen.queryByRole("group", { name: /reporting currency/i })).toBeNull();
   });
 });
