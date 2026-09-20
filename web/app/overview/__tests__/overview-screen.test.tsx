@@ -13,9 +13,18 @@ import type {
   InvestmentCoverage,
   MonthFlows,
   PositionComposition,
+  TransactionSummary,
   TransactionsResponse,
   WealthHistoryResponse,
 } from "@/types/api";
+
+const EMPTY_TRANSACTION_SUMMARY: TransactionSummary = {
+  reportableIncomeBase: "0.0000", reportableIncomeSecondary: "0.0000",
+  reportableSpendingBase: "0.0000", reportableSpendingSecondary: "0.0000",
+  reportableNetBase: "0.0000", reportableNetSecondary: "0.0000",
+  unreviewedCount: 0, uncategorizedCount: 0, attentionCount: 0,
+  moneyScope: "reportable", attentionScope: "ledger",
+};
 
 const catalogue: Array<CurrencyRow> = [
   { code: "XAE", name: "Synthetic A", symbol: "AED", decimals: 2, numberFormat: "international" },
@@ -186,7 +195,7 @@ function renderWith(
     resolvedFollowUps: [],
     previousMonthReview: { month: "2026-02-01", completedAt: null },
   },
-  recent: TransactionsResponse = { transactions: [], total: 0 },
+  recent: TransactionsResponse = { transactions: [], total: 0, summary: EMPTY_TRANSACTION_SUMMARY },
   history: WealthHistoryResponse | Error = HISTORY,
 ) {
   // Needs attention (Task 2) fetches /actions alongside /dashboard; every test here is about
@@ -547,6 +556,7 @@ describe("overview screen", () => {
   it("renders recent activity from server strings without recomputing its amount", async () => {
     renderWith(payload(), undefined, undefined, {
       total: 1,
+      summary: EMPTY_TRANSACTION_SUMMARY,
       transactions: [{
         id: "transaction-1",
         accountId: "account-1",

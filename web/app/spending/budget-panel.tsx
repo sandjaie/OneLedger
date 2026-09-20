@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { DataTableRegion } from "@/app/ui/data-table-region";
 
 import { useEffect, useState } from "react";
 
@@ -241,13 +242,13 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
   );
 
   return (
-    <section aria-labelledby="budget-panel-title" className="budget-panel" id="budget-panel">
-      <h2 id="budget-panel-title">Budget</h2>
+    <section aria-labelledby="budget-panel-title" className="budget-panel console-section" id="budget-panel">
+      <div className="console-section-head"><div><h2 id="budget-panel-title">Budget</h2>
       <p className="lede">
         A budget is an assumption, not a posting — setting, editing or removing one never changes
         the ledger. A bucket&rsquo;s actual excludes any category that carries its own budget this
         month, so nothing is counted twice.
-      </p>
+      </p></div></div>
 
       {state === "loading" && <p role="status">Loading budget…</p>}
       {state === "error" && (
@@ -267,7 +268,7 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
 
           {data.lines.length === 0 && <p>No budget lines are set for this month.</p>}
           {data.lines.length > 0 && (
-            <table className="spending-table">
+            <DataTableRegion label={`Budget lines for ${month}`}><table className="console-table spending-table">
               <caption className="visually-hidden">Budget lines for {month}</caption>
               <thead>
                 <tr>
@@ -319,7 +320,7 @@ export function BudgetPanel({ categories, currencies, baseCurrency, month, reque
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></DataTableRegion>
           )}
 
           {editingId && editingLine && (

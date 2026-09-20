@@ -2,9 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { DownloadIcon } from "lucide-react";
 
 import { BudgetPanel } from "@/app/spending/budget-panel";
 import { SpendingEvidenceChart } from "@/app/spending/spending-evidence-chart";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -105,17 +110,18 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
 
   return (
     <section className="workspace-content spending-screen" aria-labelledby="spending-title">
-      <header className="page-head">
-        <p className="eyebrow">Reportable ledger</p>
-        <h1 className="workspace-title" id="spending-title">Spending</h1>
-        <p>Compare net spending by category or bucket, then open the underlying transactions.</p>
-      </header>
+      <div id="spending-title">
+        <ConsolePageHeader
+          description="Compare net spending by category or bucket, then open the underlying transactions."
+          title="Spending"
+        />
+      </div>
       <details className="experience-disclosure">
         <summary>What counts as spending</summary>
         <p>Figures use the reportable ledger only. Transfers, card payments and investment legs are excluded; refunds reduce spending rather than count as income.</p>
       </details>
 
-      <div className="filter-bar" role="group" aria-label="Date range">
+      <DataToolbar label="Date range">
         <label className="text-field">
           <span className="visually-hidden">Range type</span>
           <NativeSelect
@@ -164,10 +170,11 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
               `/spending/export.csv?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`,
             )}
           >
+            <DownloadIcon aria-hidden="true" />
             Download CSV
           </a>
         )}
-      </div>
+      </DataToolbar>
 
       {!rangeReady && <p role="status">Choose a from and to date.</p>}
       {rangeReady && state === "loading" && <p className="loading-frame" role="status">Loading spending…</p>}
@@ -184,28 +191,33 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
 
       {rangeReady && state === "ready" && data && (
         <>
-          <dl className="spending-totals">
-            <div>
-              <dt>This period</dt>
-              <dd>{moneyText(amountFor(data.totalBase, data.totalSecondary, data, currency), currency.code, currencies)}</dd>
-            </div>
-            <div>
-              <dt>Previous period ({data.baseCurrency})</dt>
-              <dd>{moneyText(data.previousTotalBase, data.baseCurrency, currencies)}</dd>
-            </div>
-          </dl>
+          <MetricStrip
+            items={[
+              {
+                label: "This period",
+                value: moneyText(amountFor(data.totalBase, data.totalSecondary, data, currency), currency.code, currencies),
+                detail: `${data.from} to ${data.to}`,
+              },
+              {
+                label: `Previous period (${data.baseCurrency})`,
+                value: moneyText(data.previousTotalBase, data.baseCurrency, currencies),
+                detail: "Server comparison",
+              },
+            ]}
+            label="Spending summary"
+          />
 
-          <h2>By bucket</h2>
+          <div className="console-section-head"><div><h2>By bucket</h2>
           <p className="lede">
             Buckets cover categorised spending only, so these rows can total less than the figure
             above: uncategorised spending, and any category left without a bucket, are not counted
             here.
-          </p>
+          </p></div></div>
           {data.byBucket.length === 0 && <p>No spending in this range.</p>}
           {data.byBucket.length > 0 && (
             <>
-            <SpendingEvidenceChart rows={data.byBucket} kind="bucket" currency={data.baseCurrency} from={data.from} to={data.to} />
-            <div className="spending-table-wrap"><table className="spending-table spending-table--bucket">
+            <SpendingEvidenceChart dense rows={data.byBucket} kind="bucket" currency={data.baseCurrency} from={data.from} to={data.to} />
+            <DataTableRegion label="Spending by bucket"><table className="console-table spending-table spending-table--bucket">
               <caption className="visually-hidden">Spending by bucket</caption>
               <thead>
                 <tr>
@@ -225,16 +237,16 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </table></DataTableRegion>
             </>
           )}
 
-          <h2>By category</h2>
+          <div className="console-section-head"><div><h2>By category</h2><p>Exact totals and their underlying ledger rows.</p></div></div>
           {maxCategoryRows.length === 0 && <p>No spending in this range.</p>}
           {maxCategoryRows.length > 0 && (
             <>
-              <SpendingEvidenceChart rows={maxCategoryRows} kind="category" currency={data.baseCurrency} from={data.from} to={data.to} />
-              <div className="spending-table-wrap"><table className="spending-table spending-table--category">
+              <SpendingEvidenceChart dense rows={maxCategoryRows} kind="category" currency={data.baseCurrency} from={data.from} to={data.to} />
+              <DataTableRegion label="Spending by category"><table className="console-table spending-table spending-table--category">
                 <caption className="visually-hidden">Spending by category</caption>
                 <thead>
                   <tr>
@@ -265,7 +277,7 @@ export function SpendingScreen({ categories, currencies, currency, request }: Pr
                     </tr>
                   ))}
                 </tbody>
-              </table></div>
+              </table></DataTableRegion>
             </>
           )}
 

@@ -13,6 +13,7 @@ import type {
   HouseholdCurrency,
   HouseholdResponse,
   TransactionRow,
+  TransactionSummary,
   TransferRow,
 } from "@/types/api";
 
@@ -84,6 +85,20 @@ const coffee: CategoryRow = {
   parentId: "cat-food",
 };
 
+const summary: TransactionSummary = {
+  reportableIncomeBase: "125.2500",
+  reportableIncomeSecondary: "5.2500",
+  reportableSpendingBase: "40.5000",
+  reportableSpendingSecondary: "1.5000",
+  reportableNetBase: "84.7500",
+  reportableNetSecondary: "3.7500",
+  unreviewedCount: 2,
+  uncategorizedCount: 1,
+  attentionCount: 2,
+  moneyScope: "reportable",
+  attentionScope: "ledger",
+};
+
 function transaction(overrides: Partial<TransactionRow>): TransactionRow {
   return {
     id: "txn-1",
@@ -134,15 +149,31 @@ function renderScreen(
       household={household}
       onChanged={vi.fn()}
       request={request}
+      summary={summary}
       total={total}
       transactions={rows}
     />,
   );
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/transactions");
+});
 
 describe("the transactions screen", () => {
+  it("shows the exact filtered reportable summary and ledger attention", () => {
+    renderScreen([transaction({})], 1);
+
+    const metrics = screen.getByRole("region", { name: "Filtered transaction summary" });
+    expect(metrics.textContent).toContain("Reportable income");
+    expect(metrics.textContent).toContain(formatMoney("125.2500", reporting));
+    expect(metrics.textContent).toContain("Reportable spending");
+    expect(metrics.textContent).toContain(formatMoney("40.5000", reporting));
+    expect(metrics.textContent).toContain("2 items");
+    expect(metrics.textContent).toContain("1 uncategorized");
+  });
+
   it("keeps the compact filters and ledger ahead of optional manual entry", () => {
     renderScreen([transaction({})], 1);
 
@@ -173,7 +204,8 @@ describe("the transactions screen", () => {
     const filterForm = screen.getByRole("form", { name: "Filter the ledger" });
     const main = filterForm.querySelector(".transaction-filter-main");
     const advanced = filterForm.querySelector(".transaction-filter-advanced");
-    expect(main?.querySelectorAll("label")).toHaveLength(6);
+    expect(main?.querySelectorAll("label")).toHaveLength(5);
+    expect(advanced?.textContent).toContain("Type");
     expect(advanced?.textContent).toContain("Amount from");
     expect(advanced?.textContent).toContain("Currency");
     expect(advanced?.textContent).toContain("Country");
@@ -194,7 +226,7 @@ describe("the transactions screen", () => {
   });
 
   it("round-trips filters as query parameters, never interpolated", async () => {
-    const request = vi.fn().mockResolvedValue({ transactions: [], total: 0 });
+    const request = vi.fn().mockResolvedValue({ transactions: [], total: 0, summary });
     renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
     fireEvent.change(screen.getByLabelText("Search descriptions"), {
       target: { value: "coffee" },
@@ -208,10 +240,85 @@ describe("the transactions screen", () => {
     expect(url).toContain("offset=0");
   });
 
+  it("restores URL filters on Back and Forward navigation", async () => {
+    window.history.replaceState(null, "", "/transactions?q=first");
+    const request = vi.fn().mockResolvedValue({ transactions: [], total: 0, summary });
+    renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+
+    fireEvent.change(screen.getByLabelText("Search descriptions"), {
+      target: { value: "second" },
+    });
+    fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
+    await waitFor(() => expect(window.location.search).toContain("q=second"));
+
+    window.history.pushState(null, "", "/transactions?q=first");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => {
+      expect((screen.getByLabelText("Search descriptions") as HTMLInputElement).value).toBe(
+        "first",
+      );
+    });
+    expect(request.mock.calls.some(([path]) => String(path).includes("q=first"))).toBe(true);
+  });
+
+  it("preserves valid classification provenance in deep links and history", async () => {
+    window.history.replaceState(null, "", "/transactions?classifiedBy=user_manual");
+    const request = vi.fn().mockResolvedValue({ transactions: [], total: 0, summary });
+    renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
+
+    expect((screen.getByLabelText("Classification") as HTMLSelectElement).value).toBe(
+      "user_manual",
+    );
+    fireEvent.submit(screen.getByRole("form", { name: "Filter the ledger" }));
+    await waitFor(() =>
+      expect(
+        request.mock.calls.some(([path]) => String(path).includes("classifiedBy=user_manual")),
+      ).toBe(true),
+    );
+
+    window.history.pushState(null, "", "/transactions?classifiedBy=seed_rule");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await waitFor(() => {
+      expect((screen.getByLabelText("Classification") as HTMLSelectElement).value).toBe(
+        "seed_rule",
+      );
+    });
+    expect(
+      request.mock.calls.some(([path]) => String(path).includes("classifiedBy=seed_rule")),
+    ).toBe(true);
+  });
+
+  it("ignores a stale filter response that arrives after the current one", async () => {
+    let resolveSlow: ((value: unknown) => void) | undefined;
+    let resolveFast: ((value: unknown) => void) | undefined;
+    const request = vi.fn((path: string) => new Promise((resolve) => {
+      if (path.includes("q=slow")) resolveSlow = resolve;
+      if (path.includes("q=fast")) resolveFast = resolve;
+    }));
+    renderScreen([transaction({ descriptionRaw: "INITIAL" })], 1, request as unknown as typeof apiFetch);
+    const form = screen.getByRole("form", { name: "Filter the ledger" });
+
+    fireEvent.change(screen.getByLabelText("Search descriptions"), { target: { value: "slow" } });
+    fireEvent.submit(form);
+    fireEvent.change(screen.getByLabelText("Search descriptions"), { target: { value: "fast" } });
+    fireEvent.submit(form);
+    resolveFast?.({
+      transactions: [transaction({ id: "fast", descriptionRaw: "FAST" })], total: 1, summary,
+    });
+    await screen.findByText("FAST");
+    resolveSlow?.({
+      transactions: [transaction({ id: "slow", descriptionRaw: "SLOW" })], total: 1, summary,
+    });
+    await waitFor(() => expect(screen.queryByText("SLOW")).toBeNull());
+    expect(screen.getByText("FAST")).toBeTruthy();
+  });
+
   it("PATCHes an inline category edit and re-renders the returned row", async () => {
+    const updated = transaction({ categoryId: "cat-groceries", categoryName: "Groceries" });
     const request = vi
       .fn()
-      .mockResolvedValue(transaction({ categoryId: "cat-groceries", categoryName: "Groceries" }));
+      .mockResolvedValueOnce(updated)
+      .mockResolvedValueOnce({ transactions: [updated], total: 1, summary });
     renderScreen([transaction({})], 1, request as unknown as typeof apiFetch);
     fireEvent.change(screen.getByLabelText("Category for COFFEE"), {
       target: { value: "cat-groceries" },
@@ -367,6 +474,7 @@ it("pre-fills the source-document filter carried from the Documents screen's URL
       initialSourceDocumentId="doc-9"
       onChanged={vi.fn()}
       request={vi.fn()}
+      summary={summary}
       total={1}
       transactions={[transaction({})]}
     />,
@@ -381,6 +489,7 @@ it("links an imported row's page and row number to its original", () => {
     1,
   );
 
+  fireEvent.click(screen.getByRole("button", { name: "More actions for COFFEE" }));
   const link = screen.getByRole("link", { name: "Page 2 · row 5" });
   expect(link.getAttribute("href")).toBe("http://localhost:8000/documents/doc-1/original");
   expect(link.getAttribute("target")).toBe("_blank");
@@ -523,12 +632,25 @@ describe("asking how to classify an unclassified row", () => {
   });
 
   it("can apply the category only to the chosen row", async () => {
+    const refreshedSummary = {
+      ...summary,
+      unreviewedCount: 0,
+      uncategorizedCount: 0,
+      attentionCount: 0,
+    };
     const request = vi.fn(async (path: string) => {
       if (path === "/rules/preview") {
         return { affected: 2, unclassified: 2, sample: [] };
       }
       if (path === "/transactions/txn-1") {
         return transaction({ categoryId: "cat-groceries", categoryName: "Groceries" });
+      }
+      if (path.startsWith("/transactions?")) {
+        return {
+          transactions: [transaction({ categoryId: "cat-groceries", categoryName: "Groceries" })],
+          total: 1,
+          summary: refreshedSummary,
+        };
       }
       return {};
     });
@@ -546,7 +668,13 @@ describe("asking how to classify an unclassified row", () => {
     await waitFor(() =>
       expect(request.mock.calls.some(([path]) => path === "/transactions/txn-1")).toBe(true),
     );
+    await waitFor(() =>
+      expect(request.mock.calls.some(([path]) => path.startsWith("/transactions?"))).toBe(true),
+    );
     expect(request.mock.calls.some(([path]) => path === "/rules")).toBe(false);
+    const metrics = screen.getByRole("region", { name: "Filtered transaction summary" });
+    expect(metrics.textContent).toContain("0 items");
+    expect(metrics.textContent).toContain("0 uncategorized");
   });
 
   it("keeps the prompt open with the service sentence when the one-row change is refused", async () => {

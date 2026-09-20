@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { AttentionRow } from "@/app/ui/attention-row";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -174,12 +175,18 @@ export function TransferQueue({ currencies, household, request, onChanged }: Sha
   }
 
   return (
-    <section aria-labelledby="transfers-title" className="account-form transaction-transfer-panel">
-      <h2 id="transfers-title">Transfers</h2>
+    <section aria-label="Transfer review" className="account-form transaction-transfer-panel console-section">
+      <AttentionRow
+        action={(
+          <Button disabled={busy} onClick={() => void find()} type="button" variant="outline">
+            Find transfers
+          </Button>
+        )}
+        detail="Review suggested movements between accounts; nothing links without your confirmation."
+        title="Transfers"
+        tone="neutral"
+      />
       {problem && <p className="inline-alert" role="alert">{problem}</p>}
-      <Button disabled={busy} onClick={() => void find()} type="button" variant="outline">
-        Find transfers
-      </Button>
 
       {open && (
         <>

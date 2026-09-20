@@ -14,10 +14,19 @@ import type {
   HouseholdResponse,
   LotAllocationProposalResponse,
   LotAllocationResponse,
+  TransactionSummary,
   TransactionsResponse,
 } from "@/types/api";
 
 type Request = typeof apiFetch;
+
+const EMPTY_TRANSACTION_SUMMARY: TransactionSummary = {
+  reportableIncomeBase: "0.0000", reportableIncomeSecondary: "0.0000",
+  reportableSpendingBase: "0.0000", reportableSpendingSecondary: "0.0000",
+  reportableNetBase: "0.0000", reportableNetSecondary: "0.0000",
+  unreviewedCount: 0, uncategorizedCount: 0, attentionCount: 0,
+  moneyScope: "reportable", attentionScope: "ledger",
+};
 
 const household: HouseholdResponse = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -287,6 +296,7 @@ describe("HoldingScreen", () => {
         sourceRowNumber: null,
       }],
       total: 1,
+      summary: EMPTY_TRANSACTION_SUMMARY,
     };
     const proposalResponse: FundingProposalResponse = {
       state: "ready",

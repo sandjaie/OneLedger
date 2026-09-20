@@ -16,6 +16,7 @@ import type {
   MonthFlows,
   RuleRow,
   RuleSuggestion,
+  TransactionsResponse,
 } from "@/types/api";
 
 const catalogue: Array<CurrencyRow> = [
@@ -43,6 +44,24 @@ const swappedHousehold: HouseholdResponse = {
   baseCurrency: "XAE",
   secondaryCurrency: "XIN",
   currencies: [household.currencies[1], household.currencies[0]],
+};
+
+const emptyLedger: TransactionsResponse = {
+  transactions: [],
+  total: 0,
+  summary: {
+    reportableIncomeBase: "0.0000",
+    reportableIncomeSecondary: "0.0000",
+    reportableSpendingBase: "0.0000",
+    reportableSpendingSecondary: "0.0000",
+    reportableNetBase: "0.0000",
+    reportableNetSecondary: "0.0000",
+    unreviewedCount: 0,
+    uncategorizedCount: 0,
+    attentionCount: 0,
+    moneyScope: "reportable",
+    attentionScope: "ledger",
+  },
 };
 
 type Request = typeof apiFetch;
@@ -79,7 +98,7 @@ function outOfBand(path: string): Promise<unknown> | undefined {
     });
   }
   if (path === "/transactions?limit=5&offset=0") {
-    return Promise.resolve({ transactions: [], total: 0 });
+    return Promise.resolve(emptyLedger);
   }
   // Net-position history (Phase 4.8 Task 2): Overview plots the stored month ends beside the
   // dashboard; every test here is about the rest of the screen, so it sees none stored yet.
@@ -861,7 +880,7 @@ describe("authenticated workspace", () => {
 
   it("forwards a source-document id from the transactions URL to its first ledger request", async () => {
     window.history.replaceState(null, "", "/transactions?sourceDocumentId=doc-9");
-    const ledger = { transactions: [], total: 0 };
+    const ledger = emptyLedger;
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     // The taxonomy is fetched before the ledger page, so a deep-linked category can be checked
     // against it before the page is asked for.
@@ -876,7 +895,7 @@ describe("authenticated workspace", () => {
   it("forwards a validated search-result transaction id to its first ledger request", async () => {
     const transactionId = "018f2f95-6a58-7f8c-9e61-2d388d928b42";
     window.history.replaceState(null, "", `/transactions?transactionId=${transactionId}`);
-    const ledger = { transactions: [], total: 0 };
+    const ledger = emptyLedger;
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     const request = requestThat(household, [], ledger, inventory, catalogue);
     render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);
@@ -894,7 +913,7 @@ describe("authenticated workspace", () => {
       "",
       "/transactions?categoryId=cat-1&dateFrom=2026-03-01&dateTo=2026-03-31",
     );
-    const ledger = { transactions: [], total: 0 };
+    const ledger = emptyLedger;
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     const taxonomy = [
       { id: "cat-1", parentId: null, name: "Synthetic groceries", slug: "synthetic-groceries",
@@ -916,7 +935,7 @@ describe("authenticated workspace", () => {
       "",
       "/transactions?categoryId=cat-missing&dateTo=nonsense&transactionId=not-a-uuid",
     );
-    const ledger = { transactions: [], total: 0 };
+    const ledger = emptyLedger;
     const inventory: AccountsResponse = { accounts: [], totals: [] };
     const request = requestThat(household, [], ledger, inventory, catalogue);
     render(<Workspace section="transactions" request={request} navigate={vi.fn()} />);

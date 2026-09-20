@@ -71,6 +71,23 @@ def owner() -> auth.OwnerSession:
     )
 
 
+def test_transaction_summary_openapi_requires_all_eleven_fields() -> None:
+    summary_schema = app.openapi()["components"]["schemas"]["TransactionSummary"]
+    assert set(summary_schema["required"]) == {
+        "reportableIncomeBase",
+        "reportableIncomeSecondary",
+        "reportableSpendingBase",
+        "reportableSpendingSecondary",
+        "reportableNetBase",
+        "reportableNetSecondary",
+        "unreviewedCount",
+        "uncategorizedCount",
+        "attentionCount",
+        "moneyScope",
+        "attentionScope",
+    }
+
+
 class LedgerConnection:
     """The fake-connection pattern from test_accounts.py: statements are recorded, canned rows
     come back, and no database is needed."""
@@ -84,6 +101,13 @@ class LedgerConnection:
         fx: dict[tuple[str, str], tuple[object, ...]] | None = None,
         rows: list[tuple[object, ...]] | None = None,
         total: int = 0,
+        attention: tuple[object, ...] = (0, 0, 0),
+        money: tuple[object, ...] = (
+            Decimal("0.0000"),
+            Decimal("0.0000"),
+            Decimal("0.0000"),
+            Decimal("0.0000"),
+        ),
         category_ok: tuple[object, ...] | None = (1,),
         dedupe_taken: int = 0,
     ) -> None:
@@ -102,6 +126,8 @@ class LedgerConnection:
         )
         self.rows = rows or []
         self.total = total
+        self.attention = attention
+        self.money = money
         self.statements: list[str] = []
         self.params: list[tuple[object, ...]] = []
 
@@ -149,6 +175,10 @@ class LedgerCursor:
                 self._one = (1,)
             else:
                 self._one = None
+        elif "v_transaction_reportable" in sql:
+            self._one = self.connection.money
+        elif "FILTER (WHERE" in sql:
+            self._one = self.connection.attention
         elif "count(*)" in sql:
             self._one = (self.connection.total,)
         elif "INSERT INTO transaction" in sql:
@@ -342,6 +372,8 @@ def test_every_statement_is_scoped_to_the_resolved_household(monkeypatch: Monkey
     finally:
         _teardown()
     for statement, params in zip(connection.statements, connection.params, strict=True):
+        if statement == "SET TRANSACTION READ ONLY":
+            continue
         assert "household_id = %s" in statement
         assert HOUSEHOLD_ID in params
 
@@ -370,6 +402,71 @@ def test_filters_round_trip_as_parameters(monkeypatch: MonkeyPatch) -> None:
     assert any("plainto_tsquery" in s for s in connection.statements), (
         "free-text search uses the predicate the GIN index serves"
     )
+
+
+def test_summary_reuses_the_filter_predicate_without_page_controls(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = LedgerConnection(
+        rows=[FETCHED_ROW],
+        total=1,
+        attention=(2, 1, 2),
+        money=(
+            Decimal("125.2500"),
+            Decimal("5.2500"),
+            Decimal("40.5000"),
+            Decimal("1.5000"),
+        ),
+    )
+    try:
+        response = _client(connection, monkeypatch).get(
+            "/transactions",
+            params={
+                "accountId": str(ACCOUNT_ID),
+                "categoryId": str(CATEGORY_ID),
+                "dateFrom": "2024-02-01",
+                "dateTo": "2024-02-29",
+                "q": "coffee",
+                "sort": "amount",
+                "direction": "asc",
+                "limit": 1,
+                "offset": 3,
+            },
+        )
+    finally:
+        _teardown()
+
+    assert response.status_code == 200
+    assert response.json()["summary"] == {
+        "reportableIncomeBase": "125.2500",
+        "reportableIncomeSecondary": "5.2500",
+        "reportableSpendingBase": "40.5000",
+        "reportableSpendingSecondary": "1.5000",
+        "reportableNetBase": "84.7500",
+        "reportableNetSecondary": "3.7500",
+        "unreviewedCount": 2,
+        "uncategorizedCount": 1,
+        "attentionCount": 2,
+        "moneyScope": "reportable",
+        "attentionScope": "ledger",
+    }
+    assert "SET TRANSACTION READ ONLY" in connection.statements[0]
+    filtered = [
+        statement for statement in connection.statements if "WHERE t.household_id = %s" in statement
+    ]
+    assert len(filtered) == 4
+    for statement in filtered:
+        assert "t.account_id = %s" in statement
+        assert "t.category_id = %s" in statement
+        assert "t.booked_date >= %s" in statement
+        assert "t.booked_date <= %s" in statement
+        assert "plainto_tsquery" in statement
+    for statement in filtered[:-1]:
+        assert "ORDER BY" not in statement
+        assert "LIMIT" not in statement
+        assert "OFFSET" not in statement
+    assert "ORDER BY t.amount ASC" in filtered[-1]
+    assert "LIMIT %s OFFSET %s" in filtered[-1]
 
 
 @pytest.mark.parametrize("classified_by", ["unclassified", "recurring_series", "ai"])

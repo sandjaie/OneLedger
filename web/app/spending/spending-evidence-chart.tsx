@@ -33,18 +33,19 @@ export function spendingChartRows(rows: readonly SpendingRow[], kind: "category"
   };
 }
 
-export function SpendingEvidenceChart({ rows, kind, currency, from, to }: {
+export function SpendingEvidenceChart({ rows, kind, currency, from, to, dense = false }: {
   rows: SpendingRow[];
   kind: "category" | "bucket";
   currency: string;
   from: string;
   to: string;
+  dense?: boolean;
 }) {
   const chart = spendingChartRows(rows, kind);
   const hasNegative = chart.rows.some((row) => row.coordinate < 0);
   const title = `Spending by ${kind} · ${from} to ${to}`;
   return (
-    <section aria-label={title} className="spending-evidence-chart">
+    <section aria-label={title} className="spending-evidence-chart" data-dense={dense ? "true" : undefined}>
       <div className="evidence-chart-head">
         <h3>{title}</h3>
         <p>Net spending in {currency}. Bars compare the server&apos;s figures; negative bars mean refunds exceeded spending. The exact values are in the table below.</p>

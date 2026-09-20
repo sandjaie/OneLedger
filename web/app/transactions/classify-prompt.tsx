@@ -130,11 +130,11 @@ export function ClassifyPrompt({
   }
 
   return (
-    <section aria-label={`Classify ${row.descriptionRaw}`} className="account-form">
-      <h2>Mark rows like this?</h2>
+    <section aria-label={`Classify ${row.descriptionRaw}`} className="account-form console-section transaction-classify-prompt">
+      <div className="console-section-head"><div><h2>Mark rows like this?</h2>
       <p className="lede">
         Save a private rule for matching unclassified rows, or change only this transaction.
-      </p>
+      </p></div></div>
       <label className="text-field">
         <span>Pattern</span>
         <Input
