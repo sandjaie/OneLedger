@@ -8,6 +8,7 @@ import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { LayoutMapper, type LayoutMapperSeed } from "@/app/import/layout-mapper";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
 import { ImportStageJourney, type ImportStage } from "@/app/ui/import-stage-journey";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
@@ -450,11 +451,11 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
   );
 
   return (
-    <section className="workspace-content statement-import-screen" aria-labelledby="import-title">
-      <header className="statement-import-header">
-        <h1 className="workspace-title" id="import-title">Statement import</h1>
-        <p>Check first. Nothing enters the ledger until you review and commit it.</p>
-      </header>
+    <section className="workspace-content statement-import-screen" aria-label="Statement import">
+      <ConsolePageHeader
+        title="Statement import"
+        description="Check first. Nothing enters the ledger until you review and commit it."
+      />
 
       <ImportStageJourney current={1} />
 

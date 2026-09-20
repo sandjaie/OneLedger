@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { reasonText } from "@/app/investments/review-reasons";
 import { SecurityForm } from "@/app/investments/security-form";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
 import { ImportStageJourney, type ImportStage } from "@/app/ui/import-stage-journey";
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import { ApiError, LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
@@ -308,8 +309,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
   if (loading) {
     return (
-      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
-        <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
+      <section className="workspace-content investment-import-screen" aria-label="Investment import">
+        <ConsolePageHeader title="Import investments" />
         <p className="lede" role="status">Loading this import…</p>
       </section>
     );
@@ -321,9 +322,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
     const committable = imported.groups.some((group) => group.status === "ready");
     const terminal = TERMINAL.has(imported.status);
     return (
-      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
-        <p className="eyebrow">Statement import</p>
-        <h1 className="workspace-title" id="investment-import-title">Review investment import</h1>
+      <section className="workspace-content investment-import-screen" aria-label="Investment import review">
+        <ConsolePageHeader title="Review investment import" description="Statement import" />
         <ImportStageJourney
           completeThrough={imported.status === "completed" ? 4 : 3}
           current={imported.status === "completed" ? 5 : 4}
@@ -391,9 +391,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
 
   if (investmentAccounts.length === 0) {
     return (
-      <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
-        <p className="eyebrow">Statement import</p>
-        <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
+      <section className="workspace-content investment-import-screen" aria-label="Investment import">
+        <ConsolePageHeader title="Import investments" description="Statement import" />
         <div className="investment-import-prerequisite">
           <h2>Set up an investment account first</h2>
           <p>An investment account is required before importing a statement.</p>
@@ -404,9 +403,8 @@ export function InvestmentImportScreen({ accounts, importId, request }: Props) {
   }
 
   return (
-    <section className="workspace-content investment-import-screen" aria-labelledby="investment-import-title">
-      <p className="eyebrow">Statement import</p>
-      <h1 className="workspace-title" id="investment-import-title">Import investments</h1>
+    <section className="workspace-content investment-import-screen" aria-label="Investment import">
+      <ConsolePageHeader title="Import investments" description="Statement import" />
       <ImportStageJourney completeThrough={uploadCompleteThrough} current={uploadStage} />
       <p className="lede">
         Upload a detailed investment statement. Nothing reaches your holdings until every group

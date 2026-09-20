@@ -5,6 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 
 import { useEffect, useState } from "react";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
 import { ImportStageJourney } from "@/app/ui/import-stage-journey";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { formatMoney, moneyText } from "@/lib/money/format";
@@ -231,8 +232,8 @@ export function ReviewScreen({
 
   if (!batch) {
     return (
-      <section className="workspace-content statement-review-screen" aria-labelledby="review-title">
-        <h1 className="workspace-title" id="review-title">Review</h1>
+      <section className="workspace-content statement-review-screen" aria-label="Statement import review">
+        <ConsolePageHeader title="Review" description="Statement import" />
         <ImportStageJourney completeThrough={3} current={4} />
         {problem ? (
           <p className="inline-alert" role="alert">{problem}</p>
@@ -252,9 +253,8 @@ export function ReviewScreen({
   const accountCode = accounts.find(({ id }) => id === batch.accountId)?.currency;
 
   return (
-    <section className="workspace-content statement-review-screen" aria-labelledby="review-title">
-      <p className="eyebrow">Statement import</p>
-      <h1 className="workspace-title" id="review-title">Review</h1>
+    <section className="workspace-content statement-review-screen" aria-label="Statement import review">
+      <ConsolePageHeader title="Review" description="Statement import" />
       <ImportStageJourney
         completeThrough={open ? 3 : batch.status === "completed" ? 4 : 3}
         current={open || batch.status !== "completed" ? 4 : 5}
