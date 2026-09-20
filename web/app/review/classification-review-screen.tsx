@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataToolbar } from "@/app/ui/data-toolbar";
+import { MetricStrip } from "@/app/ui/metric-strip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { type apiFetch, errorText } from "@/lib/api/client";
@@ -35,6 +38,23 @@ type Sort = "default" | "impact";
 function groupsPath(offset: number, sort: Sort) {
   const base = `/classification-review/groups?limit=${PAGE_SIZE}&offset=${offset}`;
   return sort === "impact" ? `${base}&sort=impact` : base;
+}
+
+function featuredGroup(groups: Array<ClassificationReviewGroup>) {
+  const proposed = groups.filter(
+    (group) => group.knowledgeVersionId !== null && !group.transactionIdsTruncated,
+  );
+  const actionable = proposed.length > 0
+    ? proposed
+    : groups.filter((group) => group.rememberable && !group.transactionIdsTruncated);
+  return actionable.reduce<ClassificationReviewGroup | undefined>((best, candidate) => {
+    if (!best) return candidate;
+    // The API emits a normalized fixed-precision decimal string, so lexical comparison keeps
+    // confidence exact without turning it into a client-side floating-point value.
+    return candidate.proposedConfidence.localeCompare(best.proposedConfidence) > 0
+      ? candidate
+      : best;
+  }, undefined);
 }
 
 const REASON_LABELS: Record<ClassificationReviewGroup["reason"], string> = {
@@ -543,34 +563,43 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
   }
 
   const remaining = page ? Math.max(0, page.totalGroups - page.groups.length) : 0;
+  const featured = page ? featuredGroup(page.groups) : undefined;
+  const orderedGroups = page && featured
+    ? [featured, ...page.groups.filter((group) => group.groupKey !== featured.groupKey)]
+    : page?.groups ?? [];
 
   return (
-    <section className="classification-review" aria-labelledby="classification-review-title">
-      <header className="classification-review-head">
-        <div>
-          <p className="classification-kicker">Household knowledge</p>
-          <h1 id="classification-review-title">Classify</h1>
-          <p>Review the next household question, preview its exact scope, then apply only when it is right.</p>
-        </div>
-        {page && (
-          <div className="classification-summary" aria-label="Review queue summary">
-            <strong>{page.totalGroups}</strong>
-            <span>{page.totalGroups === 1 ? "group" : "groups"} · {page.totalOccurrences} occurrences</span>
-          </div>
-        )}
-      </header>
+    <section aria-label="Classify" className="workspace-content classification-review">
+      <div id="classification-review-title">
+        <ConsolePageHeader
+          title="Classify"
+          description="Review the strongest actionable proposal, preview its exact scope, then apply only when it is right."
+          actions={<Link className={buttonVariants({ variant: "outline" })} href="/settings#merchant-knowledge-title">Merchant knowledge</Link>}
+        />
+      </div>
 
-      <label className="classification-sort">
-        Sort
-        <NativeSelect
-          disabled={loading}
-          onChange={(event) => changeSort(event.target.value as Sort)}
-          value={sort}
-        >
-          <NativeSelectOption value="default">Most urgent first</NativeSelectOption>
-          <NativeSelectOption value="impact">Largest amount first</NativeSelectOption>
-        </NativeSelect>
-      </label>
+      {page && <MetricStrip
+        label="Review queue summary"
+        items={[
+          { label: "Review groups", value: String(page.totalGroups), detail: "Authenticated queue total" },
+          { label: "Affected rows", value: String(page.totalOccurrences), detail: "Occurrences across the queue" },
+          { label: "Loaded groups", value: String(page.groups.length), detail: "Available in this view" },
+        ]}
+      />}
+
+      <DataToolbar label="Classification queue controls" summary={page ? `${page.groups.length} loaded` : undefined}>
+        <label className="classification-sort">
+          Sort
+          <NativeSelect
+            disabled={loading}
+            onChange={(event) => changeSort(event.target.value as Sort)}
+            value={sort}
+          >
+            <NativeSelectOption value="default">Most urgent first</NativeSelectOption>
+            <NativeSelectOption value="impact">Largest amount first</NativeSelectOption>
+          </NativeSelect>
+        </label>
+      </DataToolbar>
 
       {loading && <p className="classification-state">Loading review queue…</p>}
       {!loading && problem && (
@@ -588,8 +617,8 @@ export function ClassificationReviewScreen({ categories, request }: Props) {
       {!loading && !problem && page && page.groups.length > 0 && (
         <>
           <div className="classification-list">
-            {page.groups.map((group, index) => (
-              <GroupCard categories={categories} featured={index === 0} group={group} key={group.groupKey} request={request} />
+            {orderedGroups.map((group) => (
+              <GroupCard categories={categories} featured={group.groupKey === featured?.groupKey} group={group} key={group.groupKey} request={request} />
             ))}
           </div>
           {moreProblem && <Alert variant="destructive"><AlertDescription>{moreProblem}</AlertDescription></Alert>}

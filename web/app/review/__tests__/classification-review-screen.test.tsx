@@ -98,14 +98,20 @@ function applied(overrides: Partial<RunResult> = {}): RunResult {
 afterEach(cleanup);
 
 describe("grouped classification review", () => {
-  it("makes the first unresolved decision the focus and uses readable economic labels", async () => {
-    const first = group({ proposedTxnType: "refund", proposedPaymentMethod: "card" });
-    const second = group({ groupKey: "group-2", description: "SECOND MARKET" });
+  it("features the highest-confidence actionable decision and uses readable economic labels", async () => {
+    const first = group({ proposedConfidence: "0.650" });
+    const second = group({
+      groupKey: "group-2",
+      description: "SECOND MARKET",
+      proposedConfidence: "0.950",
+      proposedTxnType: "refund",
+      proposedPaymentMethod: "card",
+    });
     const request = vi.fn(async (path: string) => path === "/classification-runs?limit=20&offset=0"
       ? [] : response([first, second]));
     render(<ClassificationReviewScreen categories={categories} request={request as never} />);
 
-    const focus = await screen.findByRole("article", { name: "SAMPLE MARKET" });
+    const focus = await screen.findByRole("article", { name: "SECOND MARKET" });
     expect(focus.classList.contains("classification-card--focus")).toBe(true);
     expect(within(focus).getByText("Expense → Refund")).toBeTruthy();
     expect(within(focus).getByText("Debit")).toBeTruthy();
@@ -113,7 +119,7 @@ describe("grouped classification review", () => {
     const actions = focus.querySelector(".classification-actions");
     const facts = focus.querySelector(".classification-facts");
     expect(actions && facts && (actions.compareDocumentPosition(facts) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
-    expect(screen.getByRole("article", { name: "SECOND MARKET" }).classList.contains("classification-card--focus")).toBe(false);
+    expect(screen.getByRole("article", { name: "SAMPLE MARKET" }).classList.contains("classification-card--focus")).toBe(false);
   });
 
   it("shows loading, grouped explanations and an empty state without financial amounts", async () => {

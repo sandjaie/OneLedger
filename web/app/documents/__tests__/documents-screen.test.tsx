@@ -98,16 +98,25 @@ describe("the documents screen", () => {
     renderScreen([document({})], 1);
 
     expect(screen.getByText("1 document")).toBeTruthy();
-    const record = within(screen.getByRole("article", { name: "Bank statement" }));
+    const record = within(screen.getByRole("row", { name: "Bank statement" }));
     expect(record.getByText("Bank statement")).toBeTruthy();
     expect(record.getByText("Ledger Savings · ****7890")).toBeTruthy();
     expect(record.getByText("2026-03-01 – 2026-03-31 (derived from the rows)")).toBeTruthy();
     expect(record.getByText("Awaiting review")).toBeTruthy();
     expect(record.getByRole("link", { name: "Review" })).toBeTruthy();
-    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.getByRole("table", { name: "Document library" })).toBeTruthy();
     fireEvent.click(record.getByRole("button", { name: "Details for Bank statement" }));
     expect(record.getByText("3 pages")).toBeTruthy();
     expect(record.getByText("10 Mar 2026")).toBeTruthy();
+  });
+
+  it("keeps a long document label inside the named library overflow region", () => {
+    const longTitle = "Synthetic evidence title with an intentionally long descriptive label that must stay inside the document library";
+    renderScreen([document({ title: longTitle })], 1);
+
+    const library = screen.getByRole("region", { name: "Document library" });
+    expect(within(library).getByText(longTitle)).toBeTruthy();
+    expect(within(library).getByRole("table", { name: "Document library" })).toBeTruthy();
   });
 
   it("shows an em dash for a document with no account or period", () => {
@@ -186,7 +195,7 @@ describe("the documents screen", () => {
     renderScreen([document({}), completedWithNewerLayout], 2);
 
     const button = screen.getByRole("button", { name: "Re-read descriptions" });
-    expect(within(screen.getAllByRole("article", { name: "Bank statement" })[1]).getByRole("button", { name: "Re-read descriptions" })).toBeTruthy();
+    expect(within(screen.getAllByRole("row", { name: "Bank statement" })[1]).getByRole("button", { name: "Re-read descriptions" })).toBeTruthy();
     fireEvent.click(button);
     expect(screen.getByText("A newer layout is available for this import.")).toBeTruthy();
   });
@@ -194,7 +203,7 @@ describe("the documents screen", () => {
   it("shows an upload by its title with no import link", () => {
     renderScreen([upload], 1);
 
-    const record = within(screen.getByRole("article", { name: "Synthetic policy schedule" }));
+    const record = within(screen.getByRole("row", { name: "Synthetic policy schedule" }));
     expect(record.getByText("Synthetic policy schedule")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Transactions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Review" })).toBeNull();
@@ -210,9 +219,9 @@ describe("the documents screen", () => {
     renderScreen([document({})], 2, request as unknown as typeof apiFetch);
     fireEvent.click(screen.getByRole("button", { name: "Load 1 more" }));
 
-    await screen.findByRole("article", { name: "Synthetic second" });
+    await screen.findByRole("row", { name: "Synthetic second" });
     expect(request).toHaveBeenCalledWith("/documents?limit=50&offset=1");
-    expect(screen.getAllByRole("article")).toHaveLength(2);
+    expect(screen.getByRole("table", { name: "Document library" }).querySelectorAll("tbody > tr[aria-label]")).toHaveLength(2);
   });
 
   it("labels previously loaded records honestly when a filter reload is unavailable", async () => {
@@ -222,6 +231,6 @@ describe("the documents screen", () => {
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(screen.getByText(/previously loaded records remain/)).toBeTruthy();
-    expect(screen.getByRole("article", { name: "Bank statement" })).toBeTruthy();
+    expect(screen.getByRole("row", { name: "Bank statement" })).toBeTruthy();
   });
 });
