@@ -259,7 +259,7 @@ export function SecurityForm({
   }
 
   return (
-    <fieldset className="investment-instrument-fields">
+    <fieldset className="investment-instrument-fields investment-context-workflow">
       <legend>Catalogue instrument</legend>
       {!creating ? (
         <>

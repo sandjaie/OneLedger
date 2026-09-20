@@ -11,6 +11,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { FundingPanel } from "@/app/investments/funding-panel";
 import { InstrumentCandidate } from "@/app/investments/security-form";
+import { ConsolePageHeader } from "@/app/ui/console-page-header";
+import { DataTableRegion } from "@/app/ui/data-table-region";
+import { StatusLabel } from "@/app/ui/status-label";
 import { INVESTMENT_ACCOUNT_TYPES } from "@/lib/accounts/types";
 import type { apiFetch } from "@/lib/api/client";
 import { dateLabel } from "@/lib/format/date";
@@ -287,14 +290,12 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
   }
 
   return (
-    <section className="workspace-content investment-entry-screen" aria-labelledby="investments-title">
-      <header className="investment-entry-header">
-        <div>
-          <p className="eyebrow">Recorded evidence</p>
-          <h1 className="workspace-title" id="investments-title">Investments</h1>
-        </div>
-        <p>Record an exact acquisition and, when available, a separate dated valuation.</p>
-      </header>
+    <section aria-label="Investment entry" className="workspace-content investment-entry-screen">
+      <ConsolePageHeader
+        actions={<Link className={buttonVariants({ variant: "outline" })} href="/investments">Back to portfolio</Link>}
+        description="Record an exact acquisition and, when available, separate dated valuation evidence."
+        title="Record investment evidence"
+      />
 
       <ol className="investment-evidence-rail" aria-label="Investment entry steps">
         <li className={account ? "complete" : "current"}><span>1</span>Account</li>
@@ -304,11 +305,8 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
       </ol>
 
       <section className="investment-holdings" aria-labelledby="recorded-holdings-title">
-        <div className="investment-section-head">
-          <div>
-            <p className="section-label">Current projection</p>
-            <h2 id="recorded-holdings-title">Recorded holdings</h2>
-          </div>
+        <div className="console-section-head">
+          <h2 id="recorded-holdings-title">Recorded holdings</h2>
           {portfolio && <small>As of {dateLabel(portfolio.asOf)}</small>}
         </div>
         {loadState === "loading" && <p className="investment-state" role="status">Loading recorded holdings…</p>}
@@ -322,25 +320,20 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
           <p className="investment-state">No investment holdings are recorded yet.</p>
         )}
         {loadState === "ready" && portfolio && portfolio.positions.length > 0 && (
-          <div className="investment-holding-grid">
-            {portfolio.positions.map((item) => (
-              <article aria-label={item.securityName} className="investment-holding" key={item.holdingId}>
-                <div>
-                  <p className="section-label">{item.assetClass}</p>
-                  <h3>{item.securityName}</h3>
-                  <p className="investment-exact">{item.units} units</p>
-                </div>
-                <div className="investment-holding-value">
-                  <small>Current value</small>
-                  <strong>{item.currentValueNative === null ? "Current value unavailable" : `${item.currency} ${item.currentValueNative}`}</strong>
-                  {item.price !== null && item.priceDate !== null && (
-                    <p>Price {item.currency} {item.price} · {dateLabel(item.priceDate)}</p>
-                  )}
-                  {coverageMessages(item).map((message) => <p key={message}>{message}</p>)}
-                </div>
-              </article>
-            ))}
-          </div>
+          <DataTableRegion label="Recorded investment holdings">
+            <table className="console-table investment-entry-holdings-table">
+              <thead><tr><th scope="col">Holding</th><th scope="col">Units</th><th scope="col">Current value</th><th scope="col">Price evidence</th><th scope="col">Status</th></tr></thead>
+              <tbody>{portfolio.positions.map((item) => (
+                <tr aria-label={item.securityName} key={item.holdingId}>
+                  <th scope="row"><span className="console-entity-title">{item.securityName}</span><span className="console-entity-sub">{item.assetClass.replaceAll("_", " ")}</span></th>
+                  <td className="console-number">{item.units} units</td>
+                  <td className="console-number">{item.currentValueNative === null ? "Current value unavailable" : `${item.currency} ${item.currentValueNative}`}</td>
+                  <td className="investment-entry-price-evidence">{item.price !== null && item.priceDate !== null ? `Price ${item.currency} ${item.price} · ${dateLabel(item.priceDate)}` : "No dated price"}</td>
+                  <td className="investment-entry-status"><StatusLabel tone={item.currentValueNative === null ? "attention" : "success"}>{item.currentValueNative === null ? "Evidence gap" : "Valued"}</StatusLabel>{coverageMessages(item).map((message) => <span key={message}>{message}</span>)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </DataTableRegion>
         )}
       </section>
 
@@ -352,7 +345,7 @@ export function InvestmentEntryScreen({ accounts, request }: Props) {
           <Link className={buttonVariants()} href="/accounts">Add an investment account</Link>
         </section>
       ) : (
-        <form className="investment-entry-docket" onSubmit={reviewPurchase}>
+        <form className="investment-entry-docket investment-context-workflow" onSubmit={reviewPurchase}>
           <div className="investment-docket-head">
             <div>
               <p className="section-label">Owner entry</p>

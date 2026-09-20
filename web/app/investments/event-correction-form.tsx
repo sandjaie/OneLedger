@@ -276,7 +276,7 @@ export function EventCorrectionForm({ event, holding, request, onCorrected }: Pr
   const preview = idempotencyKey ? correctionRequest(event, holding, draft, idempotencyKey, reason.trim()) : undefined;
 
   return (
-    <fieldset aria-label={`Correct the ${event.eventKind.replaceAll("_", " ")} on ${event.eventDate}`} className="investment-correction-form">
+    <fieldset aria-label={`Correct the ${event.eventKind.replaceAll("_", " ")} on ${event.eventDate}`} className="investment-correction-form investment-context-workflow">
       <legend>Correct this event</legend>
 
       {fields.map((field) => (

@@ -155,7 +155,7 @@ export function LotAllocationPanel({ holdingId, disposalEventId, disposalDate, r
   }
 
   return (
-    <section aria-labelledby="lot-allocation-title" className="investment-lot-allocation-panel">
+    <section aria-labelledby="lot-allocation-title" className="investment-lot-allocation-panel investment-context-workflow">
       <p className="section-label">Lot allocation</p>
       <h3 id="lot-allocation-title">Allocate lots</h3>
 
