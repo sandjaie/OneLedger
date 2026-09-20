@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { DataTableRegion } from "@/app/ui/data-table-region";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -145,7 +146,8 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
       <h2 id="rules-analytics-title" tabIndex={-1}>Coverage and analytics</h2>
       <p className="lede">{coverage.totalRows} rows counted.</p>
 
-      <table className="console-table rules-analytics-table">
+      <DataTableRegion label="Classification coverage by source">
+        <table className="console-table rules-analytics-table">
         <caption>By classified by</caption>
         <tbody>
           {Object.entries(coverage.byClassifiedBy).map(([status, figure]) => (
@@ -156,9 +158,11 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </DataTableRegion>
 
-      <table className="console-table rules-analytics-table">
+      <DataTableRegion label="Classification coverage by confidence">
+        <table className="console-table rules-analytics-table">
         <caption>By confidence</caption>
         <tbody>
           {Object.entries(coverage.confidenceBands).map(([band, figure]) => (
@@ -169,7 +173,8 @@ function RuleAnalyticsPanel({ request }: { request: typeof apiFetch }) {
             </tr>
           ))}
         </tbody>
-      </table>
+        </table>
+      </DataTableRegion>
 
       <p>
         {coverage.reportableUncategorized.count} reportable{" "}
