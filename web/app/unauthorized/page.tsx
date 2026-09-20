@@ -5,10 +5,12 @@ export default function UnauthorizedPage() {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="unauthorized-title">
         <div className="brand"><span className="brand-mark" aria-hidden="true">OL</span><span>OneLedger</span></div>
-        <p className="eyebrow">Owner access required</p>
-        <h1 className="auth-title" id="unauthorized-title">This account is not authorized</h1>
-        <p className="lede">Use the Google account configured for this private workspace.</p>
-        <a className={buttonVariants()} href="/login">Sign in again</a>
+        <div className="auth-card-copy">
+          <p className="eyebrow">Owner access required</p>
+          <h1 className="auth-title" id="unauthorized-title">This account is not authorized</h1>
+          <p className="lede">Use the Google account configured for this private workspace.</p>
+          <a className={buttonVariants()} href="/login">Sign in again</a>
+        </div>
       </section>
     </main>
   );

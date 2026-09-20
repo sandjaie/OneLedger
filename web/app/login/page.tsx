@@ -13,11 +13,13 @@ export default async function LoginPage({ searchParams }: Props) {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="login-title">
         <div className="brand"><span className="brand-mark" aria-hidden="true">OL</span><span>OneLedger</span></div>
-        <p className="eyebrow">Private owner access</p>
-        <h1 className="auth-title" id="login-title">Workspace access needs another try.</h1>
-        <p className="lede">OneLedger could not open the configured owner workspace.</p>
-        <p className="inline-alert" role="alert">Check that the service is available, then try again.</p>
-        <a className={buttonVariants()} href={apiUrl("/auth/login")}>Try again</a>
+        <div className="auth-card-copy">
+          <p className="eyebrow">Private owner access</p>
+          <h1 className="auth-title" id="login-title">Workspace access needs another try.</h1>
+          <p className="lede">OneLedger could not open the configured owner workspace.</p>
+          <p className="inline-alert" role="alert">Check that the service is available, then try again.</p>
+          <a className={buttonVariants()} href={apiUrl("/auth/login")}>Try again</a>
+        </div>
       </section>
     </main>
   );

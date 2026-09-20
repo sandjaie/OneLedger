@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -63,13 +62,15 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
   }
 
   return (
-    <section aria-labelledby="household-title" className="settings-general">
-      <Card>
-        <CardHeader>
-          <CardTitle><h2 id="household-title" tabIndex={-1}>Name and reporting pair</h2></CardTitle>
-          <CardDescription>These details identify your household and set how reports display amounts.</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <section aria-labelledby="household-title" className="settings-block settings-general">
+      <div className="settings-section-head">
+        <div>
+          <p className="section-label">General</p>
+          <h2 id="household-title" tabIndex={-1}>Name and reporting pair</h2>
+          <p>These details identify your household and set how reports display amounts.</p>
+        </div>
+      </div>
+      <div className="settings-general-body">
           <FieldGroup className="settings-general-fields">
             <Field>
               <FieldLabel htmlFor="settings-household-name">Household name</FieldLabel>
@@ -104,11 +105,10 @@ export function HouseholdForm({ household, currencies, save, onSaved }: Props) {
             </Collapsible>
           ) : <p className="settings-explanation">Choose the pair before the first import. Afterwards changing it requires a backfill.</p>}
           {problem && <Alert variant="destructive"><AlertDescription>{problem}</AlertDescription></Alert>}
-        </CardContent>
-        <CardFooter>
-          <Button disabled={saving} onClick={() => void submit()} type="button">{saving ? "Saving…" : "Save household"}</Button>
-        </CardFooter>
-      </Card>
+      </div>
+      <div className="settings-save-row">
+        <Button disabled={saving} onClick={() => void submit()} type="button">{saving ? "Saving…" : "Save household"}</Button>
+      </div>
     </section>
   );
 }
