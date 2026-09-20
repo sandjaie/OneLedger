@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SalaryAnalysis } from "@/app/salary/salary-analysis";
@@ -110,9 +110,15 @@ describe("salary analysis", () => {
       if (path === "/salary/analysis") return analysis;
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
     await screen.findByText("2026");
+    expect(screen.getByText("Latest evidenced pay period")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Mar 2026" })).toBeTruthy();
+    expect(screen.getByText("Receipt unavailable")).toBeTruthy();
+    expect(screen.getByLabelText("Latest salary evidence for Mar 2026").textContent).toContain("Not available");
+    expect(screen.getByRole("region", { name: "Salary evidence needs attention" }).textContent)
+      .toContain("1 unmatched salary credit · 0 unclassified deductions");
     const trend = screen.getByRole("table", { name: /Payslip net pay and linked receipts.*exact values/ });
     expect(trend.textContent).toContain("Not available");
     expect(trend.textContent).toContain("A 2,500.00");
@@ -138,6 +144,37 @@ describe("salary analysis", () => {
     expect(screen.getByText(/Checking/)).toBeTruthy();
   });
 
+  it("leads with the server aggregate when a pay period contains multiple payslips", async () => {
+    const currency = analysis.currencies[0]!;
+    const secondMarchPayslip = {
+      ...currency.payslips[1]!,
+      payslipId: "00000000-0000-4000-8000-000000000003",
+      netPay: "1200.0000",
+      cashReceived: "1200.0000",
+      receiptStatus: "received" as const,
+    };
+    const response: SalaryAnalysisResponse = {
+      ...analysis,
+      currencies: [{
+        ...currency,
+        payslips: [...currency.payslips, secondMarchPayslip],
+        trend: currency.trend.map((point) => point.payMonth === "2026-03"
+          ? { ...point, earnedNetPay: "3700.0000", cashReceived: null, earnedCoordinate: 10000 }
+          : point),
+      }],
+    };
+    const request = requestFrom((path) => {
+      if (path === "/salary/analysis") return response;
+      throw new ApiError(500, "unexpected");
+    });
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
+
+    const latest = await screen.findByLabelText("Latest salary evidence for Mar 2026");
+    expect(within(latest).getByText("A 3,700.00")).toBeTruthy();
+    expect(within(latest).getByText("Not available")).toBeTruthy();
+    expect(screen.getByText("Receipt unavailable")).toBeTruthy();
+  });
+
   it("shows the empty state when there are no payslips", async () => {
     const request = requestFrom((path) => {
       if (path === "/salary/analysis") {
@@ -145,7 +182,7 @@ describe("salary analysis", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
     await screen.findByText("No payslips yet.");
   });
@@ -160,7 +197,7 @@ describe("salary analysis", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
     await screen.findByText("Salary analysis could not be loaded.");
     fireEvent.click(screen.getByText("Try again"));
@@ -181,7 +218,7 @@ describe("salary analysis", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
     const select = await screen.findByLabelText("Component for Basic");
     fireEvent.change(select, { target: { value: "variable" } });
@@ -205,7 +242,7 @@ describe("salary analysis", () => {
       }
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
     const button = await screen.findByText("Use inference");
     fireEvent.click(button);
@@ -218,16 +255,29 @@ describe("salary analysis", () => {
   });
 
   it("switches between currencies when there is more than one", async () => {
-    const second = { ...analysis.currencies[0]!, currency: "XBB", years: [], increments: [], variablePay: [], labels: [], gaps: [], payslips: [] };
+    const second = {
+      ...analysis.currencies[0]!,
+      currency: "XBB",
+      years: [],
+      increments: [],
+      variablePay: [],
+      labels: [],
+      gaps: [],
+      payslips: [],
+      trend: [
+        { payMonth: "2027-01", earnedNetPay: "1000.0000", cashReceived: "1000.0000", earnedCoordinate: 10000, receivedCoordinate: 10000 },
+      ],
+    };
     const request = requestFrom((path) => {
       if (path === "/salary/analysis") return { ...analysis, currencies: [...analysis.currencies, second] };
       throw new ApiError(500, "unexpected");
     });
-    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} />);
+    render(<SalaryAnalysis currencies={currencies} refreshKey={0} request={request} unclassifiedDeductionCount={0} />);
 
-    await screen.findByText("16.67%");
-    fireEvent.click(screen.getByRole("button", { name: "XBB" }));
-    expect(screen.queryByText("16.67%")).toBeNull();
+    await screen.findByRole("heading", { name: "Jan 2027" });
     expect(screen.getByRole("button", { name: "XBB" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "XAA" }));
+    expect(await screen.findByText("16.67%")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "XAA" }).getAttribute("aria-pressed")).toBe("true");
   });
 });

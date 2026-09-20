@@ -103,11 +103,27 @@ describe("salary screen", () => {
     await screen.findByText("2026-01");
     expect(screen.getByText("A 4,000.00 net · A 5,000.00 gross")).toBeTruthy();
     expect(screen.getByText("Not linked")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Salary evidence needs attention" }).textContent)
+      .toContain("1 unclassified deduction");
     expect(screen.getByLabelText("Pay month").getAttribute("data-slot")).toBe("input");
     expect(screen.getByRole("combobox", { name: "Category for deduction line 2" })).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "Line 1 type" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Line 1 label" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Line 1 amount" })).toBeTruthy();
+  });
+
+  it("does not report reconciliation while deduction evidence is unavailable", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/salary/analysis") return { currencies: [], salaryCreditsWithoutPayslip: [] };
+      if (path === "/payslips/deduction-rules") return { rules: [] };
+      if (path === "/payslips") throw new ApiError(500, "unavailable");
+      throw new ApiError(500, "unexpected");
+    });
+    render(<PayslipsScreen categories={categories} currencies={currencies} request={request} />);
+
+    await screen.findByText("Payslips could not be loaded.");
+    expect(await screen.findByRole("region", { name: "Salary evidence status is incomplete" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Salary evidence is reconciled" })).toBeNull();
   });
 
   it("posts typed strings with one idempotency key, reused on a retry", async () => {
