@@ -77,8 +77,11 @@ export function CashForecast({
   const context = contexts.find((item) => item.id === selectedContext) ?? contexts[0];
 
   return (
-    <section aria-labelledby="plans-forecast-title" id="forecast">
-      <h2 id="plans-forecast-title">Forecast{forecast ? ` as of ${forecast.asOf}` : ""}</h2>
+    <section className="plans-forecast-section" aria-labelledby="plans-forecast-title" id="forecast">
+      <div className="console-section-head">
+        <h2 id="plans-forecast-title">Forecast{forecast ? ` as of ${forecast.asOf}` : ""}</h2>
+        <span>Read-only · 30 / 60 / 90 days</span>
+      </div>
       {state === "loading" && <p role="status">Loading the forecast…</p>}
       {state === "error" && (
         <div role="alert">

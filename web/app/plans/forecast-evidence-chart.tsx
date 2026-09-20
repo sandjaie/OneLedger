@@ -44,11 +44,11 @@ export function ForecastEvidenceChart({ title, currency, currencies, points }: {
       </div>
       {rows.length === 0 ? <p>No forecast points are available for this context.</p> : <>
         <ul aria-label="Forecast series" className="evidence-chart-legend">
-          <li><span aria-hidden="true" className="evidence-chart-legend-swatch" style={{ borderColor: "var(--category-1)" }} />Confirmed-input forecast</li>
+          <li><span aria-hidden="true" className="evidence-chart-legend-swatch" style={{ borderColor: "var(--console-blue)" }} />Confirmed-input forecast</li>
           <li><span aria-hidden="true" className="evidence-chart-legend-swatch" data-style="dashed" style={{ borderColor: "var(--category-2)" }} />All planned (includes estimates)</li>
         </ul>
         <ChartContainer aria-hidden="true" className="forecast-evidence-plot" config={{
-          confirmed: { label: "Confirmed-input forecast", color: "var(--category-1)" },
+          confirmed: { label: "Confirmed-input forecast", color: "var(--console-blue)" },
           projected: { label: "All planned (includes estimates)", color: "var(--category-2)" },
         }}>
           <LineChart data={rows} accessibilityLayer>

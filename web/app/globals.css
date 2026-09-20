@@ -3876,3 +3876,145 @@ body {
   .salary-work-panel .salary-deduction-rules > li > [data-slot="button"] { align-self: flex-start; }
   .salary-work-panel .salary-deduction-rule-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Phase 4.8 Task 9 — Plans is a decision-first mixed workspace. Attention and the read-only
+   forecast lead; stable planning sections use hairlines and contextual work panels, never a
+   dashboard of invented aggregates. */
+.workspace-content.plans-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: none;
+  min-width: 0;
+}
+.workspace-content.plans-screen > * { min-width: 0; }
+.plans-screen .console-page-header { margin-bottom: 0; }
+.plans-create-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  background: var(--console-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.plans-screen > .data-toolbar { margin: 0; padding-bottom: 14px; }
+.plans-screen > .data-toolbar nav { min-width: 0; }
+.plans-screen .plans-page-nav { gap: 4px; margin: 0; }
+.plans-screen .plans-page-nav a {
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--console-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.plans-screen .plans-page-nav a:hover,
+.plans-screen .plans-page-nav a:focus-visible { border-color: transparent; background: var(--console-blue-soft); color: var(--console-blue); }
+
+.plans-screen > section[id] {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 22px 0 0;
+  border: 0;
+  border-top: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+  scroll-margin-top: 84px;
+}
+.plans-screen > .plans-attention-section { padding-top: 0; border-top: 0; }
+.plans-screen > section[id] > :is(h2, h3, p) { margin-top: 0; }
+.plans-screen .console-section-head { margin-bottom: 1px; }
+.plans-attention-section > .attention-row { margin-bottom: 2px; }
+.plans-attention-section > h3,
+.plans-review-section > h3,
+.plans-goals-section > h3,
+.plans-register-section > h3 { margin: 8px 0 0; font-family: inherit; font-size: 13px; font-weight: 650; letter-spacing: normal; }
+
+.plans-screen :is(.needs-attention-list, .plans-commitment-list, .plans-register-list, .plans-goal-list, .plans-account-list, .plans-currency-list) {
+  gap: 0;
+  margin: 0;
+  border-block: 1px solid var(--console-line);
+}
+.plans-screen :is(.needs-attention-list, .plans-commitment-list, .plans-register-list, .plans-goal-list, .plans-account-list, .plans-currency-list) > li {
+  min-width: 0;
+  padding: 11px 4px;
+  border: 0;
+  border-top: 1px solid var(--console-line);
+  border-radius: 0;
+  background: transparent;
+}
+.plans-screen :is(.needs-attention-list, .plans-commitment-list, .plans-register-list, .plans-goal-list, .plans-account-list, .plans-currency-list) > li:first-child { border-top: 0; }
+.plans-screen .needs-attention-list > li.needs-attention-overdue { padding-left: 11px; border-left: 3px solid var(--console-red); }
+.plans-screen :is(.needs-attention-controls, .plans-settlement-actions) { justify-content: flex-start; }
+
+.plans-forecast-section .forecast-chart-panel {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--console-line);
+}
+.plans-forecast-section .forecast-evidence-chart { padding: 0; border: 0; background: transparent; }
+.plans-forecast-section .forecast-evidence-chart .evidence-chart-table-wrap { border-bottom: 1px solid var(--console-line); }
+.plans-forecast-section > h3 { margin: 10px 0 0; font-family: inherit; font-size: 13px; font-weight: 650; letter-spacing: normal; }
+.plans-forecast-section .plans-currency-list,
+.plans-forecast-section .plans-account-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 0; }
+.plans-forecast-section .plans-currency-list > li,
+.plans-forecast-section .plans-account-list > li { padding: 14px 16px; border: 0; border-top: 1px solid var(--console-line); }
+.plans-forecast-section .plans-currency-list > li:nth-child(even),
+.plans-forecast-section .plans-account-list > li:nth-child(even) { border-left: 1px solid var(--console-line); }
+.plans-forecast-section .plans-points { color: var(--console-muted); font-size: 11px; }
+.plans-forecast-section .plans-assumptions-disclosure { margin-top: 0; padding: 12px 0; border: 0; border-top: 1px solid var(--console-line); border-radius: 0; background: transparent; }
+.plans-forecast-section .plans-assumptions-disclosure summary { color: var(--console-blue); font-size: 12px; }
+
+.plans-review-section > .month-field { width: min(240px, 100%); }
+.plans-review-steps { border-block: 1px solid var(--console-line); }
+.plans-review-steps > li { padding: 10px 4px; border-top-color: var(--console-line); font-size: 12px; }
+.plans-review-steps > li:first-child { border-top: 0; }
+.plans-screen :is(.plans-reserve-form, .needs-attention-inline-form) { min-width: 0; }
+.plans-screen .plans-resources-table { width: 100%; min-width: 620px; border-collapse: collapse; }
+
+.plans-context-panel,
+.plans-settlement-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 6px;
+  padding: 18px 20px;
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-blue);
+  border-radius: 7px;
+  background: var(--console-soft);
+}
+.plans-context-panel > :is(h3, p, [role="alert"], [role="status"]),
+.plans-settlement-panel > * { grid-column: 1 / -1; }
+.plans-context-panel > h3 { margin: 0; font-family: inherit; font-size: 14px; font-weight: 650; letter-spacing: normal; }
+.plans-context-panel > [data-slot="button"] { justify-self: start; }
+.plans-settlement-panel { grid-template-columns: minmax(0, 1fr); }
+.plans-settlement-panel .plans-settlement-head h3 { font-family: inherit; font-size: 14px; letter-spacing: normal; }
+.plans-reserve-account { border-color: var(--console-line); background: var(--console-soft); }
+
+@media (max-width: 1024px) {
+  .plans-forecast-section .plans-currency-list,
+  .plans-forecast-section .plans-account-list { grid-template-columns: minmax(0, 1fr); }
+  .plans-forecast-section .plans-currency-list > li:nth-child(even),
+  .plans-forecast-section .plans-account-list > li:nth-child(even) { border-left: 0; }
+  .plans-context-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 588px) {
+  .plans-screen > .data-toolbar { align-items: stretch; }
+  .plans-screen > .data-toolbar .data-toolbar-controls { width: 100%; }
+  .plans-screen > .data-toolbar nav { width: 100%; overflow-x: auto; }
+  .plans-screen .plans-page-nav { width: max-content; flex-wrap: nowrap; }
+  .plans-create-link { justify-content: center; width: 100%; }
+  .plans-context-panel { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .plans-screen :is(.needs-attention-controls, .needs-attention-inline-form, .plans-reserve-form) { align-items: stretch; flex-direction: column; }
+  .plans-screen :is(.needs-attention-controls, .needs-attention-inline-form, .plans-reserve-form) > * { max-width: 100%; }
+}

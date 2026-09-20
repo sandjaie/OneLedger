@@ -6,6 +6,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 
 import { useEffect, useState } from "react";
 
+import { AttentionRow } from "@/app/ui/attention-row";
 import { type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type { ActionRow, ActionsResponse, AccountRow, CurrencyRow } from "@/types/api";
@@ -440,8 +441,8 @@ export function NeedsAttention({
   const activeAccounts = accounts.filter((account) => account.isActive);
 
   return (
-    <section aria-labelledby="actions-title" id="actions">
-      <h2 id="actions-title">Needs attention</h2>
+    <section className="plans-attention-section" aria-labelledby="actions-title" id="actions">
+      <div className="console-section-head"><h2 id="actions-title">Needs attention</h2></div>
       {state === "loading" && <p role="status">Loading what needs attention…</p>}
       {state === "error" && (
         <div role="alert">
@@ -451,6 +452,15 @@ export function NeedsAttention({
       )}
       {state === "ready" && actions && (
         <>
+          <AttentionRow
+            tone={actions.items.length > 0 ? "attention" : "success"}
+            title={actions.items.length > 0
+              ? `${actions.items.length} ${actions.items.length === 1 ? "decision needs" : "decisions need"} attention`
+              : "No decisions need attention"}
+            detail={actions.items.length > 0
+              ? "Review the dated evidence and choose the next action. Nothing changes automatically."
+              : "There are no current overdue, due or follow-up items."}
+          />
           {problem && <p className="inline-alert" role="alert">{problem}</p>}
           {actions.items.length === 0 && <p>Nothing needs attention right now.</p>}
           {actions.items.length > 0 && (
