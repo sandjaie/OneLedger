@@ -20,6 +20,10 @@ type Props = {
 type LoadState = "loading" | "ready" | "error";
 const PAGE_SIZE = 20;
 
+function reviewScope(row: ReviewItemRow) {
+  return [row.securityName, row.accountName].filter(Boolean).join(" · ") || "Imported evidence";
+}
+
 /** Every open investment review this household owns — a holding-scoped row (lot allocation)
  * links to its holding, an import-scoped row to its import. */
 export function ReviewQueue({ request, quietEmpty = false }: Props) {
@@ -69,7 +73,7 @@ export function ReviewQueue({ request, quietEmpty = false }: Props) {
     <section aria-labelledby="investment-reviews-title" className="investment-reviews">
       <div className="console-section-head">
         <h2 id="investment-reviews-title">Reviews</h2>
-        <span>{rows.length} open</span>
+        {state === "ready" && rows.length > 0 && <span>{hasMore ? `${rows.length}+ loaded` : `${rows.length} open`}</span>}
       </div>
       {state === "loading" && <p className="investment-state" role="status">Loading reviews…</p>}
       {state === "error" && <p className="inline-alert" role="alert">Open reviews could not be loaded.</p>}
@@ -81,7 +85,7 @@ export function ReviewQueue({ request, quietEmpty = false }: Props) {
             <tbody>{rows.map((row) => (
               <tr key={row.id}>
                 <th scope="row">{reasonText(row.reason)}</th>
-                <td>{row.securityName ?? row.accountName ?? "Imported evidence"}</td>
+                <td>{reviewScope(row)}</td>
                 <td><StatusLabel tone={row.isBlocking ? "danger" : "attention"}>{row.isBlocking ? "Blocking" : "Needs review"}</StatusLabel></td>
                 <td>{row.holdingId
                   ? <Link href={`/investments/${row.holdingId}`}>View holding</Link>

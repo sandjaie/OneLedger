@@ -350,6 +350,36 @@ describe("PortfolioScreen", () => {
     expect(screen.getByRole("region", { name: "Valuation gaps" }).textContent).toContain("1 unvalued");
   });
 
+  it("keeps an unsupported current-price value unavailable with its reason", async () => {
+    const request = requestFrom((path) => {
+      if (path === "/portfolio/summary") return summary({
+        valueComplete: false,
+        valuedCount: 0,
+        unvaluedCount: 1,
+        allocationComplete: false,
+      });
+      if (path === "/portfolio/positions?includeClosed=true") return positions([position({
+        valueStatus: "outside_supported_range",
+        currentValueNative: null,
+        currentValueBase: null,
+        currentValueSecondary: null,
+        gainNative: null,
+        gainBase: null,
+        gainSecondary: null,
+      })]);
+      if (path === "/portfolio/analysis") return emptyAnalysis();
+      if (path === "/investment-reviews?limit=20&offset=0") return [];
+      throw new Error(`Unexpected synthetic route ${path}`);
+    });
+
+    render(<PortfolioScreen accounts={[]} request={request} />);
+
+    expect(await screen.findByText("Unsupported value")).toBeTruthy();
+    expect(screen.getByText("The exact value is outside the supported reporting range.")).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Unavailable" })).toBeTruthy();
+    expect(screen.getByRole("cell", { name: "Gain unavailable" })).toBeTruthy();
+  });
+
   it("states allocation is incomplete rather than a false percentage", async () => {
     const request = requestFrom((path) => {
       if (path === "/portfolio/summary") return summary({ allocationComplete: false });

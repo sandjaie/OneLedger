@@ -55,6 +55,13 @@ function priceStatusLabel(position: AcquisitionPosition) {
   return "";
 }
 
+function valueStatusReason(position: AcquisitionPosition) {
+  if (position.valueStatus === "outside_supported_range") {
+    return "The exact value is outside the supported reporting range.";
+  }
+  return "";
+}
+
 export function PortfolioScreen({ request, accounts }: Props) {
   const [state, setState] = useState<LoadState>("loading");
   const [attempt, setAttempt] = useState(0);
@@ -118,6 +125,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
   function positionTone(position: AcquisitionPosition) {
     if (position.closed) return "neutral";
+    if (position.valueStatus === "outside_supported_range") return "attention";
     if (position.priceStatus === "missing" || position.priceStatus === "future_price_only") return "attention";
     if (position.priceStatus === "stale") return "danger";
     return "success";
@@ -125,6 +133,7 @@ export function PortfolioScreen({ request, accounts }: Props) {
 
   function positionStatus(position: AcquisitionPosition) {
     if (position.closed) return "Closed";
+    if (position.valueStatus === "outside_supported_range") return "Unsupported value";
     if (position.priceStatus === "missing") return "Missing price";
     if (position.priceStatus === "future_price_only") return "Future price only";
     if (position.priceStatus === "stale") return "Stale price";
@@ -242,7 +251,10 @@ export function PortfolioScreen({ request, accounts }: Props) {
                       <span className="console-entity-sub">{position.assetClass}{position.closed ? " · closed" : ""}</span></div>
                   </div></th>
                   <td className="console-number">{position.units}</td>
-                  <td className="portfolio-price-evidence"><p>{priceStatusLabel(position)}</p></td>
+                  <td className="portfolio-price-evidence">
+                    <p>{priceStatusLabel(position)}</p>
+                    {valueStatusReason(position) && <p>{valueStatusReason(position)}</p>}
+                  </td>
                   <td><StatusLabel tone={positionTone(position)}>{positionStatus(position)}</StatusLabel></td>
                   <td className="console-number">{position.currentValueNative === null ? "Unavailable" : `${position.currency} ${position.currentValueNative}`}</td>
                   <td className="console-number">{position.gainNative === null ? "Gain unavailable" : `${position.currency} ${position.gainNative}`}</td>
