@@ -8,6 +8,7 @@ import { useState, type DragEvent } from "react";
 
 import { AccountProposalPanel } from "@/app/import/account-proposal";
 import { LayoutMapper, type LayoutMapperSeed } from "@/app/import/layout-mapper";
+import { ImportStageJourney, type ImportStage } from "@/app/ui/import-stage-journey";
 import { LONG_REQUEST_TIMEOUT_MS, type apiFetch, errorText } from "@/lib/api/client";
 import { moneyText } from "@/lib/money/format";
 import type {
@@ -214,6 +215,20 @@ function leadsProposal(item: Candidate, candidates: Array<Candidate>) {
       return byPeriod || left.key.localeCompare(right.key);
     })[0];
   return first?.key === item.key;
+}
+
+function candidateStage(item: Candidate): ImportStage {
+  if (item.state === "staged") return 4;
+  if (item.parsed?.identityResolution.status === "matched") return 3;
+  if (item.state === "checking" || item.parsed || item.problem) return 2;
+  return 1;
+}
+
+function candidateCompleteThrough(item: Candidate): 0 | ImportStage {
+  if (item.state === "staged") return 3;
+  if (item.parsed?.identityResolution.status === "matched") return 2;
+  if (item.parsed || item.problem) return 1;
+  return 0;
 }
 
 export function ImportScreen({ accounts, currencies, request }: Props) {
@@ -441,11 +456,7 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
         <p>Check first. Nothing enters the ledger until you review and commit it.</p>
       </header>
 
-      <ol aria-label="Import steps" className="statement-import-journey">
-        <li><strong>Check</strong><span>Confirm account and statement details</span></li>
-        <li><strong>Stage</strong><span>Prepare rows for review</span></li>
-        <li><strong>Commit</strong><span>Review and add to the ledger</span></li>
-      </ol>
+      <ImportStageJourney current={1} />
 
       <div
         aria-label="Upload statement files"
@@ -517,12 +528,11 @@ export function ImportScreen({ accounts, currencies, request }: Props) {
               </span>
             </div>
 
-            <ol aria-label={`${item.file.name} import progress`} className="statement-import-progress">
-              <li className="complete">Selected</li>
-              <li className={item.parsed ? "complete" : undefined}>Checked</li>
-              <li className={item.state === "staged" ? "complete" : undefined}>Staged</li>
-              <li className={item.state === "staged" ? "current" : undefined}>Review</li>
-            </ol>
+            <ImportStageJourney
+              completeThrough={candidateCompleteThrough(item)}
+              current={candidateStage(item)}
+              label={`${item.file.name} import progress`}
+            />
 
             {item.problem && <p className="inline-alert" role="alert">{item.problem}</p>}
 

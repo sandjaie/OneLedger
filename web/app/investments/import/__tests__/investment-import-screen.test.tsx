@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { InvestmentImportScreen } from "@/app/investments/import/investment-import-screen";
+import { ApiError } from "@/lib/api/client";
 import type {
   AccountRow,
   InvestmentCommitResponse,
@@ -170,7 +171,7 @@ function pdf(name = "statement.pdf") {
 async function runToStaged(request: ReturnType<typeof vi.fn>) {
   render(<InvestmentImportScreen accounts={[account]} request={request as never} />);
 
-  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Check statement");
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Upload");
 
   const fileInput = screen.getByLabelText("Statement file");
   expect(fileInput.getAttribute("data-slot")).toBe("input");
@@ -178,7 +179,7 @@ async function runToStaged(request: ReturnType<typeof vi.fn>) {
   fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
 
   await screen.findByText("Example Fund", { exact: false });
-  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Stage import");
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Identify / resolve");
 
   fireEvent.change(screen.getByLabelText("Public identifier"), { target: { value: "US0000000001" } });
   fireEvent.click(screen.getByRole("button", { name: "Find instrument" }));
@@ -186,17 +187,34 @@ async function runToStaged(request: ReturnType<typeof vi.fn>) {
 
   fireEvent.change(screen.getByLabelText("Account"), { target: { value: "acct-1" } });
 
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Parse");
+
   const stageButton = screen.getByRole("button", { name: "Stage import" });
   await waitFor(() => expect(stageButton.hasAttribute("disabled")).toBe(false));
   fireEvent.click(stageButton);
 
   await screen.findByText("Ready to commit", { exact: false });
-  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Commit ready groups");
+  expect(screen.getByRole("list", { name: "Import steps" }).querySelector('[aria-current="step"]')?.textContent).toContain("Review");
 }
 
 afterEach(cleanup);
 
 describe("investment statement import", () => {
+  it("keeps a selected statement at resolution when its check is refused", async () => {
+    const request = vi.fn().mockRejectedValue(new ApiError(422, "This statement needs attention."));
+    render(<InvestmentImportScreen accounts={[account]} request={request as never} />);
+
+    fireEvent.change(screen.getByLabelText("Statement file"), { target: { files: [pdf()] } });
+    fireEvent.click(screen.getByRole("button", { name: "Check statement" }));
+
+    await screen.findByRole("alert");
+    expect(
+      screen
+        .getByRole("list", { name: "Import steps" })
+        .querySelector('[aria-current="step"]')?.textContent,
+    ).toContain("Identify / resolve");
+  });
+
   it("stages an uploaded statement and commits its ready group", async () => {
     const request = vi
       .fn()

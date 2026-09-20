@@ -240,7 +240,7 @@ export function LayoutMapper({
                 : "Choose an account type.";
 
   return (
-    <section className="account-proposal layout-mapper" aria-labelledby={headingId}>
+    <section className="account-proposal layout-mapper import-resolution-panel" aria-labelledby={headingId}>
       <header>
         <p className="eyebrow">{seed.remap ? "Remap this layout" : "Map this layout"}</p>
         <h3 id={headingId}>{seed.remap ? `Remap ${seed.draft.name}` : "Map an unseen statement layout"}</h3>

@@ -1061,10 +1061,32 @@ body { background: var(--paper); }
   font-size: 0.78rem;
   line-height: 1.5;
 }
-.statement-import-journey { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
-.statement-import-journey li { display: grid; gap: 4px; min-width: 0; padding: 12px 15px; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
-.statement-import-journey strong { color: var(--green); font-size: 0.78rem; }
-.statement-import-journey span { color: var(--muted); font-size: 0.72rem; line-height: 1.35; }
+.import-stage-journey {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;
+  min-width: 0; margin: 0; padding: 0; list-style: none;
+}
+.import-stage-journey li {
+  display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 11px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; color: var(--muted-foreground);
+  background: var(--surface);
+}
+.import-stage-number {
+  display: grid; flex: 0 0 23px; place-items: center; height: 23px;
+  border: 1px solid currentColor; border-radius: 50%; font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.import-stage-copy { display: grid; gap: 2px; min-width: 0; }
+.import-stage-copy strong { color: inherit; font-size: 0.76rem; line-height: 1.3; }
+.import-stage-copy small { color: var(--muted); font-size: 0.64rem; line-height: 1.35; }
+.import-stage-journey li[aria-current="step"] {
+  border-color: color-mix(in srgb, var(--green) 42%, var(--rule)); color: var(--green);
+  background: color-mix(in srgb, var(--surface) 95%, var(--green));
+}
+.import-stage-journey li[aria-current="step"] strong { font-weight: 650; }
+.import-stage-journey li[data-complete="true"] { color: var(--foreground); }
+.import-stage-journey li[data-complete="true"] .import-stage-number {
+  border-color: var(--green); color: var(--surface); background: var(--green);
+}
 .statement-import-dropzone {
   padding: 32px 28px 0;
   border: 1px dashed rgba(16, 22, 20, 0.22);
@@ -1139,25 +1161,11 @@ body { background: var(--paper); }
   background: rgba(29, 92, 68, 0.09);
   font-size: 0.59rem;
 }
-.statement-import-progress {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 7px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.import-resolution-panel {
+  min-width: 0; border-inline-start: 3px solid var(--console-blue);
+  background: color-mix(in srgb, var(--surface) 97%, var(--console-blue));
 }
-.statement-import-progress li {
-  padding-top: 8px;
-  border-top: 3px solid var(--rule);
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.statement-import-progress li.complete { border-top-color: var(--green); color: var(--green); }
-.statement-import-progress li.current { border-top-color: var(--blue); color: var(--green); }
+.statement-review-screen { max-width: 1180px; }
 .statement-import-file-card .import-summary {
   padding: 16px 0;
   border-top: 1px solid var(--rule);
@@ -1193,7 +1201,7 @@ body { background: var(--paper); }
   .statement-import-dropzone { padding: 24px 18px 0; }
   .statement-import-dropzone .import-controls,
   .statement-import-file-card .import-summary dl { grid-template-columns: 1fr; }
-  .statement-import-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .import-stage-journey { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 /* Investment owner entry — a factual evidence rail and exact-value docket in the same
@@ -2282,12 +2290,6 @@ body { background: var(--paper); }
 .investment-empty-coverage .investment-disclosure-content ul { margin: 0; padding-left: 20px; line-height: 1.55; }
 .portfolio-screen .evidence-chart { grid-template-columns: minmax(0, 1fr); }
 .portfolio-screen .evidence-chart-table-wrap { min-width: 0; }
-.investment-import-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-.investment-import-steps li { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px 12px; border: 1px solid var(--rule); border-radius: 8px; color: var(--muted-foreground); background: var(--surface); font-size: 0.8rem; }
-.investment-import-steps li > span { display: grid; flex: 0 0 23px; place-items: center; height: 23px; border: 1px solid currentColor; border-radius: 50%; font-variant-numeric: tabular-nums; }
-.investment-import-steps li[aria-current="step"] { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, var(--rule)); font-weight: 650; }
-.investment-import-steps li[data-complete="true"] { color: var(--foreground); }
-
 /* 4.7.5: the document's next action is visible without a horizontal table. */
 .documents-screen .transaction-filters { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .documents-screen .document-filter-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2355,7 +2357,7 @@ body { background: var(--paper); }
   .allocation-evidence-plot { min-height: 210px; }
   .allocation-evidence-chart table { table-layout: fixed; }
   .allocation-evidence-chart :is(th, td) { padding: 7px 4px; white-space: normal; overflow-wrap: anywhere; font-size: 0.72rem; }
-  .investment-import-steps { grid-template-columns: minmax(0, 1fr); }
+  .import-stage-journey { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .documents-screen .document-filter-primary, .document-advanced-filters .transaction-filter-main { grid-template-columns: minmax(0, 1fr); }
   .document-record-facts { display: grid; gap: 10px; }
   .document-actions > :is(a, button) { flex: 1 1 auto; }
@@ -2381,8 +2383,7 @@ body { background: var(--paper); }
   .portfolio-allocation-groups { grid-template-columns: 1fr; }
 }
 @media (max-width: 540px) {
-  .statement-import-journey { grid-template-columns: 1fr; }
-  .statement-import-journey li { grid-template-columns: 56px minmax(0, 1fr); align-items: center; }
+  .import-stage-journey { grid-template-columns: minmax(0, 1fr); }
   .subscriptions-screen .overview-summary-grid { grid-template-columns: 1fr; }
   .subscriptions-screen .overview-summary-grid article:last-child { grid-column: auto; }
   :is(.subscription-next-facts, .recurring-next-facts) { display: grid; gap: 5px; }
